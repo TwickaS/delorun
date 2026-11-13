@@ -11,7 +11,7 @@ import { recorded, serializeCheckState } from '@delo/release-verify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDoctorCommand, doctorCommand, type DoctorEnvironment } from '../../src/doctor/index.ts'
 import type { DshImportRecordEntry } from '../../src/doctor/records.ts'
-import { closeServer, GOOD_KEY, listenOnEphemeralPort } from './fixtures.ts'
+import { CHECK_NAMES, closeServer, GOOD_KEY, listenOnEphemeralPort, usableBwrap } from './fixtures.ts'
 
 const RELEASE = '0.4.0'
 /** 2026-11-10T12:00:00Z. */
@@ -28,6 +28,8 @@ beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'doctor-command-')))
   home = join(base, '.delo')
   mkdirSync(home, { mode: 0o700 })
+  mkdirSync(join(base, 'no-bin'))
+  usableBwrap(join(base, 'no-bin'))
   process.chdir(base)
   for (const name of Object.keys(process.env)) if (/^(DSH_|DELO_|DEEPSEEK_API_KEY$)/.test(name)) delete process.env[name]
 })
@@ -96,7 +98,7 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('pass release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
-    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
+    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
     expect(result.lines.some(line => / import: /.test(line))).toBe(false)
   })
 

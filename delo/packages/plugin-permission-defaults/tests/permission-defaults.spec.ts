@@ -30,7 +30,7 @@ import {
   fullAccessRefusal,
 } from '../src/index.ts'
 import { workspaceKey } from '../src/workspace.ts'
-import { serializePermissionStore } from '../src/store.ts'
+import { serializePermissionStore, withPermissionStoreLock } from '../src/store.ts'
 
 /** One mounted composition's fixtures, owned by the test that built it. */
 interface Mounted {
@@ -98,7 +98,7 @@ async function mounted(options: {
     setPolicy() {},
   } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: options.defaultPreset ?? SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: options.enabled ?? true }) })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: options.enabled ?? true }) })
   return { ctx, harness, asks, home, workspace, other }
 }
 
@@ -114,7 +114,7 @@ function knobs(ctx: Context, session: Session): { preset: string | null, sandbox
 
 describe('the permission_defaults switch', () => {
   it('defaults to off, the parity value', () => {
-    expect(Config()).toEqual({ enabled: false })
+    expect(Config().enabled).toBe(false)
   })
 
   it('mounts nothing when off, so the deployment default reaches a new chat exactly as upstream seeds it', async () => {
@@ -128,7 +128,7 @@ describe('the permission_defaults switch', () => {
   it('resolves only after the guard and the service are provided', async () => {
     const { ctx } = await mounted({ enabled: false })
     expect(ctx.get('sandboxModeGuard')).toBeUndefined()
-    await apply(ctx, { enabled: true })
+    await apply(ctx, { ...Config(), enabled: true })
     expect(ctx.get('sandboxModeGuard')).toBeTypeOf('function')
     expect(ctx.get('permissionDefaults')).toBeInstanceOf(PermissionDefaults)
   })
@@ -137,7 +137,7 @@ describe('the permission_defaults switch', () => {
     const ctx = new Context()
     try {
       const dispose = ctx.provide('sandboxModeGuard', () => undefined)
-      await expect(apply(ctx, { enabled: true })).rejects.toThrow('another plugin already provides the sandbox-mode guard')
+      await expect(apply(ctx, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox-mode guard')
       dispose()
     } finally {
       void ctx.fiber.dispose()
@@ -242,6 +242,26 @@ describe('the full-access consent', () => {
     await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toThrow('this chat has no workspace folder')
   })
 
+  it('provides the granted workspace folders to remote access, read again after each change', async () => {
+    const { ctx, home, workspace, other } = await mounted({ store: paths => serializePermissionStore(new Map([
+      [workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 }],
+      [workspaceKey(paths.other), { preset: SAFER_PRESET, fullAccessGrantedAt: null }],
+    ])) })
+    const grants = ctx.get('reachFullAccessGrants')
+    // Pins the grant filter: a workspace that never held a grant is not listed.
+    expect(grants?.grantedFolders()).toEqual([workspaceKey(workspace)])
+    expect(workspaceKey(other)).not.toBe(workspaceKey(workspace))
+    // Another process withdraws the grant, as `delorun workspace full-access` does.
+    writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[workspaceKey(workspace), { preset: SAFER_PRESET, fullAccessGrantedAt: null }]])), { mode: 0o600 })
+    // Pins the refresh: a withdrawn grant is absent at the next read.
+    expect(grants?.grantedFolders()).toEqual([])
+  })
+
+  it('provides no granted folder while the permission store cannot be read', async () => {
+    const { ctx } = await mounted({ store: () => '{' })
+    expect(ctx.get('reachFullAccessGrants')?.grantedFolders()).toEqual([])
+  })
+
   it('refuses full access when the permission store cannot be read, naming the store\'s problem', async () => {
     const { ctx, harness, workspace } = await mounted({ store: () => '{' })
     const defaults = ctx.get('permissionDefaults') as PermissionDefaults
@@ -249,6 +269,63 @@ describe('the full-access consent', () => {
     const agent = await harness.create(SessionId('chat-refused-store'), {}, { cwd: workspace })
     expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET })
     await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toThrow('the permission store is refused')
+  })
+})
+
+describe('a full-access selection after another process withdrew the grant', () => {
+  /**
+   * Write the store as another process at the home's computer does when it withdraws a workspace's grant.
+   * @param home - the Delo home.
+   * @param workspace - the workspace.
+   */
+  function withdrawElsewhere(home: string, workspace: string): void {
+    writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[workspaceKey(workspace), { preset: SAFER_PRESET, fullAccessGrantedAt: null }]])), { mode: 0o600 })
+  }
+
+  it('asks the person again rather than record the withdrawn grant anew', async () => {
+    const { ctx, harness, asks, workspace, home } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const first = await harness.create(SessionId('chat-withdrawn-1'), {}, { cwd: workspace })
+    await defaults.select(first, FULL_ACCESS_PRESET)
+    expect(asks).toHaveLength(1)
+    const second = await harness.create(SessionId('chat-withdrawn-2'), {}, { cwd: workspace })
+    ctx.permissionPresets.set(second.session, SAFER_PRESET)
+    withdrawElsewhere(home, workspace)
+    await defaults.select(second, FULL_ACCESS_PRESET)
+    expect(asks).toHaveLength(2)
+    expect(knobs(ctx, second.session)).toMatchObject({ preset: FULL_ACCESS_PRESET })
+  })
+
+  it('records nothing when the grant is withdrawn after the selection read the store and before it records', async () => {
+    const { ctx, harness, asks, workspace, home } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const agent = await harness.create(SessionId('chat-withdrawn-race'), {}, { cwd: workspace })
+    await defaults.select(agent, FULL_ACCESS_PRESET)
+    ctx.permissionPresets.set(agent.session, SAFER_PRESET)
+    let selected: Promise<void> | undefined
+    // Another process holds the store's lock and withdraws the grant after the selection read the store.
+    await withPermissionStoreLock(permissionStorePath(home), async () => {
+      selected = defaults.select(agent, FULL_ACCESS_PRESET)
+      withdrawElsewhere(home, workspace)
+      await Promise.resolve()
+    })
+    await expect(selected).rejects.toThrow(FullAccessConsentRefusedError)
+    await expect(selected).rejects.toThrow('was withdrawn while it was being selected')
+    expect(asks).toHaveLength(1)
+    const stored = JSON.parse(readFileSync(permissionStorePath(home), 'utf8')) as { workspaces: Record<string, { fullAccessGrantedAt: number | null }> }
+    expect(stored.workspaces[workspaceKey(workspace)]?.fullAccessGrantedAt).toBeNull()
+    expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET, sandbox: SAFER_PRESET })
+  })
+
+  it('sets the workspace\'s other open full-access chats back when the person goes back to the safer preset in one', async () => {
+    const { ctx, harness, workspace } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const first = await harness.create(SessionId('chat-back-1'), {}, { cwd: workspace })
+    await defaults.select(first, FULL_ACCESS_PRESET)
+    const second = await harness.create(SessionId('chat-back-2'), {}, { cwd: workspace })
+    expect(ctx.sandboxPolicy.resolve({ session: second.session }).mode).toBe(FULL_ACCESS_PRESET)
+    await defaults.select(first, SAFER_PRESET)
+    expect(ctx.sandboxPolicy.resolve({ session: second.session }).mode).toBe(SAFER_PRESET)
   })
 })
 
@@ -398,7 +475,7 @@ async function persistedComposition(paths: { sessionsRoot: string, home: string,
     setPolicy() {},
   } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: true }) })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
   return { ctx, asks, harness }
 }
 

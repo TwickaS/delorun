@@ -8,7 +8,7 @@ import { Button, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PrivacyLocaleKey } from './locales.ts'
-import type { OptInId, OptInMutation, OptInSettings } from './opt-in.ts'
+import { OPT_IN_FIELDS, type OptInId, type OptInMutation, type OptInSettings } from './opt-in.ts'
 import css from './SettingsRow.module.css'
 
 /** What the row renders from. */
@@ -24,7 +24,7 @@ export interface OptInRowProps {
   /** The line that says why a profile that does not serve the switch's Host row shows no switch. */
   readonly unavailable?: PrivacyLocaleKey | undefined
   /**
-   * Write the switch's `enabled` field.
+   * Write the switch's field ({@link OPT_IN_FIELDS}).
    * @param enabled - `true` only after the person accepted the dialog.
    * @returns after the write settles.
    */
@@ -48,7 +48,7 @@ export function OptInRow({ id, t, form, mutation, unavailable, setEnabled }: Opt
       {mutation.failed ? <div className={css.failed} role="alert">{t('failed')}</div> : null}
     </div>
     {served
-      ? <Switch checked={form.value?.enabled === true} label={t(`${id}.title`)}
+      ? <Switch checked={form.value?.[OPT_IN_FIELDS[id]] === true} label={t(`${id}.title`)}
         disabled={mutation.busy || form.status !== 'ready' || !form.writable}
         onChange={(enabled) => { if (enabled) setAsking(true); else void setEnabled(false) }} />
       : null}

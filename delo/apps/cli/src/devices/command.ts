@@ -1,5 +1,5 @@
 /**
- * `delorun devices list | approve | remove <device id> | code` (contract C5): the devices this home trusts, managed at
+ * `delorun devices list | approve | elevate | remove <device id> | code` (contract C5): the devices this home trusts, managed at
  * the home's own computer.
  *
  * - `list` reads the home's records, without key material.
@@ -10,6 +10,9 @@
  *   request only, and the list is shown again.
  * - `remove` removes a device, ending its sessions at once: through the home socket's `devices.remove` when Delo runs,
  *   so its open connections end too, or on the records when it does not. No command reaches a device route over HTTP.
+ * - `elevate` answers a device's request to unlock sensitive actions (C14, "Elevation") through the home socket's
+ *   `devices.elevate`, which only the person's own command may call. It lists the waiting requests and the running
+ *   unlocks; the person approves a request by typing the 8-digit code its device shows, declines one, or ends an unlock.
  * - `code` prints a new owner code, only to a terminal.
  *
  * @module @delo/cli/devices/command
@@ -25,6 +28,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
+import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { printable } from '../terminal-text.ts'
 
 /** What the command runs against. */
@@ -55,12 +59,12 @@ export interface DevicesDependencies {
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun devices list | approve | remove <device id> | code [--profile <name>]'
+const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code [--profile <name>]'
 
-/** How many codes `approve` takes for one request, which is C5's count before the home cancels it. */
+/** How many codes `approve` and `elevate` take for one request: C5's and C14's count before the home cancels it. */
 const CODE_ATTEMPTS = 3
 
-/** How many characters of a request id `approve` shows to tell requests apart. */
+/** How many characters of a request id `approve` and `elevate` show to tell requests apart. */
 const SHORT_REQUEST_ID = 8
 
 /**
@@ -71,7 +75,7 @@ const SHORT_REQUEST_ID = 8
 export function createDevicesCommand(dependencies: DevicesDependencies): CliCommand {
   return {
     name: 'devices',
-    summary: 'The devices this home trusts: list, approve, remove, code',
+    summary: 'The devices this home trusts: list, approve, elevate, remove, code',
     async run(args, context) {
       const [action, ...rest] = args
       // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`. A device id is base64url
@@ -85,6 +89,7 @@ export function createDevicesCommand(dependencies: DevicesDependencies): CliComm
       switch (action) {
         case 'list': return list(where)
         case 'approve': return approve(where)
+        case 'elevate': return elevate(where)
         case 'remove': return remove(where, positional)
         case 'code': return code(where)
         default: throw new CliError(EXIT.usage, `delorun devices: ${action === undefined ? 'choose an action' : `unknown action ${JSON.stringify(action)}`}\n${USAGE}`)
@@ -194,7 +199,7 @@ type Outcome = ExitCode | 'again'
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
   if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running. Start it with delorun start, then run delorun devices approve again')
-  context.stdout('Waiting for a new device for up to 5 minutes. Open this home\'s address on it and choose Ask for approval.\n')
+  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
   for (;;) {
     const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
     if (opened.ok !== true) return failed(context, `the home refused: ${refusal(opened)}`)
@@ -204,9 +209,20 @@ async function approve(where: Where): Promise<ExitCode> {
     context.stdout(`Devices asking for approval:\n${pending.map((request, index) => `  ${String(index + 1)}. ${pendingLine(request)}`).join('\n')}\n`)
     const choice = await choose(where, pending)
     if (choice === undefined) return failed(context, 'cancelled; no device was approved')
-    const outcome = choice.action === 'approve' ? await typeCode(where, choice.request) : await cancel(where, choice.request)
+    const outcome = choice.action === 'approve' ? await typeCode(where, deviceRound(choice.request)) : await cancel(where, choice.request)
     if (outcome !== 'again') return outcome
   }
+}
+
+/**
+ * What the person opens on the new device: the sign-in address while the profile's remote access is on.
+ * @param row - the profile's Tailscale private row.
+ * @returns the sentence.
+ */
+function openLine(row: TailscalePrivateRow): string {
+  return row.enabled && row.address !== ''
+    ? `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
+    : 'Remote access is off for this profile, so a phone cannot reach this home yet: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
 }
 
 /**
@@ -258,25 +274,59 @@ async function choose(where: Where, pending: readonly PendingRequest[]): Promise
   }
 }
 
+/** A request the person answers with the code its device shows. */
+interface CodeRound {
+  /** The device's name. */
+  readonly label: string
+  /**
+   * The request that carries the typed code.
+   * @param typedCode - what the person typed.
+   * @returns the request.
+   */
+  readonly request: (typedCode: string) => UnsignedRequest
+  /**
+   * What the person reads once the home accepted the code.
+   * @param answer - the home's final line.
+   * @returns the line.
+   */
+  readonly accepted: (answer: ResponseLine) => string
+  /** What did not happen, after `cancelled; ` and before a refusal's code. */
+  readonly unchanged: string
+}
+
 /**
- * Approve the chosen request with the code its device shows.
- * @param where - the invocation.
+ * The round that approves a new device.
  * @param request - the chosen request.
- * @returns the exit code, or `again` when the request ended before it was approved.
+ * @returns the round.
  */
-async function typeCode(where: Where, request: PendingRequest): Promise<Outcome> {
+function deviceRound(request: PendingRequest): CodeRound {
+  return {
+    label: request.label,
+    request: typedCode => ({ op: 'devices.approve', args: { requestId: request.requestId, typedCode } }),
+    accepted: () => `Approved ${printable(request.label)}. It signs in on its own now.\n`,
+    unchanged: 'no device was approved',
+  }
+}
+
+/**
+ * Send the code the person types until the home accepts it, refuses it for another reason, or cancels the request.
+ * @param where - the invocation.
+ * @param round - the request and what the person reads.
+ * @returns the exit code, or `again` when the request ended before the home accepted a code.
+ */
+async function typeCode(where: Where, round: CodeRound): Promise<Outcome> {
   const { home, profile, context, dependencies } = where
   for (let attempt = 1; attempt <= CODE_ATTEMPTS; attempt += 1) {
-    const typed = await dependencies.ask(`Type the 8-digit code ${printable(request.label)} shows`)
-    if (typed === undefined) return failed(context, 'cancelled; no device was approved')
-    const answer = final(await dependencies.send(home, profile, { op: 'devices.approve', args: { requestId: request.requestId, typedCode: typed } }))
+    const typed = await dependencies.ask(`Type the 8-digit code ${printable(round.label)} shows`)
+    if (typed === undefined) return failed(context, `cancelled; ${round.unchanged}`)
+    const answer = final(await dependencies.send(home, profile, round.request(typed)))
     if (answer.ok === true) {
-      context.stdout(`Approved ${printable(request.label)}. It signs in on its own now.\n`)
+      context.stdout(round.accepted(answer))
       return EXIT.ok
     }
     const detail = refusal(answer)
     if (detail.startsWith('APPROVAL_EXPIRED')) return noLongerWaiting(context)
-    if (!detail.startsWith('APPROVAL_CODE_MISMATCH')) return failed(context, `the device was not approved: ${detail}`)
+    if (!detail.startsWith('APPROVAL_CODE_MISMATCH')) return failed(context, `${round.unchanged}: ${detail}`)
     context.stderr(attempt < CODE_ATTEMPTS
       ? 'That code is not the one the device shows. Try again.\n'
       : 'That code is not the one the device shows. Three wrong codes cancelled this request; any other request still waits.\n')
@@ -312,13 +362,141 @@ function noLongerWaiting(context: CommandContext): Outcome {
   return 'again'
 }
 
+/** A request to unlock or a running unlock, as `devices.elevate` lists them. */
+interface Unlock {
+  readonly kind: 'request' | 'running'
+  /** The request id or the elevation id. */
+  readonly id: string
+  readonly label: string
+  readonly platform: string
+  /** When the device asked, or when its unlock ends. */
+  readonly at: number
+}
+
+/**
+ * `delorun devices elevate`.
+ * @param where - the invocation.
+ * @returns the exit code.
+ */
+async function elevate(where: Where): Promise<ExitCode> {
+  const { home, profile, context, dependencies } = where
+  if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running, so no device holds an unlock. Start it with delorun start')
+  for (;;) {
+    const listed = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: {} }))
+    if (listed.ok !== true) return failed(context, `the home refused: ${refusal(listed)}`)
+    const unlocks = unlocksOf(listed)
+    if (unlocks === undefined) return failed(context, 'the home answered with a list of unlocks this command cannot read')
+    if (unlocks.length === 0) {
+      context.stdout('No device asks to unlock sensitive actions, and none holds an unlock.\n')
+      return EXIT.ok
+    }
+    context.stdout(`Sensitive actions:\n${unlocks.map((unlock, index) => `  ${String(index + 1)}. ${unlockLine(unlock)}`).join('\n')}\n`)
+    const chosen = await chooseUnlock(where, unlocks)
+    if (chosen === undefined) return failed(context, 'cancelled; nothing changed')
+    const outcome = chosen.action === 'approve' ? await typeCode(where, unlockRound(chosen.unlock)) : await endUnlock(where, chosen.unlock)
+    if (outcome !== 'again') return outcome
+  }
+}
+
+/**
+ * One request to unlock or running unlock as a line.
+ * @param unlock - the request or the unlock.
+ * @returns the device's name and when it asked, or until when its unlock runs.
+ */
+function unlockLine(unlock: Unlock): string {
+  const at = new Date(unlock.at).toISOString()
+  return unlock.kind === 'request'
+    ? `${deviceName(unlock)} asks to unlock, asked at ${at}, request ${printable(unlock.id.slice(0, SHORT_REQUEST_ID))}`
+    : `${deviceName(unlock)} is unlocked until ${at}`
+}
+
+/**
+ * Read the requests and the running unlocks of a `devices.elevate` answer.
+ * @param answer - the answer.
+ * @returns the requests, oldest first, then the running unlocks; undefined when an entry cannot be read.
+ */
+function unlocksOf(answer: ResponseLine): readonly Unlock[] | undefined {
+  const unlocks: Unlock[] = []
+  for (const [field, kind, id, at] of [['pending', 'request', 'requestId', 'requestedAt'], ['running', 'running', 'id', 'endsAt']] as const) {
+    const value = answer[field]
+    if (!Array.isArray(value)) return undefined
+    const entries: readonly unknown[] = value
+    for (const entry of entries) {
+      if (typeof entry !== 'object' || entry === null) return undefined
+      const read = { id: Reflect.get(entry, id), label: Reflect.get(entry, 'label'), platform: Reflect.get(entry, 'platform'), at: Reflect.get(entry, at) }
+      if (typeof read.id !== 'string' || typeof read.label !== 'string' || typeof read.platform !== 'string') return undefined
+      if (typeof read.at !== 'number' || Number.isNaN(new Date(read.at).getTime())) return undefined
+      unlocks.push({ kind, id: read.id, label: read.label, platform: read.platform, at: read.at })
+    }
+  }
+  return unlocks
+}
+
+/**
+ * Ask which request to approve, or which request or unlock to end, until the answer names one or the person cancels.
+ * @param where - the invocation.
+ * @param unlocks - the listed requests and unlocks.
+ * @returns the choice, or undefined when the person cancelled.
+ */
+async function chooseUnlock(where: Where, unlocks: readonly Unlock[]): Promise<{ readonly action: 'approve' | 'end'; readonly unlock: Unlock } | undefined> {
+  for (;;) {
+    const answer = await where.dependencies.ask('Type the number of a request to approve, or e and a number to decline a request or end an unlock')
+    if (answer === undefined) return undefined
+    const match = /^(e(?:nd)?\s*)?(\d+)$/i.exec(answer.trim())
+    const unlock = match === null ? undefined : unlocks[Number(match[2]) - 1]
+    if (match !== null && unlock !== undefined) {
+      if (match[1] !== undefined) return { action: 'end', unlock }
+      if (unlock.kind === 'request') return { action: 'approve', unlock }
+      where.context.stderr('That device is unlocked already. Type e and its number to end the unlock.\n')
+      continue
+    }
+    where.context.stderr(`Type a number from 1 to ${String(unlocks.length)}, or e and a number.\n`)
+  }
+}
+
+/**
+ * The round that unlocks sensitive actions on a device.
+ * @param unlock - the chosen request.
+ * @returns the round.
+ */
+function unlockRound(unlock: Unlock): CodeRound {
+  return {
+    label: unlock.label,
+    request: typedCode => ({ op: 'devices.elevate', args: { requestId: unlock.id, typedCode } }),
+    accepted: (answer) => {
+      const endsAt: unknown = typeof answer.elevation === 'object' && answer.elevation !== null ? Reflect.get(answer.elevation, 'endsAt') : undefined
+      const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${new Date(endsAt).toISOString()}` : ''
+      return `Unlocked sensitive actions on ${printable(unlock.label)}${until}. End it sooner with delorun devices elevate.\n`
+    },
+    unchanged: 'nothing was unlocked',
+  }
+}
+
+/**
+ * Decline the chosen request or end the chosen unlock.
+ * @param where - the invocation.
+ * @param unlock - the chosen request or unlock.
+ * @returns `again`, or the exit code of a refusal.
+ */
+async function endUnlock(where: Where, unlock: Unlock): Promise<Outcome> {
+  const { home, profile, context, dependencies } = where
+  const answer = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: { revokeId: unlock.id } }))
+  if (answer.ok !== true) return failed(context, `nothing was ended: ${refusal(answer)}`)
+  if (answer.revoked !== true) {
+    context.stderr('That request or unlock had ended already.\n')
+    return 'again'
+  }
+  context.stdout(unlock.kind === 'request' ? `Declined the request of ${printable(unlock.label)}.\n` : `Ended the unlock of ${printable(unlock.label)}.\n`)
+  return 'again'
+}
+
 /**
  * A refused answer's code and sentence.
  * @param answer - the final line.
  * @returns the sentence home-auth wrote, which starts with its code, or the channel's code with its detail.
  */
 function refusal(answer: ResponseLine): string {
-  if (answer.error === 'APPROVAL_FAILED' && typeof answer.detail === 'string') return answer.detail
+  if ((answer.error === 'APPROVAL_FAILED' || answer.error === 'ELEVATION_FAILED') && typeof answer.detail === 'string') return answer.detail
   return `${String(answer.error)}${typeof answer.detail === 'string' ? ` (${answer.detail})` : ''}`
 }
 

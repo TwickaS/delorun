@@ -18,6 +18,8 @@ export interface PatchLayer {
   readonly source: string
   /** The bundle's package name, for a bundle layer; absent for the profile's patch, the home's patch and overlays. */
   readonly packageName?: string
+  /** The bundle's package directory, for a bundle layer. */
+  readonly packageDir?: string
   /** The parsed patches. */
   readonly patches: Profile['patches']
 }
@@ -44,7 +46,7 @@ export function homePatchFile(home: string): string {
 export function patchLayers(home: string, profile: Pick<Profile, 'layers' | 'patchPath' | 'patches'>, patchFiles: readonly string[]): PatchLayer[] {
   const homePatch = homePatchFile(home)
   return [
-    ...profile.layers.map(layer => ({ source: `the bundle ${layer.packageName} (${layer.patchPaths.join(', ')})`, packageName: layer.packageName, patches: layer.patches })),
+    ...profile.layers.map(layer => ({ source: `the bundle ${layer.packageName} (${layer.patchPaths.join(', ')})`, packageName: layer.packageName, packageDir: layer.packageDir, patches: layer.patches })),
     { source: profile.patchPath, patches: profile.patches },
     { source: homePatch, patches: loadOptionalPatches('delorun', homePatch) ?? [] },
     ...patchFiles.map(file => ({ source: resolve(file), patches: loadOverlayPatches('delorun', resolve(file)) })),

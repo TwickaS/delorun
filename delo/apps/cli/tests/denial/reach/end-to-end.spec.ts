@@ -135,9 +135,9 @@ function loopback(method: string, path: string, body?: unknown, credential = stu
 beforeAll(async () => {
   studio = await bootStudio()
   secrets = await mkdtemp(join(tmpdir(), 'delo-reach-e2e-'))
-  await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'home-auth') })
+  await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'secrets', 'home-auth') })
   const listenerPort = await chooseListenerPort(LISTENER_PORT_RANGE)
-  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs: 60_000 } }
+  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs: 60_000, elevationMinutes: 15 } }
   await studio.ctx.plugin(FakeReach, config)
   await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
   const served = calls.find(call => call[1] === '--bg')?.at(-1) ?? ''
@@ -301,6 +301,17 @@ describe('reach on the Tailscale private address', () => {
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'rejected', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'bash' }, 'allowed-once', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()
+    })
+
+    it('a tailnet-route session cannot start an external agent', () => {
+      const peer = admittedPeer(phone)
+      const guard = studio.ctx.get('remoteAnswerGuard')
+      expect(guard).toBeDefined()
+      const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs you at your computer: starting an external agent/)
+      // Declining from the phone applies, and the studio on the home's computer can allow the start.
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'rejected', peer) }).not.toThrow()
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()
     })
 
     it('removing the device ends its session at once', async () => {

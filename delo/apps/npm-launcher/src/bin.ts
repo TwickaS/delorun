@@ -45,9 +45,12 @@ export const TERMINATOR = '--'
  * the runtime runs the person's commands and tools, which need `PATH`, credentials, agents and toolchain variables that
  * an allowlist would remove. None of the dropped variables is a launch protocol variable, except `DELO_LAUNCHER_*`: an
  * inherited value of those is dropped too, so the runtime sees only what this launcher sets, and a variable this
- * launcher has no value for, such as `DELO_LAUNCHER_VERSION` when its own version does not read, is absent.
+ * launcher has no value for, such as `DELO_LAUNCHER_VERSION` when its own version does not read, is absent. The same
+ * names are refused from a discovered `.env` by upstream's `loadLayeredEnv` (`BOOTSTRAP_NAMES` and
+ * `BOOTSTRAP_PREFIXES` in `@deepseek-ai/dsh-app-boot`), so no file that arrives with a repository sets one inside the
+ * runtime either; `tests/environment-denylist.integration.spec.ts` holds the two lists together.
  */
-const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*|DELO_LAUNCHER_.*)$/iu
+export const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*|DELO_LAUNCHER_.*)$/iu
 
 /**
  * The environment a runtime starts with: this process's, without the variables that would load code into the

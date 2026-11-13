@@ -213,10 +213,31 @@ export interface DevicesRemoveRequest extends RequestBase {
 }
 
 /**
- * The `permission.reload` request: the per-workspace permission store of `@delo/plugin-permission-defaults` was changed
- * at the home's own computer by `delorun workspace full-access`, which writes the store itself; the running Host reads
- * it again, and sets the open chats of a workspace that lost its grant back to the safer preset. Accepted with either
- * token, because it changes nothing the store does not already hold.
+ * The `devices.elevate` request: the person at the home's own computer answers a device's request to unlock sensitive
+ * actions (C14, "Elevation"). Without arguments it answers the waiting requests and the running elevations; with
+ * `requestId` and `typedCode` it approves that request with the code the device shows; with `revokeId` alone it declines
+ * that request or ends that elevation. Accepted only with the token the person's own `delorun` reads from the token file,
+ * and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface DevicesElevateRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'devices.elevate'
+  /** Arguments. */
+  readonly args: {
+    /** The waiting request to approve. */
+    readonly requestId?: string
+    /** The 8-digit code the person typed from the device's screen. */
+    readonly typedCode?: string
+    /** The request to decline or the elevation to end; it comes without `requestId` and `typedCode`. */
+    readonly revokeId?: string
+  }
+}
+
+/**
+ * The `permission.reload` request: the running Host reads the per-workspace permission store of
+ * `@delo/plugin-permission-defaults` again, and sets the open chats of a workspace that lost its grant back to the safer
+ * preset. No Delo process sends it, because each Host watches the store; it stays for a caller holding the token.
+ * Accepted with either token, because it changes nothing the store does not already hold.
  */
 export interface PermissionReloadRequest extends RequestBase {
   /** The operation. */
@@ -281,6 +302,41 @@ export interface McpRevokeRequest extends RequestBase {
 }
 
 /**
+ * The `reach.status` request: the live state of each reach option of contract C7 in the running Host. Accepted only with
+ * the token the person's own `delorun` reads from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's
+ * channel token, because the answer names the tailnet address and each option's failure.
+ */
+export interface ReachStatusRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'reach.status'
+}
+
+/**
+ * The `reach.apply` request: the running Host's reach service restarts its options from the `delo-reach` row the
+ * profile now holds, after `delorun reach on|off` wrote it, and answers each option's state once its start settled.
+ * Accepted only with the token from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token,
+ * because C14 keeps managing remote access at the home's own computer.
+ */
+export interface ReachApplyRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'reach.apply'
+}
+
+/** One reach option's state as `reach.status` and `reach.apply` answer it (contract C7, "Provider states"). */
+export interface ReachOptionStatus {
+  /** C7's option id, such as `tailscale-private`. */
+  readonly option: string
+  /** C7's state, such as `ready` or `blocked`. */
+  readonly state: string
+  /** The option's studio address, once its row names one. */
+  readonly address?: string
+  /** C7's code, for `blocked` and `failed`, and for `degraded` when the cause is known. */
+  readonly cause?: string
+  /** The sentence that says what to do, with `cause`. */
+  readonly detail?: string
+}
+
+/**
  * Every request the update channel accepts. No request carries a path, an archive or a URL the home process opens or
  * fetches, or a command it runs; `mcp.revoke` names an accepted start only by its acceptance id.
  */
@@ -294,11 +350,14 @@ export type UpdateChannelRequest =
   | StudioOpenTokenRequest
   | DevicesApproveRequest
   | DevicesRemoveRequest
+  | DevicesElevateRequest
   | PermissionReloadRequest
   | McpListRequest
   | McpAcceptRequest
   | McpDeclineRequest
   | McpRevokeRequest
+  | ReachStatusRequest
+  | ReachApplyRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -328,9 +387,11 @@ export type HomeProcessErrorCode =
   | 'APPROVAL_FAILED'
   | 'APPROVALS_UNAVAILABLE'
   | 'REMOVAL_FAILED'
+  | 'ELEVATION_FAILED'
   | 'CONSENT_UNAVAILABLE'
   | 'STALE_REVIEW'
   | 'CONSENT_FAILED'
+  | 'REACH_UNAVAILABLE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {
@@ -382,6 +443,7 @@ export type UpdateChannelResponse =
   | { readonly ok: true, readonly line: string }
   | { readonly ok: true, readonly reportId: string, readonly report: unknown }
   | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
+  | { readonly ok: true, readonly options: readonly ReachOptionStatus[] }
   | { readonly ok: false, readonly error: HomeProcessErrorCode }
 
 /** What C3's health check holds an update's target to, from the update report, as the update record keeps it. */

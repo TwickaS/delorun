@@ -16,30 +16,52 @@ import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { randomLockId } from '@delo/home'
+
+// The store's watch: the real `fs.watch` unless a spec makes it fail to start.
+const watchControl = vi.hoisted(() => ({ fail: false }))
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  const watch: typeof actual.watch = ((...args: Parameters<typeof actual.watch>) => {
+    if (watchControl.fail) throw Object.assign(new Error('ENOSPC: System limit for number of file watchers reached'), { code: 'ENOSPC' })
+    return actual.watch(...args)
+  }) as typeof actual.watch
+  return { ...actual, default: { ...actual, watch }, watch }
+})
 import {
   apply,
+  Config,
   FULL_ACCESS_PRESET,
   FullAccessChangeError,
   fullAccessReviewId,
   permissionEntriesDigest,
   permissionStorePath,
   MAX_PERMISSION_REQUEST_BYTES,
+  NETWORK_LIST_PATH,
+  NETWORK_SET_PATH,
   PERMISSION_ROUTES,
   PermissionDefaults,
   readPermissionStore,
   SAFER_PRESET,
   serializePermissionStore,
+  withPermissionStoreLock,
   workspaceKey,
+  writePermissionStore,
 } from '../src/index.ts'
 import { registerPermissionRoutes } from '../src/routes.ts'
 
 const roots: string[] = []
 const originalHome = process.env['DELO_HOME']
 
-afterEach(() => {
+const contexts: Context[] = []
+
+afterEach(async () => {
+  // Disposing each composition closes its store watch before the home is removed.
+  for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
   if (originalHome === undefined) delete process.env['DELO_HOME']
   else process.env['DELO_HOME'] = originalHome
+  watchControl.fail = false
 })
 
 /** One mounted composition: the real permission services of a chat, a Delo home and two workspace folders. */
@@ -56,15 +78,18 @@ interface Mounted {
  * Mount the permission presets and this plugin over a fresh home, or over the home and folders of another mount, as a
  * second profile's Host shares the home.
  * @param shared - the home and folders of another mount.
+ * @param deloHome - the `DELO_HOME` the composition starts with, when it is not the home.
+ * @param mount - `row` mounts the plugin as its profile row does, `service` only the permission service.
  * @returns the composition.
  */
-async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>): Promise<Mounted> {
+async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, deloHome?: string, mount: 'row' | 'service' = 'row'): Promise<Mounted> {
   const root = mkdtempSync(join(tmpdir(), 'delo-permission-surfaces-'))
   roots.push(root)
   const { home, workspace, other } = shared ?? { home: join(root, 'home'), workspace: join(root, 'work'), other: join(root, 'other') }
   for (const directory of [home, workspace, other]) mkdirSync(directory, { recursive: true })
-  process.env['DELO_HOME'] = home
+  process.env['DELO_HOME'] = deloHome ?? home
   const ctx = new Context()
+  contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
   const harness = await mountAgentLoopTestHarness(ctx)
   await ctx.plugin(SandboxPolicyService, { mode: SAFER_PRESET, workspaceRoot: workspace })
@@ -76,7 +101,8 @@ async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>): 
   } as never)
   ctx.provide('approval', { config: { policy: 'ask' }, request: async () => 'rejected', setPolicy() {} } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: true }) })
+  if (mount === 'row') await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
+  else await ctx.plugin(PermissionDefaults)
   return { ctx, harness, defaults: ctx.get('permissionDefaults') as PermissionDefaults, home, workspace, other }
 }
 
@@ -390,6 +416,94 @@ describe('a home shared by several Hosts', () => {
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
   })
 
+  /**
+   * Give the home three running profiles whose start tokens no process may read, so a Host that read another
+   * profile's token would fail: this spec's Hosts read none.
+   * @param home - the Delo home.
+   */
+  function unreadableTokens(home: string): void {
+    for (const profile of ['studio', 'work', 'stale']) {
+      mkdirSync(join(home, 'run', profile), { recursive: true })
+      writeFileSync(join(home, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(0).toISOString() }), { mode: 0o600 })
+      writeFileSync(join(home, 'run', profile, 'token'), 'start-token', { mode: 0o000 })
+    }
+  }
+
+  /**
+   * Two Hosts over one home with a full-access chat open in the second, which no decision of the second Host touches
+   * afterwards.
+   * @param chat - the second Host's chat id.
+   * @returns both compositions, the second Host's open chat, and the workspace's review after the grant.
+   */
+  async function sharedGrant(chat: string) {
+    const first = await mounted()
+    const second = await mounted(first)
+    unreadableTokens(first.home)
+    const asked = await first.harness.create(SessionId(`${chat}-first`), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat(`${chat}-first`)
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: `${chat}-first` })
+    const open = await second.harness.create(SessionId(chat), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+    return { first, second, asked, open, on }
+  }
+
+  it('a withdrawal in one profile\'s studio sets the other Host\'s open full-access chats back once the store changes, without a decision there', async () => {
+    const { first, second, open, on } = await sharedGrant('chat-work')
+    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    // No decision runs in the second Host: its watch of the store reads the withdrawal.
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 5000 })
+  })
+
+  it('a return to the safer preset in one profile\'s chat sets the other Host\'s open full-access chats back once the store changes', async () => {
+    const { first, second, asked, open } = await sharedGrant('chat-select')
+    await first.defaults.select(asked, SAFER_PRESET)
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 5000 })
+  })
+
+  it('a withdrawal delorun workspace full-access writes under the store\'s lock sets every Host\'s open full-access chats back once the store changes', async () => {
+    const { first, second, asked, open } = await sharedGrant('chat-cli')
+    // The CLI's write: read, change and write the store under its lock, with no message to any Host.
+    const path = permissionStorePath(first.home)
+    await withPermissionStoreLock(path, async () => {
+      const read = await readPermissionStore(path)
+      if (read.kind !== 'readable') throw new Error('the store must be readable here')
+      await writePermissionStore(path, new Map([...read.entries, [workspaceKey(first.workspace), { preset: SAFER_PRESET, fullAccessGrantedAt: null }]]))
+    })
+    await vi.waitFor(() => {
+      expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+      expect(first.ctx.sandboxPolicy.resolve({ session: asked.session }).mode).toBe(SAFER_PRESET)
+    }, { timeout: 5000 })
+  })
+
+  it('names a watch that cannot start, and reads a withdrawal at the next decision instead', async () => {
+    const first = await mounted()
+    watchControl.fail = true
+    const second = await mounted(first)
+    expect(second.ctx.logger.buffer.some(message => message.type === 'warn' && String(message.args[0]).includes('the permission store is not watched (ENOSPC'))).toBe(true)
+    await first.harness.create(SessionId('chat-unwatched-first'), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat('chat-unwatched-first')
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const open = await second.harness.create(SessionId('chat-unwatched'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    // Unwatched, the second Host keeps the chat until a decision reads the store.
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+    expect(second.defaults.granted(second.workspace)).toBe(false)
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) })
+  })
+
+  it('names a change it could not read again, and reads it at the next decision', async () => {
+    const { first, second, open, on } = await sharedGrant('chat-reread')
+    vi.spyOn(second.defaults, 'reload').mockRejectedValueOnce(new Error('the reread failed'))
+    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await vi.waitFor(() => {
+      expect(second.ctx.logger.buffer.some(message => message.type === 'warn' && String(message.args[0]).includes('could not be read again (the reread failed)'))).toBe(true)
+    }, { timeout: 5000 })
+    expect(second.defaults.granted(second.workspace)).toBe(false)
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) })
+  })
+
   it('refuses full access for a folder Delo never adds as a workspace, through the surfaces and the chat picker', async () => {
     const { harness, defaults, home } = await mounted()
     // The folder holding the Delo home is one Delo never adds.
@@ -418,6 +532,17 @@ describe('a change that cannot be recorded', () => {
       .rejects.toMatchObject({ code: 'STORE_REFUSED' })
     await expect(defaults.reload()).resolves.toMatchObject({ storeProblem: expect.stringContaining('could not be resolved') })
     expect(defaults.granted(workspace)).toBe(false)
+  })
+
+  it('refuses to start the row while the home cannot be resolved, and its permission service watches nothing and counts no grant', async () => {
+    // Upstream's ~/.dsh under the real OS home is a home resolveDeloHome refuses.
+    const dshHome = join(homedir(), '.dsh')
+    // The row's network service has no store or socket directory without a home, so the row does not start.
+    await expect(mounted(undefined, dshHome)).rejects.toThrow('HOME_IS_DSH_HOME')
+    const { ctx, defaults, workspace } = await mounted(undefined, dshHome, 'service')
+    expect(defaults.storeProblem).toContain('the Delo home could not be resolved')
+    expect(defaults.granted(workspace)).toBe(false)
+    expect(ctx.logger.buffer.some(message => String(message.args[0]).includes('not watched'))).toBe(false)
   })
 
   it('records nothing while the store\'s lock file is not a lock record', async () => {
@@ -500,11 +625,11 @@ describe('the service around its decisions', () => {
     }
   })
 
-  it('registers its routes where a Connection serves the studio', async () => {
+  it('registers its routes and the network\'s where a Connection serves the studio', async () => {
     const { ctx } = await mounted()
     const register = vi.fn<(route: { readonly path: string }) => void>()
     ctx.provide('connection', { fetch: { register } } as never)
     await new Promise(resolve => setImmediate(resolve))
-    expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual(Object.values(PERMISSION_ROUTES).sort())
+    expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual([...Object.values(PERMISSION_ROUTES), NETWORK_LIST_PATH, NETWORK_SET_PATH].sort())
   })
 })

@@ -6,7 +6,7 @@
  *
  * @module @delo/cli/package-manager
  */
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { delimiter, dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProfilePnpmInvocation } from '@deepseek-ai/dsh-app-boot'
@@ -62,6 +62,16 @@ export function packageManagerFor(source: PackageManagerSource): ProfilePnpmInvo
  */
 export function runsFromClosure(): boolean {
   return closureRootOf(thisEntry()) !== undefined
+}
+
+/**
+ * The directory that holds this Delo's own packages: `<runtime>/app` when `delorun` runs from a runtime closure, the
+ * source checkout's root otherwise. A Delo package that resolves outside it is not this installation's.
+ * @returns the directory, real path.
+ */
+export function deloPackagesRoot(): string {
+  const root = closureRootOf(thisEntry())
+  return realpathSync(root === undefined ? fileURLToPath(new URL('../../../../', import.meta.url)) : join(root, 'app'))
 }
 
 /** @returns the `delorun` entry file of this package. */

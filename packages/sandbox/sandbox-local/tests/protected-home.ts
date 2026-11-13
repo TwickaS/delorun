@@ -550,3 +550,25 @@ export async function checkSocketDirectoryDenied(make: ProviderFactory, director
   }
   expect(await probe(await make(protectionConfig(fixture)), policy, 'connect', backend)).toBe('ok')
 }
+
+/**
+ * With `privateTmp`, a `read-only` command reaches no socket and no file in the host's `/tmp` and reads its workspace
+ * there, and a `workspace-write` command reaches no such socket either; without it, the `read-only` command connects.
+ * @param make - creates a provider.
+ * @param directory - creates a temporary directory under a base.
+ */
+export async function checkPrivateTmpDenied(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const server = await listen(join(await directory('/tmp'), 'server.sock'))
+  const workspace = await directory('/tmp')
+  writeFileSync(join(workspace, 'note.txt'), 'inside')
+  const sibling = join(await directory('/tmp'), 'note.txt')
+  writeFileSync(sibling, 'outside')
+  const readOnly: SandboxPolicy = { mode: 'read-only', workspaceRoot: workspace }
+  const provider = await make({ privateTmp: true })
+  expect(await probe(provider, readOnly, 'connect', server)).toBe('ENOENT')
+  expect(await probe(provider, readOnly, 'read', join(workspace, 'note.txt'))).toBe('ok')
+  expect(await probe(provider, readOnly, 'read', sibling)).toBe('ENOENT')
+  expect(await probe(provider, readOnly, 'create', join(workspace, 'planted.txt'))).toBe('EROFS')
+  expect(await probe(provider, { mode: 'workspace-write', workspaceRoot: workspace }, 'connect', server)).toBe('ENOENT')
+  expect(await probe(await make({}), readOnly, 'connect', server)).toBe('ok')
+}

@@ -17,7 +17,8 @@
  */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReachListenerId, StudioAddress } from '@delo/contract-admission'
-import type { IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { ELEVATION_LIMITS, type IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { isElevationMinutes } from '@delo/home-auth'
 import { REACH_OPTION_LISTENERS, type ReachConfigRows, type ReachOptionId } from '@delo/contract-reach-providers'
 import { ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, type TailscaleRunner } from './tailscale.ts'
 
@@ -31,6 +32,8 @@ export interface ReachSpec {
   readonly listenerPort: number
   /** How often the service runs {@link ReachProvider.check} while the option is ready. */
   readonly checkIntervalMs: number
+  /** How many minutes an elevation approved for a device on the option's listener lasts. */
+  readonly elevationMinutes: number
 }
 
 /**
@@ -121,11 +124,14 @@ export class TailscalePrivateProvider implements ReachProvider {
     if (!Number.isInteger(listenerPort) || listenerPort < 1 || listenerPort > 65_535) {
       throw new ReachError('PORT_CONFLICT', `tailscalePrivate.listenerPort must be a port from 1 to 65535, got ${String(listenerPort)}. Run delorun reach on tailscale again to choose one`)
     }
+    if (!isElevationMinutes(row.elevationMinutes)) {
+      throw new ReachError('ELEVATION_MINUTES_INVALID', `tailscalePrivate.elevationMinutes must be a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(row.elevationMinutes)}`)
+    }
     const address = URL.parse(row.address)
     if (address?.protocol !== 'https:' || !address.hostname.endsWith('.ts.net') || address.origin !== row.address) {
       throw new ReachError('TAILSCALE_ADDRESS_MISMATCH', `tailscalePrivate.address must be this machine's https ts.net address, got ${JSON.stringify(row.address)}`)
     }
-    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort, listenerPort, checkIntervalMs: row.serveCheckIntervalMs }
+    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort, listenerPort, checkIntervalMs: row.serveCheckIntervalMs, elevationMinutes: row.elevationMinutes }
   }
 
   /** @inheritdoc */
@@ -174,6 +180,45 @@ export class TailscalePrivateProvider implements ReachProvider {
  */
 export function funnelOn(host: string, servePort: number, next: string): ReachError {
   return new ReachError('TAILSCALE_FUNNEL_ON', `Tailscale Funnel is on for ${host}:${String(servePort)}, which would put this studio on the public internet, so remote access stays off. Turn Funnel off with tailscale funnel --https=${String(servePort)} off, ${next}`)
+}
+
+/** Where {@link checkServeAccess} checks, and what its refusals ask the person to do next. */
+export interface ServeAccessRequest {
+  /** This machine's `ts.net` name. */
+  readonly host: string
+  readonly servePort: number
+  /** The fixed listener port the row records. */
+  readonly listenerPort: number
+  /**
+   * Whether this home's own rule on the serve port stays: true while the profile's home runs with the option on and
+   * holds the listener port, so its rule forwards to the home. Otherwise every rule on the port is removed, because a
+   * port no home holds can be bound by any local program.
+   */
+  readonly keepOwn: boolean
+  /** What the person does once Funnel is off, as a clause beginning with `then`. */
+  readonly next: string
+}
+
+/**
+ * The checks `delorun reach on tailscale` and setup's reach section run before the row is written, after
+ * {@link readTailscale}: Funnel is off for the address; a rule on the serve port that is not kept is removed, and its
+ * removal confirmed; and the person's user may configure `tailscale serve`, which is tested by configuring it. A kept
+ * rule is configured again unchanged; otherwise the serve target is configured to the listener port and removed again,
+ * and the removal confirmed, so the test leaves no rule behind.
+ * @param run - the runner.
+ * @param request - the address, the ports, whether the home's own rule stays, and the next step after Funnel.
+ * @throws {ReachError} `TAILSCALE_FUNNEL_ON`; `TAILSCALE_SERVE_NOT_PERMITTED` with {@link TAILSCALE_OPERATOR_COMMAND}
+ *   when the person's user may not configure serve; `TAILSCALE_SERVE_CONFLICT` when a removal is not confirmed; a
+ *   refusal of {@link readServeRules}.
+ */
+export async function checkServeAccess(run: TailscaleRunner, request: ServeAccessRequest): Promise<void> {
+  const target = serveTarget(request.listenerPort)
+  const rules = await readServeRules(run, request.host, request.servePort, target)
+  if (rules.funnel) throw funnelOn(request.host, request.servePort, request.next)
+  const keep = rules.present && rules.own && request.keepOwn
+  if (rules.present && !keep) await removeServe(run, request.host, request.servePort, target)
+  await serve(run, request.servePort, request.listenerPort)
+  if (!keep) await removeServe(run, request.host, request.servePort, target)
 }
 
 /** What the running home's refusal asks the person to do once Funnel is off. */

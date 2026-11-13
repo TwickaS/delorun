@@ -7,8 +7,10 @@
  *   session token.
  * - {@link HomeAuthAuthenticator} — the provider of upstream's `authenticator`, which also refuses a full-access grant
  *   answered from a `tailnet-membership` session.
- * - The `reach-device` principal of an approved device's Peers, and the remote access policy that allows it only the
- *   actions of {@link REACH_ALLOWED_ACTIONS} and refuses every other with `loopback-required: <action>`.
+ * - The `reach-device` principal of an approved device's Peers on one listener, and the remote access policy that
+ *   allows it only the actions of {@link REACH_ALLOWED_ACTIONS}, those of {@link REACH_ELEVATED_ACTIONS} while the
+ *   device holds an unlock on that listener the person approved at the computer, and refuses every other with
+ *   `loopback-required: <action>`.
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
@@ -33,11 +35,22 @@ export {
   type SignedIn,
   type TokenAdmission,
 } from './home-auth.ts'
-export { HomeAuthAuthenticator, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, type ReachPeer } from './authenticator.ts'
+export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, defaultPermissionOf, protectedEntryIdsOf, type ReachPeer } from './authenticator.ts'
 export {
   REACH_ALLOWED_ACTIONS,
   REACH_DENIED_ACTIONS,
+  REACH_ELEVATED_ACTIONS,
   REACH_DEVICE,
+  REACH_DEVICE_COMMANDS,
+  DEFAULT_PERMISSION_REFUSAL,
+  PROTECTED_ROW_REFUSAL,
+  UNLISTED_COMMAND_REFUSAL,
+  protectedPluginsIn,
+  switchOffRefusal,
+  type ComputerOnlySwitch,
+  type DefaultPermission,
+  type PermissionLevel,
+  CREATE_OUTSIDE_WORKSPACES,
   assertDisjoint,
   createReachAccessPolicy,
   reachDevicePrincipal,
@@ -50,6 +63,10 @@ export { formatMatchCode, matchCode, typedCodeMatches, type MatchCodeInputs } fr
 export { Challenges, signInMessage, signInVerifies } from './sign-in.ts'
 export { loadHomeKey, type HomeKey } from './home-key.ts'
 export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS, sessionCookie } from './reach-routes.ts'
+export { ELEVATION_PATHS } from './elevation-routes.ts'
+export type { ReachFullAccessGrants } from './full-access-grants.ts'
+export { REACH_TERMINAL_VERSION, ReachTerminalStore, type ReachTerminalRecord } from './reach-terminal.ts'
+export { isElevationMinutes } from './elevation.ts'
 export { REACH_DEVICE_PATHS, plainPathname, reachesDevicePath, type ReachDevicePath, type ReachDevicePathMatch } from './reach-paths.ts'
 export { HomeAuthService, Config as HomeAuthConfig, type Config } from './service.ts'
 export {

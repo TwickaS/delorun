@@ -1,11 +1,11 @@
 /**
  * `delorun workspace full-access` and `delorun mcp` over a temporary home, a scripted home socket and a scripted prompt:
  * full access is recorded only after a yes at a terminal, a review that changed meanwhile records nothing, a folder Delo
- * never adds is refused, the running studio is asked to read the store again and a mismatch is reported; an MCP server
+ * never adds is refused, and turning full access off names the running profiles without sending them anything; an MCP server
  * is accepted only after a yes at a terminal and with the review id that was shown, an allowed server is revoked by its
  * name only after a yes at a terminal and with the acceptance id that was shown, and every action needs Delo to run.
  */
-import { randomLockId, shellQuote } from '@delo/home'
+import { shellQuote } from '@delo/home'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,9 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const { clackConfirm } = vi.hoisted(() => ({ clackConfirm: vi.fn<() => Promise<boolean | symbol>>() }))
 vi.mock('@clack/prompts', () => ({ confirm: clackConfirm, isCancel: (value: unknown) => typeof value === 'symbol' }))
 import type { ResponseLine, UnsignedRequest } from '@delo/home-process'
+import { randomLockId } from '@delo/home'
 import { permissionStorePath, readPermissionStore, serializePermissionStore } from '@delo/plugin-permission-defaults/store'
-import { fullAccessNote, permissionEntriesDigest } from '@delo/plugin-permission-defaults/review'
+import { fullAccessNote } from '@delo/plugin-permission-defaults/review'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
+import { grantStorePath, readGrantStore } from '@delo/plugin-delegation-consent/store'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createMcpCommand, type McpDependencies } from '../../src/mcp/command.ts'
@@ -52,23 +54,15 @@ interface Scripted {
 }
 
 /**
- * `delorun workspace` over a scripted home socket and prompt.
- * @param overrides - the dependencies to replace, the socket's answers and the prompt's.
- * @returns the command, the requests sent and the questions asked.
+ * `delorun workspace` over a scripted prompt.
+ * @param overrides - the dependencies to replace, and the prompt's answers.
+ * @returns the command and the questions asked.
  */
-function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
-  const sent: UnsignedRequest[] = []
-  const reloaded: string[] = []
+function workspace(overrides: Partial<WorkspaceDependencies> & Pick<Scripted, 'answers'> = {}) {
   const asked: string[] = []
-  const lines = [...(overrides.lines ?? [])]
   const answers = [...(overrides.answers ?? [])]
   const command = createWorkspaceCommand({
     runningProfiles: () => [],
-    send: async (_home, profile, request) => {
-      sent.push(request)
-      reloaded.push(profile)
-      return Promise.resolve(lines.shift() ?? [])
-    },
     confirm: async (message) => {
       asked.push(message)
       return Promise.resolve(answers.shift())
@@ -78,7 +72,7 @@ function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
     now: () => NOW,
     ...overrides,
   })
-  return { command, sent, asked, reloaded }
+  return { command, asked }
 }
 
 /**
@@ -149,26 +143,21 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout).toContain('Full access is already off')
   })
 
-  it('asks the studio of every running profile to read the store again, and names each that did not', async () => {
-    const written = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: NOW }]]))
-    const matching = workspace({ runningProfiles: () => ['cli', 'work'], answers: [true], lines: [[{ ok: true, digest: written }], [{ ok: true, digest: written }]] })
-    await expect(matching.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
-    expect(matching.sent).toEqual([{ op: 'permission.reload' }, { op: 'permission.reload' }])
-    expect(matching.reloaded).toEqual(['cli', 'work'])
-    out.stdout = ''
-    const off = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'workspace-write', fullAccessGrantedAt: null }]]))
-    const mixed = workspace({
-      runningProfiles: () => ['cli', 'stock', 'other', 'gone'],
-      lines: [[{ ok: true, digest: off }], [{ ok: false, error: 'CONSENT_UNAVAILABLE' }], [{ ok: true, digest: 'sha256:other' }], []],
-    })
-    await expect(mixed.command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stdout).toContain('The studio of profile stock does not ask for full access per workspace')
+  it('names the running profiles after turning full access off, without sending them anything', async () => {
+    mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    const { command } = workspace({ runningProfiles: () => ['cli', 'work'] })
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(await grants()).toEqual({ [workspaceKey(folder)]: null })
     expect(out.stdout).toContain(`Full access is off for ${workspaceKey(folder)}`)
-    expect(out.stderr).toContain('the studio of profile other holds other grants than were written')
-    expect(out.stderr).toContain('profile gone did not read it (NO_ANSWER)')
-    expect(out.stderr).toContain('restart it with delorun stop and delorun start')
-    // The change is told only after the studios answered.
-    expect(out.stdout.indexOf('does not ask')).toBeLessThan(out.stdout.indexOf('Full access is off'))
+    expect(out.stdout).toContain('Delo runs in profile cli, work: running chats there switch to the safer preset within a second.')
+    expect(out.stderr).toBe('')
+    // Turning full access on, or off when it is already off, names no profile.
+    out.stdout = ''
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+    const on = workspace({ runningProfiles: () => ['cli'], answers: [true] })
+    await expect(on.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).not.toContain('Delo runs in profile')
   })
 
   it('records nothing and says so when the record cannot be written or another command holds it', async () => {
@@ -224,14 +213,17 @@ describe('delorun workspace full-access', () => {
     await expect(confirmInTerminal('Turn on?')).resolves.toBeUndefined()
   })
 
-  it('lists the profiles whose home process runs', () => {
+  it('lists the profiles whose home process runs from their home locks, reading no token', () => {
     expect(runningProfiles(join(osHome, 'no-home'))).toEqual([])
-    for (const profile of ['work', 'cli', 'stopped']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
+    for (const profile of ['work', 'cli', 'stopped', 'damaged']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
     writeFileSync(join(deloHome, 'run', 'file'), '')
-    // This process holds the home lock of two profiles; the third has none.
+    // This process holds the home lock of two profiles; the third has none, and the fourth's is not a lock record.
     for (const profile of ['work', 'cli']) {
       writeFileSync(join(deloHome, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(NOW).toISOString() }), { mode: 0o600 })
+      // A token the command must never read: unreadable, so a read would fail.
+      writeFileSync(join(deloHome, 'run', profile, 'token'), 'start-token', { mode: 0o000 })
     }
+    writeFileSync(join(deloHome, 'run', 'damaged', 'home.lock'), '{ not a lock', { mode: 0o600 })
     expect(runningProfiles(deloHome)).toEqual(['cli', 'work'])
   })
 
@@ -254,13 +246,13 @@ describe('delorun workspace full-access', () => {
 
 const SERVER = {
   serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
-  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'API_TOKEN' }],
+  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'API_TOKEN' }], files: [] as object[], writableByChats: [] as string[],
   reason: 'the acceptance store holds no acceptance for this server', change: 'new', changedVariables: [], state: 'waiting', reviewedAt: NOW,
 }
 
 const ACCEPTED = {
   acceptanceId: 'c'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/repo',
-  resolvedCommand: '/opt/uv/bin/uvx.cmd', resolvedCwd: '/srv/repo', resolvedShell: '/Windows/System32/cmd.exe', env: [{ name: 'GIT_TOKEN' }, { name: 'PATH', value: '/opt/git/bin' }], acceptedAt: NOW, configured: true,
+  resolvedCommand: '/opt/uv/bin/uvx.cmd', resolvedCwd: '/srv/repo', resolvedShell: '/Windows/System32/cmd.exe', env: [{ name: 'GIT_TOKEN' }, { name: 'PATH', value: '/opt/git/bin' }], files: [] as object[], acceptedAt: NOW, configured: true,
 }
 
 /** The `mcp.list` answer of a studio holding {@link SERVER} waiting and {@link ACCEPTED} allowed. */
@@ -307,10 +299,20 @@ describe('delorun mcp', () => {
     expect(out.stdout).toContain('files: its command or working directory now resolves to another place on this computer\n')
     expect(out.stdout).toContain('    runs: /home/person/project/node_modules/.bin/npx\n    runs in: /home/person\n')
     const { resolvedCommand: _command, ...unresolved } = SERVER
-    for (const entry of [unresolved, { ...SERVER, resolvedCwd: 1 }, { ...SERVER, resolvedShell: 2 }]) {
+    const { files: _files, ...unpinned } = SERVER
+    const { writableByChats: _writable, ...unchecked } = SERVER
+    for (const entry of [unresolved, unpinned, unchecked, { ...SERVER, writableByChats: [4] }, { ...SERVER, resolvedCwd: 1 }, { ...SERVER, resolvedShell: 2 }, { ...SERVER, files: [{ path: 3 }] }]) {
       const unreadable = mcp({ lines: [[{ ok: true, servers: [entry], accepted: [] }]] })
       await expect(unreadable.command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed })
     }
+  })
+
+  it('names the files a start runs and says when one changed', async () => {
+    const changed = { ...SERVER, change: 'contents', files: [{ path: '/usr/local/lib/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/srv/server.js', sha256: `sha256:${'b'.repeat(64)}` }] }
+    const { command } = mcp({ lines: [[{ ok: true, servers: [changed], accepted: [] }]] })
+    await expect(command.run(['list'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('files: a file it runs changed since you accepted it\n')
+    expect(out.stdout).toContain('    runs in: /home/person\n    files it runs: /usr/local/lib/npx-cli.js, /srv/server.js\n')
   })
 
   it('says in plain words what changed since the person allowed each waiting server', async () => {
@@ -318,7 +320,7 @@ describe('delorun mcp', () => {
       command: 'its command changed', arguments: 'its arguments changed', directory: 'its working directory changed',
       environment: 'its environment variables changed', unreadable: 'the acceptance list could not be read',
       resolved: 'its command or working directory now resolves to another place on this computer',
-      upgraded: 'Delorun now remembers each server separately; review it once',
+      contents: 'a file it runs changed since you accepted it',
     }
     for (const [change, words] of Object.entries(changes)) {
       const { command } = mcp({ lines: [[{ ok: true, servers: [{ ...SERVER, change }], accepted: [] }]] })
@@ -369,6 +371,23 @@ describe('delorun mcp', () => {
     out.stdout = ''
     await expect(empty.command.run(['list'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toBe('No MCP server is waiting for your answer.\n\nNo MCP server is allowed.\n')
+  })
+
+  it('shows on the accept screen the file the command links to, which is the file that runs, and what chats can write', async () => {
+    const linked = {
+      ...SERVER,
+      files: [{ path: '/usr/local/lib/node_modules/npm/bin/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/home/person/project/server.js', sha256: `sha256:${'b'.repeat(64)}` }],
+      writableByChats: ['/home/person/project/server.js'],
+    }
+    const { command } = mcp({ answers: [false], lines: [[{ ok: true, servers: [linked], accepted: [] }]] })
+    await expect(command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('    runs: /usr/local/bin/npx, which links to /usr/local/lib/node_modules/npm/bin/npx-cli.js\n')
+    expect(out.stdout).toContain('    chats can write: /home/person/project/server.js, so a chat can change what this server runs\n')
+    const direct = { ...linked, files: [{ path: '/usr/local/bin/npx', sha256: `sha256:${'a'.repeat(64)}` }], writableByChats: [] }
+    const plain = mcp({ answers: [false], lines: [[{ ok: true, servers: [direct], accepted: [] }]] })
+    await expect(plain.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('    runs: /usr/local/bin/npx\n')
+    expect(out.stdout).not.toContain('chats can write: /usr')
   })
 
   it('accepts a server with the review id it showed, once the person says yes at a terminal', async () => {
@@ -483,5 +502,68 @@ describe('delorun mcp', () => {
     const idle = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 0 }]] })
     await expect(idle.command.run(['revoke', 'git'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('Revoked git; it was not running.')
+  })
+})
+
+describe('delorun workspace external-agents', () => {
+  /**
+   * The grants file's grants.
+   * @returns each grant as workspace, provider and time.
+   */
+  async function agentGrants(): Promise<unknown> {
+    const read = await readGrantStore(grantStorePath(deloHome))
+    return read.kind === 'readable' ? read.grants : read
+  }
+
+  it('says no agent may start without asking while none is allowed', async () => {
+    const { command } = workspace()
+    await expect(command.run(['external-agents'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('No external agent may start without asking')
+  })
+
+  it('shows what the agent can do and records the grant once the person says yes at a terminal, then revokes it', async () => {
+    const { command, asked } = workspace({ answers: [true, true] })
+    await expect(command.run(['external-agents', 'projects/site', 'claude-code', 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('outside Delo\'s sandbox and approval prompts')
+    expect(asked).toEqual(['Let Claude Code start in this workspace without asking?'])
+    expect(await agentGrants()).toEqual([{ workspace: workspaceKey(folder), provider: 'claude-code', grantedAt: NOW }])
+    await expect(command.run(['external-agents', folder, 'claude-code', 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('(it already could)')
+    await expect(command.run(['external-agents'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Claude Code (claude-code)  since 2027-01-15T08:00:00.000Z')
+    await expect(command.run(['external-agents', folder, 'claude-code', 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Claude Code now asks again before it starts in')
+    expect(await agentGrants()).toEqual([])
+    await expect(command.run(['external-agents', folder, 'codex', 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Codex already asked before it starts in')
+  })
+
+  it('records nothing without a yes or without a terminal', async () => {
+    for (const answer of [false, undefined]) {
+      const { command } = workspace({ answers: [answer] })
+      await expect(command.run(['external-agents', folder, 'codex', 'on'], context)).resolves.toBe(EXIT.failed)
+    }
+    const { command, asked } = workspace({ terminal: false, answers: [true] })
+    await expect(command.run(['external-agents', folder, 'codex', 'on'], context)).resolves.toBe(EXIT.failed)
+    expect(asked).toEqual([])
+    expect(await agentGrants()).toEqual([])
+    expect(out.stderr).toContain('nothing was changed; Codex still asks before it starts in')
+    expect(out.stderr).toContain('asks you to confirm at a terminal')
+  })
+
+  it('refuses a usage error, a missing folder, a folder Delo never adds and an unreadable grants file', async () => {
+    const { command } = workspace({ answers: [true] })
+    await expect(command.run(['external-agents', folder], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'Bad Agent', 'on'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'maybe'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'on', 'extra'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', join(osHome, 'missing'), 'codex', 'on'], context)).rejects.toThrow('is not a folder')
+    await expect(command.run(['external-agents', osHome, 'codex', 'on'], context)).rejects.toThrow('Nothing was changed.')
+    const path = grantStorePath(deloHome)
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(path, '{"v":9}', { mode: 0o600 })
+    await expect(command.run(['external-agents'], context)).rejects.toThrow('cannot be read')
+    await expect(command.run(['external-agents', folder, 'codex', 'off'], context)).rejects.toThrow('nothing was recorded')
+    chmodSync(path, 0o600)
   })
 })

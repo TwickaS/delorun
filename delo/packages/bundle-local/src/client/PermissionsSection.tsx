@@ -20,6 +20,7 @@ import {
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
 import type { HostFetch } from './host-api.ts'
+import { formatTime, listLine, readListing, type GroupProps, type Listing } from './ConsentListing.tsx'
 import { SettingsCard } from '@delo/settings-controls'
 import css from './ConsentSections.module.css'
 
@@ -39,42 +40,6 @@ export interface PermissionsSectionInjected {
 /** Props the renderer binds for the section. */
 export type PermissionsSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'deloConsents'> & InjectFace<PermissionsSectionInjected>
 
-type Translate = PermissionsSectionProps['t']
-
-/** One list's state: not answered yet, answered, not mounted in this profile, remote, or failed with the sentence. */
-type Listing<T> =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly value: T }
-  | { readonly kind: 'unavailable' }
-  | { readonly kind: 'remote' }
-  | { readonly kind: 'failed'; readonly text: string }
-
-/**
- * A moment as the section shows it, in the section's locale.
- * @param t - the copy, whose `time.locale` names the locale.
- * @param at - milliseconds since the epoch.
- * @returns the date and time.
- */
-function formatTime(t: Translate, at: number): string {
-  return new Intl.DateTimeFormat(t('time.locale'), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(at))
-}
-
-/**
- * Read one list into its state.
- * @param t - the copy.
- * @param read - the request.
- * @returns the state the request answered.
- */
-async function listing<T>(t: Translate, read: () => Promise<T | undefined>): Promise<Listing<T>> {
-  try {
-    const value = await read()
-    return value === undefined ? { kind: 'unavailable' } : { kind: 'ready', value }
-  } catch (error) {
-    const failure = consentFailureOf(error)
-    return failure.kind === 'remote' ? { kind: 'remote' } : { kind: 'failed', text: consentFailureText(t, failure) }
-  }
-}
-
 /**
  * Render the section.
  * @param props - the copy, the request function, the consent and the review.
@@ -87,7 +52,7 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
   const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
-    const [nextWorkspaces, nextServers] = await Promise.all([listing(t, () => readWorkspaces(fetch)), listing(t, () => readServers(fetch))])
+    const [nextWorkspaces, nextServers] = await Promise.all([readListing(t, () => readWorkspaces(fetch)), readListing(t, () => readServers(fetch))])
     setWorkspaces(nextWorkspaces)
     setServers(nextServers)
   }, [fetch, t])
@@ -142,27 +107,6 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
       <ServersGroup t={t} listing={servers} busy={busy} review={reviewServer} decline={declineWaiting} revoke={revokeAccepted} />
     </SettingsCard>
   </div>
-}
-
-/** What a group renders from: the copy, its list, whether an answer is being sent, and the answer's sentence. */
-interface GroupProps<T> {
-  readonly t: Translate
-  readonly listing: Listing<T>
-  readonly busy: boolean
-}
-
-/**
- * The lines a list shows before its rows: why it has none, or why it could not be read.
- * @param t - the copy.
- * @param listing - the list.
- * @param unavailable - the line for a profile that mounts no list.
- * @returns the line, or nothing for a list that is remote or ready.
- */
-function listLine(t: Translate, listing: Listing<unknown>, unavailable: 'access.unavailable' | 'mcp.unavailable'): ReactNode {
-  if (listing.kind === 'loading') return <p className={css.boxLine} aria-busy="true">{t('permissions.loading')}</p>
-  if (listing.kind === 'unavailable') return <p className={css.boxLine}>{t(unavailable)}</p>
-  if (listing.kind === 'failed') return <p className={css.boxFailed} role="alert">{listing.text}</p>
-  return null
 }
 
 /**

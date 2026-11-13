@@ -842,6 +842,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Optional check that runs before a `sandbox/mode` event is appended and returns the reason when the switch must not happen.',
   },
   {
+    key: 'sandboxNetwork',
+    pkg: 'sandbox-policy',
+    title: 'Sandbox network resolver',
+    mode: 'seam',
+    implementations: [],
+    consumers: [],
+    note: 'Optional resolver that `ctx.sandboxPolicy.resolve()` asks for each call\'s network; without one the policy carries none and runners share the host\'s network.',
+  },
+  {
     key: 'approval',
     pkg: 'user-approval',
     title: 'Approval seam',
@@ -894,6 +903,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: ['compaction-basic'],
     consumers: ['compaction-basic'],
     note: 'The basic backend consumes post-step pressure and request-error recovery events; there is no model-facing compact tool.',
+  },
+  {
+    key: 'delegationConsent',
+    pkg: 'subagent',
+    title: 'External delegation consent',
+    mode: 'seam',
+    implementations: [],
+    consumers: ['subagent', 'tool-subagent'],
+    note: 'Optional review of each external provider start before it runs, with the run time limit, and the model-facing description of an external delegation tool.',
   },
   {
     key: 'subagents',

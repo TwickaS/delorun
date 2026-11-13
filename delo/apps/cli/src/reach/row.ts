@@ -8,7 +8,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
+import { ELEVATION_LIMITS } from '@delo/contract-oidc-passkeys'
 import { DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, LISTENER_PORT_RANGE } from '@delo/contract-reach-providers'
+import { REACH_PATHS } from '@delo/home-auth'
 import { chooseListenerPort, isPortFree } from '@delo/reach'
 import { profileDirectory } from '../profile.ts'
 import { setPatchRow } from '../setup/writes.ts'
@@ -24,10 +26,12 @@ export interface TailscalePrivateRow {
   /** The fixed port on `127.0.0.1` the serve target names; `0` until `delorun reach on tailscale` chooses one. */
   readonly listenerPort: number
   readonly serveCheckIntervalMs: number
+  /** How many minutes sensitive actions stay unlocked on a device the person approves; the reach service checks the range. */
+  readonly elevationMinutes: number
 }
 
 /** The option of a profile that has no row of its own: off. */
-export const REACH_OFF: TailscalePrivateRow = { enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS }
+export const REACH_OFF: TailscalePrivateRow = { enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS, elevationMinutes: ELEVATION_LIMITS.defaultMinutes }
 
 /**
  * The profile's patch file.
@@ -68,12 +72,14 @@ export function readReachRowAt(path: string): TailscalePrivateRow {
   const servePort: unknown = Reflect.get(option, 'servePort')
   const listenerPort: unknown = Reflect.get(option, 'listenerPort')
   const interval: unknown = Reflect.get(option, 'serveCheckIntervalMs')
+  const elevationMinutes: unknown = Reflect.get(option, 'elevationMinutes')
   return {
     enabled: enabled === true,
     address: typeof address === 'string' ? address : '',
     servePort: typeof servePort === 'number' ? servePort : DEFAULT_SERVE_PORT,
     listenerPort: typeof listenerPort === 'number' ? listenerPort : 0,
     serveCheckIntervalMs: typeof interval === 'number' ? interval : DEFAULT_SERVE_CHECK_INTERVAL_MS,
+    elevationMinutes: typeof elevationMinutes === 'number' ? elevationMinutes : ELEVATION_LIMITS.defaultMinutes,
   }
 }
 
@@ -99,9 +105,19 @@ export function writeReachRowAt(path: string, option: TailscalePrivateRow): void
       enabled: true,
       tailscalePrivate: {
         enabled: option.enabled, address: option.address, servePort: option.servePort, listenerPort: option.listenerPort, serveCheckIntervalMs: option.serveCheckIntervalMs,
+        elevationMinutes: option.elevationMinutes,
       },
     },
   })
+}
+
+/**
+ * The sign-in page of a studio address, which a phone opens to ask for approval.
+ * @param address - the option's studio address, as the row records it.
+ * @returns `<address>/auth/sign-in`.
+ */
+export function signInAddress(address: string): string {
+  return `${address.replace(/\/$/, '')}${REACH_PATHS.signIn}`
 }
 
 /**

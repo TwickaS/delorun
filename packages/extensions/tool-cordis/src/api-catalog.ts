@@ -1096,6 +1096,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'delegationConsent',
+    summary: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`.',
+    description: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools\' own wording. A provider\'s plugin module exports DELEGATION_CONSENT_PROVIDER_EXPORT as `true`, so a start refuses while that row is not running.',
+    methods: [
+      {
+        signature: 'describe?(provider: string): string | undefined',
+        description: 'The model-facing description of a delegation tool whose provider is external, replacing the tool\'s generic opening sentences.',
+        parameters: [{ name: 'provider', description: 'the registered provider name.' }],
+        returns: 'the description, or undefined to keep the tool\'s own.',
+      },
+      {
+        signature: 'review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict>',
+        description: 'Review one external start. The runtime starts the provider only on `allow`; a refusal, any other answer and a throw start nothing.',
+        parameters: [{ name: 'review', description: 'the facts of the start.' }],
+        returns: 'the verdict.',
+      },
+    ],
+  },
+  {
     key: 'directoryPicker',
     summary: 'Abstract directory-picking service.',
     description: 'Abstract directory-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.directoryPicker` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The capability object must be stable for the service lifetime: consumers may capture it across calls.',
@@ -2074,7 +2093,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
-        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, and again before every reconnect spawns the server after its connection dropped, where a refusal ends the reconnect loop and leaves the server stopped until its row starts again. The provider can therefore compare what the start names, such as the contents of its executable, with what it accepted each time, and let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
         parameters: [{ name: 'command', description: 'the server start under review.' }],
         returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
       },
@@ -2241,7 +2260,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'pluginAudit',
     summary: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`.',
-    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.',
+    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited and an installation is a single `pnpm add`.',
     methods: [
       {
         signature: 'audit(target: PluginAuditTarget): Promise<PluginAuditResult>',
@@ -2361,7 +2380,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote installBundle(spec: string, options?: InstallBundleOptions): Promise<ChangeResult>',
-        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
+        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into the lockfile, the audit answers with `pending: \'install\'`, and only then pnpm installs the lockfile; without one the installation is a single `pnpm add`. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
         parameters: [{ name: 'spec', description: 'One package spec, including local paths relative to the invocation directory.' }, { name: 'options', description: 'Whether to activate the installed bundle (defaults to true), the request id a cancellation names, the pending build scripts to allow, whether to save an exact dependency, and the registry asked first.' }],
         returns: 'Package-manager diagnostics, the registries asked, and the observed activation outcome.',
       },
@@ -2628,6 +2647,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [],
   },
   {
+    key: 'sandboxNetwork',
+    summary: 'Decides the network of one call\'s policy.',
+    description: 'Decides the network of one call\'s policy. It answers synchronously, because policy resolution is synchronous, and must not throw: a resolver that cannot decide answers the most restrictive network it supports.',
+    methods: [],
+  },
+  {
     key: 'sandboxPolicy',
     summary: 'The sandbox-policy service (`ctx.sandboxPolicy`).',
     description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log and immutable cwd travel together to every enforcing capability.',
@@ -2660,9 +2685,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd. A mounted `ctx.sandboxNetwork` resolver decides the call\'s network; without one the policy carries none, and runners share the host\'s network.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.',
       },
       {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
@@ -5688,7 +5713,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Admission',
-    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n};',
+    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n    readonly location?: string;\n};',
   },
   {
     name: 'AdmittedPromptContentPart',
@@ -6539,6 +6564,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EveryScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'every\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly everySeconds: number;\n    readonly scheduledAt: string;\n}',
   },
   {
+    name: 'ExternalDelegationReview',
+    declaration: 'export interface ExternalDelegationReview {\n    readonly provider: string;\n    readonly parent: Agent;\n    readonly cwd: string;\n    readonly label?: string | undefined;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ExternalDelegationVerdict',
+    declaration: 'export type ExternalDelegationVerdict = {\n    readonly kind: \'allow\';\n    readonly timeoutMs?: number | undefined;\n} | {\n    readonly kind: \'refuse\';\n    readonly reason: string;\n};',
+  },
+  {
     name: 'FeedbackCategory',
     declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
   },
@@ -7324,7 +7357,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpConsentDecision',
-    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
+    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n    readonly spawnCommand?: string;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
   },
   {
     name: 'McpResourceProvider',
@@ -7660,7 +7693,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PluginAuditTarget',
-    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n}',
+    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n    pending?: \'install\' | \'scripts\';\n    registries?: Registry[];\n}',
   },
   {
     name: 'PluginChange',
@@ -8280,11 +8313,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    network?: SandboxNetwork;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
     declaration: 'export type SandboxMode = \'read-only\' | \'workspace-write\' | \'danger-full-access\';',
+  },
+  {
+    name: 'SandboxNetwork',
+    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork;',
   },
   {
     name: 'SandboxPolicy',
@@ -8293,6 +8330,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxProxyNetwork',
+    declaration: 'export interface SandboxProxyNetwork {\n    readonly mode: \'proxy\';\n    readonly socket: string;\n}',
   },
   {
     name: 'SaveFileAttachment',

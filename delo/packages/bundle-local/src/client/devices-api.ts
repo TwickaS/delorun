@@ -1,10 +1,13 @@
 /**
- * Requests to the home's reach and device routes, through the same-origin requests of [`./host-api.ts`](./host-api.ts).
+ * Requests to the home's reach, device and unlock routes, through the same-origin requests of
+ * [`./host-api.ts`](./host-api.ts).
  * A refusal is the Host's `{ "error": "<CODE>", "message": "<sentence>" }` with a 4xx status.
  * @module @delo/bundle-local/client/devices-api
  */
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import { call, fields, hostFailureOf, isRefused, isString, isTime, listOf, optional, orNull, type HostFetch } from './host-api.ts'
+import {
+  call, fields, hostFailureOf, isBoolean, isRefused, isString, isTime, listOf, optional, orNull, readServedRoute, type Check, type HostFetch,
+} from './host-api.ts'
 
 export {
   HostRequestError, hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFailure, type HostFetch,
@@ -135,7 +138,7 @@ const isPendingDevices = fields({
 })
 const isApprovedDevice = fields({ device: fields({ id: isString, label: isString, address: isString }) })
 const isCancelledRequest = fields({ cancelled: isString })
-const isRemovedDevice = fields({ removed: value => typeof value === 'boolean', sessions: isTime, connections: isTime })
+const isRemovedDevice = fields({ removed: isBoolean, sessions: isTime, connections: isTime })
 
 /**
  * Read the reach state of each option this home builds.
@@ -143,14 +146,8 @@ const isRemovedDevice = fields({ removed: value => typeof value === 'boolean', s
  * @returns the status, or undefined when this profile has no reach (the route answers 404).
  * @throws {HostRequestError} for any other refusal, an unreachable Host or an unreadable answer.
  */
-export async function readReachStatus(fetch: HostFetch): Promise<ReachStatus | undefined> {
-  try {
-    return await call<ReachStatus>(fetch, DEVICE_ROUTES.reachStatus, isReachStatus)
-  } catch (error) {
-    const failure = hostFailureOf(error)
-    if (failure.kind !== 'unreachable' && failure.status === 404) return undefined
-    throw error
-  }
+export function readReachStatus(fetch: HostFetch): Promise<ReachStatus | undefined> {
+  return readServedRoute<ReachStatus>(fetch, DEVICE_ROUTES.reachStatus, isReachStatus)
 }
 
 /**
@@ -228,4 +225,179 @@ export function cancelPendingDevice(fetch: HostFetch, requestId: ApprovalRequest
  */
 export function removeDevice(fetch: HostFetch, deviceId: DeviceId): Promise<RemovedDevice> {
   return call<RemovedDevice>(fetch, DEVICE_ROUTES.remove, isRemovedDevice, { v: 1, deviceId })
+}
+
+/** One request to unlock, as the device's own studio and the computer name it. */
+export type ElevationRequestId = Branded<'DeloElevationRequestId'>
+
+/** One running unlock, as the computer names it to end it. */
+export type ElevationId = Branded<'DeloElevationId'>
+
+/**
+ * What `GET /auth/elevation` answers a device about its own unlock on the address it uses: none, a request waiting
+ * with the code to type at the computer, or a running unlock. Times are milliseconds since the epoch.
+ */
+export type ElevationState =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'pending'; readonly requestId: ElevationRequestId; readonly code: string; readonly expiresAt: number }
+  | { readonly kind: 'elevated'; readonly elevationId: ElevationId; readonly endsAt: number }
+
+/** One request to unlock waiting at the computer, without its code, which the person reads from the device. */
+export interface PendingElevation {
+  readonly requestId: ElevationRequestId
+  readonly deviceId: DeviceId
+  /** Milliseconds since the epoch. */
+  readonly requestedAt: number
+  /** Milliseconds since the epoch. */
+  readonly expiresAt: number
+}
+
+/** One running unlock, as the computer lists it. */
+export interface RunningElevation {
+  readonly id: ElevationId
+  readonly deviceId: DeviceId
+  /** Milliseconds since the epoch. */
+  readonly startedAt: number
+  /** Milliseconds since the epoch. */
+  readonly endsAt: number
+}
+
+/** What `GET /auth/elevation/pending` answers the computer. */
+export interface ElevationsAtComputer {
+  readonly pending: readonly PendingElevation[]
+  readonly running: readonly RunningElevation[]
+}
+
+/** The unlock routes this module calls: the device's three, then the computer's three. */
+export const ELEVATION_ROUTES = {
+  state: '/auth/elevation',
+  request: '/auth/elevation/request',
+  lock: '/auth/elevation/lock',
+  pending: '/auth/elevation/pending',
+  approve: '/auth/elevation/approve',
+  revoke: '/auth/elevation/revoke',
+  terminal: '/auth/elevation/terminal',
+} as const
+
+/** The prefix of the reason remote access gives a call that needs an unlock. */
+export const ELEVATION_REQUIRED = 'elevation-required:'
+
+/** The Host error code a device route answers on the computer's own address, where no device unlocks. */
+export const HOST_MISMATCH = 'HOST_MISMATCH'
+
+/** Interval between two reads of the unlock state while a request waits, and of the computer's list while it shows. */
+export const ELEVATION_POLL_MS = 2000
+
+/** Interval between two reads of the unlock state while an unlock runs, which notices an unlock ended at the computer. */
+export const ELEVATED_POLL_MS = 30_000
+
+const isElevationState: Check = value => fields({ kind: kind => kind === 'none' })(value)
+  || fields({ kind: kind => kind === 'pending', requestId: isString, code: code => typeof code === 'string' && /^\d{8}$/.test(code), expiresAt: isTime })(value)
+  || fields({ kind: kind => kind === 'elevated', elevationId: isString, endsAt: isTime })(value)
+const isElevationsAtComputer = fields({
+  pending: listOf(fields({ requestId: isString, deviceId: isString, requestedAt: isTime, expiresAt: isTime })),
+  running: listOf(fields({ id: isString, deviceId: isString, startedAt: isTime, endsAt: isTime })),
+})
+const isElevationRecord = fields({ id: isString, deviceId: isString, startedAt: isTime, endsAt: isTime })
+const isRevoked = fields({ revoked: isBoolean })
+const isTerminalSwitch = fields({ withoutUnlock: isBoolean })
+
+/**
+ * Read this device's own unlock state.
+ * @param fetch - the request function.
+ * @returns the state, or undefined where no device unlocks: the computer's own address (`HOST_MISMATCH`) or a profile
+ *   without the routes (404).
+ * @throws {HostRequestError} for any other refusal, an unreachable Host or an unreadable answer.
+ */
+export async function readElevation(fetch: HostFetch): Promise<ElevationState | undefined> {
+  try {
+    return await call<ElevationState>(fetch, ELEVATION_ROUTES.state, isElevationState)
+  } catch (error) {
+    const failure = hostFailureOf(error)
+    if (failure.kind !== 'unreachable' && (failure.status === 404 || (failure.kind === 'refused' && failure.code === HOST_MISMATCH))) return undefined
+    throw error
+  }
+}
+
+/**
+ * Ask the computer for an unlock from this device.
+ * @param fetch - the request function.
+ * @returns the state, a waiting request with the code to type at the computer, or the unlock this device holds.
+ * @throws {HostRequestError} for a refusal (`APPROVAL_PENDING_LIMIT` among them), an unreachable Host or an unreadable
+ *   answer.
+ */
+export function requestElevation(fetch: HostFetch): Promise<ElevationState> {
+  return call<ElevationState>(fetch, ELEVATION_ROUTES.request, isElevationState, {})
+}
+
+/**
+ * End this device's unlock and withdraw its waiting request. A device may end its own unlock, never start or extend one.
+ * @param fetch - the request function.
+ * @returns the state after it, `none`.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export function lockElevation(fetch: HostFetch): Promise<ElevationState> {
+  return call<ElevationState>(fetch, ELEVATION_ROUTES.lock, isElevationState, {})
+}
+
+/**
+ * Read the requests to unlock waiting at the computer and the running unlocks.
+ * @param fetch - the request function.
+ * @returns both lists.
+ * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED` on a device), an unreachable Host or an unreadable answer.
+ */
+export function readElevationsAtComputer(fetch: HostFetch): Promise<ElevationsAtComputer> {
+  return call<ElevationsAtComputer>(fetch, ELEVATION_ROUTES.pending, isElevationsAtComputer)
+}
+
+/**
+ * Approve one request to unlock at the computer with the code the device shows.
+ * @param fetch - the request function.
+ * @param requestId - the request.
+ * @param typedCode - the code the person typed, as eight digits.
+ * @returns the unlock that started.
+ * @throws {HostRequestError} for a refusal (`APPROVAL_CODE_MISMATCH`, `APPROVAL_EXPIRED` among them), an unreachable
+ *   Host or an unreadable answer.
+ */
+export function approveElevation(fetch: HostFetch, requestId: ElevationRequestId, typedCode: string): Promise<RunningElevation> {
+  return call<RunningElevation>(fetch, ELEVATION_ROUTES.approve, isElevationRecord, { requestId, typedCode })
+}
+
+/**
+ * Decline a request to unlock, or end a running unlock, at the computer.
+ * @param fetch - the request function.
+ * @param id - the request's or the unlock's id.
+ * @returns whether it was waiting or running.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function revokeElevation(fetch: HostFetch, id: ElevationRequestId | ElevationId): Promise<boolean> {
+  return (await call<{ revoked: boolean }>(fetch, ELEVATION_ROUTES.revoke, isRevoked, { id })).revoked
+}
+
+/**
+ * Read whether a device opens a terminal without an unlock in every folder.
+ * @param fetch - the request function.
+ * @returns whether the switch is on, or undefined where the home has no such switch (404).
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function readTerminalSwitch(fetch: HostFetch): Promise<boolean | undefined> {
+  try {
+    return (await call<{ withoutUnlock: boolean }>(fetch, ELEVATION_ROUTES.terminal, isTerminalSwitch)).withoutUnlock
+  } catch (error) {
+    const failure = hostFailureOf(error)
+    if (failure.kind !== 'unreachable' && failure.status === 404) return undefined
+    throw error
+  }
+}
+
+/**
+ * Turn the terminal switch on or off. Only the computer turns it on; a device that asks is refused with
+ * `LOOPBACK_REQUIRED`.
+ * @param fetch - the request function.
+ * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
+ * @returns the switch after the change.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function setTerminalSwitch(fetch: HostFetch, withoutUnlock: boolean): Promise<boolean> {
+  return (await call<{ withoutUnlock: boolean }>(fetch, ELEVATION_ROUTES.terminal, isTerminalSwitch, { withoutUnlock })).withoutUnlock
 }

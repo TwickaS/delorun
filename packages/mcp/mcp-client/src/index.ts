@@ -18,8 +18,8 @@ import z from '@deepseek-ai/schemastery'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
-import type { ReconnectConfig } from './connection.ts'
-import { findMcpAddConsent, McpConsentRefusedError } from './consent.ts'
+import type { ConnectionOptions, ReconnectConfig } from './connection.ts'
+import { findMcpAddConsent, McpConsentRefusedError, type McpAddConsent } from './consent.ts'
 import { resolveServerStart } from './server-start.ts'
 import { registerServerContext } from './server-context.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
@@ -72,6 +72,14 @@ export interface StdioConfig {
   serverName: string
   /** Executable used to start the server. */
   command: string
+  /**
+   * The `argv[0]` the server sees when it differs from `command`. A reviewed
+   * start sets it to the configured `command` while `command` names the
+   * reviewed file, so a program that locates itself by its invoked name, such
+   * as a virtual-environment `python` link, still does. `apply` drops a
+   * configured value. Absent, the server sees `command`.
+   */
+  argv0?: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
   /** Extra env vars merged on top of scrubbed ambient env. */
@@ -115,7 +123,7 @@ export interface StreamableHttpConfig {
 /** Configuration for one stdio or Streamable HTTP MCP server. */
 export type Config = StdioConfig | StreamableHttpConfig
 
-type StdioConfigInput = Omit<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>
+type StdioConfigInput = Omit<StdioConfig, 'argv0' | 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>
   & Partial<Pick<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
 type StreamableHttpConfigInput = Omit<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>
   & Partial<Pick<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
@@ -156,14 +164,72 @@ export const Config = z.union([
 // ---- Plugin apply ----
 
 /**
+ * Resolve a stdio server's start, have the consent review it, and return the
+ * config that spawns the reviewed executable, or the path the consent's
+ * decision names for it, in the reviewed directory. A file that runs directly
+ * sees the configured `command` as its `argv[0]`; a Windows batch shim keeps
+ * the command shell's own.
+ * @param consent - the mounted consent.
+ * @param config - the server's stdio configuration.
+ * @returns the configuration to spawn.
+ * @throws {McpServerStartUnresolvedError} when the start cannot be resolved.
+ * @throws {McpConsentRefusedError} when the consent refuses the start.
+ */
+async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promise<StdioConfig> {
+  const start = await resolveServerStart(config)
+  const decision = await consent.review(start)
+  if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
+  return {
+    ...config,
+    command: decision.spawnCommand ?? start.resolvedCommand,
+    ...start.resolvedShell === undefined ? { argv0: config.command } : {},
+    cwd: start.resolvedCwd,
+  }
+}
+
+/**
+ * The hook that reviews a stdio server's start again before each reconnect
+ * spawns it, so a file that changed while the server ran is reviewed before it
+ * runs. It looks the consent up again; a consent that is no longer mounted
+ * refuses the reconnect.
+ * @param ctx - the mcp-client plugin's context.
+ * @param config - the server's stdio configuration.
+ * @returns the connection options.
+ */
+function reviewEachReconnect(ctx: Context, config: StdioConfig): ConnectionOptions {
+  return {
+    beforeReconnect: async () => {
+      const consent = await findMcpAddConsent(ctx, config.serverName)
+      if (consent === undefined) {
+        throw new Error(`mcp-client(${config.serverName}): the add-time consent that allowed this server is no longer mounted, so the server stays stopped`)
+      }
+      return reviewedStart(consent, config)
+    },
+  }
+}
+
+/**
+ * A configuration without the `argv0` only a reviewed start sets.
+ * @param config - the configuration as the row gave it.
+ * @returns the configuration without `argv0`.
+ */
+function withoutArgv0(config: Config): Config {
+  if (config.transport !== 'stdio' || config.argv0 === undefined) return config
+  const { argv0: _reviewedOnly, ...rest } = config
+  return rest
+}
+
+/**
  * Connect one MCP server and publish its initial tool generation before activation.
  * This entry remains explicitly `async`: Cordis treats a prototype-bearing
  * ordinary function as a constructor, whose returned Promise is not startup work.
  * @param ctx - plugin context carrying the tool registry.
- * @param config - resolved transport and server namespace configuration.
+ * @param configured - resolved transport and server namespace configuration.
  * @returns startup readiness after connection and initial tool discovery settle.
  */
-export async function apply(ctx: Context, config: Config): Promise<void> {
+export async function apply(ctx: Context, configured: Config): Promise<void> {
+  // Only a reviewed start sets argv0; a configured one is dropped, as upstream ignores it.
+  const config = withoutArgv0(configured)
   // Fail loud at load: reconnect misconfiguration (including programmatic
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.
@@ -174,22 +240,24 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // mounted, or a loader row declares one, the configured start — command,
   // arguments, working directory and environment, with the executable path
   // and working directory they resolve to now — is reviewed at every boot and
-  // the server does not start until the review allows it. The allowed server
-  // is spawned with the reviewed executable path and working directory, so a
-  // later change of the Host's working directory or PATH cannot swap them.
+  // the server does not start until the review allows it, and again before
+  // every reconnect spawns it, so a file that changed while the server ran is
+  // reviewed before it runs again. The allowed server
+  // is spawned with the reviewed executable path, or the path the decision
+  // names for it, and working directory, so a later change of the Host's
+  // working directory or PATH cannot swap them.
   // The lookup waits for declaring rows, so the result does not depend on row
   // order. Without a provider — or for a Streamable HTTP server, which starts
   // no local command — startup is exactly upstream's. An unresolved start or a
   // refusal fails THIS instance at load, which leaves the server stopped with
   // the typed reason.
   let spawned: Config = config
+  let connectionOptions: ConnectionOptions = {}
   if (config.transport === 'stdio') {
     const consent = await findMcpAddConsent(ctx, config.serverName)
     if (consent !== undefined) {
-      const start = await resolveServerStart(config)
-      const decision = await consent.review(start)
-      if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
-      spawned = { ...config, command: start.resolvedCommand, cwd: start.resolvedCwd }
+      spawned = await reviewedStart(consent, config)
+      connectionOptions = reviewEachReconnect(ctx, config)
     }
   }
 
@@ -214,7 +282,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, spawned, reconnect)
+  const connection = startConnection(ctx, spawned, reconnect, connectionOptions)
   registerServerContext(ctx, config.serverName, connection)
   let stopping: Promise<void> | undefined
   const dispose = (): Promise<void> => stopping ??= connection.dispose()

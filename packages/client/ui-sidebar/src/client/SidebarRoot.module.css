@@ -81,8 +81,8 @@
    lifts the expanded shell out of the frame as an overlay — the same content
    at the open column's width (the frame publishes --dsh-sidebar-expanded-width
    from its own solve), over the rail and the page. Fixed, so the frame's grid
-   track keeps the rail's width and no page content moves. The fill, divider and
-   shadow replace the column's own: on macOS the column is a translucent
+   track keeps the rail's width and no page content moves. The fill and shadow, whose
+   hairline is the divider, replace the column's own: on macOS the column is a translucent
    vibrancy tint that cannot sit over content, so the overlay paints the
    sidebar fill itself. */
 .root.peeking {
@@ -93,7 +93,6 @@
   max-width: calc(100vw - 48px);
   z-index: 90;
   background: var(--dsw-specific-sidebar-fill);
-  border-right: 0.5px solid var(--dsw-alias-border-l3);
   box-shadow: var(--dsw-shadow-lv2);
   transition: width 140ms ease-out;
   animation: peek-in 140ms ease-out;

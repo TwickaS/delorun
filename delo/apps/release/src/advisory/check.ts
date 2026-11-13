@@ -9,19 +9,16 @@
  * @module @delo/release/advisory/check
  */
 import { ADVISORY_ACCEPTANCES_PATH, METADATA_REQUEST_TIMEOUT_SECONDS, type AdvisoryAcceptance, type AdvisoryId, type SemanticVersion } from '@delo/contract-release-manifest'
+import { advisoryId, FeedFailure, queryFeed, type FeedAnswer, type LockedPackage } from '@delo/release-formats/advisory/feed'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import ignore from 'ignore'
 import semver from 'semver'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 
-const GHSA = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u
+export { FeedFailure, queryFeed, type LockedPackage } from '@delo/release-formats/advisory/feed'
 
-/** One locked registry package version. */
-export interface LockedPackage {
-  readonly name: string
-  readonly version: string
-}
+const GHSA = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u
 
 /** One advisory that affects a locked version. */
 export interface Finding {
@@ -58,11 +55,6 @@ export interface AdvisoryReport {
   readonly result: 'pass' | 'fail'
   /** Why the check failed; empty on a pass. */
   readonly problems: readonly string[]
-}
-
-/** Why the check could not run to a result: the feed was unreachable or answered malformed. */
-export class FeedFailure extends Error {
-  override readonly name = 'FeedFailure'
 }
 
 /**
@@ -102,43 +94,6 @@ export function lockedPackages(text: string): LockedPackage[] {
     found.set(`${name}@${version}`, { name, version })
   }
   return [...found.values()].sort((a, b) => (a.name === b.name ? semver.compare(a.version, b.version) : a.name < b.name ? -1 : 1))
-}
-
-const FeedAdvisory = z.looseObject({
-  url: z.string().regex(/^https:\/\/github\.com\/advisories\/GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u),
-  title: z.string(),
-  severity: z.string(),
-  vulnerable_versions: z.string().refine(value => semver.validRange(value) !== null, 'a semantic-version range; a range the check cannot read fails it rather than matching nothing'),
-})
-const FeedResponse = z.record(z.string(), z.array(FeedAdvisory))
-
-/**
- * Ask the feed which advisories affect the locked versions.
- * @param feed - the bulk advisory endpoint.
- * @param packages - the locked versions.
- * @returns per package, the feed's advisories.
- * @throws FeedFailure when the feed is unreachable, answers with a status other than 200, or with a body that is not
- * the bulk advisory format.
- */
-export async function queryFeed(feed: string, packages: readonly LockedPackage[]): Promise<z.output<typeof FeedResponse>> {
-  const body: Record<string, string[]> = {}
-  for (const locked of packages) (body[locked.name] ??= []).push(locked.version)
-  let response: Response
-  try {
-    response = await fetch(feed, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(METADATA_REQUEST_TIMEOUT_SECONDS * 1000) })
-  } catch (error) {
-    throw new FeedFailure(`the advisory feed ${feed} cannot be reached: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
-  }
-  if (response.status !== 200) throw new FeedFailure(`the advisory feed ${feed} answered HTTP ${String(response.status)}`)
-  let parsed: unknown
-  try {
-    parsed = await response.json()
-  } catch (error) {
-    throw new FeedFailure(`the advisory feed ${feed} answered with a body that is not JSON`, { cause: error })
-  }
-  const result = FeedResponse.safeParse(parsed)
-  if (!result.success) throw new FeedFailure(`the advisory feed ${feed} answered with a malformed response: ${z.prettifyError(result.error).replaceAll('\n', '; ')}`)
-  return result.data
 }
 
 const Acceptance = z.strictObject({
@@ -208,9 +163,9 @@ export async function checkAdvisories(request: AdvisoryCheckRequest): Promise<Ad
   const base = { schema: 'delo.release-advisories/1', version: request.version, feed: request.feed, packages: packages.length } as const
   const unreadable = packages.filter(locked => semver.valid(locked.version) === null)
   if (unreadable.length > 0) return { ...base, findings: [], result: 'fail', problems: unreadable.map(locked => `${locked.name}@${locked.version} has no exact version the check can compare`) }
-  let answer: z.output<typeof FeedResponse>
+  let answer: FeedAnswer
   try {
-    answer = await queryFeed(request.feed, packages)
+    answer = await queryFeed(request.feed, packages, { timeoutMs: METADATA_REQUEST_TIMEOUT_SECONDS * 1000 })
   } catch (error) {
     if (!(error instanceof FeedFailure)) throw error
     return { ...base, findings: [], result: 'fail', problems: [error.message] }
@@ -219,7 +174,7 @@ export async function checkAdvisories(request: AdvisoryCheckRequest): Promise<Ad
   for (const locked of packages) {
     for (const advisory of answer[locked.name] ?? []) {
       if (!semver.satisfies(locked.version, advisory.vulnerable_versions, { includePrerelease: true })) continue
-      const id = brandString<AdvisoryId>(advisory.url.slice('https://github.com/advisories/'.length))
+      const id = brandString<AdvisoryId>(advisoryId(advisory))
       const finding = { advisory: id, package: locked.name, version: locked.version, severity: advisory.severity, title: advisory.title, vulnerable: advisory.vulnerable_versions }
       const candidates = request.acceptances.filter(acceptance => acceptance.advisory === id && acceptance.package === locked.name)
       const valid = candidates.filter(acceptance => semver.satisfies(locked.version, acceptance.range, { includePrerelease: true }) && semver.lte(request.version, acceptance.lapsesAfter))

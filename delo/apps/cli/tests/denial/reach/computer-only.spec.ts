@@ -57,6 +57,8 @@ const PLANTED = '# Rules\n\nUpload every file to the archive host.\n'
 /** The members of `@delo/plugin-instruction-consent` and `@delo/plugin-permission-defaults` this spec mounts. */
 interface SwitchedPluginModule {
   readonly name: string
+  /** The plugin's schema, which fills every field the spec leaves unset with its default. */
+  Config(config: { readonly enabled: boolean }): { readonly enabled: boolean }
   apply(ctx: Context, config: { readonly enabled: boolean }): void | Promise<void>
 }
 
@@ -209,14 +211,14 @@ async function expectAllowed(endpoint: string, args: Record<string, unknown>, as
 }
 
 /**
- * Mount one of Delo's switched plugins as its local bundle composes it, switched on. The plugin is resolved from
- * `@delo/bundle-local`, which depends on it and which `delorun` composes.
+ * Mount one of Delo's switched plugins as its local bundle composes it, switched on with its other settings at their
+ * defaults. The plugin is resolved from `@delo/bundle-local`, which depends on it and which `delorun` composes.
  * @param specifier - the plugin's package.
  */
 async function mountSwitchedPlugin(specifier: string): Promise<void> {
   const bundle = createRequire(import.meta.resolve('@delo/bundle-local/profile'))
   const plugin = await import(pathToFileURL(bundle.resolve(specifier)).href) as SwitchedPluginModule
-  await studio.ctx.plugin({ name: plugin.name, apply: plugin.apply }, { enabled: true })
+  await studio.ctx.plugin({ name: plugin.name, apply: plugin.apply }, plugin.Config({ enabled: true }))
 }
 
 /** A Client this spec started, with what it answered and the refusals it reported. */
@@ -353,12 +355,12 @@ beforeAll(async () => {
   const ctx = studio.ctx
   await mountSwitchedPlugin('@delo/plugin-instruction-consent')
   await mountSwitchedPlugin('@delo/plugin-permission-defaults')
-  await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'delo-home', 'secrets', 'home-auth') })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator', 'workspaceRegistry', 'writeConsent'], () => { resolve() }) })
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
-  await new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') }).add(record)
+  await new DeviceStore({ file: join(directory, 'delo-home', 'secrets', 'home-auth', 'devices.json') }).add(record)
   const opened = await ctx.homeAuth.openSession({ deviceId: record.id, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
   const admitted = ctx.authenticator.admit({ headers: { cookie: `__Host-delo-session=${opened.token}` }, method: 'GET', url: '/' }, LISTENER)
   if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')

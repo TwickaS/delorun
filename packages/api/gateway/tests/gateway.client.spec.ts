@@ -1310,6 +1310,35 @@ describe('Client Typert API', () => {
       .toThrow('Remote method is no longer mounted')
   })
 
+  it('reports a remote-access/denied call as remote/call-denied, and still fails the call', async () => {
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'remote-access/denied', message: 'fixture: denied', details: { action: 'probe/create', reason: 'elevation-required: probe/create' } },
+      })
+      .mockResolvedValueOnce({ ok: false, error: { code: 'remote-access/denied', message: 'fixture: no reason', details: { reason: 7 } } })
+      .mockResolvedValueOnce({ ok: false, error: { code: 'gateway/internal', message: 'fixture: other', details: {} } })
+    const ctx = await bench(call)
+    await ctx.remote.$mount({ package: '@fixture/probe', descriptors: [directDescriptor()] })
+    const denials: unknown[] = []
+    ctx.on('remote/call-denied', (denial) => { denials.push(denial) })
+    ctx.on('remote/call-denied', () => { throw new Error('fixture denial listener failure') })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'gateway/internal' } })
+      // Only a remote access refusal is reported, with a non-string reason as absent.
+      expect(denials).toEqual([
+        { endpoint: 'probe/create', reason: 'elevation-required: probe/create' },
+        { endpoint: 'probe/create', reason: undefined },
+      ])
+      expect(consoleError).toHaveBeenCalledWith('client api: remote/call-denied listener threw:', expect.objectContaining({ message: 'fixture denial listener failure' }))
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   it('preserves a __proto__ wire parameter as an own named argument', async () => {
     const call = vi.fn<ConnectionHandle['rpc']['call']>()
       .mockResolvedValue({ ok: true, value: { ref: 'goal-1' } })

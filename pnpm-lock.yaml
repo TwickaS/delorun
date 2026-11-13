@@ -16,6 +16,7 @@ patchedDependencies:
   '@electron/osx-sign@1.3.3': 280e7b2816caf01423097d24e79107a66afeb563a348630ce9928ae8499a5861
   '@fortune-sheet/core@1.0.4': 8791a230763dbf853fd65d627c68c31de37209992851377855e16cf08ea70532
   '@fortune-sheet/react@1.0.4': 2932e52e79afcd4ced08cfa123b5eded786c85043da32f622f3e80af6fc96c37
+  '@modelcontextprotocol/client@2.2.0': d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4
   '@yao-pkg/pkg@6.21.0': 236fb467509b18abae4c09b1727bbe0239e05a6fbb4d35f84fff3821ca2f6771
   app-builder-lib@26.17.0: b70dc2a2a78ffabb80a4f14fafc7c103237f2b0a207e1f296fa1c1387ea29348
   exceljs@4.4.0: c1bf8ac8f319dab382f08e3a669b715e691d46c703ac5a4163eb383fbedd1d48
@@ -1342,6 +1343,9 @@ importers:
       '@delo/contract-home-process':
         specifier: workspace:*
         version: link:../../packages/contract-home-process
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../../packages/contract-oidc-passkeys
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
@@ -1384,6 +1388,12 @@ importers:
       '@delo/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../../packages/plugin-delegation-consent
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../../packages/plugin-install-check
       '@delo/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
@@ -1546,6 +1556,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/runtime-store
     devDependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
@@ -1776,9 +1789,15 @@ importers:
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
@@ -1812,9 +1831,15 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
@@ -2119,6 +2144,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
       '@deepseek-ai/dsh-api-gateway':
         specifier: workspace:*
         version: link:../../../packages/api/gateway
@@ -2131,12 +2159,21 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-commands':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/commands
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/permission-presets
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../../packages/session/working-directory
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
@@ -2149,6 +2186,9 @@ importers:
       '@delo/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
       '@delo/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys
@@ -2394,6 +2434,64 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delo/packages/plugin-delegation-consent:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      '@delo/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-policy
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
+
   delo/packages/plugin-fetch-guard:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -2412,6 +2510,46 @@ importers:
       undici:
         specifier: 8.11.2
         version: 8.11.2
+
+  delo/packages/plugin-install-check:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../../packages/util/atomic-write
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/release-formats':
+        specifier: workspace:*
+        version: link:../release-formats
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../runtime-store
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/packages/plugin-instruction-consent:
     dependencies:
@@ -2577,9 +2715,12 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@modelcontextprotocol/client':
         specifier: 2.2.0
-        version: 2.2.0
+        version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
 
   delo/packages/plugin-onboarding:
     dependencies:
@@ -2725,6 +2866,9 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delo/plugin-fetch-guard':
+        specifier: workspace:*
+        version: link:../plugin-fetch-guard
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2747,6 +2891,9 @@ importers:
       '@deepseek-ai/dsh-sandbox':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-local
       '@deepseek-ai/dsh-sandbox-policy':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox-policy
@@ -15828,7 +15975,7 @@ importers:
         version: link:../../../vendor/schemastery
       '@modelcontextprotocol/client':
         specifier: 2.2.0
-        version: 2.2.0
+        version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -30457,7 +30604,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/client@2.2.0':
+  '@modelcontextprotocol/client@2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)':
     dependencies:
       '@modelcontextprotocol/core': 2.2.0
       cross-spawn: 7.0.6

@@ -65,7 +65,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * What an `allowed-once` answer grants beyond an ordinary tool call; the values of `ApprovalGrant` in
  * `@deepseek-ai/dsh-user-approval`, which the `approval/request` consumer passes through unchanged.
  */
-export type ApprovalGrant = 'full-access' | 'workspace-management'
+export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
 
 /** Stable identity handed to an optional approval-detail renderer. */
 export interface ApprovalDetailOwnerProps {
@@ -87,6 +87,13 @@ export interface ApprovalActionOwnerProps {
    * accepts an answer; rejects with the send failure, after which the card accepts an answer again.
    */
   allow: () => Promise<void>
+  /** Whether the card is sending or has sent an answer, as of this render; an action renders disabled while true. */
+  answered: boolean
+  /**
+   * Whether the card accepts an answer now: false while it sends or after it sent one, and once its caller no longer
+   * accepts one. An action with effects of its own reads it before each effect, because it can change across an await.
+   */
+  canAnswer: () => boolean
 }
 
 /** Client-visible fields of an approval request projected through Remote Events. */

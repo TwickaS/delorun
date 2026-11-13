@@ -175,6 +175,7 @@ export const PARITY_SWITCHES = [
     // behaviour the switch turns off at its parity value.
     sources: [
       'delo/packages/plugin-permission-defaults/src/index.ts',
+      'delo/packages/plugin-permission-defaults/src/command-network.ts',
     ],
   },
   {
@@ -342,6 +343,31 @@ export const PARITY_SWITCHES = [
     sources: [
       'packages/mcp/mcp-client/src/consent.ts',
       'packages/mcp/mcp-client/src/index.ts',
+    ],
+  },
+  {
+    id: 'external_agent_consent',
+    state: 'built',
+    registeredBy: '@delo/plugin-delegation-consent',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-external-agent-consent',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/plugin-delegation-consent',
+      source: 'delo/packages/plugin-delegation-consent/src/index.ts',
+      key: 'enabled',
+    },
+    // The consent reaches the model through the external delegation tool's
+    // description, the refusal an unapproved start throws and the refusal of a
+    // plugin_manager call; these files are the ones whose behaviour the switch
+    // turns off at its parity value.
+    sources: [
+      'packages/subagent/subagent/src/consent.ts',
+      'packages/subagent/subagent/src/index.ts',
+      'packages/subagent/tool-subagent/src/index.ts',
+      'delo/packages/plugin-delegation-consent/src/index.ts',
     ],
   },
   {

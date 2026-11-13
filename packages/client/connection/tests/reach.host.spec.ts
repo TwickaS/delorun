@@ -52,6 +52,8 @@ class TestAuthenticator extends Authenticator {
   /** The loopback listener's policy, when the test gives one. */
   loopbackPolicy: ListenerPolicy | undefined
   served = true
+  /** The `location` every reach refusal names, when the test gives one. */
+  refusalLocation: string | undefined
   private peer: PeerScope | undefined
 
   constructor(ctx: Context, private readonly address = ADDRESS) {
@@ -90,7 +92,7 @@ class TestAuthenticator extends Authenticator {
         return { kind: 'pre-login', route }
       }
     }
-    return { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' }
+    return { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN', ...this.refusalLocation === undefined ? {} : { location: this.refusalLocation } }
   }
 }
 
@@ -220,6 +222,26 @@ describe('reach listener dispatch', () => {
       expectRefusal(await send(port, path), 'NOT_SIGNED_IN')
     }
     expect(await upgrade(port, { origin: ORIGIN })).toMatch(/^HTTP\/1\.1 401 /)
+    expect(harness.ran).toEqual([])
+  })
+
+  it('answers a refusal that names a same-origin location with 303 to a GET or HEAD request, and with JSON otherwise', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    harness.provider.refusalLocation = '/auth/sign-in?next=%2Fchat'
+    for (const method of ['GET', 'HEAD']) {
+      const reply = await send(port, '/chat', {}, method)
+      expect({ status: reply.status, location: reply.headers.location, body: reply.body }).toEqual({ status: 303, location: '/auth/sign-in?next=%2Fchat', body: '' })
+      expect(reply.headers['strict-transport-security']).toBe('max-age=31536000')
+    }
+    // Pins the method rule: a state change, and an upgrade, keep the JSON refusal a script reads.
+    expectRefusal(await send(port, '/chat', { origin: ORIGIN }, 'POST'), 'NOT_SIGNED_IN')
+    expect(await upgrade(port, { origin: ORIGIN })).toMatch(/^HTTP\/1\.1 401 /)
+    // Pins the same-origin rule: a location another authority could be read from keeps the JSON refusal.
+    for (const location of ['//evil.example/x', '/\\evil.example', 'https://evil.example/', '/a b', '/a\u0000b', 'auth/sign-in', '']) {
+      harness.provider.refusalLocation = location
+      expectRefusal(await send(port, '/chat'), 'NOT_SIGNED_IN')
+    }
     expect(harness.ran).toEqual([])
   })
 

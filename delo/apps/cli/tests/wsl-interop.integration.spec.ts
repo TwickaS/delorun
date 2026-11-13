@@ -95,13 +95,14 @@ function directory(base: string, prefix: string): string {
 async function provider(): Promise<LocalSandboxProvider> {
   const home = directory(tmpdir(), 'dsh-interop-home-')
   mkdirSync(join(home, 'run', 'default'), { recursive: true })
-  const protection = await sandboxProtection(home, 'default', { DOCKER_HOST: 'tcp://127.0.0.1:2375', DOCKER_CONFIG: join(home, 'no-config') }, homedir())
+  const protection = await sandboxProtection(home, 'default', { DOCKER_HOST: 'tcp://127.0.0.1:2375', DOCKER_CONFIG: join(home, 'no-config') }, homedir(), process.getuid?.())
   ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, {
     protectedHome: protection.protectedHome,
     protectedHomeReadable: [...protection.protectedHomeReadable],
     deniedSockets: [...protection.deniedSockets],
     escapeSocketDirectories: [...protection.escapeSocketDirectories],
+    privateTmp: protection.privateTmp,
   })
   return ctx.sandbox as LocalSandboxProvider
 }

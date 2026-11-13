@@ -201,10 +201,10 @@ const WEAKENING: ReadonlyArray<readonly [string, Patch]> = [
 ]
 
 describe('plugin_manager in danger-full-access with @delo/bundle-local\'s protection', () => {
-  it('names the consent and guard plugins, the update gate, the update check, sign-in and reach, and the sandbox rows', () => {
+  it('names the consent and guard plugins, the update gate, the update check, the install check, sign-in and reach, and the sandbox rows', () => {
     expect([...PROTECTED].sort()).toEqual([
       '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delo/bundle-local/update-check', '@delo/bundle-local/update-gate',
-      '@delo/home-auth', '@delo/plugin-fetch-guard', '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent',
+      '@delo/home-auth', '@delo/plugin-delegation-consent', '@delo/plugin-fetch-guard', '@delo/plugin-install-check', '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent',
       '@delo/plugin-permission-defaults', '@delo/plugin-schedule-consent', '@delo/reach',
     ])
   })
@@ -389,6 +389,21 @@ describe('plugin_manager undo and restore in danger-full-access with @delo/bundl
     const before = files()
     expect(changeResult(await call({ action: 'undo' }))).toMatchObject(GUARD_REFUSAL)
     expect(files()).toEqual(before)
+  })
+
+  describe.each(['restore', 'undo'] as const)('%s back to a version that turns the external-agent consent off', (action) => {
+    it('is refused, and leaves the profile as it was', async () => {
+      const consent = '@delo/plugin-delegation-consent'
+      const { ctx, dir, call, files } = await fixture({ reload: 'startup' })
+      pnpmInstalls(dir, {})
+      const version = await outsideVersion(ctx, dir, (edited) => {
+        writeFileSync(join(edited, 'cordis.patch.yml'), JSON.stringify([{ id: rowId(consent), config: { enabled: false } }]))
+      })
+      const before = files()
+      const result = changeResult(await call(action === 'restore' ? { action, target: version } : { action }))
+      expect(result).toMatchObject({ ...GUARD_REFUSAL, error: { code: 'management-required', diagnostic: expect.stringContaining(consent) } })
+      expect(files()).toEqual(before)
+    })
   })
 
   /** A version exemption of the guard's package for a fixture runtime. */

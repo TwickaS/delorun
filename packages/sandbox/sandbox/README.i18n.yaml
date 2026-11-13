@@ -26,6 +26,9 @@
 /deepseek-ai-dsh-sandbox/use-this-package/modes-and-enforcement:
   en: aabe9791ece99ec1
   zh: 1dbc86eabb3a5548
+/deepseek-ai-dsh-sandbox/use-this-package/network:
+  en: 9b3af6409034a2e2
+  zh: 54abce5927fe531b
 /deepseek-ai-dsh-sandbox/use-this-package/denied-calls-and-escalation:
   en: 3960c33a1e322cf9
   zh: 4d85c962067fe7a1
@@ -81,8 +84,8 @@
   en: ea21ed3a768ed4b8
   zh: 8e2f396a6875420e
 /deepseek-ai-dsh-sandbox/known-limitations-and-deferred-work:
-  en: 63ff67b6fd13b4b0
-  zh: 6c8efa9ee99ea9bf
+  en: 0c7373d288ff2af3
+  zh: d43b6fcd27f123bf
 /deepseek-ai-dsh-sandbox/known-limitations-and-deferred-work/dev-note:
   en: cc273320f6a1beaf
   zh: 5c57a312ddc50651

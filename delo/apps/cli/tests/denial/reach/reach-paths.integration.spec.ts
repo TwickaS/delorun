@@ -61,6 +61,13 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/devices/approve': HOME_AUTH,
   'exact /auth/devices/cancel': HOME_AUTH,
   'prefix /auth/assets': HOME_AUTH,
+  'exact /auth/elevation': HOME_AUTH,
+  'exact /auth/elevation/request': HOME_AUTH,
+  'exact /auth/elevation/lock': HOME_AUTH,
+  'exact /auth/elevation/pending': HOME_AUTH,
+  'exact /auth/elevation/approve': HOME_AUTH,
+  'exact /auth/elevation/revoke': HOME_AUTH,
+  'exact /auth/elevation/terminal': HOME_AUTH,
 }
 
 /**
@@ -77,6 +84,7 @@ interface FetchDecision {
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
 const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate'
 const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
+const EXTERNAL_AGENT = 'allowing or revoking an external agent for a workspace decides whether a program outside the sandbox starts without asking, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
@@ -89,6 +97,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.set': { device: 'refused', reason: 'snoozing or settling a chat is not in the device rule' },
   '/api/deloOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
   '/api/deloOnboarding.addWorkspace': { device: 'refused', reason: 'adds a folder as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
+  '/api/deloNetwork.list': { device: 'refused', reason: 'lists each workspace\'s network setting, which is read and changed only at the home\'s computer', refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloNetwork.set': { device: 'refused', reason: 'changes a workspace\'s network, which only the person at the home\'s computer chooses', refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloOnboarding.clone': { device: 'refused', reason: 'runs Git as the person and adds the clone as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
   '/api/deloOnboarding.cloneStatus': { device: 'refused', reason: 'reports a clone the computer started', refusal: 'LOOPBACK_ONLY' },
   '/api/deloOnboarding.readiness': { device: 'refused', reason: 'whether the coding agents are signed in and how far Tailscale is set up serves onboarding at the computer' },
@@ -110,6 +120,9 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.revoke': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.grants': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.allow': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.revoke': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.waiting': { device: 'admitted', reason: 'the names of the servers waiting for the person\'s OK, without their commands, so a phone says to approve them at the computer' },
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },

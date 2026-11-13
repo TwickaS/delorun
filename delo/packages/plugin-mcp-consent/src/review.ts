@@ -10,8 +10,9 @@
  * @module @delo/plugin-mcp-consent/review
  */
 import { createHash } from 'node:crypto'
-import { sortedEnvEntries, type McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
-import { envDigest } from './store.ts'
+import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
+import type { PinnedStart } from './pins.ts'
+import { envDigests } from './store.ts'
 import { showsEnvValue } from './wire.ts'
 import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'
 
@@ -25,18 +26,19 @@ export const MCP_REVIEW_ID_PATTERN = /^[0-9a-f]{32}$/
 export interface PendingReview {
   /** What a surface shows. */
   readonly shown: PendingServer
-  /** The start the review judged, which an acceptance records as it was shown. */
-  readonly start: McpServerCommand
+  /** The start the review judged, with the files it pinned, which an acceptance records as it was shown. */
+  readonly start: PinnedStart
 }
 
 /**
  * The id of a review of one server start: a digest of every field the start carries, sorted by name, with the
- * environment replaced by its digest. A field the mcp-client adds to the start changes the id with it.
- * @param start - the start under review.
+ * environment replaced by each variable's digest. A field the mcp-client adds to the start changes the id with it, and so do the
+ * pinned files.
+ * @param start - the start under review, with the files it pinned.
  * @returns {@link MCP_REVIEW_ID_LENGTH} hexadecimal digits.
  */
-export function mcpReviewId(start: McpServerCommand): string {
-  const fields = Object.entries({ ...start, env: envDigest(start.env) }).sort(([left], [right]) => (left < right ? -1 : 1))
+export function mcpReviewId(start: PinnedStart): string {
+  const fields = Object.entries({ ...start, env: envDigests(start.env) }).sort(([left], [right]) => (left < right ? -1 : 1))
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, MCP_REVIEW_ID_LENGTH)
 }
 
@@ -73,13 +75,14 @@ export interface RefusedStart {
 
 /**
  * The pending review of a refused start.
- * @param start - the refused start.
+ * @param start - the refused start, with the files the review pinned.
  * @param refused - what the consent found.
  * @param reviewedAt - when, in milliseconds since the epoch.
+ * @param writableByChats - the working directory and pinned files that lie where chats can write.
  * @returns the review, whose shown fields name the resolved executable path, working directory and command shell, the
- *   environment's variables and only the values a surface may show.
+ *   environment's variables and only the values a surface may show, the pinned files, and the paths chats can write.
  */
-export function pendingReviewOf(start: McpServerCommand, refused: RefusedStart, reviewedAt: number): PendingReview {
+export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, reviewedAt: number, writableByChats: readonly string[]): PendingReview {
   return {
     start,
     shown: {
@@ -92,6 +95,8 @@ export function pendingReviewOf(start: McpServerCommand, refused: RefusedStart, 
       resolvedCwd: start.resolvedCwd,
       ...start.resolvedShell === undefined ? {} : { resolvedShell: start.resolvedShell },
       env: shownEnv(start.env),
+      files: start.files.map(file => ({ ...file })),
+      writableByChats: [...writableByChats],
       reason: refused.reason,
       change: refused.change,
       changedVariables: [...refused.changedVariables],

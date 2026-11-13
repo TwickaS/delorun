@@ -167,14 +167,18 @@ export async function readServeRules(run: TailscaleRunner, host: string, servePo
  * @param host - this machine's `ts.net` name.
  * @param servePort - the port.
  * @param target - this home's serve target.
- * @throws {ReachError} `TAILSCALE_SERVE_CONFLICT` naming the command to run when the removal fails or the port is
- *   still served after it; a refusal of {@link readServeRules} when the configuration cannot be read.
+ * @throws {ReachError} `TAILSCALE_SERVE_NOT_PERMITTED` with the one command to run when the person's user may not
+ *   configure serve; `TAILSCALE_SERVE_CONFLICT` naming the command to run when the removal fails otherwise or the port
+ *   is still served after it; a refusal of {@link readServeRules} when the configuration cannot be read.
  */
 export async function removeServe(run: TailscaleRunner, host: string, servePort: number, target: string): Promise<void> {
   const before = await readServeRules(run, host, servePort, target)
   if (!before.present) return
   const command = ['serve', before.removal, 'off']
   const removed = await run(command)
+  if (removed.code !== 0 && isPermissionRefusal(removed.stderr)) {
+    throw new ReachError('TAILSCALE_SERVE_NOT_PERMITTED', `Your user may not configure tailscale serve yet, so Tailscale may still serve ${host}:${String(servePort)}. Run this once yourself, then try again: ${TAILSCALE_OPERATOR_COMMAND}`)
+  }
   if (removed.code !== 0) {
     throw new ReachError('TAILSCALE_SERVE_CONFLICT', `tailscale ${command.join(' ')} failed (${firstLine(removed.stderr)}), so Tailscale may still serve ${host}:${String(servePort)}. Run it yourself, or stop the tailscale serve or funnel that holds the port`)
   }

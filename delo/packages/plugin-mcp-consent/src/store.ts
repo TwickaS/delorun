@@ -10,16 +10,17 @@
  * whole start accepted for that server — the command, the argument list, the
  * configured working directory, the absolute executable path and canonical
  * working directory they resolved to, on Windows the canonical command shell
- * that runs a batch file, and a SHA-256 digest of each configured environment
- * variable's value, never the values themselves — and when it was accepted. It
+ * that runs a batch file, a SHA-256 digest of each configured environment
+ * variable's value, never the values themselves, and the canonical path and
+ * SHA-256 digest of each file the start runs: the executable and every file an
+ * argument names ([`./pins.ts`](./pins.ts)) — and when it was accepted. It
  * also holds the starts the person set aside, declined or revoked, by server
- * name and start digest, and the command-keyed acceptances of a version 4
- * store, which never allow a start: a start that one of them covers exactly is
- * reviewed once as `upgraded`. A store of version 1, written before an
- * acceptance covered the working directory and the environment, of version 2,
- * written before it covered the resolved executable path and working
- * directory, or of version 3, written before it covered the command shell or
- * without them, is superseded: none of its acceptances counts.
+ * name and start digest. Every change reads, changes and writes the store while
+ * holding its lock file ({@link withAcceptanceStoreLock}), because the store is
+ * shared by every profile of the home. A store of any other version, or of another format,
+ * is refused as a whole: no acceptance in it counts, nothing is written into
+ * it, and the refusal asks the person to remove the file and accept the
+ * servers again.
  *
  * The module is free of Cordis, so the store's format, its refusals and its
  * file handling are testable without a mounted plugin.
@@ -29,29 +30,19 @@
 import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
-import type { McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
-import { readProtectedFile, writeProtectedFile } from '@delo/home'
+import {
+  currentHolder, holderAlive, holderIdentity, isLockId, LockFile, parseHolder, randomLockId, readProtectedFile, writeProtectedFile,
+  type ProcessHolder,
+} from '@delo/home'
+import type { PinnedStart } from './pins.ts'
 import { SERVER_NAME_PATTERN } from './wire.ts'
+import type { PinnedFile } from './wire.ts'
 
 /** Format version of the acceptance store. */
-export const ACCEPTANCE_STORE_VERSION = 5 as const
-
-/**
- * The format version whose acceptances were keyed by the command alone. A store of it is read as this version with
- * no acceptance, and its acceptances are kept as {@link AcceptanceStore.commandKeyed} records, which never allow a
- * start.
- */
-export const COMMAND_KEYED_STORE_VERSION = 4 as const
-
-/**
- * Format versions written before an acceptance covered everything a review compares: version 1 held no working
- * directory or environment, version 2 no resolved executable path or working directory, and version 3 no command
- * shell that runs a Windows batch file, or no resolved paths at all. A store of one of them is superseded: none of its
- * acceptances counts, and the next write starts a store of this version.
- */
-export const SUPERSEDED_STORE_VERSIONS: readonly number[] = [1, 2, 3]
+export const ACCEPTANCE_STORE_VERSION = 6 as const
 
 /** Directory of the acceptance store under the home's `secrets/` directory. */
 export const ACCEPTANCE_STORE_DIR = 'mcp-add-consent'
@@ -66,7 +57,7 @@ export const ACCEPTANCE_ID_LENGTH = 32
 export const ACCEPTANCE_ID_PATTERN = /^[0-9a-f]{32}$/
 
 /** A server start as an acceptance judges it: everything a review is shown except the server's namespace. */
-export type ServerStart = Omit<McpServerCommand, 'serverName'>
+export type ServerStart = Omit<PinnedStart, 'serverName'>
 
 /** A configured environment as the store keeps it: each variable's name and the digest of its value. */
 export type EnvDigests = Readonly<Record<string, string>>
@@ -90,26 +81,8 @@ export interface ServerAcceptance {
   readonly resolvedShell?: string
   /** {@link envDigests} of the accepted environment. */
   readonly env: EnvDigests
-  /** When the acceptance was recorded, in milliseconds since the epoch. */
-  readonly acceptedAt: number
-}
-
-/** One acceptance of a version 4 store, keyed by its command; it never allows a start. */
-export interface CommandKeyedAcceptance {
-  /** The arguments the command was accepted with, in the configured order. */
-  readonly args: readonly string[]
-  /** The working directory the command was accepted with. */
-  readonly cwd: string
-  /** The absolute path of the executable the command resolved to. */
-  readonly resolvedCommand: string
-  /** The canonical working directory the command was accepted to run in. */
-  readonly resolvedCwd: string
-  /** The canonical command shell accepted to run a Windows batch file; absent when the executable runs directly. */
-  readonly resolvedShell?: string
-  /** The names of the configured environment variables the command was accepted with, sorted. */
-  readonly envNames: readonly string[]
-  /** {@link envDigest} of the configured environment the command was accepted with. */
-  readonly envDigest: string
+  /** The files the accepted start runs, pinned when it was accepted: the executable, then each file an argument names. */
+  readonly files: readonly PinnedFile[]
   /** When the acceptance was recorded, in milliseconds since the epoch. */
   readonly acceptedAt: number
 }
@@ -131,24 +104,22 @@ export interface AcceptanceStore {
   readonly acceptances: ReadonlyMap<string, ServerAcceptance>
   /** The starts set aside, keyed by server name. */
   readonly setAside: ReadonlyMap<string, SetAsideStart>
-  /** The acceptances of a version 4 store, keyed by command, until a start each covers is accepted. */
-  readonly commandKeyed: ReadonlyMap<string, CommandKeyedAcceptance>
 }
 
 /** A store with nothing in it. */
-export const EMPTY_ACCEPTANCE_STORE: AcceptanceStore = { acceptances: new Map(), setAside: new Map(), commandKeyed: new Map() }
+export const EMPTY_ACCEPTANCE_STORE: AcceptanceStore = { acceptances: new Map(), setAside: new Map() }
 
 /** The fields of one acceptance in the store's format, in the order they are written. */
-const ACCEPTANCE_FIELDS: readonly string[] = ['command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell', 'env', 'acceptedAt']
+const ACCEPTANCE_FIELDS: readonly string[] = ['command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell', 'env', 'files', 'acceptedAt']
 
-/** The fields of one version 4 acceptance, in the order they are written. */
-const COMMAND_KEYED_FIELDS: readonly string[] = ['args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell', 'envNames', 'envDigest', 'acceptedAt']
+/** The fields of one pinned file, in the order they are written. */
+const FILE_FIELDS: readonly string[] = ['argument', 'path', 'sha256']
 
 /** The fields of one set-aside start, in the order they are written. */
 const SET_ASIDE_FIELDS: readonly string[] = ['state', 'start']
 
 /** The fields of a store of this version. */
-const STORE_FIELDS: readonly string[] = ['v', 'acceptances', 'setAside', 'commandKeyed']
+const STORE_FIELDS: readonly string[] = ['v', 'acceptances', 'setAside']
 
 /** The text of a digest: the algorithm and 64 lowercase hexadecimal digits. */
 const DIGEST = /^sha256:[0-9a-f]{64}$/
@@ -160,17 +131,6 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/
  */
 function sha256(text: string): string {
   return `sha256:${createHash('sha256').update(text).digest('hex')}`
-}
-
-/**
- * The digest a version 4 acceptance kept of a configured environment: SHA-256 of the JSON text of its `[name, value]`
- * pairs sorted by name, so equal environments have equal digests whatever order their keys were written in. A review
- * id carries it, and a version 4 acceptance is compared with it.
- * @param env - the configured environment entries.
- * @returns `sha256:` and the hexadecimal digest.
- */
-export function envDigest(env: Readonly<Record<string, string>>): string {
-  return sha256(JSON.stringify(sortedEnvEntries(env)))
 }
 
 /**
@@ -186,23 +146,24 @@ export function envDigests(env: Readonly<Record<string, string>>): EnvDigests {
 
 /**
  * The digest of a whole start as an acceptance holds it: its command, arguments, working directory, the paths they
- * resolved to and its environment digests.
+ * resolved to, its environment digests and its pinned files.
  * @param start - the start, its environment already digested.
  * @returns `sha256:` and the hexadecimal digest.
  */
 function digestOf(start: Omit<ServerAcceptance, 'acceptedAt'>): string {
   const env = sortedEnvEntries(start.env)
-  return sha256(JSON.stringify([start.command, start.args, start.cwd, start.resolvedCommand, start.resolvedCwd, start.resolvedShell ?? null, env]))
+  const files = start.files.map(file => [file.argument ?? null, file.path, file.sha256])
+  return sha256(JSON.stringify([start.command, start.args, start.cwd, start.resolvedCommand, start.resolvedCwd, start.resolvedShell ?? null, env, files]))
 }
 
 /**
  * The digest of a whole server start: its command, arguments, working directory, the executable path, working
- * directory and command shell they resolved to, and each environment variable's digest.
+ * directory and command shell they resolved to, each environment variable's digest, and the files it runs.
  * @param start - the start.
  * @returns `sha256:` and the hexadecimal digest.
  */
 export function startDigest(start: ServerStart): string {
-  return digestOf({ ...resolvedPathsOf(start), command: start.command, args: start.args, cwd: start.cwd, env: envDigests(start.env) })
+  return digestOf({ ...resolvedPathsOf(start), command: start.command, args: start.args, cwd: start.cwd, env: envDigests(start.env), files: start.files })
 }
 
 /**
@@ -245,11 +206,11 @@ export function acceptedStartDigest(accepted: ServerAcceptance): string {
  * @returns the acceptance the store holds for the start's server name.
  */
 export function acceptanceOfStart(start: ServerStart, acceptedAt: number): ServerAcceptance {
-  return { command: start.command, args: [...start.args], cwd: start.cwd, ...resolvedPathsOf(start), env: envDigests(start.env), acceptedAt }
+  return { command: start.command, args: [...start.args], cwd: start.cwd, ...resolvedPathsOf(start), env: envDigests(start.env), files: start.files.map(copyFile), acceptedAt }
 }
 
 /** The part of a start that differs from its server's acceptance. */
-export type ChangedPart = 'command' | 'arguments' | 'directory' | 'environment' | 'resolved'
+export type ChangedPart = 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'contents'
 
 /** What differs between a server's acceptance and a start of the server. */
 export interface StartChange {
@@ -286,7 +247,8 @@ function changed(part: ChangedPart, reason: string): StartChange {
  * What a server's acceptance does not cover of a start of the server. The configured command, arguments, working
  * directory and environment are compared first, then the paths they resolve to: the working directory, the
  * executable and the command shell, so a start whose configuration is unchanged but resolves elsewhere is not covered
- * and its change is `resolved`.
+ * and its change is `resolved`; last the files the start runs, by canonical path and contents, whose change is
+ * `contents`.
  * @param accepted - the server's acceptance.
  * @param start - the start under review.
  * @returns the first part that differs with its reason and the changed variables, or `undefined` when the acceptance
@@ -309,7 +271,46 @@ export function changeOf(accepted: ServerAcceptance, start: ServerStart): StartC
   if (accepted.resolvedShell !== start.resolvedShell) {
     return changed('resolved', `the command runs through ${describeShell(start.resolvedShell)}, and the person accepted it run through ${describeShell(accepted.resolvedShell)}`)
   }
-  return undefined
+  const files = filesChangeOf(accepted.files, start.files)
+  return files === undefined ? undefined : changed('contents', files)
+}
+
+/**
+ * A copy of a pinned file, with no `argument` key for the executable.
+ * @param file - the pinned file.
+ * @returns the copy.
+ */
+function copyFile(file: PinnedFile): PinnedFile {
+  return { ...file.argument === undefined ? {} : { argument: file.argument }, path: file.path, sha256: file.sha256 }
+}
+
+/**
+ * The words naming what a pinned file is to its start.
+ * @param argument - the index of the argument that names it, or `undefined` for the executable.
+ * @returns the words.
+ */
+function describeRole(argument: number | undefined): string {
+  return argument === undefined ? 'the executable' : `the argument ${String(argument)}`
+}
+
+/**
+ * What differs between the files an acceptance pinned and the files a start runs: a file rewritten, a path that now
+ * resolves to another file, an argument that names a file now or named one before.
+ * @param accepted - the files the acceptance pinned.
+ * @param current - the files the start under review runs.
+ * @returns the reason for the first difference, the start's files in order first, then a file the acceptance pinned that
+ *   the start no longer names, or `undefined` when they agree.
+ */
+export function filesChangeOf(accepted: readonly PinnedFile[], current: readonly PinnedFile[]): string | undefined {
+  for (const now of current) {
+    const named = describeRole(now.argument)
+    const was = accepted.find(file => file.argument === now.argument)
+    if (was === undefined) return `${named} now names the file ${JSON.stringify(now.path)}, which the person did not accept`
+    if (was.path !== now.path) return `${named} now resolves to the file ${JSON.stringify(now.path)}, and the person accepted ${JSON.stringify(was.path)}`
+    if (was.sha256 !== now.sha256) return `the contents of the file ${JSON.stringify(now.path)}, ${named}, changed since the person accepted this server`
+  }
+  const gone = accepted.find(was => !current.some(file => file.argument === was.argument))
+  return gone === undefined ? undefined : `${describeRole(gone.argument)} named the file ${JSON.stringify(gone.path)} when the person accepted this server, and names no file now`
 }
 
 /**
@@ -321,18 +322,6 @@ function describeShell(shell: string | undefined): string {
   return shell === undefined ? 'no command shell' : `the command shell ${JSON.stringify(shell)}`
 }
 
-/**
- * Whether a version 4 acceptance covers a start exactly: the same arguments, working directory, resolved executable
- * path, working directory and command shell, and environment for its command.
- * @param record - the version 4 acceptance of the start's command.
- * @param start - the start.
- * @returns true when every part matches.
- */
-export function coversExactly(record: CommandKeyedAcceptance, start: ServerStart): boolean {
-  return sameArgs(record.args, start.args) && record.cwd === start.cwd && record.resolvedCommand === start.resolvedCommand
-    && record.resolvedCwd === start.resolvedCwd && record.resolvedShell === start.resolvedShell && record.envDigest === envDigest(start.env)
-}
-
 /** Why a store that exists could not be read as this version's format. */
 export class AcceptanceStoreError extends Error {
   /**
@@ -341,21 +330,6 @@ export class AcceptanceStoreError extends Error {
   constructor(reason: string) {
     super(reason)
     this.name = 'AcceptanceStoreError'
-  }
-}
-
-/** A store of a {@link SUPERSEDED_STORE_VERSIONS} version, whose acceptances do not count. */
-export class SupersededStoreError extends AcceptanceStoreError {
-  /** The store's version. */
-  readonly version: number
-
-  /**
-   * @param version - the store's superseded version.
-   */
-  constructor(version: number) {
-    super(`the store's version is ${String(version)}, written before an acceptance covered the resolved executable path, command shell and working directory`)
-    this.name = 'SupersededStoreError'
-    this.version = version
   }
 }
 
@@ -467,29 +441,30 @@ function acceptanceOf(serverName: string, value: unknown): ServerAcceptance {
     throw new AcceptanceStoreError(`${named} does not hold a sha256 digest for each environment variable`)
   }
   const digests = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => isDigest(entry[1])))
-  return { command, args, cwd, ...resolved, env: digests, acceptedAt: acceptedAtOf(named, acceptedAt) }
+  return { command, args, cwd, ...resolved, env: digests, files: filesOf(named, entry['files']), acceptedAt: acceptedAtOf(named, acceptedAt) }
 }
 
 /**
- * One version 4 acceptance as the store holds it.
- * @param command - the accepted command, named in the reason.
- * @param value - the store's value for it.
- * @returns the acceptance.
- * @throws {AcceptanceStoreError} when the value is not an object holding only the argument list, the working
- *   directory, the absolute resolved executable path and working directory, an optional absolute command shell, the
- *   environment's names and digest, and the acceptance time, with the right types.
+ * The pinned files an acceptance holds.
+ * @param named - the acceptance, as a refusal names it.
+ * @param value - the store's value for them.
+ * @returns the files, the executable first.
+ * @throws {AcceptanceStoreError} when the value is not a non-empty list whose first entry pins the executable and whose
+ *   other entries pin an argument by its index, each with an absolute path and a sha256 digest.
  */
-function commandKeyedOf(command: string, value: unknown): CommandKeyedAcceptance {
-  const named = `the acceptance of the command ${JSON.stringify(command)}`
-  if (command.length === 0) throw new AcceptanceStoreError('the store holds an acceptance with an empty command')
-  const entry = fieldsOf(named, value, COMMAND_KEYED_FIELDS)
-  const { args, cwd, envNames, envDigest: digest, acceptedAt } = entry
-  if (!isStringList(args)) throw new AcceptanceStoreError(`${named} does not hold a list of argument strings`)
-  if (typeof cwd !== 'string') throw new AcceptanceStoreError(`${named} does not hold a working directory string`)
-  const resolved = resolvedPathsIn(named, entry)
-  if (!isStringList(envNames)) throw new AcceptanceStoreError(`${named} does not hold a list of environment variable names`)
-  if (!isDigest(digest)) throw new AcceptanceStoreError(`${named} does not hold a sha256 environment digest`)
-  return { args, cwd, ...resolved, envNames, envDigest: digest, acceptedAt: acceptedAtOf(named, acceptedAt) }
+function filesOf(named: string, value: unknown): readonly PinnedFile[] {
+  if (!Array.isArray(value) || value.length === 0) throw new AcceptanceStoreError(`${named} does not hold a list of pinned files`)
+  return value.map((item: unknown, position): PinnedFile => {
+    const entry = fieldsOf(`a pinned file of ${named}`, item, FILE_FIELDS)
+    const { argument, path, sha256: digest } = entry
+    const isArgument = Number.isSafeInteger(argument) && Number(argument) >= 0
+    if (position === 0 ? 'argument' in entry : !isArgument) {
+      throw new AcceptanceStoreError(`${named} does not pin the executable first and then arguments by their index`)
+    }
+    if (typeof path !== 'string' || !isAbsolute(path)) throw new AcceptanceStoreError(`${named} pins a file without an absolute path`)
+    if (!isDigest(digest)) throw new AcceptanceStoreError(`${named} pins a file without a sha256 digest`)
+    return { ...position === 0 ? {} : { argument: Number(argument) }, path, sha256: digest }
+  })
 }
 
 /**
@@ -539,11 +514,9 @@ function serverNameKey(serverName: string): void {
 /**
  * Parse the store's text.
  * @param text - the store file's text.
- * @returns the store: of this version as written, or of {@link COMMAND_KEYED_STORE_VERSION} with no acceptance and its
- *   acceptances kept as command-keyed records.
- * @throws {SupersededStoreError} when the store is of a {@link SUPERSEDED_STORE_VERSIONS} version.
- * @throws {AcceptanceStoreError} when the text is not this version's or version 4's format: no JSON document, not an
- *   object, another version, an unknown field, or an entry whose fields are wrong.
+ * @returns the store as written.
+ * @throws {AcceptanceStoreError} when the text is not this version's format: no JSON document, not an object, another
+ *   version, an unknown field, or an entry whose fields are wrong.
  */
 export function parseAcceptanceStore(text: string): AcceptanceStore {
   let document: unknown
@@ -554,21 +527,14 @@ export function parseAcceptanceStore(text: string): AcceptanceStore {
   }
   if (!isRecord(document)) throw new AcceptanceStoreError('the store is not a JSON object')
   const version = document['v']
-  if (typeof version === 'number' && SUPERSEDED_STORE_VERSIONS.includes(version)) throw new SupersededStoreError(version)
-  const fields = version === COMMAND_KEYED_STORE_VERSION ? ['v', 'acceptances'] : STORE_FIELDS
-  if (version !== ACCEPTANCE_STORE_VERSION && version !== COMMAND_KEYED_STORE_VERSION) {
+  if (version !== ACCEPTANCE_STORE_VERSION) {
     throw new AcceptanceStoreError(`the store's version is ${JSON.stringify(version)}, not ${String(ACCEPTANCE_STORE_VERSION)}`)
   }
-  const extra = Object.keys(document).filter(key => !fields.includes(key))
+  const extra = Object.keys(document).filter(key => !STORE_FIELDS.includes(key))
   if (extra.length > 0) throw new AcceptanceStoreError(`the store sets ${extra.join(', ')}`)
-  const anyKey = (): void => {}
-  if (version === COMMAND_KEYED_STORE_VERSION) {
-    return { acceptances: new Map(), setAside: new Map(), commandKeyed: sectionOf(document, 'acceptances', commandKeyedOf, anyKey) }
-  }
   return {
     acceptances: sectionOf(document, 'acceptances', acceptanceOf, serverNameKey),
     setAside: sectionOf(document, 'setAside', setAsideOf, serverNameKey),
-    commandKeyed: sectionOf(document, 'commandKeyed', commandKeyedOf, anyKey),
   }
 }
 
@@ -598,17 +564,10 @@ export function serializeAcceptanceStore(store: AcceptanceStore): string {
       cwd: accepted.cwd,
       ...resolvedPathsOf(accepted),
       env: Object.fromEntries(Object.keys(accepted.env).sort().map(name => [name, accepted.env[name]])),
+      files: accepted.files.map(copyFile),
       acceptedAt: accepted.acceptedAt,
     })),
     setAside: sorted(store.setAside, ({ state, start }) => ({ state, start })),
-    commandKeyed: sorted(store.commandKeyed, record => ({
-      args: [...record.args],
-      cwd: record.cwd,
-      ...resolvedPathsOf(record),
-      envNames: [...record.envNames],
-      envDigest: record.envDigest,
-      acceptedAt: record.acceptedAt,
-    })),
   }, null, 2)}\n`
 }
 
@@ -616,7 +575,6 @@ export function serializeAcceptanceStore(store: AcceptanceStore): string {
 export type AcceptanceStoreRead =
   | { readonly kind: 'absent' }
   | { readonly kind: 'readable', readonly store: AcceptanceStore }
-  | { readonly kind: 'superseded', readonly version: number }
   | { readonly kind: 'refused', readonly problem: string }
 
 /**
@@ -641,12 +599,21 @@ function problemOf(error: unknown): string {
 }
 
 /**
+ * What the person does about a refused store, appended to its reason: no acceptance counts and nothing is written
+ * into it until the file holds this version's format or is gone.
+ * @param path - the store's absolute path, the person's own file.
+ * @returns the words, starting with a semicolon.
+ */
+function refusedStoreHint(path: string): string {
+  return `; fix or remove ${JSON.stringify(path)}, then accept each MCP server again`
+}
+
+/**
  * Read the store from its path, applying contract C1's protected-file refusal rule.
  * @param path - the store's absolute path.
- * @returns `absent` while no store exists, `readable` with its content, `superseded` with the version of a store
- *   written before an acceptance covered everything a review compares, or `refused` with the reason a
- *   store that exists could not be read as this version's or version 4's format — a laxer mode, a symbolic link,
- *   another format, or a filesystem failure.
+ * @returns `absent` while no store exists, `readable` with its content, or `refused` with the reason a store that
+ *   exists could not be read as this version's format — a laxer mode, a symbolic link, another version or format, or a
+ *   filesystem failure — followed by what the person does about it.
  */
 export async function readAcceptanceStore(path: string): Promise<AcceptanceStoreRead> {
   let bytes: Buffer
@@ -654,13 +621,12 @@ export async function readAcceptanceStore(path: string): Promise<AcceptanceStore
     bytes = await readProtectedFile(path)
   } catch (error) {
     if (isMissing(error)) return { kind: 'absent' }
-    return { kind: 'refused', problem: problemOf(error) }
+    return { kind: 'refused', problem: `${problemOf(error)}${refusedStoreHint(path)}` }
   }
   try {
     return { kind: 'readable', store: parseAcceptanceStore(bytes.toString('utf8')) }
   } catch (error) {
-    if (error instanceof SupersededStoreError) return { kind: 'superseded', version: error.version }
-    return { kind: 'refused', problem: problemOf(error) }
+    return { kind: 'refused', problem: `${problemOf(error)}${refusedStoreHint(path)}` }
   }
 }
 
@@ -683,4 +649,62 @@ export async function writeAcceptanceStore(path: string, store: AcceptanceStore)
  */
 export function sameArgs(accepted: readonly string[], current: readonly string[]): boolean {
   return accepted.length === current.length && accepted.every((argument, index) => argument === current[index])
+}
+
+/** How long a change waits for another process's change to the store, in milliseconds. */
+export const ACCEPTANCE_STORE_LOCK_WAIT_MS = 10_000
+
+/** The record of the store's lock file. */
+interface StoreLockRecord extends ProcessHolder {
+  /** Record version. */
+  readonly v: 1
+  /** A random id, never reused, naming the guard that may remove this record. */
+  readonly id: string
+}
+
+/**
+ * Parse a lock record.
+ * @param record - the lock file's JSON object.
+ * @returns the record, or `undefined` when the object is not one.
+ */
+function parseLockRecord(record: Readonly<Record<string, unknown>>): StoreLockRecord | undefined {
+  const holder = parseHolder(record)
+  if (holder === undefined || record['v'] !== 1 || !isLockId(record['id'])) return undefined
+  return { v: 1, pid: holder.pid, id: record['id'], ...holderIdentity(holder) }
+}
+
+/**
+ * Run one change to the store while holding its lock file, `<store>.lock`, `@delo/home`'s lock file shared by Delo's
+ * locks: created whole, and a record whose holder process is dead removed under a takeover guard. A live holder is
+ * waited for. The change reads, changes and writes the store inside the lock, so a change of another profile's
+ * process, which shares the home's store, is either read by it or waits for it.
+ * @param path - the store's absolute path; its directory is created at the private directory mode when missing.
+ * @param change - the change.
+ * @param waitMs - how long to wait for a live holder.
+ * @returns the change's result.
+ * @throws {AcceptanceStoreError} naming the holder's process when the lock is not free in time; nothing is changed.
+ */
+export async function withAcceptanceStoreLock<T>(path: string, change: () => Promise<T>, waitMs: number = ACCEPTANCE_STORE_LOCK_WAIT_MS): Promise<T> {
+  await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
+  const file = new LockFile<StoreLockRecord>(`${path}.lock`, {
+    label: 'MCP acceptance store lock', remedy: 'once no delorun process answers an MCP server review', parse: parseLockRecord, id: record => record.id,
+  })
+  const holder = currentHolder()
+  const record: StoreLockRecord = { v: 1, pid: holder.pid, id: randomLockId(), ...holderIdentity(holder) }
+  const deadline = Date.now() + waitMs
+  while (!file.create(record)) {
+    const found = file.read()
+    /* v8 ignore next -- the holder released the lock between this create and this read; the loop tries again. */
+    if (found === undefined) continue
+    if (!holderAlive(found) && await file.removeDead(found.id) === 'done') continue
+    if (Date.now() >= deadline) {
+      throw new AcceptanceStoreError(`process ${String(found.pid)} has been changing the MCP acceptance store for longer than ${String(waitMs / 1000)} seconds, so nothing was changed; try again once it finishes`)
+    }
+    await sleep(Math.min(10 + Math.floor(Math.random() * 40), Math.max(1, deadline - Date.now())))
+  }
+  try {
+    return await change()
+  } finally {
+    file.release(record.id)
+  }
 }

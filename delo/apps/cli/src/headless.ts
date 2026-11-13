@@ -17,6 +17,7 @@
  *
  * @module @delo/cli/headless
  */
+import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { mkdirSync } from 'node:fs'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HEADLESS_PROFILE, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
@@ -191,6 +192,8 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
   await runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', successor: false, output: request.output })
   const composed = await composeDeloProfile({ home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', output: request.output, env: request.env }, dependencies)
   await refuseUngrantedFullAccess(request.home, request.args, request.env, dependencies.cwd(), fullAccessPresetNames(composed.layers))
+  // The Host boots in this process, so `@delo/bundle-headless`'s `plugin-manager` row reads the mirror setting from here.
+  process.env[NPM_MIRROR_ENV] = composed.npmMirror ? 'on' : 'off'
   // A crash after boot ends the process through the CLI's last-resort handler, which first disposes the booted Host
   // within its bound; the registration lasts as long as the run, which upstream's runner ends.
   let current: BootedProfile | undefined

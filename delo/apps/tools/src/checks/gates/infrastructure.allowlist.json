@@ -265,6 +265,31 @@
       "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "2002:cb00:710a::1",
       "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-permission-defaults/tests/command-network.spec.ts",
+      "value": "10.0.0.1",
+      "reason": "A private-network address that the egress proxy and the allowlist validation must refuse, in their specs; no deployment uses it."
+    },
+    {
+      "path": "delo/packages/plugin-permission-defaults/tests/egress-proxy.spec.ts",
+      "value": "10.0.0.1",
+      "reason": "A private-network address that the egress proxy and the allowlist validation must refuse, in their specs; no deployment uses it."
+    },
+    {
+      "path": "delo/packages/plugin-permission-defaults/tests/egress.integration.spec.ts",
+      "value": "10.0.0.1",
+      "reason": "A private-network address that the egress proxy and the allowlist validation must refuse, in their specs; no deployment uses it."
+    },
+    {
+      "path": "delo/packages/plugin-permission-defaults/tests/network.spec.ts",
+      "value": "10.0.0.1",
+      "reason": "A private-network address that the egress proxy and the allowlist validation must refuse, in their specs; no deployment uses it."
+    },
+    {
+      "path": "delo/packages/plugin-permission-defaults/tests/egress-proxy.spec.ts",
+      "value": "192.168.0.9",
+      "reason": "A private-network address a listed name resolves to in the egress proxy's spec, which the proxy must refuse; no deployment uses it."
     }
   ]
 }

@@ -129,7 +129,11 @@ Abstract add-time consent service. Subclass, implement review, and load the subc
 /**
  * Review one configured server start before the mcp-client plugin starts
  * that server. The review runs at every boot of the server row, before any
- * child process starts, so the provider can let an accepted start through
+ * child process starts, and again before every reconnect spawns the server
+ * after its connection dropped, where a refusal ends the reconnect loop and
+ * leaves the server stopped until its row starts again. The provider can
+ * therefore compare what the start names, such as the contents of its
+ * executable, with what it accepted each time, and let an accepted start through
  * at once and ask again when the command, arguments, working directory,
  * environment, resolved executable path, resolved command shell or resolved
  * working directory it is shown differ from the ones it accepted before.

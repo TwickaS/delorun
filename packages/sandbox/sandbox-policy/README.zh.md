@@ -73,7 +73,7 @@ kind: "package-reference"
 
 ### 解析优先级
 
-`resolve({ session, mode })` 返回一份完整的逐调用策略：已批准的显式模式优先于会话最后一条 `sandbox/mode` 事件，后者又优先于部署默认值。会话的不可变 `cwd` 提供工作区根目录；否则使用配置的回退值。执行环境中的绝对路径写法保持不变。执行限制的提供方在自己的文件系统上规范化根目录，因此远端 `symlink/..` 路径绝不会在 Harness 主机上解析。
+`resolve({ session, mode })` 返回一份完整的逐调用策略：已批准的显式模式优先于会话最后一条 `sandbox/mode` 事件，后者又优先于部署默认值。会话的不可变 `cwd` 提供工作区根目录；否则使用配置的回退值。决定网络的插件将 `SandboxNetworkResolver` 挂载为可选的 `ctx.sandboxNetwork`；`resolve()` 以会话和已解析的根目录询问它，并把其回答放入策略的 `network`。未挂载时，任何策略都不携带网络。执行环境中的绝对路径写法保持不变。执行限制的提供方在自己的文件系统上规范化根目录，因此远端 `symlink/..` 路径绝不会在 Harness 主机上解析。
 
 ### 逐会话存储
 
@@ -89,6 +89,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`SandboxPolicyService`、`Config` schema、策略解析与上下文贡献 |
 | [`src/session-mode.ts`](src/session-mode.ts) | `sandbox/mode` 事件、其 fold 与写入路径 |
+| [`src/network.ts`](src/network.ts) | 决定每次调用网络的可选 `ctx.sandboxNetwork` 解析器 |
 
 </details>
 
@@ -154,7 +155,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 这些限制界定了本包提供的策略范围。它们是当前的包级约束，并非通用沙箱对比，也不是待办事项清单。
 
 - **部署级额外授权**——额外目录来自配置，而非逐会话权限设置。后端支持情况见 [sandbox-local](../sandbox-local/README.zh.md)。
-- **仅限文件操作模式**——`SandboxMode` 管控文件操作；网络和进程策略不在其词汇中，因此这里没有限制它们的旋钮。
+- **仅限文件操作模式**——`SandboxMode` 管控文件操作，这里没有限制网络或进程的旋钮；网络由挂载的 `ctx.sandboxNetwork` 解析器决定，`sandbox:policy` 文本不提及它，因此模型从命令的失败中得知网络受限。
 - **有意概述临时区域**——强制执行后端会授予不同的平台临时区域，这些区域在策略解析后才会选定，因此无法在当前上下文中如实枚举。
 
 替换策略上下文时，必须使用先遭拒绝、再可申请升权的任务做反向验证，确认模型仍会尝试初次工具调用。[历史上十二轮中五轮没有工具调用的测量](../../../.agents/notes/archived/feature/2026-07-06-sandbox.md)记录了这项检查要防止的失败。

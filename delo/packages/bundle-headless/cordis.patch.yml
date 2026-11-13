@@ -54,6 +54,13 @@
       config:
         enabled: true
 
+    # An external agent such as Claude Code or Codex starts only with a grant
+    # recorded for the workspace: no one answers its ask in a one-shot run.
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
+      config:
+        enabled: true
+
     # The first step of every turn waits until `delorun headless` has checked
     # the booted Host's rows and services, so the task starts only after that
     # check. No update or stop waits on a headless run's chats.
@@ -69,15 +76,28 @@
 # its settings, or deselect or remove a bundle that carries one, so a model in a
 # workspace with a full-access grant cannot turn a guard off for the rest of the
 # run. Upstream's base bundle gives the row no config, so `protectedPlugins` is
-# the only key.
+# the only key besides `fallbackRegistries`, which asks the npmmirror registry
+# only when the `npmMirror` setting is on, as in the CLI profile.
 - id: plugin-manager
   config:
+    fallbackRegistries: !!js "process.env.DELO_NPM_MIRROR === 'on' ? ['https://registry.npmmirror.com/'] : []"
     protectedPlugins:
       - '@delo/plugin-instruction-consent'
       - '@delo/plugin-mcp-consent'
       - '@delo/plugin-permission-defaults'
       - '@delo/plugin-schedule-consent'
       - '@delo/plugin-fetch-guard'
+      - '@delo/plugin-delegation-consent'
+      - '@delo/plugin-install-check'
       - '@delo/bundle-local/update-gate'
       - '@deepseek-ai/dsh-sandbox-local'
       - '@deepseek-ai/dsh-sandbox-policy'
+
+# The plugin install check, as in the CLI profile: a plugin installed into this
+# profile is checked and recorded, and a known critical advisory refuses it
+# until the person accepts it.
+- insert:
+    - id: delo-plugin-install-check
+      name: '@delo/plugin-install-check'
+      config:
+        enabled: true

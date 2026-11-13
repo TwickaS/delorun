@@ -33,6 +33,7 @@ kind: "package-bundle"
 - **版本行。**Host 部分把 Delo 的版本（来自 `delorun` 的 `DELO_VERSION`）与上游报告的 DeepSeek Harness 版本作为全局 `deloVersions` 打印到每个页面中；浏览器部分校验它，然后以库存行的 id `current-version`、排序 -1 注册设置中的版本行，因此它取代该行，显示“Delorun 版本”与“DeepSeek Harness 版本”。它还注册通用行 `delo-versions`（`VERSIONS_ITEM`，排序 99），在一行中写出两者：“Delorun 0.1.0 · DeepSeek Harness 0.2.2”。不是由 `delorun` 启动的 harness 不打印任何内容，因此保留库存行，也不注册这一行。
 - **提示服务。**浏览器部分提供 `ctx.deloNotice`（`acknowledged()`、`acknowledge()`），因此自行显示预览提示文案的流程（例如 `@delo/plugin-onboarding` 的第一个屏幕）会记录确认，本组合包的提示步骤随之完成，不会再次显示。
 - **声明文字。**`./statements` 导出即隐私分区的英文词典（[`src/client/locales.ts`](src/client/locales.ts)），CLI 的 setup 读取其中的声明作为隐私说明；该分区本身只显示反馈声明。
+- **Delo 的行来自本次安装。**本组合包的某一行或组合包本身解析到本 Delo 自身包（`runtimes/<version>/app` 或源码检出）之外的包时，例如 profile 的 `node_modules` 中同名的包，`delorun` 拒绝启动该 profile（[`compose.ts`](../../apps/cli/src/compose.ts)）。要修改 Delo 的某个包，请以新名称派生它（例如 `@yourscope/plugin-fetch-guard`），用 `delorun plugin --profile <profile> add <路径或 spec>` 安装，并在 profile 的 `cordis.patch.yml` 中让一行指向新名称，同时保留 Delo 的行。
 - **构建。**`pnpm --filter @delo/bundle-local run build` 写出 `lib/index.js`（即 `delo-privacy` 行的 Host 部分）与 `lib/client.js`（即浏览器端部分）。上游的 `pnpm run build:artifacts` 不构建 Delo 的包。
 
 <a id="rows"></a>
@@ -62,6 +63,8 @@ kind: "package-bundle"
 | `delo-fetch-guard` | 新增 | `@delo/plugin-fetch-guard`，`config.enabled: true`：`web_fetch` 以带类型的原因拒绝回环、链路本地、私有网络与唯一本地目的地 | 无 | 存在且已禁用：开关的对等取值，因此录制的抓取场景按原样调用其回环 fixture |
 | `delo-update-check` | 新增 | `@delo/bundle-local/update-check`，`config.enabled: true`、`intervalHours: 24` 与 `timeoutSeconds: 15`：在启动时与每个间隔校验渠道的最新发布，较新时 studio 显示提示 | 无 | 存在且已禁用：库存版本不发出这样的请求 |
 | `delo-update-gate` | 新增 | `@delo/bundle-local/update-gate`，`config.enabled: true`：`delorun` 的对话闸门处于保持状态时，每个新回合的第一步都以 `UPDATE_PENDING` 被拒绝 | 无 | 存在且已禁用：开关的对等取值，因此每个回合都按上游的方式开始 |
+| `plugin-manager` | 改变 | `config.protectedPlugins` 列出同意与防护行、更新闸门与检查、插件安装检查、reach、home 的登录与沙箱行，因此 `plugin_manager` 工具无法禁用或重新配置它们；`config.fallbackRegistries` 只在安装检查的 `npmMirror` 设置开启时指定 npmmirror，该设置由设置 → 隐私与 `delorun plugin mirror on` 修改，下次启动生效。行中删去受保护名称时，`delorun` 拒绝该 profile | 管理只保护自身组件，首个注册表失败时询问 npmmirror | 沿用上游的组合：覆盖层省略该行 |
+| `delo-plugin-install-check` | 新增 | [`@delo/plugin-install-check`](../plugin-install-check/README.zh.md)，`config.enabled: true`：每次安装在其代码加载之前接受检查，每项发现都会显示，已知的严重公告需要本人接受，每个已安装插件的文件都被记录并在每次启动时比对 | 无 | 存在且已禁用：stock 不审计任何插件 |
 
 [对等覆盖层](../../apps/tools/src/parity/composition/parity.overlay.yml) 以该形式重述本组合包的 patch，从而挂载本组合包；[`parityPatches`](src/rows.ts) 从本组合包的 `cordis.patch.yml` 推导出该形式，覆盖层与之不一致时，`parity-switches` 失败。Delo 的组合不向 DeepSeek 的反馈收集端发送任何内容：反馈导出器、`/feedback` 命令与反馈界面均已禁用或隐藏，因为 Delo 目前还没有反馈的去处。上游自己的组合保留它们，对等组合沿用上游的行。没有任何行指明 Delo 主机。
 
@@ -75,7 +78,7 @@ kind: "package-bundle"
 - 开关显示 Host 接受的值。被拒绝或失败的写入会使其保持不变，并在该行中予以说明。
 - 未提供某开关所对应行的 profile，不会为该项显示开关；对于桌面端分析，该行会说明只有桌面应用会收集它，对于发布检查，则说明该 profile 不检查新版本。
 
-**关于**分区（`delo-about`，`ABOUT_SECTION_ID`，位于“权限”之后，[`src/client/AboutSection.tsx`](src/client/AboutSection.tsx)）包含两个分组：“许可证”说明 Delorun 及其包含的 DeepSeek Harness 均采用 MIT 许可证，并链接许可证文件；“项目链接”链接文档、源代码、问题跟踪与支持邮箱。每个链接都在新标签页中打开。Delo 分区的每个分组都是 [`@delo/settings-controls`](../settings-controls/README.md) 的卡片，即一个 `h3` 标题加一个带边框的框；标题读取分组式设置布局的卡片标题属性，因此与布局的卡片一致，每个分区也保留自己的标题，供不自行显示标题的页面使用。
+**关于**分区（`delo-about`，`ABOUT_SECTION_ID`，位于“网络”之后，[`src/client/AboutSection.tsx`](src/client/AboutSection.tsx)）包含两个分组：“许可证”说明 Delorun 及其包含的 DeepSeek Harness 均采用 MIT 许可证，并链接许可证文件；“项目链接”链接文档、源代码、问题跟踪与支持邮箱。每个链接都在新标签页中打开。Delo 分区的每个分组都是 [`@delo/settings-controls`](../settings-controls/README.md) 的卡片，即一个 `h3` 标题加一个带边框的框；标题读取分组式设置布局的卡片标题属性，因此与布局的卡片一致，每个分区也保留自己的标题，供不自行显示标题的页面使用。
 
 初始设置流程与其他界面通过 `ctx.settingsShell.openSection('delo-privacy')` 打开该分区。上游自身的 **设置 → 通用** 中的会话日志上传开关编辑同一行，且不经对话框；[`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) 在 Delo 的外观中隐藏它，库存外观则显示它。该分区的文案同时提供英文与中文。
 
@@ -90,6 +93,7 @@ kind: "package-bundle"
 - **权限控件。**该行提供上游的 `permissionSwitchConsent` 客户端服务（[`@deepseek-ai/dsh-client-ui-permission-presets`](../../../packages/client/ui-permission-presets/README.zh.md)）：当本人在对话的权限控件或 `/permission` 选择器中选择完全访问时，在上游自己的风险确认之后，工作区没有授权的对话会先显示该同意，只有在授权记录之后才提交切换。其他每种切换，以及在已持有授权的工作区中的每次切换，都立即提交。
 - **审批卡片的操作**（上游 `conversation.approval.action` 列表插槽中的 `delo-full-access`，[`src/client/FullAccessAction.tsx`](src/client/FullAccessAction.tsx)；该插槽属于 [`@deepseek-ai/dsh-client-ui-approval`](../../../packages/client/ui-approval/README.zh.md)）显示在请求完全访问的审批卡片上。在 home 的电脑上，它提供“允许此工作区使用完全访问”，点击时会重新读取该工作区的完全访问：没有授权的工作区先显示该同意，随后记录授权，对话切换为完全访问因而不再询问，卡片以允许作答；已持有授权的工作区不再询问。远程 studio（例如手机）显示“请在你的电脑上批准。”且没有按钮。其他授权、同意自身的卡片、没有工作区文件夹的对话以及不含该插件的 profile 都不显示任何内容。
 - **权限**（`delo-permissions`，位于“设备”之后，[`src/client/PermissionsSection.tsx`](src/client/PermissionsSection.tsx)；Delo 的外观把它放在 [`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) 的“权限”页面上）列出本人给出的每项授权，每项都带一键“撤销”；每次答复的结果显示为各分组上方的一行，它不属于任何列表行，因此列表刷新不会把它移除，每个列表在回答之前都说明正在加载。“完全访问”与“MCP 服务器”两个分组各以一句话说明 Delorun 会先询问什么。在“完全访问”下，它列出持有授权的工作区及起始时间，并说明那里的新对话以完全访问开始；“撤销”立即撤回授权，把该工作区打开的完全访问对话放回更安全的预设并说明数量，其他工作区位于一个展开项之后，其中“允许完全访问”打开该同意。在“MCP 服务器”下，它列出每个等待本人同意的 stdio 服务器以及自允许以来发生的变化（新服务器、其命令、参数、文件夹或指明的环境变量，无法读取的已允许服务器列表，或在 Delorun 分别记住每个服务器之前记录的接受），其中“查看”打开 MCP 服务器审查，“拒绝”让服务器保持停止；随后列出本人拒绝或撤销的服务器，它们在被允许之前保持停止且不引发提示；随后列出每个已允许的服务器及其启动与允许时间，其中“撤销”撤回其接受，让它停止直到再次被允许，并说明停止了多少行。
+- **外部代理**（`delo-external-agents`，`EXTERNAL_AGENTS_SECTION_ID`，紧接“权限”之后，[`src/client/ExternalAgentsSection.tsx`](src/client/ExternalAgentsSection.tsx)；Delo 的外观把它放在 [`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) 的“外部代理”页面上）在题为“运行之前”的卡片中放置开关**外部代理运行前询问**和以分钟计的运行时间上限，二者通过上游的设置服务写入 `delo-delegation-consent` 行的 `enabled` 与 `runTimeoutMinutes`，无需重启即可生效；时间上限在输入框失去焦点或按下 Enter 时写入，且只接受 1 到 1440 的整数。被拒绝的写入会如实说明并保留 Host 持有的值；在远程工作室中二者都被禁用，开关会说明关闭它需要在电脑前操作。第二张卡片“已允许的代理”列出每个被允许不经询问就在某个工作区启动的代理，每项带“撤销”；撤销的结果显示为卡片上方的一行。
 - **MCP 服务器审查**（`delo-mcp-review`，[`src/client/McpServerReview.tsx`](src/client/McpServerReview.tsx)）是一个 `shell.overlay` 对话框，由“权限”与等待中服务器的提示打开：它用一句话说明该服务器以本人的权限在这台电脑上、在沙箱之外运行它自己的命令，用一句话说明只在信任其来源时才允许；它写明发生的变化，并在“详情”下写明命令、参数、文件夹与环境变量，只为改变运行内容的变量显示值（`NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`DYLD_*`、`PATH`、`PYTHONPATH`）。记录答复期间“取消”不可用；完全访问同意也是如此。“允许并启动”记录对话框所显示的审查，随后服务器启动；“取消”不记录任何内容，期间已发生变化的审查会让对话框保持打开，并写明过期的审查。
 - **等待中服务器的提示**（`delo-mcp-waiting`，[`src/client/McpWaitingNotice.tsx`](src/client/McpWaitingNotice.tsx)）是一个 `shell.overlay` 提示，在 studio 打开时以及其窗口每次重新获得焦点时读取等待中的服务器，并写明它们的名称。在 home 的电脑上，“查看并允许此服务器”打开第一个服务器的审查，允许服务器的结果以提示条显示（`delo-consents-toast`，[`src/client/ConsentToast.tsx`](src/client/ConsentToast.tsx)），该审查关闭后提示提供下一个，因此每个等待中的服务器依次被审查；被拒绝或撤销的服务器不引发提示。远程 studio 只读取等待中服务器的名称与变化，提示到电脑上批准。被关闭的提示只为审查发生变化的服务器再次显示。
 

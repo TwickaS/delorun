@@ -66,7 +66,7 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not start: an unfinished update needs the runtime store, and this delorun runs outside it.', remedies: ['Start Delo through the launcher the Delo home installs.', recoverStatus] }
     case 'LOOPBACK_REQUIRED':
       return {
-        lead: 'The home process refused the request: only the person\'s own delorun on this computer approves or removes devices and answers or revokes an MCP server.',
+        lead: 'The home process refused the request: only the person\'s own delorun on this computer manages devices and remote access and answers or revokes an MCP server.',
         remedies: [`Approve the device at this computer: delorun devices approve${profile}`, `Answer the MCP server at this computer: delorun mcp accept <server>${profile}`],
       }
     case 'APPROVAL_FAILED':
@@ -75,12 +75,16 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not change any device: the running profile does not load remote access.', remedies: [`Turn remote access on, then restart Delo: delorun reach on tailscale${profile}`] }
     case 'REMOVAL_FAILED':
       return { lead: 'Delo did not remove the device.', remedies: [`See the trusted devices: delorun devices list${profile}`] }
+    case 'ELEVATION_FAILED':
+      return { lead: 'Delo did not unlock sensitive actions on the device, or did not end the unlock.', remedies: [`See the requests and the running unlocks again: delorun devices elevate${profile}`] }
     case 'CONSENT_UNAVAILABLE':
       return { lead: 'Delo changed nothing: the running profile does not ask this consent, because its switch is off.', remedies: [`See which prompts the profile asks: delorun setup prompts${profile}`] }
     case 'STALE_REVIEW':
       return { lead: 'Delo changed nothing: what you answered changed after it was shown.', remedies: [`Look at it again: delorun mcp list${profile}`] }
     case 'CONSENT_FAILED':
       return { lead: 'Delo did not record the answer.', remedies: [again] }
+    case 'REACH_UNAVAILABLE':
+      return { lead: 'Delo did not apply remote access to the running home: its profile does not run the reach service now.', remedies: [`Restart Delo to apply it: delorun stop${profile}, then delorun start${profile}`] }
     case 'STUDIO_UNAVAILABLE':
       return { lead: 'Delo did not open the studio: the running home process could not make a sign-in link for this computer.', remedies: [`See whether Delo runs and where its studio listens: delorun status${profile}`] }
   }

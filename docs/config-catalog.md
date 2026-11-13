@@ -2423,7 +2423,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:116`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:124`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2441,6 +2441,14 @@ export interface StdioConfig {
   serverName: string
   /** Executable used to start the server. */
   command: string
+  /**
+   * The `argv[0]` the server sees when it differs from `command`. A reviewed
+   * start sets it to the configured `command` while `command` names the
+   * reviewed file, so a program that locates itself by its invoked name, such
+   * as a virtual-environment `python` link, still does. `apply` drops a
+   * configured value. Absent, the server sees `command`.
+   */
+  argv0?: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
   /** Extra env vars merged on top of scrubbed ambient env. */
@@ -2919,7 +2927,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-sandbox-local`
 
-- `source`: [`packages/sandbox/sandbox-local/src/index.ts:73`](../packages/sandbox/sandbox-local/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-local/src/index.ts:75`](../packages/sandbox/sandbox-local/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -2973,7 +2981,7 @@ export interface Config {
    * Absolute paths of directories that hold only sockets confined commands cannot connect to, such as Docker
    * Desktop's control-socket directories. bwrap hides each one under an empty read-only tmpfs, so a socket created
    * there later is hidden too; Seatbelt denies each entry present at the wrap by its path; Landlock cannot express it.
-   * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
+   * Every socket in a named directory is denied, so naming one that also holds sockets commands need cuts those off too.
    */
   deniedSocketDirectories?: string[]
   /**
@@ -2986,6 +2994,29 @@ export interface Config {
    * exist at a wrap denies and refuses nothing.
    */
   escapeSocketDirectories?: string[]
+  /**
+   * Whether bwrap gives `read-only` commands an empty read-only `/tmp`, into which a workspace root under `/tmp` is
+   * bound read-only, as it gives `workspace-write` commands an empty writable one, and hides every other mount of the
+   * host's `/tmp` found at a wrap, such as WSLg's `/mnt/wslg/distro/tmp`, in both modes. The host's `/tmp` holds
+   * sockets of the person's programs, such as a tmux server's and an ssh-agent's, under names no list can predict.
+   * Landlock and Seatbelt cannot express it and leave it out. Off: `read-only` commands read the host's `/tmp`.
+   */
+  privateTmp?: boolean
+  /**
+   * Absolute paths of Unix sockets that a command whose policy restricts the network cannot connect to, because a
+   * daemon behind them resolves names or sends traffic for the command: the system D-Bus, through which
+   * systemd-resolved answers lookups, tailscaled's control socket, and snapd's sockets, whose API downloads and
+   * installs snaps. Denied like {@link deniedSockets} entries, on bwrap only, and only for such a command; a command
+   * with the host's network keeps them. Defaults to {@link NETWORK_DENIED_SOCKETS}.
+   */
+  networkDeniedSockets?: string[]
+  /**
+   * Absolute paths of directories whose sockets resolve names for a command, hidden like
+   * {@link deniedSocketDirectories} entries from a command whose policy restricts the network: systemd-resolved's
+   * varlink directory, nscd's and avahi's, and CUPS's, whose scheduler sends jobs to network printers. Defaults to
+   * {@link NETWORK_DENIED_SOCKET_DIRECTORIES}.
+   */
+  networkDeniedSocketDirectories?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
@@ -2997,7 +3028,7 @@ export interface Config {
 
 - `inject`: `sessionProjections`
 - `refs`: [`SandboxMode`](subsystems/sandbox.md)
-- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:95`](../packages/sandbox/sandbox-policy/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:96`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 ```ts config-catalog
 /**
@@ -3676,7 +3707,7 @@ export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
 
 - `inject`: `workingDirectory` · `sessionProjections`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/subagent/subagent/src/index.ts:186`](../packages/subagent/subagent/src/index.ts)
+- `source`: [`packages/subagent/subagent/src/index.ts:192`](../packages/subagent/subagent/src/index.ts)
 
 ```ts config-catalog
 /** Host configuration for continuable subagent capacity. */
@@ -4426,7 +4457,7 @@ export interface Config {
 
 - `inject`: `tools` · `subagents` · `systemPrompt` · `sessionProjections`
 - `refs`: [`AgentOptions`](subsystems/core.md)
-- `source`: [`packages/subagent/tool-subagent/src/index.ts:46`](../packages/subagent/tool-subagent/src/index.ts)
+- `source`: [`packages/subagent/tool-subagent/src/index.ts:47`](../packages/subagent/tool-subagent/src/index.ts)
 
 ```ts config-catalog
 /** Config: which registered provider this tool delegates to, plus child defaults. */

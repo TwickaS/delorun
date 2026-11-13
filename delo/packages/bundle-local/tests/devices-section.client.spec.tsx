@@ -10,10 +10,13 @@ import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject,
-  MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
+  ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
+  EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
+  MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
+  PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -21,45 +24,15 @@ import {
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import { AWAY, fakeHost, staticUnlock } from './fake-host.ts'
+import type { ExternalAgentsSectionInjected } from '../src/client/ExternalAgentsSection.tsx'
+import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
 
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
-
-/** One scripted Host answer: a JSON body, a raw text body, or a request that never completes. */
-type Answer = { status: number; body?: unknown; text?: string } | 'unreachable' | Promise<{ status: number; body: unknown }>
-
-/** A route key: the method and the path. */
-type RouteKey = `${'GET' | 'POST'} ${string}`
-
-/** One request the fake Host received. */
-interface Received {
-  readonly key: RouteKey
-  readonly init: RequestInit | undefined
-  readonly body: unknown
-}
-
-/**
- * A fake home answering each route with the latest scripted answer; an unscripted route answers 404 as the Host's
- * router does.
- * @param script - the answers by route.
- * @returns the fake `fetch`, the received requests and the script, which a test changes between steps.
- */
-function fakeHost(script: Partial<Record<RouteKey, Answer>> = {}) {
-  const received: Received[] = []
-  const fetch: HostFetch = async (input, init) => {
-    const key: RouteKey = `${init?.method === 'POST' ? 'POST' : 'GET'} ${input}`
-    received.push({ key, init, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined })
-    const scripted = script[key] ?? { status: 404, body: { error: 'NOT_FOUND', message: 'No such route' } }
-    if (scripted === 'unreachable') throw new TypeError('Failed to fetch')
-    const answer = await scripted
-    return new Response('text' in answer && answer.text !== undefined ? answer.text : JSON.stringify(answer.body), { status: answer.status })
-  }
-  const count = (key: RouteKey): number => received.filter(request => request.key === key).length
-  return { fetch, received, script, count }
-}
 
 const NOW = Date.UTC(2026, 10, 10, 12, 0, 0)
 
@@ -91,7 +64,7 @@ const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs
  */
 function renderSection(host: ReturnType<typeof fakeHost>) {
   // The renderer's standard props are absent: the section reads none of them.
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch } as DevicesSectionProps
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY) } as DevicesSectionProps
   return render(<DevicesSection {...props} />)
 }
 
@@ -486,6 +459,8 @@ describe('the device requests', () => {
   })
 })
 
+const SESSION = 'session-1' as Parameters<PermissionSwitchConsent['confirm']>[0]
+
 describe('the plugin', () => {
   it('registers the Devices section right after Privacy, with the browser\'s fetch, and the refused-answer notice', async () => {
     const ctx = new Context()
@@ -496,20 +471,30 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
       expect(sections).toMatchObject([
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
-        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
+        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
+        { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
+        { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
-      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Permissions', 'About'])
+      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
+        .toEqual(['Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      // Each overlay, each section and the approval card's action read their store's view and actions.
+      for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section')]) expect(entry.inject?.()).toBeTypeOf('object')
+      // Each approval card action is bound to the card's chat.
+      const actions = slots.entries('conversation.approval.action')
+      expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
+      for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
+      await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
       expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
@@ -519,6 +504,13 @@ describe('the plugin', () => {
       expect((devicesEntry?.inject?.() as { fetch: HostFetch }).fetch).toBe(face.fetch)
       expect(await readReachStatus(face.fetch)).toEqual(READY.body)
       expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
+      // The External agents section's settings read and write the consent row's Host form.
+      const agentsInject = slots.entries('settings.section')[3]?.inject as (() => ExternalAgentsSectionInjected) | undefined
+      const agents = agentsInject?.()
+      if (agents === undefined) throw new Error('no External agents section face')
+      expect(agents.hooks.agentSettings).toBe(ctx.get('configForms')?.get(DELEGATION_CONSENT_ROW))
+      await agents.setAgentSetting('runTimeoutMinutes', 45)
+      expect(agents.hooks.agentSettingsMutation.getSnapshot()).toEqual({ busy: false, failed: true })
     } finally {
       await ctx.fiber.dispose()
     }

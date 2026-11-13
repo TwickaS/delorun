@@ -1,27 +1,35 @@
 /**
  * `delorun reach status | on tailscale | off` (contract C7): remote access to the studio over the person's own tailnet.
  *
- * - `on tailscale` checks that Tailscale is installed, running and signed in, that the tailnet has HTTPS certificates
- *   on, and that the person's user may configure `tailscale serve`; for the last it prints the one command the person
- *   runs and runs nothing through `sudo`. It refuses while Tailscale Funnel is on for the address, and removes any rule
- *   on the serve port that is not this home's own, or every rule there while Delo is stopped, confirming each removal.
- *   It then writes the profile's `delo-reach` row with this machine's `ts.net` address and the fixed listener port,
- *   chosen once, and prints the address and the trust statement. The running home applies it at its next start.
+ * - `on tailscale` checks that Tailscale is installed, running and signed in and that the tailnet has HTTPS certificates
+ *   on; refuses while Tailscale Funnel is on for the address; removes any rule on the serve port that is not this home's
+ *   own, or every rule there while the option does not run, confirming each removal; and tests that the person's user
+ *   may configure `tailscale serve` by configuring the serve target and removing it again (`checkServeAccess`). A user
+ *   who may not gets `TAILSCALE_SERVE_NOT_PERMITTED` with the one command the person runs, and nothing is written;
+ *   nothing runs through `sudo`. It then writes the profile's `delo-reach` row with this machine's `ts.net` address
+ *   and the fixed listener port, chosen once, and prints the address, the sign-in address and the trust statement.
  * - `off` turns the option off in the row, removes whatever Tailscale serves on the serve port at once, and confirms it
  *   is gone; a removal it cannot confirm exits non-zero with the reason.
- * - `status` prints the row, and whether the home runs; the studio's Devices section shows the live state.
+ * - While the profile's home runs, `on` and `off` ask it over the update channel's `reach.apply` (C19) to restart its
+ *   options from the row, and print the state it answers; a home that cannot apply it, or a start that is not
+ *   `ready`, exits non-zero with the reason and the restart command.
+ * - `status` prints the row and, while the home runs, each option's live state from `reach.status`.
  *
- * Every `tailscale` call goes through the injected runner.
+ * Every `tailscale` call goes through the injected runner, and every home request through the injected sender.
  *
  * @module @delo/cli/reach/command
  */
 import { DEFAULT_SERVE_PORT } from '@delo/contract-reach-providers'
-import { funnelOn, ReachError, readServeRules, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
+import type { ReachOptionStatus } from '@delo/contract-home-process'
+import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
 import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
+import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
-import { listenerPortFor, readReachRow, writeReachRow } from './row.ts'
+import { profileFlag } from '../open/studio.ts'
+import { printable } from '../terminal-text.ts'
+import { listenerPortFor, readReachRow, signInAddress, writeReachRow } from './row.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
 /** What the command runs against. */
@@ -35,6 +43,15 @@ export interface ReachDependencies {
    * @returns true when a live process holds its lock.
    */
   readonly running: (home: string, profile: string) => boolean
+  /**
+   * Send one request over the update channel with the token file's token.
+   * @param home - the Delo home.
+   * @param profile - the CLI profile.
+   * @param request - the request.
+   * @returns the response lines.
+   * @throws the connection's error when no home process answers.
+   */
+  readonly send: (home: string, profile: string, request: UnsignedRequest) => Promise<ResponseLine[]>
 }
 
 /** The usage line. */
@@ -53,7 +70,7 @@ export function homeRuns(home: string, profile: string): boolean {
 
 /**
  * Build the command over its dependencies.
- * @param dependencies - the runner and the running check.
+ * @param dependencies - the runner, the running check and the home socket.
  * @returns the command.
  */
 export function createReachCommand(dependencies: ReachDependencies): CliCommand {
@@ -72,8 +89,8 @@ export function createReachCommand(dependencies: ReachDependencies): CliCommand 
   }
 }
 
-/** `delorun reach`, over the system's `tailscale` and the home lock. */
-export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns })
+/** `delorun reach`, over the system's `tailscale`, the home lock and the home socket. */
+export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest })
 
 /**
  * The home and profile of a command that changes the profile, refusing a home without the CLI profile.
@@ -91,10 +108,115 @@ async function preparedProfile(command: string, args: readonly string[], context
 }
 
 /**
+ * The commands that restart a profile's home.
+ * @param profile - the CLI profile, named with `--profile` unless it is the default.
+ * @returns the commands.
+ */
+function restartCommand(profile: string): string {
+  const flag = profileFlag(profile)
+  return `delorun stop${flag}, then delorun start${flag}`
+}
+
+/**
+ * The lines that tell the person how to add a phone: the approval first, then the sign-in address on the phone.
+ * @param address - the option's studio address.
+ * @returns the lines.
+ */
+export function addPhoneLines(address: string): readonly string[] {
+  return [
+    'To add your phone:',
+    '  1. Run delorun devices approve on this computer.',
+    `  2. Open ${signInAddress(address)} on the phone, choose Ask for approval, and type the code it shows here.`,
+  ]
+}
+
+/** What the running home answered to a reach operation. */
+type LiveAnswer =
+  | { readonly kind: 'options'; readonly options: readonly ReachOptionStatus[] }
+  | { readonly kind: 'unavailable'; readonly reason: string }
+
+/**
+ * Ask the running home one reach operation.
+ * @param dependencies - the home socket.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param op - `reach.status` or `reach.apply`.
+ * @returns the options, or why the home did not answer them.
+ */
+async function askHome(dependencies: ReachDependencies, home: string, profile: string, op: 'reach.status' | 'reach.apply'): Promise<LiveAnswer> {
+  let lines: ResponseLine[]
+  try {
+    lines = await dependencies.send(home, profile, { op })
+  } catch (error) {
+    return { kind: 'unavailable', reason: `the home process did not answer (${error instanceof Error ? error.message : String(error)})` }
+  }
+  const line = lines.at(-1)
+  if (line === undefined) return { kind: 'unavailable', reason: 'the home process closed the request without an answer; see delorun logs home' }
+  if (line.ok !== true) {
+    const detail = typeof line.detail === 'string' ? `: ${line.detail}` : ''
+    return { kind: 'unavailable', reason: `the home process refused with ${String(line.error)}${detail}` }
+  }
+  const options = optionsOf(line.options)
+  return options === undefined ? { kind: 'unavailable', reason: 'the home process answered with states this command cannot read' } : { kind: 'options', options }
+}
+
+/**
+ * Read the options of a reach answer.
+ * @param value - the answer's `options` field.
+ * @returns the options, or undefined when an entry is not one.
+ */
+function optionsOf(value: unknown): readonly ReachOptionStatus[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const entries: readonly unknown[] = value
+  const options: ReachOptionStatus[] = []
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) return undefined
+    const option: unknown = Reflect.get(entry, 'option')
+    const state: unknown = Reflect.get(entry, 'state')
+    if (typeof option !== 'string' || typeof state !== 'string') return undefined
+    const text = (name: string): Record<string, string> => {
+      const field: unknown = Reflect.get(entry, name)
+      return typeof field === 'string' ? { [name]: field } : {}
+    }
+    options.push({ option, state, ...text('address'), ...text('cause'), ...text('detail') })
+  }
+  return options
+}
+
+/**
+ * One option's live state as a line, its text escaped for the terminal.
+ * @param option - the option.
+ * @returns the line.
+ */
+function liveLine(option: ReachOptionStatus): string {
+  const at = option.address === undefined ? '' : ` at ${printable(option.address)}`
+  const cause = option.cause === undefined ? '' : ` (${printable(option.cause)}): ${printable(option.detail ?? '')}`
+  return `Live: ${printable(option.option)} is ${printable(option.state)}${at}${cause}`
+}
+
+/** The live states in which the running home holds the option's fixed listener port. */
+const HOLDING_STATES: ReadonlySet<string> = new Set(['starting', 'ready', 'degraded'])
+
+/**
+ * Whether the running home holds the Tailscale private option's fixed listener port now, as its live state says: a
+ * blocked, failed or off option holds none, so its own serve rule would forward to a port any local program can bind.
+ * @param dependencies - the home socket.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns whether it holds the port; false when the home does not answer.
+ */
+async function holdsListener(dependencies: ReachDependencies, home: string, profile: string): Promise<boolean> {
+  const answer = await askHome(dependencies, home, profile, 'reach.status')
+  if (answer.kind === 'unavailable') return false
+  const state = answer.options.find(entry => entry.option === 'tailscale-private')?.state
+  return state !== undefined && HOLDING_STATES.has(state)
+}
+
+/**
  * `delorun reach on tailscale`.
  * @param args - the arguments after `on`.
  * @param context - the environment and output.
- * @param dependencies - the runner and the running check.
+ * @param dependencies - the runner, the running check and the home socket.
  * @returns the exit code.
  */
 async function turnOn(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok | typeof EXIT.failed> {
@@ -102,34 +224,38 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
   if (option !== 'tailscale') throw new CliError(EXIT.usage, `delorun reach on: the one option this build offers is tailscale\n${USAGE}`)
   const { home, profile } = await preparedProfile('on', rest, context)
   const running = dependencies.running(home, profile)
+  const row = readReachRow(home, profile)
+  const holds = running && row.enabled && await holdsListener(dependencies, home, profile)
   let dnsName: string
   let listenerPort: number
   try {
     ({ dnsName } = await readTailscale(dependencies.tailscale))
-    listenerPort = await listenerPortFor(readReachRow(home, profile).listenerPort, running)
-    const target = serveTarget(listenerPort)
-    const rules = await readServeRules(dependencies.tailscale, dnsName, DEFAULT_SERVE_PORT, target)
-    if (rules.funnel) throw funnelOn(dnsName, DEFAULT_SERVE_PORT, 'then run delorun reach on tailscale again')
-    // A stopped home holds no port, so even its own rule would forward to a port any local program could bind.
-    if (rules.present && (!rules.own || !running)) await removeServe(dependencies.tailscale, dnsName, DEFAULT_SERVE_PORT, target)
+    listenerPort = await listenerPortFor(row.listenerPort, holds)
+    await checkServeAccess(dependencies.tailscale, { host: dnsName, servePort: DEFAULT_SERVE_PORT, listenerPort, keepOwn: holds, next: 'then run delorun reach on tailscale again' })
   } catch (error) {
     if (!(error instanceof ReachError)) throw error
-    context.stderr(`delorun reach: ${error.detail} (${error.code})\n`)
+    context.stderr(`delorun reach: ${error.detail} (${error.code})\nRemote access stays off.\n`)
     return EXIT.failed
   }
   const address = tailscaleAddress(dnsName, DEFAULT_SERVE_PORT)
-  writeReachRow(home, profile, { ...readReachRow(home, profile), enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort })
-  context.stdout([
-    `Remote access is on for the profile ${profile} at ${address}`,
-    '',
-    ...TRUST_STATEMENT,
-    '',
-    running
-      ? 'Restart Delo to apply it: delorun stop, then delorun start.'
-      : 'It starts with Delo: delorun start.',
-    'Then add your phone: run delorun devices approve here, open the address on the phone and type the code it shows.',
-    '',
-  ].join('\n'))
+  writeReachRow(home, profile, { ...row, enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort })
+  context.stdout([`Remote access is on for the profile ${profile} at ${address}`, '', ...TRUST_STATEMENT, '', ''].join('\n'))
+  if (!running) {
+    context.stdout([`It starts with Delo: delorun start.`, ...addPhoneLines(address), ''].join('\n'))
+    return EXIT.ok
+  }
+  const answer = await askHome(dependencies, home, profile, 'reach.apply')
+  if (answer.kind === 'unavailable') {
+    context.stderr(`delorun reach: the running Delo did not apply it: ${answer.reason}.\nRestart Delo to apply it: ${restartCommand(profile)}.\n`)
+    return EXIT.failed
+  }
+  const tailscalePrivate = answer.options.find(entry => entry.option === 'tailscale-private')
+  context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
+  if (tailscalePrivate?.state !== 'ready') {
+    context.stderr(`delorun reach: the running Delo did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again.\n`)
+    return EXIT.failed
+  }
+  context.stdout(`${addPhoneLines(address).join('\n')}\n`)
   return EXIT.ok
 }
 
@@ -137,7 +263,7 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
  * `delorun reach off`.
  * @param args - the options.
  * @param context - the environment and output.
- * @param dependencies - the runner and the running check.
+ * @param dependencies - the runner, the running check and the home socket.
  * @returns the exit code.
  */
 async function turnOff(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok | typeof EXIT.failed> {
@@ -159,8 +285,14 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
     }
     lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
   }
-  if (running) lines.push('Restart Delo to close the remote listener now: delorun stop, then delorun start.')
   context.stdout(`${lines.join('\n')}\n`)
+  if (!running) return EXIT.ok
+  const answer = await askHome(dependencies, home, profile, 'reach.apply')
+  if (answer.kind === 'unavailable') {
+    context.stderr(`delorun reach: the running Delo did not close its remote listener: ${answer.reason}.\nRestart Delo to close it: ${restartCommand(profile)}.\n`)
+    return EXIT.failed
+  }
+  context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
   return EXIT.ok
 }
 
@@ -168,7 +300,7 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
  * `delorun reach status`.
  * @param args - the options.
  * @param context - the environment and output.
- * @param dependencies - the running check.
+ * @param dependencies - the running check and the home socket.
  * @returns the exit code.
  */
 async function status(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok> {
@@ -180,9 +312,11 @@ async function status(args: readonly string[], context: CommandContext, dependen
   if (!dependencies.running(home, profile)) {
     lines.push('Delo is not running, so no remote listener is open.')
   } else {
-    // The live state answers only the studio's own page, so the command points there instead of asking over HTTP.
-    lines.push('Delo is running. Settings → Devices in the studio on this computer shows whether the address is ready; a change applies at the next start.')
+    const answer = await askHome(dependencies, home, profile, 'reach.status')
+    if (answer.kind === 'options') lines.push(...answer.options.map(liveLine))
+    else lines.push(`Delo is running, but its live state could not be read: ${answer.reason}. Settings → Devices in the studio on this computer shows it.`)
   }
+  if (row.enabled) lines.push(`Sign-in address: ${signInAddress(row.address)}`, ...addPhoneLines(row.address))
   context.stdout(`${lines.join('\n')}\n`)
   return EXIT.ok
 }

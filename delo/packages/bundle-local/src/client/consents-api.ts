@@ -13,9 +13,12 @@ import {
 import {
   PERMISSION_ROUTES, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from '@delo/plugin-permission-defaults/wire'
+import {
+  DELEGATION_CONSENT_ROUTES, type AllowWorkspaceAnswer, type GrantsAnswer, type GrantView, type RevokeAnswer,
+} from '@delo/plugin-delegation-consent/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { AcceptedServer, EnvVariable, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -36,14 +39,15 @@ const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
 const isServerState: Check = value => SERVER_STATES.some(state => state === value)
 const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }))
+const isFiles: Check = listOf(fields({ argument: optional(value => Number.isSafeInteger(value) && Number(value) >= 0), path: isString, sha256: isString }))
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles, writableByChats: listOf(isString), reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({
     acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString,
-    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles,
     acceptedAt: isTime, configured: value => typeof value === 'boolean',
   })),
 })
@@ -51,6 +55,10 @@ const isWaitingServers: Check = fields({ servers: listOf(fields({ serverName: is
 const isAccepted: Check = fields({ started: isTime })
 const isRevoked: Check = fields({ stopped: isTime })
 const isDeclined: Check = fields({ declined: value => value === true })
+const isGrant: Check = fields({ workspace: isString, provider: isString, agent: isString, grantedAt: isTime })
+const isGrants: Check = fields({ grants: listOf(isGrant), storeProblem: optional(isString) })
+const isAllowed: Check = fields({ grant: isGrant })
+const isAgentRevoked: Check = fields({ revoked: value => typeof value === 'boolean' })
 
 /**
  * Run a request whose route a profile may not mount.
@@ -164,4 +172,39 @@ export function acceptServer(fetch: HostFetch, server: PendingServer): Promise<A
  */
 export async function declineServer(fetch: HostFetch, server: PendingServer): Promise<void> {
   await call<{ declined: true }>(fetch, MCP_CONSENT_ROUTES.decline, isDeclined, { serverName: server.serverName, reviewId: server.reviewId })
+}
+
+/**
+ * Read the external agents allowed per workspace.
+ * @param fetch - the request function.
+ * @returns the grants, or undefined when the profile mounts no external-agent consent.
+ * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED` on a remote studio), an unreachable Host or an
+ *   unreadable answer.
+ */
+export function readAgentGrants(fetch: HostFetch): Promise<GrantsAnswer | undefined> {
+  return mounted(call<GrantsAnswer>(fetch, DELEGATION_CONSENT_ROUTES.grants, isGrants))
+}
+
+/**
+ * Let an external agent start without asking in an open chat's workspace, with the person's answer.
+ * @param fetch - the request function.
+ * @param sessionId - the chat the approval card belongs to.
+ * @param provider - the agent's provider name.
+ * @returns the recorded grant.
+ * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED`, `NO_WORKSPACE`, `UNKNOWN_WORKSPACE`, `STORE_REFUSED`
+ *   among them), an unreachable Host or an unreadable answer.
+ */
+export function allowAgentForWorkspace(fetch: HostFetch, sessionId: string, provider: string): Promise<AllowWorkspaceAnswer> {
+  return call<AllowWorkspaceAnswer>(fetch, DELEGATION_CONSENT_ROUTES.allow, isAllowed, { sessionId, provider, confirmed: true })
+}
+
+/**
+ * Revoke one external agent's grant; it asks again at its next start there.
+ * @param fetch - the request function.
+ * @param grant - the grant as the section showed it.
+ * @returns whether a grant was removed.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export function revokeAgentGrant(fetch: HostFetch, grant: GrantView): Promise<RevokeAnswer> {
+  return call<RevokeAnswer>(fetch, DELEGATION_CONSENT_ROUTES.revoke, isAgentRevoked, { workspace: grant.workspace, provider: grant.provider })
 }

@@ -42,9 +42,12 @@ export interface FullAccessConsentSource {
    * Show the consent for one workspace and wait for the person's answer.
    * @param access - the workspace as the home showed it, or undefined on a remote studio.
    * @param chat - the open chat the consent is asked from, which the grant also switches to full access.
-   * @returns true once the grant is recorded; false when the person cancelled or the studio is remote.
+   * @param wanted - whether the asker still wants the grant, read when the person confirms: false closes the consent
+   *   without recording anything, as an approval card that can no longer be answered does.
+   * @returns true once the grant is recorded; false when the person cancelled, the asker no longer wants it, or the
+   *   studio is remote.
    */
-  readonly ask: (access: WorkspaceAccess | undefined, chat?: string) => Promise<boolean>
+  readonly ask: (access: WorkspaceAccess | undefined, chat?: string, wanted?: () => boolean) => Promise<boolean>
   /** Record the grant for the open consent; a refusal keeps the consent open with its failure. */
   readonly confirm: () => void
   /** Close the open consent without recording anything. */
@@ -81,6 +84,7 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
   let state: FullAccessConsentState = null
   let seq = 0
   let settle: ((granted: boolean) => void) | undefined
+  let stillWanted: (() => boolean) | undefined
   const listeners = new Set<() => void>()
   const publish = (next: FullAccessConsentState): void => {
     state = next
@@ -89,6 +93,7 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
   const close = (granted: boolean): void => {
     const done = settle
     settle = undefined
+    stillWanted = undefined
     publish(null)
     done?.(granted)
   }
@@ -102,15 +107,20 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
         },
       },
     },
-    ask(access, chat) {
+    ask(access, chat, wanted) {
       // A second ask answers the first as cancelled: one consent is open at a time.
       close(false)
+      stillWanted = wanted
       publish({ seq: ++seq, ...access === undefined ? {} : { access }, ...chat === undefined ? {} : { chat }, busy: false })
       return new Promise<boolean>((resolve) => { settle = resolve })
     },
     confirm() {
       const open = state
       if (open?.access === undefined || open.busy) return
+      if (stillWanted?.() === false) {
+        close(false)
+        return
+      }
       publish({ ...open, busy: true })
       setFullAccess(fetch, open.access, true, open.chat).then(
         () => { if (state?.seq === open.seq) close(true) },
@@ -168,7 +178,7 @@ export type FullAccessConsentProps = PropsLocale<'deloConsents'> & InjectFace<Om
  * @param action - the phrase a remote refusal names: changing full access, or allowing an MCP server.
  * @returns the sentence.
  */
-export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure, action: 'action.changeAccess' | 'action.answerServer' = 'action.changeAccess'): string {
+export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure, action: 'action.changeAccess' | 'action.answerServer' | 'action.changeAgent' = 'action.changeAccess'): string {
   switch (failure.kind) {
     case 'stale': return t('failed.stale')
     case 'remote': return t('loopback', { action: t(action) })

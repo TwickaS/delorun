@@ -24,7 +24,7 @@ const PER_WORKSPACE = 20
 /** Decisions timed per measurement. */
 const DECISIONS = 500
 
-const DEVICE = reachDevicePrincipal('device-scale')
+const DEVICE = reachDevicePrincipal('device-scale', 'reach-tailscale-private')
 
 /**
  * The median of several timings of one operation, in milliseconds.
@@ -53,10 +53,11 @@ async function serviceWith(count: number): Promise<{ readonly access: RemoteAcce
   await ctx.plugin(RemoteAccessService)
   const workspaces = Array.from({ length: Math.ceil(count / PER_WORKSPACE) }, (_, index) => ({
     id: brandString<WorkspaceId>(`workspace-${String(index)}`),
+    path: `/nowhere/workspace-${String(index)}`,
     sessionIds: Array.from({ length: Math.min(PER_WORKSPACE, count - index * PER_WORKSPACE) },
       (__, offset) => brandString<SessionId>(`session-${String(index * PER_WORKSPACE + offset)}`)),
   }))
-  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [] }))
+  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined }))
   return { access: ctx.remoteAccess, dispose: () => ctx.fiber.dispose(), sessionId: brandString<SessionId>(`session-${String(Math.floor(count / 2))}`) }
 }
 

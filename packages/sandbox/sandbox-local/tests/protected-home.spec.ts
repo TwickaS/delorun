@@ -21,15 +21,19 @@ import type { Protection, ProtectionSettings } from '../src/profiles.ts'
 
 /** Protection settings with every field empty except those given. */
 function settingsOf(fields: Partial<ProtectionSettings>): ProtectionSettings {
-  return { home: undefined, readable: [], deniedSockets: [], deniedSocketDirectories: [], ...fields }
+  return { home: undefined, readable: [], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false, ...fields }
 }
 
 /** No mount and no Data volume: resolution sees only the paths it is given. */
 const NO_MOUNTS: readonly MountEntry[] = []
 const NO_DATA_VOLUME = '/nonexistent-data-volume'
 
-function resolveIsolated(settings: ProtectionSettings, mounts: readonly MountEntry[] = NO_MOUNTS): Protection {
-  return resolveProtection(settings, mounts, NO_DATA_VOLUME)
+function resolveIsolated(
+  settings: ProtectionSettings,
+  mounts: readonly MountEntry[] = NO_MOUNTS,
+  platform: string = process.platform,
+): Protection {
+  return resolveProtection(settings, mounts, NO_DATA_VOLUME, platform)
 }
 
 /**
@@ -87,7 +91,7 @@ describe('RUNNER_PROTECTION', () => {
 
 describe('resolveProtection', () => {
   it('is empty without a home or sockets', () => {
-    expect(resolveProtection({ home: undefined, readable: [], deniedSockets: [], deniedSocketDirectories: [] })).toEqual(NO_PROTECTION)
+    expect(resolveProtection(settingsOf({}))).toEqual(NO_PROTECTION)
   })
 
   it('keeps existing readable entries, drops missing ones and an entry that leads elsewhere inside the home', () => {
@@ -96,7 +100,7 @@ describe('resolveProtection', () => {
     mkdirSync(outside)
     symlinkSync(outside, join(home, 'skills'), 'dir')
     symlinkSync(join(home, 'secrets'), join(home, 'dsh-runtimes'), 'dir')
-    const protection = resolveIsolated({ home, readable: ['runtimes', 'skills', 'dsh-runtimes', 'missing'], deniedSockets: [], deniedSocketDirectories: [] })
+    const protection = resolveIsolated({ home, readable: ['runtimes', 'skills', 'dsh-runtimes', 'missing'], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false })
     expect(protection.readable).toEqual([
       { path: join(home, 'runtimes'), source: join(home, 'runtimes') },
       { path: join(home, 'skills'), source: outside },
@@ -113,7 +117,7 @@ describe('resolveProtection', () => {
     const underHome = join(home, 'u.sock')
     writeFileSync(underHome, '')
     const missing = join(root, 'missing.sock')
-    const protection = resolveIsolated({ home, readable: [], deniedSockets: [viaLink, underHome, missing], deniedSocketDirectories: [] })
+    const protection = resolveIsolated(settingsOf({ home, deniedSockets: [viaLink, underHome, missing] }))
     expect(protection.socketSpellings).toEqual([viaLink, join(real, 'docker.sock'), underHome, missing])
     expect(protection.shadowedSockets).toEqual([join(real, 'docker.sock')])
     expect(resolveIsolated(settingsOf({ deniedSockets: [underHome] })).shadowedSockets).toEqual([underHome])
@@ -151,13 +155,13 @@ describe('resolveProtection with aliases', () => {
     const { root, home } = fixture()
     symlinkSync(root, join(home, 'skills'), 'dir')
     symlinkSync(home, join(home, 'dsh-runtimes'), 'dir')
-    expect(resolveIsolated({ home, readable: ['skills', 'dsh-runtimes', 'runtimes'], deniedSockets: [], deniedSocketDirectories: [] }).readable.map(entry => entry.path)).toEqual([join(home, 'runtimes')])
+    expect(resolveIsolated({ home, readable: ['skills', 'dsh-runtimes', 'runtimes'], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false }).readable.map(entry => entry.path)).toEqual([join(home, 'runtimes')])
   })
 
   it('reads the mount table only when something is protected', () => {
     expect(resolveProtection(settingsOf({}), undefined)).toBe(NO_PROTECTION)
     const { home } = fixture()
-    expect(resolveProtection({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [] }).home).toBe(home)
+    expect(resolveProtection({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false }).home).toBe(home)
   })
 })
 
@@ -250,10 +254,10 @@ describe('alias coverage', () => {
     const socket = join(root, 'docker.sock')
     writeFileSync(socket, '')
     const device = deviceName(statSync(home, { bigint: true }).dev)
-    const settings: ProtectionSettings = { home, readable: [], deniedSockets: [socket], deniedSocketDirectories: [] }
+    const settings: ProtectionSettings = { home, readable: [], deniedSockets: [socket], deniedSocketDirectories: [], privateTmp: false }
     expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('complete')
     expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'overlay' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
-    expect(resolveProtection({ home: undefined, readable: [], deniedSockets: [socket], deniedSocketDirectories: [] }, [], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
+    expect(resolveProtection({ home: undefined, readable: [], deniedSockets: [socket], deniedSocketDirectories: [], privateTmp: false }, [], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
   })
 
   it('reports protected reads: the home, its aliases and the readable entries under each', async () => {
@@ -304,39 +308,61 @@ describe('alias coverage', () => {
 })
 
 describe('denied socket directories', () => {
-  it('hides each existing directory and its mount aliases, and denies each entry present now by its spellings', () => {
+  it('hides each existing directory and its mount aliases, and on macOS denies each entry present now by its spellings', () => {
     const { root, home } = fixture()
     const sockets = join(root, 'shared-sockets')
     mkdirSync(sockets)
     writeFileSync(join(sockets, 'backend.sock'), '')
     const bind = join(root, 'bind')
     symlinkSync(root, bind, 'dir')
-    const protection = resolveIsolated(
-      { home, readable: [], deniedSockets: [], deniedSocketDirectories: [sockets, join(root, 'missing')] },
-      aliasMount(sockets, bind),
-    )
-    expect(protection.hiddenDirectories).toEqual([sockets, join(bind, 'shared-sockets')])
-    expect(protection.socketSpellings).toEqual([join(sockets, 'backend.sock')])
-    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toEqual(expect.arrayContaining(['--tmpfs', sockets, '--remount-ro', sockets]))
-    expect(seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)[1]).toContain(`(path-literal "${join(sockets, 'backend.sock')}")`)
+    const settings: ProtectionSettings = { home, readable: [], deniedSockets: [], deniedSocketDirectories: [sockets, join(root, 'missing')], privateTmp: false }
+    const linux = resolveIsolated(settings, aliasMount(sockets, bind), 'linux')
+    expect(linux.hiddenDirectories).toEqual([sockets, join(bind, 'shared-sockets')])
+    expect(linux.socketSpellings).toEqual([])
+    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, linux)).toEqual(expect.arrayContaining(['--tmpfs', sockets, '--remount-ro', sockets]))
+    const darwin = resolveIsolated(settings, NO_MOUNTS, 'darwin')
+    expect(darwin.socketSpellings).toEqual([join(sockets, 'backend.sock')])
+    expect(seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, darwin)[1]).toContain(`(path-literal "${join(sockets, 'backend.sock')}")`)
   })
 
-  it('leaves a directory inside the home to the home\'s tmpfs, and fails closed on one it cannot list', () => {
+  it('leaves a directory inside the home to the home\'s tmpfs, hides one it cannot list, and on macOS fails closed on it', () => {
     const { root, home } = fixture()
     const inside = join(home, 'run')
     mkdirSync(inside)
-    expect(resolveIsolated({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [inside] }).hiddenDirectories).toEqual([])
+    expect(resolveIsolated(settingsOf({ home, deniedSocketDirectories: [inside] })).hiddenDirectories).toEqual([])
+    // Another local user can create such a directory, such as /tmp/tmux-<uid>, before the person does.
     const locked = join(root, 'locked')
     mkdirSync(locked)
     chmodSync(locked, 0o100)
-    expect(() => resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }))).toThrow(/cannot list the denied socket directory/)
+    expect(resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }), NO_MOUNTS, 'linux').hiddenDirectories).toEqual([locked])
+    expect(() => resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }), NO_MOUNTS, 'darwin')).toThrow(/cannot list the denied socket directory/)
     chmodSync(locked, 0o700)
+  })
+
+  it('hides the runtime directory itself on plain Linux, where no other mount reaches it', () => {
+    // A plain Linux mount table: the root filesystem, and the runtime directory as logind mounts it, its own tmpfs.
+    const { root } = fixture()
+    const runtime = join(root, 'run', 'user', '4242')
+    mkdirSync(runtime, { recursive: true })
+    writeFileSync(join(runtime, 'bus'), '')
+    const mounts: MountEntry[] = [
+      { device: '0:1', root: '/', mountPoint: '/', fsType: 'ext4' },
+      { device: deviceName(statSync(runtime, { bigint: true }).dev), root: '/', mountPoint: runtime, fsType: 'tmpfs' },
+    ]
+    const protection = resolveIsolated(settingsOf({ deniedSocketDirectories: [join(root, 'run', 'WSL'), runtime, join(root, 'mnt', 'wslg')] }), mounts, 'linux')
+    expect(protection.hiddenDirectories).toEqual([runtime])
+    expect(protection.aliasCoverage).toBe('complete')
+    for (const mode of ['read-only', 'workspace-write'] as const) {
+      const args = bwrapProfileArgs({ mode, workspaceRoot: '/w' }, protection)
+      const at = args.indexOf(runtime)
+      expect(args.slice(at - 1, at + 3), mode).toEqual(['--tmpfs', runtime, '--remount-ro', runtime])
+    }
   })
 })
 
 describe('bwrap profile', () => {
   it('shadows each denied socket path and hides the home under a read-only tmpfs with its readable entries bound', () => {
-    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], homeAliasMounts: ['/mnt/distro'], aliasCoverage: 'complete', readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'], hiddenDirectories: [] }
+    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], homeAliasMounts: ['/mnt/distro'], aliasCoverage: 'complete', readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'], hiddenDirectories: [], privateTmp: false, tmpAliases: [] }
     expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toEqual([
       ...BASE,
       '--ro-bind', '/dev/null', '/run/docker.sock',
@@ -348,6 +374,70 @@ describe('bwrap profile', () => {
   it('is upstream\'s profile without protection', () => {
     expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, NO_PROTECTION)).toEqual(BASE)
   })
+
+  it('gives a read-only command an empty read-only /tmp with its workspace under /tmp bound back, and hides the other mounts of /tmp', () => {
+    const protection: Protection = { ...NO_PROTECTION, privateTmp: true, tmpAliases: ['/mnt/root/tmp'], hiddenDirectories: ['/tmp/tmux-7'] }
+    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/tmp/w' }, protection)).toEqual([
+      ...BASE,
+      '--tmpfs', '/tmp', '--ro-bind', '/tmp/w', '/tmp/w',
+      '--tmpfs', '/tmp/tmux-7', '--remount-ro', '/tmp/tmux-7',
+      '--tmpfs', '/mnt/root/tmp', '--remount-ro', '/mnt/root/tmp',
+      '--remount-ro', '/tmp',
+    ])
+    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, { ...protection, hiddenDirectories: [] })).toEqual([
+      ...BASE, '--tmpfs', '/tmp', '--tmpfs', '/mnt/root/tmp', '--remount-ro', '/mnt/root/tmp', '--remount-ro', '/tmp',
+    ])
+    expect(bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: '/w' }, { ...protection, hiddenDirectories: [] })).toEqual([
+      ...BASE, '--tmpfs', '/tmp', '--bind', '/w', '/w', '--tmpfs', '/mnt/root/tmp', '--remount-ro', '/mnt/root/tmp',
+    ])
+  })
+
+  it('mounts nothing inside a hidden directory, whose read-only tmpfs could not hold the mount point', () => {
+    const protection: Protection = {
+      ...NO_PROTECTION,
+      home: '/h',
+      homeAliases: ['/mnt/wslg/distro/h', '/mnt/root/h'],
+      shadowedSockets: ['/mnt/wslg/distro/run/docker.sock', '/run/docker.sock'],
+      hiddenDirectories: ['/mnt/wslg/distro/tmp/tmux-7', '/mnt/wslg', '/run/user/7', '/run/user/7/gnupg'],
+      privateTmp: true,
+      tmpAliases: ['/mnt/wslg/distro/tmp', '/mnt/root/tmp'],
+    }
+    expect(bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: '/w' }, protection)).toEqual([
+      ...BASE,
+      '--tmpfs', '/tmp', '--bind', '/w', '/w',
+      '--ro-bind', '/dev/null', '/run/docker.sock',
+      '--tmpfs', '/mnt/wslg', '--remount-ro', '/mnt/wslg',
+      '--tmpfs', '/run/user/7', '--remount-ro', '/run/user/7',
+      '--tmpfs', '/h', '--remount-ro', '/h',
+      '--tmpfs', '/mnt/root/h', '--remount-ro', '/mnt/root/h',
+      '--tmpfs', '/mnt/root/tmp', '--remount-ro', '/mnt/root/tmp',
+    ])
+  })
+})
+
+describe.skipIf(process.platform !== 'linux')('private /tmp', () => {
+  it('is resolved on its own, with the other mounts of the host\'s /tmp, whose coverage it reports', (test) => {
+    // The empty mount table does not list /tmp's device, so its other mounts cannot be known.
+    expect(resolveIsolated(settingsOf({ privateTmp: true }))).toEqual({ ...NO_PROTECTION, privateTmp: true, aliasCoverage: 'unknown' })
+    const { root } = fixture()
+    if (dirname(root) !== realpathSync.native('/tmp')) return test.skip('the temporary directory is not /tmp here')
+    // The second mount lies outside /tmp, as WSLg's /mnt/wslg/distro/tmp does.
+    const outside = realpathSync.native(mkdtempSync(join('/var/tmp', 'dsh-protected-')))
+    dirs.push(outside)
+    const alias = join(outside, 'distro-tmp')
+    symlinkSync(dirname(root), alias, 'dir')
+    expect(resolveIsolated(settingsOf({ privateTmp: true }), aliasMount(root, alias)).tmpAliases).toEqual([alias])
+    expect(resolveIsolated(settingsOf({ deniedSocketDirectories: [root] }), aliasMount(root, alias)).tmpAliases).toEqual([])
+  })
+
+  it('is off unless configured, and reaches the wrap when it is', async () => {
+    const { workspace } = fixture()
+    const policy: SandboxPolicy = { mode: 'read-only', workspaceRoot: workspace }
+    expect((await (await provider({})).confine(['true'], policy)).argv).not.toContain('--tmpfs')
+    const argv = (await (await provider({ privateTmp: true })).confine(['true'], policy)).argv
+    expect(argv.slice(argv.indexOf('--tmpfs'), argv.indexOf('--tmpfs') + 2)).toEqual(['--tmpfs', '/tmp'])
+    expect(argv.slice(argv.lastIndexOf('--remount-ro'), argv.lastIndexOf('--remount-ro') + 2)).toEqual(['--remount-ro', '/tmp'])
+  })
 })
 
 describe('landlock profile', () => {
@@ -357,7 +447,7 @@ describe('landlock profile', () => {
     symlinkSync(join(root, 'gone'), join(root, 'dangling'))
     symlinkSync(home, join(root, 'home-alias'), 'dir')
     symlinkSync(root, join(root, 'parent-alias'), 'dir')
-    const protection = resolveIsolated({ home, readable: ['runtimes'], deniedSockets: [], deniedSocketDirectories: [] })
+    const protection = resolveIsolated({ home, readable: ['runtimes'], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false })
     const args = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: workspace }, protection)
     const readOnly = args.flatMap((arg, index) => arg === '--ro' ? [args[index + 1]] : [])
     const readWrite = args.flatMap((arg, index) => arg === '--rw' ? [args[index + 1]] : [])
@@ -373,7 +463,7 @@ describe('landlock profile', () => {
 
   it('grants nothing for a write root that equals the home, and fails closed when a directory on the way cannot be listed', () => {
     const { root, home } = fixture()
-    const protection = resolveIsolated({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [] })
+    const protection = resolveIsolated({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false })
     chmodSync(root, 0o100)
     expect(() => landlockProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toThrow(/cannot list/)
     chmodSync(root, 0o700)
@@ -395,7 +485,7 @@ describe('landlock profile', () => {
     mkdirSync(join(mirror, 'inner'), { recursive: true })
     symlinkSync(home, join(mirror, 'inner', 'h'), 'dir')
     mkdirSync(join(mirror, 'inner', 'beside'))
-    const protection: Protection = { ...resolveIsolated({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [] }), homeAliasMounts: [join(mirror, 'inner', 'h')] }
+    const protection: Protection = { ...resolveIsolated({ home, readable: [], deniedSockets: [], deniedSocketDirectories: [], privateTmp: false }), homeAliasMounts: [join(mirror, 'inner', 'h')] }
     const args = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: workspace }, protection)
     const grants = args.filter((_arg, index) => index % 2 === 1)
     const readOnly = args.flatMap((arg, index) => arg === '--ro' ? [args[index + 1]] : [])
@@ -419,6 +509,8 @@ describe('seatbelt profile', () => {
       socketSpellings: ['/var/run/docker.sock', '/private/var/run/docker.sock'],
       shadowedSockets: [],
       hiddenDirectories: [],
+      privateTmp: false,
+      tmpAliases: [],
     }
     const profile = seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)[1]
     expect(profile).toBe([

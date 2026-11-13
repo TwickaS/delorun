@@ -2,27 +2,33 @@
 /**
  * The consent surfaces of the studio: the full-access consent that upstream's permission control asks before a chat
  * switches to full access in a workspace without a grant, the approval card's full-access action, the MCP server review,
- * the notice that a server waits, and the Permissions section with its revokes. The denial cases prove that a remote
+ * the notice that a server waits, the approval card's external-agent action, and the Permissions section with its revokes. The denial cases prove that a remote
  * studio, an unanswered consent and a stale review record nothing, that a phone sees "Approve this at your computer"
  * instead of a button, and that a profile without the consent plugins (such as one set up with "Same as stock") keeps
  * upstream's behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
+import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
-import type { WorkspaceAccess } from '../src/client/consents-api.ts'
+import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
-  confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
-  type FullAccessConsentProps, type FullAccessConsentSource,
+  confirmPermissionSwitch, consentFailureText, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
+  workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
+import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
+import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps } from '../src/client/ExternalAgentsSection.tsx'
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
+import { OptIn } from '../src/client/opt-in.ts'
 
 afterEach(() => {
   cleanup()
@@ -165,6 +171,19 @@ describe('the full-access consent', () => {
     expect(source.hooks.consent.getSnapshot()).toBeNull()
   })
 
+  it('records nothing when the approval card it was asked from can no longer be answered at the confirm', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } } })
+    const source = createFullAccessConsentSource(host.fetch)
+    let answerable = true
+    const answered = source.ask(OFF, 'chat-1', () => answerable)
+    // The person rejects the card while the consent is open.
+    answerable = false
+    source.confirm()
+    await expect(answered).resolves.toBe(false)
+    expect(host.received).toEqual([])
+    expect(source.hooks.consent.getSnapshot()).toBeNull()
+  })
+
   it('records nothing when the person cancels, or asks again before answering', async () => {
     const host = fakeHost()
     const source = createFullAccessConsentSource(host.fetch)
@@ -187,6 +206,80 @@ describe('the full-access consent', () => {
     expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
   })
 
+  it('words a phone, a refusal and an unreachable home in the consent', async () => {
+    const answers: [Answer | 'unreachable', string][] = [
+      [REMOTE, en['loopback'].replace('{action}', en['action.changeAccess'])],
+      [refusal(500, 'STORE_REFUSED', 'The record cannot be written'), 'The record cannot be written'],
+      ['unreachable', en['failed.unreachable']],
+    ]
+    for (const [answer, text] of answers) {
+      const host = fakeHost(answer === 'unreachable' ? {} : { [`POST ${PERMISSION_ROUTES.setFullAccess}`]: answer })
+      const fetch: HostFetch = answer === 'unreachable' ? async () => Promise.reject(new TypeError('Failed to fetch')) : host.fetch
+      const source = createFullAccessConsentSource(fetch)
+      void source.ask(OFF)
+      source.confirm()
+      await settle()
+      const { unmount } = renderConsent(source)
+      expect(screen.getByRole('alert').textContent).toBe(text)
+      unmount()
+    }
+    expect(consentFailureText(makeTranslate(en), { kind: 'remote' }, 'action.answerServer')).toBe(en['loopback'].replace('{action}', en['action.answerServer']))
+  })
+
+  it('tells subscribers of each change until they unsubscribe', () => {
+    const source = createFullAccessConsentSource(fakeHost().fetch)
+    const listener = vi.fn()
+    const unsubscribe = source.hooks.consent.subscribe(listener)
+    void source.ask(OFF)
+    expect(listener).toHaveBeenCalled()
+    const calls = listener.mock.calls.length
+    unsubscribe()
+    source.cancel()
+    expect(listener).toHaveBeenCalledTimes(calls)
+  })
+
+  it('keeps a consent asked again while the first answer was recorded open, whatever that answer brought', async () => {
+    for (const answer of [{ status: 200, body: { access: ON, chats: 0 } }, refusal(409, 'STALE_REVIEW')]) {
+      let release: () => void = () => {}
+      const held = new Promise<void>((resolve) => { release = resolve })
+      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: answer })
+      const source = createFullAccessConsentSource(async (input, init) => { await held; return host.fetch(input, init) })
+      const first = source.ask(OFF)
+      source.confirm()
+      const second = source.ask(ON)
+      await expect(first).resolves.toBe(false)
+      release()
+      await settle()
+      expect(source.hooks.consent.getSnapshot()).toMatchObject({ access: ON, busy: false })
+      expect(source.hooks.consent.getSnapshot()).not.toHaveProperty('failure')
+      source.cancel()
+      await expect(second).resolves.toBe(false)
+    }
+  })
+
+  it('names a workspace without a title by its folder\'s last segment, or by its whole path', () => {
+    const { title: _title, ...untitled } = OFF
+    expect(workspaceName(untitled)).toBe('site')
+    expect(workspaceName({ ...untitled, workspace: '/' })).toBe('/')
+  })
+
+  it('shows nothing while no consent is open, and closes only while no answer is being recorded', async () => {
+    const cancel = vi.fn()
+    const open = (state: ReturnType<FullAccessConsentSource['hooks']['consent']['getSnapshot']>) => render(<FullAccessConsent {...{
+      t: makeTranslate(en), useConsent: <T,>(select: (current: typeof state) => T) => select(state), confirm: () => {}, cancel,
+    } as FullAccessConsentProps} />)
+    const closed = open(null)
+    expect(closed.container.innerHTML).toBe('')
+    closed.unmount()
+    const busy = open({ seq: 1, access: OFF, busy: true })
+    fireEvent.click(screen.getByRole('button', { name: en['consent.close'] }))
+    expect(cancel).not.toHaveBeenCalled()
+    busy.unmount()
+    open({ seq: 2, access: OFF, busy: false })
+    fireEvent.click(screen.getByRole('button', { name: en['consent.close'] }))
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a remote studio the command for the home\'s computer and no way to grant', () => {
     const source = createFullAccessConsentSource(fakeHost().fetch)
     void source.ask(undefined)
@@ -202,12 +295,13 @@ describe('the full-access consent', () => {
 const SERVER = {
   serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
   resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
-  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], changedVariables: [] as string[], state: 'waiting' as const,
+  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], files: [] as { argument?: number, path: string, sha256: string }[],
+  writableByChats: [] as string[], changedVariables: [] as string[], state: 'waiting' as const,
   reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
 }
 const ACCEPTED = {
   acceptanceId: 'e'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git',
-  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], acceptedAt: NOW - 86_400_000, configured: true,
+  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], files: [], acceptedAt: NOW - 86_400_000, configured: true,
 }
 const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
 
@@ -220,7 +314,7 @@ const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): 
 function actionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<FullAccessActionProps> = {}): FullAccessActionProps {
   return {
     t: makeTranslate(en), grants: 'full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}),
-    sessionId: 'chat-1', fetch: host.fetch, ask: vi.fn(async () => true), ...overrides,
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ask: vi.fn(async () => true), ...overrides,
   } as FullAccessActionProps
 }
 
@@ -232,8 +326,69 @@ describe('the approval card\'s full-access action', () => {
     await settle()
     fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
     await settle()
-    expect(props.ask).toHaveBeenCalledWith(OFF, 'chat-1')
+    expect(props.ask).toHaveBeenCalledWith(OFF, 'chat-1', props.canAnswer)
     expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled once the card answered or no longer accepts an answer, so a click records nothing', async () => {
+    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
+      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } } })
+      const props = actionProps(host, overrides)
+      const { unmount } = render(<FullAccessAction {...props} />)
+      await settle()
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowFullAccess'] })
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+      await settle()
+      expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`])
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('records nothing and reads nothing when the card no longer accepts an answer at the click', async () => {
+    const host = fakeHost({
+      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
+    })
+    let answerable = true
+    const props = actionProps(host, { canAnswer: () => answerable })
+    render(<FullAccessAction {...props} />)
+    await settle()
+    // The request ended after the action rendered, so the card cannot answer, though no answer was sent from it.
+    answerable = false
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`])
+    expect(props.ask).not.toHaveBeenCalled()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('records nothing when the person answers the card while the click reads the workspace', async () => {
+    for (const access of [ON, OFF]) {
+      const host = fakeHost({
+        [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access } },
+        [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
+      })
+      let answerable = true
+      let clicked = false
+      const fetch: HostFetch = async (input, init) => {
+        const response = await host.fetch(input, init)
+        // The person rejects the card while the click's review is on its way.
+        if (clicked) answerable = false
+        return response
+      }
+      const props = actionProps(host, { fetch, canAnswer: () => answerable })
+      const { unmount } = render(<FullAccessAction {...props} />)
+      await settle()
+      clicked = true
+      fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
+      await settle()
+      expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`, `POST ${PERMISSION_ROUTES.review}`])
+      expect(props.ask).not.toHaveBeenCalled()
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
   })
 
   it('leaves the card unanswered when the person cancels the consent', async () => {
@@ -280,6 +435,28 @@ describe('the approval card\'s full-access action', () => {
     expect(props.allow).toHaveBeenCalledTimes(1)
   })
 
+  it('names a grant the home refused, and leaves the card unanswered', async () => {
+    const host = fakeHost({
+      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: refusal(409, 'STALE_REVIEW'),
+    })
+    const props = actionProps(host)
+    render(<FullAccessAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('shows nothing when the card goes away before the home answers its review', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
+    const { container, unmount } = render(<FullAccessAction {...actionProps(host)} />)
+    unmount()
+    await settle()
+    expect(container.innerHTML).toBe('')
+  })
+
   it('tells a phone to approve at the computer, with no button', async () => {
     const props = actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }))
     render(<FullAccessAction {...props} />)
@@ -302,6 +479,165 @@ describe('the approval card\'s full-access action', () => {
       expect(container.innerHTML).toBe('')
       unmount()
     }
+  })
+})
+
+const GRANT: GrantView = { workspace: '/home/person/projects/site', provider: 'claude-code', agent: 'Claude Code', grantedAt: NOW - 3_600_000 }
+const GRANTS = (grants: readonly GrantView[], storeProblem?: string): Answer => ({ status: 200, body: storeProblem === undefined ? { grants } : { grants, storeProblem } })
+
+/**
+ * The approval card's owner props and the external-agent action's face, over a fake home.
+ * @param host - the fake home.
+ * @param overrides - the props a case changes.
+ * @returns the props.
+ */
+function agentActionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<ExternalAgentActionProps> = {}): ExternalAgentActionProps {
+  return {
+    t: makeTranslate(en), grants: 'external-agent', toolName: 'claude-code', callId: undefined, allow: vi.fn(async () => {}),
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ...overrides,
+  } as ExternalAgentActionProps
+}
+
+describe('the approval card\'s external-agent action', () => {
+  it('records the workspace grant first, then answers the card', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.allow}`)?.body)
+      .toEqual({ sessionId: 'chat-1', provider: 'claude-code', confirmed: true })
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled once the card answered or no longer accepts an answer, so a click records nothing', async () => {
+    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
+      const host = fakeHost({
+        [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+        [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+      })
+      const props = agentActionProps(host, overrides)
+      const { unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowAgent'] })
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+      await settle()
+      expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('records nothing when the card no longer accepts an answer at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const props = agentActionProps(host, { canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    // The request ended after the action rendered, so the card cannot answer, though no answer was sent from it.
+    answerable = false
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('does not answer a card that stopped accepting an answer while the grant was recorded', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const fetch: HostFetch = async (input, init) => {
+      const response = await host.fetch(input, init)
+      // The person rejects the card while the grant is on its way.
+      if (init?.method === 'POST') answerable = false
+      return response
+    }
+    const props = agentActionProps(host, { fetch, canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `POST ${DELEGATION_CONSENT_ROUTES.allow}`])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('leaves the card unanswered and names the reason when the home records nothing', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: refusal(500, 'STORE_REFUSED', 'The approvals file cannot be changed'),
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe('The approvals file cannot be changed')
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('leaves the card unanswered when the home refuses the grant as remote at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: REMOTE,
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('tells a phone to approve at the computer, with no button', async () => {
+    const props = agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('shows nothing for another grant, a card without a tool, a profile without the plugin and an unreadable home', async () => {
+    const mounted = fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) })
+    const cases = [
+      agentActionProps(mounted, { grants: 'full-access' }),
+      agentActionProps(mounted, { toolName: undefined }),
+      agentActionProps(fakeHost()),
+      agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: refusal(500, 'STORE_REFUSED') })),
+    ]
+    for (const props of cases) {
+      const { container, unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      unmount()
+    }
+  })
+
+  it('reads its offer from the grants route', async () => {
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]) }).fetch)).resolves.toBe('allow')
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }).fetch)).resolves.toBe('remote')
+    await expect(agentOfferFor(fakeHost().fetch)).resolves.toBe('none')
+  })
+
+  it('ignores an offer that arrives after the card is gone', async () => {
+    let answer: ((response: Response) => void) | undefined
+    const fetch: HostFetch = async () => new Promise<Response>((resolve) => { answer = resolve })
+    const { container, unmount } = render(<ExternalAgentAction {...agentActionProps({ fetch, received: [], script: {} })} />)
+    unmount()
+    answer?.(new Response(JSON.stringify({ grants: [] }), { status: 200 }))
+    await settle()
+    expect(container.innerHTML).toBe('')
   })
 })
 
@@ -348,6 +684,44 @@ describe('the MCP server review', () => {
     expect(within(details).queryByText(en['mcp.resolvedShell'])).toBeNull()
   })
 
+  it('says a file it runs changed, and lists the files it runs under Details', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, change: 'contents', files })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText(en['mcp.change.contents'])).toBeTruthy()
+    expect(within(dialog).getByText(en['mcp.files'])).toBeTruthy()
+    expect(within(dialog).getByText((_content, element) => element?.tagName === 'CODE' && element.textContent === '/opt/node/bin/node\n/work/server.js')).toBeTruthy()
+  })
+
+  it('names the file the command links to, which is the file that starts, and the paths chats can write', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/usr/local/lib/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, files, writableByChats: ['/work', '/work/server.js'] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText('/usr/local/bin/npx links to /usr/local/lib/npx-cli.js, which is the file Delorun starts.')).toBeTruthy()
+    expect(within(dialog).getByText('Chats can write to /work, /work/server.js, so a chat can change what this server runs.')).toBeTruthy()
+  })
+
+  it('says nothing about a link or about what chats can write when the command is the file itself and none is writable', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, files: [{ path: '/usr/local/bin/npx', sha256: `sha256:${'a'.repeat(64)}` }] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(dialog.querySelector('[data-links]')).toBeNull()
+    expect(dialog.querySelector('[data-writable]')).toBeNull()
+  })
+
+  it('reads the pinned files of each waiting server, and refuses an answer whose file names an argument by no index', async () => {
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    const good = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files }]) })
+    await expect(readServers(good.fetch)).resolves.toMatchObject({ servers: [{ files }] })
+    const bad = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files: [files[0], { ...files[1], argument: -1 }] }]) })
+    await expect(readServers(bad.fetch)).rejects.toThrow()
+  })
+
   it('names the command shell that runs a batch file', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, resolvedCommand: '/nodejs/npx.cmd', resolvedShell: '/Windows/System32/cmd.exe' })
@@ -367,7 +741,7 @@ describe('the MCP server review', () => {
 
   it('says in its own words what each review asks about', () => {
     const t = makeTranslate(en)
-    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'unreadable', 'upgraded'] as const) {
+    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'contents', 'unreadable'] as const) {
       expect(serverChangeText(t, { change, changedVariables: [] })).toBe(en[`mcp.change.${change}`])
     }
   })
@@ -534,6 +908,25 @@ describe('the notice that an MCP server waits', () => {
 })
 
 /**
+ * The external-agent consent row's Host settings form, accepting each write as the Host would.
+ * @param value - the row's fields, or undefined for a profile that does not serve the row.
+ * @returns the form, its recorded writes and the writer the section uses.
+ */
+function agentSettingsForm(value?: DelegationConsentSettings) {
+  const state = createSnapshotStore<ConfigFormSnapshot<DelegationConsentSettings>>({
+    status: value === undefined ? 'unavailable' : 'ready', value, base: {}, user: {}, revision: 0, writable: true,
+  })
+  const set = vi.fn(async (field: string, next: unknown) => {
+    state.update((draft) => { if (draft.value !== undefined) draft.value = { ...draft.value, [field]: next } })
+    return true
+  })
+  const form: ConfigForm<DelegationConsentSettings> = {
+    getSnapshot: () => state.getSnapshot(), subscribe: listener => state.subscribe(listener), set, unset: vi.fn(), mutate: vi.fn(),
+  }
+  return { form, set, writer: new OptIn(form) }
+}
+
+/**
  * Render the Permissions section over a fake home.
  * @param host - the fake home.
  * @param faces - the consent's and the review's questions.
@@ -542,6 +935,22 @@ describe('the notice that an MCP server waits', () => {
 function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
   const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
   return render(<PermissionsSection {...props} />)
+}
+
+/**
+ * Render the External agents section over a fake home.
+ * @param host - the fake home.
+ * @param settings - the external-agent consent row's form; by default a profile that does not serve the row.
+ * @returns the render result.
+ */
+function renderExternalAgents(host: ReturnType<typeof fakeHost>, settings = agentSettingsForm()) {
+  const props = {
+    t: makeTranslate(en), close: () => {}, fetch: host.fetch,
+    useAgentSettings: bindSnapshotSelector(settings.form),
+    useAgentSettingsMutation: bindSnapshotSelector(settings.writer.state),
+    setAgentSetting: (field: keyof DelegationConsentSettings, value: DelegationConsentSettings[keyof DelegationConsentSettings]) => settings.writer.set(field, value as never),
+  } as ExternalAgentsSectionProps
+  return render(<ExternalAgentsSection {...props} />)
 }
 
 /**
@@ -652,6 +1061,7 @@ describe('the Permissions section', () => {
     const line = screen.getByRole('status').textContent
     expect(line).toContain(FULL_ACCESS_COMMAND)
     expect(line).toContain(MCP_COMMAND)
+    expect(line).not.toContain(AGENTS_COMMAND)
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -665,6 +1075,34 @@ describe('the Permissions section', () => {
     expect(within(row).queryByRole('button', { name: en['mcp.decline'] })).toBeNull()
     fireEvent.click(within(row).getByRole('button', { name: en['mcp.allow'] }))
     expect(review).toHaveBeenCalledWith({ ...SERVER, state: 'revoked' })
+  })
+
+  it('names a store it cannot read, and says when nothing is allowed or waiting', async () => {
+    renderPermissions(fakeHost({
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [], storeProblem: 'the file is not JSON' } },
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]),
+    }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['access.storeProblem'].replace('{problem}', 'the file is not JSON'))
+    expect(screen.getByText(en['access.none'])).toBeTruthy()
+    expect(screen.getByText(en['mcp.none'])).toBeTruthy()
+  })
+
+  it('says a reviewed server starts later or was not answered, names a declined one, and marks an allowed start no server uses', async () => {
+    const review = vi.fn<() => Promise<number | undefined>>(async () => 0)
+    renderPermissions(fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, state: 'declined' }], [{ ...ACCEPTED, configured: false }]),
+    }), { review })
+    await settle()
+    expect(within(rowOf('files')).getByText(en['mcp.state.declined'])).toBeTruthy()
+    expect(within(rowOf('git')).getByText(en['mcp.unused'])).toBeTruthy()
+    fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.allow'] }))
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(en['mcp.acceptedLater'].replace('{server}', 'files'))
+    review.mockResolvedValueOnce(undefined)
+    fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.allow'] }))
+    await settle()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('says it is loading until each list answers', async () => {
@@ -689,6 +1127,114 @@ describe('the Permissions section', () => {
     await settle()
     expect(screen.getByText(en['access.unavailable'])).toBeTruthy()
     expect(screen.getByText(en['mcp.unavailable'])).toBeTruthy()
+  })
+})
+
+describe('the External agents section', () => {
+  it('lists each external agent allowed per workspace and revokes it in one click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: { status: 200, body: { revoked: true } },
+    })
+    renderExternalAgents(host)
+    await settle()
+    const row = rowOf('Claude Code')
+    expect(within(row).getByText(GRANT.workspace)).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.revoke}`)?.body).toEqual({ workspace: GRANT.workspace, provider: 'claude-code' })
+    expect(screen.getByRole('status').textContent).toBe(`Claude Code asks again before it starts in ${GRANT.workspace}.`)
+  })
+
+  it('says no agent starts without asking, and names a grants file it cannot read', async () => {
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([], 'not JSON') }))
+    await settle()
+    expect(screen.getByText(en['agents.none'])).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('agents.storeProblem', { problem: 'not JSON' }))
+  })
+
+  it('names a refused revoke and keeps the grant listed', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: REMOTE,
+    })
+    renderExternalAgents(host)
+    await settle()
+    fireEvent.click(within(rowOf('Claude Code')).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(rowOf('Claude Code')).toBeTruthy()
+  })
+
+  it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', false)
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', true)
+    const limit = screen.getByRole('spinbutton', { name: en['agents.limit.title'] })
+    for (const typed of ['0', '1441', '2.5', '', '30']) {
+      fireEvent.change(limit, { target: { value: typed } })
+      fireEvent.blur(limit)
+      await settle()
+    }
+    // An entry outside 1 to 1440 whole minutes, or the saved value, writes nothing and shows the saved value again.
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    expect((limit as HTMLInputElement).value).toBe('30')
+    fireEvent.change(limit, { target: { value: '90' } })
+    fireEvent.keyDown(limit, { key: '0' })
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(limit, { key: 'Enter' })
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('runTimeoutMinutes', 90)
+    expect((limit as HTMLInputElement).value).toBe('90')
+  })
+
+  it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    settings.set.mockResolvedValueOnce(false)
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['agents.settings.failed'])
+    expect(screen.getByRole('switch', { name: en['agents.ask.title'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.hasAttribute('disabled') || ask.getAttribute('aria-disabled') === 'true').toBe(true)
+    expect((screen.getByRole('spinbutton', { name: en['agents.limit.title'] }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByText(en['agents.ask.computerOnly'])).toBeTruthy()
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).not.toHaveBeenCalled()
+  })
+
+  it('tells a phone to approve at the computer, and offers no answer', async () => {
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
+    await settle()
+    expect(screen.getByRole('status').textContent).toContain(AGENTS_COMMAND)
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('says it is loading until the list answers, and that the profile does not ask where the plugin is not mounted', async () => {
+    const { unmount } = renderExternalAgents({ fetch: async () => new Promise<Response>(() => {}), received: [], script: {} })
+    await settle()
+    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(1)
+    unmount()
+    renderExternalAgents(fakeHost())
+    await settle()
+    expect(screen.getByText(en['agents.unavailable'])).toBeTruthy()
   })
 })
 

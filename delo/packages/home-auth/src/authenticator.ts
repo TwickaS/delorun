@@ -7,7 +7,8 @@
  *   factor the provider declares. Its policy is the address's `Host` rule, the `https` scheme, no launch token and the
  *   pre-login routes this package answers. Every request `admit` sees is stamped with the listener before any route
  *   runs, so the routes decide its arrival from the stamp. A request on a pre-login route is `pre-login`; any other
- *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise. A
+ *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise; a
+ *   browser that opens a page without one is sent to the sign-in page with `303`, carrying where it aimed. A
  *   request with a live session whose target is not on `REACH_DEVICE_PATHS` (`./reach-paths.ts`) is refused with
  *   `403 LOOPBACK_REQUIRED` before any route, upgrade handler or the fallback runs.
  * - **Peers.** Each device is one Peer per listener, created on its first admitted request and disposed when the device
@@ -22,9 +23,13 @@
  * @module @delo/home-auth/authenticator
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
+import type {} from '@deepseek-ai/dsh-working-directory'
+import type {} from '@deepseek-ai/dsh-permission-presets'
+import type {} from './full-access-grants.ts'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
 import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
@@ -33,8 +38,8 @@ import { REACH_SESSION_COOKIE, type ReachListenerId } from '@delo/contract-admis
 import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc-passkeys'
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
-import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
-import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
+import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
+import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
 
@@ -51,6 +56,9 @@ export const FULL_ACCESS_REFUSAL = 'This needs you at your computer: granting fu
 /** The sentence the remote studio shows for a refused workspace-management grant. */
 export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: managing workspaces and their instructions. Answer this prompt in the studio on the home\'s own computer'
 
+/** The sentence the remote studio shows for a refused external-agent start. */
+export const EXTERNAL_AGENT_REFUSAL = 'This needs you at your computer: starting an external agent such as Claude Code or Codex, which runs outside Delo\'s sandbox. Answer this prompt in the studio on the home\'s own computer'
+
 /**
  * The `LOOPBACK_REQUIRED` refusal of each grant a reach Peer may not give, by the approval request's `grants` marker
  * (`ApprovalGrant` of `@deepseek-ai/dsh-user-approval`).
@@ -58,6 +66,7 @@ export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: ma
 const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAction; readonly message: string }> = new Map([
   ['full-access', { action: 'full-access-escalation', message: FULL_ACCESS_REFUSAL }],
   ['workspace-management', { action: 'workspace-management', message: WORKSPACE_MANAGEMENT_REFUSAL }],
+  ['external-agent', { action: 'external-agent', message: EXTERNAL_AGENT_REFUSAL }],
 ])
 
 /** The approval outcomes that grant nothing, which a reach Peer may answer to any prompt. */
@@ -142,6 +151,56 @@ function sessionTokenOf(cookie: string): string | undefined {
   return undefined
 }
 
+/** The module of upstream's plugin manager, whose row's `protectedPlugins` names the rows plugin management keeps. */
+const PLUGIN_MANAGER_MODULE = '@deepseek-ai/dsh-plugin-manager'
+
+/**
+ * The Loader entry ids of the rows whose module a `plugin-manager` row's `protectedPlugins` names, read from the Loader
+ * when asked, so the profile's own list is the only one.
+ * @param ctx - a context of the running profile.
+ * @returns the ids, none without a Loader or a `plugin-manager` row, or undefined when a row's list cannot be read.
+ */
+export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefined {
+  const entries = [...ctx.get('loader')?.entries() ?? []]
+  const modules = new Set<string>()
+  for (const entry of entries.filter(row => row.options.name === PLUGIN_MANAGER_MODULE)) {
+    const listed = protectedPluginsIn(entry.options.config)
+    if (listed === undefined) return undefined
+    for (const name of listed) modules.add(name)
+  }
+  return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
+}
+
+/** The module of upstream's permission presets, whose rows' `defaultPreset` names the permission new chats start in. */
+const PERMISSION_PRESETS_MODULE = '@deepseek-ai/dsh-permission-presets'
+
+/**
+ * The permission new chats start in, read from the running permission presets when asked.
+ * @param ctx - a context of the running profile.
+ * @returns it, or undefined while no `permissionPresets` service runs.
+ */
+export function defaultPermissionOf(ctx: Context): DefaultPermission | undefined {
+  const presets = ctx.get('permissionPresets')
+  if (presets === undefined) return undefined
+  const levelOf = (name: string): PermissionLevel | undefined => {
+    try {
+      return presets.resolve(name)
+    } catch (_unknownPreset) {
+      // `resolve` throws for a name the presets do not hold, which the policy refuses.
+      return undefined
+    }
+  }
+  let current: PermissionLevel | undefined
+  try {
+    current = levelOf(presets.defaultPreset)
+  } catch (_unreadable) {
+    // A default preset the presets do not hold cannot be read; the policy refuses every change of it.
+    current = undefined
+  }
+  const rows = [...ctx.get('loader')?.entries() ?? []].filter(entry => entry.options.name === PERMISSION_PRESETS_MODULE)
+  return { namespaces: new Set(rows.map(entry => entry.options.id)), current, levelOf }
+}
+
 /** The provider. */
 export class HomeAuthAuthenticator extends Authenticator {
   static inject = ['homeAuth', 'connection']
@@ -166,19 +225,44 @@ export class HomeAuthAuthenticator extends Authenticator {
     // with it when it goes.
     ctx.inject(['remoteAccess', 'remoteAnswerGuard'], (access) => {
       registerReachPolicy(access.get('remoteAnswerGuard'), access.remoteAccess, createReachAccessPolicy({
-        admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
+        admitted: (deviceId, listener) => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId && peer.listener === listener),
         workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
         liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),
+        workspaceRootOf: (sessionId) => {
+          const live = access.get('sessions')?.get(sessionId)?.header
+          if (live !== undefined) return live.cwd
+          return access.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.path
+        },
+        deloHome: ctx.homeAuth.deloHome,
+        elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
+        logElevated: (line) => { ctx.logger.info(line) },
+        terminalFoldersOf: (sessionId) => {
+          // A terminal opens in the Session's current directory, or in its original folder when that one is gone.
+          const session = access.get('sessions')?.get(sessionId)
+          const current = session === undefined ? undefined : access.get('workingDirectory')?.get(session)
+          const original = session?.header.cwd
+          return current === undefined || original === undefined ? undefined : [current, original]
+        },
+        grantedFolders: () => access.get('reachFullAccessGrants')?.grantedFolders() ?? [],
+        terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
+        computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
+        protectedEntryIds: () => protectedEntryIdsOf(ctx),
+        defaultPermission: () => defaultPermissionOf(access),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
-        for (const deviceId of new Set([...this.reachPeers.values()].map(peer => peer.deviceId))) {
-          access.remoteAccess.invalidate(reachDevicePrincipal(deviceId))
-        }
+        for (const peer of this.reachPeers.values()) access.remoteAccess.invalidate(reachDevicePrincipal(peer.deviceId, peer.listener))
       }
       access.on('session/created', invalidate)
       access.on('session/disposed', invalidate)
       access.on('domain/changed', (change) => { if (change.domain === 'workspace') invalidate() })
+      // A device's snapshot on one listener lists its elevated actions while it holds an unlock there, so it is
+      // recomputed when one starts or ends.
+      access.effect(() => ctx.homeAuth.onElevationChange((change) => {
+        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId, change.elevation.listener))
+      }), 'home-auth elevation snapshots')
+      // A device's snapshot lists the terminal actions it may take without an unlock, so the switch recomputes it.
+      access.effect(() => ctx.homeAuth.onTerminalSwitchChange(invalidate), 'home-auth terminal switch snapshots')
     })
   }
 
@@ -187,7 +271,8 @@ export class HomeAuthAuthenticator extends Authenticator {
    * `LOOPBACK_REQUIRED`), to an approval prompt whose `grants` marker names a grant the home's own computer keeps:
    * `full-access` (an escalation to `danger-full-access`, `plugin_manager`'s included, and a workspace's full-access
    * consent) and `workspace-management` (creating, cloning, trashing or restoring a workspace, changing an
-   * instruction-layer file, and the main chat's commands and writes). Any answer but `rejected`, `cancelled` and
+   * instruction-layer file, and the main chat's commands and writes) and `external-agent` (starting an external
+   * agent program, such as Claude Code or Codex, outside the sandbox). Any answer but `rejected`, `cancelled` and
    * `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
    * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.
@@ -225,20 +310,20 @@ export class HomeAuthAuthenticator extends Authenticator {
     const route = REACH_PRE_LOGIN_ROUTES.find(candidate => matchesPreLogin(candidate, request.method, pathname))
     if (route !== undefined) return { kind: 'pre-login', route }
     const token = sessionTokenOf(cookieOf(request))
-    if (token === undefined) return refused('NOT_SIGNED_IN')
+    if (token === undefined) return signedOut(request, 'NOT_SIGNED_IN')
     // A signed-in device reaches only the listed paths (`./reach-paths.ts`); any other target, or none, is refused
     // after the session is checked, so an expired or rotated session still answers with its own code.
     const reachable = reachesDevicePath(request.url ?? '')
     // A 101 response is written by the upgrade handler, so a session rolls only on a request without `Upgrade`, and
     // never on a refused one, whose response would carry no cookie.
     const admission = this.ctx.homeAuth.admitToken(token, served.listener, { roll: reachable && headerOf(request, 'upgrade') === '' })
-    if (admission.kind === 'refused') return refused(admission.code)
+    if (admission.kind === 'refused') return signedOut(request, admission.code)
     if (!reachable) return { kind: 'refused', status: HOME_AUTH_HTTP_STATUS.LOOPBACK_REQUIRED, code: 'LOOPBACK_REQUIRED' }
     const { session, sessionId } = admission
     const key = `${served.listener}\u0000${session.deviceId}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId) })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener) })
       this.peers.set(key, peer)
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
     }
@@ -273,11 +358,36 @@ export class HomeAuthAuthenticator extends Authenticator {
 }
 
 /**
+ * Whether a request is a browser opening a page rather than a script reading a resource: a `GET` or `HEAD` that
+ * `Sec-Fetch-Mode` names a navigation, or, from a browser that sends no fetch metadata, that accepts HTML.
+ * @param request - the request.
+ * @returns whether it is a navigation.
+ */
+export function isNavigation(request: ConnectionIndexRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false
+  const mode = headerOf(request, 'sec-fetch-mode')
+  if (mode !== '') return mode === 'navigate'
+  return headerOf(request, 'accept').toLowerCase().includes('text/html')
+}
+
+/**
+ * The refusal of a reach request without a live session: a navigation is sent to the sign-in page with where it aimed
+ * (C4), and any other request, a script's included, is answered C4's code as JSON.
+ * @param request - the request.
+ * @param code - C4's code.
+ * @returns the admission.
+ */
+function signedOut(request: ConnectionIndexRequest, code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Admission {
+  const refusal = refused(code)
+  return isNavigation(request) ? { ...refusal, location: signInLocation(targetOf(request)) } : refusal
+}
+
+/**
  * A refusal with C4's status for its code.
  * @param code - the code.
  * @returns the admission.
  */
-function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Admission {
+function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Extract<Admission, { readonly kind: 'refused' }> {
   return { kind: 'refused', status: ADMISSION_REFUSAL_STATUS[code], code }
 }
 

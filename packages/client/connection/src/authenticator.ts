@@ -92,7 +92,13 @@ export interface ListenerPolicy {
  *   complete `Set-Cookie` value the dispatcher adds to an HTTP response.
  * - `pre-login`: the request is unauthenticated and only `route`, which must
  *   be on the listener's pre-login list, may answer it.
- * - `refused`: the dispatcher answers `status` with `{"error":"<code>"}`.
+ * - `refused`: the dispatcher answers `status` with `{"error":"<code>"}`. On a
+ *   reach listener, a refusal that names `location` answers an HTTP `GET` or
+ *   `HEAD` request with `303 See Other` to it instead, so a browser that opens
+ *   the address without a session reaches the sign-in page; an upgrade, any
+ *   other method, and a `location` that is not a same-origin path (one `/`,
+ *   then no `/`, no `\`, no control character or space) keep the JSON refusal.
+ *   The loopback listener ignores `location`.
  */
 export type Admission =
   | {
@@ -103,7 +109,7 @@ export type Admission =
     readonly setCookie?: string
   }
   | { readonly kind: 'pre-login'; readonly route: PreLoginRoute }
-  | { readonly kind: 'refused'; readonly status: 401 | 403 | 421; readonly code: string }
+  | { readonly kind: 'refused'; readonly status: 401 | 403 | 421; readonly code: string; readonly location?: string }
 
 /**
  * Admission provider. Subclass it and load the subclass as a plugin; it

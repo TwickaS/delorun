@@ -1,6 +1,6 @@
 {
   "name": "@delo/plugin-permission-defaults",
-  "description": "Delo's per-workspace permission defaults (permissionDefaults): the safer preset for a new workspace, the one full-access consent a workspace needs, and the sandboxModeGuard that refuses an unconseted full-access switch",
+  "description": "Delo's per-workspace permission defaults (permissionDefaults): the safer preset for a new workspace, the one full-access consent a workspace needs, the sandboxModeGuard that refuses an unconsented full-access switch, and each workspace's network for sandboxed commands (deloCommandNetwork) with its egress proxy",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -16,6 +16,7 @@
     "@delo/contract-home-layout": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/home-auth": "workspace:*",
+    "@delo/plugin-fetch-guard": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {
@@ -26,6 +27,7 @@
     "@deepseek-ai/dsh-sandbox": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-user-approval": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
@@ -37,6 +39,7 @@
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-permission-presets": "workspace:*",
     "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",

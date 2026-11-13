@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
-import { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
+import { checkServeAccess, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
 import {
   isPermissionRefusal, parseServeRules, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
 } from '../src/tailscale.ts'
@@ -38,8 +38,8 @@ function fake(answers: Partial<Record<string, TailscaleResult>> = {}): { readonl
 
 const LISTENER_PORT = 24_680
 const TARGET = `http://127.0.0.1:${String(LISTENER_PORT)}`
-const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, serveCheckIntervalMs: 60_000, ...row } })
-const SPEC: ReachSpec = { option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, checkIntervalMs: 60_000 }
+const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, serveCheckIntervalMs: 60_000, elevationMinutes: 15, ...row } })
+const SPEC: ReachSpec = { option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, checkIntervalMs: 60_000, elevationMinutes: 15 }
 
 describe('the Tailscale private provider', () => {
   it('declares tailnet-membership and resolves only an https ts.net address', () => {
@@ -54,6 +54,9 @@ describe('the Tailscale private provider', () => {
     expect(() => provider.resolve(rows({ address: 'https://studio.example.org' }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ address: `http://${HOST}` }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ servePort: 0 }))).toThrow(expect.objectContaining({ code: 'PORT_CONFLICT' }))
+    // Pins the minutes check: a row the person edited to more than an hour, or that reach.apply reads unvalidated, is refused.
+    for (const elevationMinutes of [0, 61, 2.5]) expect(() => provider.resolve(rows({ elevationMinutes }))).toThrow(expect.objectContaining({ code: 'ELEVATION_MINUTES_INVALID' }))
+    expect(provider.resolve(rows({ elevationMinutes: 60 }))).toEqual({ ...SPEC, elevationMinutes: 60 })
     expect(tailscaleAddress(HOST, 8443)).toBe(`https://${HOST}:8443`)
   })
 
@@ -190,6 +193,33 @@ describe('the Tailscale private provider', () => {
     const silent = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: '' } })
     silent.config = ownRule(HOST, 443, 1)
     await expect(removeServe(silent.run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT', detail: expect.stringContaining('failed (no reason given)') })
+  })
+
+  it('tests that the person may configure serve before anything is written, leaving no rule behind unless the home keeps its own', async () => {
+    const request = { host: HOST, servePort: 443, listenerPort: LISTENER_PORT, keepOwn: false, next: 'then try again' }
+    const fresh = fakeTailscale(HOST)
+    await checkServeAccess(fresh.run, request)
+    // Pins the test by configuring: the serve target is set and removed again, and nothing stays served.
+    expect(fresh.calls.filter(call => call[1] !== 'status')).toEqual([['serve', '--bg', '--https=443', TARGET], ['serve', '--https=443', 'off']])
+    expect(fresh.config).toEqual({ TCP: {}, Web: {} })
+    // A kept rule of this home is configured again unchanged; a stopped home's own rule is removed.
+    const kept = fakeTailscale(HOST)
+    kept.config = ownRule(HOST, 443, LISTENER_PORT)
+    await checkServeAccess(kept.run, { ...request, keepOwn: true })
+    expect(kept.config).toEqual(ownRule(HOST, 443, LISTENER_PORT))
+    const stale = fakeTailscale(HOST)
+    stale.config = ownRule(HOST, 443, LISTENER_PORT)
+    await checkServeAccess(stale.run, request)
+    expect(stale.config).toEqual({ TCP: {}, Web: {} })
+    const funnel = fakeTailscale(HOST)
+    funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(checkServeAccess(funnel.run, request)).rejects.toMatchObject({ code: 'TAILSCALE_FUNNEL_ON', detail: expect.stringContaining('then try again') })
+    expect(funnel.calls).toEqual([['serve', 'status', '--json']])
+    const denied = { code: 1, stdout: '', stderr: 'Access denied: serve config denied' }
+    await expect(checkServeAccess(fakeTailscale(HOST, { 'serve set': denied }).run, request)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining(TAILSCALE_OPERATOR_COMMAND) })
+    const foreign = fakeTailscale(HOST, { 'serve off': denied })
+    foreign.config = ownRule(HOST, 443, 1)
+    await expect(checkServeAccess(foreign.run, request)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining('may still serve home.example.ts.net:443') })
   })
 
   it('runs the system tailscale without a shell', async () => {

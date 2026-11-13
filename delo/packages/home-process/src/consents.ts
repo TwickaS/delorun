@@ -1,7 +1,7 @@
 /**
- * The update channel's consent operations (contract C19): `permission.reload` after `delorun workspace full-access`
- * changed the per-workspace permission store, and `mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, through
- * which `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped and withdraws the
+ * The update channel's consent operations (contract C19): `permission.reload`, which makes the Host read the
+ * per-workspace permission store again, and `mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, through which
+ * `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped and withdraws the
  * acceptances it holds.
  *
  * - **The caller rule.** `mcp.accept`, `mcp.decline` and `mcp.revoke` are accepted only with the person's token; the
@@ -20,11 +20,11 @@ import { HomeProcessError } from './errors.ts'
 /**
  * What a pending review asks about: a server never accepted (`new`), a start whose command, arguments, working
  * directory or environment differ from the server's acceptance, a start configured as accepted whose command or
- * working directory now resolves to another executable, directory or command shell (`resolved`), an acceptance store
- * that cannot be read (`unreadable`), or a start accepted before Delo kept one acceptance per server, which is reviewed
- * once (`upgraded`).
+ * working directory now resolves to another executable, directory or command shell (`resolved`), a start whose
+ * executable or a file an argument names changed since the acceptance or cannot be read (`contents`), or an acceptance
+ * store that cannot be read (`unreadable`).
  */
-export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'unreadable' | 'upgraded'
+export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'contents' | 'unreadable'
 
 /** Where a pending review stands: waiting for an answer, or set aside by a decline or a revoke until its start changes. */
 export type McpServerState = 'waiting' | 'declined' | 'revoked'
@@ -36,6 +36,15 @@ export type McpServerState = 'waiting' | 'declined' | 'revoked'
 export interface McpEnvVariable {
   readonly name: string
   readonly value?: string
+}
+
+/** One file a server start runs, by its canonical path and the digest of its contents. */
+export interface McpPinnedFile {
+  /** The index of the argument that names the file; absent for the executable. */
+  readonly argument?: number
+  readonly path: string
+  /** `sha256:` and the hexadecimal digest. */
+  readonly sha256: string
 }
 
 /** One pending stdio MCP server review, as `delorun mcp` shows it. */
@@ -53,6 +62,10 @@ export interface PendingMcpServer {
   readonly resolvedShell?: string
   /** The configured environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
+  /** The files the start runs as the review pinned them; empty when one could not be read. */
+  readonly files: readonly McpPinnedFile[]
+  /** The working directory and pinned files that lie in a workspace or a temporary directory chats can write. */
+  readonly writableByChats: readonly string[]
   readonly reason: string
   /** What changed since the person's acceptance. */
   readonly change: McpServerChange
@@ -80,6 +93,8 @@ export interface AcceptedMcpServer {
   readonly resolvedShell?: string
   /** The accepted environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
+  /** The files the accepted start runs, pinned when it was accepted. */
+  readonly files: readonly McpPinnedFile[]
   /** When the person accepted it, in milliseconds since the epoch. */
   readonly acceptedAt: number
   /** Whether a configured server row has the server name. */
