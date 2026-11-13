@@ -142,6 +142,20 @@ function harnessMessage(item: ReportItem & { readonly kind: 'harness' }, version
 }
 
 /**
+ * The line a report shows under a plugin that the update disables because its `engines.dsh` range (or a DSH peer)
+ * excludes the target: how to try the plugin anyway, and what stops a failed try. The Delorun axis has no exemption
+ * (C17), so no other reason has one.
+ * @param item - the item.
+ * @param versions - the running and target releases.
+ * @returns the line, or `undefined` for every item that is not a `dsh-requirement-unmet` plugin.
+ */
+export function exemptionNote(item: ReportItem, versions: MessageVersions): string | undefined {
+  if (item.kind !== 'plugin' || item.reason !== 'dsh-requirement-unmet') return undefined
+  const { name, version } = item.subject
+  return `To try it anyway before you update, run: delorun plugin allow-version ${name}@${version} --dsh-version ${versions.to.dsh} --accept-risk. If the plugin then fails to load, the health check after the switch rolls the update back.`
+}
+
+/**
  * The sentence a report shows beside a `data` item, in C3's words: what declining the copy costs.
  * @param versions - the running and target releases.
  * @returns the sentence.
