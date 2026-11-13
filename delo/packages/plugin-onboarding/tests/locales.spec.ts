@@ -16,13 +16,21 @@ describe('the copy', () => {
 
   it('names the product Delo, and uses sentence case for a step\'s name', () => {
     for (const text of Object.values(en)) expect(text).not.toMatch(/\bDelo Run\b/)
-    expect(en['step.look']).toBe('Language and look')
+    expect(en['step.look']).toBe('Look')
     expect(en['step.plugins']).toBe('Recommended plugins')
+    expect(en['step.reach']).toBe('Phone access')
   })
 
-  it('states the agents warning plainly and claims no per-workspace consent', () => {
-    expect(en['agents.warning']).toContain('their own permissions, outside Delo\'s permission prompts')
+  it('says plainly what adding an agent means and claims no consent that is not built', () => {
+    expect(en['agents.confirm.outside']).toBe('It runs outside Delo\'s sandbox and permission prompts.')
+    expect(en['agents.confirm.handoff']).toContain('Delo asks here on this computer first')
+    expect(en['agents.confirm.handoff']).not.toContain('does not ask')
+    expect(en['agents.confirm.limits']).toContain('stop after 30 minutes')
     for (const text of Object.values(en)) expect(text).not.toMatch(/consent|each workspace/i)
+  })
+
+  it('has a prompt set for each folder kind and the general one', () => {
+    for (const set of ['general', 'empty', 'code', 'files']) for (const n of [1, 2, 3]) expect(Object.keys(en)).toEqual(expect.arrayContaining([`starter.${set}.${n}.label`, `starter.${set}.${n}.prompt`]))
   })
 
   it('keeps the Plugins page copy in both languages', () => {

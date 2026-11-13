@@ -450,6 +450,25 @@ describe('SettingsPanel navigation', () => {
     expect(inactive).toHaveLength(0)
   })
 
+  it('lets a step draw one section inline and complete a later step its own flow covered', () => {
+    const { renderSlot } = mount({ steps: [{ id: 'welcome', order: -100 }, { id: 'credential', order: 0 }, { id: 'last', order: 10 }] })
+    const owner = renderSlot.mock.calls.find(call => call[0] === 'settings.onboarding')?.[1] as {
+      renderSection: (id: string) => import('react').ReactNode
+      completeStep: (id: string) => void
+      complete: () => void
+    }
+    const inline = render(<>{owner.renderSection('models')}</>)
+    expect(inline.getByTestId('section-models')).toBeTruthy()
+    const drawn = renderSlot.mock.calls.filter(call => call[0] === 'settings.section').at(-1)
+    expect(drawn?.[2]).toEqual({ only: 'models' })
+    expect(() => { (drawn?.[1] as { close: () => void }).close() }).not.toThrow()
+    act(() => {
+      owner.completeStep('credential')
+      owner.complete()
+    })
+    expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding').at(-1)?.[1]).toMatchObject({ stepId: 'last' })
+  })
+
   it('takes the panel down when an onboarding step appears beneath it', () => {
     const { setOnboardingActive } = mount({ onboardingActive: false })
     openPanel()

@@ -1,0 +1,88 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { en } from '../src/client/locales.ts'
+import { hasNoWorkingKey, KEY_RECHECK_MS, KeyBanner, type KeyBannerProps } from '../src/client/KeyBanner.tsx'
+import type { KeyResult, KeyTestAnswer } from '../src/wire.ts'
+import { t } from './fixtures.client.ts'
+
+beforeEach(() => { vi.useFakeTimers() })
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
+
+const answer = (...results: KeyResult[]): KeyTestAnswer => ({ providers: results.map((result, index) => ({ provider: `p${String(index)}`, name: `P${String(index)}`, result })) })
+
+describe('when the banner shows', () => {
+  it.each<readonly [string, KeyTestAnswer | undefined, boolean]>([
+    ['no provider is usable', answer(), true],
+    ['every provider has no key or a rejected one', answer('no-key', 'rejected'), true],
+    ['a key works', answer('no-key', 'works'), false],
+    ['every provider is no-key', answer('no-key', 'no-key'), true],
+    ['a provider has a credential but no listing, and no other provider works', answer('no-key', 'untested'), false],
+    ['a provider has a credential but no listing, alone', answer('untested'), false],
+    ['a provider has no listing, and another works', answer('untested', 'works'), false],
+    ['a provider cannot be reached', answer('unreachable'), false],
+    ['a provider\'s test failed', answer('failed'), false],
+    ['the key test could not be read', undefined, false],
+  ])('%s: %s', (_, test, shows) => { expect(hasNoWorkingKey(test)).toBe(shows) })
+})
+
+/** The banner over a key test that answers from a list, one answer per ask, the last repeated. */
+function mount(...answers: (KeyTestAnswer | undefined)[]) {
+  let asks = 0
+  const keyTest = vi.fn(() => Promise.resolve(answers[Math.min(asks++, answers.length - 1)]))
+  const openModels = vi.fn()
+  const props: KeyBannerProps = { t, keyTest, openModels }
+  const view = render(<KeyBanner {...props} />)
+  return { ...view, keyTest, openModels }
+}
+const settle = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
+
+describe('the banner', () => {
+  it('shows a calm line with a button that opens Models while no key works', async () => {
+    const { openModels, container } = mount(answer('no-key'))
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(`${en['keyBanner.text']}${en['keyBanner.open']}`)
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['keyBanner.open'] }))
+    expect(openModels).toHaveBeenCalledOnce()
+  })
+
+  it('stays away, and never asks again, when a key works', async () => {
+    const { keyTest, container } = mount(answer('works'))
+    await settle(KEY_RECHECK_MS * 3)
+    expect(container.textContent).toBe('')
+    expect(keyTest).toHaveBeenCalledOnce()
+  })
+
+  it('stays away when the key test cannot be read', async () => {
+    const { container } = mount(undefined)
+    await settle()
+    expect(container.textContent).toBe('')
+  })
+
+  it('asks again while it shows and leaves once a key is added', async () => {
+    const { keyTest, container } = mount(answer('no-key'), answer('no-key'), answer('works'))
+    await settle()
+    expect(screen.queryByRole('status')).not.toBeNull()
+    await settle(KEY_RECHECK_MS - 1)
+    expect(screen.queryByRole('status')).not.toBeNull()
+    await settle(1)
+    expect(container.textContent).toBe('')
+    const asked = keyTest.mock.calls.length
+    await settle(KEY_RECHECK_MS * 3)
+    expect(keyTest).toHaveBeenCalledTimes(asked)
+  })
+
+  it('ignores an answer that arrives after it was removed', async () => {
+    let resolve: (value: KeyTestAnswer) => void = () => {}
+    const keyTest = vi.fn(() => new Promise<KeyTestAnswer>((done) => { resolve = done }))
+    const view = render(<KeyBanner {...{ t, keyTest, openModels: vi.fn() } satisfies KeyBannerProps} />)
+    view.unmount()
+    resolve(answer('no-key'))
+    await settle()
+    expect(document.body.textContent).toBe('')
+  })
+})

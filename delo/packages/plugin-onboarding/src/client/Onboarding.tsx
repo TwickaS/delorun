@@ -2,32 +2,30 @@
  * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the steps listed at its
  * left (a progress count on a phone), the current step at its right and Back, Continue and Skip under it. It shows on a
  * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing or skipping is kept
- * on the profile. The dialog owns the page's inert root while it shows, as upstream's steps do.
+ * on the profile. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
+ * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
+ * upstream's steps do.
  */
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { OnboardingSettings } from '../config.ts'
 import type { SetupRecord } from '../wire.ts'
 import { buildSteps, STEPS, type FlowStep } from './flow.tsx'
 import { landFocus } from './focus.ts'
-import type { FolderView, StartFolder } from './steps.tsx'
-import type { FolderChoice, OnboardingInjected, StepServices } from './types.ts'
+import { createGuide, folderOf, type Guide } from './guide.ts'
+import type { OnboardingInjected, ReachState, StepServices } from './types.ts'
 import css from './Onboarding.module.css'
 
 /** The entry's props: the owner props it reads, this plugin's copy and the dialog's services. */
-export type OnboardingStepEntryProps = Pick<PropsRuntime<'settings.onboarding'>, 'complete' | 'explicit'> & PropsLocale<'deloOnboarding'> & InjectFace<OnboardingInjected>
+export type OnboardingStepEntryProps = Pick<PropsRuntime<'settings.onboarding'>, 'complete' | 'explicit' | 'renderSection' | 'completeStep'> & PropsLocale<'deloOnboarding'> & InjectFace<OnboardingInjected>
+
+/** Upstream's DeepSeek key step, which Welcome's Models section covers once the first chat starts. */
+export const UPSTREAM_KEY_STEP = 'deepseek-official'
 
 /** The dialog is closed by its buttons only, so Escape and the mask do nothing. */
 const ignoreImplicitDismiss = (): void => {}
-
-/** The Start step before any folder choice. */
-const IDLE: FolderView = { kind: 'idle' }
-
-/** The Start step showing its own chooser. */
-const BROWSE: FolderView = { kind: 'browse' }
 
 /**
  * Show the dialog while onboarding is unfinished or was opened explicitly, and complete upstream's step otherwise.
@@ -45,13 +43,13 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   return show ? <Dialog {...props} settings={settings} explicit={explicit} /> : null
 }
 
-/** Whether the Start step told the person there is no default workspace; the flow sets it. */
+/** Whether the Workspace step told the person there is no default workspace; the flow sets it. */
 interface Told { current: boolean }
 
 /**
  * Keep the workspace UI's default-workspace notice back while the dialog shows. On close the notice is dropped when the
- * Start step told the person there is no default workspace, and shows otherwise.
- * @param start - the Start step's workspace face.
+ * Workspace step told the person there is no default workspace, and shows otherwise.
+ * @param start - the workspace face.
  * @returns the flag the flow sets.
  */
 function useNoticeHold(start: OnboardingInjected['services']['start']): Told {
@@ -63,17 +61,25 @@ function useNoticeHold(start: OnboardingInjected['services']['start']): Told {
   return told
 }
 
-/** Load what the terminal setup recorded, then show the flow. */
+/** What the dialog reads before it shows its steps. */
+interface Loaded {
+  readonly record: SetupRecord
+  readonly reach: ReachState
+}
+
+/** Load what the terminal setup recorded and whether reach is set up, start the guide's reads, then show the flow. */
 function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean }): ReactNode {
-  const { loadRecord } = props
-  const told = useNoticeHold(props.services.start)
-  const [record, setRecord] = useState<SetupRecord | undefined>()
+  const { loadRecord, services } = props
+  const told = useNoticeHold(services.start)
+  const [loaded, setLoaded] = useState<Loaded | undefined>()
+  const [guide] = useState<Guide>(() => createGuide(services.host))
+  useEffect(() => () => { guide.dispose() }, [guide])
   useEffect(() => {
     let live = true
-    void loadRecord().then((loaded) => { if (live) setRecord(loaded) })
+    void Promise.all([loadRecord(), services.host.reach()]).then(([record, reach]) => { if (live) setLoaded({ record, reach }) })
     return () => { live = false }
-  }, [loadRecord])
-  return record === undefined ? null : <Flow {...props} record={record} told={told} />
+  }, [loadRecord, services.host])
+  return loaded === undefined ? null : <Flow {...props} {...loaded} told={told} guide={guide} />
 }
 
 /**
@@ -99,19 +105,21 @@ function useInertRoot(): void {
 }
 
 /** The steps, the current one and the buttons. */
-function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly record: SetupRecord; readonly told: Told }): ReactNode {
-  const { t, progress, extra, services: fixed, startChat, complete, settings, explicit, record, told } = props
-  const { reach: reachFace, start } = fixed
+function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide }): ReactNode {
+  const { t, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
+  const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
-  const reach = useSyncExternalStore(reachFace.subscribe, reachFace.getSnapshot)
   const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
-  const [choosing, setChoosing] = useState(false)
-  const [folder, setFolder] = useState<FolderView>(IDLE)
-  // The default workspace is looked up when the dialog opens, so the Start step already knows what its button does.
+  const workspace = useSyncExternalStore(useCallback(listener => guide.workspace.subscribe(listener), [guide]), () => guide.workspace.getSnapshot())
+  // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
+  useEffect(() => {
+    if (target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
+    if (target.kind === 'none') told.current = true
+  }, [target, guide, told])
   const { plugins } = settings
-  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins }), [fixed, t, plugins])
+  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins, renderSection }), [fixed, t, plugins, renderSection])
 
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delo onboarding: progress was not saved', error) })
@@ -121,80 +129,42 @@ function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingS
     save('step', '')
     complete()
   }, [save, complete])
-  const added = useCallback((workspaceId: WorkspaceId): void => {
-    finish()
-    void startChat(workspaceId)
-  }, [finish, startChat])
-  const startFolder = useMemo<StartFolder>(() => ({ view: folder, added }), [folder, added])
 
-  // The notice screen is decided once: acknowledging it must not remove it from under Back.
+  // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, record, extra: addedSteps, reach, notice, folder: startFolder }),
-    [services, record, addedSteps, reach, notice, startFolder],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice }),
+    [services, guide, record, addedSteps, reach, target, notice],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
-  // The list is never empty: the last step is always built.
+  // The list is never empty: Welcome, Workspace and Ready are always built.
   const step = steps[current] as FlowStep
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus({ preventScroll: true }) }, [step.id])
 
-  const go = (target: number): void => {
-    setIndex(target)
-    setFolder(IDLE)
-    save('step', (steps[target] as FlowStep).id)
+  const go = (to: number): void => {
+    setIndex(to)
+    save('step', (steps[to] as FlowStep).id)
   }
   const last = current === steps.length - 1
-  // Without a default workspace the last button chooses a folder first, and a closed chooser keeps the dialog open.
-  const choosesFolder = last && target.kind === 'none'
-  useEffect(() => { if (choosesFolder) told.current = true }, [choosesFolder, told])
-  const settle = (choice: FolderChoice): void => {
-    switch (choice.kind) {
-      case 'cancelled':
-        return
-      case 'chosen':
-        added(choice.workspaceId)
-        return
-      case 'in-step':
-        setFolder(BROWSE)
-        return
-      case 'refused':
-        setFolder({ kind: 'problem', problem: choice.problem })
-        return
-      case 'failed':
-        setFolder({ kind: 'problem', problem: 'failed' })
-        return
-      case 'unavailable':
-        finish()
-        void startChat()
-        return
-      /* v8 ignore next 2 -- closed-union default only defends a future widening of FolderChoice */
-      default:
-        assertNever(choice)
-    }
-  }
+  // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step.
+  const needsFolder = last && workspace === undefined && target.kind !== 'other'
   const next = (): void => {
     step.onContinue?.()
     if (!last) {
       go(current + 1)
       return
     }
-    if (!choosesFolder) {
-      finish()
-      void startChat()
+    if (needsFolder) {
+      go(steps.findIndex(each => each.id === STEPS.workspace.id))
       return
     }
-    setChoosing(true)
-    setFolder(IDLE)
-    void start.chooseFolder().then((choice) => {
-      setChoosing(false)
-      settle(choice)
-    })
+    finish()
+    completeStep(UPSTREAM_KEY_STEP)
+    void startChat(workspace?.workspaceId, folderOf(workspace))
   }
-  const title = (step.heading ?? step.title)()
-  // While the Start step shows its own chooser, that chooser's button adds the folder.
-  const primary = !(choosesFolder && folder.kind === 'browse')
+  const title = step.title()
   return (
     <Modal open title={title} onClose={ignoreImplicitDismiss} headless className={css.dialog as string}>
       <div className={css.frame}>
@@ -219,23 +189,13 @@ function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingS
             <div className={css.body} key={step.id}>{step.render(next)}</div>
           </div>
           <footer className={css.footer}>
-            {step.id !== STEPS.notice.id && <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button>}
+            {notice === undefined || step.id !== STEPS.welcome.id ? <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button> : null}
             <span className={css.spacer} />
             {current > 0 && <Button variant="ghost" onClick={() => { go(current - 1) }}>{t('back')}</Button>}
-            {primary && <Button variant="primary" disabled={choosing} onClick={next}>{t(choosesFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>}
+            <Button variant="primary" onClick={next}>{t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>
           </footer>
         </div>
       </div>
     </Modal>
   )
-}
-
-/**
- * Close a union the compiler has narrowed to nothing.
- * @param value - the value that cannot occur.
- * @throws always.
- */
-/* v8 ignore next 3 -- reached only when FolderChoice widens without its switch */
-function assertNever(value: never): never {
-  throw new Error(`unhandled folder choice ${JSON.stringify(value)}`)
 }

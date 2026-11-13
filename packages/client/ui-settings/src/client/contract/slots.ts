@@ -10,6 +10,7 @@
  */
 
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import type { ReactNode } from 'react'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -161,6 +162,19 @@ export interface SettingsOnboardingOwnerProps {
   complete: () => void
   /** Open the settings panel directly on one registered section. */
   openSection: (id: string) => void
+  /**
+   * Draw one registered section inside the step, as the settings panel draws it, so a step can offer a page's own
+   * controls without a second implementation. The section's `close` does nothing there.
+   * @param id - a registered `settings.section` id.
+   * @returns the section, or nothing while none is registered under the id.
+   */
+  renderSection: (id: string) => ReactNode
+  /**
+   * Mark another onboarding step complete, for a step whose own flow already covered what that step asks, so the
+   * coordinator does not show it next. Completion lasts while the page is open, as the step's own `complete` does.
+   * @param id - a registered `settings.onboarding` step id.
+   */
+  completeStep: (id: string) => void
 }
 
 /** Sidebar launcher geometry and settings navigation. */

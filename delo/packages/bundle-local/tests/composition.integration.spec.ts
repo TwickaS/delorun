@@ -28,6 +28,9 @@ const STUDIO_ROWS = [
   { id: 'delo-onboarding', name: '@delo/plugin-onboarding' },
 ] as const
 
+/** The upstream row `@delo/bundle-studio` patches so upstream's "Add an API key" dialog never opens. */
+const STUDIO_KEY_DIALOG_ROW = 'ui-settings-models'
+
 /** The consent and guard rows this bundle mounts, with the row id each entry carries. */
 const MOUNTED_PLUGINS = [
   { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent' },
@@ -189,7 +192,8 @@ describe('a Delo CLI profile', () => {
     const local = dump.rows.filter(({ label }) => writers(label).includes(LOCAL_BUNDLE)).map(({ row }) => row.id)
     expect(local).toEqual(LOCAL_ROWS.map(row => row.id))
     const studio = dump.rows.filter(({ label }) => writers(label).includes(STUDIO_BUNDLE)).map(({ row }) => row.id)
-    expect(studio).toEqual(STUDIO_ROWS.map(row => row.id))
+    // The studio bundle also patches upstream's models row, to turn the first-run key dialog off.
+    expect(studio).toEqual([STUDIO_KEY_DIALOG_ROW, ...STUDIO_ROWS.map(row => row.id)])
   })
 
   it('mounts every studio plugin, with the Delo look switched on in the theme row', () => {
@@ -198,6 +202,12 @@ describe('a Delo CLI profile', () => {
       expect(rows.filter(entry => entry.id === row.id && entry.disabled !== true && entry.name === row.name), row.id).toHaveLength(1)
     }
     expect(rows.find(entry => entry.id === 'delo-theme')?.config).toEqual({ studioAdditions: true })
+  })
+
+  it('turns upstream\'s first-run key dialog off while keeping the preview notice off, so a reload never opens it', () => {
+    const row = home.rows(DELO_PROFILE).find(entry => entry.id === STUDIO_KEY_DIALOG_ROW)
+    expect(row?.disabled).not.toBe(true)
+    expect(row?.config).toEqual({ credentialOnboarding: false, welcomeNotice: false })
   })
 
   it('composes no enabled DeepSeek account row and no DeepSeek host beyond the model API', () => {
@@ -291,7 +301,7 @@ describe('a Delo CLI profile', () => {
       if (listed.kind === 'added') {
         expect(composed?.name, listed.id).toBe(declared?.['name'])
         expect(text({ config: composed?.config ?? null }), `${listed.id} config`).toBe(text({ config: declared?.['config'] ?? null }))
-      } else if (declared?.['config'] !== undefined) {
+      } else if (declared?.['config'] !== undefined && listed.id !== STUDIO_KEY_DIALOG_ROW) {
         expect(text({ config: composed?.config }), `${listed.id} config`).toBe(text({ config: declared['config'] }))
       }
     }

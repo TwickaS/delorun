@@ -148,6 +148,8 @@ function harness(options: {
     stepId: 'deepseek-official',
     complete,
     openSection,
+    renderSection: () => null,
+    completeStep: vi.fn(),
     renderSlot: (_name, _props, options) => options?.fallback,
     useSessions: unusedHook,
     useSessionStatus,

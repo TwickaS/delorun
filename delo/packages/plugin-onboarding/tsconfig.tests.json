@@ -14,6 +14,12 @@
     "src/wire.ts",
     "src/answers.ts",
     "src/workspace-route.ts",
+    "src/clone.ts",
+    "src/clone-address.ts",
+    "src/folder-kind.ts",
+    "src/key-test.ts",
+    "src/readiness.ts",
+    "src/recommend.ts",
     "tests"
   ],
   "exclude": [
@@ -44,6 +50,15 @@
     },
     {
       "path": "../../../packages/workspace/workspace"
+    },
+    {
+      "path": "../../../packages/credentials/credentials"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/llm/llm-deepseek"
     }
   ]
 }

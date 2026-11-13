@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, hostApi, inject, KEY_BANNER_ENTRY, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -92,6 +92,7 @@ const face = <T,>(entries: Map<string, Registered>, key: string): T => {
 const STEP_KEY = `settings.onboarding#${ONBOARDING_STEP.id}`
 const ROW_KEY = `settings.general.item#${SHOW_AGAIN_ROW.id}`
 const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
+const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 
 describe('the stock look', () => {
   it('registers nothing until the Delo look provides deloStudio, and everything leaves with it', async () => {
@@ -104,7 +105,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(3)
+    expect(entries.size).toBe(4)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('deloOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -129,7 +130,7 @@ describe('the registrations', () => {
     const { entries, served } = await harness()
     expect([...entries.keys()]).toEqual([])
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([DOCK_KEY, ROW_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, ROW_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delo-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
@@ -228,39 +229,11 @@ describe('the services the dialog draws with', () => {
   })
 })
 
-describe('the reach service', () => {
-  it('is unavailable until a reach plugin provides ctx.deloReach, then available or set up, and follows it as it comes and goes', async () => {
-    const { entries, served, ctx } = await harness()
+describe('the harness\'s routes', () => {
+  it('are the guide\'s requests over the page\'s fetch', async () => {
+    const { entries, served } = await harness()
     served.on()
-    const { reach } = face<OnboardingInjected>(entries, STEP_KEY).services
-    const changed = vi.fn()
-    const off = reach.subscribe(changed)
-    expect(reach.getSnapshot()).toBe('unavailable')
-    let setUp = false
-    const plugin = ctx.plugin({ apply: (scope: Context) => { scope.provide('deloReach', { available: true, setUp: () => setUp } as never) } })
-    await plugin.await()
-    expect(changed).toHaveBeenCalled()
-    expect(reach.getSnapshot()).toBe('available')
-    setUp = true
-    expect(reach.getSnapshot()).toBe('set-up')
-    changed.mockClear()
-    await plugin.dispose()
-    expect(changed).toHaveBeenCalled()
-    expect(reach.getSnapshot()).toBe('unavailable')
-    off()
-    changed.mockClear()
-    ctx.emit('internal/service' as never, 'something-else' as never)
-    expect(changed).not.toHaveBeenCalled()
-  })
-
-  it('ignores other services coming and going', async () => {
-    const { entries, served, ctx } = await harness()
-    served.on()
-    const changed = vi.fn()
-    face<OnboardingInjected>(entries, STEP_KEY).services.reach.subscribe(changed)
-    const other = ctx.plugin({ apply: (scope: Context) => { scope.provide('somethingElse' as never, {} as never) } })
-    await other.await()
-    expect(changed).not.toHaveBeenCalled()
+    expect(face<OnboardingInjected>(entries, STEP_KEY).services.host).toBe(hostApi)
   })
 })
 
@@ -363,10 +336,10 @@ describe('the default workspace and the first chat', () => {
 
   it('opens the workspace the person chose without asking for the default one', async () => {
     const { startChat, openWorkspace, initializeDefault, progress } = await chat()
-    await startChat('workspace-7' as never)
+    await startChat('workspace-7' as never, 'code')
     expect(initializeDefault).not.toHaveBeenCalled()
     expect(openWorkspace).toHaveBeenCalledWith('workspace-7', expect.any(Function))
-    expect(progress.value()?.starterSession).toBe('session-9')
+    expect(progress.value()).toMatchObject({ starterSession: 'session-9', starterKind: 'code' })
   })
 
   it.each<readonly [string, ChatOptions, string, number]>([
@@ -410,7 +383,7 @@ describe('the default workspace and the first chat', () => {
 
   describe('choosing a folder', () => {
     /** The harness's add-workspace route, answering as given, and recording what it is asked. */
-    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7' }), { status: 200 })) => {
+    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7', kind: 'code' }), { status: 200 })) => {
       const fetch = vi.fn(async (_path: string, _init?: RequestInit) => answer())
       vi.stubGlobal('fetch', fetch)
       return fetch
@@ -419,7 +392,7 @@ describe('the default workspace and the first chat', () => {
     it('adds the folder the host\'s chooser returns through the harness\'s route, relative to the document', async () => {
       const fetch = route()
       const { start, pickDirectory } = await chat()
-      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7' })
+      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7', path: '/work/folder', folder: 'code' })
       expect(pickDirectory).toHaveBeenCalledOnce()
       expect(fetch).toHaveBeenCalledExactlyOnceWith(ADD_WORKSPACE_PATH.slice(1), {
         method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' }, body: JSON.stringify({ path: '/work/folder' }),
@@ -487,11 +460,11 @@ describe('the default workspace and the first chat', () => {
 })
 
 describe('a fresh home with no default workspace', () => {
-  it('says so on the Start step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the starter prompts', async () => {
+  it('says so on the Workspace step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the prompts that fit it', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const fetch = vi.fn(async (path: string, _init?: RequestInit) => new Response(
-      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : { result: 'added', workspaceId: 'workspace-7' }),
-      { status: 200 },
+      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : path === ADD_WORKSPACE_PATH.slice(1) ? { result: 'added', workspaceId: 'workspace-7', kind: 'empty' } : {}),
+      { status: path === ADD_WORKSPACE_PATH.slice(1) || path === SETUP_RECORD_PATH.slice(1) ? 200 : 404 },
     ))
     vi.stubGlobal('fetch', fetch)
     const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
@@ -506,17 +479,19 @@ describe('a fresh home with no default workspace', () => {
     const made = await harness({ provide: { workspaces, uiWorkspace } })
     made.served.on()
     const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
-    const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} />)
+    const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} completeStep={vi.fn()} renderSection={() => null} />)
     await act(async () => { await flush() })
-    for (let n = 0; n < 2; n++) await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
-    expect(document.body.textContent).toContain('Delo could not set up a default workspace on this computer.')
-    expect(screen.queryByRole('button', { name: en.start })).toBeNull()
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.chooseFolder })) })
+    for (let n = 0; n < 3; n++) await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
+    expect(document.body.textContent).toContain(en['start.lead.none'])
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['workspace.folder.choose'] })) })
     await act(async () => { await flush() })
     expect(pickDirectory).toHaveBeenCalledOnce()
     expect(fetch).toHaveBeenCalledWith(ADD_WORKSPACE_PATH.slice(1), expect.objectContaining({ method: 'POST', body: JSON.stringify({ path: '/work/folder' }) }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.start })) })
+    await act(async () => { await flush() })
     expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7', expect.any(Function))
-    expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9' })
+    expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9', starterKind: 'empty' })
     expect(holdDefaultWorkspaceNotice).toHaveBeenCalledOnce()
     view.unmount()
     expect(release).toHaveBeenCalledExactlyOnceWith({ told: true })
@@ -544,7 +519,7 @@ describe('Show again', () => {
       return (
         <>
           <Row t={t} {...rowFace} />
-          {open === ONBOARDING_STEP.id && <Step t={t} {...stepFace} explicit complete={() => { requested.set(undefined) }} />}
+          {open === ONBOARDING_STEP.id && <Step t={t} {...stepFace} explicit complete={() => { requested.set(undefined) }} completeStep={vi.fn()} renderSection={() => null} />}
         </>
       )
     }
@@ -552,7 +527,7 @@ describe('Show again', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['row.show'] })) })
     await act(async () => { await flush() })
-    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
   })
 
   it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished or skipped', async () => {
@@ -565,9 +540,9 @@ describe('Show again', () => {
     // A reload: the Settings shell no longer opens the step explicitly, and the profile's settings decide.
     const Step = entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
     const complete = vi.fn()
-    render(<Step t={t} {...face<OnboardingInjected>(entries, STEP_KEY)} complete={complete} />)
+    render(<Step t={t} {...face<OnboardingInjected>(entries, STEP_KEY)} complete={complete} completeStep={vi.fn()} renderSection={() => null} />)
     await act(async () => { await flush() })
-    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
     expect(complete).not.toHaveBeenCalled()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
     expect(progress.value()).toMatchObject({ done: true, step: '' })
@@ -595,6 +570,21 @@ describe('Show again', () => {
   })
 })
 
+describe('the no-key banner\'s services', () => {
+  it('ask the key test through the page and open Settings at Models', async () => {
+    const openSection = vi.fn()
+    const keyTest = vi.spyOn(hostApi, 'keyTest').mockResolvedValue({ providers: [] })
+    const { entries, served } = await harness({ provide: { settingsShell: { openSection, openOnboarding: vi.fn() } } })
+    served.on()
+    expect(entries.get(BANNER_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', order: 5, locale: NS })
+    const services = face<KeyBannerInjected>(entries, BANNER_KEY)
+    expect(await services.keyTest()).toEqual({ providers: [] })
+    expect(keyTest).toHaveBeenCalledOnce()
+    services.openModels()
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('models')
+  })
+})
+
 describe('the starter prompts\' services', () => {
   const CHAT = SessionId('session-9')
 
@@ -619,11 +609,13 @@ describe('the starter prompts\' services', () => {
     expect(services.starter.getSnapshot()).toBe('')
     const listener = vi.fn()
     services.starter.subscribe(listener)
-    progress.publish({ value: settings({ starterSession: 'session-9' }) })
+    expect(services.folder()).toBe('')
+    progress.publish({ value: settings({ starterSession: 'session-9', starterKind: 'code' }) })
     expect(services.starter.getSnapshot()).toBe('session-9')
+    expect(services.folder()).toBe('code')
     expect(listener).toHaveBeenCalledOnce()
     progress.publish({ value: undefined })
-    expect(services.starter.getSnapshot()).toBe('')
+    expect([services.starter.getSnapshot(), services.folder()]).toEqual(['', ''])
   })
 
   it('write a prompt into the chat\'s message box without sending, and put the cursor there for a pointer that can hover', async () => {

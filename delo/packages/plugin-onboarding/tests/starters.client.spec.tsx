@@ -14,14 +14,14 @@ const CHAT = SessionId('chat-1')
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 
 /** The chips in the input dock of one chat, over a store holding the chat that offers them. */
-function mount(options: { readonly offered?: string; readonly sessionId?: SessionId; readonly blank?: boolean; readonly draft?: string } = {}) {
+function mount(options: { readonly offered?: string; readonly sessionId?: SessionId; readonly blank?: boolean; readonly draft?: string; readonly folder?: string } = {}) {
   const starter = createSnapshotStore(options.offered ?? CHAT)
   const prefill = vi.fn()
   const dismiss = vi.fn()
   const element = (draft: string, blank = options.blank ?? true) => (
     <StarterPrompts {...{
       t, sessionId: options.sessionId ?? CHAT, session: { ...sessionSnapshot(CHAT), blank },
-      input: { draft, attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill, dismiss, bind: vi.fn(),
+      input: { draft, attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, folder: () => options.folder ?? '', prefill, dismiss, bind: vi.fn(),
     } satisfies StarterPromptsProps} />
   )
   const view = render(element(options.draft ?? ''))
@@ -38,7 +38,7 @@ describe('the starter prompts while they are pending', () => {
     const element = (sessionId: SessionId, blank = options.blank ?? true) => (
       <StarterPrompts {...{
         t, sessionId, session: { ...sessionSnapshot(sessionId), blank },
-        input: { draft: '', attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill: vi.fn(), dismiss: vi.fn(), bind,
+        input: { draft: '', attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, folder: () => '', prefill: vi.fn(), dismiss: vi.fn(), bind,
       } satisfies StarterPromptsProps} />
     )
     const view = render(element(OLDER))
@@ -81,24 +81,32 @@ describe('the starter prompts', () => {
   it('show three chips with their labels above the message box of the chat onboarding opened', () => {
     mount()
     expect(screen.getAllByRole('button', { name: /^(What can you|Plan a|Suggest a)/ }).map(each => each.textContent)).toEqual([
-      en['starter.1.label'], en['starter.2.label'], en['starter.3.label'],
+      en['starter.general.1.label'], en['starter.general.2.label'], en['starter.general.3.label'],
     ])
     expect(STARTERS).toHaveLength(3)
     expect(screen.getByRole('group', { name: en['starter.lead'] })).toBeTruthy()
   })
 
+  it.each(['empty', 'code', 'files'] as const)('offer the prompts that fit a folder onboarding read as %s, and the general ones for any other', (folder) => {
+    mount({ folder })
+    expect(screen.getAllByRole('button').slice(0, 3).map(each => each.textContent)).toEqual([1, 2, 3].map(n => en[`starter.${folder}.${n as 1 | 2 | 3}.label`]))
+    cleanup()
+    mount({ folder: 'unknown' })
+    expect(screen.getAllByRole('button')[0]?.textContent).toBe(en['starter.general.1.label'])
+  })
+
   it('write the prompt into the message box when a chip is pressed, and send nothing', async () => {
     const { prefill } = mount()
-    await click(screen.getByRole('button', { name: en['starter.2.label'] }))
-    expect(prefill).toHaveBeenCalledExactlyOnceWith(CHAT, en['starter.2.prompt'])
+    await click(screen.getByRole('button', { name: en['starter.general.2.label'] }))
+    expect(prefill).toHaveBeenCalledExactlyOnceWith(CHAT, en['starter.general.2.prompt'])
   })
 
   it('stay while the box holds one of their own prompts, mark it, and let another replace it', async () => {
-    const { prefill } = mount({ draft: en['starter.2.prompt'] })
-    expect(screen.getByRole('button', { name: en['starter.2.label'] }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: en['starter.1.label'] }).getAttribute('aria-pressed')).toBe('false')
-    await click(screen.getByRole('button', { name: en['starter.1.label'] }))
-    expect(prefill).toHaveBeenCalledWith(CHAT, en['starter.1.prompt'])
+    const { prefill } = mount({ draft: en['starter.general.2.prompt'] })
+    expect(screen.getByRole('button', { name: en['starter.general.2.label'] }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: en['starter.general.1.label'] }).getAttribute('aria-pressed')).toBe('false')
+    await click(screen.getByRole('button', { name: en['starter.general.1.label'] }))
+    expect(prefill).toHaveBeenCalledWith(CHAT, en['starter.general.1.prompt'])
   })
 
   it('go when the person types their own text, and come back if the box is emptied while the chat is still empty', () => {

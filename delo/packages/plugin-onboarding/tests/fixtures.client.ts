@@ -10,8 +10,9 @@ import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import type { CloneStatus, KeyTestAnswer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, FolderBrowse, FolderChoice, LanguageFace, NoticeFace, ReachFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AddOutcome, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
 
 /** This plugin's copy. */
@@ -107,11 +108,33 @@ export function installerFake(views: Readonly<Record<string, BundleView>> = {}) 
 /** A workspace id the specs use as the default workspace. */
 export const DEFAULT_WORKSPACE = 'workspace-1' as WorkspaceId
 
-/** A reach face over a store: the state `ctx.deloReach` gives, changeable. */
-export function reachFace(initial: ReachState = 'unavailable') {
-  const store = createSnapshotStore<ReachState>(initial)
-  const face: ReachFace = { getSnapshot: store.getSnapshot, subscribe: store.subscribe }
-  return { face, set: store.set }
+/** The default workspace's folder in the specs. */
+export const DEFAULT_PATH = '/home/person/Delo'
+
+/** A computer with both agents signed in and Tailscale ready. */
+export const READY: Readiness = { agents: { 'claude-code': 'found', 'codex': 'found' }, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } }
+
+/** One DeepSeek key that works. */
+export const KEYS: KeyTestAnswer = { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'works' }] }
+
+/** The harness's routes, each a spy that answers what it is given. */
+export function hostFake(change: {
+  readonly readiness?: Readiness | undefined
+  readonly keys?: KeyTestAnswer | undefined
+  readonly recommend?: RecommendAnswer | undefined
+  readonly reach?: ReachState
+  readonly cloneStart?: CloneStartOutcome
+  readonly cloneStatus?: readonly CloneStatus[]
+} = {}) {
+  const statuses = [...change.cloneStatus ?? [{ state: 'unknown' } as const]]
+  const readiness = vi.fn(() => Promise.resolve('readiness' in change ? change.readiness : READY))
+  const keyTest = vi.fn(() => Promise.resolve('keys' in change ? change.keys : KEYS))
+  const recommend = vi.fn((_registry: boolean) => Promise.resolve('recommend' in change ? change.recommend : { plugins: [], registry: 'not-asked' as const }))
+  const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
+  const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
+  const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
+  const host: HostFace = { readiness, keyTest, recommend, reach, cloneStart, cloneStatus }
+  return { host, readiness, keyTest, recommend, reach, cloneStart, cloneStatus }
 }
 
 /** The home directory the folder listings start at. */
@@ -141,9 +164,9 @@ export function browseFake(listings: Readonly<Record<string, DirectoryListing>> 
 
 /** A start face over a store, recording the dialog opening it, the folder chosen or added, and the notice hold. */
 export function startFace(
-  initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE },
+  initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH },
   choice: FolderChoice = { kind: 'cancelled' },
-  outcome: AddOutcome = { kind: 'chosen', workspaceId: DEFAULT_WORKSPACE },
+  outcome: AddOutcome = { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: `${HOME}/projects`, folder: 'code' },
 ) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
@@ -167,8 +190,9 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     scheme: schemeFace().face,
     look: { settings: theme.form, useStockLook: () => Promise.resolve(true) },
     bundles: bundles.installer,
-    reach: reachFace().face,
+    host: hostFake().host,
     start: startFace().face,
+    renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     spies: bundles,
     ...change,

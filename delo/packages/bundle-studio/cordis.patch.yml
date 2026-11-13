@@ -28,6 +28,24 @@
 
     - id: delo-onboarding
       name: '@delo/plugin-onboarding'
+      config:
+        # The curated plugins the guide offers. Each package may say in its own
+        # package.json which connections it is for ("delo": { "connections": [...] });
+        # the guide puts those that fit the person's connections first.
+        plugins:
+          - '@deepseek-ai/dsh-experimental-session-search'
+          - '@deepseek-ai/dsh-experimental-terminal-bundle'
+          - '@deepseek-ai/dsh-experimental-tool-worktree'
+          - '@deepseek-ai/dsh-experimental-session-titles-bundle'
+
+# Upstream's first-run "Add an API key" dialog is off: the studio's no-key banner above the message box (in
+# @delo/plugin-onboarding) is the only nudge. A patch replaces the row's whole config, so this restates
+# @delo/bundle-local's `welcomeNotice: false`. The stock look keeps this row too, so upstream's dialog does not return
+# there; Settings → Models and the model picker still add a key.
+- id: ui-settings-models
+  config:
+    credentialOnboarding: false
+    welcomeNotice: false
 
 # Optional studio plugins: each row is inserted disabled, so a new profile
 # mounts nothing of it until the person turns it on in Settings → Plugins,

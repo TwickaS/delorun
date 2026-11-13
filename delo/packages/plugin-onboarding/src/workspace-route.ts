@@ -10,7 +10,8 @@ import { isLoopbackHost, type HomeAuthService } from '@delo/home-auth'
 import { resolveDeloHome, workspaceLocationHomes, workspaceLocationProblem, type WorkspaceLocationProblem } from '@delo/home'
 // Type-only: the ctx.workspaceRegistry merge.
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
-import { AddWorkspaceRequest, MAX_ADD_BODY_BYTES, type AddWorkspaceAnswer } from './wire.ts'
+import { folderKind } from './folder-kind.ts'
+import { AddWorkspaceRequest, MAX_ADD_BODY_BYTES, type AddWorkspaceAnswer, type FolderKind } from './wire.ts'
 
 /** The code of the refusal a request that did not arrive on the loopback listener is answered with. */
 export const LOOPBACK_ONLY_CODE = 'LOOPBACK_ONLY'
@@ -81,28 +82,69 @@ async function requestedPath(request: Request): Promise<string | undefined> {
  * Handle one request to add a folder: refuse a folder Delo never adds, and register any other through the registry.
  * @param request - the `POST` request carrying {@link AddWorkspaceRequest}.
  * @param deps - the registry, the environment and the log.
- * @returns 200 `added` with the workspace's id, 422 `refused` with the problem, 400 for a request that cannot be read,
+ * @returns 200 `added` with the workspace's id and the folder's kind, 422 `refused` with the problem, 400 for a request that cannot be read,
  * or 500 `failed` when the Delo home cannot be resolved or the registry refuses the folder.
  */
 export async function addWorkspace(request: Request, deps: AddWorkspaceDeps): Promise<Response> {
   const path = await requestedPath(request)
   if (path === undefined) return reply(400, { error: 'the request must be JSON with one path' })
-  let problem: WorkspaceLocationProblem | undefined
+  const outcome = await registerFolder(path, deps)
+  switch (outcome.result) {
+    case 'added': return reply(200, outcome)
+    case 'refused': return reply(422, outcome)
+    case 'failed': return reply(500, outcome)
+    /* v8 ignore next 2 -- closed-union default only defends a future widening of AddWorkspaceAnswer */
+    default: return assertNever(outcome)
+  }
+}
+
+/**
+ * Where a folder Delo never adds would be: the problem `@delo/home` names for the path, against the Delo home the
+ * environment resolves.
+ * @param path - the folder.
+ * @param deps - the environment and the log.
+ * @returns the problem, `undefined` for a folder that may be a workspace, or `unresolved` when the Delo home cannot be resolved.
+ */
+export async function locationProblem(path: string, deps: Pick<AddWorkspaceDeps, 'env' | 'warn'>): Promise<WorkspaceLocationProblem | 'unresolved' | undefined> {
   try {
-    problem = await workspaceLocationProblem(path, workspaceLocationHomes((await resolveDeloHome(deps.env)).path))
+    return await workspaceLocationProblem(path, workspaceLocationHomes((await resolveDeloHome(deps.env)).path))
   } catch (error) {
     deps.warn(`the Delo home could not be resolved, so no folder is added: ${codeOf(error)}`)
-    return reply(500, { result: 'failed' })
+    return 'unresolved'
   }
-  if (problem !== undefined) return reply(422, { result: 'refused', problem })
+}
+
+/**
+ * Hold a folder against the locations Delo never adds, then register it and read what it holds. The clone route adds
+ * its new folder through this too.
+ * @param path - the folder.
+ * @param deps - the registry, the environment and the log.
+ * @returns `added` with the workspace's id and the folder's kind, `refused` with the problem, or `failed`.
+ */
+export async function registerFolder(path: string, deps: AddWorkspaceDeps): Promise<AddWorkspaceAnswer> {
+  const problem = await locationProblem(path, deps)
+  if (problem === 'unresolved') return { result: 'failed' }
+  if (problem !== undefined) return { result: 'refused', problem }
   try {
     const workspace = await deps.registry.create(path)
-    return reply(200, { result: 'added', workspaceId: workspace.id })
+    const kind: FolderKind = await folderKind(path)
+    return { result: 'added', workspaceId: workspace.id, kind }
   } catch (error) {
     // The registry's message names the path, so the log keeps only its code.
     deps.warn(`the folder could not be added as a workspace: ${codeOf(error)}`)
-    return reply(500, { result: 'failed' })
+    return { result: 'failed' }
   }
+}
+
+/**
+ * Close a union the compiler has narrowed to nothing.
+ * @param value - the value that cannot occur.
+ * @returns never.
+ * @throws always.
+ */
+/* v8 ignore next 3 -- reached only when AddWorkspaceAnswer widens without its switch */
+function assertNever(value: never): never {
+  throw new Error(`unhandled add-workspace outcome ${JSON.stringify(value)}`)
 }
 
 /**
