@@ -2,10 +2,11 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** The field every switch's row exposes: `config.enabled` of its profile row. */
-export interface OptInSettings {
-  enabled: boolean
-}
+/** The `config` field a switch writes: `enabled` of an opt-in's row, or `npmMirror` of the install check's row. */
+export type OptInField = 'enabled' | 'npmMirror'
+
+/** The fields a switch's row exposes; each switch reads and writes its own {@link OptInField}. */
+export type OptInSettings = Partial<Record<OptInField, boolean>>
 
 /** Write state shown beside the opt-in's switch. */
 export interface OptInMutation {
@@ -26,18 +27,25 @@ export class OptIn<T extends OptInSettings = OptInSettings> {
   /** The Host form of the opt-in's profile row. */
   readonly form: ConfigForm<T>
 
-  /** @param form - the Host form of the opt-in's profile row. */
-  constructor(form: ConfigForm<T>) {
+  /** The field the switch writes. */
+  readonly field: OptInField
+
+  /**
+   * @param form - the Host form of the switch's profile row.
+   * @param field - the field the switch writes; `enabled` by default.
+   */
+  constructor(form: ConfigForm<T>, field: OptInField = 'enabled') {
     this.form = form
+    this.field = field
   }
 
   /**
-   * Write the opt-in's `enabled` field; this changes no other row or field.
+   * Write the switch's field; this changes no other row or field.
    * @param enabled - the value the person chose; `true` only after they confirmed the consent dialog.
    * @returns after the write settles.
    */
   setEnabled(enabled: boolean): Promise<void> {
-    return this.set('enabled', enabled)
+    return this.write(this.field, enabled)
   }
 
   /**
@@ -46,7 +54,17 @@ export class OptIn<T extends OptInSettings = OptInSettings> {
    * @param value - the value the person chose.
    * @returns after the write settles.
    */
-  async set<K extends keyof T & string>(field: K, value: T[K]): Promise<void> {
+  set<K extends keyof T & string>(field: K, value: T[K]): Promise<void> {
+    return this.write(field, value)
+  }
+
+  /**
+   * Write one field unless another write is crossing the wire.
+   * @param field - the row's field.
+   * @param value - the value to write.
+   * @returns after the write settles.
+   */
+  private async write(field: string, value: unknown): Promise<void> {
     if (this.state.getSnapshot().busy) return
     this.state.update((state) => { state.busy = true; state.failed = false })
     let accepted = false

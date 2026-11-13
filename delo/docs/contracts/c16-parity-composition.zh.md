@@ -50,7 +50,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | --- | --- | --- | --- |
 | studio 附加功能（`studio_additions`） | 开启，并有一个用于 stock 外观的开关 | 关闭，即 stock 外观 | 录制的 web 场景会比对上游的界面输出。 |
 | studio 新手引导中选中的 agent 预设（`agent-preset-registry.config.default`） | `ptc` | `standard`，即上游的组合默认值 | 未指定预设的场景运行在组合默认值上，因此回放需要上游的取值。 |
-| 每个工作区的权限预设（`permission_defaults`） | 新工作区从 `workspace-write` 开始。为某个工作区选择 `danger-full-access` 需要该工作区一次同意。 | 上游的组合默认值（`sandbox-policy.config.mode` 为 `workspace-write`，`approval.config.policy` 为 `ask`），没有同意要求 | 生效的权限策略通过 system prompt context 进入每次模型请求，录制的场景 `permission-policy-context` 会回放它。 |
+| 每个工作区的权限预设（`permission_defaults`） | 新工作区从 `workspace-write` 开始。为某个工作区选择 `danger-full-access` 需要该工作区一次同意。每个工作区沙箱中的命令与 `web_fetch` 只能到达其设置允许的网络，默认为 `open`。 | 上游的组合默认值（`sandbox-policy.config.mode` 为 `workspace-write`，`approval.config.policy` 为 `ask`），没有同意要求 | 生效的权限策略通过 system prompt context 进入每次模型请求，录制的场景 `permission-policy-context` 会回放它。 |
 | 桌面分析（`product-analytics.config.enabled`） | `false` | `false`，保留 Delo 的取值 | 不需要：回放不挂载桌面 Host，因为 `sdk-desktop` 组合运行的是 `sdk` profile。 |
 | DeepSeek 会话日志上传（`session-log-deepseek.config.enabled`） | `false` | `true`，即上游的取值 | 录制的场景在上传开启时运行，除非其回放层将其设为 `false`；覆盖层位于这些回放层之前。 |
 | `web_fetch` 防护（`fetch_guard`） | 开启 | 关闭 | 录制的抓取场景会调用回环夹具，而防护会拒绝这些目标。 |
@@ -69,7 +69,7 @@ DeepSeek 会话日志上传在每个挂载了 `@delo/bundle-local` 的 profile �
 | 开关 id | 注册方 | 默认值 | 对等取值 | 它所开关的、对模型可见的内容 |
 | --- | --- | --- | --- | --- |
 | `studio_additions` | `@delo/bundle-studio`（由 studio 包交付），其中的主 chat 位于 `@delo/plugin-main-chat` | 开 | 关 | 主题、侧边栏、chat 状态、新手引导，以及主 chat（包括其写入类工具）。关闭即 stock 外观。 |
-| `permission_defaults` | `@delo/plugin-permission-defaults` | 开 | 关 | 工作区默认预设，以及完全访问的一次性同意要求。 |
+| `permission_defaults` | `@delo/plugin-permission-defaults` | 开 | 关 | 工作区默认预设、完全访问的一次性同意要求，以及每个工作区沙箱中命令与 `web_fetch` 的网络。 |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | 开 | 关 | `web_fetch` 与 HTTP 抓取提供方对回环、链路本地与私有网络目标的拒绝，附带带类型的原因。 |
 | `preset_inspect` | Delo 对上游预设工具的编辑 | 开 | 关 | `preset_inspect` 工具。 |
 | `doctor` | `packages/boot/doctor`，由 `apps/cli` 启动 | 开 | 关 | 无：doctor 命令的功能开关。 |

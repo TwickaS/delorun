@@ -64,7 +64,7 @@ export { IconPicker, ICON_EMOJIS, type IconPickerProps, type IconPickerTarget } 
 export { GLYPHS, WorkspaceBadge, WorkspaceIconsContext } from './WorkspaceBadge.tsx'
 export * from '../workspace-icon.ts'
 export {
-  BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, TITLE_SCRIM_STYLE, TITLE_SCRIM_TOKEN, TitleScrim, type StagePalette, type StageScene,
+  BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, INK_EDGE_IDS, INK_EDGE_OPACITY, INK_EDGE_RADIUS, INK_EDGE_SHADE, INK_EDGE_TOKEN, InkEdgeFilters, type InkEdgePart, type StagePalette, type StageScene,
 } from './StageArt.tsx'
 export { DRAG_DISTANCE, useListDrag, type DragView, type ListDrag, type ListDragOptions } from './drag.ts'
 export * from './sections.ts'
@@ -348,9 +348,11 @@ export function applyStudio(ctx: Context): void {
       }
     }, 'delo-sidebar: width')
   })
-  // The list's header offers New chat, so the wide sidebar drops upstream's button; the foot is T3 Code's one row.
+  // The list's header offers New chat, so the wide sidebar drops upstream's button; the foot is T3 Code's one row, which
+  // also holds the global panels (Plugins, Automation tasks, More) as icon buttons, so the brand sits directly above the list.
   ctx.inject(['sidebarLayout'], (child) => {
     child.effect(() => child.sidebarLayout.setNewSessionButton(false), 'delo-sidebar: New chat in the list header')
     child.effect(() => child.sidebarLayout.setFootRow(true), 'delo-sidebar: the foot in one row')
+    child.effect(() => child.sidebarLayout.setPanelPlacement('footer'), 'delo-sidebar: the panels in the foot row')
   })
 }

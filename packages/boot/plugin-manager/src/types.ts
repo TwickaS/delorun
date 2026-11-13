@@ -50,8 +50,12 @@ export interface PluginAuditFinding {
   title: string
   /** `critical` is refused under the distribution's strictest mode; `warning` needs the user's acceptance; `notice` is shown. */
   severity: 'critical' | 'warning' | 'notice'
-  /** The file, relative to the package's directory. */
+  /**
+   * The file, relative to the package's directory, or to the profile's for a finding about the profile's lockfile or
+   * another installed package; empty when the finding names no file.
+   */
   path: string
+  /** The 1-based line of `path`; 0 when the finding names the whole file. */
   line: number
   excerpt: string
 }
@@ -82,12 +86,26 @@ export interface PluginAuditTarget {
   dir: string
   /** The digests the user accepted for this package, the newest last. */
   accepted: string[]
+  /**
+   * What the manager has yet to do for the package: `install` when pnpm has only resolved it into the profile's
+   * lockfile and none of its files exist yet, `scripts` when its files are installed but no install script of the
+   * change has run. The manager asks again with no `pending` once both are done; an audit that reads the package's
+   * files answers `clear` while they are pending.
+   */
+  pending?: 'install' | 'scripts'
+  /**
+   * With `pending: 'install'`, the registries this installation asked, in order: the last one resolved the package, and
+   * any before it failed. `null` stands for the registry pnpm's own configuration names. Absent for any other question.
+   */
+  registries?: Registry[]
 }
 
 /**
  * The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before
- * it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as
- * `pluginAudit`; without one, nothing is audited.
+ * it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after
+ * pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the
+ * package is installed; a restore asks it before the build scripts it allows run, and again after them. A
+ * distribution provides it as `pluginAudit`; without one, nothing is audited and an installation is a single `pnpm add`.
  */
 export interface PluginAudit {
   /**
@@ -244,7 +262,10 @@ export interface ChangeResult {
   pendingBuilds?: string[]
   /** Package script permissions saved before this installation attempt. */
   approvedBuilds?: string[]
-  /** What the plugin audit found in a bundle it let the change go on with: notices, or findings the user accepted. */
+  /**
+   * What the plugin audit found in a bundle it let an installation or an enablement go on with: notices, or findings the
+   * user accepted.
+   */
   audit?: PluginAuditResult
   /** The registries the installation asked, in order; `packageResult` is the last one's run. */
   registries?: Registry[]

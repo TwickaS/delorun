@@ -57,7 +57,7 @@ describe('the headless profile\'s pre-start migration', { timeout: 120_000 }, ()
 
     const bundlesAfter = (JSON.parse(readFileSync(manifestPath, 'utf8')) as { dsh: { profile: { bundles: string[] } } }).dsh.profile.bundles
     expect(bundlesAfter).toEqual([...bundlesBefore, HEADLESS_BUNDLE])
-    expect((JSON.parse(readFileSync(migrationsPath(deloHome, HEADLESS_PROFILE), 'utf8')) as { done: string[] }).done).toEqual(['headless-bundle'])
+    expect((JSON.parse(readFileSync(migrationsPath(deloHome, HEADLESS_PROFILE), 'utf8')) as { done: string[] }).done).toEqual(['headless-bundle', 'pnpm-copy-import'])
     expect(readFileSync(patchPath, 'utf8')).toBe(mine)
     expect(stderr.join('')).toContain('added Delo\'s guards to the headless profile')
   })

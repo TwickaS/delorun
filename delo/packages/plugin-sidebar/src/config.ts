@@ -40,6 +40,12 @@ export const ART_STRENGTHS = ['subtle', 'standard', 'vivid'] as const
 /** One art strength. */
 export type ArtStrength = typeof ART_STRENGTHS[number]
 
+/** How the art's bottom edge meets the sidebar's fill: a short fade, T3 Code's soft one, a long eased one, or a hairline cut. */
+export const ART_FADES = ['short', 'soft', 'long', 'none'] as const
+
+/** One art fade. */
+export type ArtFade = typeof ART_FADES[number]
+
 /** How the art shows, as T3 Code's environment badge does: behind the sidebar's top, or as a small pill beside the brand. */
 export const ART_STYLES = ['artwork', 'pill'] as const
 
@@ -72,6 +78,8 @@ export interface SidebarSettings {
   artSeed: number
   /** How strongly the art shows. */
   artStrength: ArtStrength
+  /** How the art's bottom edge meets the sidebar's fill. */
+  artFade: ArtFade
   /** Whether the art fills the sidebar's top or shows as a pill. */
   artStyle: ArtStyle
   /** How the chats are sorted. */
@@ -95,7 +103,7 @@ export interface SidebarSettings {
 
 /** The settings a studio applies before its stored ones arrive. */
 export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettings = {
-  headerArt: 'blueprint', artPalette: 'accent', view: 'cards', workingShelf: true, artSeed: 1, artStrength: 'standard', artStyle: 'artwork', sort: 'updated',
+  headerArt: 'blueprint', artPalette: 'accent', view: 'cards', workingShelf: true, artSeed: 1, artStrength: 'standard', artFade: 'soft', artStyle: 'artwork', sort: 'updated',
   confirmUnpin: false, width: 256, workspaceIcons: {}, updateNoticeRefreshMinutes: 60,
 }
 
@@ -107,6 +115,7 @@ export interface Config {
   workingShelf: Volatile<boolean>
   artSeed: Volatile<number>
   artStrength: Volatile<ArtStrength>
+  artFade: Volatile<ArtFade>
   artStyle: Volatile<ArtStyle>
   sort: Volatile<SortOrder>
   confirmUnpin: Volatile<boolean>
@@ -123,13 +132,13 @@ export const Config = z.object({
   workingShelf: z.boolean().default(DEFAULT_SIDEBAR_SETTINGS.workingShelf).volatile(),
   artSeed: z.natural().min(1).max(MAX_ART_SEED).default(DEFAULT_SIDEBAR_SETTINGS.artSeed).volatile(),
   artStrength: z.union([...ART_STRENGTHS]).default(DEFAULT_SIDEBAR_SETTINGS.artStrength).volatile(),
+  artFade: z.union([...ART_FADES]).default(DEFAULT_SIDEBAR_SETTINGS.artFade).volatile(),
   artStyle: z.union([...ART_STYLES]).default(DEFAULT_SIDEBAR_SETTINGS.artStyle).volatile(),
   sort: z.union([...SORT_ORDERS]).default(DEFAULT_SIDEBAR_SETTINGS.sort).volatile(),
   confirmUnpin: z.boolean().default(DEFAULT_SIDEBAR_SETTINGS.confirmUnpin).volatile(),
-  workspaceIcons: z.transform(z.dict(z.any()), (icons: Record<string, unknown>) => {
-    if (Object.keys(icons).length > MAX_WORKSPACE_ICONS) throw new z.ValidationError(`holds more than ${String(MAX_WORKSPACE_ICONS)} Workspace icons`, { path: ['workspaceIcons'] })
-    return icons
-  }, true).default({}).volatile(),
+  // A plain dict: the studio rehydrates this schema from its serialized form, which carries no transform callback, so a
+  // transform here fails every validation there. The host half refuses a stored value above `MAX_WORKSPACE_ICONS` at load.
+  workspaceIcons: z.dict(z.any()).default({}).volatile(),
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
   updateNoticeRefreshMinutes: z.natural().min(UPDATE_NOTICE_REFRESH_MINUTES.min).max(UPDATE_NOTICE_REFRESH_MINUTES.max)
     .description('Minutes between the studio\'s reads of the update notice.').default(DEFAULT_SIDEBAR_SETTINGS.updateNoticeRefreshMinutes).volatile(),

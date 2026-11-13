@@ -92,6 +92,8 @@ function mount(
     stepId: 'welcome-notice',
     complete,
     openSection: vi.fn(),
+    renderSection: () => null,
+    completeStep: vi.fn(),
     useSessions: unusedHook,
     useSessionStatus,
     usePanelInfo, useSessionRetainInfo: () => undefined, useResource,

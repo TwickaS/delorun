@@ -40,7 +40,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 | 计划任务 | 一次获批的调用就能创建无人值守、反复运行的轮次 | 创建或编辑任务时会写明重复规则、目标会话及其权限预设并询问；当目标 chat 的预设与获批的预设不同时，投递会被拒绝 | 在设置的默认提示答复下更安全；“与 stock 相同”会关闭它 |
 | 指令层文件 | 模型对 skill、预设或 `AGENTS.md` 的写入，即使需要批准，也只作为文件写入批准 | 通过文件工具的写入会询问，并写明其效果（该文本会作为指令加载到其范围内今后的每个 chat）与差异；shell 命令或 PTC 代码的写入不经询问。审查按目标已存在目录的设备号与 inode，将其与 skill 提供方和 profile 启动器读取的根目录比对，因此链接或不同的大小写会得到相同的答复，并在卷不区分大小写时对不存在的部分折叠大小写；硬链接只在它指向指令文件本身时才询问，指向其他位置的链接文件则不询问。这是针对文件工具写入的提示，而不是针对拥有 shell 的模型的边界 | 仅对文件工具更安全；“与 stock 相同”会关闭它 |
 | MCP 服务器 | 每个服务器命令都作为可信代码在 agent（智能体）沙箱之外运行 | 新的 stdio 服务器会被拒绝，并写明其命令、参数、工作目录以及已配置环境变量的名称；审查只显示会改变运行内容的变量（`PATH`、`NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`PYTHONPATH`、`DYLD_*`）的值。一次接受属于一个服务器名称并覆盖其完整启动：其中任何部分发生变化（例如 `PATH`、`NODE_OPTIONS` 或 `LD_PRELOAD`）都会再次询问并写明变化的变量，其他服务器名称从不共享它，在审查工作目录与环境之前或在按服务器名称保存接受之前记录的接受不被采纳，并且无论顺序如何，服务器行都会等待同意行。本人在主机的电脑上通过工作室的「设置 > 权限」或 `delorun mcp accept` 接受被暂停的服务器，两者显示相同的启动信息，并在同一处拒绝它，或在同一处或用 `delorun mcp revoke` 撤销其接受，该服务器随即保持停止，直到其启动变化；远程设备只能读取等待中服务器的名称及变化，它的每个答复都会被拒绝 | 更安全；新的 stdio 服务器在一次接受后启动；“与 stock 相同”会关闭该拒绝 |
-| `plugin_manager` 下的防护插件 | 在完全访问下，该工具无需提示即可运行，并能停用、重新配置或移除除插件管理自身组件之外的每个插件 | 插件管理还保护 Delo 的同意与防护插件、更新闸门、更新检查、`dsh-sandbox-local` 与 `dsh-sandbox-policy`。在所有模式下，该工具都会拒绝这样的变更：根据 profile 变更前后的组合行判断，它会丢弃、替换、重新配置、停用或复制一个受保护的行，把其 id 给另一行，或添加一个受保护模块的行，无论是通过 `set_plugin`、`configure`、组合包的安装、选择、取消选择或移除、`undo` 还是 `restore`；它还拒绝提供受保护模块的包。完全访问的命令仍可直接编辑 profile 的文件，嵌套在另一个组合包依赖中的遮蔽包不受检查；防护包的版本豁免无法通过撤销或恢复去除 | 更安全 |
+| `plugin_manager` 下的防护插件 | 在完全访问下，该工具无需提示即可运行，并能停用、重新配置或移除除插件管理自身组件之外的每个插件 | 插件管理还保护 Delo 的同意与防护插件、更新闸门、更新检查、插件安装检查、`dsh-sandbox-local` 与 `dsh-sandbox-policy`。在所有模式下，该工具都会拒绝这样的变更：根据 profile 变更前后的组合行判断，它会丢弃、替换、重新配置、停用或复制一个受保护的行，把其 id 给另一行，或添加一个受保护模块的行，无论是通过 `set_plugin`、`configure`、组合包的安装、选择、取消选择或移除、`undo` 还是 `restore`；它还拒绝提供受保护模块的包。完全访问的命令仍可直接编辑 profile 的文件，嵌套在另一个组合包依赖中的遮蔽包不受检查；防护包的版本豁免无法通过撤销或恢复去除 | 更安全 |
 | 数据共享 | 桌面分析与 DeepSeek 会话日志上传默认开启 | 会话日志上传关闭；Delo 没有自己的遥测。桌面分析属于桌面应用，桌面应用是上游的，保持其开启 | 在 CLI profile 中更安全 |
 | studio 附加功能 | stock 外观 | Delo 的主题、设置布局、chat 状态、侧栏与入门引导；不挂载主 chat | 不改变批准或限制 |
 | home 目录 | `~/.dsh` | `~/.delo`，在 Linux 与 macOS 上权限模式为 0700；`delorun` 从不读取或写入 `~/.dsh` | 分开两个 home |
@@ -53,7 +53,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 - **CLI profile。** 由 `delorun setup` 创建、由 `delorun` 或 `delorun start` 启动的 profile：上游的 web 模板加上 `@delo/bundle-local` 与 `@delo/bundle-studio`。本页称为已构建的每项保护都在这里适用。
 - **`delorun headless`。** 它启动 home 的 `headless` profile：上游的 `headless` 模板加上 `@delo/bundle-headless`，运行在 C1 的沙箱 overlay 之下。抓取防护、指令写入、MCP 与计划任务的同意、完全访问同意以及回合闸门都适用，插件管理无法关闭它们，DeepSeek 的会话日志上传也与 CLI profile 一样关闭。会询问本人的防护会拒绝，因为该 profile 不组合任何批准应答者。对于没有在 home 的电脑上记录完全访问授权的工作目录，完全访问同意会拒绝完全访问；在参数或 `DSH_PERMISSION_MODE` 中请求完全访问也会在启动之前被提前拒绝。组合会拒绝不含该组合包的 `headless` profile，并且任务只在 Delo 检查过该组合包的行与服务之后才开始。该模板不挂载 MCP 客户端，也不挂载计划任务运行时；MCP 与计划任务的同意保护的是本人自己的 patch 添加的客户端或运行时。
-- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delo 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。让每个启动 Host 的命令都应用 Delo 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
+- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delo 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。在 pnpm 运行之前，它把 profile 的包设为从 pnpm 的存储中复制；操作成功之后，它按 profile 中 `delo-plugin-install-check` 行的设置，对操作安装的内容运行[插件安装检查](#插件)。让每个启动 Host 的命令都应用 Delo 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
 - **桌面应用。** 它是上游的，未作改动，Delo 的任何行都不适用于它。
 - **Windows。** 沙箱只限制写入。受限命令可以读取整个 home，包括 Delo 的密钥、上游的凭据文件与启动令牌，并且不会对 home 运行任何权限模式或访问列表检查。
 
@@ -66,7 +66,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 - **会话**：chat 历史（其中常含密钥），以及附件、全文索引、溢出文件与浏览器中的草稿。
 - **Delo 的 home**：`~/.delo`，包括其密钥、每次启动的令牌、更新通道的套接字、已验证的发布根与检查点，以及运行时仓库（runtime store）。
 - **发布完整性**：已签名的发布清单、运行时文件与 npm 启动器，以及为它们签名的离线 root 与 targets 密钥。
-- **插件供应**：已安装的插件，上游的插件管理器在 profile 的 `pnpm-lock.yaml` 中记录其版本与 tarball 完整性。
+- **插件供应**：已安装的插件。profile 的 `pnpm-lock.yaml` 记录每个版本的 tarball 完整性或 git 提交，pnpm 只在获取 tarball 时用它核对，之后从不检查已安装的文件。Delo 的安装记录在[安装检查](#插件)通过时写入，记下每个来自 npm、tarball 或 git 的插件每个已安装文件的 SHA-256，每次启动和 `delorun verify` 都用它比对已安装的文件。
 
 <a id="parties-and-trust"></a>
 
@@ -82,7 +82,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 ### 插件
 
-插件是本人安装的代码，其可信程度以本人的安装为限。Host 插件在 harness 进程中以 harness 的权限运行：它能读取 Host 读取的内容，包括 Host 加载的凭据以及 home 进程（home process）在内存中持有的启动令牌，并能向更新通道发送其固定请求集合中的任何请求。客户端插件在 studio 页面中以浏览器的权限运行。Delo 不对插件做沙箱隔离，也不审计插件。Delo 在安装时与启动时检查每个插件的 DSH 与 Delo 版本要求（[C17](../contracts/c17-plugin-versions.zh.md)）；除上游的锁文件之外它不固定任何东西，插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）。每个 MCP 服务器命令都按上游所述，作为可信代码在 agent 沙箱之外运行；在 CLI profile 中，新的 stdio 服务器，或命令、参数、工作目录或环境发生变化的服务器，会被拒绝。
+插件是本人安装的代码，其可信程度以本人的安装为限。Host 插件在 harness 进程中以 harness 的权限运行：它能读取 Host 读取的内容，包括 Host 加载的凭据以及 home 进程（home process）在内存中持有的启动令牌，并能向更新通道发送其固定请求集合中的任何请求。客户端插件在 studio 页面中以浏览器的权限运行。Delo 不对插件做沙箱隔离，也不读取插件代码。Delo 在安装时与启动时检查每个插件的 DSH 与 Delo 版本要求（[C17](../contracts/c17-plugin-versions.zh.md)）；除上游的锁文件之外它不固定任何东西，插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）。插件安装检查（[`@delo/plugin-install-check`](../../packages/plugin-install-check/README.zh.md)）在安装被解析进锁文件之后、其任何文件下载或任何安装脚本运行之前运行，在插件管理与 `delorun plugin` 中都是如此，并在选入、启用或恢复组合包之前再次运行，即在其代码加载之前：对插件及其安装向锁文件新增的每个包，它对缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布不到 24 小时的版本，以及与 profile 或 Delo 已有名称相近的名称发出警告；对已知的严重（critical）公告，它拒绝安装，直到本人用 `--allow-advisory` 或 studio 的「仍然安装」允许。公告或注册表查询失败时，警告检查未能运行。本人列为可信的 scope 或 git 所有者的插件只显示严重公告，链接的或本地的文件夹不检查。每次启动按文件标识比对每个已记录插件的文件，`delorun verify` 对每个文件计算哈希；插件被改动是警告，不是拒绝。上游在首个注册表失败时询问的 npmmirror 回退默认关闭，直到本人在设置 → 隐私中或用 `delorun plugin mirror on` 开启；在 studio 中，由镜像解析的包，其锁文件完整性与主注册表列出的不同时会被拒绝，主注册表无法核对时需要本人接受。插件的安装脚本只在本人允许的构建中由 pnpm 运行，且在检查通过之后运行。每个 MCP 服务器命令都按上游所述，作为可信代码在 agent 沙箱之外运行；在 CLI profile 中，新的 stdio 服务器，或命令、参数、工作目录或环境发生变化的服务器，会被拒绝。
 
 ### 同一用户下的其他本地进程
 
@@ -213,7 +213,7 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 
 ### 插件索引与撤销
 
-插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）：除上游的锁文件之外，Delo 不固定任何插件版本，也无法停用任何已安装的版本。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。Delo 不审计插件。
+插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）：除上游的锁文件之外，Delo 不固定任何插件版本，也无法停用任何已安装的版本。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。Delo 不读取插件代码；[安装检查](#插件)读取锁文件、公告源与注册表的发布时间，并记录每个已安装的文件。
 
 <a id="updates-and-rollback"></a>
 
@@ -277,7 +277,7 @@ Delo 没有自己的遥测。在 CLI profile 中，DeepSeek 的会话日志上�
 | 沙箱之外的同一用户进程 | 它们可以读取和修改 home 下的一切、签发回环凭据、运行 `delorun` 与 `docker`、凭启动令牌使用更新通道（批准设备、移除设备、获取 studio 登录链接），并改动启动器、已存储的 root 与检查本身 |
 | macOS 与 Windows 上的进程内存 | home 进程内存的保护依赖操作系统的规则，没有 Delo 测试检查它 |
 | 回环 studio 的凭据 | 在 CLI profile 中，启动令牌在 60 秒内只能使用一次，但它会出现在浏览器启动器的命令行中，另一个用户或 Landlock 与 Seatbelt 下的受限命令可以在这一分钟内抢先于浏览器使用它；cookie 在 30 天内都能被准入，跨越重启仍然有效且无法撤销；能读取 `.credentials.yaml` 的一方可以签出 cookie；每个持有者都以所有者身份行事，且不适用任何内容安全策略 |
-| 插件 | 插件以 harness 的权限运行；除上游的锁文件之外，Delo 不固定任何东西，也无法撤销任何东西 |
+| 插件 | 插件以 harness 的权限运行；除上游的锁文件之外，Delo 不固定任何东西，也无法撤销任何东西。安装检查只知道已公布的公告，对其余情况发出警告；安装记录能发现插件之外做出的改动，而不是插件自身代码以本人身份做出的改动 |
 | 对时钟的信任 | 被调慢的时钟会接受已超过实际过期时间的发布 timestamp 或日志检查点；被调快的时钟会拒绝新的元数据，拒绝信息会写明过期时间与本地时间 |
 | 从不联网的 home | 其发布相对于日志一直是 `unchecked`，展示给它的不同日志视图不会被发现 |
 | 见证者的独立性 | 检查的是所列见证者的共同签名；它独立于日志与 Delo 与否，取决于 root 列出了哪些见证者 |

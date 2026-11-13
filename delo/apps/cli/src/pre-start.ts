@@ -71,6 +71,8 @@ export const updateNoticeStep = (_context: PreStartContext): Promise<void> => Pr
 export interface PreStartDependencies {
   /** The profile's one-time changes, run on a fresh start of the CLI profile and on every `delorun headless` run. */
   readonly migrations: (context: PreStartContext) => readonly ProfileMigration[]
+  /** Compares the profile's installed plugins with their install records and prints what changed; never throws. */
+  readonly pluginChanges: (context: PreStartContext) => Promise<void>
 }
 
 /**
@@ -83,8 +85,11 @@ export interface PreStartDependencies {
  * 3. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
  *    stays within the health check's time; and the `headless` profile on every `delorun headless` run, whose one-time
  *    change links Delo's headless bundle and so creates the profile on the first run.
- * 4. `update-notice`: both starts; {@link updateNoticeStep}.
- * @param dependencies - the migrations.
+ * 4. `plugin-changes`: both starts; the quick check of the profile's installed plugins against their install records,
+ *    which writes the profile's trust status and prints a warning for each plugin whose files changed since it was
+ *    installed, before any plugin code loads ([install check](./plugin-install-check.ts)). It never stops the start.
+ * 5. `update-notice`: both starts; {@link updateNoticeStep}.
+ * @param dependencies - the migrations and the plugin change check.
  * @returns the steps, in the order they run.
  */
 export function preStartSteps(dependencies: PreStartDependencies): readonly PreStartStep[] {
@@ -98,6 +103,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
         if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context), context.output)
       },
     },
+    { name: 'plugin-changes', kinds: ['cli', 'headless'], run: dependencies.pluginChanges },
     { name: 'update-notice', kinds: ['cli', 'headless'], run: updateNoticeStep },
   ]
 }

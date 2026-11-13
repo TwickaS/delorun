@@ -1,16 +1,15 @@
 /**
- * The Start step's own folder chooser, for a host without a native one. It lists the folders of one folder at a time,
+ * The Workspace step's own folder chooser, for a host without a native one, and for picking where a clone goes. It lists the folders of one folder at a time,
  * starting at the home directory, lets the person enter a folder, go up and create a folder, and adds only the folder
  * the person selected: nothing is selected when it opens or after a move, so its button waits for a choice. The
  * harness's route refuses the folders Delo never adds, and the chooser says why in place.
  */
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import type { LocationProblem } from '../wire.ts'
-import type { StepServices } from './types.ts'
+import type { AddedFolder, StepServices } from './types.ts'
 import css from './Onboarding.module.css'
 
 /** Why a folder was not added: a location Delo never adds, or a failure to add it. */
@@ -31,10 +30,15 @@ export interface FolderChooserProps {
   /** The services; the chooser lists, creates and adds folders through `start`. */
   readonly services: StepServices
   /**
-   * Called once the selected folder was added.
-   * @param workspaceId - the new workspace.
+   * Called once the selected folder was added; a chooser with `pick` adds nothing and leaves it out.
+   * @param added - the new workspace, its folder and what the folder holds.
    */
-  readonly onAdded: (workspaceId: WorkspaceId) => void
+  readonly onAdded?: (added: AddedFolder) => void
+  /**
+   * When present, the chooser picks a folder instead of adding one: its button is named by `label` and hands the
+   * selected folder, or the folder shown when none is selected, to `onPick`. The clone choice picks where to clone into.
+   */
+  readonly pick?: { readonly label: string; readonly onPick: (path: string) => void }
 }
 
 /** One folder of a listing. */
@@ -48,7 +52,7 @@ const LIST_KEYS: Readonly<Record<string, -1 | 1 | 'first' | 'last'>> = { ArrowDo
  * @param props - the services and what follows an added folder.
  * @returns the chooser.
  */
-export function FolderChooser({ services, onAdded }: FolderChooserProps): ReactNode {
+export function FolderChooser({ services, onAdded, pick }: FolderChooserProps): ReactNode {
   const { t, start } = services
   const nameId = useId()
   const [listing, setListing] = useState<DirectoryListing | undefined>()
@@ -146,7 +150,7 @@ export function FolderChooser({ services, onAdded }: FolderChooserProps): ReactN
     setProblem(undefined)
     void start.addFolder(path).then((outcome) => {
       setAdding(false)
-      if (outcome.kind === 'chosen') onAdded(outcome.workspaceId)
+      if (outcome.kind === 'chosen') onAdded?.(outcome)
       else setProblem(outcome.kind === 'refused' ? outcome.problem : 'failed')
     })
   }
@@ -209,9 +213,17 @@ export function FolderChooser({ services, onAdded }: FolderChooserProps): ReactN
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <div className={css.chooserActions}>
         <Button variant="outline" size="sm" disabled={selected === undefined} onClick={() => { open(selected, { focusList: true }) }}>{t('chooser.open')}</Button>
-        <Button variant="primary" disabled={selected === undefined || adding} onClick={selected === undefined ? undefined : () => { add(selected) }}>
-          {t('chooser.add')}
-        </Button>
+        {pick === undefined
+          ? (
+            <Button variant="primary" disabled={selected === undefined || adding} onClick={selected === undefined ? undefined : () => { add(selected) }}>
+              {t('chooser.add')}
+            </Button>
+          )
+          : (
+            <Button variant="primary" disabled={listing === undefined} onClick={listing === undefined ? undefined : () => { pick.onPick(selected ?? listing.path) }}>
+              {pick.label}
+            </Button>
+          )}
       </div>
     </div>
   )

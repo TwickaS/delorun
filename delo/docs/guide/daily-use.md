@@ -41,7 +41,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 
 ## Check the release and your setup
 
-- **`delorun doctor`** checks your home's permissions, whether Docker answers, the DeepSeek key's format (without sending it), whether the studio's port is free, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`; it exits with 1 when a check fails.
+- **`delorun doctor`** checks your home's permissions, whether Docker answers, the DeepSeek key's format (without sending it), whether the studio's port is free, on Linux whether bubblewrap can sandbox commands, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`; it exits with 1 when a check fails.
 - **`delorun verify`** checks the installed release against its signed manifest and the public release log. The first release runs two of its checks, the release signature and the installed files, and lists the others as `not run`; its report ends with `this is not a full verification of this Delo`. `--offline` skips the online log check, `--release <version>` checks another release, and `--json` prints the report as JSON. The checks run as you, so a program running as you could change them.
 - **`delorun logs`** prints where each log is and the recent records of the running Delorun; `delorun logs --follow` follows it ([Where Delorun keeps its logs](logs.md)).
 - **`delorun --version`** prints the Delorun version and the DeepSeek Harness version it runs on.

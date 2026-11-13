@@ -18,6 +18,7 @@ import {
 } from './devices-api.ts'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
+import { failureSentence, type Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
 /** The command that turns remote access on, which the section shows while it is off. */
@@ -43,9 +44,6 @@ export type DevicesSectionProps = PropsRuntime<'settings.section'> & PropsLocale
 
 type Translate = DevicesSectionProps['t']
 
-/** A request's state: not answered yet, answered, or failed with the sentence to show. */
-type Loaded<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly value: T } | { readonly kind: 'failed'; readonly text: string }
-
 /**
  * The sentence for a failed request.
  * @param t - the section's copy.
@@ -55,18 +53,11 @@ type Loaded<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readon
  *   sentence for an unreachable Host or an unreadable answer.
  */
 export function failureText(t: Translate, error: unknown, action: DevicesAction): string {
-  const failure = hostFailureOf(error)
-  switch (failure.kind) {
-    case 'refused':
-      return failure.code === LOOPBACK_REQUIRED ? t('loopback', { action: t(`action.${action}`) }) : failure.message
-    case 'unreachable':
-      return t('failed.unreachable')
-    case 'unreadable':
-      return t('failed.unreadable')
-    /* v8 ignore next 2 -- HostFailure is a closed union, so the default holds no reachable statement. */
-    default:
-      return failure satisfies never
-  }
+  return failureSentence(error, {
+    refused: (code, message) => code === LOOPBACK_REQUIRED ? t('loopback', { action: t(`action.${action}`) }) : message,
+    unreachable: t('failed.unreachable'),
+    unreadable: t('failed.unreadable'),
+  })
 }
 
 /**

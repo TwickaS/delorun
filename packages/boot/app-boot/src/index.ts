@@ -140,6 +140,10 @@ const BOOTSTRAP_NAMES = new Set([
   'PATH', 'HOME', 'USERPROFILE', 'SHELL', 'COMSPEC', 'PATHEXT',
   'NODE_OPTIONS', 'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'LD_PRELOAD', 'LD_LIBRARY_PATH', 'LD_AUDIT',
+  // Node's caches and data files, and the native code the runtime loads: OpenSSL's configuration, providers and
+  // engines, and the C library's character converters and locales.
+  'NODE_COMPILE_CACHE', 'NODE_V8_COVERAGE', 'NODE_ICU_DATA',
+  'OPENSSL_CONF', 'OPENSSL_MODULES', 'OPENSSL_ENGINES', 'GCONV_PATH', 'LOCPATH',
   // Interpreter startup hooks.
   'BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS',
   'PERL5OPT', 'PERL5LIB', 'PYTHONSTARTUP', 'PYTHONPATH', 'RUBYOPT', 'RUBYLIB',
@@ -159,7 +163,7 @@ const BOOTSTRAP_NAMES = new Set([
 ])
 
 /** Name prefixes no discovered file may set. */
-const BOOTSTRAP_PREFIXES = ['DSH_', 'XDG_', 'DYLD_', 'BASH_FUNC_']
+const BOOTSTRAP_PREFIXES = ['DSH_', 'XDG_', 'DYLD_', 'LD_', 'BASH_FUNC_', 'DELO_LAUNCHER_']
 
 /**
  * The bootstrap names the Harness-home `.env` alone may set. A proxy chooses the route every

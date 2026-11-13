@@ -64,6 +64,8 @@ export interface HostProtection {
   readonly deniedSockets: readonly string[]
   /** The directories whose sockets the sandbox hides. */
   readonly escapeSocketDirectories: readonly string[]
+  /** Whether bwrap hides the host's `/tmp` from confined commands in every mode. */
+  readonly privateTmp: boolean
 }
 
 /** A row a Host had at boot, as the next release's health check compares it with its own. */

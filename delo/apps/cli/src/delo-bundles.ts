@@ -184,6 +184,12 @@ export interface BootedRow {
 }
 
 /**
+ * The Delo rows that are opt-in: a bundle inserts them disabled, and the person turns them on in Settings → Plugins.
+ * A start does not require them to be enabled; once enabled they must be active like every other Delo row.
+ */
+export const OPT_IN_ROWS: ReadonlySet<string> = new Set(['delo-cost-meter'])
+
+/**
  * The ids of the rows that Delo bundles insert into a profile.
  * @param profile - the loaded profile.
  * @returns the ids, from every `insert` list of each Delo layer's patches, nested lists included.

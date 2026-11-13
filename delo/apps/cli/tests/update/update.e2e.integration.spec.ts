@@ -120,7 +120,7 @@ async function startHome(): Promise<Running> {
   const listeners: (() => void)[] = []
   const process_ = await HomeProcess.start({
     home, profile: PROFILE, running: current, startId: newStartId(), host: { boot: async () => Promise.resolve(host()) },
-    preStart: () => runPreStartSteps(preStartSteps({ migrations: () => [] }), { home, profile: PROFILE, kind: 'cli', successor: false, output: { stdout: () => undefined, stderr: () => undefined } }),
+    preStart: () => runPreStartSteps(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }), { home, profile: PROFILE, kind: 'cli', successor: false, output: { stdout: () => undefined, stderr: () => undefined } }),
     probe: updateChannelProbe(home, PROFILE), logger: SILENT, redactor: new Redactor(),
     updates: homeUpdateSupport({ home, profile: PROFILE, store, root: anchored, fullCheckDays: 7, openChannel: channel.open, sources: storeReportSources({ home, profile: PROFILE, store, running: current, root: anchored, fullCheckDays: 7 }), now: () => new Date() }),
     supervisor: undefined,

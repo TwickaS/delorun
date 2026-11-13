@@ -61,6 +61,10 @@ The mode names the file effects a command may perform; enforcement completeness 
 
 Enforcement is reported per call: `full` means the backend governs every promised file effect, while `partial` means an active backend or older kernel ABI governs only a subset — the Windows ACL rung and older Landlock ABIs are the current partial cases, so a consumer that requires the absolute boundary can reject or surface them.
 
+### Network
+
+A policy may also carry a `network`: `off` gives the command no network, and `proxy` gives it only an HTTP proxy that listens on a Unix socket outside the sandbox. Without one the command shares the host's network. A backend that cannot express the requested network refuses the call with `SANDBOX_UNSUPPORTED_POLICY` instead of running it with the host's network; the [subsystem reference](../../../docs/subsystems/sandbox.md#network) defines both forms, and the [local provider](../sandbox-local/README.md#network) says which runners express them.
+
 ### Denied calls and escalation
 
 When a confined call is denied, the operation reports a denial marker naming the mode — `[sandbox: file access denied under <mode> mode]` — and, when the composition advertises escalation, an escalation hint. The model may retry the exact call once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a `justification`; the approval service obtains consent for the operation. The request retains its audit reason and supplies English, Chinese, and Japanese presentation copy from `src/locales.ts`, with the model's justification unchanged. Missing translations follow the locale service's fallback chain, ultimately English; requesters own their translated presentation text. A wider mode requires approval and applies to that one call only. Repeating the call's effective mode succeeds without approval; narrower targets remain invalid.
@@ -166,7 +170,7 @@ Append-only; escalation text follows the retained prefix and does not invalidate
 
 These limits define when the seam is a poor fit or needs special operational care. They are current package constraints, not a general sandbox comparison or a task backlog.
 
-- **File effects are the whole policy vocabulary** — the seam expresses no network, process, syscall, device, or credential restrictions.
+- **File effects and the network are the whole policy vocabulary** — the seam expresses no process, syscall, device, or credential restrictions, and its network forms are all-or-nothing or one proxy, with no per-port or per-address rule of its own.
 - **Same-world confinement only** — containers, microVMs, and remote execution require replacing capability implementations rather than adding a provider here.
 - **Denial reporting is a stderr dialect** — the seam returns backend signatures instead of a typed runtime denial channel, so consumers that need classification infer it from the child process's output.
 - **Runner diagnostics are in-band** — exit status plus stderr evidence cannot prove which process wrote a matching line, so a confined child that deliberately mimics its runner can cause a false availability or diagnostic attribution; this cannot bypass confinement, and an out-of-band runner-status channel is deferred.

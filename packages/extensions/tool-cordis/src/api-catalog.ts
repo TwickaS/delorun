@@ -2260,7 +2260,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'pluginAudit',
     summary: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`.',
-    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.',
+    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited and an installation is a single `pnpm add`.',
     methods: [
       {
         signature: 'audit(target: PluginAuditTarget): Promise<PluginAuditResult>',
@@ -2380,7 +2380,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote installBundle(spec: string, options?: InstallBundleOptions): Promise<ChangeResult>',
-        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
+        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into the lockfile, the audit answers with `pending: \'install\'`, and only then pnpm installs the lockfile; without one the installation is a single `pnpm add`. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
         parameters: [{ name: 'spec', description: 'One package spec, including local paths relative to the invocation directory.' }, { name: 'options', description: 'Whether to activate the installed bundle (defaults to true), the request id a cancellation names, the pending build scripts to allow, whether to save an exact dependency, and the registry asked first.' }],
         returns: 'Package-manager diagnostics, the registries asked, and the observed activation outcome.',
       },
@@ -2647,6 +2647,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [],
   },
   {
+    key: 'sandboxNetwork',
+    summary: 'Decides the network of one call\'s policy.',
+    description: 'Decides the network of one call\'s policy. It answers synchronously, because policy resolution is synchronous, and must not throw: a resolver that cannot decide answers the most restrictive network it supports.',
+    methods: [],
+  },
+  {
     key: 'sandboxPolicy',
     summary: 'The sandbox-policy service (`ctx.sandboxPolicy`).',
     description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log and immutable cwd travel together to every enforcing capability.',
@@ -2679,9 +2685,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd. A mounted `ctx.sandboxNetwork` resolver decides the call\'s network; without one the policy carries none, and runners share the host\'s network.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.',
       },
       {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
@@ -7687,7 +7693,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PluginAuditTarget',
-    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n}',
+    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n    pending?: \'install\' | \'scripts\';\n    registries?: Registry[];\n}',
   },
   {
     name: 'PluginChange',
@@ -8307,11 +8313,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    network?: SandboxNetwork;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
     declaration: 'export type SandboxMode = \'read-only\' | \'workspace-write\' | \'danger-full-access\';',
+  },
+  {
+    name: 'SandboxNetwork',
+    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork;',
   },
   {
     name: 'SandboxPolicy',
@@ -8320,6 +8330,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxProxyNetwork',
+    declaration: 'export interface SandboxProxyNetwork {\n    readonly mode: \'proxy\';\n    readonly socket: string;\n}',
   },
   {
     name: 'SaveFileAttachment',

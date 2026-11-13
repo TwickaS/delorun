@@ -847,6 +847,65 @@ it('runs a real pnpm dependency script only after approval and retry', async () 
   expect(readFileSync(built, 'utf8')).toBe('built')
 })
 
+it('runs no allowed install script of a package the audit refuses once the lockfile names it', { timeout: 30_000 }, async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, profile } = await fixture('startup', false, auditing('refused', calls))
+  const addon = join(profile.cwd, 'addon')
+  const marker = join(profile.cwd, 'install-script-ran')
+  mkdirSync(addon)
+  writeFileSync(join(addon, 'package.json'), JSON.stringify({ name: 'refused-fixture-addon', version: '1.0.0',
+    scripts: { install: 'node build.cjs' }, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  writeFileSync(join(addon, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(join(addon, 'cordis.patch.yml'), '[]\n')
+  writeFileSync(join(dir, 'package.json'), '{"name":"refused-fixture","private":true}\n')
+  const policy = parseDocument(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+  policy.set('offline', true)
+  policy.set('storeDir', join(profile.cwd, 'store'))
+  // The build is allowed under the key pnpm names it by, so only the audit stands between the package and its script.
+  policy.set('allowBuilds', { 'refused-fixture-addon@file:../../addon': true })
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), String(policy))
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
+  const refused = await manager.installBundle('file:./addon', { enabled: false })
+  expect(existsSync(marker)).toBe(false)
+  expect(refused, JSON.stringify(refused)).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-refused' } })
+  expect(calls).toEqual([{ name: 'refused-fixture-addon', dir: join(dir, 'node_modules', 'refused-fixture-addon'), accepted: [], pending: 'install', registries: [null] }])
+  expect(existsSync(join(dir, 'node_modules', 'refused-fixture-addon'))).toBe(false)
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+it('runs no approved git prepare script while it resolves a package the audit then refuses', { timeout: 30_000 }, async () => {
+  // Both the fixture's Git and the manager's pnpm child read only this empty configuration.
+  const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
+  const pnpm = fileURLToPath(new URL('../../../../apps/desktop/node_modules/pnpm/bin/pnpm.mjs', import.meta.url))
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, profile } = await fixture('startup', false, auditing('refused', calls), {}, { command: process.execPath, args: ['--expose-internals', pnpm], env })
+  const repository = join(profile.cwd, 'repository')
+  const marker = join(profile.cwd, 'prepare-ran')
+  mkdirSync(repository)
+  env.GIT_CONFIG_GLOBAL = join(profile.cwd, 'git.config')
+  writeFileSync(env.GIT_CONFIG_GLOBAL, '')
+  const git = (args: string[]) => execa('git', args, { cwd: repository, env })
+  await git(['init', '--initial-branch=main'])
+  writeFileSync(join(repository, 'package.json'), JSON.stringify({ name: '@test/git-prepared', version: '1.0.0',
+    scripts: { prepare: 'node build.cjs' }, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  writeFileSync(join(repository, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(join(repository, 'cordis.patch.yml'), '[]\n')
+  await git(['add', '.'])
+  await git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture bundle'])
+  const commit = (await git(['rev-parse', 'HEAD'])).stdout.trim()
+  const spec = `git+${pathToFileURL(repository).href}`
+  writeFileSync(join(dir, 'package.json'), '{"name":"git-prepare-fixture","private":true}\n')
+  const policy = parseDocument(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+  policy.set('storeDir', join(profile.cwd, 'store'))
+  // The prepare script is approved under its commit-exact key, so only the resolution's own flags keep it from running.
+  policy.set('allowBuilds', { [`@test/git-prepared@${spec}#${commit}`]: true })
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), String(policy))
+  const refused = await manager.installBundle(spec, { enabled: false })
+  expect(refused, JSON.stringify(refused)).toMatchObject({ application: 'failed', error: { code: 'audit-refused' } })
+  expect(calls.map(call => call.pending)).toEqual(['install'])
+  expect(existsSync(marker)).toBe(false)
+})
+
 it('offers approval for a real git-hosted package pnpm refused to prepare', async () => {
   // Both the fixture's Git and the manager's pnpm child read only this empty configuration.
   const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
@@ -1823,17 +1882,59 @@ function auditing(decision: 'needs-acceptance' | 'refused', calls: PluginAuditTa
   }
 }
 
-// A pnpm run that installs `audited`, a bundle of one row.
+// pnpm runs that resolve `audited`, a bundle of one row, into the manifest, then install it.
 function installsAudited(dir: string, bundle: (name: string, rows: unknown[]) => void) {
-  const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async () => {
-    bundle('audited', [])
-    const profile = readProfileManifest('test', dir)
-    profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+  const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'add') {
+      const profile = readProfileManifest('test', dir)
+      profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+    } else bundle('audited', [])
     return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
   })
   onTestFinished(() => { install.mockRestore() })
+  return install
 }
+
+it('resolves, audits, then installs when an audit is composed, and runs one pnpm add without one', async () => {
+  const calls: PluginAuditTarget[] = []
+  const withAudit = await fixture('live', false, auditing('needs-acceptance', calls))
+  const split = installsAudited(withAudit.dir, withAudit.bundle)
+  expect(await withAudit.manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })).toMatchObject({ application: 'applied' })
+  expect(split.mock.calls.map(call => call[1])).toEqual([['add', 'audited', '--lockfile-only', '--ignore-scripts'], ['install', '--frozen-lockfile']])
+  split.mockRestore()
+  const stock = await fixture('live')
+  const single = installsAudited(stock.dir, stock.bundle)
+  // The stand-in writes the package's files only for a run other than `add`, so the stock installation finds no bundle.
+  expect(await stock.manager.installBundle('audited', { enabled: false })).toMatchObject({ application: 'failed' })
+  expect(single.mock.calls.map(call => call[1])).toEqual([['add', 'audited']])
+})
+
+it('tells the audit which registries an installation asked, the one that resolved it last', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
+  const install = vi.spyOn(operations, 'runProfilePnpm')
+    .mockResolvedValueOnce({ exitCode: 1, output: 'ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/audited: ETIMEDOUT', truncated: false, logPath: join(dir, 'pnpm.log') })
+    .mockImplementation(async (_context, args) => {
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else bundle('audited', [])
+      return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+  onTestFinished(() => { install.mockRestore() })
+  expect(await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })).toMatchObject({ application: 'applied', registries: [null, MIRROR] })
+  expect(calls.map(call => call.registries)).toEqual([[null, MIRROR], undefined])
+})
+
+it('tells the audit about the registry one installation names', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
+  installsAudited(dir, bundle)
+  expect(await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1', registry: 'http://registry.example.test/' })).toMatchObject({ application: 'applied' })
+  expect(calls[0]?.registries).toEqual(['http://registry.example.test/'])
+})
 
 it('refuses an installation the plugin audit finds against until the user accepts its findings, then remembers the acceptance', async () => {
   const calls: PluginAuditTarget[] = []
@@ -1844,13 +1945,21 @@ it('refuses an installation the plugin audit finds against until the user accept
   const refused = await manager.installBundle('audited', { enabled: false })
   expect(refused).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings', audit: { decision: 'needs-acceptance', digest: 'digest-1' } } })
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
-  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+  // Asked once the lockfile names the package, before pnpm installed anything.
+  expect(calls).toEqual([{ name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'install', registries: [null] }])
+  expect(existsSync(join(dir, 'node_modules', 'audited'))).toBe(false)
   const accepted = await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })
   expect(accepted).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1' } })
+  // Asked again once it is installed and its builds have run.
+  expect(calls.slice(1)).toEqual([
+    { name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'], pending: 'install', registries: [null] },
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'] },
+  ])
   expect(JSON.parse(readFileSync(join(dir, '.plugin-manager', 'audits.json'), 'utf8'))).toEqual({ audited: ['digest-1'] })
   expect(lstatSync(join(dir, '.plugin-manager', 'audits.json')).mode & 0o777).toBe(0o600)
   // Enabling it later asks the audit again, with the saved acceptance.
-  expect(await manager.setBundleEnabled('audited', true)).toMatchObject({ application: 'applied', changed: true })
+  // The findings it went on with are in the result, as an installation's are.
+  expect(await manager.setBundleEnabled('audited', true)).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1', findings: [{ rule: 'exfil.endpoint' }] } })
   expect(calls.at(-1)?.accepted).toEqual(['digest-1'])
 })
 
@@ -1865,6 +1974,7 @@ it('refuses enabling a bundle whose findings the user never accepted, and a crit
   installsAudited(second.dir, second.bundle)
   expect(await second.manager.installBundle('audited', { acceptedAudit: 'digest-1' })).toMatchObject({ application: 'failed', error: { code: 'audit-refused', audit: { decision: 'refused' } } })
   expect(existsSync(join(second.dir, '.plugin-manager', 'audits.json'))).toBe(false)
+  expect(existsSync(join(second.dir, 'node_modules', 'audited'))).toBe(false)
 })
 
 it('lists absent Official entries offline without resolving their packages or consulting registries', async () => {
@@ -2317,8 +2427,12 @@ it('audits what a restore brings back after installing it with every script held
   onTestFinished(() => { pnpm.mockRestore() })
   const result = await manager.restore(version)
   expect(result).toMatchObject({ application: 'applied', changed: true, changes: { plugins: [{ name: 'audited', change: 'added' }], builds: [{ name: 'audited', to: 'allowed' }] } })
-  expect(steps).toEqual(['install --frozen-lockfile --ignore-scripts', 'audit', 'rebuild --pending'])
-  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+  // Asked again once the builds have run, so a recorded file list includes their output.
+  expect(steps).toEqual(['install --frozen-lockfile --ignore-scripts', 'audit', 'rebuild --pending', 'audit'])
+  expect(calls).toEqual([
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'scripts' },
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] },
+  ])
 })
 
 it.each(['needs-acceptance', 'refused'] as const)('puts the profile back when the audit answers %s for a package a restore brings back, running none of its scripts', async (decision) => {

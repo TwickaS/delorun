@@ -66,9 +66,14 @@ async function versionCommand(profile: string, args: readonly string[]): Promise
  * @param profile Profile name; Desktop's reserved profile must already be initialized by the application.
  * @param args DSH exemption command or pnpm arguments relative to the invoking directory.
  * @param packageManager Installation-owned executable and environment for pnpm operations.
+ * @param operation Bundle activation and the baseline of an earlier resolution-only run, for a caller that splits one
+ *   operation into resolution and installation.
  * @returns Zero on success; nonzero on invalid approval or package-manager failure.
  */
-export async function runPlugin(profile: string, args: readonly string[], packageManager?: ProfileContext['packageManager']): Promise<number> {
+export async function runPlugin(
+  profile: string, args: readonly string[], packageManager?: ProfileContext['packageManager'],
+  operation?: Pick<PackageOperationOptions, 'activateNewBundles' | 'baseline'>,
+): Promise<number> {
   if (profile === 'desktop') {
     try { requireDesktopProfile(resolveProfileDir(profile)) } catch (error) {
       process.stderr.write(`dsh: ${String(error)}\n`)
@@ -89,6 +94,7 @@ export async function runPlugin(profile: string, args: readonly string[], packag
     lockWaitMs: 120000,
     lookupTimeoutMs: 120000,
     onOutput: (text, stream) => { process[stream].write(text) },
+    ...operation,
   }
   const result = profile === 'desktop'
     ? await withFileLock(join(dir, 'package.json'), async () => {

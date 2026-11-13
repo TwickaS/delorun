@@ -81,9 +81,11 @@ function harness(options: {
   ctx.provide('contextMenus', { active: menuTarget } as never)
   const shown: boolean[] = []
   const rows: boolean[] = []
+  const placements: string[] = []
   ctx.provide('sidebarLayout', {
     setNewSessionButton: (value: boolean) => { shown.push(value); return () => { shown.push(true) } },
     setFootRow: (row: boolean) => { rows.push(row); return () => { rows.push(false) } },
+    setPanelPlacement: (placement: string) => { placements.push(placement); return () => { placements.push('top') } },
   } as never)
   const widths: unknown[] = []
   ctx.provide('layout', {
@@ -93,7 +95,7 @@ function harness(options: {
   void studio
   const fiber = ctx.plugin({ name: 'delo-sidebar', inject, apply })
   return {
-    ctx, fiber, dictionaries, entries, forms, shown, rows, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
+    ctx, fiber, dictionaries, entries, forms, shown, rows, placements, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
     change: (value: SidebarSettings | undefined) => { snapshot = { ...snapshot, value, status: 'ready' }; for (const listener of [...listeners]) listener() },
     face: <T,>(key: string): T => {
       const entry = entries.get(key)
@@ -119,21 +121,23 @@ describe('the studio half', () => {
     expect(h.entries.get('sidebar.backdrop#')?.component).toBe(HeaderArt)
     expect(h.shown).toEqual([false])
     expect(h.rows).toEqual([true])
+    expect(h.placements).toEqual(['footer'])
     expect(h.widths).toEqual([{ default: 300, min: 264 }])
     await h.fiber.dispose()
     expect([h.dictionaries.size, h.entries.size]).toEqual([0, 0])
     expect(h.shown).toEqual([false, true])
     expect(h.rows).toEqual([true, false])
+    expect(h.placements).toEqual(['footer', 'top'])
     expect(h.widths).toEqual([{ default: 300, min: 264 }, 'restored'])
   })
 
   it('registers nothing, changes no layout, and keeps no form while the Delo look is off', async () => {
     const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, studio: false })
     await Promise.resolve()
-    expect([h.dictionaries.size, h.entries.size, h.forms.length, h.shown.length, h.rows.length, h.widths.length]).toEqual([0, 0, 0, 0, 0, 0])
+    expect([h.dictionaries.size, h.entries.size, h.forms.length, h.shown.length, h.rows.length, h.placements.length, h.widths.length]).toEqual([0, 0, 0, 0, 0, 0, 0])
     h.ctx.provide('deloStudio', {} as never)
     await vi.waitFor(() => { expect(h.entries.size).toBe(5) })
-    expect([h.shown, h.rows]).toEqual([[false], [true]])
+    expect([h.shown, h.rows, h.placements]).toEqual([[false], [true], ['footer']])
   })
 
   it('undoes every sidebar and layout change when the Delo look goes away', async () => {
@@ -145,7 +149,7 @@ describe('the studio half', () => {
     await vi.waitFor(() => { expect(h.entries.size).toBe(5) })
     await look.dispose()
     await vi.waitFor(() => { expect(h.entries.size).toBe(0) })
-    expect([h.shown, h.rows, h.widths]).toEqual([[false, true], [true, false], [{ default: 256, min: 256 }, 'restored']])
+    expect([h.shown, h.rows, h.placements, h.widths]).toEqual([[false, true], [true, false], ['footer', 'top'], [{ default: 256, min: 256 }, 'restored']])
   })
 
   it('stays an active entry under the stock look: the Delo look is injected inside apply, not required', () => {

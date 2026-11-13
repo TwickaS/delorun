@@ -8,9 +8,9 @@ import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/ds
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import type { ThemeSettings } from '@delo/plugin-theme'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
-import type { LocationProblem, SetupRecord } from '../wire.ts'
+import type { CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -23,7 +23,7 @@ export interface OnboardingStepProps {
 export interface OnboardingStep {
   /** Unique among the steps: lower-case letters, digits, dots and hyphens, such as `thinking.reader`. */
   readonly id: string
-  /** Its place: the built-in steps take 100 to 500 and the last, Start, 1000; a plugin's steps take 600 to 999. */
+  /** Its place: the built-in steps take 100 to 500 and the last two, Workspace and Ready, 1000 and 1100; a plugin's steps take 600 to 999. */
   readonly order: number
   /** Its name in the list of steps and its heading. */
   readonly title: () => string
@@ -103,29 +103,17 @@ export interface LookFace {
 export type AppearanceTranslate = TranslateNS<'settings.deloAppearance'>
 
 /**
- * The service the reach lane provides as `ctx.deloReach` when reach can be turned on in this installation. Absent
- * means reach is not available, and onboarding leaves its step out.
+ * Whether the reach step applies, from the home's reach status: `absent` where this profile has no reach service or it
+ * cannot be read, `set-up` once an option is ready, otherwise `off`.
  */
-export interface DeloReach {
-  /** Always true: the service exists only where reach is available in this installation. */
-  readonly available: true
-  /**
-   * Whether reach is already turned on at this computer. Onboarding reads it when the dialog opens and whenever the
-   * service comes or goes.
-   * @returns true when reach is set up.
-   */
-  setUp(): boolean
-}
+export type ReachState = 'absent' | 'set-up' | 'off'
 
-/** Whether the reach step applies: `unavailable` without `ctx.deloReach`, otherwise `available` or `set-up`. */
-export type ReachState = 'unavailable' | 'available' | 'set-up'
-
-/** Where the Start step's chat opens. */
+/** Where the first chat opens unless the person chooses another folder. */
 export type StartTarget =
   /** The default workspace is still being resolved. */
   | { readonly kind: 'checking' }
-  /** The default workspace resolved; the chat opens there and offers the starter prompts. */
-  | { readonly kind: 'default'; readonly workspaceId: WorkspaceId }
+  /** The default workspace resolved, with its folder. */
+  | { readonly kind: 'default'; readonly workspaceId: WorkspaceId; readonly path: string }
   /** No default workspace, but other workspaces exist; the workspace UI's own New Session applies. */
   | { readonly kind: 'other' }
   /** No default workspace and no other: the person chooses a folder first. */
@@ -133,24 +121,31 @@ export type StartTarget =
 
 /** What adding a folder through the harness's route came to. */
 export type AddOutcome =
-  /** The folder was added as this workspace, or already was one. */
-  | { readonly kind: 'chosen'; readonly workspaceId: WorkspaceId }
+  /** The folder was added as this workspace, or already was one; `folder` is what it holds. */
+  | ({ readonly kind: 'chosen' } & AddedFolder)
   /** The folder is one Delo never adds as a workspace; nothing was registered. */
   | { readonly kind: 'refused'; readonly problem: LocationProblem }
   /** The harness could not add the folder, or could not be asked; nothing was registered. */
   | { readonly kind: 'failed' }
+
+/** A folder the Workspace step added: the workspace, its folder and what the folder holds. */
+export interface AddedFolder {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+  readonly folder: FolderKind
+}
 
 /** What choosing a folder came to. */
 export type FolderChoice =
   | AddOutcome
   /** The person closed the chooser; nothing changed. */
   | { readonly kind: 'cancelled' }
-  /** The host has no native chooser, so the Start step shows its own; see {@link StartFace.browse}. */
+  /** The host has no native chooser, so the Workspace step shows its own; see {@link StartFace.browse}. */
   | { readonly kind: 'in-step' }
   /** The studio has no workspace navigation; the workspace UI's own New Session applies. */
   | { readonly kind: 'unavailable' }
 
-/** The host's folders, as the Start step's own chooser lists and creates them. */
+/** The host's folders, as the Workspace step's own chooser lists and creates them. */
 export interface FolderBrowse {
   /**
    * List one folder's child folders.
@@ -170,7 +165,7 @@ export interface FolderBrowse {
   readonly create: (path: string, name: string) => Promise<string>
 }
 
-/** The Start step's workspace: where the chat opens and how a folder is chosen when there is no default. */
+/** The Workspace step's face: where the chat opens without a choice, and how a folder is chosen or added. */
 export interface StartFace {
   /** Where the chat opens, once resolved. */
   readonly target: { getSnapshot(): StartTarget; subscribe(listener: () => void): () => void }
@@ -187,25 +182,46 @@ export interface StartFace {
    * @returns what adding it came to; it never rejects.
    */
   readonly addFolder: (path: string) => Promise<AddOutcome>
-  /** The host's folders, for the Start step's own chooser. */
+  /** The host's folders, for the Workspace step's own chooser. */
   readonly browse: FolderBrowse
   /**
    * Keep the workspace UI's "Unable to create default workspace" notice back while the dialog shows.
-   * @returns the release; `told` true says the Start step told the person there is no default workspace, which drops
+   * @returns the release; `told` true says the Workspace step told the person there is no default workspace, which drops
    * the notice, and false shows a kept notice.
    */
   readonly holdNotice: () => (told: boolean) => void
 }
 
-/** The reach service's state, followed as the service comes and goes. */
-export interface ReachFace {
-  /** @returns whether reach is available here and whether it is already set up. */
-  readonly getSnapshot: () => ReachState
+/** What starting a clone came to: its job, why it was refused, or that the harness could not be asked. */
+export type CloneStartOutcome =
+  | { readonly kind: 'started'; readonly job: string }
+  | { readonly kind: 'refused'; readonly problem: CloneProblem }
+  | { readonly kind: 'failed' }
+
+/** The harness's routes the guide reads; each resolves `undefined` when the harness cannot be asked or answers something else, and never rejects. */
+export interface HostFace {
+  /** @returns this computer's readiness for the agents and reach steps. */
+  readonly readiness: () => Promise<Readiness | undefined>
+  /** @returns each model provider's key test. */
+  readonly keyTest: () => Promise<KeyTestAnswer | undefined>
   /**
-   * @param listener - called when `ctx.deloReach` appears or disappears.
-   * @returns the unsubscriber.
+   * @param registry - whether to read packages that are not installed from the npm registry.
+   * @returns which connections each recommended plugin is for.
    */
-  readonly subscribe: (listener: () => void) => () => void
+  readonly recommend: (registry: boolean) => Promise<RecommendAnswer | undefined>
+  /** @returns whether the reach step applies. */
+  readonly reach: () => Promise<ReachState>
+  /**
+   * Start cloning a repository into a new folder.
+   * @param request - the address, the folder to clone into and the new folder's name.
+   * @returns the job, or why it did not start.
+   */
+  readonly cloneStart: (request: CloneRequest) => Promise<CloneStartOutcome>
+  /**
+   * @param job - a started clone.
+   * @returns where it stands; `unknown` when the harness cannot be asked.
+   */
+  readonly cloneStatus: (job: string) => Promise<CloneStatus>
 }
 
 /** The services that do not change while the dialog is open. */
@@ -222,20 +238,26 @@ export interface StaticServices {
   readonly appearance: AppearanceTranslate
   /** The plugin manager's bundles. */
   readonly bundles: BundleInstaller
-  /** Whether reach can be turned on here. */
-  readonly reach: ReachFace
+  /** The harness's routes. */
+  readonly host: HostFace
   /** Where the chat opens. */
   readonly start: StartFace
   /** Resolve a package's localized text in the active language. */
   readonly resolveText: (text: LocalizedText) => string
 }
 
-/** The services the built-in steps draw with: the static ones, this plugin's copy and the recommended packages. */
+/** The services the built-in steps draw with: the static ones, this plugin's copy, the recommended packages and the Settings section drawer. */
 export interface StepServices extends StaticServices {
   /** This plugin's copy. */
   readonly t: TranslateNS<'deloOnboarding'>
   /** The packages the recommended-plugins step offers. */
   readonly plugins: readonly string[]
+  /**
+   * Draw a Settings section inside a step, as the Settings panel draws it.
+   * @param id - the section's id, such as `models`.
+   * @returns the section.
+   */
+  readonly renderSection: (id: string) => ReactNode
 }
 
 /** Everything the dialog reads and calls. */
@@ -251,7 +273,8 @@ export interface OnboardingInjected {
   /**
    * Open a new chat, as the last step's button does: in the workspace given, else the default workspace when it
    * resolved, else through the workspace UI's own New Session.
-   * @param workspaceId - a workspace the person just chose.
+   * @param workspaceId - a workspace the person chose.
+   * @param folder - what that workspace's folder holds, which picks the starting prompts.
    */
-  readonly startChat: (workspaceId?: WorkspaceId) => Promise<void>
+  readonly startChat: (workspaceId?: WorkspaceId, folder?: FolderKind) => Promise<void>
 }

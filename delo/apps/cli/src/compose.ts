@@ -21,32 +21,41 @@
  *   the bundle that declares it (upstream's `@deepseek-ai/dsh-base` for `sandbox`, a Delo bundle for a Delo row), and
  *   runs the plugin that bundle names; no other bundle, the profile's patch, the home's patch or an overlay inserts the
  *   id again, which would replace the row;
- * - each required row is enabled and active; safe mode's overlay never exempts one;
+ * - each required row is enabled and active, except that an opt-in row ({@link OPT_IN_ROWS}) may be disabled; safe
+ *   mode's overlay never exempts one;
  * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its
- *   `escapeSocketDirectories` hold every directory the start names, and it sets no `runnerCommand` or
- *   `runnerFailureSignatures`;
+ *   `escapeSocketDirectories` hold every directory the start names, its `privateTmp` is on, and it sets no
+ *   `runnerCommand` or `runnerFailureSignatures`;
  * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Safer prompts"
  *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
  *   are on; in the `headless` profile, which has no setup answer, each row of `@delo/bundle-headless` has Delo's
  *   default ({@link HEADLESS_ROW_VALUES});
+ * - each required Delo row's package, and the Delo bundle that declares the row, resolve inside this Delo's own
+ *   packages ({@link deloPackagesRoot}: `runtimes/<version>/app`, or the source checkout), so a same-named package
+ *   elsewhere, such as in the profile's `node_modules`, cannot stand in for it;
+ * - the `plugin-manager` row's `protectedPlugins` keep every name a Delo bundle's patch of the row lists;
  * - after boot, each service a required row provides ({@link ROW_SERVICES}) is provided by that row, by the fiber that
  *   registered it and not by its presence alone, and is present unless the row's switch is off: `sandbox`, `fetchGuard`,
- *   the consent services and `deloTurnGate`, through which an update's or a stop's wait refuses new turns.
+ *   the consent services, `pluginAudit` and `deloPluginTrust`, and `deloTurnGate`, through which an update's or a stop's
+ *   wait refuses new turns.
  *
  * A violation stops the start with one refusal that names each row, the files that set the value, and the remedy.
  *
  * @module @delo/cli/compose
  */
 import { realpathSync } from 'node:fs'
+import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delo/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
-import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
+import { deloRowIds, isDeloPackage, OPT_IN_ROWS, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
-import { composedRow, isRecord, patchLayers, rowInserts, sourcesSetting, type PatchLayer } from './patch-layers.ts'
+import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
+import { deloPackagesRoot } from './package-manager.ts'
+import { INSTALL_CHECK_ROW } from './plugin-install-check.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
@@ -68,10 +77,12 @@ export interface ComposeRequest {
   readonly kind: ComposeKind
   /** Where safe mode's notice is written. */
   readonly output: CommandOutput
-  /** The launch environment, read for the Docker context whose socket C1 denies. */
+  /** The launch environment, read for the Docker context and the ssh-agent whose sockets C1 denies. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The OS home directory, under which Docker Desktop for macOS keeps its sockets; the user's by default. */
   readonly osHome?: string
+  /** The user id that names the runtime and tmux directories C1 hides; this process's by default. */
+  readonly uid?: number
 }
 
 /** The composition so far, which the approved plugin content step reads. */
@@ -136,7 +147,26 @@ export interface ComposedStart {
   readonly values: ReadonlyMap<string, Readonly<Record<string, unknown>>>
   /** The prompts answer the values follow, in the CLI profile. */
   readonly prompts: PromptsAnswer | undefined
+  /** Where each required Delo row's package resolves, real path, for the rows whose package resolves. */
+  readonly rowPackages: readonly RowPackage[]
+  /** The directory this Delo's own packages lie in ({@link deloPackagesRoot}). */
+  readonly packagesRoot: string
+  /** Whether the npm mirror is on ({@link npmMirrorOf}); the start passes it to the Host as `DELO_NPM_MIRROR`. */
+  readonly npmMirror: boolean
 }
+
+/** Where a required Delo row's package, or the bundle that declares it, resolves. */
+export interface RowPackage {
+  /** The row. */
+  readonly id: string
+  /** The package. */
+  readonly packageName: string
+  /** Its directory, real path. */
+  readonly dir: string
+}
+
+/** The plugin manager's row, whose registries and protected plugins the composition holds. */
+export const PLUGIN_MANAGER_ROW = 'plugin-manager'
 
 /** The guard rows that stay on whatever the prompts answer. */
 const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
@@ -175,8 +205,9 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
   'delo-instruction-consent': ['writeConsent'],
   'delo-mcp-consent': ['mcpAddConsent'],
   'delo-schedule-consent': ['scheduleConsent'],
-  'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard'],
+  'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard', 'deloCommandNetwork', 'sandboxNetwork'],
   'delo-delegation-consent': ['delegationConsent'],
+  'delo-plugin-install-check': ['pluginAudit', 'deloPluginTrust'],
 }
 
 /**
@@ -206,7 +237,7 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   }
   const before = safe?.patchFiles ?? []
   const approved = await dependencies.approvedPluginContent({ request, resolvedProfile, patchFiles: before, safe })
-  const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir())
+  const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir(), request.uid ?? process.getuid?.())
   const others = [...before, ...approved]
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile, others, protection)
   const startOnly = startOnlySockets(request.home, resolvedProfile.profile, others, protection)
@@ -216,6 +247,8 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     ? Object.entries(HEADLESS_ROW_VALUES)
     : [...promptRows(prompts).map(row => [row.id, row.config] as const), ...Object.entries(GUARD_ROWS)])
   const layers = patchLayers(request.home, resolvedProfile.profile, patchFiles)
+  const requiredIds = [SANDBOX_ROW, ...deloRows]
+  const rowPackages = await deloRowPackages(resolvedProfile, layers, requiredIds.filter(id => id !== SANDBOX_ROW))
   const composed: ComposedStart = {
     request,
     resolvedProfile,
@@ -224,9 +257,12 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     protection,
     startOnlySockets: startOnly,
     layers,
-    required: [SANDBOX_ROW, ...deloRows].map(id => ({ id, name: declaredName(layers, id) })),
+    required: requiredIds.map(id => ({ id, name: declaredName(layers, id) })),
     values,
     prompts,
+    rowPackages,
+    packagesRoot: deloPackagesRoot(),
+    npmMirror: npmMirrorOf(layers),
   }
   assertComposedInvariants(composed)
   return composed
@@ -245,6 +281,81 @@ function refuseHeadlessWithoutBundle(home: string, resolvedProfile: ResolvedProf
     `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delo's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delo did not start the task.`,
     `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delo creates the profile again with it.`,
   ].join('\n'))
+}
+
+/**
+ * The package a module name belongs to.
+ * @param moduleName - a row's module, such as `@delo/bundle-local/update-gate`.
+ * @returns the package, such as `@delo/bundle-local`.
+ */
+function packageOfModule(moduleName: string): string {
+  return moduleName.split('/').slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
+}
+
+/**
+ * Where each required Delo row's package resolves, as the boot's runtime resolution resolves it, and where the bundle
+ * that declares the row was loaded from.
+ * @param resolvedProfile - the prepared profile.
+ * @param layers - the layers.
+ * @param ids - the required Delo rows.
+ * @returns one entry per row and package that resolves.
+ */
+async function deloRowPackages(resolvedProfile: ResolvedProfileRuntime, layers: readonly PatchLayer[], ids: readonly string[]): Promise<RowPackage[]> {
+  const resolution = await createRuntimeResolution({ installAnchor: resolvedProfile.installAnchor, profile: resolvedProfile.profile })
+  const found: RowPackage[] = []
+  for (const id of ids) {
+    const declaring = layers.find(layer => rowInserts(layer.patches, id).length > 0)
+    if (declaring?.packageName !== undefined && declaring.packageDir !== undefined) found.push({ id, packageName: declaring.packageName, dir: realpathSync.native(declaring.packageDir) })
+    const name = composedRow(layers, id)?.name
+    if (typeof name !== 'string') continue
+    const packageName = packageOfModule(name)
+    for (const entry of resolution.entries.filter(each => each.name === packageName)) found.push({ id, packageName, dir: realpathSync.native(entry.packageDir) })
+  }
+  return found
+}
+
+/**
+ * The violations of required Delo rows whose package, or declaring bundle, resolves outside this Delo's packages: a
+ * same-named stand-in, such as a copy in the profile's `node_modules`, would otherwise pass the check by name.
+ * @param composed - the composed start.
+ * @returns one violation per row and package.
+ */
+function standInViolations(composed: ComposedStart): Violation[] {
+  return composed.rowPackages.flatMap((row): Violation[] => {
+    const path = relative(composed.packagesRoot, row.dir)
+    if (path !== '..' && !path.startsWith(`..${sep}`) && !path.startsWith(sep) && !/^[A-Za-z]:/u.test(path)) return []
+    return [{ subject: row.id, problem: `loads ${row.packageName} from ${row.dir}, which is not this Delo's own copy in ${composed.packagesRoot}; a package of that name installed elsewhere, such as in the profile, cannot stand in for it`, sources: [] }]
+  })
+}
+
+/**
+ * The violations of the plugin manager's row: a protected plugin that a Delo bundle's patch of the row lists and the
+ * composed row does not.
+ * @param composed - the composed start.
+ * @param row - the plugin manager's row, composed or booted; `undefined` when the profile has none.
+ * @returns the violations.
+ */
+function pluginManagerViolations(composed: ComposedStart, row: { readonly config?: unknown } | undefined): Violation[] {
+  if (row === undefined) return []
+  const config = isRecord(row.config) ? row.config : {}
+  const kept = new Set(Array.isArray(config.protectedPlugins) ? config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
+  const declared = composed.layers.filter(layer => layer.packageName !== undefined && isDeloPackage(layer.packageName))
+    .flatMap(layer => rowPatches(layer.patches, PLUGIN_MANAGER_ROW))
+    .flatMap(patch => isRecord(patch.config) && Array.isArray(patch.config.protectedPlugins) ? patch.config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
+  const dropped = [...new Set(declared)].filter(name => !kept.has(name))
+  if (dropped.length === 0) return []
+  return [{ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists`, sources: sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && 'protectedPlugins' in patch.config) }]
+}
+
+/**
+ * Whether the composition turns the npm mirror on: the composed `delo-plugin-install-check` row's `npmMirror` is
+ * literally `true`.
+ * @param layers - the layers.
+ * @returns the setting; false without the row or with any other value.
+ */
+export function npmMirrorOf(layers: readonly PatchLayer[]): boolean {
+  const config = composedRow(layers, INSTALL_CHECK_ROW)?.config
+  return isRecord(config) && config.npmMirror === true
 }
 
 /**
@@ -342,6 +453,7 @@ function violationsOf(composed: ComposedStart, rows: readonly BootedRow[]): Viol
       violations.push({ subject: id, problem: `runs the plugin ${JSON.stringify(row.name)}, not ${required.name}`, sources: sourcesSetting(composed.layers, id, patch => patch.name !== undefined && patch.name !== required.name) })
     }
     if (row.disabled) {
+      if (OPT_IN_ROWS.has(id)) continue
       violations.push({ subject: id, problem: 'is disabled', sources: sourcesSetting(composed.layers, id, patch => patch.disabled !== undefined && patch.disabled !== false) })
       continue
     }
@@ -381,6 +493,7 @@ function sandboxViolations(composed: ComposedStart, row: BootedRow): Violation[]
   if (missing.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not deny ${missing.join(', ')}`, sources: sources('deniedSockets') })
   const unhidden = missingEscapeSocketDirectories(composed.protection, config)
   if (unhidden.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not hide the escape directories ${unhidden.join(', ')}`, sources: sources('escapeSocketDirectories') })
+  if (config.privateTmp !== true) violations.push({ subject: SANDBOX_ROW, problem: 'shows confined commands the host\'s /tmp (privateTmp is not on)', sources: sources('privateTmp') })
   for (const key of ['runnerCommand', 'runnerFailureSignatures']) {
     if (config[key] !== undefined) violations.push({ subject: SANDBOX_ROW, problem: `sets ${key}`, sources: sources(key) })
   }
@@ -408,7 +521,7 @@ function refusal(profile: string, violations: readonly Violation[], booted: bool
  * @throws {CliError} naming each violation, the files that set it and the remedy.
  */
 export function assertComposedInvariants(composed: ComposedStart): void {
-  const violations = violationsOf(composed, composedRows(composed))
+  const violations = [...violationsOf(composed, composedRows(composed)), ...standInViolations(composed), ...pluginManagerViolations(composed, composedRow(composed.layers, PLUGIN_MANAGER_ROW))]
   if (violations.length > 0) throw refusal(composed.request.profile, violations, false)
 }
 
@@ -461,6 +574,6 @@ function serviceViolations(composed: ComposedStart, host: BootedHost): Violation
  * @throws {CliError} naming each violation, the files that set it and the remedy; the caller stops the Host.
  */
 export function assertDeloInvariants(composed: ComposedStart, host: BootedHost): void {
-  const violations = [...violationsOf(composed, host.rows()), ...serviceViolations(composed, host)]
+  const violations = [...violationsOf(composed, host.rows()), ...serviceViolations(composed, host), ...pluginManagerViolations(composed, host.rows().find(row => row.id === PLUGIN_MANAGER_ROW))]
   if (violations.length > 0) throw refusal(composed.request.profile, violations, true)
 }

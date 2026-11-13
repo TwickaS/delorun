@@ -148,19 +148,8 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.copy {
-  font-size: var(--dsw-font-s-14-font-size);
-  line-height: var(--dsw-font-s-14-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.copy p + p {
-  margin-top: var(--delo-space-5);
-}
-
 .text,
 .hint,
-.warning,
 .failure {
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
@@ -176,14 +165,6 @@
 
 .failure {
   color: var(--dsw-alias-state-error-primary);
-}
-
-.warning {
-  padding: var(--delo-space-5) var(--delo-space-6);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
 }
 
 .field {
@@ -303,14 +284,20 @@
 
 .card {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--delo-space-5) var(--delo-space-6);
+  flex-direction: column;
+  gap: var(--delo-space-5);
   padding: var(--delo-space-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
+}
+
+.cardMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--delo-space-5) var(--delo-space-6);
 }
 
 .cardText {
@@ -346,6 +333,10 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.status[data-tone='attention'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
 .failedAction {
   display: flex;
   flex-wrap: wrap;
@@ -370,7 +361,7 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* The Start step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
+/* The Workspace step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
 .chooser {
   display: flex;
   flex-direction: column;
@@ -476,6 +467,274 @@
   user-select: all;
 }
 
+/* Welcome: the preview notice, and each provider's key test as a row. */
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-4);
+  padding: var(--delo-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noticeTitle {
+  margin: 0;
+  font-size: var(--dsw-font-s-14-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-s-14-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--delo-space-2) var(--delo-space-5);
+  padding: var(--delo-space-4) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delo-space-4);
+}
+
+.alignStart {
+  align-self: flex-start;
+}
+
+/* A Settings section drawn inside the step, framed so it reads as part of the step. */
+.embedded {
+  padding: var(--delo-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* Look: the choices beside a small chat drawn with the studio's own tokens, which follow each choice at once. */
+.lookGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+  align-items: start;
+  gap: var(--delo-space-8);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-base);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bubbleMine {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: var(--delo-space-3) var(--delo-space-5);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.bubbleAgent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-3);
+}
+
+.toolLine {
+  align-self: flex-start;
+  padding: var(--delo-space-1) var(--delo-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--delo-space-4);
+  padding: var(--delo-space-3) var(--delo-space-3) var(--delo-space-3) var(--delo-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.send {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+}
+
+/* Agents: what adding one means, confirmed in place. */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-5);
+  padding-top: var(--delo-space-5);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-3);
+  margin: 0;
+  padding-left: var(--delo-space-7);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A command with its Copy button. */
+.commandRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delo-space-3) var(--delo-space-4);
+  min-width: 0;
+}
+
+.commandRow > .command {
+  overflow-wrap: anywhere;
+}
+
+/* Phone access: Tailscale's checks in order, each done, to do or waiting. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--delo-space-4);
+  padding: var(--delo-space-4) 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.check[data-state='waiting'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.checkMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: 1;
+}
+
+.check[data-state='done'] .checkMark {
+  border-color: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.check[data-state='todo'] .checkMark {
+  border-color: var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-3);
+  min-width: 0;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Workspace: the chosen folder and a clone's progress. */
+.chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--delo-space-2) var(--delo-space-4);
+}
+
+.cloneProgress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-3);
+}
+
+.meter {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+/* Ready: what the guide set, as label and value rows, and the starting prompts the chat will offer. */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.checkRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-4) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.checkRow > dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.starterPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delo-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.starterPreview > li {
+  padding: var(--delo-space-2) var(--delo-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
 /* Below the Settings panel's breakpoint the dialog is the whole window; its offsets undo the modal's own 24px padding. */
 @media (max-width: 767px) {
   .dialog {
@@ -500,5 +759,9 @@
 
   .footer {
     padding: var(--delo-space-5) var(--delo-space-7);
+  }
+
+  .lookGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

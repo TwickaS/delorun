@@ -141,9 +141,25 @@ Its remedies come from this list: do not take this update; keep the item and wai
 
 - **`the profile default would boot without protections Delo requires`.** A setting in your profile turns off a protection, such as the sandbox or one of Delorun's guards. The refusal lists each one with the file that sets it. Remove those settings, or start without your plugins with `delorun recover safe-mode`.
 - **`the profile default could not load Delo's bundle`** or **`plugins of Delo's bundles did not start`.** Delorun stops rather than start without its guards and privacy settings, because the profile would otherwise run with DeepSeek Harness's own defaults. The refusal names each package, the cause and the fix.
+- **`the landlock sandbox cannot deny the sockets in "<directory>"`.** Your Linux system has no working bubblewrap, so commands would run under Landlock, which cannot hide the sockets of your login session, and Delorun refuses every sandboxed command while such a directory exists. If the refusal says to install bubblewrap, install the `bubblewrap` package and start again. If it says bubblewrap's check did not finish in time, your computer was busy when Delorun started: start it again. If it says bubblewrap is installed but could not create a sandbox, `delorun doctor` shows why on its `sandbox` line, or run `bwrap --ro-bind / / true` to see why; on Ubuntu the usual cause is its AppArmor restriction on user namespaces (`kernel.apparmor_restrict_unprivileged_userns`), which [a profile for `bwrap`](#letting-bubblewrap-run-under-ubuntus-apparmor-restriction) lifts for `bwrap` alone. Turning the restriction off for the whole system also works, but lowers its protection for every program.
 - **`the sandbox row sets the runner itself`** or **`is configured with expressions`.** Delorun adds its home protection to the sandbox's settings at start, so those settings must leave the choice of sandbox to Delorun and use plain YAML values. Remove what the refusal names.
 - **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the sandbox in a folder you have not put on full access. Open the folder as a workspace in the studio and choose Full access once, or run the task without full access.
 - **`Delo could not use the Docker engine`.** Docker did not answer, or refused the request with the HTTP status the refusal names. Start Docker and run the command again.
+
+### Letting bubblewrap run under Ubuntu's AppArmor restriction
+
+From Ubuntu 23.10, AppArmor keeps a program from creating user namespaces unless a profile allows it, and `kernel.apparmor_restrict_unprivileged_userns` reads 1. bubblewrap needs them, so `delorun doctor` then fails its `sandbox` line and every sandboxed command is refused. A profile for `bwrap` alone allows them. Save this as `/etc/apparmor.d/bwrap`, with `/usr/bin/bwrap` replaced by the path `command -v bwrap` prints if it differs:
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+}
+```
+
+Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap --ro-bind / / true` exits without an error, and restart Delorun. Any program can then create user namespaces through `bwrap`, which is what the restriction holds back, but every other program stays restricted.
 
 ## Remote access and devices
 

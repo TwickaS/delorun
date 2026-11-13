@@ -34,7 +34,18 @@ describe('the header art', () => {
   it('draws at the chosen strength', () => {
     const { container } = render(<HeaderArt useSettings={settingsOf({ artStrength: 'vivid' })} />)
     expect(container.firstElementChild?.getAttribute('data-strength')).toBe('vivid')
-    expect(container.firstElementChild?.getAttribute('data-fade')).toBe('true')
+    expect(container.firstElementChild?.getAttribute('data-fade')).toBe('soft')
+  })
+
+  it('fades as chosen, soft by default', () => {
+    const fadeOf = (fields: Partial<SidebarSettings>) =>
+      render(<HeaderArt useSettings={settingsOf(fields)} />).container.firstElementChild?.getAttribute('data-fade')
+    expect(DEFAULT_SIDEBAR_SETTINGS.artFade).toBe('soft')
+    expect(fadeOf({})).toBe('soft')
+    cleanup()
+    expect(fadeOf({ artFade: 'long' })).toBe('long')
+    cleanup()
+    expect(fadeOf({ artFade: 'none' })).toBe('none')
   })
 
   it('draws a pill that leaves the brand its colours, with the compact blueprint and no fade', () => {
@@ -69,7 +80,9 @@ describe('the stage backdrop', () => {
   it('states whether it fades and how strongly it shows', () => {
     const { container, rerender } = render(<StageBackdrop scene="night" palette="blueprint" />)
     expect([container.firstElementChild?.getAttribute('data-fade'), container.firstElementChild?.getAttribute('data-strength')])
-      .toEqual(['true', 'standard'])
+      .toEqual(['soft', 'standard'])
+    rerender(<StageBackdrop scene="night" palette="blueprint" fade="short" />)
+    expect(container.firstElementChild?.getAttribute('data-fade')).toBe('short')
     rerender(<StageBackdrop scene="night" palette="blueprint" fade={false} strength="subtle" />)
     expect([container.firstElementChild?.getAttribute('data-fade'), container.firstElementChild?.getAttribute('data-strength')])
       .toEqual(['false', 'subtle'])

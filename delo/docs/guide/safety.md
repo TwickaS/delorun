@@ -42,11 +42,11 @@ The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun ho
 
 | Sandbox | Where | What it enforces |
 | --- | --- | --- |
-| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. Under WSL2 it also hides `/run/WSL`, so commands cannot start Windows programs. |
-| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules; commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, and to Docker's socket. |
+| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. It hides the sockets your session keeps as files, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux, screen or the X server's socket file, or use your ssh-agent, gpg-agent or keyring, and it gives read-only commands an empty `/tmp`. It also hides Docker Desktop's control sockets and Tailscale's. Under WSL2 it also hides `/run/WSL` and WSLg, so commands cannot start Windows programs. Sockets that no file names stay reachable: on a Linux desktop the X server's, and a session bus started by `dbus-launch`. |
+| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules. It cannot hide sockets, so on a machine with a desktop or login session, D-Bus, tmux or WSL it refuses to run commands at all. Elsewhere, such as in a container, commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, to Docker's socket and to an ssh-agent. |
 | Windows access lists | Windows | Writes only: commands can read your Delorun home, its secrets and the token included. |
 
-Commands can still reach the network, other local sockets such as your ssh-agent and D-Bus, and everything else your user can read, such as `~/.ssh` and `~/.aws`. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
+Commands can still reach the network, local sockets outside the places the sandbox hides, such as one in your home folder, and everything else your user can read, such as `~/.ssh` and `~/.aws`. A command that needs your ssh-agent, such as `git push` over ssh, needs full access. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
 
 ## Full access
 
@@ -100,7 +100,7 @@ The release checks prove that you run the release Delorun's keys signed and logg
 - **Programs running as you outside the sandbox.** Any program you run, and any command you let run with full access, can read and change everything in your Delorun home, use its token to approve a device or open the studio, and change the checks.
 - **Windows reads.** On Windows, the model's commands can read Delorun's secrets and token.
 - **Landlock sockets.** On a Linux system with Landlock but no bwrap, commands can connect to Docker's socket, which gives root on a rootful Docker.
-- **The network and other sockets.** Commands reach any network host, your ssh-agent, D-Bus and the display server.
+- **The network and other sockets.** Commands reach any network host and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file path names, and a session bus that `dbus-launch` started can listen on one too; commands can still reach both, and through such a bus start programs outside the sandbox.
 - **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but does not check a plugin's files again after install: a plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
 - **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions; the consents and the sandbox limit what follows from them, and do not detect them.
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.

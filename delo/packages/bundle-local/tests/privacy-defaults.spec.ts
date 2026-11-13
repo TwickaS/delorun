@@ -156,11 +156,12 @@ describe('a Delo CLI profile', () => {
     expect(destinations).toContain('dsh-otel-collector.deepseeksvc.com')
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
-    const studioRows = ['delo-theme', 'delo-settings-layout', 'delo-chat-states', 'delo-sidebar', 'delo-onboarding']
+    const studioRows = ['delo-theme', 'delo-settings-layout', 'delo-chat-states', 'delo-sidebar', 'delo-onboarding', 'delo-cost-meter']
     expect(deloRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
     // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, its update check, which fetches
-    // the release channel's signed files and sends nothing about the person, the trash, which keeps everything local, the
-    // home's admission and remote access, and the studio plugins of @delo/bundle-studio.
+    // the release channel's signed files and sends nothing about the person, the plugin install check, which asks the advisory
+    // feed and the registry only when the person installs a plugin, the trash, which keeps everything local, the home's
+    // admission and remote access, and the studio plugins of @delo/bundle-studio.
     expect(deloRows.map(row => row.name)).toEqual([
       LOCAL_BUNDLE,
       '@delo/plugin-instruction-consent',
@@ -171,6 +172,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-delegation-consent',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
+      '@delo/plugin-install-check',
       '@delo/plugin-trash',
       '@delo/home-auth',
       '@delo/reach',
@@ -179,6 +181,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-chat-states',
       '@delo/plugin-sidebar',
       '@delo/plugin-onboarding',
+      '@delo/plugin-cost-meter',
     ])
   })
 })

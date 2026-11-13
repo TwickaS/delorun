@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
 import { SidebarSettingsSection } from '../src/client/SettingsSection.tsx'
-import { TITLE_SCRIM_TOKEN } from '../src/client/StageArt.tsx'
+import { INK_EDGE_IDS } from '../src/client/StageArt.tsx'
 import { ART_PALETTES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, MAX_ART_SEED, type SidebarSettings } from '../src/config.ts'
 
 afterEach(() => {
@@ -51,14 +51,29 @@ describe('Settings → Sidebar choices', () => {
     fireEvent.click(screen.getByRole('tab', { name: en['settings.view.folders'] }))
     fireEvent.click(screen.getByRole('switch', { name: en['settings.working'] }))
     fireEvent.click(screen.getByRole('tab', { name: en['settings.strength.subtle'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['settings.fade.long'] }))
     fireEvent.click(screen.getByRole('tab', { name: en['settings.style.pill'] }))
     fireEvent.click(screen.getByRole('tab', { name: en['settings.sort.created'] }))
     fireEvent.click(screen.getByRole('switch', { name: en['settings.confirmUnpin'] }))
     expect(set.mock.calls).toEqual([
-      ['headerArt', 'night'], ['artPalette', 'ocean'], ['view', 'folders'], ['workingShelf', false], ['artStrength', 'subtle'], ['artStyle', 'pill'],
+      ['headerArt', 'night'], ['artPalette', 'ocean'], ['view', 'folders'], ['workingShelf', false], ['artStrength', 'subtle'], ['artFade', 'long'], ['artStyle', 'pill'],
       ['sort', 'created'], ['confirmUnpin', true],
     ])
     expect(screen.getByText(en['settings.credit'])).toBeTruthy()
+  })
+
+  it('offers the four fades as previews of themselves, soft chosen, and saves none only when picked', () => {
+    const set = recordingSet()
+    const { container } = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS, set))
+    const fades = within(screen.getByRole('radiogroup', { name: en['settings.fade'] })).getAllByRole('radio')
+    expect(fades.map(tile => tile.getAttribute('aria-label'))).toEqual([en['settings.fade.short'], en['settings.fade.soft'], en['settings.fade.long'], en['settings.fade.none']])
+    expect(fades.map(tile => tile.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false', 'false'])
+    expect(fades.map(tile => tile.querySelector('[data-fade]')?.getAttribute('data-fade'))).toEqual(['short', 'soft', 'long', 'none'])
+    fireEvent.click(fades[1]!)
+    expect(set).not.toHaveBeenCalled()
+    fireEvent.click(fades[3]!)
+    expect(set).toHaveBeenCalledWith('artFade', 'none')
+    expect(block(container, 'fade')).not.toBeNull()
   })
 
   it('does not save the art or the palette that is already chosen', () => {
@@ -80,11 +95,11 @@ describe('Settings → Sidebar choices', () => {
 
   it('mutes the art settings, and only those, while the header art is none', () => {
     const { container } = renderSection(formOf({ ...DEFAULT_SIDEBAR_SETTINGS, headerArt: 'none' }))
-    expect(['palette', 'strength', 'style'].map(id => block(container, id)?.getAttribute('data-muted'))).toEqual(['true', 'true', 'true'])
+    expect(['palette', 'strength', 'fade', 'style'].map(id => block(container, id)?.getAttribute('data-muted'))).toEqual(['true', 'true', 'true', 'true'])
     expect(['art', 'view', 'sort', 'width'].map(id => block(container, id)?.getAttribute('data-muted'))).toEqual([null, null, null, null])
     cleanup()
     const shown = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
-    expect(['palette', 'strength', 'style'].map(id => block(shown.container, id)?.getAttribute('data-muted'))).toEqual(['false', 'false', 'false'])
+    expect(['palette', 'strength', 'fade', 'style'].map(id => block(shown.container, id)?.getAttribute('data-muted'))).toEqual(['false', 'false', 'false', 'false'])
   })
 
   it('offers nothing to change while the settings are read-only', () => {
@@ -219,13 +234,21 @@ describe('Settings → Sidebar names and parts', () => {
     expect(container.querySelector('#delo-sidebar-stock')).toBeNull()
   })
 
-  it('previews the brand on the title plate over art, and plain when the art is none', () => {
-    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
-    const brands = screen.getAllByText(en['settings.preview.brand'])
+  it('previews the brand through the section\'s own brand edge filter over art, and plain when the art is none', () => {
+    const { container } = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+    const brands = within(screen.getByRole('radiogroup', { name: en['settings.art'] })).getAllByText(en['settings.preview.brand'])
     expect(brands).toHaveLength(HEADER_ARTS.length)
-    const backgrounds = brands.map(brand => brand.style.background)
-    expect(backgrounds.filter(background => background === `var(${TITLE_SCRIM_TOKEN})`)).toHaveLength(HEADER_ARTS.length - 1)
-    expect(backgrounds[HEADER_ARTS.indexOf('none')]).toBe('')
+    const filters = brands.map(brand => brand.style.getPropertyValue('filter'))
+    expect(filters[HEADER_ARTS.indexOf('none')]).toBe('')
+    const referenced = new Set(filters.filter(filter => filter !== '').map(filter => /^url\("#(.+)"\)$/.exec(filter)?.[1]))
+    expect(referenced.size).toBe(1)
+    const [id] = referenced
+    const filter = container.querySelector(`[data-ink-edge] filter[id="${String(id)}"]`)
+    expect(filter, String(id)).not.toBeNull()
+    expect(filters.filter(value => value !== '')).toHaveLength(HEADER_ARTS.length - 1)
+    // The section's filters are its own, never the ids the sidebar's art mounts.
+    expect(Object.values(INK_EDGE_IDS)).not.toContain(id)
+    expect(container.querySelectorAll('[data-ink-edge] filter')).toHaveLength(Object.keys(INK_EDGE_IDS).length)
   })
 })
 

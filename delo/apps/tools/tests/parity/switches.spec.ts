@@ -507,7 +507,9 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
   const GATE_INSERT = { insert: [{ id: 'delo-update-gate', name: '@delo/bundle-local/update-gate', config: { enabled: true, holdUntilChecked: true }, disabled: true }] }
   /** The update check row in the parity form the overlay's fifth patch restates it. */
   const CHECK_INSERT = { insert: [{ id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { enabled: true, intervalHours: 24, timeoutSeconds: 15 }, disabled: true }] }
-  /** The trash row in the parity form the overlay's sixth patch restates it, with the home paths kept as expressions. */
+  /** The plugin install check row in the parity form the overlay's sixth patch restates it. */
+  const INSTALL_CHECK_INSERT = { insert: [{ id: 'delo-plugin-install-check', name: '@delo/plugin-install-check', config: { enabled: true }, disabled: true }] }
+  /** The trash row in the parity form the overlay's seventh patch restates it, with the home paths kept as expressions. */
   const TRASH_INSERT = {
     insert: [{
       id: 'delo-trash',
@@ -548,6 +550,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       },
       GATE_INSERT,
       CHECK_INSERT,
+      INSTALL_CHECK_INSERT,
       TRASH_INSERT,
       REACH_INSERT,
     ])
@@ -560,8 +563,9 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       `parity overlay: @delo/bundle-local patch 2 is nothing, not its parity form ${JSON.stringify(CONSENT_INSERT)}`,
       `parity overlay: @delo/bundle-local patch 3 is nothing, not its parity form ${JSON.stringify(GATE_INSERT)}`,
       `parity overlay: @delo/bundle-local patch 4 is nothing, not its parity form ${JSON.stringify(CHECK_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 5 is nothing, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 6 is nothing, not its parity form ${JSON.stringify(REACH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 5 is nothing, not its parity form ${JSON.stringify(INSTALL_CHECK_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 6 is nothing, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 7 is nothing, not its parity form ${JSON.stringify(REACH_INSERT)}`,
     ])
     // The session-log row's parity form is upstream's composition, so restating it overrides the replay's root configuration.
     expect(localBundleErrors([{ id: 'session-log-deepseek', config: { enabled: false } }, ...localBundle], bundle)).toEqual([
@@ -570,9 +574,10 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form ' + JSON.stringify(CONSENT_INSERT),
       `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form ${JSON.stringify(GATE_INSERT)}`,
       `parity overlay: @delo/bundle-local patch 4 is ${JSON.stringify(GATE_INSERT)}, not its parity form ${JSON.stringify(CHECK_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 5 is ${JSON.stringify(CHECK_INSERT)}, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 6 is ${JSON.stringify(TRASH_INSERT)}, not its parity form ${JSON.stringify(REACH_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 7 is ${JSON.stringify(REACH_INSERT)}, not its parity form nothing`,
+      `parity overlay: @delo/bundle-local patch 5 is ${JSON.stringify(CHECK_INSERT)}, not its parity form ${JSON.stringify(INSTALL_CHECK_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 6 is ${JSON.stringify(INSTALL_CHECK_INSERT)}, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 7 is ${JSON.stringify(TRASH_INSERT)}, not its parity form ${JSON.stringify(REACH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 8 is ${JSON.stringify(REACH_INSERT)}, not its parity form nothing`,
     ])
     expect(localBundleErrors(localBundle, `${bundle}\n- id: web-search-deepseek\n  config: {}\n`)).toEqual([
       `${LOCAL_BUNDLE_PATCH_PATH}: @delo/bundle-local writes row "web-search-deepseek", which LOCAL_ROWS does not list`,

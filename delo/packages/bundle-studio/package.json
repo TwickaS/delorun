@@ -1,6 +1,6 @@
 {
   "name": "@delo/bundle-studio",
-  "description": "Delo's studio bundle: mounts the theme, the sidebar, chat states, the settings layout and onboarding, with the Delo look on and one switch back to the stock look",
+  "description": "Delo's studio bundle: mounts the theme, the sidebar, chat states, the settings layout and onboarding, with the Delo look on and one switch back to the stock look, and the optional cost meter, off until the person turns it on",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@delo/plugin-chat-states": "workspace:*",
+    "@delo/plugin-cost-meter": "workspace:*",
     "@delo/plugin-onboarding": "workspace:*",
     "@delo/plugin-settings-layout": "workspace:*",
     "@delo/plugin-sidebar": "workspace:*",

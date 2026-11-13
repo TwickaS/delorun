@@ -12,7 +12,7 @@ import type { HomeAuthService } from '@delo/home-auth'
 import type { WorkspaceLocationProblem } from '@delo/home'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import {
-  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, apply, inject, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
+  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, CLONE_PATH, CLONE_STATUS_PATH, apply, Config, inject, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
 } from '../src/index.ts'
 
 /** The scratch layout: the OS home three levels down with its stock home, and the Delo home beside it. */
@@ -56,7 +56,7 @@ async function mount(registry: ReturnType<typeof registryFake> | null = registry
   if (registry !== null) ctx.provide('workspaceRegistry', registry as never)
   if (homeAuth !== null) ctx.provide('homeAuth', homeAuth as never)
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-  const fiber = ctx.plugin({ name, inject: [...inject], apply })
+  const fiber = ctx.plugin({ name, inject: [...inject], Config, apply })
   await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const post = (body: string): Promise<Response> => {
@@ -77,11 +77,20 @@ describe('the add-workspace route', () => {
     expect(without.routes.has(ADD_WORKSPACE_PATH)).toBe(false)
   })
 
+  it('mounts the clone routes beside it, present only while the workspace registry is', async () => {
+    const { routes } = await mount()
+    const ask = (path: string, body: unknown) => routes.get(path)?.fetch(new Request('http://harness.test/api', { method: 'POST', body: JSON.stringify(body) }))
+    expect((await ask(CLONE_PATH, { url: 'file:///etc', parent: person, name: 'x' }))?.status).toBe(422)
+    expect(await (await ask(CLONE_STATUS_PATH, { job: 'none' }))?.json()).toEqual({ state: 'unknown' })
+    const without = await mount(null)
+    expect([without.routes.has(CLONE_PATH), without.routes.has(CLONE_STATUS_PATH)]).toEqual([false, false])
+  })
+
   it('adds a folder inside the home directory through the registry and answers its id', async () => {
     const { add, registry } = await mount()
     const response = await add(join(person, 'projects'))
     expect([response.status, response.headers.get('cache-control'), response.headers.get('content-type')]).toEqual([200, 'no-store', 'application/json'])
-    expect(AddWorkspaceAnswer.parse(await response.json())).toEqual({ result: 'added', workspaceId: 'workspace-7' })
+    expect(AddWorkspaceAnswer.parse(await response.json())).toEqual({ result: 'added', workspaceId: 'workspace-7', kind: 'empty' })
     expect(registry.create).toHaveBeenCalledExactlyOnceWith(join(person, 'projects'))
   })
 
@@ -181,9 +190,9 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
     return { request, response, writeHead, end }
   }
 
-  it('refuses a request that a reach listener admitted with 403 LOOPBACK_ONLY, and goes no further', async () => {
+  it.each([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])('refuses a request to %s that a reach listener admitted with 403 LOOPBACK_ONLY, and goes no further', async (path) => {
     const { ctx } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
-    const { request, response, writeHead, end } = arrival(ADD_WORKSPACE_PATH, '127.0.0.1:3080')
+    const { request, response, writeHead, end } = arrival(path, '127.0.0.1:3080')
     const next = vi.fn(async () => {})
     await ctx.waterfall('connection/request', request, response, next)
     expect(next).not.toHaveBeenCalled()

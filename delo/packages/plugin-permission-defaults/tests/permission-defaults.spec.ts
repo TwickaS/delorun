@@ -98,7 +98,7 @@ async function mounted(options: {
     setPolicy() {},
   } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: options.defaultPreset ?? SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: options.enabled ?? true }) })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: options.enabled ?? true }) })
   return { ctx, harness, asks, home, workspace, other }
 }
 
@@ -114,7 +114,7 @@ function knobs(ctx: Context, session: Session): { preset: string | null, sandbox
 
 describe('the permission_defaults switch', () => {
   it('defaults to off, the parity value', () => {
-    expect(Config()).toEqual({ enabled: false })
+    expect(Config().enabled).toBe(false)
   })
 
   it('mounts nothing when off, so the deployment default reaches a new chat exactly as upstream seeds it', async () => {
@@ -128,7 +128,7 @@ describe('the permission_defaults switch', () => {
   it('resolves only after the guard and the service are provided', async () => {
     const { ctx } = await mounted({ enabled: false })
     expect(ctx.get('sandboxModeGuard')).toBeUndefined()
-    await apply(ctx, { enabled: true })
+    await apply(ctx, { ...Config(), enabled: true })
     expect(ctx.get('sandboxModeGuard')).toBeTypeOf('function')
     expect(ctx.get('permissionDefaults')).toBeInstanceOf(PermissionDefaults)
   })
@@ -137,7 +137,7 @@ describe('the permission_defaults switch', () => {
     const ctx = new Context()
     try {
       const dispose = ctx.provide('sandboxModeGuard', () => undefined)
-      await expect(apply(ctx, { enabled: true })).rejects.toThrow('another plugin already provides the sandbox-mode guard')
+      await expect(apply(ctx, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox-mode guard')
       dispose()
     } finally {
       void ctx.fiber.dispose()
@@ -475,7 +475,7 @@ async function persistedComposition(paths: { sessionsRoot: string, home: string,
     setPolicy() {},
   } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: true }) })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
   return { ctx, asks, harness }
 }
 

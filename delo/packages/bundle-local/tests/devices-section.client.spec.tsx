@@ -8,13 +8,14 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID, FULL_ACCESS_ACTION_ID,
-  FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER,
-  PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ID,
+  PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -469,16 +470,16 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
       expect(sections).toMatchObject([
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
-        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
+        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER }, { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
-      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Permissions'])
+      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Permissions', 'Network'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
@@ -490,6 +491,7 @@ describe('the plugin', () => {
       expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
       for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
       await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
+      expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]

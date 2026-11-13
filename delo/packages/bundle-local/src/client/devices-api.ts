@@ -5,7 +5,9 @@
  * @module @delo/bundle-local/client/devices-api
  */
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import { call, fields, hostFailureOf, isRefused, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
+import {
+  call, fields, hostFailureOf, isBoolean, isRefused, isString, isTime, listOf, optional, orNull, readServedRoute, type Check, type HostFetch,
+} from './host-api.ts'
 
 export {
   HostRequestError, hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFailure, type HostFetch,
@@ -136,7 +138,7 @@ const isPendingDevices = fields({
 })
 const isApprovedDevice = fields({ device: fields({ id: isString, label: isString, address: isString }) })
 const isCancelledRequest = fields({ cancelled: isString })
-const isRemovedDevice = fields({ removed: value => typeof value === 'boolean', sessions: isTime, connections: isTime })
+const isRemovedDevice = fields({ removed: isBoolean, sessions: isTime, connections: isTime })
 
 /**
  * Read the reach state of each option this home builds.
@@ -144,14 +146,8 @@ const isRemovedDevice = fields({ removed: value => typeof value === 'boolean', s
  * @returns the status, or undefined when this profile has no reach (the route answers 404).
  * @throws {HostRequestError} for any other refusal, an unreachable Host or an unreadable answer.
  */
-export async function readReachStatus(fetch: HostFetch): Promise<ReachStatus | undefined> {
-  try {
-    return await call<ReachStatus>(fetch, DEVICE_ROUTES.reachStatus, isReachStatus)
-  } catch (error) {
-    const failure = hostFailureOf(error)
-    if (failure.kind !== 'unreachable' && failure.status === 404) return undefined
-    throw error
-  }
+export function readReachStatus(fetch: HostFetch): Promise<ReachStatus | undefined> {
+  return readServedRoute<ReachStatus>(fetch, DEVICE_ROUTES.reachStatus, isReachStatus)
 }
 
 /**
@@ -303,8 +299,8 @@ const isElevationsAtComputer = fields({
   running: listOf(fields({ id: isString, deviceId: isString, startedAt: isTime, endsAt: isTime })),
 })
 const isElevationRecord = fields({ id: isString, deviceId: isString, startedAt: isTime, endsAt: isTime })
-const isRevoked = fields({ revoked: value => typeof value === 'boolean' })
-const isTerminalSwitch = fields({ withoutUnlock: value => typeof value === 'boolean' })
+const isRevoked = fields({ revoked: isBoolean })
+const isTerminalSwitch = fields({ withoutUnlock: isBoolean })
 
 /**
  * Read this device's own unlock state.

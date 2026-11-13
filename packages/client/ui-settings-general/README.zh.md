@@ -79,7 +79,7 @@ Web 与桌面端的通用设置底部显示当前发布版本，使用构建注�
 
 ### 账本投影
 
-导航是 `settings.section` 账本的投影；导航 label 可以是跟随语言的 thunk，经 `resolveSlotLabel` 解析，并在分区账本更新或 locale revision 变化时重新渲染（`ctx.get('locale')` 可选读取，无硬 locale 依赖）。每行渲染匹配的 `settings.section.icon` 贡献；没有贡献时，已知内置分区使用各自的图标，其他 id 使用设置齿轮。引导账本按升序投影；当前注册方会收到该条目的 id、`complete()` 与 `openSection(id)` 回调，完成或跳过当前步骤后，所有权转交给下一项。
+导航是 `settings.section` 账本的投影；导航 label 可以是跟随语言的 thunk，经 `resolveSlotLabel` 解析，并在分区账本更新或 locale revision 变化时重新渲染（`ctx.get('locale')` 可选读取，无硬 locale 依赖）。每行渲染匹配的 `settings.section.icon` 贡献；没有贡献时，已知内置分区使用各自的图标，其他 id 使用设置齿轮。引导账本按升序投影；当前注册方会收到该条目的 id、`complete()`、`openSection(id)` 回调、在步骤内按面板方式绘制某个已注册分区的 `renderSection(id)`，以及在自身流程已覆盖另一步骤时将其标记为完成的 `completeStep(id)`；完成或跳过当前步骤后，所有权转交给下一项。
 
 ### 连接恢复
 

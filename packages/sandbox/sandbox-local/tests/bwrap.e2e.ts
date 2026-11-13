@@ -21,6 +21,7 @@ import {
   closeServers,
   checkDockerDesktopBackendDenied,
   checkSocketDirectoryDenied,
+  checkPrivateTmpDenied,
   dockerDesktopBackendUnusable,
   checkHomeLinkDenied,
   checkHomeMountAliasDenied,
@@ -267,6 +268,12 @@ params = ctypes.create_string_buffer(120)
 print('io_uring', 'descriptor' if libc.syscall(425, 4, params) >= 0 else errno.errorcode[ctypes.get_errno()])
 print('stdin', input())
 `
+
+describe.skipIf(!bwrapUsable)('sandbox-local: privateTmp under real bwrap', () => {
+  it('private-tmp-denied: a read-only command reaches no socket or file in the host\'s /tmp beside its workspace', async () => {
+    await checkPrivateTmpDenied(provider, tempDir)
+  })
+})
 
 describe.skipIf(!bwrapUsable)('sandbox-local: the escape filter under real bwrap', () => {
   // While an escape directory exists, the command keeps its other sockets, standard input and exit status.

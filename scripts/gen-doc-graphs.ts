@@ -842,6 +842,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Optional check that runs before a `sandbox/mode` event is appended and returns the reason when the switch must not happen.',
   },
   {
+    key: 'sandboxNetwork',
+    pkg: 'sandbox-policy',
+    title: 'Sandbox network resolver',
+    mode: 'seam',
+    implementations: [],
+    consumers: [],
+    note: 'Optional resolver that `ctx.sandboxPolicy.resolve()` asks for each call\'s network; without one the policy carries none and runners share the host\'s network.',
+  },
+  {
     key: 'approval',
     pkg: 'user-approval',
     title: 'Approval seam',

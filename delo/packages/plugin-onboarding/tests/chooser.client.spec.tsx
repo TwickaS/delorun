@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FolderChooser } from '../src/client/FolderChooser.tsx'
 import { en } from '../src/client/locales.ts'
 import type { AddOutcome } from '../src/client/types.ts'
-import { browseFake, DEFAULT_WORKSPACE, HOME, listingOf, startFace, stepServices } from './fixtures.client.ts'
+import { browseFake, HOME, listingOf, startFace, stepServices } from './fixtures.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -58,7 +58,7 @@ describe('the Start step\'s own folder chooser', () => {
     expect(button(en['chooser.add']).disabled).toBe(false)
     await click(button(en['chooser.add']))
     expect(start.addFolder).toHaveBeenCalledExactlyOnceWith(`${HOME}/projects`)
-    expect(onAdded).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE)
+    expect(onAdded).toHaveBeenCalledExactlyOnceWith({ kind: 'chosen', workspaceId: 'workspace-2', path: `${HOME}/projects`, folder: 'code' })
   })
 
   it.each<readonly [string, AddOutcome, string]>([
@@ -246,5 +246,29 @@ describe('the Start step\'s own folder chooser', () => {
     const view = render(<FolderChooser services={stepServices({ start: { ...start.face, browse: folders.browse } })} onAdded={vi.fn()} />)
     view.unmount()
     expect(signal?.aborted).toBe(true)
+  })
+
+  it('picks a folder instead of adding one: the selected folder, or the one shown when none is selected', async () => {
+    const start = startFace({ kind: 'none' })
+    const folders = browseFake(LISTINGS)
+    const onPick = vi.fn()
+    render(<FolderChooser services={stepServices({ start: { ...start.face, browse: folders.browse } })} pick={{ label: 'Clone here', onPick }} />)
+    await settle()
+    expect(screen.queryByRole('button', { name: en['chooser.add'] })).toBeNull()
+    await click(button('Clone here'))
+    expect(onPick).toHaveBeenLastCalledWith(HOME)
+    await click(option('projects'))
+    await click(button('Clone here'))
+    expect(onPick).toHaveBeenLastCalledWith(`${HOME}/projects`)
+    expect(start.addFolder).not.toHaveBeenCalled()
+  })
+
+  it('adds without telling anyone when it has no one to tell', async () => {
+    const start = startFace({ kind: 'none' })
+    render(<FolderChooser services={stepServices({ start: { ...start.face, browse: browseFake(LISTINGS).browse } })} />)
+    await settle()
+    await click(option('projects'))
+    await click(button(en['chooser.add']))
+    expect(start.addFolder).toHaveBeenCalledOnce()
   })
 })

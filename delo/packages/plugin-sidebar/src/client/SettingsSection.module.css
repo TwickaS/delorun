@@ -253,10 +253,8 @@
   line-height: var(--settings-small-line);
 }
 
+/* Over art the brand is white with the edge its inline filter draws, as upstream's sidebar draws its brand over the art. */
 .preview:has(> :first-child:not(.previewBrand)) .previewBrand {
-  align-self: flex-start;
-  padding: 0 var(--delo-space-3);
-  border-radius: var(--dsw-radius-xs);
   color: var(--dsw-static-neutral-bluish-00);
 }
 
