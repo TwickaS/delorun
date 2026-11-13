@@ -1460,6 +1460,30 @@ describe('dangerous mode', () => {
     expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
   })
 
+  it('offers the unlock, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
+    const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [EVERYWHERE_ROUTE]: EVERYWHERE_ON })
+    renderPermissions(host, {})
+    await settle()
+    // Pins the mode check in the section: with the mode off the same refusal shows the computer line.
+    expect(screen.getByText(en.unlockHere)).toBeTruthy()
+    expect(screen.queryByText(en['permissions.remote'], { exact: false })).toBeNull()
+  })
+
+  it('offers the unlock in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
+    for (const mode of [true, false]) {
+      const everywhere = { status: 200, body: mode ? { on: true } : { on: false } }
+      const agents = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE, [EVERYWHERE_ROUTE]: everywhere }))
+      await settle()
+      expect(screen.queryByText(en.unlockHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText(en['agents.remote'], { exact: false }) !== null, `agents, mode ${String(mode)}`).toBe(!mode)
+      agents.unmount()
+      const notice = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } }, [EVERYWHERE_ROUTE]: everywhere }))
+      await settle()
+      expect(screen.queryByText('An MCP server is waiting for your OK: files. Unlock this device to review it here.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
+      notice.unmount()
+    }
+  })
+
   it('shows no card while it is off', async () => {
     renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], everywhere: { on: false } } } }), {})
     await settle()

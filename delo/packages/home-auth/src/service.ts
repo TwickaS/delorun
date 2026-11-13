@@ -40,9 +40,9 @@ import {
   elevationPendingHandler,
   elevationRequestHandler,
   elevationRevokeHandler,
-  terminalSwitchHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
+import { terminalSwitchHandler } from './terminal-switch.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -136,7 +136,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
-        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential, () => this.dangerousMode()) }),
       ]
       return () => {
         for (const off of registered) off()

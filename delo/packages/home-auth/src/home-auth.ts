@@ -547,7 +547,8 @@ export class HomeAuth {
 
   /**
    * Turn the terminal switch on or off, the one place the switch is written. Turning it on lowers protection, so only
-   * the person at the home's own computer does it; any studio of the home's may turn it off. The switch is not a
+   * the person at the home's own computer does it, or a device the terminal switch route admits while dangerous mode
+   * holds and the device is unlocked; any studio of the home's may turn it off. The switch is not a
    * setting or a plugin's configuration, so no settings save, slash command, profile undo or restore, or model tool
    * that writes configuration reaches it.
    * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.

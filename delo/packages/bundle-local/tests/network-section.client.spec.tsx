@@ -5,7 +5,7 @@
  * serves the setting only to its own computer, refuses a change or cannot read its store.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
 import { apply as connectionApply } from '@deepseek-ai/dsh-client-connection/client'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
@@ -17,6 +17,7 @@ import type { HostFetch } from '../src/client/host-api.ts'
 import {
   addedHosts, comparableHosts, hostLines, NETWORK_ROUTES, sameNetwork, setNetwork, type WorkspaceNetwork,
 } from '../src/client/network-api.ts'
+import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
 import { en, zh } from '../src/client/network-locales.ts'
 import { looseningText, NetworkSection, type NetworkSectionProps } from '../src/client/NetworkSection.tsx'
 
@@ -233,6 +234,15 @@ describe('the Network section', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(en.loopback)
     expect(screen.queryByText(message)).toBeNull()
     expect(screen.queryByRole('listitem')).toBeNull()
+  })
+
+  it('says to unlock this device, not to go to the computer, while dangerous mode is on', async () => {
+    // Pins the mode read: the same refusal reads as the computer's sentence while the everywhere route says off.
+    renderSection(fakeHost({
+      [`GET ${NETWORK_ROUTES.list}`]: refusal(403, 'LOOPBACK_REQUIRED'),
+      [`GET ${PERMISSION_ROUTES.everywhere}`]: { status: 200, body: { on: true } },
+    }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe(en.loopbackUnlock) })
   })
 
   it('says so in the row for a change refused away from the home\'s computer', async () => {
