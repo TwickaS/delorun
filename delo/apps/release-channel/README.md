@@ -30,7 +30,7 @@ The production release channel: the R2 bucket that holds the signed release file
 | Bucket lock rules | `releases/` and `root/` | R2 refuses to overwrite or delete an object under either prefix. `prod` locks indefinitely, so its bucket can never be emptied; other stages lock for 7 days. `timestamp.json` has no rule, because it is replaced. |
 | Worker `Channel` | | The public Worker with the bucket binding `RELEASES`. |
 | Workers KV namespace `Mark` | `delo-release-mark-<stage>` | The re-signer's high-water mark. Only `Resign` is bound to it, and the S3 publish token cannot reach it. |
-| Worker `Resign` | | The cron Worker, schedule `17 3 * * *` (UTC), with the bucket binding `RELEASES`, the namespace binding `MARK` and the secret `TIMESTAMP_KEY`. It has no workers.dev address. |
+| Worker `Resign` | | The cron Worker, schedule `17 3 * * *` (UTC), with the bucket binding `RELEASES`, the namespace binding `MARK` and the secrets `TIMESTAMP_KEY` and `MARK_SECRET`. It answers the publisher's HMAC-signed `POST /mark` on its workers.dev address (the stack output `markUrl`) and 404 elsewhere. |
 
 The `prod` stage serves `releases.delorun.com` (main) and `releases.delo.run` (spare) from `Channel`; every other stage has only its workers.dev address. Only the owner deploys `prod`.
 
@@ -65,12 +65,12 @@ A holder of the timestamp key, or of the Cloudflare account, can keep a stale re
 ## Publishing
 
 ```sh
-DELO_R2_ACCESS_KEY_ID=... DELO_R2_SECRET_ACCESS_KEY=... \
+DELO_R2_ACCESS_KEY_ID=... DELO_R2_SECRET_ACCESS_KEY=... DELO_MARK_SECRET=... \
   node delo/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> \
-  [--mirror github --tag v<version> --repo <owner/name>]
+  --mark-url <the Resign Worker's /mark address> [--mirror github --tag v<version> --repo <owner/name>]
 ```
 
-`--channel` is a directory laid out as `local-release.ts` writes it (`timestamp.json`, `root/`, `releases/download/v<version>/`). Hidden entries are skipped and any other file is refused. The order is the release files, then new roots, then `timestamp.json`. Release files and roots are create-only (`If-None-Match: *`). An existing object with the same bytes is skipped, so an interrupted publish resumes; one with other bytes stops the publish with a refusal that names the key. `timestamp.json` is replaced only when the new file's version is higher than the stored file's, and against the entity tag read just before, so a racing re-signing keeps its file and the publish stops. A publish whose version is equal or lower is refused; sign the next version from the re-signed file.
+`--channel` is a directory laid out as `local-release.ts` writes it (`timestamp.json`, `root/`, `releases/download/v<version>/`). Hidden entries are skipped and any other file is refused. The order is the release files, then new roots, then `timestamp.json`. Release files and roots are create-only (`If-None-Match: *`). An existing object with the same bytes is skipped, so an interrupted publish resumes; one with other bytes stops the publish with a refusal that names the key. `timestamp.json` is replaced only when the new file's version is higher than the stored file's, and against the entity tag read just before, so a racing re-signing keeps its file and the publish stops. Right after the upload the script posts the file to `--mark-url`, signed with `DELO_MARK_SECRET`; the Worker moves the high-water mark to it when the bucket holds those bytes and never lowers it, so a restored older timestamp is refused by the next cron run. A refused request fails the publish. A publish whose version is equal or lower is refused; sign the next version from the re-signed file.
 
 `--mirror github` then runs `gh release upload <tag> <files> --repo <repo>` for that version's release files, without `--clobber`. Tests mock the command.
 
@@ -79,6 +79,7 @@ DELO_R2_ACCESS_KEY_ID=... DELO_R2_SECRET_ACCESS_KEY=... \
 | Name | Where | Holds |
 | --- | --- | --- |
 | `DELO_TIMESTAMP_KEY` | The environment of the process that deploys the stack; bound as the secret `TIMESTAMP_KEY` on `Resign` only | The timestamp private key, PKCS #8 PEM, Ed25519. |
+| `DELO_MARK_SECRET` | The environment of the process that deploys the stack, and of the publisher's machine or workflow | A random secret. Bound as `MARK_SECRET` on `Resign` only; the publisher signs each mark request with it (HMAC-SHA-256 over the request body). Never committed. |
 | `DELO_R2_ACCESS_KEY_ID`, `DELO_R2_SECRET_ACCESS_KEY` | The publisher's machine or workflow | An R2 S3 token scoped to Object Read and Write on the one bucket. Never a Worker secret. |
 | Cloudflare credentials | Alchemy's login or environment | The deploy. |
 
@@ -87,7 +88,7 @@ DELO_R2_ACCESS_KEY_ID=... DELO_R2_SECRET_ACCESS_KEY=... \
 ```sh
 cd delo/apps/release-channel/deploy
 pnpm install
-DELO_TIMESTAMP_KEY="$(cat staging-timestamp.pem)" pnpm exec alchemy deploy --stage staging
+DELO_TIMESTAMP_KEY="$(cat staging-timestamp.pem)" DELO_MARK_SECRET="$(cat staging-mark-secret)" pnpm exec alchemy deploy --stage staging
 ```
 
 Staging is signed with a non-production root. The launcher for staging is built with `--channel-origin` set to the Channel Worker's workers.dev address. The `prod` stage is the owner's.

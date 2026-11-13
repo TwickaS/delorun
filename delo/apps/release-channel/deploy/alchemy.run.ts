@@ -4,7 +4,8 @@
  * `releases.delo.run` (spare); every other stage has only its workers.dev address. Stages never share a bucket.
  *
  * The timestamp key is the Worker secret `DELO_TIMESTAMP_KEY`, read from the environment of the deploying process and
- * bound as `TIMESTAMP_KEY` on the cron Worker alone.
+ * bound as `TIMESTAMP_KEY` on the cron Worker alone. The mark secret is `DELO_MARK_SECRET`, bound as `MARK_SECRET` on
+the same Worker, which answers only the publisher's HMAC-signed mark request on its workers.dev address.
  *
  * @module @delo/release-channel/alchemy.run
  */
@@ -42,12 +43,12 @@ export default Alchemy.Stack(
       env: { RELEASES: releases },
       domain: prod ? { name: 'releases.delorun.com', aliases: ['releases.delo.run'] } : undefined,
     })
-    yield* Cloudflare.Worker('Resign', {
+    const resign = yield* Cloudflare.Worker('Resign', {
       main: source('resign-worker.ts'),
-      env: { RELEASES: releases, MARK: mark, TIMESTAMP_KEY: Config.Redacted('DELO_TIMESTAMP_KEY') },
+      env: { RELEASES: releases, MARK: mark, TIMESTAMP_KEY: Config.Redacted('DELO_TIMESTAMP_KEY'), MARK_SECRET: Config.Redacted('DELO_MARK_SECRET') },
       crons: [RESIGN_CRON],
-      workersDev: false,
+      workersDev: true,
     })
-    return { url: channel.url, bucket: releases.bucketName }
+    return { url: channel.url, bucket: releases.bucketName, markUrl: resign.url }
   }),
 )

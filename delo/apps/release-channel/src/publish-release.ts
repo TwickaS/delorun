@@ -2,7 +2,11 @@
  * Publishes a built channel directory (the output of `delo/apps/release/src/local-release.ts`, or a signed release
  * laid out the same way) to the channel's R2 bucket, and optionally mirrors the release files to the GitHub release.
  *
- * `node delo/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> [--mirror github --tag v<version> --repo <owner/name>]`
+ * `node delo/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> --mark-url <url> [--mirror github --tag v<version> --repo <owner/name>]`
+ *
+ * The Resign Worker's high-water mark moves at publish time: right after `timestamp.json` is uploaded, the script posts
+ * it to `--mark-url` (the Worker's `/mark` address), signed with `DELO_MARK_SECRET`; a refusal fails the publish
+ * ({@link postMark}, `./mark-endpoint.ts`).
  *
  * The S3 token is read from `DELO_R2_ACCESS_KEY_ID` and `DELO_R2_SECRET_ACCESS_KEY`; it is scoped to Object Read and
  * Write on the one bucket and is never a Worker secret. The order is fixed: the release files under
@@ -25,6 +29,7 @@ import { parseArgs } from 'node:util'
 import { promisify } from 'node:util'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
 import { releaseBucket } from './bucket.ts'
+import { MARK_SIGNATURE_HEADER, markSignature } from './mark-endpoint.ts'
 import { s3Store } from './s3-store.ts'
 import type { PublishStore } from './store.ts'
 
@@ -77,12 +82,13 @@ function requireHigherVersion(next: Uint8Array, stored: Uint8Array): void {
  * @param store - the store.
  * @param channel - the channel directory.
  * @param log - receives one line per object.
+ * @param announceMark - called with the bytes of `timestamp.json` right after they are uploaded; see {@link postMark}.
  * @returns the keys written, in order.
  * @throws PublishRefusal when a release file or root exists with other bytes, `timestamp.json` changed since it was read,
  * or the stored `timestamp.json` has a version equal to or higher than the new one.
  * @throws Error when the new or the stored `timestamp.json` is not a timestamp file.
  */
-export async function publishChannel(store: PublishStore, channel: string, log: (line: string) => void = () => {}): Promise<string[]> {
+export async function publishChannel(store: PublishStore, channel: string, log: (line: string) => void = () => {}, announceMark?: (timestamp: Uint8Array) => Promise<void>): Promise<string[]> {
   const written: string[] = []
   for (const { key, path } of await publishPlan(channel)) {
     const bytes = await readFile(path)
@@ -99,8 +105,22 @@ export async function publishChannel(store: PublishStore, channel: string, log: 
     }
     written.push(key)
     log(`published ${key}`)
+    if (key === 'timestamp.json') await announceMark?.(bytes)
   }
   return written
+}
+
+/**
+ * Ask the cron Worker to move the high-water mark to the timestamp just uploaded, signed with the shared HMAC secret.
+ * @param options - the Worker's mark URL, the secret and the fetch function (global `fetch` by default).
+ * @returns the function `publishChannel` calls with the uploaded bytes.
+ * @throws Error from that function when the Worker refuses the request, so a publish that did not move the mark fails.
+ */
+export function postMark(options: { readonly url: string, readonly secret: string, readonly fetch?: typeof fetch }): (timestamp: Uint8Array) => Promise<void> {
+  return async (timestamp) => {
+    const response = await (options.fetch ?? fetch)(options.url, { method: 'POST', body: timestamp, headers: { [MARK_SIGNATURE_HEADER]: markSignature(options.secret, timestamp) } })
+    if (!response.ok) throw new Error(`the Worker refused to move the high-water mark (${String(response.status)}): ${(await response.text()).trim()}`)
+  }
 }
 
 /**
@@ -119,13 +139,15 @@ export async function mirrorToGithub(options: { readonly channel: string, readon
 
 async function main(argv: readonly string[]): Promise<number> {
   try {
-    const { values } = parseArgs({ args: [...argv], strict: true, options: { stage: { type: 'string' }, account: { type: 'string' }, channel: { type: 'string' }, mirror: { type: 'string' }, tag: { type: 'string' }, repo: { type: 'string' } } })
+    const { values } = parseArgs({ args: [...argv], strict: true, options: { stage: { type: 'string' }, account: { type: 'string' }, channel: { type: 'string' }, mirror: { type: 'string' }, tag: { type: 'string' }, repo: { type: 'string' }, 'mark-url': { type: 'string' } } })
     if (values.stage === undefined || values.account === undefined || values.channel === undefined) throw new Error('pass --stage <stage>, --account <Cloudflare account id> and --channel <dir>')
     if (values.mirror !== undefined && (values.mirror !== 'github' || values.tag === undefined || values.repo === undefined)) throw new Error('--mirror takes github, with --tag v<version> and --repo <owner/name>')
     const accessKeyId = process.env.DELO_R2_ACCESS_KEY_ID
     const secretAccessKey = process.env.DELO_R2_SECRET_ACCESS_KEY
     if (accessKeyId === undefined || secretAccessKey === undefined) throw new Error('DELO_R2_ACCESS_KEY_ID and DELO_R2_SECRET_ACCESS_KEY hold no S3 token')
-    await publishChannel(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), values.channel, console.log)
+    const markSecret = process.env.DELO_MARK_SECRET
+    if (values['mark-url'] === undefined || markSecret === undefined) throw new Error('pass --mark-url <the Resign Worker\'s /mark address> and set DELO_MARK_SECRET, so the high-water mark moves when the timestamp is uploaded')
+    await publishChannel(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), values.channel, console.log, postMark({ url: values['mark-url'], secret: markSecret }))
     if (values.mirror === 'github') {
       const uploaded = await mirrorToGithub({ channel: values.channel, tag: values.tag!, repo: values.repo! })
       console.log(`mirrored ${String(uploaded.length)} files to ${values.repo!} ${values.tag!}`)
