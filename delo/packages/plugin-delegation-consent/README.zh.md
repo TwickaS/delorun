@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 摘要
 
-`@delo/plugin-delegation-consent` 提供 `delegationConsent` 服务，即 [`@deepseek-ai/dsh-subagent`](../../../packages/subagent/subagent) 外部委派同意 seam 的 Service Provider。外部 agent（智能体）是没有本地子会话的 subagent 提供方，例如 Claude Code（`claude-code`）或 Codex（`codex`）：它作为自己的程序在 Delo 的沙箱和审批提示之外运行，可以在其自身设置允许的任何位置读取和更改文件（包括 Delo 的 home），并使用本人自己的登录和账户。运行时在每次外部启动之前询问该服务，只有在它答复 `allow` 时才启动提供方。本插件还为模型的 `plugin_manager` 提供一道防护，防止引入这类 agent，并提供 studio 审批卡片操作及其权限部分背后的仅回环路由。`enabled` 关闭时——这是 schema 的默认值，也是 C16 开关 `external_agent_consent` 的对等值——它不挂载任何内容，外部提供方以与上游一致的方式启动。
+`@delo/plugin-delegation-consent` 提供 `delegationConsent` 服务，即 [`@deepseek-ai/dsh-subagent`](../../../packages/subagent/subagent) 外部委派同意 seam 的 Service Provider。外部 agent（智能体）是没有本地子会话的 subagent 提供方，例如 Claude Code（`claude-code`）或 Codex（`codex`）：它作为自己的程序在 Delo 的沙箱和审批提示之外运行，可以在其自身设置允许的任何位置读取和更改文件（包括 Delo 的 home），并使用本人自己的登录和账户。运行时在每次外部启动之前询问该服务，只有在它答复 `allow` 时才启动提供方。本插件还为模型的 `plugin_manager` 提供一道防护，防止引入这类 agent，并提供 studio 审批卡片操作及其外部代理部分背后的仅回环路由。`enabled` 关闭时——这是 schema 的默认值，也是 C16 开关 `external_agent_consent` 的对等值——它不挂载任何内容，外部提供方以与上游一致的方式启动。
 
 ## 目录
 
