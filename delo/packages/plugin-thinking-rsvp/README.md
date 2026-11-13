@@ -10,7 +10,7 @@ Open the right Sidebar and pick **Thinking**. The tab follows the latest turn of
 - **The page** keeps every word legible: what you have read sits above the band and what is still ahead sits below it, each part labelled Reasoning or Reply. Scroll either side to look back or ahead; the band keeps its place.
 - **Read** chooses the reasoning, the reply, or both in the order the model wrote them.
 - **Pace** chooses how the band moves:
-  - **Live** shows each word as soon as the model writes it.
+  - **Live** shows each word as the model writes it.
   - **Set rate** plays at the words a minute you choose, from 100 to 1,000.
   - **Model's rate** plays at the rate the model writes, measured over its newest words, and at your set rate until it is known.
 - **Delay**, at a set rate or the model's, holds each word back until it has been written for the seconds you choose, up to 30, so you read a steady stream behind the model.
