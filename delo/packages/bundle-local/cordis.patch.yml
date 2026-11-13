@@ -190,6 +190,15 @@
         intervalHours: 24
         timeoutSeconds: 15
 
+# Setup versions: the profile history's versions listed, compared and saved, and
+# the switch to another version, as routes under /api/deloVersions.*. Reading
+# answers any signed-in studio; saving and switching answer only the loopback
+# studio at the home's computer. The row keeps no store: the versions are the
+# history `delorun recover` and plugin management share.
+- insert:
+    - id: delo-profile-versions
+      name: '@delo/bundle-local/profile-versions'
+
 # Plugin management protects the guard rows and the update check above, remote
 # access and the home's sign-in (so no chat turns remote access on or points
 # its records elsewhere), the plugin install check, and the sandbox rows, as it

@@ -172,6 +172,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-delegation-consent',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
+      `${LOCAL_BUNDLE}/profile-versions`,
       '@delo/plugin-install-check',
       '@delo/plugin-trash',
       '@delo/home-auth',

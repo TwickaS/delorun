@@ -16,7 +16,7 @@ import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/d
 import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
-  MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
+  MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
   PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
@@ -483,11 +483,11 @@ describe('the plugin', () => {
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
         { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
         { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
-        { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
+        { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: SETUP_VERSIONS_SECTION_ID, order: SETUP_VERSIONS_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
       expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
-        .toEqual(['Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'About'])
+        .toEqual(['Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')

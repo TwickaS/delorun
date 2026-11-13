@@ -42,7 +42,7 @@ describe("Delo's layout", () => {
       ['Agent', ['Models', 'Modes', 'Tools', 'Plugins']],
       ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy']],
       ['Devices', ['Devices']],
-      ['Data', ['Trash', 'About']],
+      ['Data', ['Trash', 'Setup versions', 'About']],
     ])
     // Every page carries the layout's own title: Modes and Plugins, not upstream's section names.
     expect(nav.groups.every(group => group.pages.every(page => page.titled))).toBe(true)
@@ -70,6 +70,7 @@ describe("Delo's layout", () => {
       Privacy: ['delo-privacy'],
       Devices: ['delo-devices'],
       Trash: ['delo-trash'],
+      'Setup versions': ['delo-setup-versions'],
       About: ['Versions: current-version', 'delo-about'],
     })
   })
@@ -114,7 +115,7 @@ describe("Delo's layout", () => {
     const sections = [...SECTION_ROWS, { id: 'bot-chat', order: 90, label: 'Bot chat' }, { id: 'bot-voice', order: 91, label: 'Voice' }, { id: 'stray', order: 92, label: 'Stray' }]
     const nav = projectLayout(attributed, sections, REGISTERED_ITEMS)
     expect(nav.groups.slice(-3).map(group => [group.id, group.label, group.pages.map(page => [page.id, page.label])])).toEqual([
-      ['data', 'Data', [[SECTIONS.trash, 'Trash'], ['about', 'About']]],
+      ['data', 'Data', [[SECTIONS.trash, 'Trash'], ['setup-versions', 'Setup versions'], ['about', 'About']]],
       ['plugin:ds-bot', 'DS Bot', [['bot-chat', 'Bot chat'], ['bot-voice', 'Voice']]],
       ['other', 'Other', [['stray', 'Stray']]],
     ])

@@ -175,6 +175,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'Stock DSH makes no request for a newer release, and a disabled row mounts nothing: no service, no route and no check.' },
   },
   {
+    id: 'delo-profile-versions',
+    kind: 'added',
+    reason: 'Setup versions in Settings: the profile history\'s versions are listed and compared for any signed-in studio, and saving the setup or switching to a version is answered only on the loopback listener, at the home\'s computer; upstream has no such page.',
+    parity: { kind: 'disabled', reason: 'Stock offers no version page, and a disabled row mounts nothing: no route.' },
+  },
+  {
     id: 'delo-plugin-install-check',
     kind: 'added',
     reason: 'The plugin install check provides upstream\'s `pluginAudit` hook: every package an installation brings is checked for integrity, known advisories, very new versions and lookalike names, a known critical advisory needs the person\'s acceptance, and each installed plugin\'s files are recorded and compared at every start; upstream audits nothing.',

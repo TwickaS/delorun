@@ -41,6 +41,7 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 | Safety | Privacy | The session-log upload switch, the desktop analytics line and feedback | section `delo-privacy` |
 | Devices | Devices | Remote access and the approved devices | section `delo-devices` |
 | Data | Trash | Deleted chats and workspaces | section `delo-trash` |
+| Data | Setup versions | The profile history's versions, what a switch changes, Save this setup and Switch to this version | section `delo-setup-versions` |
 | Data | About | A Versions card, then licences and project links | row `current-version`; section `delo-about` |
 
 After Data, each third-party plugin that names its sections in `settingsPluginGroups` has a group of its own, titled with the plugin's display title, with one page per section. The search field finds pages, cards and rows by name and by keywords in English and Chinese. Anything neither the layout nor a plugin group places, such as an unnamed third-party section or a new upstream General row, appears under Other, so no section or row disappears.

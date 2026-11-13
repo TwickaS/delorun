@@ -7,7 +7,7 @@
  *
  * @module @delo/profile-safety/recover
  */
-import type { ProfileChangedBy, ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
+import type { ProfileChangedBy, ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { ProfileSafetyError } from './errors.ts'
 import { readInventory } from './inventory.ts'
 import { readSafetyRecord, type LastUpdate } from './record.ts'
@@ -17,6 +17,7 @@ import {
   latestVersion,
   openHistory,
   planRestore,
+  recordSnapshot,
   rollbackToSnapshot,
   withProfileLock,
   type RestorePlan,
@@ -29,8 +30,11 @@ export type RecoverAction =
   | { readonly kind: 'status' }
   /** Go back to the snapshot an update took, or to the version named. */
   | { readonly kind: 'rollback', readonly version?: ProfileVersionId }
-  /** Bring back the version named. */
-  | { readonly kind: 'restore', readonly version: ProfileVersionId }
+  /**
+   * Bring back the version named. With `saveFirst`, the current profile is saved as a version with that summary
+   * before anything is written, under the same writer lock, so the restore can itself be undone by restoring that version.
+   */
+  | { readonly kind: 'restore', readonly version: ProfileVersionId, readonly saveFirst?: string }
   /** Start in safe mode: third-party bundles and their rows are left out until it ends. */
   | { readonly kind: 'safe-mode', readonly reason: string }
   /** End safe mode. */
@@ -50,6 +54,8 @@ export interface RecoverRequest {
   readonly installationBundles?: readonly string[]
   /** The plugin versions the current revocation list revokes. */
   readonly revoked?: readonly RevokedPlugin[]
+  /** Decides before each version is saved whether it may be, as `openHistory` takes it; every version is saved without one. */
+  readonly admit?: VersionAdmission
   /** Who asked, for the history's trailer; the person by default. */
   readonly changedBy?: ProfileChangedBy
   /** The current time, for the marker's start time; now by default. */
@@ -80,6 +86,8 @@ export interface RecoverReport {
   readonly versions: readonly RecoverVersion[]
   /** What a restore or rollback would change, and changed. */
   readonly plan?: RestorePlan
+  /** The version a restore with `saveFirst` saved before it wrote anything; absent when the profile already matched the latest version. */
+  readonly saved?: ProfileVersionId
   /** The third-party bundles a safe-mode start leaves out. */
   readonly skipped?: readonly string[]
   /** What the person reads, one line each. */
@@ -94,7 +102,7 @@ export interface RecoverReport {
  *   history, and `RESTORE_REFUSED` when a version cannot be brought back; nothing has changed when it throws.
  */
 export async function recover(request: RecoverRequest): Promise<RecoverReport> {
-  const history = openHistory({ profileDir: request.profileDir })
+  const history = openHistory({ profileDir: request.profileDir, ...request.admit === undefined ? {} : { admit: request.admit } })
   const record = readSafetyRecord(request.profileDir)
   const safeMode = readSafeMode(request.homeDir, request.profile)
   const versions = (await history.list(10)).map(version => ({ id: version.id, at: version.at, summary: version.summary }))
@@ -121,12 +129,19 @@ export async function recover(request: RecoverRequest): Promise<RecoverReport> {
         ...request.revoked === undefined ? {} : { revoked: request.revoked },
         history,
       }
+      const { saveFirst } = request.action
+      let saved: ProfileVersionId | undefined
       const planned = await withProfileLock(request.profileDir, 'RESTORE_REFUSED', async () => {
+        if (saveFirst !== undefined) {
+          const latest = (await history.list(1))[0]?.id
+          const id = await recordSnapshot({ profileDir: request.profileDir, homeDir: request.homeDir, summary: saveFirst, changedBy: request.changedBy ?? { kind: 'person' }, history })
+          if (id !== latest) saved = id
+        }
         const plan = await planRestore(restore)
         await applyRestore(plan, restore)
         return plan
       }, request.lockWaitMs)
-      return { action: 'restore', versions, plan: planned, lines: planLines(`Restored ${request.action.version}`, planned) }
+      return { action: 'restore', versions, plan: planned, ...saved === undefined ? {} : { saved }, lines: planLines(`Restored ${request.action.version}`, planned) }
     }
     case 'safe-mode': {
       const { installationBundles } = request

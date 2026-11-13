@@ -78,6 +78,10 @@ Contract [C1](../../docs/contracts/c01-home-layout.md#secrets) keeps every secre
 
 A plugin version the current revocation list revokes comes back turned off, with its reason: a revoked bundle leaves the bundle list, and a revoked plugin's rows are disabled in the profile patch while the plugin itself stays installed. A row without an id is refused with `RESTORE_REFUSED`, because the restore would have no way to disable exactly that row. `rollbackToSnapshot` is the same restore toward the snapshot an update took, and it refuses with `RECOVER_REFUSED` when the history holds no version.
 
+## Versions for people
+
+`versions.ts` names and browses the history for the studio's Setup versions page and adds no store. `listProfileVersions` lists up to 50 versions newest first, each with its origin (`update` for an update's snapshot, `saved` for a version the person saved, `switch` for the version saved before a switch, `other` for any other edit) and `current` on the newest version whose files equal the profile now, ignoring the update report and the home patch copy; `unsaved` is true when none does. `saveProfileVersion` records the profile as `Saved by you` with an optional name (one line, at most 60 characters) under the profile's writer lock and reports whether the version is new. `switchToVersion` runs the restore of `delorun recover restore` with `saveFirst` set: the current setup is saved as `Before switching to <name or summary>` and the version is planned and applied in the same locked step, and a refused save leaves the profile as it was. Diffs are `planRestore`'s plan.
+
 ## Eject
 
 `ejectPlugin` removes a package from the profile's bundle list and dependencies and records the ejection in `delo-safety.json`, with the person's reason and the time. Every row and setting the person wrote for it stays, so the configuration is there if they install it again, and a later update cannot put the plugin back — the carry check refuses that with `EJECTED_PLUGIN_REINSTATED`. Delo's own bundle cannot be ejected, because contract C11's privacy defaults hold only while it loads.
@@ -98,7 +102,7 @@ Every failure is a `ProfileSafetyError` with a `code`, the `path` it concerns, t
 
 - The update itself: the pre-update report, the staging, the switch, the health check and the runtime store's rollback belong to the update and runtime-store work packages. This package decides whether a profile survives them and brings a profile back afterwards.
 - The home lock. Contract C1 has `delorun recover` hold the profile's home lock while it changes the store; the CLI command that runs the runtime switch owns that, and this package's restore touches the profile and the home patch only.
-- Client surfaces. The studio has no update screen, no undo and restore prompt and no safe-mode switch; only `delorun` uses this package.
+- Client surfaces. The studio's Setup versions page ([`@delo/bundle-local`](../bundle-local/README.md)) lists, saves and switches versions through `listProfileVersions`, `saveProfileVersion` and `switchToVersion`; the studio has no update screen and no safe-mode switch.
 - Secret fields of plugins that are not loaded. Only a loaded plugin's schema marks its secret fields, so a row of a disabled or missing plugin is not checked until it loads.
 - Plugin audits. A restore lists the plugin versions it brings back, as contract C13 requires of an install; Delo itself runs no plugin audit.
 

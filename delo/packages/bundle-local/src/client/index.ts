@@ -46,6 +46,8 @@ import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devic
 import type { HostFetch } from './devices-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
+import { en as versionsEn, zh as versionsZh, type VersionsLocaleKey } from './versions-locales.ts'
+import { VersionsSection, type VersionsSectionInjected } from './VersionsSection.tsx'
 import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
 import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
 import { OPT_IN_FIELDS, OptIn, type OptInId, type OptInSettings } from './opt-in.ts'
@@ -90,6 +92,9 @@ export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './Mc
 export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { NetworkLocaleKey } from './network-locales.ts'
+export type { VersionsLocaleKey } from './versions-locales.ts'
+export type { VersionsSectionInjected, VersionsSectionProps } from './VersionsSection.tsx'
+export { PROFILE_VERSION_ROUTES, type VersionChanges, type VersionEntry, type VersionsAnswer } from './versions-api.ts'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInId, OptInMutation, OptInSettings } from './opt-in.ts'
@@ -139,6 +144,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'deloConsents': ConsentsLocaleKey
     /** The Network section's copy. */
     'deloNetwork': NetworkLocaleKey
+    /** The Setup versions section's copy. */
+    'deloVersions': VersionsLocaleKey
   }
 }
 
@@ -150,6 +157,9 @@ export const DEVICES_NS = 'deloDevices'
 
 /** Dictionary namespace of the Network section. */
 export const NETWORK_NS = 'deloNetwork'
+
+/** Dictionary namespace of the Setup versions section. */
+export const VERSIONS_NS = 'deloVersions'
 
 /** The `settings.section` id of the Privacy section, which setup and other surfaces open. */
 export const PRIVACY_SECTION_ID = 'delo-privacy'
@@ -203,6 +213,12 @@ export const NETWORK_SECTION_ID = 'delo-network'
 
 /** The Network section's place in the Settings navigation: right after External agents. */
 export const NETWORK_SECTION_ORDER = 24
+
+/** The `settings.section` id of the Setup versions section. */
+export const SETUP_VERSIONS_SECTION_ID = 'delo-setup-versions'
+
+/** The Setup versions section's place in the Settings navigation: right after Network. */
+export const SETUP_VERSIONS_SECTION_ORDER = 24.5
 
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
@@ -376,6 +392,18 @@ export function apply(ctx: Context): void {
     locale: NETWORK_NS,
     inject: networkFace,
   }, NetworkSection))
+  ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delo-setup-versions: section dictionaries')
+  const versionsT = ctx.locale.bind(VERSIONS_NS)
+  const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback
+  const versionsFace = (): VersionsSectionInjected => ({ fetch: browserFetch, atComputer: () => isLoopback })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: SETUP_VERSIONS_SECTION_ID,
+    order: SETUP_VERSIONS_SECTION_ORDER,
+    label: () => versionsT('nav'),
+    locale: VERSIONS_NS,
+    inject: versionsFace,
+  }, VersionsSection))
   // A link glyph stands in for a device glyph, which the icon library lacks; without this Settings draws the generic gear.
   ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineMedium))
   applyRemoteNotice(ctx)
