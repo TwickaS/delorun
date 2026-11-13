@@ -548,6 +548,8 @@ export interface BootedHost {
 export interface ServiceProvider {
   /** The id of the Loader row that provides it; `undefined` when the provider is no Loader row's fiber or descendant. */
   readonly row: string | undefined
+  /** Whether the provided value is a fail-closed stand-in that a row mounted after its real service failed. */
+  readonly failClosed?: boolean
 }
 
 /**
@@ -562,6 +564,7 @@ function serviceViolations(composed: ComposedStart, host: BootedHost): Violation
   return composed.required.flatMap(({ id }) => (ROW_SERVICES[id] ?? []).flatMap((service): Violation[] => {
     const provider = host.providerOf(service)
     if (provider !== undefined) {
+      if (provider.failClosed === true) return [{ subject: service, problem: `is a fail-closed stand-in: ${id} is on but its real service failed to start, so the composition is not healthy`, sources: [] }]
       return provider.row === id ? [] : [{ subject: service, problem: `is provided by ${provider.row === undefined ? 'no plugin row' : `the row ${provider.row}`}, not by ${id}`, sources: provider.row === undefined ? [] : sourcesSetting(composed.layers, provider.row, () => true) }]
     }
     const row = byId.get(id)

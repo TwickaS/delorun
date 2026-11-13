@@ -8,6 +8,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { FAIL_CLOSED_STUB } from '@delo/home'
 import { bootedRows, FIBER_STATES, runningHost, serviceProvider, type BootedProfile } from '../src/start.ts'
 
 
@@ -66,6 +67,8 @@ describe('bootedRows', () => {
     expect(serviceProvider(root, 'fetchGuard')).toEqual({ row: 'delo-fetch-guard' })
     expect(serviceProvider(root, 'sandbox')).toEqual({ row: undefined })
     expect(serviceProvider(root, 'absent')).toBeUndefined()
+    root.provide('scheduleConsent', { [FAIL_CLOSED_STUB]: true })
+    expect(serviceProvider(root, 'scheduleConsent')).toEqual({ row: undefined, failClosed: true })
     await root.fiber.dispose()
   })
 })

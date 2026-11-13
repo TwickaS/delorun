@@ -72,6 +72,7 @@ import { FullAccessChangeError, fullAccessNote, permissionEntriesDigest, workspa
 import type { SetFullAccessRequest, WorkspaceAccess, WorkspacesAnswer } from './wire.ts'
 import { registerPermissionRoutes } from './routes.ts'
 import { CommandNetwork, type CommandNetworkSettings } from './command-network.ts'
+import { clearFailedRow, guardFailedRow, mountFailedRow, PERMISSION_DEFAULTS_ROW, type FailedRowGuard } from './failed.ts'
 import { NETWORK_ACCESSES, parseHostList, type NetworkAccess } from './network.ts'
 import { watchPermissionStore } from './watch.ts'
 
@@ -888,6 +889,7 @@ declare module '@deepseek-ai/cordis' {
  * @param config - the switch, defaulted by the schema above.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  clearFailedRow(ctx)
   if (!config.enabled) return
   if (ctx.get('sandboxModeGuard') !== undefined) {
     throw new Error('permission-defaults: another plugin already provides the sandbox-mode guard; the seam has one provider, so a composition turns on this full-access consent or the other guard, not both')
@@ -895,22 +897,60 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (ctx.get('sandboxNetwork') !== undefined) {
     throw new Error('permission-defaults: another plugin already provides the sandbox network resolver; the seam has one provider, so a composition turns on this per-workspace network or the other resolver, not both')
   }
+  const failedGuard = guardFailedRow(ctx)
+  try {
+    // Validated inside the guarded try: a hot reload does not run the boot check, so a refused value must mount the stand-ins too.
+    await mountServices(ctx, config, validatedHosts(config), failedGuard.track)
+  } catch (error) {
+    // The row fails loudly, and the seams its services decide answer their most restrictive value meanwhile, because
+    // an absent seam reads as stock permissive.
+    const reason = reasonOf(error)
+    ctx.logger.error(`permission-defaults: the row ${PERMISSION_DEFAULTS_ROW} failed to start a service, so commands get no network and full access is refused until it starts again: ${reason}`)
+    failedGuard.fail(reason)
+    mountFailedRow(ctx, reason)
+    throw error
+  }
+}
+
+/**
+ * Check the row's allowlist and proxy limits.
+ * @param config - the row's configuration.
+ * @returns the validated default allowlist.
+ * @throws when `allowedHosts` has a refused entry or a proxy limit is not positive (0 would disable the timeout or refuse every connection).
+ */
+function validatedHosts(config: Config): readonly string[] {
   const allowed = parseHostList(config.allowedHosts)
   if ('problem' in allowed) throw new Error(`permission-defaults: allowedHosts is refused: ${allowed.problem}`)
   for (const field of ['proxyConnectTimeoutMs', 'proxyMaxConnections', 'proxyIdleTimeoutMs'] as const) {
     if (!(config[field] > 0)) throw new Error(`permission-defaults: ${field} must be a positive number`)
   }
+  return allowed.hosts
+}
+
+/**
+ * Mount the row's services in order, each awaited.
+ * @param ctx - the plugin context.
+ * @param config - the row's configuration.
+ * @param hosts - the validated default allowlist.
+ * @param track - receives the permission service's fiber.
+ */
+async function mountServices(ctx: Context, config: Config, hosts: readonly string[], track: FailedRowGuard['track']): Promise<void> {
   // Awaited, with the service's own injections declared on the plugin, so the store is read and the guard provided
   // before the Loader counts this row as started; the network's proxies listen and its resolver is provided the same way.
-  await ctx.plugin(PermissionDefaults).await()
+  const service = ctx.plugin(PermissionDefaults)
+  track(service)
+  await service.await()
+  // A service whose activation failed may leave its fiber's await resolved, so its registration is what counts.
+  if (ctx.root.get('permissionDefaults') === undefined) throw new Error('the permission service did not start; its failure is in the log above')
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'permissionDefaults'], (child) => { registerPermissionRoutes(child) })
   await ctx.plugin(CommandNetwork, {
-    defaultNetwork: { access: config.network, hosts: allowed.hosts },
+    defaultNetwork: { access: config.network, hosts },
     proxyConnectTimeoutMs: config.proxyConnectTimeoutMs,
     proxyMaxConnections: config.proxyMaxConnections,
     proxyIdleTimeoutMs: config.proxyIdleTimeoutMs,
   } satisfies CommandNetworkSettings).await()
+  if (ctx.root.get('deloCommandNetwork') === undefined) throw new Error('the network service did not start; its failure is in the log above')
 }
 
 /**

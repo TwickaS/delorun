@@ -42,7 +42,7 @@ import { readReachRow } from './reach/row.ts'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { HomeLayoutError, newStartId, type HolderProbe } from '@delo/home'
+import { HomeLayoutError, isFailClosedStub, newStartId, type HolderProbe } from '@delo/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
@@ -305,13 +305,14 @@ export function serviceProvider(ctx: Context, name: string): ServiceProvider | u
     const uid = entry.fiber?.uid
     if (uid !== undefined && uid !== null) rowOf.set(uid, entry.options.id)
   }
+  const failClosed = isFailClosedStub(ctx.get(name))
   const seen = new Set<number>()
   for (let fiber: Fiber = provision.ctx.fiber; fiber.uid !== null && !seen.has(fiber.uid); fiber = fiber.parent.fiber) {
     seen.add(fiber.uid)
     const row = rowOf.get(fiber.uid)
-    if (row !== undefined) return { row }
+    if (row !== undefined) return { row, ...failClosed && { failClosed } }
   }
-  return { row: undefined }
+  return { row: undefined, ...failClosed && { failClosed } }
 }
 
 /** What a foreground start runs. */
