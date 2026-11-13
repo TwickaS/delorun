@@ -7,7 +7,7 @@
  * the home's own computer and offers no way to grant.
  */
 import { useState, type ReactNode } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
@@ -260,10 +260,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
   // While the grant is recorded the consent stays open, so its outcome is the one the person sees.
   const close = (): void => { if (!consent.busy) cancel() }
   const acknowledge = consent.acknowledge
-    ? <label className={css.text}>
-      <input type="checkbox" checked={acknowledged} disabled={consent.busy} onChange={(event) => { setAcknowledged(event.currentTarget.checked) }} />
-      {' '}{t('consent.acknowledge')}
-    </label>
+    ? <Checkbox checked={acknowledged} onChange={setAcknowledged} label={t('consent.acknowledge')} disabled={consent.busy} className={css.text} />
     : null
   return <Modal open onClose={close} title={t(short ? 'switch.title' : 'consent.title')} closeLabel={t('consent.close')}
     footer={<>
