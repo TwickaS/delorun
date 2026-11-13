@@ -20,7 +20,7 @@ import { open, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { z } from 'zod'
-import type { InstallFinding } from './findings.ts'
+import { FINDING_RULES, type InstallFinding } from './findings.ts'
 
 /** The directory under a profile that holds the records. */
 export const RECORDS_DIRECTORY = 'delo-plugin-installs'
@@ -123,7 +123,7 @@ export interface PluginTrustStatus {
 }
 
 const Finding = z.strictObject({
-  rule: z.enum(['missing-integrity', 'unpinned-commit', 'advisory', 'advisory-unchecked', 'recent-publish', 'publish-time-unchecked', 'similar-name', 'insecure-source', 'changed-files']),
+  rule: z.enum(FINDING_RULES),
   title: z.string(),
   package: z.string(),
   version: z.string().exactOptional(),
