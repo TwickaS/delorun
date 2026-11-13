@@ -181,6 +181,10 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
         />
       </button>
     </div>
+    <div
+      data-slot="sidebar.brand.badge"
+      style="display: contents;"
+    />
     <button
       aria-label="New session"
       class="newSession"
@@ -438,6 +442,10 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         />
       </button>
     </div>
+    <div
+      data-slot="sidebar.brand.badge"
+      style="display: contents;"
+    />
     <button
       aria-label="New session"
       class="newSession"
@@ -591,6 +599,10 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         />
       </button>
     </div>
+    <div
+      data-slot="sidebar.brand.badge"
+      style="display: contents;"
+    />
     <button
       aria-label="新建会话"
       class="newSession"

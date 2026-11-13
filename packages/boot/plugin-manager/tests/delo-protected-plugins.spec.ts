@@ -239,6 +239,16 @@ describe('plugin_manager in danger-full-access with @delo/bundle-local\'s protec
     expect([...ctx.loader.entries()].find(entry => entry.options.name === name)?.options.config).toEqual({ enabled: true })
   })
 
+  it('refuses to set the permission row\'s fullAccessEverywhere, so no chat turns dangerous mode on', async () => {
+    const { ctx, call, files } = await fixture()
+    const before = files()
+    const result = await call({ action: 'configure', target: rowId('@delo/plugin-permission-defaults'), config: { enabled: true, fullAccessEverywhere: true } })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('cannot be changed (management-required): plugin management protects this entry')
+    expect(files()).toEqual(before)
+    expect([...ctx.loader.entries()].find(entry => entry.options.name === '@delo/plugin-permission-defaults')?.options.config).toEqual({ enabled: true })
+  })
+
   it('refuses to change the manager\'s own settings, so the protection cannot be configured away', async () => {
     const { call, files } = await fixture()
     const before = files()

@@ -163,6 +163,40 @@ describe('dangerous mode with the row and the grant file', () => {
   })
 })
 
+/**
+ * Run a device's `/permission danger-full-access` line: the command the reach policy lists for an unlocked device, whose
+ * handler selects the preset through the same guard as every other switch.
+ * @param ctx - the composition.
+ * @param agent - the chat.
+ * @returns the command's result, or the refusal the guard threw.
+ */
+async function runPermissionCommand(ctx: Context, agent: { session: Session }): Promise<{ kind: string, text?: string } | { threw: string }> {
+  const registered: Array<{ name: string, handler: (call: { agent: unknown, rawInput: string }) => { kind: string, text?: string } }> = []
+  ctx.provide('commands', { register(definition: (typeof registered)[number]) { registered.push(definition); return () => {} } } as never)
+  // The command registers on the next turns of the event loop, once the injected child context activates.
+  for (let turn = 0; turn < 50 && registered.length === 0; turn++) await new Promise(resolve => setTimeout(resolve, 5))
+  const command = registered.find(definition => definition.name === 'permission')
+  if (command === undefined) throw new Error('the /permission command was not registered')
+  try { return command.handler({ agent, rawInput: 'danger-full-access' }) } catch (refusal) { return { threw: (refusal as Error).message } }
+}
+
+describe('a device\'s /permission danger-full-access', () => {
+  it('is refused under Safer prompts in a workspace without a grant', async () => {
+    const { ctx, harness, workspace } = await mounted({ everywhere: false, grant: 'none' })
+    const agent = await harness.create(SessionId('chat-device-safer'), {}, { cwd: workspace })
+    const result = await runPermissionCommand(ctx, agent)
+    expect(result).toHaveProperty('threw')
+    expect(presetOf(ctx, agent.session)).not.toBe(FULL_ACCESS_PRESET)
+  })
+
+  it('switches the chat with dangerous mode on', async () => {
+    const { ctx, harness, workspace } = await mounted({ everywhere: true, grant: 'valid' })
+    const agent = await harness.create(SessionId('chat-device-dangerous'), {}, { cwd: workspace })
+    expect(await runPermissionCommand(ctx, agent)).toMatchObject({ kind: 'success' })
+    expect(presetOf(ctx, agent.session)).toBe(FULL_ACCESS_PRESET)
+  })
+})
+
 describe('the grant file store', () => {
   it('writes mode 0600 JSON with the version, time and warning, and reads it back sync and async', async () => {
     const { home } = await mounted({ everywhere: false, grant: 'none' })

@@ -30,6 +30,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.brand.name': { kind: 'single'; scope: 'root'; owner: SidebarBrandNameOwnerProps }
     /**
+     * A small control under the expanded brand row, such as a mode badge. Declared by this package's `sidebar` entry;
+     * the occupant owns its own layout, and an empty slot takes no room.
+     */
+    'sidebar.brand.badge': { kind: 'single'; scope: 'root'; owner: SidebarBrandBadgeOwnerProps }
+    /**
      * Art behind the expanded sidebar's top, under the brand row and fading into the column. Declared by this
      * package's `sidebar` entry; while an entry occupies it, the brand and the toggle turn light to read on the art.
      * The occupant fills its box, 80px tall across the column, and draws nothing that takes the pointer.
@@ -78,6 +83,12 @@ export interface SidebarBrandMarkOwnerProps {
 
 /** Empty owner share for the sidebar brand-name occupant. */
 export interface SidebarBrandNameOwnerProps {
+  /** Marker field: the occupant owns its own content and width. */
+  children?: never
+}
+
+/** Empty owner share for the sidebar brand-badge occupant. */
+export interface SidebarBrandBadgeOwnerProps {
   /** Marker field: the occupant owns its own content and width. */
   children?: never
 }
@@ -217,6 +228,7 @@ export type SidebarRootComponentProps =
   & PropsRenderSlots<
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
+    | 'sidebar.brand.badge'
     | 'sidebar.backdrop'
     | 'sidebar.toggle.badge'
     | 'sidebar.panellist'

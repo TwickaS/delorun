@@ -298,11 +298,15 @@ export class PermissionDefaults extends Service {
    */
   private relied: ReadonlyMap<string, WorkspacePermission> = new Map()
 
+  private readonly config: { readonly fullAccessEverywhere: boolean }
+
   /**
    * @param ctx - the plugin context.
+   * @param config - the row's dangerous-mode field; off when absent.
    */
-  constructor(ctx: Context, private readonly config: { readonly fullAccessEverywhere: boolean } = { fullAccessEverywhere: false }) {
+  constructor(ctx: Context, config: { readonly fullAccessEverywhere: boolean } = { fullAccessEverywhere: false }) {
     super(ctx, 'permissionDefaults')
+    this.config = config
   }
 
   /**

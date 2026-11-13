@@ -83,6 +83,7 @@ function mountRail(options: MountOptions = {}) {
         if (key === 'sidebar.brand.name') return <span data-testid="brand-name">Brand</span>
         if (key === 'sidebar.backdrop') return null
         if (key === 'sidebar.toggle.badge') return null
+        if (key === 'sidebar.brand.badge') return null
         if (key === 'sidebar.settings') return <div data-testid="settings-seat" data-wide={owner.wide} />
         if (key === 'sidebar.footer.action') return null
         regionOwner = owner as SidebarSectionOwnerProps

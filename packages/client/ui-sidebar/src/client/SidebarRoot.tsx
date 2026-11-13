@@ -622,6 +622,7 @@ export function SidebarRoot({
         })()}
         {!darwinDesktop && toggle}
       </div>
+      {wide && renderSlot('sidebar.brand.badge', {})}
 
       {lead !== undefined && (
         <div className={css.leadPanel}>

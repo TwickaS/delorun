@@ -88,6 +88,9 @@ export function readWorkspaces(fetch: HostFetch): Promise<WorkspacesAnswer | und
   return mounted(call<WorkspacesAnswer>(fetch, PERMISSION_ROUTES.workspaces, isWorkspaces))
 }
 
+/** The window event that tells other surfaces, such as the sidebar badge, that Settings turned dangerous mode off. */
+export const EVERYWHERE_CHANGED = 'delo-dangerous-mode-changed'
+
 /**
  * Read whether dangerous mode is on. A refusal (a locked device), a profile without the route and an unreachable Host
  * all read as off, the direction that asks.
@@ -109,8 +112,10 @@ export async function readEverywhere(fetch: HostFetch): Promise<EverywhereAnswer
  * @returns the state after the change.
  * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
  */
-export function turnEverywhereOff(fetch: HostFetch): Promise<EverywhereAnswer> {
-  return call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhereOff, isEverywhere, {})
+export async function turnEverywhereOff(fetch: HostFetch): Promise<EverywhereAnswer> {
+  const answer = await call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhereOff, isEverywhere, {})
+  window.dispatchEvent(new Event(EVERYWHERE_CHANGED))
+  return answer
 }
 
 /**

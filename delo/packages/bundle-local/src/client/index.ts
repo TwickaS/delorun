@@ -74,6 +74,7 @@ import { ExternalAgentAction, type ExternalAgentActionInjected } from './Externa
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
+import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delo/plugin-delegation-consent/wire'
@@ -88,6 +89,7 @@ export type { FullAccessActionInjected, FullAccessActionProps } from './FullAcce
 export type { ExternalAgentActionInjected, ExternalAgentActionProps } from './ExternalAgentAction.tsx'
 export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './McpServerReview.tsx'
 export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
+export type { DangerousBadgeInjected, DangerousBadgeProps } from './DangerousBadge.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { NetworkLocaleKey } from './network-locales.ts'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
@@ -488,6 +490,13 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     fetch,
     hooks: { agentSettings: agentSettings.form, agentSettingsMutation: agentSettings.state },
     setAgentSetting: (field, value) => agentSettings.set(field, value),
+  })
+  ctx.inject(['settingsShell'], (shelled) => {
+    shelled.slots.inject('sidebar.brand.badge', () => shelled.slots.register({
+      name: 'sidebar.brand.badge',
+      locale: CONSENTS_NS,
+      inject: (): DangerousBadgeInjected => ({ fetch, open: () => { shelled.settingsShell.openSection(PERMISSIONS_SECTION_ID) } }),
+    }, DangerousBadge))
   })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
