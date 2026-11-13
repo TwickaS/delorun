@@ -1,7 +1,8 @@
 /**
  * The remark transform every Delo page passes through at build time: relative links resolve to routes, upstream files,
  * or code text (see {@link resolveLink}), a Chinese page's headings take the English page's ids, and a folded
- * `<details>` block (see {@link foldDetails}) becomes a `details` element holding its Markdown.
+ * `<details>` block (see {@link foldDetails}) becomes a `details` element holding its Markdown, and an inline anchor
+ * `<a id="…"></a>` (see {@link keepAnchors}) becomes an empty element that keeps its id.
  *
  * @module @delo/docs/remark-delo
  */
@@ -26,6 +27,7 @@ export function remarkDelo(): (tree: Root, file: PageFile) => void {
     let heading = 0
     const visit = (node: RootContent | Root): void => {
       if ('children' in node && node.type !== 'paragraph' && node.type !== 'heading') foldDetails(node, path)
+      if ('children' in node) keepAnchors(node)
       if (node.type === 'link') rewrite(node, path, root)
       if (node.type === 'heading' && englishIds !== undefined) setId(node, englishIds[heading++], path)
       if ('children' in node) for (const child of node.children) visit(child)
@@ -93,5 +95,25 @@ function foldDetails(parent: Parent, path: string): void {
       data: { hName: 'details', hProperties: opened.groups.open === undefined ? {} : { open: true } },
     }
     children.splice(index, close - index + 1, folded)
+  }
+}
+
+/** The opening tag of an inline HTML anchor with only an id, as the glossary writes after each entry. */
+const INLINE_ANCHOR = /^<a id="(?<id>[^"]+)">$/u
+
+/**
+ * Replace each inline `<a id="…"></a>` in a node's children with an empty element that carries the id, so links to
+ * the anchor resolve; raw inline HTML is otherwise dropped from the page.
+ * @param parent - the node whose children are scanned.
+ */
+function keepAnchors(parent: Parent): void {
+  const children = parent.children as RootContent[]
+  for (let index = 0; index < children.length; index++) {
+    const child = children[index]
+    if (child?.type !== 'html') continue
+    const id = INLINE_ANCHOR.exec((child as Html).value.trim())?.groups?.id
+    const close = children[index + 1]
+    if (id === undefined || close?.type !== 'html' || (close as Html).value.trim() !== '</a>') continue
+    children.splice(index, 2, { type: 'emphasis', children: [], data: { hName: 'span', hProperties: { id } } })
   }
 }
