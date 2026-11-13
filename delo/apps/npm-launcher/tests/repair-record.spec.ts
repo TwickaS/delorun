@@ -3,7 +3,7 @@
  * and a mark left by a repair that died is reported and removed.
  */
 // spec-lanes-allow: one short-lived child that has exited gives a process id no process holds.
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,7 +13,7 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { StorePaths, type LaunchCommand, type LaunchPlan, type VerifiedRuntime } from '@delo/runtime-store'
 import { fixtureRelease, type Fixture } from '../../install/tests/support.ts'
 import { runLauncher, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
-import { beginRepairRecord, repairRecordPath, resolveRepairMarkGraceSeconds } from '../src/repair-record.ts'
+import { beginRepairRecord, repairRecordPath, resolveRepairMarkGraceSeconds, staleRepairText } from '../src/repair-record.ts'
 import { runRepair, type RepairChannel, type RepairOptions, type RepairStore } from '../src/repair.ts'
 
 const version = (text: string): RuntimeVersion => text as RuntimeVersion
@@ -85,8 +85,56 @@ describe('the repair mark', () => {
     await writeFile(repairRecordPath(home), `${JSON.stringify({ pid: deadPid(), startedAt: '2026-11-13T11:00:00.000Z' })}\n`)
     expect(await runLauncher(launch('default'))).toBe(0)
     expect(err.join('')).toContain('A repair that began 2026-11-13T11:00:00.000Z ended without finishing')
-    expect(err.join('')).toContain(`rm -rf "${join(home, 'runtimes')}" && mv "$(ls -d "${join(home, 'runtimes')}".set-aside-* | tail -n 1)"`)
+    // Pins the recorded path: a mark with no set-aside folder names no restore, and never one that deletes.
+    expect(err.join('')).toContain('nothing to put back. Run delorun repair again.')
+    expect(err.join('')).not.toContain('rm -rf')
     expect(existsSync(repairRecordPath(home))).toBe(false)
+  })
+
+  describe('the restore command of a stale mark', () => {
+    const record = (setAside: string | undefined) => ({ pid: 1, startedAt: '2026-11-13T11:00:00.000Z', ...setAside === undefined ? {} : { setAside } }) as never
+
+    it('names no restore when the recorded folder is missing, even with older set-aside folders present', async () => {
+      await mkdir(join(home, 'runtimes.set-aside-20260101T000000Z'))
+      const text = await staleRepairText(record(join(home, 'runtimes.set-aside-20261113T120000Z')), home, NOW, 'linux')
+      expect(text).toContain('Run delorun repair again.')
+      expect(text).not.toMatch(/\bmv\b|rm /)
+    })
+
+    it('quotes a home path with $, double quotes, backticks and a single quote, and moves rather than deletes', async () => {
+      const odd = join(home, 'a$HOME"b`id`\'c')
+      await mkdir(join(odd, 'runtimes'), { recursive: true })
+      await writeFile(join(odd, 'runtimes/new'), 'half')
+      const setAside = join(odd, 'runtimes.set-aside-20261113T120000Z')
+      await mkdir(setAside)
+      await writeFile(join(setAside, 'old'), 'good')
+      const text = await staleRepairText(record(setAside), odd, NOW, 'linux')
+      expect(text).not.toContain('rm ')
+      const command = /: (mv .*)\. delorun recover status/.exec(text)?.[1]
+      if (command === undefined) throw new Error(`no command in ${text}`)
+      // Pins the quoting: unquoted or double-quoted, the shell expands $HOME and runs `id`, and the moves miss.
+      execFileSync('sh', ['-c', command], { env: { PATH: process.env.PATH ?? '', HOME: '/nonexistent' } })
+      expect(await readFile(join(odd, 'runtimes/old'), 'utf8')).toBe('good')
+      expect(await readFile(join(odd, 'runtimes.set-aside-20261113T120000Z-unfinished/new'), 'utf8')).toBe('half')
+    })
+
+    it('moves only the set-aside folder back when no store stands, and writes PowerShell on Windows', async () => {
+      const setAside = join(home, 'runtimes.set-aside-20261113T120000Z')
+      await mkdir(setAside)
+      const posix = await staleRepairText(record(setAside), home, NOW, 'linux')
+      expect(posix.match(/\bmv\b/g)).toHaveLength(1)
+      const windows = await staleRepairText(record(setAside), home, NOW, 'win32')
+      expect(windows).toContain(`Move-Item -LiteralPath '${setAside}' -Destination '${join(home, 'runtimes')}'`)
+      expect(windows).not.toMatch(/Remove-Item|\bmv\b/)
+      expect(await staleRepairText(record(join(home, "it's")), home, NOW, 'win32')).toContain('Run delorun repair again.')
+    })
+
+    it('records the set-aside path in the mark before a repair moves the store', async () => {
+      const { noteSetAside, end } = await beginRepairRecord(home, NOW, GRACE)
+      await noteSetAside(join(home, 'runtimes.set-aside-x'))
+      expect(JSON.parse(await readFile(repairRecordPath(home), 'utf8')).setAside).toBe(join(home, 'runtimes.set-aside-x'))
+      await end()
+    })
   })
 
   it('removes an old mark that is not a record, without refusing the start', async () => {

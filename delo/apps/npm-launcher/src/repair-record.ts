@@ -10,9 +10,10 @@
  * @module @delo/npm-launcher/repair-record
  */
 import { randomBytes } from 'node:crypto'
-import { link, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { link, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
+import { RUNTIMES_SET_ASIDE_PREFIX } from '@delo/update/home-data'
 import { currentHolder, holderAlive, parseHolder, type ProcessHolder } from '@delo/home'
 
 /** The record's file name under the home's `run/`. */
@@ -44,6 +45,8 @@ export function resolveRepairMarkGraceSeconds(raw: string | undefined): number {
 export interface RepairRecord extends ProcessHolder {
   /** When the repair began, as an ISO 8601 time. */
   readonly startedAt: string
+  /** The absolute path the repair sets the old program store aside to; written before the move, so it may not exist. */
+  readonly setAside?: string
 }
 
 /** What looking at the record found. */
@@ -89,7 +92,8 @@ async function readRecord(home: string): Promise<RepairRecord | undefined | null
   if (typeof parsed !== 'object' || parsed === null) return null
   const fields = parsed as Record<string, unknown>
   const holder = parseHolder(fields)
-  return holder === undefined || typeof fields.startedAt !== 'string' ? null : { ...holder, startedAt: fields.startedAt }
+  if (holder === undefined || typeof fields.startedAt !== 'string') return null
+  return { ...holder, startedAt: fields.startedAt, ...typeof fields.setAside === 'string' ? { setAside: fields.setAside } : {} }
 }
 
 /**
@@ -130,10 +134,11 @@ export async function checkRepairRecord(home: string, graceSeconds: number, nowM
  * @param home - the resolved Delo home.
  * @param now - the clock.
  * @param graceSeconds - how long an unparsable file counts as running.
- * @returns the state of a record found before this one (`stale` was removed) and the function that removes this record.
+ * @returns the state of a record found before this one (`stale` was removed) and the function that removes this record and the function that
+ *   adds the path the old store is set aside to.
  * @throws {Error} when another repair runs or is writing its mark.
  */
-export async function beginRepairRecord(home: string, now: Date, graceSeconds: number): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void> }> {
+export async function beginRepairRecord(home: string, now: Date, graceSeconds: number): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void>, readonly noteSetAside: (path: string) => Promise<void> }> {
   const found = await checkRepairRecord(home, graceSeconds, now.getTime())
   if (found.kind === 'running') throw new Error(`another repair runs (process ${String(found.record.pid)})`)
   if (found.kind === 'writing') throw new Error('another repair is writing its mark')
@@ -148,18 +153,59 @@ export async function beginRepairRecord(home: string, now: Date, graceSeconds: n
   } finally {
     await rm(temporary, { force: true })
   }
-  return { found, end: () => rm(repairRecordPath(home), { force: true }) }
+  const noteSetAside = async (path: string): Promise<void> => {
+    const rewritten = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
+    try {
+      await writeFile(rewritten, `${JSON.stringify({ ...record, setAside: path })}\n`, { flag: 'wx', mode: 0o600 })
+      await rename(rewritten, repairRecordPath(home))
+    } finally {
+      await rm(rewritten, { force: true })
+    }
+  }
+  return { found, end: () => rm(repairRecordPath(home), { force: true }), noteSetAside }
+}
+
+/** A time as the compact UTC stamp that names a set-aside directory. */
+export function stamp(time: Date): string {
+  return time.toISOString().replace(/[-:]/gu, '').replace(/\.\d+Z$/u, 'Z')
+}
+
+/**
+ * Quote a path as one literal word of the person's shell.
+ * @param path - the path.
+ * @param platform - `win32` for PowerShell, anything else for a POSIX shell.
+ * @returns the path in single quotes, with a single quote inside doubled for PowerShell or written `'\''` for POSIX, so
+ *   `$`, double quotes and backticks stay literal.
+ */
+export function quoteForShell(path: string, platform: NodeJS.Platform): string {
+  return platform === 'win32' ? `'${path.replaceAll("'", "''")}'` : `'${path.replaceAll("'", "'\\''")}'`
+}
+
+/** Whether a path exists. */
+async function exists(path: string): Promise<boolean> {
+  return await stat(path).then(() => true, () => false)
 }
 
 /**
  * The report for a record that {@link checkRepairRecord} found stale and removed. It names the program store the
- * repair may have set aside, and the command that puts it back, because a repair killed during its download leaves the
- * new store half-filled.
+ * repair set aside and a command that puts it back, only when the record names that folder and it still exists. The
+ * command never deletes: it moves the current store to a new folder next to it, then moves the set-aside folder back.
  * @param record - the stale record, when it could be read.
  * @param home - the resolved Delo home.
+ * @param now - the clock, which names the folder the current store moves to.
+ * @param platform - the person's platform, which picks the shell the command is written for.
  * @returns the report.
  */
-export function staleRepairText(record: RepairRecord | undefined, home: string): string {
+export async function staleRepairText(record: RepairRecord | undefined, home: string, now: Date = new Date(), platform: NodeJS.Platform = process.platform): Promise<string> {
+  const lead = `A repair${record === undefined ? '' : ` that began ${record.startedAt}`} ended without finishing; its mark in run/${REPAIR_RECORD_FILE} is removed.`
+  const setAside = record?.setAside
+  if (setAside === undefined || !await exists(setAside)) {
+    return `${lead} No set-aside folder of the old programs was recorded, so there is nothing to put back. Run delorun repair again.`
+  }
   const runtimes = join(home, DELO_HOME_ENTRIES.runtimes)
-  return `A repair${record === undefined ? '' : ` that began ${record.startedAt}`} ended without finishing; its mark in run/${REPAIR_RECORD_FILE} is removed. If it was killed during its download, the old programs are in the newest folder named ${runtimes}.set-aside-*, and this puts them back: rm -rf "${runtimes}" && mv "$(ls -d "${runtimes}".set-aside-* | tail -n 1)" "${runtimes}". delorun recover status lists the folder.`
+  const unfinished = `${RUNTIMES_SET_ASIDE_PREFIX}${stamp(now)}-unfinished`
+  const quoted = { runtimes: quoteForShell(runtimes, platform), setAside: quoteForShell(setAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
+  const move = (from: string, to: string): string => (platform === 'win32' ? `Move-Item -LiteralPath ${from} -Destination ${to}` : `mv ${from} ${to}`)
+  const steps = [...await exists(runtimes) ? [move(quoted.runtimes, quoted.unfinished)] : [], move(quoted.setAside, quoted.runtimes)]
+  return `${lead} If it was killed during its download, the old programs are in ${setAside}, and this puts them back, keeping the unfinished store in ${unfinished}: ${steps.join(platform === 'win32' ? '; ' : ' && ')}. delorun recover status lists the folders.`
 }

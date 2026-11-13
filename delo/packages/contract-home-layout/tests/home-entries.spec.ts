@@ -60,6 +60,7 @@ const REVIEWED: Readonly<Record<string, string>> = {
 const TRANSIENT: Readonly<Record<string, string>> = {
   'apps/npm-launcher/src/repair.ts: `trust.set-aside-${stampNow}`': 'trust/ set aside by the launcher\'s repair',
   'apps/npm-launcher/src/repair.ts: `${RUNTIMES_SET_ASIDE_PREFIX}${stampNow}`': 'runtimes/ set aside by the launcher\'s repair',
+  'apps/npm-launcher/src/repair-record.ts: unfinished': 'runtimes/ moved aside by the restore command of a stale repair mark',
   'packages/update/src/home-data-format.ts: `.${HOME_DATA_FORMAT_FILE}.tmp-${randomBytes(8).toString(\'hex\')}`': 'the temporary file that replaces data-format.json atomically',
 }
 

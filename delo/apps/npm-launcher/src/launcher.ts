@@ -189,7 +189,7 @@ export async function runLauncher(options: LauncherOptions): Promise<number> {
  */
 async function refuseDuringRepair(options: LauncherOptions): Promise<boolean> {
   const state = await checkRepairRecord(options.home, options.repairMarkGraceSeconds)
-  if (state.kind === 'stale') options.output.stderr(`${staleRepairText(state.record, options.home)}\n`)
+  if (state.kind === 'stale') options.output.stderr(`${await staleRepairText(state.record, options.home)}\n`)
   if (state.kind === 'writing') {
     options.output.stderr(renderLauncherRefusal({
       lead: 'Delorun is being repaired; wait for it to finish.',

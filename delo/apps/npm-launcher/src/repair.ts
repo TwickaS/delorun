@@ -31,7 +31,7 @@ import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type Verifie
 import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX, writeHomeDataFormat } from '@delo/update/home-data'
 import semver from 'semver'
 import type { LauncherOutput } from './launcher.ts'
-import { beginRepairRecord, REPAIR_RECORD_FILE, staleRepairText, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
+import { beginRepairRecord, REPAIR_RECORD_FILE, stamp, staleRepairText, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
 
 /** The flags `delorun repair` reads, beside `--profile`. */
@@ -163,11 +163,6 @@ class RepairRefusal extends Error {
 }
 
 const REDACTOR = new Redactor()
-
-/** A time as the compact UTC stamp that names a set-aside directory. */
-function stamp(time: Date): string {
-  return time.toISOString().replace(/[-:]/gu, '').replace(/\.\d+Z$/u, 'Z')
-}
 
 /**
  * Refuse while a home process runs, naming `delorun stop`.
@@ -313,8 +308,9 @@ export async function runRepair(options: RepairOptions): Promise<number> {
   const holds: HomeLock[] = []
   let endRecord: (() => Promise<void>) | undefined
   try {
-    endRecord = await recordRepair(options, log)
-    await repair(options, log, undo, holds)
+    const recorded = await recordRepair(options, log)
+    endRecord = recorded.end
+    await repair(options, log, undo, holds, recorded.noteSetAside)
     outcome = 'repaired'
     return LAUNCHER_EXIT.ok
   } catch (error) {
@@ -335,10 +331,10 @@ export async function runRepair(options: RepairOptions): Promise<number> {
  * Mark the home as being repaired, reporting a record a dead repair left.
  * @param options - the repair's inputs.
  * @param log - the run's record.
- * @returns the function that removes the mark.
+ * @returns the function that removes the mark and the one that records where the old store is set aside.
  * @throws {RepairRefusal} `REPAIR_RUNNING` when another repair of this home runs.
  */
-async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<() => Promise<void>> {
+async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<Pick<Awaited<ReturnType<typeof beginRepairRecord>>, 'end' | 'noteSetAside'>> {
   let begun
   try {
     begun = await beginRepairRecord(options.home, options.now(), options.repairMarkGraceSeconds)
@@ -350,11 +346,11 @@ async function recordRepair(options: RepairOptions, log: Record<string, unknown>
     })
   }
   if (begun.found.kind === 'stale') {
-    const text = staleRepairText(begun.found.record, options.home)
+    const text = await staleRepairText(begun.found.record, options.home, options.now())
     options.output.stderr(`${text}\n`)
     log.staleRepair = text
   }
-  return begun.end
+  return { end: begun.end, noteSetAside: begun.noteSetAside }
 }
 
 /**
@@ -380,9 +376,10 @@ function say(options: RepairOptions, log: Record<string, unknown>, text: string)
  * @param log - the run's record.
  * @param undo - collects the steps that put a change back.
  * @param holds - collects the home locks, which the caller releases last.
+ * @param noteSetAside - records in the repair mark the path the old store is set aside to, before it moves.
  * @throws {RepairRefusal} for every refusal the repair itself makes; the store's and install's own errors otherwise.
  */
-async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[], holds: HomeLock[]): Promise<void> {
+async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[], holds: HomeLock[], noteSetAside: (path: string) => Promise<void>): Promise<void> {
   const { home, line, store } = options
   const entries = await readdir(join(home, DELO_HOME_ENTRIES.run)).catch(() => [] as string[])
   refuseWhileRunning(home, entries)
@@ -428,6 +425,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   const probe = await readdir(runtimes).then(() => true, () => false)
   const aside = join(home, `${RUNTIMES_SET_ASIDE_PREFIX}${stampNow}`)
   if (probe) {
+    await noteSetAside(aside)
     await rename(runtimes, aside)
     undo.push(async () => { await rm(runtimes, { recursive: true, force: true }); await rename(aside, runtimes) })
     ;(log.moved as string[]).push(`runtimes -> ${aside}`)
