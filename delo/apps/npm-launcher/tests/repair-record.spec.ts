@@ -21,7 +21,7 @@ const GRACE = 5
 
 /** A process id that no process has: a child that has already exited. */
 function deadPid(): number {
-  const child = spawnSync(process.execPath, ['-e', ''])
+  const child = spawnSync(process.execPath, ['-e', ''], { timeout: 10_000 })
   if (child.pid === undefined) throw new Error('the spec could not start a child process')
   return child.pid
 }

@@ -12,11 +12,11 @@ import { DELEGATION_CONSENT_ROW } from '../src/wire.ts'
 
 vi.mock('../src/service.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/service.ts')>()
-  class CrashingConsent extends actual.DeloDelegationConsent {
-    protected override async [Service.init](): Promise<void> {
-      throw new Error('the grants store lock failed')
-    }
-  }
+  class CrashingConsent extends actual.DeloDelegationConsent {}
+  Object.defineProperty(CrashingConsent.prototype, Service.init, {
+    configurable: true,
+    value: () => Promise.reject(new Error('the grants store lock failed')),
+  })
   return { ...actual, DeloDelegationConsent: CrashingConsent }
 })
 
@@ -41,7 +41,7 @@ async function mount(enabled: boolean): Promise<Context> {
 
 const review = {
   provider: 'claude-code', cwd: '/work', label: 'Review', signal: new AbortController().signal,
-  parent: { id: 'chat', session: { id: 'chat', header: { cwd: '/work' } } } as unknown as Agent,
+  parent: { id: 'chat', session: { id: 'chat', header: { cwd: '/work' } } } as Agent,
 }
 
 describe('a delegation consent row whose service crashed', () => {

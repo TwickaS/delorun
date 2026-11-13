@@ -70,7 +70,7 @@ async function mount(enabled: boolean, overrides: Partial<Config> = {}): Promise
   return ctx
 }
 
-const session = { id: 'chat-1', header: { cwd: '/work' } } as unknown as Session
+const session = { id: 'chat-1', header: { cwd: '/work' } } as Session
 
 describe('a permission-defaults row whose network service failed', () => {
   it('answers no network for every workspace, never the host\'s, while the switch is on', async () => {
