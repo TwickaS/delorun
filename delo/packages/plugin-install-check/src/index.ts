@@ -238,7 +238,7 @@ export function apply(ctx: Context, config: Config): void {
       const configured = await manager.registries()
       return {
         urls: [...configured.registry === null ? configured.resolved === null ? [] : [configured.resolved] : [configured.registry], ...configured.fallbackRegistries],
-        fallbacks: configured.fallbackRegistries,
+        fallbacks: [...configured.fallbackRegistries],
       }
     } catch (error) {
       // pnpm's own registry could not be read; the registries the installation asked are still compared, and the check goes on.
