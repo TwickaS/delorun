@@ -95,8 +95,8 @@ export interface ApprovalsOptions {
   readonly random: RandomBytes
   /** The 32-byte raw home public key and its base64url text, read when a request is answered. */
   readonly homeKey: () => { readonly publicKey: Uint8Array; readonly publicKeyText: Base64Url }
-  /** The resolved pairing choices: the window, the expiry, who may ask without a window and the per-identity limit. */
-  readonly pairing: PairingSpec
+  /** The resolved pairing choices, read per call so a change in Settings applies without a restart. */
+  readonly pairing: () => PairingSpec
 }
 
 /** Where a request arrived and who it names. */
@@ -134,7 +134,7 @@ export class Approvals {
    * @returns when it closes, in milliseconds since the epoch.
    */
   openWindow(): number {
-    this.windowClosesAt = this.options.now() + this.options.pairing.windowMs
+    this.windowClosesAt = this.options.now() + this.options.pairing().windowMs
     return this.windowClosesAt
   }
 
@@ -161,8 +161,8 @@ export class Approvals {
    */
   assertMayAsk(identity?: TailnetIdentity, computerUser?: string): void {
     if (this.windowOpenUntil() !== undefined) return
-    if (mayAskWithoutWindow(this.options.pairing.mayAskWithoutWindow, identity, computerUser)) return
-    throw new HomeAuthError('APPROVALS_CLOSED', `This home is not accepting new devices now. On the home's computer, choose Add a device in the studio's settings, or run delorun devices approve, then try again within ${String(this.options.pairing.windowMs / MINUTE_MS)} minutes`)
+    if (mayAskWithoutWindow(this.options.pairing().mayAskWithoutWindow, identity, computerUser)) return
+    throw new HomeAuthError('APPROVALS_CLOSED', `This home is not accepting new devices now. On the home's computer, choose Add a device in the studio's settings, or run delorun devices approve, then try again within ${String(this.options.pairing().windowMs / MINUTE_MS)} minutes`)
   }
 
   /**
@@ -172,7 +172,7 @@ export class Approvals {
    * @returns C5's `201` answer.
    * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window for an identity that may not ask without one;
    *   `APPROVAL_RATE_LIMITED` past the source's limit; `APPROVAL_PENDING_LIMIT` when 5 requests are pending or the
-   *   identity has its limit waiting.
+   *   identity has its limit waiting, or 4 window-less requests are.
    */
   request(input: ApprovalRequestInput, where: RequestOrigin): ApprovalRequestAccepted {
     this.assertMayAsk(where.identity, where.computerUser)
@@ -183,9 +183,13 @@ export class Approvals {
     // identity's repeated asks cannot make the home refuse every other request (a person's open window included).
     if (windowless && where.identity !== undefined) {
       const login = where.identity.login
-      if (pending.filter(record => record.windowless && record.identity?.login === login).length >= this.options.pairing.pendingPerIdentity) {
+      if (pending.filter(record => record.windowless && record.identity?.login === login).length >= this.options.pairing().pendingPerIdentity) {
         throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This account already has a device request waiting at the home\'s computer. Finish or decline it there, then try again')
       }
+    }
+    // Window-less requests never take the last slot, so a request through a window the person opened always has room.
+    if (windowless && pending.filter(record => record.windowless).length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome - 1) {
+      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'Too many devices are asking to pair without an approval window. At the home\'s computer, run delorun devices approve to approve or cancel one, then try again')
     }
     // Window-less requests have their own budget per source: every reach request arrives from one address.
     if (!(windowless ? this.windowlessSources : this.sources).take(where.source)) {
@@ -200,7 +204,7 @@ export class Approvals {
     const homeNonce = brandString<Base64Url>(newSecret(nonceBytes, this.options.random))
     const key = this.options.homeKey()
     const createdAt = this.options.now()
-    const expiresAt = createdAt + this.options.pairing.requestExpiryMs
+    const expiresAt = createdAt + this.options.pairing().requestExpiryMs
     this.requests.set(id, {
       id,
       secretHash: hashSecret(secret),
@@ -318,7 +322,7 @@ export class Approvals {
     for (const [id, record] of this.requests) {
       if (record.expiresAt > at) continue
       if (record.state === 'pending') record.state = 'expired'
-      if (record.expiresAt + this.options.pairing.requestExpiryMs <= at) this.requests.delete(id)
+      if (record.expiresAt + this.options.pairing().requestExpiryMs <= at) this.requests.delete(id)
     }
   }
 }

@@ -162,9 +162,24 @@ describe('the waiting requests of one identity', () => {
 
   it('allows the configured number, and keeps the global cap of 5', async () => {
     await start(resolvePairing({ mayAskWithoutWindow: 'tailnet', pendingPerIdentity: 5 }))
-    for (let fill = 1; fill <= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome; fill += 1) await ask(fill, SOMEONE)
-    await expect(ask(6, SOMEONE)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT' })
-    await expect(ask(7, ME)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT', detail: expect.stringContaining('5 device requests') })
+    const windowless = DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome - 1
+    for (let fill = 1; fill <= windowless; fill += 1) await ask(fill, SOMEONE)
+    await home.auth.openApprovalWindow()
+    await ask(windowless + 1)
+    await expect(ask(6)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT', detail: expect.stringContaining('5 device requests') })
+  })
+
+  it('leaves the last of the 5 slots to a window request when five tailnet users ask without a window', async () => {
+    await start(resolvePairing({ mayAskWithoutWindow: 'tailnet' }))
+    const users = [1, 2, 3, 4, 5].map((fill): TailnetIdentity => ({ login: `user${String(fill)}@example.com`, name: `User ${String(fill)}` }))
+    for (const [index, user] of users.entries()) {
+      // Pins the window-less cap: the fifth user is refused although 5 slots are the global cap and the user has no request waiting.
+      if (index < 4) await ask(index + 1, user)
+      else await expect(ask(index + 1, user)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT', detail: expect.stringContaining('without an approval window') })
+    }
+    await home.auth.openApprovalWindow()
+    await expect(ask(6)).resolves.toMatchObject({ requestId: expect.any(String) })
+    expect(home.auth.pendingApprovals()).toHaveLength(5)
   })
 
   it('lets one identity\'s repeated window-less asks neither spend the source budget nor stop a window request', async () => {

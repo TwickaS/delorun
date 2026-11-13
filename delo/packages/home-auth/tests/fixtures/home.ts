@@ -88,9 +88,10 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
   }
   const closed: { readonly deviceId?: string; readonly sessionId?: string }[] = []
   const loopback: { port: number | undefined } = { port: undefined }
+  const { pairing } = options
   const auth = new HomeAuth({
     loopbackPort: () => loopback.port,
-    ...(options.pairing === undefined ? {} : { pairing: options.pairing }),
+    ...(pairing === undefined ? {} : { pairing: (): PairingSpec => pairing }),
     directory,
     now: options.now ?? clock.read,
     random,

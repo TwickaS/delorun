@@ -208,8 +208,8 @@ export interface HomeAuthOptions {
    * a loopback request.
    */
   readonly loopbackPort?: LoopbackPort
-  /** The resolved pairing choices ({@link resolvePairing}); {@link PAIRING_DEFAULTS} when absent. */
-  readonly pairing?: PairingSpec
+  /** The resolved pairing choices ({@link resolvePairing}), read at each use; {@link PAIRING_DEFAULTS} when absent. */
+  readonly pairing?: () => PairingSpec
 }
 
 /**
@@ -236,7 +236,7 @@ export class HomeAuth {
   private readonly challenges: Challenges
   /** The approval window and its requests. */
   readonly approvals: Approvals
-  private readonly pairingSpec: PairingSpec
+  private readonly pairingSpec: () => PairingSpec
   private homeKey: HomeKey | undefined
   /** What `admit` reads; undefined until the stores were read, and after a read failed, so `admit` refuses. */
   private view: AdmissionView | undefined
@@ -269,7 +269,7 @@ export class HomeAuth {
     this.loopbackPort = options.loopbackPort ?? (() => undefined)
     this.random = options.random ?? systemRandom
     this.challenges = new Challenges(this.now, this.random)
-    this.pairingSpec = options.pairing ?? PAIRING_DEFAULTS
+    this.pairingSpec = options.pairing ?? (() => PAIRING_DEFAULTS)
     this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec })
     this.elevations = new Elevations({
       now: this.now,
@@ -730,7 +730,7 @@ export class HomeAuth {
    * @returns who may ask without a window, how a request is shown and the window and expiry in minutes.
    */
   pairing(): PairingView {
-    const { mayAskWithoutWindow, showRequest, windowMs, requestExpiryMs, pendingPerIdentity } = this.pairingSpec
+    const { mayAskWithoutWindow, showRequest, windowMs, requestExpiryMs, pendingPerIdentity } = this.pairingSpec()
     return { mayAskWithoutWindow, showRequest, windowMinutes: windowMs / 60_000, requestExpiryMinutes: requestExpiryMs / 60_000, pendingPerIdentity }
   }
 

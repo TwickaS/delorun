@@ -16,7 +16,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import type { Base64Url, DevicePublicKeyJwk } from '@delo/contract-device-approval'
 import type { HomeAuth } from '../src/home-auth.ts'
-import { HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
+import { Config, HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
 import { REACH_PATHS } from '../src/reach-routes.ts'
 
@@ -214,7 +214,7 @@ describe('the homeAuth service', () => {
 
   it('admits nothing before it started, and refuses every other call', () => {
     const ctx = new Context()
-    const service = new HomeAuthService(ctx, { secretsDirectory: '/nowhere' })
+    const service = new HomeAuthService(ctx, Config({ secretsDirectory: '/nowhere' }))
     expect(service.admitToken('x', 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
     // Pins the fail-closed arrival: before the home started, a request names no listener, so no route treats it as loopback.
     expect(service.arrivalOf({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', localPort: 3080 } }))
@@ -301,6 +301,6 @@ describe('the homeAuth service', () => {
     // Pins the layout check: the home a device's workspace-file read never reaches is derived from this directory.
     await expect(ctx.plugin(HomeAuthService, { secretsDirectory: '/elsewhere/home-auth' })).rejects.toThrow(/Delo home's secrets directory/)
     await ctx.fiber.dispose()
-    expect(new HomeAuthService(new Context(), { secretsDirectory: '/home/someone/.delo/secrets/home-auth' }).deloHome).toBe('/home/someone/.delo')
+    expect(new HomeAuthService(new Context(), Config({ secretsDirectory: '/home/someone/.delo/secrets/home-auth' })).deloHome).toBe('/home/someone/.delo')
   })
 })
