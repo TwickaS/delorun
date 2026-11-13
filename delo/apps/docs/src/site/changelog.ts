@@ -57,7 +57,7 @@ export interface ViewVersion {
   /** The version's From upstream bullets, beginning with the line that names the upstream release. */
   readonly fromUpstream: readonly string[]
   readonly previews: readonly ViewPreview[]
-  /** Three to five short entries that summarize the version, for the home page. */
+  /** Three to five short entries that summarise the version, for the home page. */
   readonly headlines: readonly string[]
 }
 
@@ -93,7 +93,7 @@ export function firstSentence(text: string): string {
 }
 
 /**
- * The entries that summarize a version: the first Added bullet of each area in the record's area order, then, when
+ * The entries that summarise a version: the first Added bullet of each area in the record's area order, then, when
  * that gives fewer than the minimum, the version's other bullets in record order.
  * @param areas - the version's areas.
  * @returns at most five sentences, bullets that open with a section word excluded from the first pass.

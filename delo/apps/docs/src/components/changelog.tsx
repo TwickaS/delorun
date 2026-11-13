@@ -1,6 +1,6 @@
 /**
  * The changelog page and the home page's What's new section, both rendered from the changelog view the build derives
- * from Delo's changelog record. The entries are English in both locales; the page's title and labels are localized.
+ * from Delo's changelog record. The entries are English in both locales; the page's title and labels are localised.
  *
  * @module @delo/docs/changelog-components
  */
