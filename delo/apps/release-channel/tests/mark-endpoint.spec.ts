@@ -18,7 +18,7 @@ const URL = 'https://resign.example.workers.dev/mark'
  * @returns the request.
  */
 function request(body: Uint8Array, secret = SECRET): Request {
-  return new Request(URL, { method: 'POST', body, headers: { [MARK_SIGNATURE_HEADER]: markSignature(secret, body) } })
+  return new Request(URL, { method: 'POST', body: new Uint8Array(body), headers: { [MARK_SIGNATURE_HEADER]: markSignature(secret, body) } })
 }
 
 describe('the mark endpoint', () => {
@@ -36,7 +36,7 @@ describe('the mark endpoint', () => {
     const mark = new MemoryMark()
     const bytes = store.objects.get('timestamp.json')!.bytes
     const wrong = await handleMarkRequest(request(bytes, 'another-secret'), { secret: SECRET, bucket: store, mark })
-    const missing = await handleMarkRequest(new Request(URL, { method: 'POST', body: bytes }), { secret: SECRET, bucket: store, mark })
+    const missing = await handleMarkRequest(new Request(URL, { method: 'POST', body: new Uint8Array(bytes) }), { secret: SECRET, bucket: store, mark })
     // Pins the HMAC check: a body signed under another secret, or unsigned, moves nothing.
     expect([wrong.status, missing.status]).toEqual([401, 401])
     expect(await mark.read()).toBeUndefined()

@@ -118,7 +118,7 @@ export async function publishChannel(store: PublishStore, channel: string, log: 
  */
 export function postMark(options: { readonly url: string, readonly secret: string, readonly fetch?: typeof fetch }): (timestamp: Uint8Array) => Promise<void> {
   return async (timestamp) => {
-    const response = await (options.fetch ?? fetch)(options.url, { method: 'POST', body: timestamp, headers: { [MARK_SIGNATURE_HEADER]: markSignature(options.secret, timestamp) } })
+    const response = await (options.fetch ?? fetch)(options.url, { method: 'POST', body: new Uint8Array(timestamp), headers: { [MARK_SIGNATURE_HEADER]: markSignature(options.secret, timestamp) } })
     if (!response.ok) throw new Error(`the Worker refused to move the high-water mark (${String(response.status)}): ${(await response.text()).trim()}`)
   }
 }
