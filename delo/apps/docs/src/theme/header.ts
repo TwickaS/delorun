@@ -1,10 +1,12 @@
 /**
- * The header every layout shows: the site title linking a home page, and links beside it. It takes its text and
+ * The header every layout shows: the Delorun mark and the site title linking a home page, and links beside it. It takes its text and
  * addresses from the caller and reads no content, so another site can use it with its own.
  *
  * @module @delo/docs/theme/header
  */
+import { createElement, Fragment } from 'react'
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared'
+import { Mark } from '@design/mark.tsx'
 
 /** A link the header shows beside the title. */
 export interface HeaderLink {
@@ -28,7 +30,7 @@ export interface HeaderOptions {
  */
 export function headerOptions(options: HeaderOptions): BaseLayoutProps {
   return {
-    nav: { title: options.title, url: options.homeUrl },
+    nav: { title: createElement(Fragment, null, createElement(Mark, { size: 22 }), options.title), url: options.homeUrl },
     links: options.links.map(({ text, url, external }) => ({ text, url, external })),
   }
 }

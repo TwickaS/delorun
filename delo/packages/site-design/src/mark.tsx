@@ -1,15 +1,16 @@
 /**
- * The Delorun mark: a rounded tile with a letter D whose bowl ends in a forward stroke. It draws in the text colour,
- * with the page background showing through the letter, so it follows light and dark without a second file.
+ * The Delorun mark, the hex jack the studio's sidebar draws: a hexagonal nut in the text colour whose round hole shows
+ * the page, with a plug in Delorun's peach accent. It follows light and dark without a second file.
  *
  * @module @delo/site-design/mark
  */
 
-/** The mark's drawing, shared by the inline component and the favicon file so the two cannot drift. */
-export const MARK_PATHS = {
-  tile: 'M8 1h16a7 7 0 0 1 7 7v16a7 7 0 0 1-7 7H8a7 7 0 0 1-7-7V8a7 7 0 0 1 7-7z',
-  letter: 'M10.5 8.5v15h5a7.5 7.5 0 0 0 0-15z',
-  stroke: 'M17.5 16h5.5',
+/** The mark's drawing, the same nut and plug as `@delo/bundle-local`'s sidebar mark and the favicon file. */
+export const MARK = {
+  nut: 'M16 2.5L27.7 9.25V22.75L16 29.5L4.3 22.75V9.25Z M22.6 16A6.6 6.6 0 1 0 9.4 16A6.6 6.6 0 1 0 22.6 16Z',
+  plug: { cx: 16, cy: 16, r: 3.6 },
+  /** Delorun's default accent, Peach (`@delo/plugin-theme`). */
+  peach: '#E5734A',
 } as const
 
 /**
@@ -21,9 +22,8 @@ export const MARK_PATHS = {
 export function Mark({ size = 28, title }: { size?: number, title?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" role={title === undefined ? undefined : 'img'} aria-hidden={title === undefined ? true : undefined} aria-label={title} focusable="false">
-      <path d={MARK_PATHS.tile} className="fill-fd-foreground" />
-      <path d={MARK_PATHS.letter} fill="none" strokeWidth="3" strokeLinejoin="round" className="stroke-fd-background" />
-      <path d={MARK_PATHS.stroke} fill="none" strokeWidth="3" strokeLinecap="round" className="stroke-fd-background" />
+      <path d={MARK.nut} fillRule="evenodd" className="fill-fd-foreground" />
+      <circle cx={MARK.plug.cx} cy={MARK.plug.cy} r={MARK.plug.r} fill={MARK.peach} />
     </svg>
   )
 }
