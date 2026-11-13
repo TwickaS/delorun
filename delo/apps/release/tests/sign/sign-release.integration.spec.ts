@@ -196,12 +196,12 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     editDraft(fixture, (draft) => {
       draft.runtime['darwin-arm64'] = { archive: { ...draft.runtime['linux-x64']!.archive, name: `delorun-${VERSION}-darwin-arm64.tar.gz` }, files: { ...draft.runtime['linux-x64']!.files, name: `delorun-${VERSION}-darwin-arm64.files.json` } }
     })
-    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, linux-arm64, darwin-arm64, win32-x64, but the release platforms closure.json lists at ${fixture.commit} are ${PLATFORMS.join(', ')}`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, linux-arm64, darwin-arm64, but the release platforms closure.json lists at ${fixture.commit} are ${PLATFORMS.join(', ')}`)
     editDraft(fixture, (draft) => {
       delete draft.runtime['darwin-arm64']
-      delete draft.runtime['win32-x64']
+      delete draft.runtime['linux-arm64']
     })
-    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, linux-arm64, but the release platforms`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, but the release platforms`)
   })
 
   it('refuses a rebuild that lacks a platform, and a record of no outputs over an empty rebuild', async (test) => {

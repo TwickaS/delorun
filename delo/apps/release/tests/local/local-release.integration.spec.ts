@@ -348,19 +348,19 @@ describe('the local-release command', () => {
   })
 
   it('signs the release platforms --platform names, and refuses a platform the release does not carry', async (test) => {
-    const platforms: RuntimePlatform[] = ['linux-x64', 'win32-x64']
+    const platforms: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
     const closures = scratch(test)
     await fixtureClosure(test, '0.1.0', { platforms })(closures)
-    const { directory, args } = await command(test, '0.1.0', ['--closures-from', closures, '--platform', 'linux-x64', '--platform', 'win32-x64'])
+    const { directory, args } = await command(test, '0.1.0', ['--closures-from', closures, '--platform', 'linux-x64', '--platform', 'linux-arm64'])
     const out = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     expect(await main(args)).toBe(0)
-    expect(out).toHaveBeenCalledWith(expect.stringContaining('for linux-x64, win32-x64 in'))
+    expect(out).toHaveBeenCalledWith(expect.stringContaining('for linux-x64, linux-arm64 in'))
     const manifest = readEnvelope('manifest', readFileSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0', 'delorun-0.1.0.manifest.json'))).signed
-    expect(Object.keys(manifest.runtime).sort()).toEqual(platforms)
+    expect(Object.keys(manifest.runtime).sort()).toEqual([...platforms].sort())
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const darwin = await command(test, '0.1.0', ['--closures-from', closures, '--platform', 'darwin-arm64'])
     expect(await main(darwin.args)).toBe(1)
-    expect(failure).toHaveBeenLastCalledWith('local-release: --platform darwin-arm64 is not a release platform; closure.json lists linux-x64, linux-arm64, win32-x64')
+    expect(failure).toHaveBeenLastCalledWith('local-release: --platform darwin-arm64 is not a release platform; closure.json lists linux-x64, linux-arm64')
     expect(await main([...darwin.args.slice(0, -1), 'plan9'])).toBe(1)
     expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('--platform plan9 is not a release platform'))
   })

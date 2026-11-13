@@ -37,7 +37,7 @@ describe('release SBOM', ARCHIVE_TIMEOUT, () => {
     const text = readFileSync(join(first, sbomName('0.1.0')), 'utf8')
     expect(text).toBe(readFileSync(join(second, sbomName('0.1.0')), 'utf8'))
     const document = JSON.parse(text) as { packages: Array<{ name: string }>, relationships: Array<{ relationshipType: string }> }
-    expect(document.packages.map(item => item.name)).toEqual(expect.arrayContaining(['zod', 'node', 'pnpm', 'delorun-0.1.0-win32-x64.zip', 'gcc-12', 'musl-tools']))
+    expect(document.packages.map(item => item.name)).toEqual(expect.arrayContaining(['zod', 'node', 'pnpm', 'delorun-0.1.0-linux-arm64.tar.gz', 'gcc-12', 'musl-tools']))
     expect(document.relationships.filter(item => item.relationshipType === 'DESCRIBES')).toHaveLength(readRecipe().closure.platforms.length)
     const recipe = { ...readRecipe(), images: readImagesRecipe() }
     expect((await compareOutputs(first, second, recipe)).differences).toEqual([])
