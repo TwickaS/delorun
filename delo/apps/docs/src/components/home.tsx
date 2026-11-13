@@ -1,5 +1,5 @@
 /**
- * The home page of a locale: the site's introduction and links to the two sections.
+ * The home page of a locale: the site's introduction and three entry points, for a new reader, a reader with a task and a developer.
  *
  * @module @delo/docs/home
  */
@@ -9,7 +9,7 @@ import { baseOptions } from '@/components/layout.tsx'
 import { PageFooter } from '@/theme/footer.tsx'
 import { COPY } from '@/site/copy.ts'
 import { deloVersion, htmlLangOf, prefixOf, type Locale } from '@/site/locale.ts'
-import { routeOf, SECTIONS } from '@/site/routes.ts'
+import { routeOf } from '@/site/routes.ts'
 
 /**
  * The home page.
@@ -23,10 +23,19 @@ export function Home({ locale }: { locale: Locale }) {
       <main className="mx-auto w-full max-w-3xl px-4 py-16">
         <h1 className="text-3xl font-semibold">{copy.siteTitle}</h1>
         <p className="mt-4 text-fd-muted-foreground">{copy.homeIntro}</p>
-        <ul className="mt-8 space-y-2">
-          {SECTIONS.map(section => (
-            <li key={section}><Link href={routeOf(section, [], locale === 'zh')}>{copy.sectionNames[section]}</Link></li>
-          ))}
+        <ul className="mt-8 space-y-4">
+          <li>
+            <Link href={routeOf('guide', ['install'], locale === 'zh')} className="font-medium">{copy.entries.newTitle}</Link>
+            <p className="text-fd-muted-foreground">{copy.entries.newText}</p>
+          </li>
+          <li>
+            <Link href={routeOf('guide', [], locale === 'zh')} className="font-medium">{copy.entries.taskTitle}</Link>
+            <p className="text-fd-muted-foreground">{copy.entries.taskText}</p>
+          </li>
+          <li>
+            <Link href={routeOf('reference', [], locale === 'zh')} className="font-medium">{copy.entries.developerTitle}</Link>
+            <p className="text-fd-muted-foreground">{copy.entries.developerText}</p>
+          </li>
         </ul>
         <PageFooter><p>{copy.describes(deloVersion())}</p></PageFooter>
       </main>
