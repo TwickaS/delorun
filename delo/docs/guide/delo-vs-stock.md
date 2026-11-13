@@ -30,7 +30,7 @@ DSH is an excellent harness, and its maintainers do not accept outside contribut
 
 Delorun holds itself to these rules:
 
-- **Stock first.** A fresh install follows the stock DSH workflow. Delorun sends nothing about you; its default network requests are the release-log check at each start and a daily check for a newer release, which Settings → Privacy turns off ([What you trust when you use Delorun](trust.md#what-leaves-your-machine)).
+- **Stock first.** A fresh install follows the stock DSH workflow. Delorun sends nothing about you; its default network requests are the release-log check at each start and a daily check for a newer release, which Settings → General → Updates turns off ([What you trust when you use Delorun](trust.md#what-leaves-your-machine)).
 - **Yours to change.** Configuration, plugins, presets, skills, themes and the studio are yours, and no hidden layer overrides them.
 - **Updates never take your work away.** Before an update you see what it would change; your profile is saved first; one command goes back ([Updates](updates.md)).
 - **Delorun cannot get in on its own.** Your studio runs on your computer, and every new device needs your approval at that computer ([Reach the studio from your phone](reach.md)).
@@ -71,7 +71,7 @@ Delorun holds itself to these rules:
 
 The [parity checklist](../reference/parity.md) lists each changed default with its evidence:
 
-- Delorun's studio additions are on; the stock look is one switch away under Settings → Appearance.
+- Delorun's studio additions are on; the stock look is one switch away in Settings → General → Look.
 - A new workspace starts on Workspace Write whatever the deployment default is, and with Safer prompts a switch to full access is refused.
 - DeepSeek's session-log upload is off until you turn it on.
 - `web_fetch` refuses loopback, link-local and private-network targets.

@@ -4,7 +4,7 @@ Delorun can show an estimate of what a chat has spent, under the message box. It
 
 ## Turn it on
 
-Open Settings → Plugins, find **Cost meter** and turn it on. The reading appears under the composer in every chat, after the token count.
+Open Plugins in the sidebar, find **Cost meter** and turn it on. The reading appears under the composer in every chat, after the token count.
 
 ## What it shows
 

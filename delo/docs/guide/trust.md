@@ -70,7 +70,7 @@ Whatever the option, a device opens your chats only after you approve it at your
 Two checks run by default. They carry nothing about you, but each request shows the server it reaches your IP address and the time of the request.
 
 - **The release-log check**, at each start, against Sigstore's public release log and the service that publishes its state. It confirms that the release you run is the one Delo Run recorded publicly. No setting turns it off; when the log cannot be reached, Delorun starts anyway and warns you.
-- **The update check**, once a day, which fetches Delorun's signed release files from releases.delorun.com and GitHub. Turn it off in Settings → Privacy or with `delorun setup privacy` ([Updates](updates.md#the-update-notice)).
+- **The update check**, once a day, which fetches Delorun's signed release files from releases.delorun.com and GitHub. Turn it off in Settings → General → Updates or with `delorun setup privacy` ([Updates](updates.md#the-update-notice)).
 
 Each file these checks download is checked against its signature, so a server that hands out a changed file fails the check. Delorun downloads no list of revoked plugins, because none is published yet. Docker images and certificate-log lookups would come with Docker workspaces and own-domain reach, which are not available yet.
 

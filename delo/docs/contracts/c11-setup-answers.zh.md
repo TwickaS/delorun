@@ -131,7 +131,7 @@ setup 按以下顺序提出这些问题。本人接受默认值时即采用该�
 | `reach.option` | 远程访问约定中的远程访问行。`none` 不写入任何行。 | profile。仅在交互形式中写入。 |
 | `reach.identityFactor` | 针对远程访问地址的登记请求。无配置行。 | home 认证状态，遵循身份约定。 |
 | `importStockHome` | [C8](c08-archive-and-trash.zh.md#import-and-export) 中 stock home 导入的数据：正是该部分预览所显示的计划，在每个 profile 的 home 锁之下进行。此后发生变化的 stock 文件、此后新增了对话的 Delo home，或未显示预览的运行，都会拒绝它。 | home。 |
-| `updateCheck` | `false` 按设置 → 隐私保存的方式写入 `delo-update-check` 行：它的 id、插件名称，以及带 `enabled: false` 的 bundle 配置。`true` 不在该行留下任何配置，因此适用 bundle 的 `enabled: true`。 | profile 的 `cordis.patch.yml`，在 Delorun 首次启动之前。 |
+| `updateCheck` | `false` 按设置 → 通用 → 更新保存的方式写入 `delo-update-check` 行：它的 id、插件名称，以及带 `enabled: false` 的 bundle 配置。`true` 不在该行留下任何配置，因此适用 bundle 的 `enabled: true`。 | profile 的 `cordis.patch.yml`，在 Delorun 首次启动之前。 |
 | `sections` | 记录在 `setup-answers.json` 中。 | profile 目录。 |
 
 上游的会话遥测行 `session-telemetry-otel` 不是一个回答。在上游的 profile 中，只有本人提交反馈后它才会发送会话日志前缀。CLI profile 把它与上游的反馈命令及消息反馈行一同禁用，因此那里没有任何内容发送反馈。
@@ -155,7 +155,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 - Delo 自身没有遥测。
 - 上游的桌面分析与 DeepSeek 的会话日志上传除非您开启，否则均为关闭，由设置 → 隐私更改。
 - 上游的反馈发送包含会话日志前缀，且仅在您发送反馈时发生。CLI profile 没有反馈发送，因此这条说明只描述上游的 profile。
-- Delo 每天检查一次是否存在更新的版本，说明它从哪些主机获取、不发送任何关于本次安装及其插件的信息、这些主机能看到这台电脑的地址，以及设置 → 隐私可以关闭它。
+- Delo 每天检查一次是否存在更新的版本，说明它从哪些主机获取、不发送任何关于本次安装及其插件的信息、这些主机能看到这台电脑的地址，以及设置 → 通用 → 更新可以关闭它。
 
 关于恢复与 Docker 的说明属于加入这些主题的部分。
 

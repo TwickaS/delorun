@@ -31,7 +31,7 @@ Once a day, Delorun fetches the signed release files from releases.delorun.com a
 
 A phone or other device you reach the studio from sees the notice without its controls, because an update is applied at your computer ([Reach the studio from your phone](reach.md)).
 
-The check runs only for Delorun installed with its launcher, not for a source checkout. Turn it off in the studio's Settings, under Privacy, with **Check for new releases**, or with `delorun setup privacy`. Quick setup leaves it on; Full setup asks. With the check off, Delorun makes no update request and shows no notice, and `delorun update` still works when you run it.
+The check runs only for Delorun installed with its launcher, not for a source checkout. Turn it off in the studio's Settings → General → Updates with **Check for new releases**, or with `delorun setup privacy`. Quick setup leaves it on; Full setup asks. With the check off, Delorun makes no update request and shows no notice, and `delorun update` still works when you run it.
 
 ## Check and read the report
 

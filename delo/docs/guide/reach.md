@@ -33,7 +33,7 @@ Run `delorun reach on tailscale` in a terminal on your computer, or answer yes t
 
 A device is approved only at your computer.
 
-1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio's Settings, under Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running.
+1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio under Settings → Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running.
 2. On your phone, open your address and choose **Ask for approval**. The phone shows an 8-digit code.
 3. On your computer, the command lists every waiting device with a number, a short request id, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request.
 

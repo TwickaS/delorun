@@ -86,7 +86,7 @@ Setup（[`src/setup/`](src/setup/index.ts)）回答[约定 C11](../../docs/contr
 - **`--yes`** 应用全部默认值，并从 `DEEPSEEK_API_KEY` 读取模型密钥；该变量未设置时，它以一条指出变量名的错误停止。除非给出 `--check-key`，否则不对密钥进行实时检查。与其他形式一样，给出 `--no-update-check` 时发布检查关闭。
 - **`--config <file>`** 读取答案文档。若文档启用了 reach 或库存 home 导入（后者要先在终端中显示其预览）、携带了 setup 不再询问的键（消息写明被移除的键）、在任何字段中携带了凭据值，或指定了 3 或 2 以外的架构版本，它会拒绝该文档；版本 2 的文档没有 `updateCheck`，按开启检查读取。拒绝信息指出字段，且从不回显任何值。
 
-每个主题都是 [`src/setup/sections.ts`](src/setup/sections.ts) 注册表中的一个部分：`privacy`、`import`、`key` 与 `prompts` 在两种模式中都运行，`privacy` 只在“完整”中提出其问题；`background`、`reach`（远程访问，[`src/reach/setup-section.ts`](src/reach/setup-section.ts)）与 `profile` 只在“完整”中运行。`delorun setup privacy` 询问是否检查新版本，并像“设置 → 隐私”那样写入答复。`delorun setup <section>` 在已完成 setup 的 profile 上再次运行某一部分，`delorun setup --list` 列出各部分。后来的包以 `SectionRegistry.register(section, { order })` 加入自己的部分；`order` 决定它在其他部分中的位置。一个部分的写入会收到 home、profile 目录、输入的密钥以及 `delorun` 继承的环境。
+每个主题都是 [`src/setup/sections.ts`](src/setup/sections.ts) 注册表中的一个部分：`privacy`、`import`、`key` 与 `prompts` 在两种模式中都运行，`privacy` 只在“完整”中提出其问题；`background`、`reach`（远程访问，[`src/reach/setup-section.ts`](src/reach/setup-section.ts)）与 `profile` 只在“完整”中运行。`delorun setup privacy` 询问是否检查新版本，并像“设置 → 通用 → 更新”那样写入答复。`delorun setup <section>` 在已完成 setup 的 profile 上再次运行某一部分，`delorun setup --list` 列出各部分。后来的包以 `SectionRegistry.register(section, { order })` 加入自己的部分；`order` 决定它在其他部分中的位置。一个部分的写入会收到 home、profile 目录、输入的密钥以及 `delorun` 继承的环境。
 
 提示问题的答复会生效：“更安全的提示”与“与库存相同”把 `delo-permission-defaults`、`delo-instruction-consent`、`delo-mcp-consent` 与 `delo-schedule-consent` 各行的 `config.enabled` 分别写为约定 C16 注册表中对应开关的 Delo 默认值与对等取值。抓取防护是拒绝而非提示，保持开启。
 

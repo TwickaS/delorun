@@ -9,7 +9,7 @@
  * - opening the shortest and the longest chat from the sidebar and switching between them;
  * - opening Settings.
  *
- * The stock look is the one switch Settings → Appearance writes, the theme row's `studioAdditions: false` in the
+ * The stock look is the one switch Settings → General → Look writes, the theme row's `studioAdditions: false` in the
  * profile's own patch: every browser half of `@delo/bundle-studio` unloads and upstream's studio remains, while
  * `@delo/bundle-local` and every Host half stay as they are. Each item is timed inside the page: from the trusted
  * pointer input that triggers it (or from navigation start) to the first animation frame whose document shows the
@@ -201,7 +201,7 @@ export function writeWorkspaces(root: BenchRoot, plan: WorkspacePlan): void {
   writeFileSync(join(root.deloHome, 'storages', 'workspace.json'), workspaceStore(plan, paths))
 }
 
-/** The profile patch row Settings → Appearance writes to turn Delo's look off. */
+/** The profile patch row Settings → General → Look writes to turn Delo's look off. */
 export const STOCK_LOOK_ROW = '- id: delo-theme\n  config:\n    studioAdditions: false\n'
 
 /** The profile patch row the first-run dialog's Skip writes. */
@@ -371,7 +371,7 @@ export const LOOKS: readonly Look[] = [
   },
   {
     id: 'stock',
-    description: 'The same home with the stock look, the Settings → Appearance switch that unloads every browser half of the studio bundle',
+    description: 'The same home with the stock look, the Settings → General → Look switch that unloads every browser half of the studio bundle',
     profileRows: STOCK_LOOK_ROW,
     sidebarEntry: '[data-row-key^="workspace:"]',
     sidebarEntries: plan => plan.workspaces.length,

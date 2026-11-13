@@ -32,7 +32,7 @@ DSH 是一个出色的 harness，而它的维护者不接受外部贡献。Delor
 
 Delorun 遵守以下规则：
 
-- **Stock 优先。**全新安装遵循 stock DSH 的工作流。Delorun 不发送任何关于你的信息；它默认的网络请求只有每次启动时的发布日志检查与每天一次的新版本检查，可在 Settings → Privacy 中关闭（[你使用 Delorun 时信任什么](trust.zh.md#what-leaves-your-machine)）。
+- **Stock 优先。**全新安装遵循 stock DSH 的工作流。Delorun 不发送任何关于你的信息；它默认的网络请求只有每次启动时的发布日志检查与每天一次的新版本检查，可在 Settings → General → Updates 中关闭（[你使用 Delorun 时信任什么](trust.zh.md#what-leaves-your-machine)）。
 - **由你修改。**配置、插件、预设、skill、主题与 studio 都归你所有，没有任何隐藏的层会覆盖它们。
 - **更新绝不会夺走你的工作。**更新之前，你会看到它将改变什么；你的 profile 会先被保存；一条命令即可回退（[更新](updates.md)）。
 - **Delorun 无法擅自进入。**你的 studio 运行在你的电脑上，每台新设备都需要你在这台电脑上批准（[从手机访问 studio](reach.md)）。
@@ -79,7 +79,7 @@ Delorun 遵守以下规则：
 
 [对等清单](../reference/parity.zh.md)逐项列出每个更改的默认值及其依据：
 
-- Delorun 的 studio 附加功能默认开启；在 Settings → Appearance 中切换一下即可使用 stock 外观。
+- Delorun 的 studio 附加功能默认开启；在 Settings → General → Look 中切换一下即可使用 stock 外观。
 - 无论部署的默认值是什么，新工作区都从 Workspace Write 开始；选择 Safer 提示时，切换为完全访问会被拒绝。
 - DeepSeek 的会话日志上传在你开启之前保持关闭。
 - `web_fetch` 拒绝回环、链路本地与私有网络目标。

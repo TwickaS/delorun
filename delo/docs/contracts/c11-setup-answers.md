@@ -166,7 +166,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `reach.option` | The reach rows of the reach contracts. `none` writes none. | The profile. Written only in the interactive form. |
 | `reach.identityFactor` | An enrolment request for the reach address. No config row. | Home-auth state, under the identity contracts. |
 | `importStockHome` | The data of the stock-home import of [C8](c08-archive-and-trash.md#the-stock-home-import): exactly the plan the section's preview showed, under the home lock of every profile. A stock file that changed since, a Delo home that gained a chat since, or a run that did not show the preview refuses it. | The home. |
-| `updateCheck` | `false` writes the `delo-update-check` row as Settings → Privacy saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
+| `updateCheck` | `false` writes the `delo-update-check` row as Settings → General → Updates saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
 Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In upstream's profiles it sends a session-log prefix only after the person submits feedback. The CLI profile disables it together with upstream's feedback command and message feedback rows, so nothing sends feedback there.
@@ -190,7 +190,7 @@ Setup shows the privacy note at the start of every terminal run, and prints it b
 - Delo has no telemetry of its own.
 - Upstream's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and Settings → Privacy changes them.
 - Upstream's feedback send includes a session-log prefix, and it happens only when you send feedback. The CLI profile has no feedback send, so this statement describes upstream's profiles only.
-- Delo checks once a day whether a newer release exists, which hosts it fetches from, that it sends nothing about the installation and its plugins, that those hosts see the computer's address, and that Settings → Privacy turns it off.
+- Delo checks once a day whether a newer release exists, which hosts it fetches from, that it sends nothing about the installation and its plugins, that those hosts see the computer's address, and that Settings → General → Updates turns it off.
 
 The statements about recovery and Docker belong to the sections that add those topics.
 

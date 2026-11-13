@@ -84,7 +84,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **eject** — copying a plugin's source into the profile as an editable replacement for the original. <a id="eject"></a>
 - **source mode** — running Delo from a git checkout of the person's own fork, updated by merging signed release tags. This mode is not offered; interface text does not use the term. <a id="source-mode"></a>
 - **update report** — what a new release would change or break, shown before an update applies. <a id="update-report"></a>
-- **update check** — the request a running installation makes for the release channel's newest release, verified as an update verifies it and sending nothing about the person; Settings → Privacy turns it off. **update notice** — the line in the terminal and the quiet notice in the studio's sidebar that a newer release exists; it applies nothing. <a id="update-check"></a>
+- **update check** — the request a running installation makes for the release channel's newest release, verified as an update verifies it and sending nothing about the person; Settings → General → Updates turns it off. **update notice** — the line in the terminal and the quiet notice in the studio's sidebar that a newer release exists; it applies nothing. <a id="update-check"></a>
 - **update journal** — the file `run/<profile>/update.json`, which the home process writes at the start of each update phase from `snapshot` on and which the next start reads to finish an interrupted update. <a id="update-journal"></a>
 
 ## Keeping work safe
