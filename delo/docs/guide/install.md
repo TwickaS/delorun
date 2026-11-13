@@ -83,7 +83,7 @@ Both forms ask, in this order:
 1. **Privacy.** A note of what leaves your computer: Delorun has no telemetry of its own; DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on; and once a day Delorun checks for a newer release, sending nothing about your installation. Full asks **Check for new releases?**; Quick keeps the check on.
 2. **Import.** When `~/.dsh` exists and your Delorun home has no chats: `Copy your DeepSeek Harness chats, attachments and workspace list?`, after a preview of what would be copied. The answer starts on No.
 3. **Model key.** Enter the DeepSeek API key now, or read `DEEPSEEK_API_KEY` from the environment at each start. Setup checks a typed key with one request to the provider.
-4. **Prompts.** `How should Delorun ask before it changes things?` **Safer prompts**, the default, asks before instruction edits, new MCP servers, scheduled work and full access. **Same as stock** behaves as DeepSeek Harness does ([What Delorun protects](safety.md#consents)).
+4. **Prompts.** `How should Delorun ask before it changes things?` **Safer prompts**, the default, asks before instruction edits, new MCP servers, scheduled work and full access. **Same as stock** behaves as DeepSeek Harness does ([What Delorun protects](safety.md#consents)). **Dangerous: full access without asking** lets any chat switch to full access with no question; it prints a warning and asks you to type `full access everywhere` ([Dangerous mode](safety.md#dangerous-mode)). `--yes` never selects it; a scripted setup needs `--prompts dangerous --accept-dangerous-mode`.
 
 Full also asks:
 

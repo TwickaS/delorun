@@ -14,7 +14,7 @@ This types-only package exports the answers document of `delorun setup`: its typ
 
 - `SetupAnswers`, `ModelProviderAnswer`, `ReachAnswer`, `ProfileAnswer`, `SectionRecord` and `ModelCredential`: the answer types.
 - `SETUP_PROVIDER_IDS` and `SetupProviderId`: the model providers setup offers, by the route id the profile selects each with; setup's provider table in `delo/apps/cli` holds each one's adapter, key variable and key check.
-- `REACH_OPTIONS`, `IDENTITY_FACTORS`, `PROMPTS_OPTIONS` and `SECTION_STATUSES`, with the union types derived from each.
+- `REACH_OPTIONS`, `IDENTITY_FACTORS`, `PROMPTS_OPTIONS` and `SECTION_STATUSES`, with the union types derived from each; `PROMPTS_OPTIONS` holds `safer`, `stock` and `dangerous`, and `DANGEROUS_PHRASE` is the text a person types to confirm `dangerous`.
 - `REMOVED_ANSWER_KEYS`: the keys of earlier answers documents that `--config` refuses by name.
 - `SETUP_DEFAULTS`: the default value of every answer.
 - `SETUP_OPT_IN_ROWS`: the upstream row that each opt-in on the Privacy section writes. Setup no longer asks either. `SETUP_UPDATE_CHECK_ROW`: the `@delo/bundle-local` row that the `updateCheck` answer and the Privacy section's release-check switch write.
