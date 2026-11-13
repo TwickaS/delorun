@@ -140,14 +140,9 @@
   font: inherit;
   font-size: 13px;
   padding: 4px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--dsw-alias-border-l2, var(--dsh-boot-border));
+  border-radius: var(--dsw-radius-xs, 4px);
+  border: 0.5px solid var(--dsw-alias-border-l2, var(--dsh-boot-border));
   background: transparent;
   color: inherit;
   cursor: pointer;
-}
-
-.recoveryButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary, var(--dsh-boot-brand));
-  outline-offset: 2px;
 }
