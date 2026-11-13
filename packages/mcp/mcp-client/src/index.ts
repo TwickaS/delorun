@@ -76,8 +76,8 @@ export interface StdioConfig {
    * The `argv[0]` the server sees when it differs from `command`. A reviewed
    * start sets it to the configured `command` while `command` names the
    * reviewed file, so a program that locates itself by its invoked name, such
-   * as a virtual-environment `python` link, still does; a reviewed start
-   * replaces any configured value. Absent, the server sees `command`.
+   * as a virtual-environment `python` link, still does. `apply` drops a
+   * configured value. Absent, the server sees `command`.
    */
   argv0?: string
   /** Arguments passed directly, without shell interpolation. */
@@ -179,9 +179,8 @@ async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promi
   const start = await resolveServerStart(config)
   const decision = await consent.review(start)
   if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
-  const { argv0: _unreviewed, ...configured } = config
   return {
-    ...configured,
+    ...config,
     command: decision.spawnCommand ?? start.resolvedCommand,
     ...start.resolvedShell === undefined ? { argv0: config.command } : {},
     cwd: start.resolvedCwd,
@@ -210,14 +209,27 @@ function reviewEachReconnect(ctx: Context, config: StdioConfig): ConnectionOptio
 }
 
 /**
+ * A configuration without the `argv0` only a reviewed start sets.
+ * @param config - the configuration as the row gave it.
+ * @returns the configuration without `argv0`.
+ */
+function withoutArgv0(config: Config): Config {
+  if (config.transport !== 'stdio' || config.argv0 === undefined) return config
+  const { argv0: _reviewedOnly, ...rest } = config
+  return rest
+}
+
+/**
  * Connect one MCP server and publish its initial tool generation before activation.
  * This entry remains explicitly `async`: Cordis treats a prototype-bearing
  * ordinary function as a constructor, whose returned Promise is not startup work.
  * @param ctx - plugin context carrying the tool registry.
- * @param config - resolved transport and server namespace configuration.
+ * @param configured - resolved transport and server namespace configuration.
  * @returns startup readiness after connection and initial tool discovery settle.
  */
-export async function apply(ctx: Context, config: Config): Promise<void> {
+export async function apply(ctx: Context, configured: Config): Promise<void> {
+  // Only a reviewed start sets argv0; a configured one is dropped, as upstream ignores it.
+  const config = withoutArgv0(configured)
   // Fail loud at load: reconnect misconfiguration (including programmatic
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.

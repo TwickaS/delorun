@@ -150,6 +150,12 @@ describe('the add-time consent before a reconnect', () => {
     expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => params.argv0)).toEqual([undefined, undefined])
   })
 
+  it('spawns a start configured with an argv0 without it when no consent is mounted', async () => {
+    await apply(ctx, { ...config(), argv0: 'configured-name' })
+
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => [params.command, params.argv0])).toEqual([['tool', undefined]])
+  })
+
   it('reviews the start again before a reconnect spawns the reviewed executable', async () => {
     const consent = new StubConsent(ctx, [allow, allow])
     await apply(ctx, config())
