@@ -317,6 +317,15 @@ describe('manages-plugins', () => {
     ])).toHaveLength(3)
   })
 
+  it('flags a command that adds or removes plugins, as a string and as an argument list', () => {
+    expect(linesFound('manages-plugins', 'src/dsh-channel.ts', [
+      "await run(`dsh plugin --profile ${profile} add ${name}`)",
+      "spawn('dsh', ['plugin', '--profile', profile, 'add', name])",
+      "execFile('delorun', ['plugin', 'remove', name])",
+      "await run('dsh plugin add weather')",
+    ])).toHaveLength(4)
+  })
+
   it('flags writing the profile composition, loading plugins and the pluginManager service', () => {
     expect(linesFound('manages-plugins', 'src/market.ts', [
       "await writeFile(join(profile, 'cordis.patch.yml'), yaml)",
@@ -324,6 +333,14 @@ describe('manages-plugins', () => {
       'await ctx.plugin(loaded.default, config)',
       'const result = await ctx.pluginManager.install(name)',
     ])).toHaveLength(4)
+  })
+
+  it('flags a dynamic import loaded through ctx.plugin, bracketed or not', () => {
+    expect(linesFound('manages-plugins', 'src/market.ts', [
+      "ctx.plugin((await import(url)).default)",
+      "ctx.plugin(await import(entry))",
+      "await ctx.plugin(await import('./fetched.ts'), config)",
+    ])).toHaveLength(3)
   })
 
   it('does not flag reading cordis.yml, a comment, or the word plugin in prose', () => {
@@ -334,6 +351,19 @@ describe('manages-plugins', () => {
       "const title = 'Add a plugin to your profile'",
       "console.log('run dsh --help')",
       'ctx.effect(() => register(), name)',
+    ])).toEqual([])
+  })
+
+  it('does not flag package.json text, package specifiers, or static plugin composition', () => {
+    expect(linesFound('manages-plugins', 'package.json', [
+      '  "name": "dsh-plugin-telegram",',
+      '  "keywords": ["dsh", "plugin"],',
+      '  "description": "A dsh plugin that posts to Telegram",',
+    ])).toEqual([])
+    expect(linesFound('manages-plugins', 'src/index.ts', [
+      "import { definePlugin } from '@deepseek-ai/dsh-plugin-sdk'",
+      'ctx.plugin(Child)',
+      'ctx.plugin(Child, config)',
     ])).toEqual([])
   })
 })

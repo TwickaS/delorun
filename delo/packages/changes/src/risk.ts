@@ -156,14 +156,28 @@ function commentLine(text: string): boolean {
 const answersApprovalsLine: LineMatcher = text =>
   !commentLine(text) && /\.(?:on|once|before|prependListener)\s*\(\s*['"`]approval\/request['"`]/.test(text)
 
-/** The words that run another program's plugin management: `dsh plugin add`, `delorun plugin remove`. */
-const pluginCommand = /\b(?:dsh|delorun)\b[^\n]*\bplugins?\b/
+/**
+ * A command line that runs another program's plugin management: `dsh plugin add`, `delorun plugin remove`, with
+ * options such as `--profile <name>` before the subcommand. The program and the word `plugin` are whitespace-separated,
+ * so a package name such as `dsh-plugin-sdk` does not match.
+ */
+const pluginCommand = /\b(?:dsh|delorun)\s+plugins?(?:\s+(?:-{1,2}[\w-]+|\$\{[^}\n]*\}))*\s+(?:add|remove|install|uninstall|enable|disable|update)\b/
+/** An argument list that runs plugin management: `['plugin', 'remove', name]`. */
 const pluginArguments = /['"`]plugins?['"`]\s*,[^\]\n]*['"`](?:add|remove|install|uninstall|update)['"`]/
 const configFileWrite = /\bcordis(?:\.patch)?\.ya?ml\b[^\n]*\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b|\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b[^\n]*\bcordis(?:\.patch)?\.ya?ml\b/
 
+/**
+ * A `ctx.plugin` call whose plugin comes from a dynamic `import()`, or from a module namespace's `.default` (a plugin
+ * that an earlier `import()` loaded). A statically imported or locally declared plugin is ordinary composition.
+ */
+const dynamicPluginLoad = /\bctx\??\.plugin\s*\(\s*(?:\(*\s*(?:await\s+)?import\s*\(|[\w$.]+\.default\b)/
+
+/** A call on the `pluginManager` service, which installs, removes or changes plugins. */
+const pluginManagerCall = /\bpluginManager\??\.\w+\s*\(/
+
 const managesPluginsLine: LineMatcher = text =>
   !commentLine(text)
-  && (pluginCommand.test(text) || pluginArguments.test(text) || configFileWrite.test(text) || /\bctx\??\.plugin\s*\(/.test(text) || /\bpluginManager\b/.test(text))
+  && (pluginCommand.test(text) || pluginArguments.test(text) || configFileWrite.test(text) || dynamicPluginLoad.test(text) || pluginManagerCall.test(text))
 
 const modelToolLine = anyOf([
   /\.tools\??\.(?:register|setExecutor)\s*\(/,

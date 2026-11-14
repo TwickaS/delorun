@@ -85,6 +85,8 @@ async function confined(fixture: Fixture, command: string): Promise<{ readonly s
   return { status: result.status, stdout: result.stdout.slice('started\n'.length) }
 }
 
+// Landlock is not exercised here: it grants the copy's real path read-only, which upstream's protected-home.spec.ts covers
+// (packages/sandbox/sandbox-local/src/profiles.ts:335).
 describe.skipIf(!bwrapUsable)('approved-plugin-copies-readable under bwrap', { timeout: 120_000 }, () => {
   it('names only the profile\'s approved copies', async () => {
     expect(activeCopiesEntry('default')).toBe(join('changes', 'profiles', 'default', 'active'))
