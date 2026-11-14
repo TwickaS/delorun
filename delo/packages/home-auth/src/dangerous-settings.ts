@@ -62,15 +62,19 @@ export interface SettingsFieldAccess {
 /** The lifts of one home. */
 export class DangerousSettingsLedger {
   private readonly file: string
+  private readonly label: string
   private lifts: RecordedLift[] = []
   private saving: Promise<void> = Promise.resolve()
   private reverting: Promise<void> | undefined
 
   /**
-   * @param file - the absolute path of `reach-dangerous-settings.json`.
+   * @param file - the absolute path of `reach-dangerous-settings.json`, or of `reach-pin-settings.json` for the lifts of
+   *   unlocked PIN pages.
+   * @param label - what the file records, for the failure that names it.
    */
-  constructor(file: string) {
+  constructor(file: string, label = 'dangerous-mode settings') {
     this.file = file
+    this.label = label
   }
 
   /**
@@ -82,7 +86,7 @@ export class DangerousSettingsLedger {
     if (value === undefined) return
     const lifts = isRecord(value) && value.v === DANGEROUS_SETTINGS_VERSION && Array.isArray(value.lifts) ? value.lifts as unknown[] : undefined
     if (lifts === undefined || !lifts.every(lift => isRecord(lift) && typeof lift.ns === 'string' && typeof lift.field === 'string')) {
-      throw new Error(`${this.file} does not hold this version's record of dangerous-mode settings`)
+      throw new Error(`${this.file} does not hold this version's record of ${this.label}`)
     }
     this.lifts = lifts as RecordedLift[]
   }

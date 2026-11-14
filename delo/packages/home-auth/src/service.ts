@@ -122,6 +122,9 @@ export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delo-reach', field: EVERY
 /** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
 const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
 
+/** The refusal of a PIN page's settings write whose record could not be saved. */
+const PIN_RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when PIN mode turns off; make it at the home\'s computer'
+
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
   static inject = ['webServer']
@@ -130,6 +133,8 @@ export class HomeAuthService extends Service {
   private core: HomeAuth | undefined
   /** The settings a device loosened while dangerous mode held, set back when it ends. */
   private lifts: DangerousSettingsLedger | undefined
+  /** The settings an unlocked PIN page loosened, set back when PIN mode turns off. */
+  private pinLifts: DangerousSettingsLedger | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -173,6 +178,10 @@ export class HomeAuthService extends Service {
     this.core = core
     this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
     await this.lifts.load()
+    this.pinLifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachPinSettings), 'PIN mode settings')
+    await this.pinLifts.load()
+    // A lift left by a run whose PIN mode has since been turned off is set back before the first request.
+    await this.endPinSettings()
     // A lift left by a run whose mode has ended is set back before the first request; without the permission-defaults
     // provider the mode cannot be read yet, and the first read of it ends the lift.
     if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
@@ -193,6 +202,12 @@ export class HomeAuthService extends Service {
     // Every PIN event is logged without the PIN, which is never in an event.
     this.ctx.effect(() => core.onPinEvent((event) => {
       this.ctx.logger.info(`home-auth: pin ${event.kind}${'deviceId' in event ? `: device=${event.deviceId}` : ''}${event.kind === 'wrong' ? ` triesLeft=${String(event.triesLeft)}` : ''}`)
+      // Turning the mode off, by any route, sets back what unlocked pages loosened.
+      if (event.kind === 'off') {
+        this.endPinSettings().catch((error: unknown) => {
+          this.ctx.logger.warn(`home-auth: PIN mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
     }), 'home-auth pin log')
     // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
     this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
@@ -386,6 +401,31 @@ export class HomeAuthService extends Service {
       this.ctx.logger.warn(`home-auth: the record of dangerous-mode settings could not be saved, so a device's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
       return RECORD_REFUSAL
     }
+  }
+
+  /**
+   * Record the settings an unlocked PIN page is about to loosen, with the values they have now.
+   * @param lifts - the fields and the values the call sets.
+   * @returns undefined once the record is saved to disk, or the refusal the page's write meets when it cannot be.
+   */
+  recordPinLifts(lifts: readonly SettingsLift[]): string | undefined {
+    if (this.pinLifts === undefined) return PIN_RECORD_REFUSAL
+    try {
+      this.pinLifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+      return undefined
+    } catch (error) {
+      this.ctx.logger.warn(`home-auth: the record of PIN mode settings could not be saved, so a page's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
+      return PIN_RECORD_REFUSAL
+    }
+  }
+
+  /**
+   * Write back, through the settings service, every setting a PIN page loosened once PIN mode is off, except one the
+   * person changed since.
+   * @returns when the pass is done; a failed write is retried at the next call.
+   */
+  async endPinSettings(): Promise<void> {
+    await this.pinLifts?.revert(this.settingsFields(), () => this.core?.pin.enabled() ?? false)
   }
 
   /**

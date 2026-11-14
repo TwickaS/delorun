@@ -803,7 +803,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinLiftedSettings'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -829,8 +829,8 @@ export function createCondition(
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
-    // An unlocked PIN page lifts the same refusals as dangerous mode, except the settings writes, whose record is
-    // dangerous mode's.
+    // An unlocked PIN page lifts the same refusals as dangerous mode. Its settings writes are recorded in the PIN
+    // file when dangerous mode does not hold, and set back when PIN mode turns off.
     const pageUnlocked = unlockId !== undefined && facts.pageUnlockOf(unlockId) !== undefined
     if (args !== undefined) {
       const dangerous = facts.dangerousMode()
@@ -839,11 +839,11 @@ export function createCondition(
       // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
-        const off = facts.computerOnlySwitches().find(target => !(dangerous && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
+        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
-        if (!dangerous && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
-        if (dangerous) lifts.push(...liftsOf(facts, action, args, loosens))
+        if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+        if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
       }
       if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
@@ -861,7 +861,7 @@ export function createCondition(
     }
     // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
     if (lifts.length > 0) {
-      const unrecorded = facts.liftedSettings(lifts)
+      const unrecorded = facts.dangerousMode() ? facts.liftedSettings(lifts) : facts.pinLiftedSettings(lifts)
       if (unrecorded !== undefined) return { kind: 'deny', reason: unrecorded }
     }
     if (args === undefined) return ALLOW
@@ -939,6 +939,13 @@ export interface ReachAccessFacts {
    * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
    */
   readonly liftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
+  /**
+   * Record the settings an unlocked PIN page is about to loosen, so PIN mode turning off sets them back. Called under the
+   * same conditions as {@link liftedSettings}, when dangerous mode does not hold.
+   * @param lifts - the fields and the values the call sets.
+   * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
+   */
+  readonly pinLiftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
   /**
    * The computer-only switches the mounted plugins registered.
    * @returns the switches.

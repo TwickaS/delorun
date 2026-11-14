@@ -158,9 +158,9 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
    * @param seen - the lifts the policy recorded.
    * @returns the facts.
    */
-  function facts(mode: boolean, unlocked: boolean, seen: unknown[]): ReachAccessFacts {
+  function facts(mode: boolean, unlocked: boolean, seen: unknown[], pinSeen: unknown[] = [], pageUnlocked = false): ReachAccessFacts {
     return {
-      pageUnlockOf: () => undefined, admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere',
+      pageUnlockOf: () => (pageUnlocked ? { id: 'page-1' } : undefined), pinLiftedSettings: (lifts) => { pinSeen.push(...lifts); return undefined }, admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere',
       elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
@@ -199,5 +199,36 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
     expect(createCondition(facts(true, true, seen), device)(call({ ns: 'permission', patch: { defaultPreset: 'workspace-write' } }))).toEqual({ kind: 'allow' })
     expect(createCondition(facts(true, true, seen), device)(call({ ns: CONSENT.ns, patch: { enabled: true } }))).toEqual({ kind: 'allow' })
     expect(seen).toEqual([])
+  })
+
+  describe('under PIN mode', () => {
+    const page = { kind: REACH_DEVICE, deviceId: 'device-1', listener: 'reach-tailscale-private', unlockId: 'page-1' } as never
+    const loosenPreset = call({ ns: 'permission', patch: { defaultPreset: 'danger-full-access' } })
+    const consentOff = call({ ns: CONSENT.ns, patch: { enabled: false } })
+
+    it('records an unlocked page\'s loosening in the PIN file\'s ledger, never dangerous mode\'s', () => {
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const condition = createCondition(facts(false, false, seen, pinSeen, true), page)
+      expect(condition(loosenPreset)).toEqual({ kind: 'allow' })
+      expect(condition(consentOff)).toEqual({ kind: 'allow' })
+      // Pins the destination: a lift in dangerous mode's record would be set back by that mode, not by PIN mode.
+      expect(pinSeen).toEqual([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }])
+      expect(seen).toEqual([])
+    })
+
+    it('refuses a locked page\'s settings write and records nothing', () => {
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const locked = createCondition(facts(false, false, seen, pinSeen, false), page)
+      expect(locked(loosenPreset)).toMatchObject({ kind: 'deny' })
+      expect(locked(consentOff)).toMatchObject({ kind: 'deny' })
+      expect(pinSeen).toEqual([])
+    })
+
+    it('refuses the write when the PIN record is not saved', () => {
+      const refusing: ReachAccessFacts = { ...facts(false, false, [], [], true), pinLiftedSettings: () => 'pin-record-refused' }
+      expect(createCondition(refusing, page)(consentOff)).toEqual({ kind: 'deny', reason: 'pin-record-refused' })
+    })
   })
 })

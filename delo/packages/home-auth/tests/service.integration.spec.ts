@@ -5,7 +5,7 @@
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
 import { generateKeyPairSync } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { IncomingMessage } from 'node:http'
 import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -297,6 +297,31 @@ describe('the homeAuth service', () => {
       expect(ctx.homeAuth.dangerousMode()).toBe(false)
       await ctx.homeAuth.endDangerousSettings()
       expect(calls).toEqual([{ enabled: true }])
+      expect(values.enabled).toBe(true)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('sets back what an unlocked PIN page loosened when PIN mode turns off, and keeps the record at 0600', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      const calls: unknown[] = []
+      ctx.provide('settings', {
+        describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => { calls.push(patch); Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      const file = join(directory, 'secrets', 'home-auth', 'reach-pin-settings.json')
+      // Pins the file and its mode: the record is a protected write like the other reach files.
+      expect((await stat(file)).mode & 0o777).toBe(0o600)
+      expect(calls).toEqual([])
+      await ctx.homeAuth.turnPinOff()
+      await vi.waitFor(() => { expect(calls).toEqual([{ enabled: true }]) })
       expect(values.enabled).toBe(true)
     } finally {
       await fiber.dispose()

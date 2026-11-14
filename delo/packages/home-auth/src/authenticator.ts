@@ -246,6 +246,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
         logElevated: (line) => { ctx.logger.info(line) },
         liftedSettings: lifts => ctx.homeAuth.recordLifts(lifts),
+        pinLiftedSettings: lifts => ctx.homeAuth.recordPinLifts(lifts),
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),
