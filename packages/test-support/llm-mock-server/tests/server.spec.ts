@@ -1,7 +1,14 @@
-import { request } from 'node:http'
+import { createServer, request } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { MockLlmBehavior, MockLlmServer, MockLlmServerEvent } from '../src/index.ts'
 import { startMockLlmServer } from '../src/index.ts'
+
+/** Whether this machine can listen on the IPv6 loopback (some containers and WSL set-ups have none). */
+const ipv6Loopback = await new Promise<boolean>((resolve) => {
+  const probe = createServer()
+  probe.once('error', () => { resolve(false) })
+  probe.listen(0, '::1', () => { probe.close(() => { resolve(true) }) })
+})
 
 const running: MockLlmServer[] = []
 
@@ -207,7 +214,7 @@ describe('mock LLM server wire behaviors', () => {
     expect(server.requests[0]?.body).toEqual({ messages: [{ role: 'user', content: '你好' }] })
   })
 
-  it('formats an IPv6 listener as a valid base URL', async () => {
+  it.skipIf(!ipv6Loopback)('formats an IPv6 listener as a valid base URL', async () => {
     const server = await start(['success'], { host: '::1' })
 
     expect(server.baseURL).toMatch(/^http:\/\/\[::1\]:\d+$/)
