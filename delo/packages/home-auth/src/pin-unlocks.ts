@@ -65,6 +65,12 @@ export interface PinUnlocksOptions {
    */
   readonly removeDevice: (deviceId: DeviceId) => Promise<unknown>
   /**
+   * The session that continues a presented one: the presented id, or the id it rolled to during its grace.
+   * @param presented - the session id the request arrived with.
+   * @returns the id a new unlock is bound to.
+   */
+  readonly currentSession: (presented: string) => string
+  /**
    * Whether a presented session id is the bound session or the one it rolled from, which still admits requests in flight.
    * @param presented - the session id the request arrived with.
    * @param bound - the session id the unlock is bound to.
@@ -272,7 +278,7 @@ export class PinUnlocks {
   private mint(asker: UnlockAsker): PageUnlock {
     const at = this.options.now()
     const idleEndsAt = at + this.idleMs()
-    const record = this.options.elevations.start(asker, Math.min(idleEndsAt, at + PIN_MODE_LIMITS.absoluteCapMs))
+    const record = this.options.elevations.start({ ...asker, sessionId: this.options.currentSession(asker.sessionId) }, Math.min(idleEndsAt, at + PIN_MODE_LIMITS.absoluteCapMs))
     const token = newSecret(PIN_MODE_LIMITS.tokenBytes, this.options.random)
     this.tokens.set(hashSecret(token), { id: record.id, release: this.options.secrets?.register(token, 'session-secret') ?? (() => undefined) })
     return { token, unlockId: record.id, endsAt: at + PIN_MODE_LIMITS.absoluteCapMs, idleEndsAt: record.endsAt }

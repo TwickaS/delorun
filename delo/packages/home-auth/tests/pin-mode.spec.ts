@@ -295,6 +295,34 @@ describe('a page unlock', () => {
     expect(changes.filter(change => change.kind === 'ended' && change.reason === 'token-refused')).toHaveLength(3)
   })
 
+  it('follows a session roll both ways during the grace', async () => {
+    const HOUR = 60 * MINUTE
+    const rollable = async (): Promise<{ readonly oldToken: string; readonly newToken: string }> => {
+      const oldToken = (await home.auth.openSession({ deviceId: first, listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 72 * HOUR })).token
+      for (const hours of [11, 11, 2]) {
+        home.clock.advance(hours * HOUR)
+        if (hours === 11) home.auth.admitToken(oldToken, PRIVATE)
+      }
+      const rolled = home.auth.admitToken(oldToken, PRIVATE, { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      return { oldToken, newToken: rolled.rolled.token }
+    }
+    const touch = (cookie: string, header: string): Promise<Reply> =>
+      send('POST', `${PIN_PATHS.touch}?reach`, undefined, { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delo-unlock': header })
+    // Unlocked with the old cookie in the grace: the new cookie continues the session and keeps the unlock.
+    const { oldToken, newToken } = await rollable()
+    const header = (await unlock(PIN, oldToken)).body.token as string
+    // Pins the successor mapping in `mint`: bound to the raw old id, the new cookie would burn the unlock.
+    expect(await touch(newToken, header)).toMatchObject({ status: 200 })
+    expect(running()).toBeDefined()
+    expect(await touch(oldToken, header)).toMatchObject({ status: 200 })
+    // Unlocked with the new cookie: the old cookie in the grace still carries it.
+    const again = await rollable()
+    const second = (await unlock(PIN, again.newToken)).body.token as string
+    expect(await touch(again.oldToken, second)).toMatchObject({ status: 200 })
+    expect(await touch(again.newToken, second)).toMatchObject({ status: 200 })
+  })
+
   it('reads the token from the header only', async () => {
     const unlocked = await unlock()
     const header = unlocked.body.token as string

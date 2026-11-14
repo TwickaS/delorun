@@ -55,6 +55,24 @@ describe('the dangerous-mode settings record', () => {
     expect(ledger.pending()).toBe(false)
   })
 
+  it('keeps a lift whose settings row is not described instead of dropping it unwritten', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    let described = false
+    const access: SettingsFieldAccess = { ...settings, described: () => described }
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    // Pins the described check: an absent row reads as unset, which would pass for the person's change and drop the lift.
+    await ledger.revert(access, () => false)
+    expect(ledger.pending()).toBe(true)
+    expect(settings.writes).toEqual([])
+    described = true
+    await ledger.revert(access, () => false)
+    expect(values['permission.defaultPreset']).toBe('workspace-write')
+    expect(ledger.pending()).toBe(false)
+  })
+
   it('keeps what the person set at the computer since the device wrote', async () => {
     const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write', 'delo-delegation-consent.enabled': true }
     const settings = fakeSettings(values)

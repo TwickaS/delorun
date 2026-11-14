@@ -6,6 +6,11 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
+import { createHash } from 'node:crypto'
+import { once } from 'node:events'
+import { createServer, type IncomingMessage } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,7 +24,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HOME_AUTH_SWITCH, HomeAuthService, REACH_SWITCH } from '../src/service.ts'
 import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
-import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
+import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '@delo/home'
 import { DeviceStore } from '../src/devices.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
@@ -646,6 +651,85 @@ describe('the authenticator provider', () => {
       // Pins the strip: the upgrade handler sees only the protocol it answers with.
       expect(upgrade.headers).toMatchObject({ 'sec-websocket-protocol': 'delo.mux' })
       expect(JSON.stringify(upgrade.headers)).not.toContain(page.unlock.token)
+    })
+
+    it.each([
+      { mode: false, unlocked: false },
+      { mode: false, unlocked: true },
+      { mode: true, unlocked: false },
+      { mode: true, unlocked: true },
+    ])('with PIN mode off, a Delo-Unlock header changes no decision (dangerous mode $mode, device unlocked $unlocked)', async ({ mode, unlocked }) => {
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const cookie = await session(2)
+      const plain = provider().admit(request({ url: '/api/x', headers: { cookie: `__Host-delo-session=${cookie}` } }), PRIVATE)
+      const carried = provider().admit(request({ url: '/api/x', headers: { cookie: `__Host-delo-session=${cookie}`, 'delo-unlock': 'any-token-at-all' } }), PRIVATE)
+      // Pins the ignore: with the mode off the header is stripped and neither refuses nor unlocks the page.
+      expect(carried).toMatchObject({ kind: 'admitted' })
+      const principalOf = (admission: Admission) => provider().reachPeer(peerOf(admission).id)
+      expect(principalOf(carried)).toEqual(principalOf(plain))
+      const decide = (admission: Admission, action: string) => {
+        const peer = principalOf(admission)
+        if (peer === undefined) throw new Error('no principal')
+        const principal = reachDevicePrincipal(peer.deviceId, peer.listener, peer.unlockId)
+        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => mode })
+        return policy.bindings(principal)[0]?.condition?.({ action, resource: { kind: 'global' }, args: {} } as never)
+      }
+      for (const action of [...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS), 'terminal/create']) {
+        expect(decide(carried, action), action).toEqual(decide(plain, action))
+      }
+      vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => mode } : Context.prototype.get.call(ctx, name as never))) as never)
+      vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
+      const give = (admission: Admission, grants: string): boolean => {
+        try {
+          provider().checkAnswer({ peer: peerOf(admission), event: 'approval/request', request: { grants }, value: 'allowed-once' })
+          return true
+        } catch (_refused) {
+          return false
+        }
+      }
+      for (const grants of ['full-access', 'workspace-management', 'external-agent']) expect(give(carried, grants), grants).toBe(give(plain, grants))
+    })
+
+    it('completes a real WebSocket handshake for a browser offering delo.mux and the unlock subprotocol', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const admissions: Admission[] = []
+      const server = createServer()
+      server.on('upgrade', (upgrade: IncomingMessage, socket: Duplex) => {
+        // The admission reads the request as the Connection hands it over: real headers, the token stripped on admit.
+        const admission = provider().admit(upgrade as unknown as ConnectionIndexRequest, PRIVATE)
+        admissions.push(admission)
+        if (admission.kind !== 'admitted') {
+          socket.end('HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n')
+          return
+        }
+        const accept = createHash('sha1').update(`${String(upgrade.headers['sec-websocket-key'])}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
+        const offered = String(upgrade.headers['sec-websocket-protocol'] ?? '').split(',').map(entry => entry.trim())
+        socket.write(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept}\r\n${offered.includes('delo.mux') ? 'sec-websocket-protocol: delo.mux\r\n' : ''}\r\n`)
+      })
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const port = (server.address() as AddressInfo).port
+      // The runtime's own client, as a browser sets the cookie: a header the test adds, since Node has no cookie jar.
+      const connect = (token: string): Promise<{ readonly protocol: string } | 'refused'> => new Promise((resolve) => {
+        const socket = new WebSocket(`ws://127.0.0.1:${String(port)}/api/remote.mux`, { protocols: ['delo.mux', `delo-unlock.${token}`], headers: { cookie: `__Host-delo-session=${page.cookie}` } } as never)
+        socket.addEventListener('open', () => { const { protocol } = socket; socket.close(); resolve({ protocol }) })
+        socket.addEventListener('error', () => { resolve('refused') })
+      })
+      try {
+        // Pins the selection and the binding: delo.mux is the protocol the server answers with, on an unlocked Peer.
+        expect(await connect(page.unlock.token)).toEqual({ protocol: 'delo.mux' })
+        const accepted = admissions[0]
+        if (accepted?.kind !== 'admitted') throw new Error('the upgrade was not admitted')
+        expect(provider().reachPeer(accepted.peer.id)?.unlockId).toBe(page.unlock.unlockId)
+        // An unknown token is refused with UNLOCK_INVALID and the handshake does not complete.
+        expect(await connect('not-a-token')).toBe('refused')
+        expect(admissions[1]).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+      } finally {
+        server.closeAllConnections()
+        server.close()
+      }
     })
 
     it('ignores a token in a query and refuses a repeated or mismatched one, burning the unlock', async () => {

@@ -303,6 +303,7 @@ export class HomeAuth {
       random: this.random,
       secrets: options.secrets,
       removeDevice: deviceId => this.revokeDevice(deviceId),
+      currentSession: presented => this.successors.get(presented) ?? presented,
       sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
       stillAdmitted: asker => this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
         && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener),

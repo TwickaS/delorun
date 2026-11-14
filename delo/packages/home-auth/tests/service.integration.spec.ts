@@ -5,7 +5,7 @@
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
 import { generateKeyPairSync } from 'node:crypto'
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { IncomingMessage } from 'node:http'
 import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -325,6 +325,86 @@ describe('the homeAuth service', () => {
       expect(values.enabled).toBe(true)
     } finally {
       await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a PIN lift whose settings row is not described, and sets it back when the row appears', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      let rows: { ns: string; value: unknown }[] = [{ ns: 'delo-delegation-consent', value: values }]
+      ctx.provide('settings', {
+        describe: () => rows,
+        update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      rows = []
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      // Pins the kept lift: an absent row cannot show the person's change, so the lift is not dropped unwritten.
+      expect(values.enabled).toBe(false)
+      rows = [{ ns: 'delo-delegation-consent', value: values }]
+      // Pins the retry: the next read of PIN mode after the row mounts writes the value back.
+      expect(ctx.homeAuth.pinEnabled()).toBe(false)
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('retries a PIN revert that failed, and one left by a run that started before the settings service', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      let failing = true
+      const settings = {
+        describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => {
+          if (failing) return Promise.reject(new Error('plugin reloading'))
+          Object.assign(values, patch)
+          return Promise.resolve()
+        },
+      }
+      ctx.provide('settings', settings as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await vi.waitFor(() => { expect(ctx.homeAuth.pinEnabled()).toBe(false) })
+      expect(values.enabled).toBe(false)
+      await ctx.homeAuth.endPinSettings()
+      failing = false
+      // Pins the retry on a later read: the failed write keeps its lift, and nothing else would try again.
+      await vi.waitFor(() => { expect(ctx.homeAuth.pinEnabled()).toBe(false); expect(values.enabled).toBe(true) })
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('sets back a PIN lift a previous run left once the settings service mounts', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      await fiber.dispose()
+      const secrets = join(directory, 'secrets', 'home-auth')
+      await writeFile(join(secrets, 'reach-pin-settings.json'), JSON.stringify({ v: 1, lifts: [{ ns: 'delo-delegation-consent', field: 'enabled', previous: true, set: false }] }), { mode: 0o600 })
+      const restarted = await ctx.plugin(HomeAuthService, { secretsDirectory: secrets })
+      try {
+        const values: Record<string, unknown> = { enabled: false }
+        // Pins the start without the service: the lift stays on disk and the later mount of the settings service writes it back.
+        ctx.provide('settings', {
+          describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+          update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+        } as never)
+        await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+      } finally {
+        await restarted.dispose()
+      }
+    } finally {
       await rm(directory, { recursive: true, force: true })
     }
   })
