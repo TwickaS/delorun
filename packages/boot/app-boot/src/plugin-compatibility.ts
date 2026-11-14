@@ -70,7 +70,8 @@ export function getDshRuntimeVersion(): string {
 /**
  * Read the Delo version this process was given, from {@link DELO_VERSION_ENV}.
  * @param env - the environment to read; this process's by default.
- * @returns the validated Delo version, or undefined when the variable is unset or blank, where the `engines.delo` axis is not checked.
+ * @returns the validated Delo version, or undefined when the variable is unset or blank (the `engines.delo` axis is then not
+ * checked).
  * @throws Error when the variable is set to something that is not a semantic version.
  */
 export function getDeloRuntimeVersion(env: Readonly<Record<string, string | undefined>> = process.env): string | undefined {

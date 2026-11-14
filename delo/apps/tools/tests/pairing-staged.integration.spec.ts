@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { compareViolations, headBase, main, violationKey } from '../src/pairing-staged.ts'
+import { compareViolations, headBase, main, stagedRenames, violationKey } from '../src/pairing-staged.ts'
 import { REPO, scratchRepo, type Scratch } from './gates/support.ts'
 
 afterEach(() => { vi.restoreAllMocks() })
@@ -54,10 +54,28 @@ describe('pairing keys', () => {
     expect(violationKey('delo/a.zh.md:12: link', new Map([['delo/a', 'delorun/a']]))).toBe('delorun/a.zh.md: link')
   })
 
+  it('compares a violation whose text names renamed paths with the same violation under the old names', () => {
+    const before = 'delo/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delo-plugin-interface.md" uses the wrong locale'
+    const after = 'delorun/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delorun-plugin-interface.md" uses the wrong locale'
+    const verdict = compareViolations([after], [before], new Map([['delo/apps/cli/README', 'delorun/apps/cli/README']]))
+    expect(verdict).toEqual({ added: [], existing: [after] })
+  })
+
   it('counts a repeated violation once per occurrence', () => {
     const verdict = compareViolations(['v', 'v'], ['v'], new Map())
     expect(verdict.existing).toEqual(['v'])
     expect(verdict.added).toEqual(['v'])
+  })
+})
+
+describe('staged renames', () => {
+  it('finds renames when the rename limit is lower than the number of changed files', (test) => {
+    const repo = scratchRepo(test)
+    repo.run(['config', 'diff.renameLimit', '1'])
+    const files = Object.fromEntries(['a', 'b', 'c', 'd'].map(name => [`old/${name}.md`, `# ${name}\n\n${name.repeat(40)}\n`]))
+    repo.commit(files)
+    repo.run(['mv', 'old', 'new'])
+    expect(stagedRenames(repo.root).get('new/a.md')).toBe('old/a.md')
   })
 })
 
