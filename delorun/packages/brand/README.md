@@ -30,7 +30,7 @@ The package exports its source, as [`@delorun/settings-controls`](../settings-co
 
 | Export | Holds |
 | --- | --- |
-| `@delorun/brand` | The components, `Mark`, `MARK` and the tokens; importing it loads `tokens.css` |
+| `@delorun/brand` | The components, `Mark`, `MARK` and the tokens; importing it loads `tokens.css`, which is why the manifest declares no `sideEffects` |
 | `@delorun/brand/tokens` | `BRAND_COLOURS`, `BRAND_FONTS`, `BRAND_RADII`, `BRAND_SPACE` as data |
 | `@delorun/brand/tokens.css` | The same values as `--dl-*` custom properties |
 | `@delorun/brand/fonts.css` | `@font-face` for Schibsted Grotesk and JetBrains Mono, Latin subset, SIL OFL 1.1 |
@@ -62,6 +62,7 @@ Each is a function component with a documented props interface. "Upstream" means
 | `ConfirmAction` | `Button` | A destructive action with one inline confirmation |
 | `Link` | none | Text-safe peach, underlined |
 | `Mark` | none | The hex mark; the nut takes the text colour and the plug takes `--dl-accent` |
+| `SettingsCard`, `SettingHeading`, `SettingRow`, `ChoiceGroup`, `TileGroup` | none | The Settings sections' controls, for the studio only: they read the studio's `--dsw-*` and `--delorun-space-*` properties. [`@delorun/settings-controls`](../settings-controls/README.md) re-exports them |
 
 ## Contract
 
@@ -74,7 +75,9 @@ Each is a function component with a documented props interface. "Upstream" means
 
 ## The drift gate
 
-[`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) refuses, in the sources of every Delorun package and of the website and the docs outside this package, a brand colour literal (`#E5734A`, `#B84A1B`), a named typeface in `font-family` and a second copy of the mark's path. Each file that keeps a literal is listed with a reason in [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json); the list only shrinks.
+[`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) refuses, in the sources of every Delorun package and in the sources, public files and scripts of the website and the docs outside this package, a brand colour literal (`#E5734A`, `#B84A1B`), a named typeface in `font-family` and a second copy of the mark's path. Each file that keeps a literal is listed with a reason in [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json); the list only shrinks.
+
+The website's social card page, `apps/website/scripts/og.html`, is generated from the mark and the brand's custom properties by `scripts/render-og.ts` (`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`). Its mark path is the one allowlisted copy, and `tests/og.spec.ts` fails when the committed page differs from [`src/og.ts`](src/og.ts). `public/og.png` is a screenshot of that page at 1200 by 630.
 
 ## The desktop icon
 

@@ -24,6 +24,9 @@ describe('the brand drift gate', () => {
     expect(isScanned('delorun/packages/plugin-theme/src/client/x.css')).toBe(true)
     expect(isScanned('delorun/apps/website/src/styles/app.css')).toBe(true)
     expect(isScanned('delorun/packages/site-design/src/tokens.css')).toBe(true)
+    expect(isScanned('delorun/apps/website/scripts/og.html')).toBe(true)
+    expect(isScanned('delorun/apps/website/scripts/export-subscribers.ts')).toBe(true)
+    expect(isScanned('delorun/apps/docs/scripts/check-links.mjs')).toBe(false)
     expect(isScanned('delorun/packages/brand/src/tokens.css')).toBe(false)
     expect(isScanned('delorun/packages/plugin-theme/tests/x.ts')).toBe(false)
     expect(isScanned('delorun/packages/plugin-theme/src/client/font.woff2')).toBe(false)
@@ -37,5 +40,14 @@ describe('the brand drift gate', () => {
     const exempt: Allowlist = { entries: [{ path, rule: 'colour', reason: 'test' }] }
     expect(fileErrors(path, text, exempt)).toEqual([`${path}:2: a named typeface in font-family; use \`var(--dl-font-sans)\` or \`var(--dl-font-mono)\``])
     expect(fileErrors('delorun/packages/brand/src/tokens.css', text, NONE)).toEqual([])
+  })
+
+  it('refuses a second copy of the mark or a brand colour in a website script, and accepts the allowlisted generated card', () => {
+    const path = 'delorun/apps/website/scripts/og.html'
+    const copy = `<svg><path d="${NUT}Z"/><circle fill="${PEACH}"/></svg>`
+    expect(fileErrors(path, copy, NONE)).toHaveLength(2)
+    const generated: Allowlist = { entries: [{ path, rule: 'mark', reason: 'generated' }] }
+    expect(fileErrors(path, copy, generated)).toHaveLength(1)
+    expect(fileErrors('delorun/apps/website/scripts/x.ts', `const c = '${PEACH}'`, generated)).toHaveLength(1)
   })
 })

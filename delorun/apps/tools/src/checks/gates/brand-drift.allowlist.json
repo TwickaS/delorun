@@ -39,6 +39,11 @@
       "path": "delorun/packages/plugin-theme/src/config.ts",
       "rule": "colour",
       "reason": "The host half cannot bundle the browser-only brand package; packages/brand/tests/tokens.spec.ts keeps the default equal to BRAND_COLOURS.peach."
+    },
+    {
+      "path": "delorun/apps/website/scripts/og.html",
+      "rule": "mark",
+      "reason": "Generated from MARK by packages/brand/scripts/render-og.ts; packages/brand/tests/og.spec.ts keeps it equal to the builder."
     }
   ]
 }
