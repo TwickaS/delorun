@@ -7,7 +7,7 @@
  */
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { createServer as createTcpServer, type AddressInfo } from 'node:net'
 import { join, resolve } from 'node:path'
 import { startMockLlmServer, type MockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import type { LogEndpoints } from '../../src/log/client.ts'
@@ -135,4 +135,17 @@ export const MODEL_REPLY = 'The journey model answers: the release under test is
  */
 export function serveModel(): Promise<MockLlmServer> {
   return startMockLlmServer({ host: '127.0.0.1', port: 0, sequence: ['success'], repeatLast: true, successText: MODEL_REPLY })
+}
+
+/**
+ * A loopback port that nothing listens on at the moment of the call, for a profile's studio port: the profile's default,
+ * 3080, may be taken by another program on the computer.
+ * @returns the port, from the system's ephemeral range.
+ */
+export async function freeLoopbackPort(): Promise<number> {
+  const server = createTcpServer()
+  await new Promise<void>((done, fail) => { server.once('error', fail).listen(0, '127.0.0.1', done) })
+  const { port } = server.address() as AddressInfo
+  await new Promise<void>(done => server.close(() => { done() }))
+  return port
 }
