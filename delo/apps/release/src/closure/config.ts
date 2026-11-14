@@ -81,6 +81,15 @@ export const ClosureRecipe = z.strictObject({
   deployRoot: z.string().min(1),
   /** The product name the client artifacts are built with, as `DSH_CLIENT_TITLE`. */
   clientTitle: z.string().min(1).max(64),
+  /**
+   * Packages that carry other platforms' prebuilds in their main package, with the platform directories to drop from a
+   * closure before its native files are checked against the pins; a directory not listed here is never removed.
+   */
+  foreignPrebuilds: z.array(z.strictObject({
+    package: z.string().regex(/^(@[a-z0-9-]+\/)?[a-z0-9._-]+$/u, 'an npm package name'),
+    directory: z.string().regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/u, 'a relative path inside the package'),
+    platforms: z.array(z.string().regex(/^[a-z0-9]+-[a-z0-9]+$/u, 'a platform such as darwin-arm64')).min(1),
+  })),
   /** The install anchor upstream's runtime resolution reads, and the Delo bundles it must declare as dependencies. */
   anchor: z.strictObject({
     package: z.string().min(1),

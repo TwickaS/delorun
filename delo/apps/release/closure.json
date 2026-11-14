@@ -7,6 +7,18 @@
   "buildRoot": "/var/tmp/delo-release-build",
   "deployRoot": "@delo/runtime-closure",
   "clientTitle": "Delo",
+  "foreignPrebuilds": [
+    {
+      "package": "@deepseek-ai/libreoffice-kit",
+      "directory": "frame-forwarding/prebuilds",
+      "platforms": [
+        "darwin-arm64",
+        "darwin-x64",
+        "win32-arm64",
+        "win32-x64"
+      ]
+    }
+  ],
   "anchor": {
     "package": "@deepseek-ai/dsh",
     "bundles": [
