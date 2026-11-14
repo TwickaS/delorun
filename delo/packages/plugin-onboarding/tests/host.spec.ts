@@ -67,7 +67,7 @@ describe('the configuration', () => {
   it('accepts scoped and plain package names and a session id', () => {
     expect(plain({ starterSession: PENDING_STARTERS }).starterSession).toBe('pending')
     expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true })
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true })
   })
 })
 
@@ -275,6 +275,7 @@ describe('the optional rows', () => {
   it('checks the configured rows against the Loader when it applies', () => {
     const ctx = new Context()
     ctx.provide('loader', { entries: () => [{ id: 'delo-cost-meter' }] } as never)
+    ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
     expect(() => apply(ctx, Config({ optionalRows: ['delo-cost-meter'] }))).not.toThrow()
     expect(() => apply(ctx, Config({ optionalRows: ['delo-nope'] }))).toThrow('"delo-nope"')
   })
