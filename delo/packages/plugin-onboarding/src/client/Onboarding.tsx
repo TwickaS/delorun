@@ -118,8 +118,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     if (target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
     if (target.kind === 'none') told.current = true
   }, [target, guide, told])
-  const { plugins } = settings
-  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins, renderSection }), [fixed, t, plugins, renderSection])
+  const { plugins, optionalRows } = settings
+  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins, optionalRows, renderSection }), [fixed, t, plugins, optionalRows, renderSection])
 
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delo onboarding: progress was not saved', error) })

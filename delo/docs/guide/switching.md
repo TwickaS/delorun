@@ -19,6 +19,7 @@ You need Delorun installed ([Install and first run](install.md)) and, to copy a 
 - [What is held back](#what-is-held-back)
 - [Workspaces and chats that stay behind](#workspaces-and-chats-that-stay-behind)
 - [What stays behind](#what-stays-behind)
+- [Chats from the DeepSeek website](#chats-from-the-deepseek-website)
 - [Plugins after the import](#plugins-after-the-import)
 - [A home that already has chats](#a-home-that-already-has-chats)
 - [What changes when you switch](#what-changes-when-you-switch)
@@ -86,6 +87,10 @@ The preview lists each item that is not copied, with the reason:
 - attachments whose content does not match the name they are stored under;
 - chats written by a newer DeepSeek Harness than your Delorun reads, chats stored without compression, and documents too large or that this version cannot read;
 - anything the import does not recognise.
+
+## Chats from the DeepSeek website
+
+The import above copies chats from `~/.dsh`. Chats you had on chat.deepseek.com are a separate source: export them from the website and load the file with the optional chat import plugin, as described in [Import your DeepSeek website chats](import-deepseek-chats.md).
 
 ## Plugins after the import
 
@@ -163,6 +168,7 @@ Some differences have no switch: commands the model runs never write into Deloru
 
 - Start Delorun: [Daily use](daily-use.md).
 - See the model providers: [Model providers](providers.md).
+- Bring chats from the DeepSeek website too: [Import your DeepSeek website chats](import-deepseek-chats.md).
 - Know what Delorun changes from stock: [Delorun and stock DeepSeek Harness](delo-vs-stock.md).
 - If something went wrong: [Archives, imports and the trash](troubleshooting.md#archives-imports-and-the-trash).
 

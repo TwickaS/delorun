@@ -62,13 +62,13 @@ export interface FlowInput {
  * @returns the steps, ascending by order.
  */
 export function buildSteps({ services, guide, record, extra, reach, target, notice }: FlowInput): FlowStep[] {
-  const { t, plugins } = services
+  const { t, plugins, optionalRows } = services
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
   const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
   if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: () => <LookStep {...props} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
-  if (plugins.length > 0 && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
+  if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
   if (reach === 'remote') built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <RemoteReachStep {...props} /> })
   else if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep {...props} /> })
   built.push(

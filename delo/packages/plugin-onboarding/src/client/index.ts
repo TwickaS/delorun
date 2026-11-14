@@ -56,7 +56,7 @@ import type {
 } from './types.ts'
 
 export { createBundleInstaller, stateOf } from './bundles.ts'
-export type { BundleInstaller, BundleState, BundleView } from './bundles.ts'
+export type { BundleInstaller, BundleState, BundleView, RowView } from './bundles.ts'
 export type { OnboardingStepEntryProps } from './Onboarding.tsx'
 export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'

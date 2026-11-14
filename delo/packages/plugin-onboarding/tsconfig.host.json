@@ -16,7 +16,8 @@
     "src/folder-kind.ts",
     "src/key-test.ts",
     "src/readiness.ts",
-    "src/recommend.ts"
+    "src/recommend.ts",
+    "src/rows.ts"
   ],
   "references": [
     {

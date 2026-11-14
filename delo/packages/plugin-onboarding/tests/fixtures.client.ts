@@ -5,7 +5,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
-import type { BundleInstaller, BundleView } from '../src/client/bundles.ts'
+import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -96,13 +96,16 @@ export function noticeFace(acknowledged = false) {
 }
 
 /** A bundle installer over a store, recording what it is asked. */
-export function installerFake(views: Readonly<Record<string, BundleView>> = {}) {
+export function installerFake(views: Readonly<Record<string, BundleView>> = {}, rows: Readonly<Record<string, RowView>> = {}) {
   const store = createSnapshotStore<Readonly<Record<string, BundleView>>>(views)
   const refresh = vi.fn()
   const install = vi.fn(() => Promise.resolve())
   const openPlugins = vi.fn()
-  const installer: BundleInstaller = { views: store, refresh, install, openPlugins }
-  return { installer, store, refresh, install, openPlugins }
+  const rowStore = createSnapshotStore<Readonly<Record<string, RowView>>>(rows)
+  const refreshRows = vi.fn()
+  const enableRow = vi.fn(() => Promise.resolve())
+  const installer: BundleInstaller = { views: store, refresh, install, rows: rowStore, refreshRows, enableRow, openPlugins }
+  return { installer, store, refresh, install, rowStore, refreshRows, enableRow, openPlugins }
 }
 
 /** A workspace id the specs use as the default workspace. */
@@ -184,7 +187,7 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
   const bundles = installerFake()
   const theme = liveForm<ThemeSettings>(THEME)
   return {
-    t, appearance, plugins: [],
+    t, appearance, plugins: [], optionalRows: [],
     notice: undefined,
     language: languageFace().face,
     scheme: schemeFace().face,

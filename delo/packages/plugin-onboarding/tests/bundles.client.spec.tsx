@@ -216,3 +216,67 @@ describe('opening Plugins', () => {
     expect(() => { bare.openPlugins() }).not.toThrow()
   })
 })
+
+describe('the bundled rows', () => {
+  const costMeter = { rowId: 'delo-cost-meter', moduleName: '@delo/plugin-cost-meter', entryId: 'entry-1', meta: { title: { en: 'Cost meter' }, description: 'Estimated cost.', icon: 'data:image/png;base64,AA==' } }
+  const studio = { ...row({ name: '@delo/bundle-studio', enabled: true }), rows: [costMeter] }
+
+  /** A bench whose plugin manager also lists live plugins and enables one. */
+  function rowBench(enabled: boolean, readOnlyReason?: string, change: unknown = { application: 'applied' }) {
+    const made = bench([studio as never])
+    const live = { entryId: 'entry-1', enabled, ...readOnlyReason === undefined ? {} : { readOnlyReason } }
+    const extra = {
+      listPlugins: vi.fn(async () => ({ ok: true as const, value: [live] })),
+      setPluginEnabled: vi.fn(async () => ({ ok: true as const, value: change })),
+    }
+    Object.assign(made.pluginManager, extra)
+    return { ...made, ...extra, rowState: () => made.installer.rows.getSnapshot()['delo-cost-meter'] }
+  }
+
+  it('reads a disabled row as available with its package title, description and icon, and changes nothing', async () => {
+    const { installer, setPluginEnabled, rowState } = rowBench(false)
+    installer.refreshRows(['delo-cost-meter'])
+    expect(rowState()).toEqual({ state: 'checking' })
+    await flush()
+    expect(rowState()).toEqual({ state: 'available', title: { en: 'Cost meter' }, description: 'Estimated cost.', icon: 'data:image/png;base64,AA==' })
+    expect(setPluginEnabled).not.toHaveBeenCalled()
+  })
+
+  it('turns a row on through the plugin manager by its entry, without a restart', async () => {
+    const { installer, setPluginEnabled, rowState } = rowBench(false)
+    installer.refreshRows(['delo-cost-meter'])
+    await flush()
+    await installer.enableRow('delo-cost-meter')
+    expect(setPluginEnabled).toHaveBeenCalledExactlyOnceWith('entry-1', true)
+    expect(rowState()?.state).toBe('installed')
+  })
+
+  it.each<readonly [string, boolean, string | undefined, unknown, string]>([
+    ['is already on', true, undefined, undefined, 'installed'],
+    ['is protected or cannot be addressed', false, 'management-required', undefined, 'failed'],
+    ['waits for a restart', false, undefined, { application: 'restart-required' }, 'restart'],
+    ['is overridden', false, undefined, { application: 'overridden' }, 'failed'],
+  ])('shows a row that %s as %s and turns on only an available row', async (_, enabled, readOnly, change, expected) => {
+    const { installer, setPluginEnabled, rowState } = rowBench(enabled, readOnly, change)
+    installer.refreshRows(['delo-cost-meter'])
+    await flush()
+    if (rowState()?.state === 'available') await installer.enableRow('delo-cost-meter')
+    else {
+      await installer.enableRow('delo-cost-meter')
+      expect(setPluginEnabled).not.toHaveBeenCalled()
+    }
+    expect(rowState()?.state).toBe(expected)
+  })
+
+  it('says a row no bundle declares is unavailable, and every row failed without a plugin manager', async () => {
+    const { installer, rowState } = rowBench(false)
+    installer.refreshRows(['delo-cost-meter', 'delo-nope'])
+    await flush()
+    expect(installer.rows.getSnapshot()['delo-nope']).toEqual({ state: 'unavailable' })
+    expect(rowState()?.state).toBe('available')
+    const none = bench('no-remote')
+    none.installer.refreshRows(['delo-cost-meter'])
+    await flush()
+    expect(none.installer.rows.getSnapshot()['delo-cost-meter']).toEqual({ state: 'failed' })
+  })
+})

@@ -242,6 +242,11 @@ describe('the first run', () => {
 })
 
 describe('which steps apply', () => {
+  it('adds recommended plugins when only bundled rows are configured', async () => {
+    await mountEntry({ settings: settings({ optionalRows: ['delo-cost-meter'] }) })
+    expect(titles()).toContain(en['step.plugins'])
+  })
+
   it('adds recommended plugins when packages are configured, and leaves the step out otherwise', async () => {
     await mountEntry({ settings: settings({ plugins: ['@scope/p'] }) })
     expect(titles()).toEqual([en['step.welcome'], en['step.look'], en['step.agents'], en['step.plugins'], en['step.workspace'], en['step.ready']])

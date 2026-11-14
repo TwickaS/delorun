@@ -306,6 +306,47 @@ describe('the agents step', () => {
   })
 })
 
+describe('the recommended plugins step offers bundled rows', () => {
+  const optionalRows = ['delo-thinking-rsvp', 'delo-cost-meter']
+  const views = {
+    'delo-thinking-rsvp': { state: 'available' as const, title: 'Thinking tab', description: 'Read the reasoning word by word.' },
+    'delo-cost-meter': { state: 'available' as const, title: 'Cost meter', description: 'See what a chat costs.' },
+  }
+
+  it('lists both rows off with their own title and description, and reads them once', async () => {
+    const fake = installerFake({}, views)
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows })} guide={guideOf()} />)
+    await settle()
+    expect(fake.refreshRows).toHaveBeenCalledExactlyOnceWith(optionalRows)
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Thinking tab', 'Cost meter'])
+    expect(screen.getAllByRole('button', { name: /^Turn on / }).map(each => each.getAttribute('aria-label'))).toEqual(['Turn on Thinking tab', 'Turn on Cost meter'])
+    expect(screen.queryByText(en['plugins.none'])).toBeNull()
+    expect(fake.enableRow).not.toHaveBeenCalled()
+  })
+
+  it('turns on the row whose button is pressed, and no other', async () => {
+    const fake = installerFake({}, views)
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows })} guide={guideOf()} />)
+    await click(screen.getByRole('button', { name: 'Turn on Cost meter' }))
+    expect(fake.enableRow).toHaveBeenCalledExactlyOnceWith('delo-cost-meter')
+    expect(fake.install).not.toHaveBeenCalled()
+  })
+
+  it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
+    ['is being checked', 'checking', en['bundle.checking']],
+    ['is being turned on', 'installing', en['optional.turningOn']],
+    ['is on', 'installed', en['optional.on']],
+    ['is on but waits for a restart', 'restart', en['optional.restart']],
+    ['is not part of this profile', 'unavailable', en['bundle.unavailable']],
+    ['cannot be changed', 'failed', en['bundle.failed']],
+  ])('shows a row that %s and no Turn on button', (_, state, text) => {
+    const fake = installerFake({}, { 'delo-cost-meter': { state } })
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows: ['delo-cost-meter'] })} guide={guideOf()} />)
+    expect(screen.getByText(text)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Turn on / })).toBeNull()
+  })
+})
+
 describe('the recommended plugins step', () => {
   const plugins = ['@scope/codex-quota', '@scope/any', '@scope/claude-only', '@scope/unread']
 

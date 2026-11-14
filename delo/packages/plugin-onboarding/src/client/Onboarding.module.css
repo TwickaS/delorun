@@ -300,6 +300,13 @@
   gap: var(--delo-space-5) var(--delo-space-6);
 }
 
+.cardIcon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--dsw-radius-md);
+}
+
 .cardText {
   flex: 1 1 220px;
   min-width: 0;

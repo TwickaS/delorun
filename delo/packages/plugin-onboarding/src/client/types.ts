@@ -253,6 +253,8 @@ export interface StepServices extends StaticServices {
   readonly t: TranslateNS<'deloOnboarding'>
   /** The packages the recommended-plugins step offers. */
   readonly plugins: readonly string[]
+  /** The bundled rows, by row id, that the recommended-plugins step offers to turn on. */
+  readonly optionalRows: readonly string[]
   /**
    * Draw a Settings section inside a step, as the Settings panel draws it.
    * @param id - the section's id, such as `models`.
