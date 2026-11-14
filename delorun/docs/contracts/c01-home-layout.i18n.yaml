@@ -22,13 +22,13 @@
   zh: d94f7255530533b6
 /c1-home-layout-and-runtime-store/the-home-tree:
   en: c6837e9c78c498d0
-  zh: 982d98b375f8f9e4
+  zh: fe46cfa25f4ba859
 /c1-home-layout-and-runtime-store/modes-and-the-refusal-rule:
   en: 0b1098f532b31ae7
   zh: 50f343f046e69d38
 /c1-home-layout-and-runtime-store/secrets:
   en: 8c6761d05d881209
-  zh: c151d3fa1873824a
+  zh: 235139f180063e9f
 /c1-home-layout-and-runtime-store/sockets-and-the-start-token:
   en: 25ba77f86609777c
   zh: 77957cd49b977a78
@@ -49,7 +49,7 @@
   zh: 217bd49cd8f862be
 /c1-home-layout-and-runtime-store/confinement-rules:
   en: af521931d34a38bd
-  zh: fb1e73311be19031
+  zh: b1f43f99787843a7
 /c1-home-layout-and-runtime-store/limits:
   en: 5c228bd826a3530e
   zh: 5ef44708b4dfdb6c
@@ -67,13 +67,13 @@
   zh: bd232096a834cc62
 /c1-home-layout-and-runtime-store/security/requirements:
   en: 719b744d18a79dfb
-  zh: ff80f9ded1cda4ce
+  zh: 2cf34e527740eff8
 /c1-home-layout-and-runtime-store/security/denial-tests:
   en: 709d8411eb7142f8
-  zh: 19671522f7ea1e6d
+  zh: fd7d9c409970c378
 /c1-home-layout-and-runtime-store/security/what-this-does-not-prove:
   en: 4272f25798290104
-  zh: 1ddefdc08964b067
+  zh: 1ac8bfbc5d6f4797
 /c1-home-layout-and-runtime-store/enforcement-per-platform-and-dialect:
   en: 9838cf167dededdd
-  zh: 20a6f6bf923f00af
+  zh: ef1a488ba1893341
