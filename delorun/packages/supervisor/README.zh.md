@@ -20,7 +20,7 @@ description: "@delorun/supervisor 包，供 home 进程与 Docker 运行时的�
 - [能力报告](#the-capability-report)
 - [工作区容器](#workspace-containers)
 - [运行日志](#the-operational-log)
-- [尚未实现的部分](#not-yet-implemented)
+- [尚未实现的部分](#not-implemented)
 - [测试](#tests)
 
 <a id="launching-the-supervisor"></a>
@@ -117,9 +117,10 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delorun/ho
 
 `openSupervisorLog` 以启动 id 打开 `logs/supervisor-<profile>/supervisor.log`，且进程在记录任何内容之前，就已将其令牌登记到日志的脱敏器中。每个请求写入一条记录，包含操作、工作区 id 与结果；认证被拒绝时，记录不包含所提交的值；任何记录都不携带请求体、凭据或环境变量的值。`captureSupervisorOutput` 将进程自身的标准输出与标准错误导入同一日志。C20 的跨入口拒绝测试套件通过 `tests/log-driver.ts` 中的驱动在此入口上运行。
 
-<a id="not-yet-implemented"></a>
+<a id="not-implemented"></a>
 ## 尚未实现的部分
 
+- 由发布命令启动：`delorun start` 不传递任何监管器设置，也没有 setup 步骤写入根文件。
 - S2 辅助程序（`helper.start`）、S3 容器（`s3.*`）与凭据转发，在对应形态加入它们之前，均以 `SHAPE_UNAVAILABLE` 拒绝。
 - 出站代理程序由 S2 镜像提供；在镜像随附该程序之前，代理容器不会启动，`egress-allowlist` 被报告为 `unknown`。
 - 采用 C1 DACL 的 Windows 命名管道：监管器只在 Unix 套接字上监听。

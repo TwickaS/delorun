@@ -64,17 +64,18 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 <a id="the-denial-suite"></a>
 ## 拒绝测试套件
 
-[`tests/denial/`](tests/denial/denial.spec.ts) 对参考入口运行 C20 的拒绝测试：由本包写入 `home-default` 并捕获子进程的输出；同时对包位于树中且依赖 `@delorun/logs` 的每个入口运行。[`tests/denial/surfaces.ts`](tests/denial/surfaces.ts) 列出 C20 的入口及其所属包。包不存在或未依赖 `@delorun/logs` 的入口，会作为带有原因的跳过测试列出；包依赖 `@delorun/logs` 的入口必须在那里添加其 `SurfaceDriver`，否则套件失败。
+[`tests/denial/`](tests/denial/denial.integration.spec.ts) 对参考入口运行 C20 的拒绝测试：由本包写入 `home-default` 并捕获子进程的输出；同时对包位于树中且依赖 `@delorun/logs` 的每个入口运行。[`tests/denial/surfaces.ts`](tests/denial/surfaces.ts) 列出 C20 的入口及其所属包。包不存在或未依赖 `@delorun/logs` 的入口，会作为带有原因的跳过测试列出；包依赖 `@delorun/logs` 的入口必须在那里添加其 `SurfaceDriver`，否则套件失败。
 
 | C20 测试 | 规格文件 | 运行范围 |
 | --- | --- | --- |
-| `log-canary-every-surface` | `denial.spec.ts` | 套件中的每个入口，包括轮转文件 |
-| `log-canary-split` | `denial.spec.ts` | 套件中的每个入口 |
-| `log-canary-patterns` | `denial.spec.ts` | 套件中的每个入口 |
-| `log-rotation` | `denial.spec.ts` | 大小：套件中的每个入口；期限：每个入口运行的期限检查 |
-| `log-modes` | `denial.spec.ts` | 套件中的每个入口 |
-| `log-session-keys` | [`session-keys.spec.ts`](tests/denial/session-keys.spec.ts) | 上游生产环境 agent 循环上的 Cordis 导出器 |
-| `log-purge-clear` | `denial.spec.ts` | 套件中每个入口上的清空操作；清除本身在 C8 的清除进入树中之前会被跳过 |
+| `log-canary-every-surface` | `denial.integration.spec.ts` | 套件中的每个入口，包括轮转文件 |
+| `log-canary-split` | `denial.integration.spec.ts` | 套件中的每个入口 |
+| `log-canary-patterns` | `denial.integration.spec.ts` | 套件中的每个入口 |
+| `log-rotation` | `denial.integration.spec.ts` | 大小：套件中的每个入口；期限：每个入口运行的期限检查 |
+| `log-modes` | `denial.integration.spec.ts` | 套件中的每个入口 |
+| `log-session-keys` | [`session-keys.spec.ts`](tests/denial/session-keys.spec.ts)、[`home-wiring.spec.ts`](tests/denial/home-wiring.spec.ts) | 上游生产环境 agent 循环上的 Cordis 导出器；home 入口自身的接线 |
+| home 进程的已知值 | `home-wiring.spec.ts` | home-auth 存储、凭据提供方包装器与环境所生成的每种机密，以原始与编码形式植入记录和捕获的输出，包括轮转文件 |
+| `log-purge-clear` | `denial.integration.spec.ts` | 套件中每个入口上的清空操作；清除本身在 C8 的清除进入树中之前会被跳过 |
 | `log-desktop-host-file` | 跳过 | 等待桌面 Host 的日志文件 |
 | `log-confined-write-denied` | 跳过 | 等待 Delo 针对 C1 的 `home-write` 规则提供的沙箱配置文件 |
 
