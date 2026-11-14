@@ -32,6 +32,8 @@ const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
 const PRIVATE: ReachListenerId = 'reach-tailscale-private'
 const FUNNEL: ReachListenerId = 'reach-tailscale-funnel'
 const PIN = '482916'
+/** Each secret comparison is one scrypt derivation at the production cost; these specs make a dozen or more, so they outlast the default 10 s under load. */
+const SCRYPT_TIMEOUT_MS = 60_000
 const MINUTE = 60_000
 
 interface Reply {
@@ -454,7 +456,7 @@ describe('the store', () => {
     }
     // Pins the window: nine recent misses and five old ones do not pause.
     expect(store.summary().paused).toBe(false)
-  })
+  }, SCRYPT_TIMEOUT_MS)
 
   it('compares a passcode in NFC and refuses a store another user could read', async () => {
     const store = new PinModeStore({ directory: home.directory, now: home.clock.read })
@@ -553,7 +555,25 @@ describe('home-wide pause on every miss path', () => {
     // Pins the count on the lockout path: ten misses pause even when each device was removed by its own fifth.
     expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
     expect(events.some(event => event.kind === 'paused')).toBe(true)
-  })
+  }, SCRYPT_TIMEOUT_MS)
+})
+
+describe('structured PIN refusals and the state fields', () => {
+  it('answers triesLeft and removed on a wrong PIN, paused on a pause, and lockWhenHidden in the state', async () => {
+    expect((await send('POST', PIN_PATHS.set, { secret: PIN, lockWhenHidden: true })).status).toBe(200)
+    // Pins the state field: the client locks on hide only when the home says so.
+    expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toMatchObject({ kind: 'on', lockWhenHidden: true })
+    const second = await addDevice(2)
+    const third = await addDevice(3)
+    const fourth = await addDevice(4)
+    // Pins the structured miss: the client reads numbers, not the sentence.
+    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 4, removed: false } })
+    for (let miss = 0; miss < 3; miss += 1) await unlock('135790', second.token)
+    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 0, removed: true } })
+    for (let miss = 0; miss < 5; miss += 1) await unlock('135790', await signIn(third.deviceId))
+    // Pins the structured pause.
+    expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
+  }, 40_000)
 })
 
 describe('the unlock state and the hash cost', () => {

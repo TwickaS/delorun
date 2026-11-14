@@ -1,5 +1,5 @@
 /**
- * `delorun devices list | approve | elevate | remove <device id> | code` (contract C5): the devices this home trusts, managed at
+ * `delorun devices list | approve | elevate | remove <device id> | code | pin` (contract C5): the devices this home trusts, managed at
  * the home's own computer.
  *
  * - `list` reads the home's records, without key material.
@@ -14,10 +14,13 @@
  *   `devices.elevate`, which only the person's own command may call. It lists the waiting requests and the running
  *   unlocks; the person approves a request by typing the 8-digit code its device shows, declines one, or ends an unlock.
  * - `code` prints a new owner code, only to a terminal.
+ * - `pin set | off | resume | status` turns PIN mode on and off at this computer (C14, "PIN mode"); see `./pin.ts`.
  *
  * @module @delo/cli/devices/command
  */
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+import { parseArgs } from 'node:util'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import * as clack from '@clack/prompts'
 import type { DeviceId } from '@delo/contract-admission'
@@ -30,6 +33,7 @@ import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { printable } from '../terminal-text.ts'
+import { runPin, type PinDependencies } from './pin.ts'
 
 /** What the command runs against. */
 export interface DevicesDependencies {
@@ -56,10 +60,12 @@ export interface DevicesDependencies {
   readonly ask: (message: string) => Promise<string | undefined>
   /** Whether standard output is a terminal, which an owner code is printed to only. */
   readonly terminal: boolean
+  /** What `devices pin` needs besides the home socket and the running check above. */
+  readonly pin: Pick<PinDependencies, 'secret' | 'stdinLine' | 'interactive' | 'now'>
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code [--profile <name>]'
+const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code | pin set|off|resume|status [--profile <name>]'
 
 /** How many codes `approve` and `elevate` take for one request: C5's and C14's count before the home cancels it. */
 const CODE_ATTEMPTS = 3
@@ -78,6 +84,14 @@ export function createDevicesCommand(dependencies: DevicesDependencies): CliComm
     summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code',
     async run(args, context) {
       const [action, ...rest] = args
+      if (action === 'pin') {
+        const [pinAction, ...pinOptions] = rest
+        // Each action rejects an unknown option itself; this read only finds the profile it runs against.
+        const { values } = parseArgs({ args: pinOptions, options: { profile: { type: 'string' } }, strict: false, allowPositionals: true })
+        const profile = selectProfile(typeof values.profile === 'string' ? values.profile : undefined, context.env)
+        const home = (await resolveDeloHome(context.env)).path
+        return runPin(pinAction, pinOptions, { home, profile, context, dependencies: { running: dependencies.running, send: dependencies.send, ...dependencies.pin } })
+      }
       // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`. A device id is base64url
       // text, which may begin with `-`, so only the profile option is read as an option there.
       const positional = action === 'remove' && rest[0] !== undefined && rest[0] !== '--profile' && !rest[0].startsWith('--profile=') ? [rest[0]] : []
@@ -108,12 +122,37 @@ export async function askInTerminal(message: string): Promise<string | undefined
   return clack.isCancel(answer) ? undefined : answer
 }
 
+/**
+ * Ask for a secret in the terminal with the typed characters hidden.
+ * @param message - the question.
+ * @returns the answer, or undefined when the person cancels.
+ */
+export async function askSecretInTerminal(message: string): Promise<string | undefined> {
+  const answer = await clack.password({ message })
+  return clack.isCancel(answer) ? undefined : answer
+}
+
+/**
+ * Read the first line of standard input.
+ * @returns the line without its line ending, or undefined when input ends first.
+ */
+export async function readStdinLine(): Promise<string | undefined> {
+  const lines = createInterface({ input: process.stdin })
+  try {
+    for await (const line of lines) return line
+    return undefined
+  } finally {
+    lines.close()
+  }
+}
+
 /** `delorun devices`, over the home socket and a terminal prompt. */
 export const devicesCommand: CliCommand = createDevicesCommand({
   running: homeRuns,
   send: sendHomeRequest,
   ask: askInTerminal,
   terminal: process.stdout.isTTY,
+  pin: { secret: askSecretInTerminal, stdinLine: readStdinLine, interactive: process.stdin.isTTY === true && process.stdout.isTTY === true, now: Date.now },
 })
 
 /** One invocation's home, profile, output and dependencies. */

@@ -120,7 +120,7 @@ export class PinUnlocks {
     const record = id === undefined ? undefined : this.options.elevations.get(id)
     const mine = record?.deviceId === deviceId && record.listener === listener ? record : undefined
     return {
-      kind: 'on', secret: summary.kind, idleMinutes: summary.idleMinutes, paused: summary.paused, lockWhenHidden: summary.lockWhenHidden,
+      kind: 'on', secret: summary.kind, idleMinutes: summary.idleMinutes, lockWhenHidden: summary.lockWhenHidden, paused: summary.paused,
       unlock: mine === undefined ? null : { unlockId: mine.id, endsAt: mine.startedAt + PIN_MODE_LIMITS.absoluteCapMs, idleEndsAt: mine.endsAt },
     }
   }

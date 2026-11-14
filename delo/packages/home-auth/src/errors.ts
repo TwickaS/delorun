@@ -115,24 +115,15 @@ export class HomeAuthError extends Error {
  * The body a refusal answers with: the code a caller branches on and the sentence a person reads.
  * @param code - the refusal code.
  * @param message - the sentence.
- * @param fields - structured fields added beside `error` and `message`.
+ * @param fields - structured fields that sit beside the code and the sentence; never a secret.
  * @returns the JSON body text.
  */
 export function refusalBody(code: HomeAuthErrorCode, message: string, fields: Readonly<Record<string, unknown>> = {}): string {
-  return JSON.stringify({ ...fields, error: code, message })
+  return JSON.stringify({ error: code, message, ...fields })
 }
 
-/**
- * The structured fields of a PIN unlock refusal that its body carries beside the sentence: `triesLeft` and `removed` of
- * `PIN_INVALID`, `paused` of `PIN_UNLOCKS_PAUSED`. Every other refusal's `details` stay out of the body.
- * @param error - the refusal.
- * @returns the fields the body adds.
- */
-export function publicFieldsOf(error: HomeAuthError): Readonly<Record<string, unknown>> {
-  if (error.code === 'PIN_INVALID') return { triesLeft: error.details.triesLeft, removed: error.details.removed }
-  if (error.code === 'PIN_UNLOCKS_PAUSED') return { paused: true }
-  return {}
-}
+/** The codes whose `details` are answered as structured fields: the PIN refusals a client reads without parsing the sentence. */
+export const STRUCTURED_REFUSALS: ReadonlySet<HomeAuthErrorCode> = new Set<HomeAuthErrorCode>(['PIN_INVALID', 'PIN_UNLOCKS_PAUSED'])
 
 /** Compile-time: the two refusals C4 adds to this package's answers are mapped, so a route never answers an unmapped code. */
 export const CLAIM_REFUSAL_STATUS = {

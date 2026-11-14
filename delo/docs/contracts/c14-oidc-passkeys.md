@@ -225,7 +225,7 @@ PIN mode lets a person who holds an approved device unlock it with a PIN or pass
 - **Wrong tries.** A try is counted and written before the secret is compared, one at a time per device. The fifth wrong try of a device removes the device exactly as a removal at the computer does, so its sessions and connections close and it needs approval again at the computer. Ten wrong tries across the home within 24 hours pause PIN unlocks, answering `PIN_UNLOCKS_PAUSED`, until the person resumes them at the computer. A correct secret clears the device's count.
 - **Logs.** Each unlock start and end is an elevation start and end. Each wrong try, lockout, pause, resume, PIN change and mode change is a log line that names the device and never the secret.
 
-The error codes `PIN_INVALID`, `PIN_WEAK`, `PIN_MODE_OFF`, `PIN_NOT_ALLOWED_ON_ADDRESS`, `PIN_UNLOCKS_PAUSED` and `UNLOCK_INVALID` join [the errors below](#errors).
+The error codes `PIN_INVALID`, `PIN_WEAK`, `PIN_MODE_OFF`, `PIN_NOT_ALLOWED_ON_ADDRESS`, `PIN_UNLOCKS_PAUSED` and `UNLOCK_INVALID` join [the errors below](#errors). A `PIN_INVALID` answer carries the structured fields `triesLeft` (a number) and `removed` (a boolean, true for the fifth miss, which removed the device), and a `PIN_UNLOCKS_PAUSED` answer carries `paused: true`, beside `error` and `message`, so a client never reads the sentence. `GET /auth/pin/state` carries `lockWhenHidden` for a page that is on.
 
 <a id="limits"></a>
 ### Limits
