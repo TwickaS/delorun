@@ -698,6 +698,11 @@
     {
       "area": "Safety and privacy",
       "section": "Changed",
+      "text": "Commands the model runs can read, and run scripts in, the approved copies of your profile's plugins, so a plugin that hands the agent the path of its own tool works. They still cannot write those copies, and they cannot read a plugin change that is waiting for your review, another profile's copies or the rest of Delorun's home."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
       "text": "With setup's Dangerous answer on, the permission new chats start in and the external-agent consent that a phone loosened are set back when the mode ends, unless you changed them at your computer since."
     },
     {
@@ -1033,7 +1038,7 @@
     {
       "area": "Safety and privacy",
       "section": "Security",
-      "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, or any platform other than Linux), a workspace set to allowlist or off runs no commands instead of running them with your network."
+      "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, Windows and macOS), a workspace set to allowlist or off runs no commands instead of running them with your network."
     },
     {
       "area": "Safety and privacy",
@@ -1129,6 +1134,11 @@
       "area": "Plugins",
       "section": "Added",
       "text": "Ask the agent in a chat for a plugin and it makes one in the chat's workspace, under `plugins/<name>`, with the new `delo-plugin-authoring` skill. It cannot turn the plugin on, at any protection level and in any chat access; that stays your step at the computer. Once the plugin is on, later edits to its files wait for your review when changes protection is on, and reload live, logged as loaded without review, when it is off, the default."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "The review of a plugin change warns when the plugin answers approval prompts itself, which can give grants you keep to your computer, and when it installs, removes, updates or loads plugins itself, outside the install check. Both are warnings to read, not blocks."
     },
     {
       "area": "Plugins",
@@ -2014,6 +2024,10 @@
             },
             {
               "section": "Changed",
+              "text": "Commands the model runs can read, and run scripts in, the approved copies of your profile's plugins, so a plugin that hands the agent the path of its own tool works. They still cannot write those copies, and they cannot read a plugin change that is waiting for your review, another profile's copies or the rest of Delorun's home."
+            },
+            {
+              "section": "Changed",
               "text": "With setup's Dangerous answer on, the permission new chats start in and the external-agent consent that a phone loosened are set back when the mode ends, unless you changed them at your computer since."
             },
             {
@@ -2282,7 +2296,7 @@
             },
             {
               "section": "Security",
-              "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, or any platform other than Linux), a workspace set to allowlist or off runs no commands instead of running them with your network."
+              "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, Windows and macOS), a workspace set to allowlist or off runs no commands instead of running them with your network."
             },
             {
               "section": "Security",
@@ -2369,6 +2383,10 @@
             {
               "section": "Added",
               "text": "Ask the agent in a chat for a plugin and it makes one in the chat's workspace, under `plugins/<name>`, with the new `delo-plugin-authoring` skill. It cannot turn the plugin on, at any protection level and in any chat access; that stays your step at the computer. Once the plugin is on, later edits to its files wait for your review when changes protection is on, and reload live, logged as loaded without review, when it is off, the default."
+            },
+            {
+              "section": "Added",
+              "text": "The review of a plugin change warns when the plugin answers approval prompts itself, which can give grants you keep to your computer, and when it installs, removes, updates or loads plugins itself, outside the install check. Both are warnings to read, not blocks."
             },
             {
               "section": "Fixed",
