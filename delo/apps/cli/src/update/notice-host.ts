@@ -19,7 +19,7 @@ import { printable } from '../terminal-text.ts'
 import { runtimePlatformOf, type Publication } from './channel.ts'
 import { runtimeOfFile } from './runtime.ts'
 import { launcherAnchor, type LauncherAnchor } from './trusted-root.ts'
-import { checkForUpdate, noticeLine, noticeOf, profileReader, readUpdateCheck, removeUpdateCheck, runningRelease, type RunningRelease } from './notice.ts'
+import { checkForUpdate, noticeLine, noticeOf, profileReader, readUpdateCheck, readUpdateNotes, removeUpdateCheck, runningRelease, type RunningRelease } from './notice.ts'
 
 /** What the Host's check needs. */
 export interface UpdateWatchOptions {
@@ -92,6 +92,11 @@ export function updateCheckSource(options: UpdateWatchOptions): UpdateCheckSourc
   return {
     read: async () => stateOf(await readUpdateCheck(options.home, options.profile)),
     check: async timeoutMs => stateOf(await checkForUpdate({ ...options, timeoutMs })),
+    notes: async () => {
+      const record = await readUpdateCheck(options.home, options.profile)
+      const text = await readUpdateNotes(options.home, options.profile, record)
+      return text === undefined || record?.newest === undefined ? undefined : { version: record.newest.delo, text }
+    },
   }
 }
 

@@ -6,17 +6,23 @@
  * title and the kind and plugin line only; the close and summary buttons sit outside it.
  * @module @delo/plugin-sidebar/client/UpdateNotice
  */
-import { IconCloseOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { UPDATE_COMMAND, type UpdateNotice } from '@delo/contract-update-report'
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import css from './UpdateNotice.module.css'
 
 /** What the notice reads and does. */
 export interface UpdateNoticeFace {
   /** The notice to show, or null. */
   readonly notice: HostObservable<UpdateNotice | null>
+  /**
+   * Read the verified release notes of the notice's release.
+   * @param signal - aborts the read.
+   * @returns the plain-text notes and the release they belong to, or null when there are none.
+   */
+  readonly notes: (signal: AbortSignal) => Promise<{ readonly version: SemanticVersion, readonly notes: string } | null>
   /** Hide the notice for one release; null on a remote session, whose notice offers no action. */
   readonly dismiss: ((release: SemanticVersion) => void) | null
 }
@@ -35,6 +41,18 @@ const MARK = '\u0000'
 export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   const notice = useSyncExternalStore(listener => face.notice.subscribe(listener), () => face.notice.getSnapshot())
   const [expanded, setExpanded] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  // undefined while reading, null when there are no notes to show.
+  const [notes, setNotes] = useState<string | null | undefined>(undefined)
+  const shownVersion = notice?.release.delo
+  useEffect(() => {
+    if (!notesOpen) return undefined
+    const controller = new AbortController()
+    setNotes(undefined)
+    // Notes of another release than the card's are not shown.
+    void face.notes(controller.signal).then(found => { if (!controller.signal.aborted) setNotes(found !== null && found.version === shownVersion ? found.notes : null) })
+    return () => { controller.abort() }
+  }, [notesOpen, face, shownVersion])
   if (notice === null) return null
   const { release, running } = notice
   const remote = face.dismiss === null
@@ -77,6 +95,20 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
             {note}
           </button>
         ))}
+      {release.notes !== undefined && (
+        <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t('update.whatsNew')}</Button>
+      )}
+      {notesOpen && (
+        <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
+          title={t('update.whatsNewTitle', { version: release.delo })}>
+          {/* The notes are signed plain text: rendered as text in a pre, never as markup. */}
+          {notes === undefined
+            ? <p>{t('update.whatsNewLoading')}</p>
+            : notes === null
+              ? <p>{t('update.whatsNewUnavailable')}</p>
+              : <pre className={css.notes} data-update-notes>{notes}</pre>}
+        </Modal>
+      )}
       <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>
     </div>
   )

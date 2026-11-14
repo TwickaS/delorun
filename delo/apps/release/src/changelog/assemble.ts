@@ -15,6 +15,10 @@
  * signing checked. `--dry-run` prints the entry and the notes and writes nothing. The command exits 1 with one line
  * per refusal.
  *
+ * `--version <version> --highlights <file>` writes the release notes the studio's "What's new" dialog shows, from the
+ * version's entry in the data file: its bullets as plain text, within the 64 KiB limit of the manifest's `notes`.
+ * Pass the file to `local-release.ts --notes` (or draft its reference into a production manifest).
+ *
  * The "From upstream" section names the upstream release in `delo/upstream-patches.json`, `upstream.ref`.
  * `CHANGELOG.md` is Delo's own file at the repository root: upstream's tag has none, so the assembly creates it, and
  * the first release that commits it adds its ledger entry. Pending fragments are validated and never assembled.
@@ -28,10 +32,10 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { readManifest } from '@delo/tools/src/check-fork-boundary.ts'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
-import type { AdvisoryAcceptance, FileRef } from '@delo/contract-release-manifest'
+import { RELEASE_FILE_SIZE_LIMITS, type AdvisoryAcceptance, type FileRef } from '@delo/contract-release-manifest'
 import type { AdvisoryReport } from '../advisory/check.ts'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
-import { addVersion, buildCompared, buildEntry, foldedPreviews, parseData, renderChangelog, renderEntry, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
+import { addVersion, buildCompared, buildEntry, foldedPreviews, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
 import { fragmentPaths, readFragments, releasedPaths, type Fragment } from './fragment.ts'
 import { listUnreleased } from './list.ts'
 import { messageOf, type Output } from './output.ts'
@@ -212,6 +216,7 @@ export function run(argv: readonly string[], root: string, output: Output): numb
         'list-unreleased': { type: 'boolean', default: false },
         'first-public-release': { type: 'boolean', default: false },
         advisories: { type: 'string' },
+        highlights: { type: 'string' },
         manifest: { type: 'string' },
       },
       strict: true,
@@ -229,6 +234,18 @@ export function run(argv: readonly string[], root: string, output: Output): numb
   if (values.version === undefined) {
     output.error('assemble: pass --version <version>, or --list-unreleased')
     return 2
+  }
+  if (values.highlights !== undefined) {
+    try {
+      const entry = parseData(readFileSync(join(root, DATA_PATH), 'utf8')).versions.find(candidate => candidate.version === values.version)
+      if (entry === undefined) throw new Error(`${DATA_PATH} has no entry for ${values.version}; assemble it first`)
+      writeFileSync(values.highlights, renderHighlights(entry, RELEASE_FILE_SIZE_LIMITS.notes))
+      output.log(`assemble: wrote ${values.highlights}`)
+      return 0
+    } catch (error) {
+      output.error(`assemble: ${messageOf(error)}`)
+      return 1
+    }
   }
   if (values.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(values.date)) {
     output.error('assemble: --date must be YYYY-MM-DD')

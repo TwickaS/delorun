@@ -103,6 +103,19 @@
   margin: 0;
 }
 
+.whatsNew {
+  align-self: flex-start;
+}
+
+.notes {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .security {
   color: var(--dsw-alias-label-primary);
   font-weight: 500;

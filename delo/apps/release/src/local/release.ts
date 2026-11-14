@@ -35,6 +35,8 @@ import {
   type RootMetadata,
   type RuntimePlatform,
   type UtcTimestamp,
+  RELEASE_FILE_SIZE_LIMITS,
+  isValidNotes,
 } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delo/release-formats/brands'
@@ -77,6 +79,12 @@ export interface LocalReleaseRequest {
   readonly security: boolean
   /** The release's one-line summary, the manifest's `summary`; it must match `RELEASE_SUMMARY_PATTERN`. */
   readonly summary: string
+  /**
+   * The release notes' bytes, written to the release directory as `delorun-<version>.notes.txt` and named by the
+   * manifest's `notes`; they must satisfy `isValidNotes`. Absent: the manifest carries no `notes`, which readers
+   * that predate the field require.
+   */
+  readonly notes?: Uint8Array
   /** The channel directory; a version already in it is refused, and the timestamp is replaced. */
   readonly channel: string
   /** The root files, oldest first: the root the launcher ships, then each later root. */
@@ -133,7 +141,7 @@ async function refOf(directory: string, name: string): Promise<FileRef> {
 }
 
 /** The manifest of a local release: the built runtimes, and placeholders for everything the schema requires beyond them. */
-function localManifest(request: LocalReleaseRequest, runtime: ReadonlyMap<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>): ReleaseManifest {
+function localManifest(request: LocalReleaseRequest, runtime: ReadonlyMap<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>, notes: FileRef | undefined): ReleaseManifest {
   const version = semanticVersion(request.version)
   const sha512 = `${'A'.repeat(86)}==`
   const desktop = Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, {
@@ -160,6 +168,7 @@ function localManifest(request: LocalReleaseRequest, runtime: ReadonlyMap<Runtim
     advisories: { report: absent(`delorun-${request.version}.advisories.json`), accepted: [] },
     security: request.security,
     summary: request.summary,
+    ...notes === undefined ? {} : { notes },
   })
 }
 
@@ -221,6 +230,9 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   if (!ReleaseSummarySchema.safeParse(request.summary).success) {
     throw new Error(`the summary ${JSON.stringify(request.summary)} is not a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters on one line, with no control or format character and no whitespace at either end`)
   }
+  if (request.notes !== undefined && !isValidNotes(request.notes)) {
+    throw new Error(`the release notes are not valid: well-formed UTF-8 of 1 to ${String(RELEASE_FILE_SIZE_LIMITS.notes)} bytes with no control (except line feed and tab), format, line-separator or lone-surrogate character`)
+  }
   refuseProductionRoots(request)
   if (request.platforms.length === 0 || new Set(request.platforms).size !== request.platforms.length) {
     throw new Error(`a local release names each of its platforms once, not ${JSON.stringify(request.platforms)}`)
@@ -253,7 +265,9 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
       await writeFile(join(work, names.files), signedList)
       runtime.set(platform, { archive: await refOf(work, names.archive), files: await refOf(work, names.files) })
     }
-    const manifest = localManifest(request, runtime)
+    const notesName = `delorun-${request.version}.notes.txt`
+    if (request.notes !== undefined) await writeFile(join(work, notesName), request.notes)
+    const manifest = localManifest(request, runtime, request.notes === undefined ? undefined : await refOf(work, notesName))
     const manifestName = `delorun-${request.version}.manifest.json`
     const manifestBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.targetsKey]), undefined, 2)}\n`)
     const entry = entryRequest(manifestBytes, request.targetsKey)

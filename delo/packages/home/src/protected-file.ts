@@ -69,11 +69,13 @@ export function checkProtectedFileSync(path: string): Stats {
  * descriptor must be the same file with the same check passing, so a file
  * swapped in between is refused.
  * @param path - the absolute file path.
+ * @param maxBytes - when given, the most bytes the file may hold; a larger file is refused before it is read.
  * @returns the file's bytes.
  * @throws {HomeLayoutError} `SECRET_FILE_MODE` naming the path, with the `chmod 600` fix for a laxer mode.
+ * @throws {Error} when the file is larger than `maxBytes`.
  * @throws the filesystem error, such as `ENOENT`, when the file cannot be read.
  */
-export async function readProtectedFile(path: string): Promise<Buffer> {
+export async function readProtectedFile(path: string, maxBytes?: number): Promise<Buffer> {
   const before = await lstat(path)
   const problem = refusal(path, before)
   if (problem !== undefined) throw problem
@@ -90,6 +92,7 @@ export async function readProtectedFile(path: string): Promise<Buffer> {
     if (after.dev !== before.dev || after.ino !== before.ino) throw new HomeLayoutError('SECRET_FILE_MODE', path, `${path} was replaced while it was being read`)
     const opened = refusal(path, after)
     if (opened !== undefined) throw opened
+    if (maxBytes !== undefined && after.size > maxBytes) throw new Error(`${path} is ${String(after.size)} bytes, above the limit of ${String(maxBytes)}`)
     return await handle.readFile()
   } finally {
     await handle.close()

@@ -8,8 +8,8 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import { isValidSummary, type SemanticVersion } from '@delo/contract-release-manifest'
-import { UPDATE_NOTICE_PATH, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
+import { isValidSummary, type SemanticVersion, type Sha256Hex } from '@delo/contract-release-manifest'
+import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
 import { z } from 'zod'
 
 /** A semantic version without a leading `v`: the core, then an optional prerelease and build. */
@@ -27,6 +27,7 @@ export const UpdateNoticeResponseSchema: z.ZodType<UpdateNoticeResponse> = z.obj
       channel: z.enum(['stable', 'beta']),
       security: z.boolean(),
       summary: z.string().refine(isValidSummary).optional(),
+      notes: z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/u).transform(text => brandString<Sha256Hex>(text)), length: z.number().int().min(1) }).optional(),
     }),
     kind: z.enum(['patch', 'minor', 'major']),
     disables: z.number().int().nonnegative(),
@@ -37,6 +38,7 @@ export const UpdateNoticeResponseSchema: z.ZodType<UpdateNoticeResponse> = z.obj
     release: {
       delo: notice.release.delo, dsh: notice.release.dsh, channel: notice.release.channel, security: notice.release.security,
       ...notice.release.summary === undefined ? {} : { summary: notice.release.summary },
+      ...notice.release.notes === undefined ? {} : { notes: notice.release.notes },
     },
     kind: notice.kind,
     disables: notice.disables,
@@ -56,6 +58,23 @@ export async function fetchUpdateNotice(signal: AbortSignal): Promise<UpdateNoti
     return parsed.success ? parsed.data.notice : null
   } catch (_error) {
     // A failed request or a body that is not JSON is no notice; the next read tries again.
+    return null
+  }
+}
+
+/**
+ * Read the verified release notes of the notice's release from the harness.
+ * @param signal - aborts the read.
+ * @returns the plain-text notes with the release they belong to, or null for none, a 404, a failed request or an answer that does not validate.
+ */
+export async function fetchUpdateNotes(signal: AbortSignal): Promise<{ readonly version: SemanticVersion, readonly notes: string } | null> {
+  try {
+    const response = await fetch(UPDATE_NOTES_PATH.slice(1), { headers: { accept: 'application/json' }, signal })
+    if (!response.ok) return null
+    const parsed = z.object({ version: version.nullable(), notes: z.string().nullable() }).safeParse(await response.json())
+    return parsed.success && parsed.data.version !== null && parsed.data.notes !== null ? { version: parsed.data.version, notes: parsed.data.notes } : null
+  } catch (_error) {
+    // A failed request or a body that is not JSON shows no notes; opening the notes again tries again.
     return null
   }
 }

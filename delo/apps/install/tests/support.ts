@@ -105,6 +105,8 @@ export interface Fixture {
   readonly files: RuntimeFileList
   readonly filesBytes: Buffer
   readonly manifest: ReleaseManifest
+  /** The release notes the manifest names, when it names any. */
+  readonly notesBytes?: Buffer
   readonly manifestBytes: Buffer
   readonly rootMetadata: RootMetadata
   readonly roots: readonly Uint8Array[]
@@ -144,6 +146,10 @@ export interface FixtureOptions {
   readonly dsh?: string
   /** The security mark and summary the manifest carries; neither by default, as in a manifest signed before they existed. */
   readonly notice?: { readonly security: boolean, readonly summary: string }
+  /** The release notes the manifest names and the fixture serves; none by default. */
+  readonly notes?: Buffer
+  /** The keys to sign with, such as an earlier fixture's, so a home that trusts that fixture's root trusts this release; fresh keys by default. */
+  readonly keys?: FixtureKeys
   /** The builder the manifest's rebuild names; the targets-key holder by default. */
   readonly builder?: string
 }
@@ -154,7 +160,7 @@ export interface FixtureOptions {
  * @returns every part of the release, signed.
  */
 export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixture> {
-  const keys = fixtureKeys()
+  const keys = options.keys ?? fixtureKeys()
   const platform = options.platform ?? 'linux-x64'
   const releaseVersion = options.version ?? VERSION
   const entries: ArchiveEntry[] = [
@@ -198,6 +204,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     rebuild: { record: dummy(`delorun-${releaseVersion}.rebuild.json`), builders: [{ name: options.builder ?? 'the targets-key holder', ci: false }] },
     advisories: { report: dummy(`delorun-${releaseVersion}.advisories.json`), accepted: [] },
     ...options.notice,
+    ...options.notes === undefined ? {} : { notes: fileRef(`delorun-${releaseVersion}.notes.txt`, options.notes) },
   }
   const manifestBytes = envelope(manifest, options.manifestSigners ?? [keys.targets])
   const bundledManifest = options.bundleOver?.manifest ?? manifestBytes
@@ -241,6 +248,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     filesBytes,
     manifest,
     manifestBytes,
+    ...options.notes === undefined ? {} : { notesBytes: options.notes },
     rootMetadata,
     roots: [envelope(rootMetadata, [keys.root])],
     timestamp,
@@ -417,5 +425,6 @@ export function releasePaths(fixture: Fixture): Map<string, Buffer> {
   files.set(`/releases/${name}/delorun-${name}.manifest.log.json`, fixture.bundleBytes)
   files.set(`/releases/${name}/delorun-${name}-${fixture.platform}.tar.gz`, fixture.archive)
   files.set(`/releases/${name}/delorun-${name}-${fixture.platform}.files.json`, fixture.filesBytes)
+  if (fixture.notesBytes !== undefined) files.set(`/releases/${name}/delorun-${name}.notes.txt`, fixture.notesBytes)
   return files
 }

@@ -326,6 +326,31 @@ export function renderNotes(entry: VersionEntry): string {
 }
 
 /**
+ * The release notes the studio's "What's new" dialog shows: the entry's bullets as plain text, area by area, without
+ * the Markdown marks, filling at most `maxBytes` bytes of UTF-8. Bullets that do not fit are replaced by one closing
+ * line that counts them and points to the full changelog, so the file always fits its signed limit.
+ * @param entry - the version's entry.
+ * @param maxBytes - the most bytes the file holds.
+ * @returns the text, ending with one newline.
+ */
+export function renderHighlights(entry: VersionEntry, maxBytes: number): string {
+  const plain = (text: string): string => text.replaceAll(/\*\*|`/gu, '').replaceAll(/\[([^\]]*)\]\([^)]*\)/gu, '$1').replaceAll(/\s+/gu, ' ').trim()
+  const lines = [`Delorun ${entry.version}`, '']
+  const bullets = entry.areas.flatMap(({ area, items }) => [{ heading: area, text: '' }, ...items.map(item => ({ heading: '', text: plain(item.text) }))])
+  const total = bullets.filter(bullet => bullet.heading === '').length
+  const closing = (left: number): string[] => (left === 0 ? [] : ['', `${String(left)} more changes are in the full changelog.`])
+  let shown = 0
+  for (const bullet of bullets) {
+    const next = bullet.heading === '' ? [`- ${bullet.text}`] : ['', bullet.heading]
+    const candidate = [...lines, ...next, ...closing(total - shown - (bullet.heading === '' ? 1 : 0))]
+    if (Buffer.byteLength(`${candidate.join('\n')}\n`) > maxBytes) break
+    lines.push(...next)
+    if (bullet.heading === '') shown++
+  }
+  return `${[...lines, ...closing(total - shown)].join('\n').replaceAll(/\n{3,}/gu, '\n\n').trimEnd()}\n`
+}
+
+/**
  * Read a data file's text.
  * @param text - the file text.
  * @returns the data.

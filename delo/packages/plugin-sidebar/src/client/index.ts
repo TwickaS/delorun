@@ -49,7 +49,7 @@ import { Sidebar, type SidebarInjected } from './Sidebar.tsx'
 import { SidebarSettingsSection, type SidebarSettingsInjected } from './SettingsSection.tsx'
 import { UndoNotice, type UndoNoticeInjected } from './UndoNotice.tsx'
 import { createUndoLine } from './undo.ts'
-import { fetchUpdateNotice, UpdateNoticeStore } from './update-notice.ts'
+import { fetchUpdateNotes, fetchUpdateNotice, UpdateNoticeStore } from './update-notice.ts'
 import type { UpdateNoticeFace } from './UpdateNotice.tsx'
 
 export type { RowDrag, RowSnoozeOption, RowStateActions, MenuPoint } from './ChatRow.tsx'
@@ -60,7 +60,7 @@ export type { SidebarSettingsInjected, SidebarSettingsProps } from './SettingsSe
 export type { FootLauncherProps } from './FootLauncher.tsx'
 export type { UndoNoticeInjected, UndoNoticeProps } from './UndoNotice.tsx'
 export { createUndoLine, type UndoEntry, type UndoKind, type UndoLine } from './undo.ts'
-export { DISMISSED_KEY, fetchUpdateNotice, UpdateNoticeResponseSchema, UpdateNoticeStore, type DismissalStorage } from './update-notice.ts'
+export { DISMISSED_KEY, fetchUpdateNotes, fetchUpdateNotice, UpdateNoticeResponseSchema, UpdateNoticeStore, type DismissalStorage } from './update-notice.ts'
 export { UpdateNoticeCard, type UpdateNoticeCardProps, type UpdateNoticeFace } from './UpdateNotice.tsx'
 export { GENERATIVE_SCENES, GenerativeArt, seededRandom, type GenerativeScene } from './GenerativeArt.tsx'
 export { IconPicker, ICON_EMOJIS, type IconPickerProps, type IconPickerTarget } from './IconPicker.tsx'
@@ -294,7 +294,7 @@ export function applyStudio(ctx: Context): void {
   }, 'delo-sidebar: update notice reads')
   // A page a reach listener served, a remote session, shows the notice's text only, with no control.
   const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
-  const updateNotice: UpdateNoticeFace = { notice: updates.visible, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
+  const updateNotice: UpdateNoticeFace = { notice: updates.visible, notes: fetchUpdateNotes, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
   let actionsFor: DeloChatStates | undefined
   let actions: RowStateActions | null = null
   const chatStatesSource = <T,>(pick: (service: DeloChatStates) => HostObservable<T>, fallback: T) =>

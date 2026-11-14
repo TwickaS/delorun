@@ -20,6 +20,7 @@ import {
   RELEASE_METADATA_ORIGIN,
   RELEASE_REPOSITORY_URL,
   RELEASE_SPARE_ORIGIN,
+  isValidNotes,
   type ChannelPointer,
   type FileRef,
   type ReleaseChannel as ChannelName,
@@ -295,6 +296,24 @@ export class LauncherChannel implements RuntimeChannel {
   async newest(): Promise<NewestRelease> {
     const current = await this.current(Math.floor(this.now() / 1000), undefined, 'read-only')
     return { manifest: current.verified.manifest, timestamp: current.timestamp.version }
+  }
+
+  /**
+   * Download the release notes a verified manifest names, checked against the signed length and SHA-256 and against
+   * {@link isValidNotes}. The check never trusts a notes file by its name or its origin alone.
+   * @param manifest - a manifest {@link LauncherChannel.newest} verified.
+   * @returns the notes' bytes, or `undefined` when the manifest names none.
+   * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, or `INSTALL_VERIFY_FAILED` when the length or digest
+   *   differs or the bytes are not valid notes.
+   */
+  async notesOf(manifest: ReleaseManifest): Promise<Uint8Array | undefined> {
+    const ref = manifest.notes
+    if (ref === undefined) return undefined
+    const downloaded = await this.fetchFrom(this.fileCandidates(manifest.version, ref.name), ref.name, url => this.downloader.bytes(url, ref.length), value => {
+      checkBytes(ref, value.bytes)
+      if (!isValidNotes(value.bytes)) throw new InstallError('INSTALL_VERIFY_FAILED', ref.name, `${ref.name} is not valid release notes`)
+    })
+    return downloaded.bytes
   }
 
   /** The origins that serve a metadata file, primary first. */

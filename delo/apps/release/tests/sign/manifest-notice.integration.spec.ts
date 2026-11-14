@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isValidSummary, RELEASE_SUMMARY_MAX_LENGTH, type ReleaseManifest } from '@delo/contract-release-manifest'
+import { isValidNotes, isValidSummary, RELEASE_FILE_SIZE_LIMITS, RELEASE_SUMMARY_MAX_LENGTH, type ReleaseManifest } from '@delo/contract-release-manifest'
 import { MANIFEST_DRAFT_NAME } from '../../src/sign/release.ts'
 import { ManifestSchema } from '@delo/release-formats/sign/schemas'
 import { manifestContent, releaseFixture } from './fixture.ts'
@@ -75,6 +75,35 @@ describe('the manifest\'s notice fields', () => {
     expect(isValidSummary('Ünïcode and 日本語 are plain text')).toBe(true)
     for (const summary of ['', ' ', '   ', ' leading', 'trailing ', 'tab\there', 'line separator', 'paragraph separator', 'zero​width', 'bom﻿', 'carriage\rreturn', 'nul\u0000']) {
       expect(isValidSummary(summary), JSON.stringify(summary)).toBe(false)
+    }
+  })
+})
+
+describe('the manifest\'s notes reference', () => {
+  const notes = (length: number) => ({ name: 'delorun-0.1.0.notes.txt', length, sha256: 'a'.repeat(64) })
+
+  it('c02-manifest-without-notes-reads: a manifest without a notes reference reads and names no notes', () => {
+    expect(ManifestSchema.parse(manifest({}, ['notes'])).notes).toBeUndefined()
+  })
+
+  it('reads a notes reference within the limit and refuses an empty, an oversized or an extended one', () => {
+    expect(ManifestSchema.parse(manifest({ notes: notes(1) })).notes?.length).toBe(1)
+    expect(ManifestSchema.parse(manifest({ notes: notes(RELEASE_FILE_SIZE_LIMITS.notes) })).notes?.length).toBe(RELEASE_FILE_SIZE_LIMITS.notes)
+    for (const bad of [notes(0), notes(RELEASE_FILE_SIZE_LIMITS.notes + 1), { ...notes(5), url: 'https://example.com' }, { ...notes(5), name: '../notes.txt' }]) {
+      expect(ManifestSchema.safeParse(manifest({ notes: bad })).success, JSON.stringify(bad)).toBe(false)
+    }
+  })
+
+  it('c02-notes-invalid-text-refused: notes are plain text of 1 to 65,536 bytes with only line feeds and tabs as controls', () => {
+    const bytes = (text: string) => Buffer.from(text)
+    expect(isValidNotes(bytes('Ünïcode, 日本語 and emoji 🚀\n\t- a bullet\n'))).toBe(true)
+    expect(isValidNotes(Buffer.alloc(RELEASE_FILE_SIZE_LIMITS.notes, 'a'))).toBe(true)
+    expect(isValidNotes(Buffer.alloc(RELEASE_FILE_SIZE_LIMITS.notes + 1, 'a'))).toBe(false)
+    expect(isValidNotes(Buffer.alloc(0))).toBe(false)
+    expect(isValidNotes(Buffer.from([0xff, 0xfe, 0x41]))).toBe(false)
+    expect(isValidNotes(Buffer.from([0xed, 0xa0, 0x80]))).toBe(false)
+    for (const text of ['override \u202Etext', 'escape \u001b[31m', 'carriage\rreturn', 'nul\u0000', 'bom\uFEFF', 'zero\u200Bwidth', 'line\u2028sep', 'para\u2029sep']) {
+      expect(isValidNotes(bytes(text)), JSON.stringify(text)).toBe(false)
     }
   })
 })

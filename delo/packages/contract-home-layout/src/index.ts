@@ -213,6 +213,8 @@ export const RUN_ENTRIES = {
   updateJournal: 'update.json',
   /** The update check's record (C3, "Update check"). */
   updateCheck: 'update-check.json',
+  /** The verified release notes of the update check's newest release (C3, "Update check"). */
+  updateNotes: 'update-notes.txt',
   /** Fixtures of the confinement probes run at each start. */
   probe: 'probe',
 } as const

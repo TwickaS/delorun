@@ -3,7 +3,7 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { SemanticVersion } from '@delo/contract-release-manifest'
+import type { SemanticVersion, Sha256Hex } from '@delo/contract-release-manifest'
 import { UPDATE_COMMAND, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delo/contract-update-report'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -24,12 +24,13 @@ const t = makeTranslate(en)
 const v = (text: string): SemanticVersion => brandString<SemanticVersion>(text)
 
 /** A notice for Delorun `delo` on upstream `dsh`, over a running 0.1.2 on 0.2.2. */
-function noticeOf(fields: { delo?: string; dsh?: string; security?: boolean; summary?: string; kind?: UpdateNotice['kind']; disables?: number } = {}): UpdateNotice {
+function noticeOf(fields: { delo?: string; dsh?: string; security?: boolean; summary?: string; notes?: boolean; kind?: UpdateNotice['kind']; disables?: number } = {}): UpdateNotice {
   return {
     running: { delo: v('0.1.2'), dsh: v('0.2.2') },
     release: {
       delo: v(fields.delo ?? '0.1.3'), dsh: v(fields.dsh ?? '0.2.2'), channel: 'stable', security: fields.security ?? false,
       ...fields.summary === undefined ? {} : { summary: fields.summary },
+      ...fields.notes === true ? { notes: { sha256: brandString<Sha256Hex>('a'.repeat(64)), length: 12 } } : {},
     },
     kind: fields.kind ?? 'patch',
     disables: fields.disables ?? 0,
@@ -50,10 +51,49 @@ function memoryStorage(initial: Record<string, string> = {}): DismissalStorage &
 }
 
 /** Render the notice over a fixed notice. */
-function show(notice: UpdateNotice | null, dismiss: UpdateNoticeFace['dismiss'] = vi.fn()) {
-  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), dismiss }
+function show(notice: UpdateNotice | null, dismiss: UpdateNoticeFace['dismiss'] = vi.fn(), notes: UpdateNoticeFace['notes'] = async () => null) {
+  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), notes, dismiss }
   return render(<UpdateNoticeCard face={face} t={t} />)
 }
+
+describe('what\'s new', () => {
+  it('offers the button only for a release whose check verified notes', () => {
+    show(noticeOf())
+    expect(screen.queryByText('What\'s new')).toBeNull()
+    cleanup()
+    show(noticeOf({ notes: true }))
+    expect(screen.getByText('What\'s new')).toBeTruthy()
+  })
+
+  it('opens the notes as text in a dialog, never as markup', async () => {
+    const markup = '<script>window.hacked = true</script>\n<img src=x onerror=alert(1)>'
+    show(noticeOf({ notes: true }), vi.fn(), async () => ({ version: v('0.1.3'), notes: markup }))
+    fireEvent.click(screen.getByText('What\'s new'))
+    const pre = (await screen.findByText(/window\.hacked/u)).closest('pre')
+    expect(pre?.textContent).toBe(markup)
+    expect(pre?.querySelector('script, img')).toBeNull()
+    expect(document.querySelector('img[src="x"]')).toBeNull()
+    expect(screen.getByText('What\'s new in 0.1.3')).toBeTruthy()
+  })
+
+  it('does not show notes that belong to another release than the card\'s', async () => {
+    show(noticeOf({ notes: true }), vi.fn(), async () => ({ version: v('0.1.2'), notes: 'Notes of an older release' }))
+    fireEvent.click(screen.getByText('What\'s new'))
+    expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
+    expect(screen.queryByText(/older release/u)).toBeNull()
+  })
+
+  it('says the notes could not be shown when the read finds none, and names the dialog in Chinese', async () => {
+    show(noticeOf({ notes: true }))
+    fireEvent.click(screen.getByText('What\'s new'))
+    expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
+    cleanup()
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), dismiss: null }
+    render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
+    fireEvent.click(screen.getByText('新功能'))
+    expect((await screen.findByText(/更新/u)).closest('pre')?.textContent).toBe('- 更新')
+  })
+})
 
 describe('reading the notice', () => {
   it('reads the route document-relative and returns the notice it answers, without fields the contract does not name', async () => {
@@ -146,7 +186,7 @@ describe('the notice', () => {
   })
 
   it('marks the summary with the Chinese label in Chinese', () => {
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), notes: async () => null, dismiss: null }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     const summary = screen.getByText(/修复远程访问/)
     expect(summary.tagName).toBe('P')

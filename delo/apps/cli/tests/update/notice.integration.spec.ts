@@ -4,6 +4,7 @@
  * sends, what it verifies and records, what it shows for the profile's plugins, and what the Host's source, a
  * background start and `delorun update --check` print. No request leaves loopback.
  */
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
@@ -14,7 +15,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { Context } from '@deepseek-ai/cordis'
 import { DELO_HOME_ENTRIES, DELO_LAUNCHER_ROOTS_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
-import type { SemanticVersion, UtcTimestamp } from '@delo/contract-release-manifest'
+import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
 import { UPDATE_CHECK_FAILURES, UPDATE_CHECK_SCHEMA, type UpdateCheckRecord } from '@delo/contract-update-report'
 import * as UpdateCheck from '@delo/bundle-local/update-check'
 import { ensureHomeTree } from '@delo/home'
@@ -26,7 +27,7 @@ import { EXIT } from '../../src/exit.ts'
 import { recordedLogTransport, runtimePlatformOf, type Publication } from '../../src/update/channel.ts'
 import { launcherAnchor, type LauncherAnchor } from '../../src/update/trusted-root.ts'
 import { runUpdate, updateCommand, type UpdateCheckDependencies } from '../../src/update/command.ts'
-import { checkedReleaseOf, checkForUpdate, countDisabled, failureOf, failureText, noticeLine, noticeLines, noticeOf, withDeadline, readUpdateCheck, removeUpdateCheck, runningRelease, updateCheckPath, updateKind, writeUpdateCheck } from '../../src/update/notice.ts'
+import { checkedReleaseOf, checkForUpdate, readUpdateNotes, updateNotesPath, countDisabled, failureOf, failureText, noticeLine, noticeLines, noticeOf, withDeadline, readUpdateCheck, removeUpdateCheck, runningRelease, updateCheckPath, updateKind, writeUpdateCheck } from '../../src/update/notice.ts'
 import { recordedNoticeLine, startNoticeLine, updateCheckSource, watchUpdates } from '../../src/update/notice-host.ts'
 import { checkUpdate } from '../../src/doctor/update.ts'
 import { fakeClosure, signedRelease, writeClosure } from './support.ts'
@@ -168,6 +169,100 @@ afterEach(async () => {
 afterAll(() => {
   execFileSync('chmod', ['-R', 'u+rwX', base], { timeout: 30_000 })
   rmSync(base, { recursive: true, force: true })
+})
+
+const NOTES = Buffer.from('Delorun 0.2.0\n\nChats\n- You can now see what changed in a release.\n')
+
+/**
+ * Stand up a host for a release that names notes, then run one check.
+ * @param change - alters the host's files after signing: the notes file the host serves.
+ * @param notes - the notes the manifest names.
+ * @returns the record.
+ */
+async function checkWithNotes(change: (files: Map<string, Buffer>) => void = () => {}, notes: Buffer | null = NOTES): Promise<UpdateCheckRecord> {
+  const withNotes = await fixtureRelease({ version: '0.2.0', dsh: '0.2.3', notice: { security: false, summary: SUMMARY }, keys: fixture.keys, ...notes === null ? {} : { notes } })
+  await server.close()
+  server = await host(withNotes)
+  publication = { source: { metadata: server.origin, files: (version, name) => `${server.origin}/releases/${version}/${name}` }, hosts: { scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: 5 } }
+  change(server.files)
+  return check()
+}
+
+describe('the release notes', { timeout: 60_000 }, () => {
+  const served = '/releases/0.2.0/delorun-0.2.0.notes.txt'
+
+  it('stores notes that match the signed manifest and serves them while the record names their digest', async () => {
+    const record = await checkWithNotes()
+    expect(record.newest?.notes).toEqual({ sha256: createHash('sha256').update(NOTES).digest('hex'), length: NOTES.byteLength })
+    expect(await readUpdateNotes(home, PROFILE, record)).toBe(NOTES.toString('utf8'))
+  })
+
+  it('whats-new-denies-wrong-digest: notes of the right length but another digest are not stored or shown, and the update still shows', async () => {
+    const record = await checkWithNotes((files) => { files.set(served, Buffer.from(NOTES.toString('utf8').replace('Chats', 'Chat!')) ) })
+    expect(record.failure).toBeUndefined()
+    expect(record.newest?.delo).toBe('0.2.0')
+    expect(record.newest?.notes).toBeUndefined()
+    expect(await readUpdateNotes(home, PROFILE, record)).toBeUndefined()
+    expect(await readUpdateCheck(home, PROFILE)).toEqual(record)
+  })
+
+  it('whats-new-denies-wrong-length: notes shorter or longer than the signed length are not shown', async () => {
+    for (const bytes of [NOTES.subarray(0, NOTES.byteLength - 1), Buffer.concat([NOTES, Buffer.from('\n')])]) {
+      const record = await checkWithNotes((files) => { files.set(served, bytes) })
+      expect(record.newest?.notes).toBeUndefined()
+      expect(await readUpdateNotes(home, PROFILE, record)).toBeUndefined()
+    }
+  })
+
+  it('whats-new-denies-unsigned-notes: a notes file the host serves for a manifest that names none is never fetched or shown', async () => {
+    const record = await checkWithNotes((files) => { files.set(served, Buffer.from('Injected')) }, null)
+    expect(record.newest?.notes).toBeUndefined()
+    expect(server.seen.map(request => request.url)).not.toContain(served)
+  })
+
+  it('whats-new-denies-bidi-and-control-characters: notes the signer should have refused are not shown even with a matching digest', async () => {
+    for (const text of ['Fixed \u202Egnirts', 'Fixed\u0007bell', 'Line\r\nbreak', 'Line\u2028separator', '\uFEFFmark']) {
+      const record = await checkWithNotes(() => {}, Buffer.from(text))
+      expect(record.failure).toBeUndefined()
+      expect(record.newest?.notes).toBeUndefined()
+      expect(await readUpdateNotes(home, PROFILE, record)).toBeUndefined()
+    }
+  })
+
+  it('whats-new-denies-another-version: notes stored for one release are not served for another release', async () => {
+    const record = await checkWithNotes()
+    const other: UpdateCheckRecord = { ...record, newest: { ...record.newest!, notes: { sha256: brandString<Sha256Hex>('0'.repeat(64)), length: NOTES.byteLength } } }
+    expect(await readUpdateNotes(home, PROFILE, other)).toBeUndefined()
+  })
+
+  it('whats-new-denies-edited-file: a stored notes file changed after verification is not served', async () => {
+    const record = await checkWithNotes()
+    writeFileSync(updateNotesPath(home, PROFILE), 'Edited after the check\n', { mode: 0o600 })
+    expect(await readUpdateNotes(home, PROFILE, record)).toBeUndefined()
+  })
+
+  it('whats-new-rechecks-text-at-display: a record whose digest matches bidi or control bytes still shows nothing', async () => {
+    const record = await checkWithNotes()
+    for (const text of ['Fixed \u202Egnirts', 'Fixed\u0007bell']) {
+      const bytes = Buffer.from(text)
+      writeFileSync(updateNotesPath(home, PROFILE), bytes, { mode: 0o600 })
+      const forged: UpdateCheckRecord = { ...record, newest: { ...record.newest!, notes: { sha256: brandString<Sha256Hex>(createHash('sha256').update(bytes).digest('hex')), length: bytes.byteLength } } }
+      expect(await readUpdateNotes(home, PROFILE, forged), JSON.stringify(text)).toBeUndefined()
+    }
+  })
+
+  it('whats-new-size-before-read: a stored notes file above the limit is refused before it is read, even when the record names its digest', async () => {
+    const record = await checkWithNotes()
+    const big = Buffer.alloc(65_537, 'a')
+    writeFileSync(updateNotesPath(home, PROFILE), big, { mode: 0o600 })
+    const forged: UpdateCheckRecord = { ...record, newest: { ...record.newest!, notes: { sha256: brandString<Sha256Hex>(createHash('sha256').update(big).digest('hex')), length: big.byteLength } } }
+    expect(await readUpdateNotes(home, PROFILE, forged)).toBeUndefined()
+  })
+
+  it('serves nothing for a record without notes', async () => {
+    expect(await readUpdateNotes(home, PROFILE, await check())).toBeUndefined()
+    expect(await readUpdateNotes(home, PROFILE, undefined)).toBeUndefined()
+  })
 })
 
 describe('the check', { timeout: 60_000 }, () => {

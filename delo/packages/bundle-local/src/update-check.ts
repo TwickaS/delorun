@@ -17,7 +17,7 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { UPDATE_NOTICE_PATH, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
+import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -69,6 +69,14 @@ export interface UpdateCheckState {
   readonly notice?: UpdateNotice
 }
 
+/** Verified release notes with the release they belong to. */
+export interface UpdateNotes {
+  /** The release version. */
+  readonly version: UpdateNotice['release']['delo']
+  /** The plain-text notes. */
+  readonly text: string
+}
+
 /** The check `delorun` attaches: it owns the channel, the verification and the record. */
 export interface UpdateCheckSource {
   /**
@@ -82,6 +90,11 @@ export interface UpdateCheckSource {
    * @returns the state after it.
    */
   check(timeoutMs: number): Promise<UpdateCheckState>
+  /**
+   * The release notes of the notice's release, as the check verified them.
+   * @returns the plain-text notes and the release they belong to, or `undefined` when there are none or the stored file no longer matches what was verified.
+   */
+  notes(): Promise<UpdateNotes | undefined>
 }
 
 /** The `deloUpdateCheck` service. */
@@ -153,6 +166,14 @@ export class UpdateCheckService extends Service {
   async notice(): Promise<UpdateNotice | undefined> {
     return (await this.source?.read())?.notice
   }
+
+  /**
+   * The verified release notes for the notice's release.
+   * @returns the notes with their release, or `undefined` when no check is attached or no verified notes are stored.
+   */
+  async notes(): Promise<UpdateNotes | undefined> {
+    return this.source?.notes()
+  }
 }
 
 /**
@@ -173,5 +194,15 @@ export function apply(ctx: Context, config: Config): void {
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
       },
     }), `${name}: the notice route`)
+    scope.effect(() => scope.connection.fetch.register({
+      path: UPDATE_NOTES_PATH,
+      methods: ['GET'],
+      requestBody: 'buffered',
+      fetch: async () => {
+        const found = await service.notes()
+        const body: UpdateNotesResponse = { version: found?.version ?? null, notes: found?.text ?? null }
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+      },
+    }), `${name}: the notes route`)
   })
 }
