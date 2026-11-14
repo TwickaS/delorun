@@ -37,7 +37,7 @@ export interface PostStep {
  * catalogues and records that quote names, paths or content hashes.
  */
 export const POST_STEPS: readonly PostStep[] = [
-  { description: 'lockfile (workspace package names, importer paths)', command: ['pnpm', 'install', '--lockfile-only', '--offline'], required: true },
+  { description: 'lockfile (workspace package names, importer paths)', command: ['pnpm', 'install', '--lockfile-only'], required: true },
   { description: 'tsconfig paths', command: ['pnpm', 'run', 'gen-tsconfig-paths'], required: true },
   { description: 'plugin packages catalogue', command: ['pnpm', 'run', 'gen-plugin-packages'], required: false },
   { description: 'config catalogue', command: ['pnpm', 'run', 'gen-config-catalog'], required: false },
