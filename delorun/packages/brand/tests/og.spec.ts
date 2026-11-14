@@ -20,4 +20,11 @@ describe('the social card source', () => {
     expect(ogHtml()).toContain(MARK.nut)
     expect(ogHtml()).not.toMatch(/#[0-9a-f]{6}\b/i)
   })
+
+  it('ships a 1200 by 630 PNG as the social card image', () => {
+    const png = readFileSync(new URL('../../../apps/website/public/og.png', import.meta.url))
+    expect(png.subarray(1, 4).toString('ascii')).toBe('PNG')
+    expect(png.readUInt32BE(16)).toBe(1200)
+    expect(png.readUInt32BE(20)).toBe(630)
+  })
 })

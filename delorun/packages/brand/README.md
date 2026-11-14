@@ -77,7 +77,7 @@ Each is a function component with a documented props interface. "Upstream" means
 
 [`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) refuses, in the sources of every Delorun package and in the sources, public files and scripts of the website and the docs outside this package, a brand colour literal (`#E5734A`, `#B84A1B`), a named typeface in `font-family` and a second copy of the mark's path. Each file that keeps a literal is listed with a reason in [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json); the list only shrinks.
 
-The website's social card page, `apps/website/scripts/og.html`, is generated from the mark and the brand's custom properties by `scripts/render-og.ts` (`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`). Its mark path is the one allowlisted copy, and `tests/og.spec.ts` fails when the committed page differs from [`src/og.ts`](src/og.ts). `public/og.png` is a screenshot of that page at 1200 by 630.
+The website's social card page, `apps/website/scripts/og.html`, is generated from the mark and the brand's custom properties by `scripts/render-og.ts` (`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`). Its mark path is the one allowlisted copy, and `tests/og.spec.ts` fails when the committed page differs from [`src/og.ts`](src/og.ts). `public/og.png` is a screenshot of that page at 1200 by 630: `node_modules/.bin/tsx delorun/packages/brand/scripts/render-og-png.ts` from the repository root loads it in a browse session on 127.0.0.1, waits for the brand fonts, and writes the PNG. `tests/og.spec.ts` checks the PNG's size.
 
 ## The desktop icon
 
