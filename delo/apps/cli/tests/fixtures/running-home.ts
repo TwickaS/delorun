@@ -8,7 +8,7 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree, newStartId } from '@delo/home'
-import { CountingChatGate, HomeProcess, updateChannelProbe, type RunningHost } from '@delo/home-process'
+import { CountingChatGate, HomeProcess, updateChannelProbe, type LocalDeviceApproval, type RunningHost } from '@delo/home-process'
 import { Redactor, type DeloLogger } from '@delo/logs'
 
 /** A running fixture home process. */
@@ -28,9 +28,10 @@ const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, de
  * @param home - the Delo home; its tree is created.
  * @param profile - the CLI profile.
  * @param studio - the address the Host reports, or `undefined` for a Host that serves no studio.
+ * @param devices - the Host's local device approval, or `undefined` for a Host that loads no `@delo/home-auth`.
  * @returns the running home process.
  */
-export async function startRunningHome(home: string, profile: string, studio: string | undefined): Promise<RunningHome> {
+export async function startRunningHome(home: string, profile: string, studio: string | undefined, devices?: LocalDeviceApproval): Promise<RunningHome> {
   await ensureHomeTree(home, profile)
   const host: RunningHost = {
     chats: new CountingChatGate(),
@@ -43,6 +44,7 @@ export async function startRunningHome(home: string, profile: string, studio: st
     suspend: () => Promise.resolve(),
     close: () => Promise.resolve(),
     reload: () => Promise.resolve({ ok: true }),
+    ...(devices === undefined ? {} : { devices }),
   }
   const listeners: (() => void)[] = []
   const started = await HomeProcess.start({

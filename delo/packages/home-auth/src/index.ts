@@ -71,7 +71,7 @@ export type { ReachFullAccessGrants } from './full-access-grants.ts'
 export { isElevationMinutes } from './elevation.ts'
 export { PIN_PATHS } from './pin-routes.ts'
 export { UNLOCK_HEADER, UNLOCK_SUBPROTOCOL_PREFIX } from './unlock-token.ts'
-export { checkNewSecret } from './pin-mode.ts'
+export { checkNewSecret, PinModeStore, type PinModeSummary } from './pin-mode.ts'
 export { REACH_DEVICE_PATHS, plainPathname, reachesDevicePath, type ReachDevicePath, type ReachDevicePathMatch } from './reach-paths.ts'
 export { HomeAuthService, Config as HomeAuthConfig, HOME_AUTH_SWITCH, REACH_SWITCH, type Config } from './service.ts'
 export {
