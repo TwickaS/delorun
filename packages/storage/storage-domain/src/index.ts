@@ -117,6 +117,10 @@ export class DomainFacility {
       const unit = await backend.kv.open(descriptorOf(spec))
       try {
         const snapshot = await unit.loadAll()
+        const quarantined: string[] = [...unit.quarantined ?? []]
+        for (const location of quarantined) {
+          this.ctx.logger.warn(`domain '${spec.name}': the stored document was unreadable; set aside in '${location}' and opened empty`)
+        }
         const tables = new Map<string, Map<string, unknown>>()
         for (const [table, tableSpec] of Object.entries(spec.tables)) {
           const records = new Map<string, unknown>()
@@ -128,6 +132,17 @@ export class DomainFacility {
               // Backup-and-skip policy (disposable derived data): move the record's
               // document aside, log the concrete failure, and open without the
               // record. Backends that cannot move a document keep the loud path.
+              if (spec.recoverable === true && unit.setAside !== undefined) {
+                const reason = String((error as DomainError).cause)
+                const moved = await unit.setAside({ domain: spec.name, table, key, reason, record: raw })
+                await unit.deleteRecord(table, key)
+                quarantined.push(moved)
+                this.ctx.logger.warn(
+                  `domain '${spec.name}': stored record '${key}' in table '${table}' failed schema validation; `
+                  + `set aside in '${moved}' and removed. Cause: ${reason}`,
+                )
+                continue
+              }
               if (spec.invalidRecords !== 'backup-and-skip' || unit.backupRecord === undefined) throw error
               const moved = await unit.backupRecord(table, key)
               // parseRecord always wraps the zod failure as the cause.
@@ -152,7 +167,7 @@ export class DomainFacility {
         // The onClosed hook runs strictly after teardown completes: writes
         // landing during the drain still emit domain/changed, and the name
         // frees up for reopening only once the domain is fully closed.
-        const domain: DomainImpl = new DomainImpl(this.ctx, spec, unit, tables, globalValue, () => {
+        const domain: DomainImpl = new DomainImpl(this.ctx, spec, unit, tables, globalValue, quarantined, () => {
           this.domains.delete(spec.name)
           this.reserved.delete(spec.name)
         })

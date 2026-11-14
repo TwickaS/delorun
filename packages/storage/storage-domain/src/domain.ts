@@ -126,6 +126,22 @@ export interface Domain<S extends DomainSpec> {
   table<N extends keyof S['tables'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>
 
   /**
+   * Medium locations of documents set aside while the domain opened or since: an unparsable unit,
+   * records that failed their schema, and consumer findings passed to {@link Domain.setAside}.
+   * Empty unless the spec is `recoverable`. A snapshot, not a live view.
+   */
+  readonly quarantined: readonly string[]
+
+  /**
+   * Preserve a consumer-detected inconsistency next to the unit before the consumer repairs it.
+   * The set-aside document is never replaced or deleted, and the unit's current document stops
+   * counting as the good backup until the repairing write lands.
+   * @param document - JSON-serializable description of what is removed from the domain.
+   * @returns the medium location, or `undefined` when the backend cannot set documents aside.
+   */
+  setAside(document: unknown): Promise<string | undefined>
+
+  /**
    * Close this domain: reject new writes immediately, drain already-queued
    * writes (their events still emit), release the backend unit, then free
    * the domain name for a later open. Idempotent — repeated calls share one
@@ -182,6 +198,7 @@ export class DomainImpl {
    * the spec, so the entry set IS the table set.
    * @param globalValue - Validated stored global, or the spec's `initial`
    * when the medium held none; `undefined` when the spec declares no global.
+   * @param setAsideLocations - Locations set aside while opening; the domain appends later ones.
    * @param onClosed - Facility hook run once after teardown completes; frees
    * the domain name for a later open.
    */
@@ -191,6 +208,7 @@ export class DomainImpl {
     private readonly unit: KvUnit,
     records: Map<string, Map<string, unknown>>,
     globalValue: unknown,
+    private readonly setAsideLocations: string[],
     private readonly onClosed: () => void,
   ) {
     this.name = spec.name
@@ -218,6 +236,25 @@ export class DomainImpl {
         }),
       }
     }
+  }
+
+  /** Locations of documents set aside so far. */
+  get quarantined(): readonly string[] {
+    return [...this.setAsideLocations]
+  }
+
+  /**
+   * Set a consumer finding aside through the unit, on the write chain.
+   * @param document - JSON-serializable description of what is removed.
+   * @returns the location, or `undefined` without backend support.
+   */
+  setAside(document: unknown): Promise<string | undefined> {
+    return this.enqueue(async () => {
+      if (this.unit.setAside === undefined) return undefined
+      const location = await this.unit.setAside(document)
+      this.setAsideLocations.push(location)
+      return location
+    })
   }
 
   /** Global singleton handle; accessing it on a spec that declares no global is a caller bug and throws. */

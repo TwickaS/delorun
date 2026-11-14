@@ -2238,6 +2238,66 @@
       "path": "packages/experimental/deepseek-chat-import/src/client/mount.ts",
       "class": "generic-fix",
       "reason": "Ends the file with exactly one newline; rc.3 has a blank line at its end, which the repository's whitespace gate refuses. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage/src/backend.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "The unit descriptor gains `recoverable`, and a unit gains `quarantined` and `setAside`, so a backend can open a damaged unit instead of rejecting it. Backends that omit them behave as before. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-domain/src/spec.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "A domain spec may declare `recoverable: true`, which the unit descriptor carries. Absent, nothing changes. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-domain/src/index.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "For a `recoverable` domain on a backend that can set documents aside, a table record that fails its schema is set aside and removed so the open continues, and the set-aside locations are logged and kept. Without the flag or the backend support the open rejects as before. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-domain/src/domain.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "An open domain reports `quarantined` locations and `setAside(document)`, so its consumer can keep what it removes from a damaged store. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-json/src/index.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "Exports the file helpers that name and write set-aside files and the rolling backup, so the `delorun` recovery commands share them. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-json/src/set-aside.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "New: names `<file>.quarantined-<UTC timestamp>.json` files without replacing an earlier one, writes them with owner-only mode, and keeps one rolling `<file>.previous` copy. Offer upstream."
+    },
+    {
+      "path": "packages/storage/storage-json/src/single-unit.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "A `recoverable` single-layout unit sets an unparsable file aside and opens empty, keeps the previous good file as `<file>.previous` before each write (skipping a file known to be damaged), and sets a consumer's finding aside. A version mismatch still rejects. Offer upstream."
+    },
+    {
+      "path": "packages/workspace/workspace/src/spec.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "The workspace domain is `recoverable`. Offer upstream."
+    },
+    {
+      "path": "packages/workspace/workspace/src/inspect.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "New: the registry consistency rules as pure functions (findings, a repair plan that keeps every consistent record, and a read-only inspection of a registry file's text) for the registry and `delorun doctor`. Offer upstream."
+    },
+    {
+      "path": "packages/workspace/workspace/src/index.ts",
+      "class": "generic-fix",
+      "feature": "workspace-store-recovery",
+      "reason": "A registry whose stored records are inconsistent (repeated, dangling or orphan ids, a path claimed twice, a session claimed twice) or do not match the record format starts with the consistent records: the others are set aside in a timestamped file next to the registry file, one warning names each, and the cleaned state is written. An unparsable file is set aside whole and the registry starts empty. `quarantined` lists the set-aside files. Without a backend that can keep the records aside, startup refuses as before. Offer upstream."
     }
   ],
   "retired": []

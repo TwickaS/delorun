@@ -10,12 +10,14 @@ import { mkdir, stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
-import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
+import type { Domain, DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
 export { WorkspaceMoveInvalidError } from './entity.ts'
 import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath, realpathNormalize } from './paths.ts'
+import { describeFinding, findInconsistencies, repairRegistry } from './inspect.ts'
+import type { RegistryFinding, StoredRegistry } from './inspect.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 import type { SessionActivity, Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
@@ -26,6 +28,8 @@ export type {
 export { workspaceDomainState, workspaceRecord, workspaceDomainSpec } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 export { realpathNormalize } from './paths.ts'
+export { inspectRegistryText } from './inspect.ts'
+export type { RegistryInspection } from './inspect.ts'
 
 /** Identifies one workspace record (see `src/types.ts` for the brand rationale). */
 export type WorkspaceId = WorkspaceIdBrand
@@ -186,6 +190,7 @@ const compareHeaders = (left: SessionHeader, right: SessionHeader): number =>
 export class WorkspaceRegistry extends Service {
   static inject = ['storageDomain', 'sessionPersistence']
 
+  private domain?: Domain<typeof workspaceDomainSpec>
   private table?: KvTable<WorkspaceId, WorkspaceRecord>
   private global?: DomainGlobal<WorkspaceDomainState>
   private state?: WorkspaceDomainState
@@ -211,17 +216,27 @@ export class WorkspaceRegistry extends Service {
     super(ctx, 'workspaceRegistry')
   }
 
+  /**
+   * Locations of the files that hold records the registry set aside because they could not be read or were
+   * inconsistent, oldest first. Empty when nothing was set aside since the domain opened.
+   * @returns the set-aside file paths.
+   */
+  get quarantined(): readonly string[] {
+    return (this.domain as Domain<typeof workspaceDomainSpec>).quarantined
+  }
+
   /** Open the domain, finish bootstrap when required, and rebuild the ordered cache. */
   protected async [Service.init](): Promise<void> {
     const domain = await this.ctx.storageDomain.open(workspaceDomainSpec)
     this.ctx.effect(() => () => domain.close(), 'workspace.domainClose')
+    this.domain = domain
     this.table = domain.table('workspaces')
     this.global = domain.global
     this.state = domain.global.get()
 
     await this.recoverPendingMutation()
-    this.validateStoredState(this.state)
-    if (!this.state.initialized) {
+    await this.quarantineInconsistencies()
+    if (!this.requireState().initialized) {
       const headers = await this.listStoredHeaders()
       await this.replaceHeaderIndex(headers)
       await this.bootstrap(headers)
@@ -230,7 +245,7 @@ export class WorkspaceRegistry extends Service {
     }
 
     await this.indexLiveSessions()
-    this.validateStoredState(this.requireState())
+    await this.quarantineInconsistencies()
     this.rebuildEntities()
     this.reportFilteredCandidates()
   }
@@ -652,8 +667,8 @@ export class WorkspaceRegistry extends Service {
 
   /**
    * Complete the one mutation explicitly named by durable state. Unexplained
-   * order/table divergence still reaches {@link validateStoredState} and
-   * fails loud; this path never guesses which operation created a row from its shape alone.
+   * order/table divergence still reaches {@link quarantineInconsistencies},
+   * which sets it aside; this path never guesses which operation created a row from its shape alone.
    */
   private async recoverPendingMutation(): Promise<void> {
     const state = this.requireState()
@@ -763,47 +778,49 @@ export class WorkspaceRegistry extends Service {
     })
   }
 
-  private validateStoredState(state: WorkspaceDomainState): void {
-    const table = this.requireTable()
-    const order = new Set<WorkspaceId>()
-    for (const id of state.workspaceIds) {
-      if (order.has(id)) {
-        throw new Error(`workspace domain is inconsistent: registry order repeats workspace '${id}'`)
-      }
-      if (table.get(id) === undefined) {
-        throw new Error(`workspace domain is inconsistent: registry order references missing workspace '${id}'`)
-      }
-      order.add(id)
-    }
-    if (state.initialized && order.size !== table.size) {
-      const orphan = [...table.keys()].find(id => !order.has(id))
-      throw new Error(
-        `workspace domain is inconsistent: workspace '${orphan as WorkspaceId}' is absent from registry order`,
-      )
-    }
+  private storedRegistry(state: WorkspaceDomainState): StoredRegistry {
+    return { initialized: state.initialized, workspaceIds: state.workspaceIds, records: new Map(this.requireTable().entries()) }
+  }
 
-    const paths = new Map<string, WorkspaceId>()
-    const accounted = new Map<SessionId, WorkspaceId>()
-    for (const [id, record] of table.entries()) {
-      const pathHolder = paths.get(record.path)
-      if (pathHolder !== undefined) {
-        throw new Error(
-          `workspace domain is inconsistent: path '${record.path}' is claimed `
-          + `by both workspace '${pathHolder}' and workspace '${id}'`,
-        )
-      }
-      paths.set(record.path, id)
-      for (const sessionId of record.sessionIds) {
-        const holder = accounted.get(sessionId)
-        if (holder !== undefined) {
-          throw new Error(
-            `workspace domain is inconsistent: session '${sessionId}' is accounted `
-            + `by both workspace '${holder}' and workspace '${id}'`,
-          )
-        }
-        accounted.set(sessionId, id)
+  /**
+   * Keep every consistent record and set the inconsistent ones aside, so one bad record cannot stop the
+   * registry from starting. The set-aside file names what was removed and why; the cleaned state is
+   * written at once, so memory, the store and the next backup agree.
+   */
+  private async quarantineInconsistencies(): Promise<void> {
+    const state = this.requireState()
+    const table = this.requireTable()
+    const stored = this.storedRegistry(state)
+    if (findInconsistencies(stored).length === 0) return
+    const repair = repairRegistry(stored)
+    const reasons = [...repair.dropped.values(), ...repair.orderOnly].map(describeFinding)
+    for (const [id, sessionIds] of repair.trimmed) {
+      for (const sessionId of sessionIds) reasons.push(`session '${sessionId}' claimed twice; removed from workspace '${id}'`)
+    }
+    const location = await this.domain?.setAside({
+      reasons,
+      workspaceIds: state.workspaceIds,
+      records: Object.fromEntries([...repair.dropped.keys()].map(id => [id, table.get(id)])),
+    })
+    // Without a place to keep them the records stay and the startup refuses, as before.
+    if (location === undefined) throw new Error(describeFinding(findInconsistencies(stored)[0] as RegistryFinding))
+    for (const [id, finding] of repair.dropped) {
+      this.ctx.logger.warn(`workspace registry: record '${id}' was set aside in '${location}': ${describeFinding(finding)}`)
+    }
+    for (const finding of repair.orderOnly) {
+      this.ctx.logger.warn(`workspace registry: set aside in '${location}': ${describeFinding(finding)}`)
+    }
+    for (const [id, sessionIds] of repair.trimmed) {
+      for (const sessionId of sessionIds) {
+        this.ctx.logger.warn(`workspace registry: set aside in '${location}': session '${sessionId}' removed from workspace '${id}'`)
       }
     }
+    await table.deleteMany([...repair.dropped.keys()])
+    for (const [id, sessionIds] of repair.trimmed) {
+      const removed = new Set(sessionIds)
+      await table.update(id, record => ({ ...record, sessionIds: record.sessionIds.filter(sessionId => !removed.has(sessionId)) }))
+    }
+    await this.setState({ ...state, workspaceIds: [...repair.workspaceIds] })
   }
 
   private rebuildEntities(): void {

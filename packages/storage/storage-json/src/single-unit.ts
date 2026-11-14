@@ -17,6 +17,7 @@ import type { KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
 import { writeAtomic } from './atomic.ts'
 import { parse, serialize } from './format.ts'
 import type { UnitState } from './format.ts'
+import { rotatePrevious, setAsideFile, writeSetAside } from './set-aside.ts'
 
 /**
  * Open (load or lazily create) one `single`-layout unit under `root`: the
@@ -39,17 +40,28 @@ export async function openSingleUnit(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     // Missing file = empty unit; materialization defers to the first write.
   }
-  const state: UnitState =
-    text === undefined
-      ? {
-        version: descriptor.version,
-        global: null,
-        tables: new Map(descriptor.tables.map(table => [table, new Map<string, unknown>()])),
-      }
-      : parse(text, descriptor)
+  const empty = (): UnitState => ({
+    version: descriptor.version,
+    global: null,
+    tables: new Map(descriptor.tables.map(table => [table, new Map<string, unknown>()])),
+  })
+  const quarantined: string[] = []
+  let state: UnitState
+  if (text === undefined) {
+    state = empty()
+  } else {
+    try {
+      state = parse(text, descriptor)
+    } catch (error) {
+      // A newer or foreign-version file is intact data this reader cannot interpret; only damage is set aside.
+      if (descriptor.recoverable !== true || !(error instanceof StorageError) || error.code !== 'malformed-medium') throw error
+      quarantined.push(await setAsideFile(path))
+      state = empty()
+    }
+  }
   // Opening leaves the file untouched; the next atomic publish uses the current stamp.
   state.version = descriptor.version
-  return new SingleJsonUnit(descriptor, path, state, onClose)
+  return new SingleJsonUnit(descriptor, path, state, onClose, quarantined)
 }
 
 class SingleJsonUnit implements KvUnit {
@@ -62,7 +74,11 @@ class SingleJsonUnit implements KvUnit {
     private readonly path: string,
     private readonly state: UnitState,
     private readonly onClose: () => void,
+    readonly quarantined: readonly string[],
   ) {}
+
+  /** Set when the file on disk is known to be damaged, so the next write does not keep it as the good backup. */
+  private suspect = false
 
   // oxlint-disable-next-line typescript/require-await -- async keeps the closed guard a rejection, not a synchronous throw
   async loadAll(): Promise<{ tables: Record<string, Record<string, unknown>>; global: unknown }> {
@@ -111,6 +127,13 @@ class SingleJsonUnit implements KvUnit {
     })
   }
 
+  async setAside(document: unknown): Promise<string> {
+    this.assertOpen()
+    const location = await writeSetAside(this.path, `${JSON.stringify(document, null, 2)}\n`)
+    this.suspect = true
+    return location
+  }
+
   async setGlobal(value: unknown): Promise<void> {
     this.assertOpen()
     if (!this.descriptor.hasGlobal) {
@@ -151,11 +174,17 @@ class SingleJsonUnit implements KvUnit {
   }
 
   private async publish(): Promise<void> {
-    const write = writeAtomic(this.path, serialize(this.descriptor.name, this.state))
+    const write = this.publishFile()
     this.inFlight.add(write)
     // Swallow only on the tracking branch: the caller still awaits `write`
     // itself, so rejections stay observed exactly once.
     write.catch(() => {}).finally(() => this.inFlight.delete(write))
     return write
+  }
+
+  private async publishFile(): Promise<void> {
+    if (this.descriptor.recoverable === true && !this.suspect) await rotatePrevious(this.path)
+    await writeAtomic(this.path, serialize(this.descriptor.name, this.state))
+    this.suspect = false
   }
 }

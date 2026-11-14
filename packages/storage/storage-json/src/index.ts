@@ -14,6 +14,8 @@ import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@deepsee
 import { openSingleUnit } from './single-unit.ts'
 import { openPerRecordUnit } from './per-record-unit.ts'
 
+export { previousPath, quarantinePath, rotatePrevious, setAsideFile, writeSetAside } from './set-aside.ts'
+
 /** Cordis plugin name. */
 export const name = 'storage-json'
 /** The hub must exist before the backend can register. */

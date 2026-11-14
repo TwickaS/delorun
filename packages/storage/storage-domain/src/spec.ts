@@ -65,6 +65,15 @@ export interface DomainSpec {
    * to the rejecting default. The global slot always rejects.
    */
   readonly invalidRecords?: 'backup-and-skip'
+  /**
+   * Opt in to damage tolerance for authoritative data that must keep serving what is still good:
+   * the unit keeps a rolling previous copy, an unparsable unit document is set aside and the unit
+   * opens empty, and a table record that fails its schema is set aside (`KvUnit.setAside`) and
+   * removed so the open continues. The consumer reads the set-aside locations from
+   * `Domain.quarantined`, reports them to the person, and may call `Domain.setAside` for its own
+   * consistency findings. A backend without support rejects as it does without this flag.
+   */
+  readonly recoverable?: true
   /** Optional global singleton slot. */
   readonly global?: DomainGlobalSpec<unknown>
   /** Table declarations keyed by table name; each name must match `UNIT_NAME_RE`. */
@@ -159,5 +168,6 @@ export function descriptorOf(spec: DomainSpec): KvUnitDescriptor {
     hasGlobal: spec.global !== undefined,
     ...spec.layout === undefined ? {} : { layout: spec.layout },
     ...spec.compatibleVersions === undefined ? {} : { compatibleVersions: spec.compatibleVersions },
+    ...spec.recoverable === undefined ? {} : { recoverable: true },
   }
 }
