@@ -97,7 +97,7 @@ The row `delo-onboarding` has these fields ([`src/config.ts`](src/config.ts)), v
 | `keyTestTimeoutMs` | `15000` | The most time one provider's key test may take, 1000 to 60000. |
 | `cloneTimeoutMs` | `600000` | The most time a clone may take, 10000 to 3600000. |
 
-[`@delo/bundle-studio`](../bundle-studio/README.md) sets `plugins` to four experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool and session titles, and `optionalRows` to the Thinking tab (`delo-thinking-rsvp`) and the cost meter (`delo-cost-meter`).
+[`@delo/bundle-studio`](../bundle-studio/README.md) sets `plugins` to five experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool, session titles and the DeepSeek website chat import (an optional bundle, off until turned on), and `optionalRows` to the Thinking tab (`delo-thinking-rsvp`) and the cost meter (`delo-cost-meter`).
 
 ## Limits
 

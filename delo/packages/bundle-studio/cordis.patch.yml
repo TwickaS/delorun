@@ -37,6 +37,9 @@
           - '@deepseek-ai/dsh-experimental-terminal-bundle'
           - '@deepseek-ai/dsh-experimental-tool-worktree'
           - '@deepseek-ai/dsh-experimental-session-titles-bundle'
+          # Upstream's DeepSeek website chat import: an optional bundle the plugin manager turns on (off until then), so it is
+          # offered here by package, not as a row of this bundle.
+          - '@deepseek-ai/dsh-deepseek-chat-import'
         # Rows of this bundle that are inserted disabled (below). The guide offers to turn each on through the plugin
         # manager; each must be a row of the profile, or onboarding does not load.
         optionalRows:

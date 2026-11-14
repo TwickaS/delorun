@@ -38,6 +38,7 @@ The user guide is for people who install and use Delorun, the community fork of 
 - **Update when I run many third-party plugins:** [Update Delorun with many plugins](updating-with-plugins.md). It covers what is saved first, reading the report's `disabled` lines, trying a plugin anyway with a version exemption, and going back.
 - **Find where my data lives, move it, or use two profiles:** [Your Delorun home](home.md).
 - **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
+- **Bring my chats from the DeepSeek website:** [Import your DeepSeek website chats](import-deepseek-chats.md).
 - **See what a chat costs:** [See what a chat costs](cost-meter.md).
 - **Read the model's thinking word by word:** [Read the model's thinking word by word](thinking-tab.md).
 
