@@ -2347,6 +2347,84 @@
       "class": "security",
       "reason": "Request extras (C4, \"Page unlock\"): `openConnectionWebSocket` takes optional subprotocols, offered only to the browser `WebSocket`; a Host-supplied `createWebSocket` factory is called as before. Without subprotocols the socket opens as upstream's does. Offer upstream.",
       "sha256": "c98f13de957a954ce893f2ab03cac231ca6daa30aa5f544a2be1f2034642b752"
+    },
+    {
+      "path": "apps/desktop/resources/icon-macos.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/icon-macos.svg",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/icon-windows.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/icon-windows.svg",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/icon.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/icon.svg",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/desktop/resources/tray-windows.ico",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/apple-touch-icon.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/favicon-dark.svg",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/favicon.svg",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/icon-192.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/icon-512.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/public/icon-maskable-512.png",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
     }
   ],
   "retired": []

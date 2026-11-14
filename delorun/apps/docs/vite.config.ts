@@ -76,7 +76,7 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
     // The shared design's stylesheet imports Fumadocs UI's CSS from outside this directory, so the import resolves to this site's install.
-    alias: [{ find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
+    alias: [{ find: '#upstream', replacement: fileURLToPath(new URL('../../packages/brand/src/upstream.web.tsx', import.meta.url)) }, { find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
     // The shared design's components import React from outside this directory; every copy must be this site's.
     dedupe: ['react', 'react-dom'],
   },

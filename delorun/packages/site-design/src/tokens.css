@@ -5,3 +5,5 @@
  */
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
+@import '../../brand/src/tokens.css';
+@import '../../brand/src/fonts.css';

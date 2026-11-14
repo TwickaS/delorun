@@ -1,0 +1,33 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dl-space-2);
+  box-sizing: border-box;
+  border: 1px solid var(--dl-border);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.md { height: 36px; padding: 0 var(--dl-space-4); border-radius: var(--dl-radius-md); }
+.sm { height: 28px; padding: 0 var(--dl-space-3); border-radius: var(--dl-radius-sm); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon { display: inline-flex; }
+
+.wrap { display: flex; align-items: center; gap: var(--dl-space-2); height: 36px; padding: 0 var(--dl-space-3); border: 1px solid var(--dl-border); border-radius: var(--dl-radius-md); background: var(--dl-surface-raised); }
+.wrap:focus-within { outline: var(--dl-focus-ring); outline-offset: 1px; }
+.input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--dl-text); font: inherit; font-size: 14px; }
+
+.pill { display: inline-flex; align-items: center; height: 24px; padding: 0 var(--dl-space-3); border: 1px solid var(--dl-border); border-radius: 999px; background: transparent; color: var(--dl-text-muted); font: inherit; font-size: 12px; }
+.interactive { cursor: pointer; }
+.active { border-color: var(--dl-accent); color: var(--dl-accent-text); }
+
+.dialog { position: fixed; max-width: min(480px, calc(100vw - 32px)); padding: var(--dl-space-5); border: 1px solid var(--dl-border); border-radius: var(--dl-radius-lg); background: var(--dl-surface-raised); color: var(--dl-text); font-family: var(--dl-font-sans); }
+.dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+.heading { margin: 0 0 var(--dl-space-2); font-size: 18px; font-weight: 600; }
+.description { margin: 0 0 var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
+.footer { display: flex; justify-content: flex-end; gap: var(--dl-space-2); margin-top: var(--dl-space-4); }
+.close { position: absolute; top: var(--dl-space-3); right: var(--dl-space-3); border: 0; background: transparent; color: var(--dl-text-muted); font-size: 20px; cursor: pointer; }

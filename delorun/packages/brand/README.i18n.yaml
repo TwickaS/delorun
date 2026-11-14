@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/brand/README.md
+/:
+  en: 1628d6abf8d9d7ee
+  zh: f942bb39cb0ea433
+/delorun-brand:
+  en: 81b7ea2bd4f376f5
+  zh: 73c80e1b73720c2c
+/delorun-brand/summary:
+  en: 21658807610b43ed
+  zh: c9b5768340dcf4c1
+/delorun-brand/contents:
+  en: a6c2e40960d86799
+  zh: 1f89c78d06fc5e8d
+/delorun-brand/use-this-package:
+  en: d71ac2774f2eecdf
+  zh: 3d66c9fc56642d1e
+/delorun-brand/tokens:
+  en: 379303ccbbc728dd
+  zh: bff7a7d24770cf5f
+/delorun-brand/components:
+  en: 12012607b337e288
+  zh: a6876902db39b9b5
+/delorun-brand/contract:
+  en: 4fd49d08a9b7712f
+  zh: a4f3dbe23da42420
+/delorun-brand/the-drift-gate:
+  en: 793bdfa1e7242ff4
+  zh: 8636a70106b4a49b
+/delorun-brand/the-desktop-icon:
+  en: 1c4e5c394cea0597
+  zh: 8d3e72e247fa7877
+/delorun-brand/tests:
+  en: f7c04d9106cb2c93
+  zh: e6a1af5e8b94381f

@@ -127,6 +127,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Added",
+      "text": "The studio's update card has a What's new button that opens the release's notes. The notes show only after their length and SHA-256 match the signed release manifest and their text passes the same plain-text checks as the release summary."
+    },
+    {
+      "area": "Install and update",
       "section": "Changed",
       "text": "`delorun update --report` and `delorun update` show, under a plugin the update turns off because its DeepSeek Harness version range excludes the new release, the command that accepts the risk for that exact version and say that the health check after the switch rolls the update back if the plugin then fails to load. A new guide page, \"Update Delorun with many plugins\", walks through saving, checking, updating and going back."
     },
@@ -343,6 +348,11 @@
     {
       "area": "Setup",
       "section": "Changed",
+      "text": "Delorun's package scope, home folder and environment variables are named Delorun: `@delorun/…`, `~/.delorun` and `DELORUN_*`."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
       "text": "`delorun setup` opens with \"How will you use Delorun?\": just me on this computer, also from my phone or another device, or scripts and automation. The answer sets the defaults and decides which questions come next, so most people answer three: the model provider and its key, and how much Delorun asks. The review screen lists every answer, including the release check and the prompts answer, and its More settings choice asks the rest. This replaces the Quick or Full choice."
     },
     {
@@ -498,6 +508,11 @@
     {
       "area": "Studio",
       "section": "Changed",
+      "text": "The Ready step of onboarding shows the look and the workspace in the normal text colour, so green marks only what is working. On a phone the starter prompts in a new chat sit under their label at the width of the message box."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
       "text": "Settings is arranged in five groups. General holds a General page (language, look, updates with the release check and the current versions, keyboard shortcuts, getting started and the coding view), Appearance (colours, then text and density), Sidebar, a Conversation page for how chats are displayed, and Chat (composer, links and usage). Agent holds Models, Modes, Tools and Plugins; Safety holds Permissions (new chats, full access and MCP servers), External agents (the switch that asks before an external agent runs, its run time limit and the agents you allowed), Network and Privacy; then come Devices, and Data with Trash and About, which now lists the licences and project links."
     },
     {
@@ -539,6 +554,31 @@
       "area": "Studio",
       "section": "Changed",
       "text": "The Plugins page's install guide names `delorun plugin add` and `delorun plugin remove`, the commands Delorun has, and asks for the full path of a plugin's folder, which is the only kind of folder path the studio can install from."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The npm mirror switch moved from Settings, Privacy to Settings, Plugins, under the heading Plugin downloads, with shorter copy. It shows nothing when the profile does not load the plugin install check."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "On a phone the attach and send buttons in the message box have a 44 px tap area, the Settings tab strip fades at the edge that has more tabs, and the key field's Apply button is neutral in onboarding so Continue is the one primary button."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "On a touch screen the Settings tabs, the Close and Open configuration file buttons and the API key field are 44 px tall, and text fields use a 16 px font so the page does not zoom when one is focused. Desktop sizes are unchanged."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Settings: the Modes captions are sentence-case headings, the opening sentences of Devices and Network line up with the other panes, and the Devices terminal switch sits beside its label."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The plugins step of onboarding names a plugin in words, never by its package id, while its title is still loading."
     },
     {
       "area": "Studio",
@@ -1547,6 +1587,10 @@
               "text": "Contributors can measure where a person waits on Delorun with `pnpm run benchmark:delorun`: install and setup, start and stop, the everyday commands, `delorun update`, `update --check` and rollbacks step by step, recovery, export, import and the trash, plugins, a chat turn without a model, and the studio in a headless browser, all on local releases in throwaway homes with no network, with a mode that fails when a step exceeds its recorded ceiling."
             },
             {
+              "section": "Added",
+              "text": "The studio's update card has a What's new button that opens the release's notes. The notes show only after their length and SHA-256 match the signed release manifest and their text passes the same plain-text checks as the release summary."
+            },
+            {
               "section": "Changed",
               "text": "`delorun update --report` and `delorun update` show, under a plugin the update turns off because its DeepSeek Harness version range excludes the new release, the command that accepts the risk for that exact version and say that the health check after the switch rolls the update back if the plugin then fails to load. A new guide page, \"Update Delorun with many plugins\", walks through saving, checking, updating and going back."
             },
@@ -1725,6 +1769,10 @@
             },
             {
               "section": "Changed",
+              "text": "Delorun's package scope, home folder and environment variables are named Delorun: `@delorun/…`, `~/.delorun` and `DELORUN_*`."
+            },
+            {
+              "section": "Changed",
               "text": "`delorun setup` opens with \"How will you use Delorun?\": just me on this computer, also from my phone or another device, or scripts and automation. The answer sets the defaults and decides which questions come next, so most people answer three: the model provider and its key, and how much Delorun asks. The review screen lists every answer, including the release check and the prompts answer, and its More settings choice asks the rest. This replaces the Quick or Full choice."
             },
             {
@@ -1854,6 +1902,10 @@
             },
             {
               "section": "Changed",
+              "text": "The Ready step of onboarding shows the look and the workspace in the normal text colour, so green marks only what is working. On a phone the starter prompts in a new chat sit under their label at the width of the message box."
+            },
+            {
+              "section": "Changed",
               "text": "Settings is arranged in five groups. General holds a General page (language, look, updates with the release check and the current versions, keyboard shortcuts, getting started and the coding view), Appearance (colours, then text and density), Sidebar, a Conversation page for how chats are displayed, and Chat (composer, links and usage). Agent holds Models, Modes, Tools and Plugins; Safety holds Permissions (new chats, full access and MCP servers), External agents (the switch that asks before an external agent runs, its run time limit and the agents you allowed), Network and Privacy; then come Devices, and Data with Trash and About, which now lists the licences and project links."
             },
             {
@@ -1887,6 +1939,26 @@
             {
               "section": "Changed",
               "text": "The Plugins page's install guide names `delorun plugin add` and `delorun plugin remove`, the commands Delorun has, and asks for the full path of a plugin's folder, which is the only kind of folder path the studio can install from."
+            },
+            {
+              "section": "Changed",
+              "text": "The npm mirror switch moved from Settings, Privacy to Settings, Plugins, under the heading Plugin downloads, with shorter copy. It shows nothing when the profile does not load the plugin install check."
+            },
+            {
+              "section": "Changed",
+              "text": "On a phone the attach and send buttons in the message box have a 44 px tap area, the Settings tab strip fades at the edge that has more tabs, and the key field's Apply button is neutral in onboarding so Continue is the one primary button."
+            },
+            {
+              "section": "Changed",
+              "text": "On a touch screen the Settings tabs, the Close and Open configuration file buttons and the API key field are 44 px tall, and text fields use a 16 px font so the page does not zoom when one is focused. Desktop sizes are unchanged."
+            },
+            {
+              "section": "Changed",
+              "text": "Settings: the Modes captions are sentence-case headings, the opening sentences of Devices and Network line up with the other panes, and the Devices terminal switch sits beside its label."
+            },
+            {
+              "section": "Changed",
+              "text": "The plugins step of onboarding names a plugin in words, never by its package id, while its title is still loading."
             },
             {
               "section": "Fixed",

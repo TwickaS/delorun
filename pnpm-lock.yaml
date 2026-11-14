@@ -1812,6 +1812,22 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
+  delorun/packages/brand:
+    dependencies:
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   delorun/packages/bundle-headless:
     dependencies:
       '@delorun/bundle-local':
@@ -1856,6 +1872,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
@@ -3388,6 +3407,9 @@ importers:
 
   delorun/packages/plugin-theme:
     dependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls

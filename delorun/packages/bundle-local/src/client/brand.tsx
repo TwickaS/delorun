@@ -3,6 +3,7 @@
  * upstream's sidebar draws when no occupant is registered, in the wide sidebar and, for the mark, the folded rail.
  */
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { MARK } from '@delorun/brand/mark'
 import styles from './brand.module.css'
 
 /** The product name the page title uses. Brand text, not translated copy. */
@@ -10,9 +11,6 @@ export const PRODUCT_NAME = 'Delorun'
 
 /** The name the sidebar's brand row shows, one word in every language. Brand text, not translated copy. */
 export const BRAND_NAME = 'Delorun'
-
-/** The mark's nut: a hexagon whose round hole shows the ground. */
-const NUT = 'M16 2.5L27.7 9.25V22.75L16 29.5L4.3 22.75V9.25Z M22.6 16A6.6 6.6 0 1 0 9.4 16A6.6 6.6 0 1 0 22.6 16Z'
 
 /**
  * Render the brand name as the sidebar's brand name.
@@ -31,8 +29,8 @@ export function DelorunBrandName() {
 export function DelorunBrandMark({ size }: SidebarBrandMarkOwnerProps) {
   return (
     <svg className={styles.mark} width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false" data-delorun-mark="">
-      <path d={NUT} fill="currentColor" fillRule="evenodd" />
-      <circle className={styles.plug} cx="16" cy="16" r="3.6" />
+      <path d={MARK.nut} fill="currentColor" fillRule="evenodd" />
+      <circle className={styles.plug} cx={MARK.plug.cx} cy={MARK.plug.cy} r={MARK.plug.r} />
     </svg>
   )
 }

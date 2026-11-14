@@ -25,6 +25,12 @@
       "@/*": [
         "./src/*"
       ],
+      "@brand": [
+        "../../packages/brand/src/index.ts"
+      ],
+      "#upstream": [
+        "../../packages/brand/src/upstream.web.tsx"
+      ],
       "@design/*": [
         "../../packages/site-design/src/*"
       ],
