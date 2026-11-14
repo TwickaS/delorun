@@ -254,7 +254,7 @@ function unlockOutcomeOf(failure: ReturnType<typeof hostFailureOf>): PinOutcome 
   if (failure.kind !== 'refused') return { kind: 'failed' }
   switch (failure.code) {
     case PIN_CODES.invalid:
-      return pinMissOf(failure.message)
+      return pinMissOf(failure.fields)
     case PIN_CODES.paused:
       return { kind: 'paused' }
     case PIN_CODES.address:

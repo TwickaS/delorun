@@ -250,7 +250,7 @@ describe('a page unlock', () => {
     expect(running()?.id).toBe(reply.body.unlockId)
     // Pins the once-only token: the home keeps a digest, so no read gives it back.
     const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delo-unlock': reply.body.token as string })
-    expect(state.body).toMatchObject({ kind: 'on', secret: 'pin', paused: false, unlock: { unlockId: reply.body.unlockId } })
+    expect(state.body).toMatchObject({ kind: 'on', secret: 'pin', paused: false, lockWhenHidden: false, unlock: { unlockId: reply.body.unlockId } })
     expect(JSON.stringify(state.body)).not.toContain(reply.body.token as string)
     // A page without the token sees the mode and no unlock.
     expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toMatchObject({ kind: 'on', unlock: null })
@@ -269,6 +269,8 @@ describe('a page unlock', () => {
     const wrong = await unlock('135790')
     expect(wrong).toMatchObject({ status: 403, body: { error: 'PIN_INVALID' } })
     expect(wrong.text).toContain('4 tries left')
+    // Pins the structured fields a page reads instead of the sentence.
+    expect(wrong.body).toMatchObject({ triesLeft: 4, removed: false })
     expect(wrong.text).not.toContain('135790')
     // Pins the origin fence on the unlock.
     expect(await send('POST', `${PIN_PATHS.unlock}?reach`, { secret: PIN }, { 'sec-fetch-site': 'cross-site' })).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
@@ -367,6 +369,7 @@ describe('wrong tries', () => {
     // Pins the lockout: the fifth wrong try removes the device as the computer's removal does.
     expect(last).toMatchObject({ status: 403, body: { error: 'PIN_INVALID' } })
     expect(last.text).toContain('signed out')
+    expect(last.body).toMatchObject({ triesLeft: 0, removed: true })
     expect(home.closed).toContainEqual({ deviceId: first })
     expect((await home.auth.devices()).devices.map(device => device.id)).not.toContain(first)
     expect(home.auth.admitToken(token, PRIVATE)).toMatchObject({ kind: 'refused' })
@@ -390,7 +393,7 @@ describe('wrong tries', () => {
     }
     // Pins the home-wide count: the tenth miss pauses even a correct PIN from a device that missed twice.
     const third = devices[2]
-    expect(await unlock(PIN, third?.token)).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
+    expect(await unlock(PIN, third?.token)).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
     expect(events.some(event => event.kind === 'paused')).toBe(true)
     expect((await send('GET', PIN_PATHS.mode)).body).toMatchObject({ enabled: true, paused: true })
     await send('POST', PIN_PATHS.resume, {})

@@ -13,7 +13,7 @@ export type HostFetch = (input: string, init?: RequestInit) => Promise<Response>
  * the JSON the route promises.
  */
 export type HostFailure =
-  | { readonly kind: 'refused'; readonly status: number; readonly code: string; readonly message: string }
+  | { readonly kind: 'refused'; readonly status: number; readonly code: string; readonly message: string; readonly fields?: Readonly<Record<string, unknown>> }
   | { readonly kind: 'unreachable'; readonly cause: unknown }
   | { readonly kind: 'unreadable'; readonly status: number }
 
@@ -115,8 +115,8 @@ export async function call<T>(fetch: HostFetch, path: string, check: Check, body
   const { status, ok, json } = await send(fetch, path, body, extra)
   if (!ok) {
     if (!isRefusal(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
-    const refusal = json as { error: string; message: string }
-    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error, message: refusal.message })
+    const refusal = json as { error: string; message: string } & Record<string, unknown>
+    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error, message: refusal.message, fields: refusal })
   }
   if (!check(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
   return json as T

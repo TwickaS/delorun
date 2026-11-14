@@ -126,13 +126,11 @@ export async function lockPin(fetch: HostFetch, token: string, keepalive = false
 export type PinMiss = { readonly kind: 'wrong'; readonly triesLeft: number | undefined } | { readonly kind: 'removed' }
 
 /**
- * Tell a wrong try from the removal after the last one. The route answers both as `PIN_INVALID` with a sentence only:
- * the removal sentence says the device is signed out; a miss says how many tries are left.
- * @param message - the Host's sentence.
- * @returns the outcome.
+ * Tell a wrong try from the removal after the last one, by the fields a `PIN_INVALID` refusal carries.
+ * @param fields - the refusal's body: `triesLeft` (number) and `removed` (boolean).
+ * @returns the outcome; a refusal without the fields reads as a wrong try with no count.
  */
-export function pinMissOf(message: string): PinMiss {
-  if (/last wrong try|signed out\. Approve/i.test(message)) return { kind: 'removed' }
-  const left = /(\d+) tr(?:y|ies) left/i.exec(message)
-  return { kind: 'wrong', triesLeft: left === null ? undefined : Number(left[1]) }
+export function pinMissOf(fields: Readonly<Record<string, unknown>> | undefined): PinMiss {
+  if (fields?.removed === true) return { kind: 'removed' }
+  return { kind: 'wrong', triesLeft: typeof fields?.triesLeft === 'number' ? fields.triesLeft : undefined }
 }

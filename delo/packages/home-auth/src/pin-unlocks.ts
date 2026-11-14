@@ -114,7 +114,7 @@ export class PinUnlocks {
     const record = id === undefined ? undefined : this.options.elevations.get(id)
     const mine = record?.deviceId === deviceId && record.listener === listener ? record : undefined
     return {
-      kind: 'on', secret: summary.kind, idleMinutes: summary.idleMinutes, paused: summary.paused,
+      kind: 'on', secret: summary.kind, idleMinutes: summary.idleMinutes, paused: summary.paused, lockWhenHidden: summary.lockWhenHidden,
       unlock: mine === undefined ? null : { unlockId: mine.id, endsAt: mine.startedAt + PIN_MODE_LIMITS.absoluteCapMs, idleEndsAt: mine.endsAt },
     }
   }
@@ -138,17 +138,17 @@ export class PinUnlocks {
         if (!this.options.stillAdmitted(asker)) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
         return this.mint(asker)
       case 'paused':
-        throw new HomeAuthError('PIN_UNLOCKS_PAUSED', 'PIN unlocks are paused after too many wrong tries. Resume them at your computer')
+        throw new HomeAuthError('PIN_UNLOCKS_PAUSED', 'PIN unlocks are paused after too many wrong tries. Resume them at your computer', { paused: true })
       case 'lockout':
         this.options.report({ kind: 'lockout', deviceId: asker.deviceId })
         if (this.options.store.summary().paused) this.options.report({ kind: 'paused' })
         await this.options.removeDevice(asker.deviceId)
-        throw new HomeAuthError('PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer')
+        throw new HomeAuthError('PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer', { triesLeft: 0, removed: true })
       case 'wrong': {
         this.options.report({ kind: 'wrong', deviceId: asker.deviceId, triesLeft: outcome.triesLeft })
         if (this.options.store.summary().paused) this.options.report({ kind: 'paused' })
         const left = outcome.triesLeft
-        throw new HomeAuthError('PIN_INVALID', `That is not right. ${String(left)} ${left === 1 ? 'try' : 'tries'} left before this device is signed out`)
+        throw new HomeAuthError('PIN_INVALID', `That is not right. ${String(left)} ${left === 1 ? 'try' : 'tries'} left before this device is signed out`, { triesLeft: left, removed: false })
       }
       default:
         return assertNever(outcome)

@@ -28,7 +28,7 @@ const NOW = Date.UTC(2026, 10, 14, 9, 0, 0)
 const IDLE = 15 * 60_000
 const TOKEN = 'page-token-secret-value'
 const ok = (body: unknown, status = 200): Answer => ({ status, body })
-const refusal = (status: number, error: string, message = `${error} sentence`): Answer => ({ status, body: { error, message } })
+const refusal = (status: number, error: string, message = `${error} sentence`, fields: object = {}): Answer => ({ status, body: { error, message, ...fields } })
 const t = makeTranslate(en)
 const stateOn = (extra: object = {}): Answer => ok({ kind: 'on', secret: 'pin', idleMinutes: 15, paused: false, unlock: null, ...extra })
 const unlockedState = (extra: object = {}): Answer => stateOn({ unlock: { unlockId: 'u1', endsAt: NOW + 12 * 3_600_000, idleEndsAt: NOW + IDLE }, ...extra })
@@ -138,10 +138,10 @@ describe('the lock screen on a device', () => {
   })
 
   it.each([
-    ['a wrong try, with the tries left', refusal(403, 'PIN_INVALID', 'That is not right. 4 tries left before this device is signed out'), 'wrong', 'That is not right. 4 tries left before this device is signed out.'],
-    ['the last try', refusal(403, 'PIN_INVALID', 'That is not right. 1 try left before this device is signed out'), 'wrong', 'That is not right. 1 try left before this device is signed out.'],
-    ['the fifth miss, which removes the device', refusal(403, 'PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer'), 'removed', 'Approve this device again at your computer'],
-    ['unlocks paused home-wide', refusal(429, 'PIN_UNLOCKS_PAUSED'), 'paused', 'They resume when you resume them at your computer.'],
+    ['a wrong try, with the tries left', refusal(403, 'PIN_INVALID', 'That is not right. 4 tries left before this device is signed out', { triesLeft: 4, removed: false }), 'wrong', 'That is not right. 4 tries left before this device is signed out.'],
+    ['the last try', refusal(403, 'PIN_INVALID', 'That is not right. 1 try left before this device is signed out', { triesLeft: 1, removed: false }), 'wrong', 'That is not right. 1 try left before this device is signed out.'],
+    ['the fifth miss, which removes the device', refusal(403, 'PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer', { triesLeft: 0, removed: true }), 'removed', 'Approve this device again at your computer'],
+    ['unlocks paused home-wide', refusal(429, 'PIN_UNLOCKS_PAUSED', undefined, { paused: true }), 'paused', 'They resume when you resume them at your computer.'],
     ['an unreachable computer', 'unreachable', 'unreachable', 'can\'t be reached right now'],
     ['a listener where a PIN does not unlock', refusal(403, 'PIN_NOT_ALLOWED_ON_ADDRESS'), 'address', 'private Tailscale address'],
     ['any other refusal', refusal(500, 'INTERNAL_ERROR'), 'failed', 'The unlock did not work'],
@@ -161,11 +161,12 @@ describe('the lock screen on a device', () => {
     expect((screen.queryByLabelText('PIN') as HTMLInputElement | null)?.value ?? '').toBe('')
   })
 
-  it('splits the home\'s sentence into tries left and removal', () => {
-    // Fails without: telling the fifth miss from a wrong try.
-    expect(pinMissOf('That is not right. 2 tries left before this device is signed out')).toEqual({ kind: 'wrong', triesLeft: 2 })
-    expect(pinMissOf('That is the last wrong try. This device is signed out. Approve it again at your computer')).toEqual({ kind: 'removed' })
-    expect(pinMissOf('Something else')).toEqual({ kind: 'wrong', triesLeft: undefined })
+  it('reads tries left and removal from the refusal\'s fields, never its sentence', () => {
+    // Fails without: telling the fifth miss from a wrong try by the structured fields.
+    expect(pinMissOf({ triesLeft: 2, removed: false })).toEqual({ kind: 'wrong', triesLeft: 2 })
+    expect(pinMissOf({ triesLeft: 0, removed: true })).toEqual({ kind: 'removed' })
+    expect(pinMissOf({})).toEqual({ kind: 'wrong', triesLeft: undefined })
+    expect(pinMissOf(undefined)).toEqual({ kind: 'wrong', triesLeft: undefined })
   })
 
   it('shows the keypad, asks for six digits and clears the field when the request leaves', async () => {
