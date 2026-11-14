@@ -199,7 +199,7 @@ function recording(): { response: ServerResponse; answered: { status?: number; b
 function home(listener: string | undefined, mode: boolean, unlocked = true, pin = false, pageUnlocked = false) {
   return {
     pinEnabled: () => pin,
-    pageUnlockOf: () => (pageUnlocked ? { id: 'page-1' } : undefined),
+    pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
     dangerousMode: () => mode,
     elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined),
@@ -286,7 +286,7 @@ describe('an unlocked PIN page without dangerous mode', () => {
 
   it('is bound to no settings-document or account action, and no mode or unlock lifts them', () => {
     const pagePrincipal = reachDevicePrincipal('device-1', LISTENER, 'page-1')
-    const state: ReachAccessFacts = { ...facts(false, false), pageUnlockOf: () => ({ id: 'page-1' }) }
+    const state: ReachAccessFacts = { ...facts(false, false), pageUnlockOf: id => (id === 'page-1' ? { id: 'page-1' } : undefined) }
     const denied = Object.keys(REACH_DENIED_ACTIONS).filter(action => action === 'settings/openSettingsDocument' || action.startsWith('account/'))
     expect(denied).toContain('settings/openSettingsDocument')
     expect(denied).toContain('account/signOut')
