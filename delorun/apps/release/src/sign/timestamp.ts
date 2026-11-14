@@ -129,7 +129,7 @@ export interface TimestampRequest {
  * @throws Error when the first-signing request does not match the state, or the state's timestamp does not match its
  * digest and version or does not verify.
  */
-function verifyPrevious(request: TimestampRequest): TimestampMetadata | undefined {
+function verifyPrevious(request: Pick<TimestampRequest, 'state' | 'roots' | 'first' | 'now'>): TimestampMetadata | undefined {
   const last = request.state.timestamp
   if (request.first) {
     if (last !== null) throw new Error(`the state records timestamp ${String(last.version)} as the last signed; continue from it instead of signing a first timestamp`)
@@ -248,4 +248,53 @@ export function resignedTimestamp(previous: TimestampMetadata, now: number): Tim
     issued: utc(issued),
     expires: utc(issued + TIMESTAMP_LIFETIME_SECONDS),
   }
+}
+
+/** What {@link importTimestamp} adopts. */
+export interface TimestampImport {
+  /** The signer's state. */
+  readonly state: TimestampState
+  /** The verified root chain, oldest first; the first must be the state's root. */
+  readonly roots: readonly TrustedRoot[]
+  /** The `timestamp.json` the channel serves now. */
+  readonly bytes: Uint8Array
+  /** The import time, in Unix seconds. */
+  readonly now: number
+}
+
+/**
+ * The signer's state after adopting the timestamp the channel serves, which the Worker's daily re-signing moved past
+ * the state's last timestamp. The file must verify as a client verifies it (the timestamp role's signature under the
+ * root it names, a root in the chain passed, the contract lifetime, not expired, not issued in the future), must not
+ * be a lower version than the state's last, must be the identical file when it has the same version, and must not name
+ * a lower release on either channel. The next signing then continues from it at its version plus one.
+ * @param request - the state, roots, the served file and the time.
+ * @returns the new state, or `undefined` when the state already holds exactly this file.
+ * @throws Error when the file does not verify, is older than the state's last timestamp, forks it, or moves a channel back.
+ */
+export function importTimestamp(request: TimestampImport): TimestampState | undefined {
+  const anchor = request.roots[0]
+  const newest = request.roots.at(-1)
+  if (anchor === undefined || newest === undefined) throw new Error('no root to verify the timestamp under')
+  const trusted = request.state.root
+  if (anchor.metadata.version !== trusted.version || anchor.sha256 !== trusted.sha256) {
+    throw new Error(`the first root passed is root ${String(anchor.metadata.version)} with SHA-256 ${anchor.sha256}; the state trusts root ${String(trusted.version)} with SHA-256 ${trusted.sha256}`)
+  }
+  const named = readEnvelope('timestamp', request.bytes).signed.root.version
+  const root = request.roots.find(candidate => candidate.metadata.version === named)
+  if (root === undefined) throw new Error(`the timestamp names root ${String(named)}, which is not among the roots passed`)
+  const imported = verifyTimestamp(root, request.bytes, request.now)
+  if (root !== newest) throw new Error(`the timestamp names root ${String(named)}, not the newest root ${String(newest.metadata.version)} passed; the channel serves a timestamp for an older root`)
+  const last = request.state.timestamp
+  if (last === null) return stateAfter(newest, request.bytes, imported.version)
+  const before = verifyPrevious({ state: request.state, roots: request.roots, first: false, now: request.now })!
+  if (imported.version < last.version) throw new Error(`the channel serves timestamp ${String(imported.version)}, below the state's ${String(last.version)}; nothing is imported`)
+  if (imported.version === last.version) {
+    if (sha256Of(request.bytes) !== last.sha256) throw new Error(`the channel's timestamp ${String(imported.version)} differs from the state's file of the same version; nothing is imported`)
+    return undefined
+  }
+  for (const channel of RELEASE_CHANNELS) {
+    if (semver.lt(imported.channels[channel].release, before.channels[channel].release)) throw new Error(`the channel's timestamp names ${channel} release ${imported.channels[channel].release}, below the state's ${before.channels[channel].release}; nothing is imported`)
+  }
+  return stateAfter(newest, request.bytes, imported.version)
 }
