@@ -2507,7 +2507,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:158`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:159`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -3808,7 +3808,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-storage-json`
 
 - `inject`: `storage`
-- `source`: [`packages/storage/storage-json/src/index.ts:28`](../packages/storage/storage-json/src/index.ts)
+- `source`: [`packages/storage/storage-json/src/index.ts:30`](../packages/storage/storage-json/src/index.ts)
 
 ```ts config-catalog
 /**
