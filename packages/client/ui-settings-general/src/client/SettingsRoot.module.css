@@ -314,6 +314,19 @@
   padding-block: 0;
 }
 
+/* Touch targets: 44px tabs and close control where the primary pointer is coarse. */
+@media (pointer: coarse) {
+  .navCell,
+  .navGroups .navCell {
+    height: 44px;
+  }
+
+  .close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 .page {
   display: flex;
   flex-direction: column;

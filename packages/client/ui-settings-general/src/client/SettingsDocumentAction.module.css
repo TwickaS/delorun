@@ -14,3 +14,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+@media (pointer: coarse) {
+  .button {
+    height: 44px;
+  }
+}
