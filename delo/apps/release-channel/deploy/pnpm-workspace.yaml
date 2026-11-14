@@ -7,3 +7,7 @@ allowBuilds:
 confirmModulesPurge: false
 # Resolution takes no version published less than two weeks (in minutes) before the install, transitive ones included.
 minimumReleaseAge: 20160
+# The Effect companion packages of effect 4.0.7 must resolve to 4.0.7 too: platform-node-shared 4.1.0 and sql-d1 4.1.0 need effect 4.1, so Alchemy fails to load.
+overrides:
+  '@effect/platform-node-shared': 4.0.7
+  '@effect/sql-d1': 4.0.7
