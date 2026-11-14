@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { create as createTar } from 'tar'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildClosures, buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
-import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, RECIPE_FILES, Toolchain } from '../../src/closure/config.ts'
+import { ClosureRecipe, parseRecipeText, readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, RECIPE_FILES, Toolchain } from '../../src/closure/config.ts'
 import { RECIPE_PATH, recipeAt } from '../../src/rebuild/record.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { fetchPinned, stageNode, stageNpmPackage, stagePnpm } from '../../src/closure/sources.ts'
@@ -86,6 +86,14 @@ describe('recipe files', () => {
     expect(() => readRecipe(directory)).toThrow(/each platform once/u)
     write(['linux-x64', 'freebsd-x64'])
     expect(() => readRecipe(directory)).toThrow(/platforms/u)
+  })
+
+  it('refuse a foreign prebuild rule whose package or directory climbs out of its package', () => {
+    const closure = JSON.parse(readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8')) as { foreignPrebuilds: { package: string, directory: string, platforms: string[] }[] }
+    const parse = (rule: Partial<{ package: string, directory: string, platforms: string[] }>): unknown => parseRecipeText(ClosureRecipe, JSON.stringify({ ...closure, foreignPrebuilds: [{ ...closure.foreignPrebuilds[0], ...rule }] }), 'closure.json')
+    for (const packageName of ['..', '.', '@x/..', '@x/.', 'a/b']) expect(() => parse({ package: packageName })).toThrow(/foreignPrebuilds/u)
+    for (const directory of ['..', '.', '../../tmp', 'prebuilds/../../x', './prebuilds', '/etc', 'prebuilds\\..', 'a//b', 'prebuilds/']) expect(() => parse({ directory })).toThrow(/foreignPrebuilds/u)
+    expect(parse({ platforms: ['win32-x64'] })).toMatchObject({ schema: 'delo.release-closure/1' })
   })
 
   it('read at a commit refuse a committed release platform the recipe does not build', (test) => {
