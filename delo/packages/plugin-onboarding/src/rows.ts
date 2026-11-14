@@ -4,9 +4,12 @@
  * @module @delo/plugin-onboarding/rows
  */
 
-/** The part of the Loader this check reads: the rows it holds, enabled or not. */
+/**
+ * The part of the Loader this check reads: the rows it holds, enabled or not. A row's `options.id` is the id its profile
+ * writes; the entry's own `id` is prefixed with the ids of the groups it sits in, so it is not what a row list names.
+ */
 export interface RowSource {
-  entries(): Iterable<{ readonly id: string }>
+  entries(): Iterable<{ readonly options: { readonly id: string } }>
 }
 
 /**
@@ -18,7 +21,7 @@ export interface RowSource {
 export function assertRowsExist(rows: readonly string[], loader: RowSource | undefined): void {
   if (rows.length === 0) return
   if (loader === undefined) throw new Error('delo-onboarding: optionalRows is set, but there is no Loader to check the rows against')
-  const held = new Set([...loader.entries()].map(entry => entry.id))
+  const held = new Set([...loader.entries()].map(entry => entry.options.id))
   const unknown = rows.filter(row => !held.has(row))
   if (unknown.length > 0) throw new Error(`delo-onboarding: optionalRows names ${unknown.map(row => `"${row}"`).join(', ')}, which the profile has no row for`)
 }

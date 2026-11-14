@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { assertRowsExist } from '../src/rows.ts'
 
 describe('the optional rows check', () => {
-  const rows = (...ids: string[]) => ({ entries: () => ids.map(id => ({ id })) })
+  // A row inside an `include` subtree reports a prefixed `id` ("include:delo-cost-meter") and its own id in `options.id`.
+  const rows = (...ids: string[]) => ({ entries: () => ids.map(id => ({ id: `include:${id}`, options: { id } })) })
 
   it('accepts rows the profile holds and a profile that lists none', () => {
     expect(() => assertRowsExist(['delo-cost-meter', 'delo-thinking-rsvp'], rows('delo-theme', 'delo-cost-meter', 'delo-thinking-rsvp'))).not.toThrow()
