@@ -66,7 +66,7 @@ export type DecidedFromView = 'terminal' | 'studio' | 'upgrade' | 'start' | 'upd
 export type ProtectionView = 'on' | 'off'
 
 /** What a risk finding says a change can do. */
-export type RiskKindView = 'consent-guard-sandbox' | 'model-tool' | 'commands' | 'network' | 'home-read' | 'dependency-or-build' | 'not-shown'
+export type RiskKindView = 'consent-guard-sandbox' | 'answers-approvals' | 'manages-plugins' | 'model-tool' | 'commands' | 'network' | 'home-read' | 'dependency-or-build' | 'not-shown'
 
 /** A failure with when it happened: a start that left a change out, or a reload that went back. */
 export interface FailureView {

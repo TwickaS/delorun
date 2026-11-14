@@ -86,6 +86,8 @@ export const en = {
   'state.undone': 'Undone',
 
   'risk.consent-guard-sandbox': 'Changes a consent, a guard or the sandbox policy',
+  'risk.answers-approvals': 'Answers approval prompts itself',
+  'risk.manages-plugins': 'Installs, removes or loads plugins itself',
   'risk.model-tool': 'Adds a tool the model can call',
   'risk.commands': 'Runs commands or other programs',
   'risk.network': 'Opens network connections',
@@ -285,6 +287,8 @@ export const zh: typeof en = {
   'state.undone': '已撤销',
 
   'risk.consent-guard-sandbox': '更改了同意、防护或沙箱策略',
+  'risk.answers-approvals': '自行回答审批提示',
+  'risk.manages-plugins': '自行安装、移除或加载插件',
   'risk.model-tool': '添加了模型可以调用的工具',
   'risk.commands': '运行命令或其他程序',
   'risk.network': '建立网络连接',
