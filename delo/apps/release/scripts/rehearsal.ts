@@ -293,199 +293,204 @@ if (options.windows === true) {
   process.exit(failedWindows.length === 0 ? 0 : 1)
 }
 
-const base = await buildBaseClosure(work, R1, options.closure)
-const derived = Promise.all([
-  deriveInChild(base, work, R2, 'none'),
-  deriveInChild(base, work, R3, 'studio-without-index'),
-  deriveInChild(base, work, R4, 'tampered'),
-  deriveInChild(base, work, R5, 'none'),
-  deriveInChild(base, work, R6, 'none'),
-]).then(([two, three, four, five, six]) => ({ [R1]: base.directory, [R2]: two, [R3]: three, [R4]: four, [R5]: five, [R6]: six }) as Record<string, string>)
-derived.catch(() => undefined)
-/**
- * Publish one release and delete its closure directory, which the channel now holds a copy of; the disk of a shared
- * machine holds many 190 MB archives otherwise.
- * @param target - the channel directory.
- * @param version - the release.
- * @param signer - the signer's trust.
- */
-async function publishRelease(version: string, target = channel, signer = trust): Promise<void> {
-  await publish(signer, log, target, version, releases[version]!)
-  if (version !== R1) rmSync(releases[version]!, { recursive: true, force: true })
-}
-
-await publish(trust, log, channel, R1, base.directory)
-const built = await launcher(trust, work, server.origin(), log.origin)
-const tarball = built.tarball
-const releases = await derived
-
-/**
- * Run the packed launcher as `npx <tarball>` does.
- * @param args - the arguments after the command.
- * @param env - extra environment.
- * @returns the finished run.
- */
-const npx = (args: readonly string[], env: Readonly<Record<string, string>> = {}): Promise<Finished> => run('npx', ['--yes', '--offline', `--package=${tarball}`, '--', 'delorun', ...args], env)
-
-await scenario('install', 'npx of the packed launcher installs release 1 over the local channel and verifies it', async () => {
-  const first = await npx(['--version'])
-  expect(first.status === 0, `install failed: ${excerpt(first)}`)
-  const lines = first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))
-  expect(lines.length >= 5 && lines.some(line => line.startsWith('Checking the release log: verified')), `unexpected progress lines: ${lines.join(' | ')}`)
-  const record = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
-  expect(record.releases[R1]?.state === 'verified', 'the release log check was not recorded as verified')
-  return `${first.stdout.trim().split('\n')[0] ?? ''}; ${String(lines.length)} progress lines; log verified`
-})
-
-await scenario('setup', 'the pinned command is installed, setup runs non-interactively, and Delorun starts', async () => {
-  const globalInstall = await run('npm', ['install', '--global', '--offline', '--prefix', join(personHome, '.local'), tarball])
-  expect(globalInstall.status === 0, `npm install --global failed: ${excerpt(globalInstall)}`)
-  const answers = join(work, 'answers.json')
-  writeFileSync(answers, `${JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: await freeLoopbackPort() }, reach: { option: 'none', identityFactor: null }, importStockHome: false }, undefined, 2)}\n`)
-  const setup = await run('delorun', ['setup', '--config', answers])
-  expect(setup.status === 0, `setup failed: ${excerpt(setup)}`)
-  const started = await run('delorun', [])
-  expect(started.status === 0, `start failed: ${excerpt(started)}`)
-  const version = await running()
-  expect(version === R1, `the home process runs ${String(version)}, not ${R1}`)
-  mkdirSync(join(home, 'attachments'), { recursive: true })
-  writeFileSync(MARKER, 'a file of the person\'s, outside the program store\n')
-  return `setup exit 0, started, running ${version}`
-})
-
-await scenario('update', 'a later signed release is taken with delorun update', async () => {
-  await publishRelease(R2)
-  const checked = await run('delorun', ['update', '--check'])
-  expect(checked.stdout.includes(R2) || checked.stderr.includes(R2), `update --check does not name ${R2}: ${excerpt(checked)}`)
-  const updated = await run('delorun', ['update', '--yes'])
-  expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
-  const version = await running()
-  expect(version === R2, `the home process runs ${String(version)}, not ${R2}`)
-  expect(existsSync(MARKER), 'the person\'s file is gone')
-  return `update exit 0, running ${version}`
-})
-
-await scenario('rollback-auto', 'a release whose Host never becomes ready rolls back on its own', async () => {
-  await publishRelease(R3)
-  const updated = await terminal('delorun', ['update'], [{ when: /Applytheupdateto/u, send: 'y' }])
-  expect(updated.status === 1 && /failed its health check/u.test(updated.stdout), `expected a failed health check, got [${String(updated.status)}] ${excerpt(updated)}`)
-  const version = await running()
-  expect(version === R2, `after the rollback the home process runs ${String(version)}, not ${R2}`)
-  return `${/failed its health check \([^)]*\)/u.exec(updated.stdout)?.[0] ?? 'health check failed'}; running ${version}`
-})
-
-await scenario('tampered', 'a release with one changed archive byte is refused by a fresh install and by an update', async () => {
-  await publishRelease(R4)
-  const fresh = await npx(['--version'], { DELO_HOME: join(work, 'tampered-home') })
-  expect(fresh.status === 1 && /did not verify/u.test(fresh.stderr), `a fresh install was not refused: [${String(fresh.status)}] ${excerpt(fresh)}`)
-  expect(names(join(work, 'tampered-home', 'runtimes')).filter(name => name.includes(R4)).length === 0, 'the tampered release left files in the store')
-  const updated = await run('delorun', ['update', '--yes'])
-  expect(updated.status === 1, `the update was not refused: [${String(updated.status)}] ${excerpt(updated)}`)
-  expect(await running() === R2, 'the home process no longer runs the previous release')
-  return `fresh install: ${excerpt(fresh).slice(0, 120)}; update: ${excerpt(updated).slice(0, 120)}`
-})
-
-await scenario('clock', 'the clock jumps 4 days ahead of the 3-day timestamp: a fresh install is refused naming the expiry, an installed release still starts, and the next signed release updates normally', async () => {
-  clockOffsetMs = 4 * 24 * 3600 * 1000
-  try {
-    const fresh = await npx(['--version'], { DELO_HOME: join(work, 'ahead-home') })
-    const installed = await npx(['--version'])
-    expect(fresh.status !== 0 && /expired/u.test(fresh.stderr), `a fresh install did not refuse naming the expiry: ${excerpt(fresh)}`)
-    expect(installed.status === 0, `a start of the installed release failed: ${excerpt(installed)}`)
-    return `fresh install: ${excerpt(fresh).slice(0, 260)}; start: ${excerpt(installed).slice(0, 80)}`
-  } finally {
-    clockOffsetMs = 0
+try {
+  const base = await buildBaseClosure(work, R1, options.closure)
+  const derived = Promise.all([
+    deriveInChild(base, work, R2, 'none'),
+    deriveInChild(base, work, R3, 'studio-without-index'),
+    deriveInChild(base, work, R4, 'tampered'),
+    deriveInChild(base, work, R5, 'none'),
+    deriveInChild(base, work, R6, 'none'),
+  ]).then(([two, three, four, five, six]) => ({ [R1]: base.directory, [R2]: two, [R3]: three, [R4]: four, [R5]: five, [R6]: six }) as Record<string, string>)
+  derived.catch(() => undefined)
+  /**
+   * Publish one release and delete its closure directory, which the channel now holds a copy of; the disk of a shared
+   * machine holds many 190 MB archives otherwise.
+   * @param target - the channel directory.
+   * @param version - the release.
+   * @param signer - the signer's trust.
+   */
+  async function publishRelease(version: string, target = channel, signer = trust): Promise<void> {
+    await publish(signer, log, target, version, releases[version]!)
+    if (version !== R1) rmSync(releases[version]!, { recursive: true, force: true })
   }
-})
 
-await scenario('update-after-clock', 'with the clock back, the next signed release updates with no other action', async () => {
-  await run('delorun', [])
-  await publishRelease(R5)
-  const checked = await run('delorun', ['update', '--check'])
-  expect(checked.stdout.includes(R5) || checked.stderr.includes(R5), `update --check does not name ${R5}: ${excerpt(checked)}`)
-  const updated = await run('delorun', ['update', '--yes'])
-  expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
-  const version = await running()
-  expect(version === R5, `the home process runs ${String(version)}, not ${R5}`)
-  return `running ${version}`
-})
+  await publish(trust, log, channel, R1, base.directory)
+  const built = await launcher(trust, work, server.origin(), log.origin)
+  const tarball = built.tarball
+  const releases = await derived
 
-await scenario('repair', 'delorun repair replaces a program that fails its start check and keeps the data', async () => {
-  const stopped = await run('delorun', ['stop'])
-  expect(stopped.status === 0, `stop failed: ${excerpt(stopped)}`)
-  const entry = join(home, 'runtimes', R5, 'app', 'node_modules', '@delo', 'cli', 'package.json')
-  expect(existsSync(entry), `${entry} does not exist`)
-  chmodSync(entry, 0o644)
-  appendFileSync(entry, ' ')
-  const broken = await run('delorun', ['--version'])
-  const repaired = await terminal('npx', ['--yes', '--offline', `--package=${tarball}`, '--', 'delorun', 'repair'], [{ when: /\[y\/N\]/u, send: 'y\n' }])
-  expect(repaired.status === 0, `repair failed: [${String(repaired.status)}] ${excerpt(repaired)}`)
-  const after = await run('delorun', ['--version'])
-  expect(after.status === 0 && after.stdout.includes(R5), `after the repair delorun does not start ${R5}: ${excerpt(after)}`)
-  expect(existsSync(MARKER), 'the person\'s file is gone')
-  const aside = names(join(home)).filter(name => name.startsWith('runtimes.set-aside-'))
-  expect(aside.length === 1, `expected one set-aside program store, found ${aside.join(', ')}`)
-  const listed = await run('delorun', ['recover', 'status'])
-  expect(listed.stdout.includes(aside[0]!), `delorun recover status does not list ${aside[0]!}: ${excerpt(listed)}`)
-  const discarded = await run('delorun', ['recover', 'discard', aside[0]!])
-  expect(discarded.status === 0 && !existsSync(join(home, aside[0]!)), `delorun recover discard did not remove ${aside[0]!}: ${excerpt(discarded)}`)
-  return `broken start: [${String(broken.status)}] ${excerpt(broken).slice(0, 160)}; repair exit 0; set aside ${aside[0]}, listed by recover status and removed by recover discard; data kept`
-})
+  /**
+   * Run the packed launcher as `npx <tarball>` does.
+   * @param args - the arguments after the command.
+   * @param env - extra environment.
+   * @returns the finished run.
+   */
+  const npx = (args: readonly string[], env: Readonly<Record<string, string>> = {}): Promise<Finished> => run('npx', ['--yes', '--offline', `--package=${tarball}`, '--', 'delorun', ...args], env)
 
-await scenario('from', 'delorun update --from installs a downloaded release with the channel unreachable, and refuses a lower one', async () => {
-  const page = join(work, 'release-page')
-  mkdirSync(page)
-  const state = { ...trust, state: join(work, 'keys', 'page-state.json') }
-  await publishRelease(R6, page, state)
-  const folder = join(page, 'releases', 'download', `v${R6}`)
-  const lower = join(channel, 'releases', 'download', `v${R1}`)
-  await server.stop()
-  try {
+  await scenario('install', 'npx of the packed launcher installs release 1 over the local channel and verifies it', async () => {
+    const first = await npx(['--version'])
+    expect(first.status === 0, `install failed: ${excerpt(first)}`)
+    const lines = first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))
+    expect(lines.length >= 5 && lines.some(line => line.startsWith('Checking the release log: verified')), `unexpected progress lines: ${lines.join(' | ')}`)
+    const record = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
+    expect(record.releases[R1]?.state === 'verified', 'the release log check was not recorded as verified')
+    return `${first.stdout.trim().split('\n')[0] ?? ''}; ${String(lines.length)} progress lines; log verified`
+  })
+
+  await scenario('setup', 'the pinned command is installed, setup runs non-interactively, and Delorun starts', async () => {
+    const globalInstall = await run('npm', ['install', '--global', '--offline', '--prefix', join(personHome, '.local'), tarball])
+    expect(globalInstall.status === 0, `npm install --global failed: ${excerpt(globalInstall)}`)
+    const answers = join(work, 'answers.json')
+    writeFileSync(answers, `${JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: await freeLoopbackPort() }, reach: { option: 'none', identityFactor: null }, importStockHome: false }, undefined, 2)}\n`)
+    const setup = await run('delorun', ['setup', '--config', answers])
+    expect(setup.status === 0, `setup failed: ${excerpt(setup)}`)
     const started = await run('delorun', [])
     expect(started.status === 0, `start failed: ${excerpt(started)}`)
-    const refusedLower = await run('delorun', ['update', '--from', lower, '--yes'])
-    expect(refusedLower.status === 1, `the lower release was not refused: [${String(refusedLower.status)}] ${excerpt(refusedLower)}`)
-    const missing = await run('delorun', ['update', '--from', join(work, 'no-such-folder'), '--yes'])
-    expect(missing.status === 1, `a missing folder was not refused: ${excerpt(missing)}`)
-    const updated = await terminal('delorun', ['update', '--from', folder], [{ when: /cannotconfirmthat.*onitssignature/u, send: 'y' }, { when: /Applytheupdateto/u, send: 'y' }])
-    expect(updated.status === 0, `update --from failed: [${String(updated.status)}] ${excerpt(updated)}`)
     const version = await running()
-    expect(version === R6, `the home process runs ${String(version)}, not ${R6}`)
-    return `lower: ${excerpt(refusedLower).slice(0, 140)}; from folder: exit 0, running ${version}`
-  } finally {
-    await server.start()
-  }
-})
+    expect(version === R1, `the home process runs ${String(version)}, not ${R1}`)
+    mkdirSync(join(home, 'attachments'), { recursive: true })
+    writeFileSync(MARKER, 'a file of the person\'s, outside the program store\n')
+    return `setup exit 0, started, running ${version}`
+  })
 
-await scenario('by-hand', 'the last resort in the troubleshooting guide, followed literally, brings back a working program', async () => {
-  expect((await run('delorun', ['stop'])).status === 0, 'stop failed')
-  const backup = join(personHome, 'delo-backup')
-  // Step 2 copies the whole home, runtimes included (about 1.5 GB per release); on a full disk the copy leaves the program store out.
-  const wholeHome = execFileSync('du', ['-sk', home], { encoding: 'utf8' }).split('\t')[0]
-  const free = statfsSync(home).bavail * statfsSync(home).bsize / 1024
-  const complete = free > 2 * Number(wholeHome)
-  cpSync(home, backup, { recursive: true, filter: source => complete || source !== join(home, 'runtimes') })
-  const runtimes = join(home, 'runtimes')
-  execFileSync('chmod', ['-R', 'u+rwX', runtimes])
-  execFileSync('mv', [runtimes, join(home, 'runtimes.broken')])
-  if (existsSync(join(home, 'staging'))) execFileSync('mv', [join(home, 'staging'), join(home, 'staging.broken')])
-  const installed = await npx(['--version'])
-  expect(installed.status === 0 && installed.stdout.includes(R5), `step 4 did not install ${R5}: [${String(installed.status)}] ${excerpt(installed)}`)
-  const started = await run('delorun', [])
-  expect(started.status === 0 && await running() === R5, `Delorun does not start after the by-hand steps: ${excerpt(started)}`)
-  expect(existsSync(MARKER), 'the person\'s file is gone')
-  execFileSync('chmod', ['-R', 'u+rwX', join(home, 'runtimes.broken')])
-  rmSync(join(home, 'runtimes.broken'), { recursive: true, force: true })
-  return `npx installed ${R5}, started, data kept; the backup ${complete ? 'copied the whole home' : 'left out runtimes/ for lack of disk space'}`
-})
+  await scenario('update', 'a later signed release is taken with delorun update', async () => {
+    await publishRelease(R2)
+    const checked = await run('delorun', ['update', '--check'])
+    expect(checked.stdout.includes(R2) || checked.stderr.includes(R2), `update --check does not name ${R2}: ${excerpt(checked)}`)
+    const updated = await run('delorun', ['update', '--yes'])
+    expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
+    const version = await running()
+    expect(version === R2, `the home process runs ${String(version)}, not ${R2}`)
+    expect(existsSync(MARKER), 'the person\'s file is gone')
+    return `update exit 0, running ${version}`
+  })
 
-await server.stop()
-await log.close()
+  await scenario('rollback-auto', 'a release whose Host never becomes ready rolls back on its own', async () => {
+    await publishRelease(R3)
+    const updated = await terminal('delorun', ['update'], [{ when: /Applytheupdateto/u, send: 'y' }])
+    expect(updated.status === 1 && /failed its health check/u.test(updated.stdout), `expected a failed health check, got [${String(updated.status)}] ${excerpt(updated)}`)
+    const version = await running()
+    expect(version === R2, `after the rollback the home process runs ${String(version)}, not ${R2}`)
+    return `${/failed its health check \([^)]*\)/u.exec(updated.stdout)?.[0] ?? 'health check failed'}; running ${version}`
+  })
+
+  await scenario('tampered', 'a release with one changed archive byte is refused by a fresh install and by an update', async () => {
+    await publishRelease(R4)
+    const fresh = await npx(['--version'], { DELO_HOME: join(work, 'tampered-home') })
+    expect(fresh.status === 1 && /did not verify/u.test(fresh.stderr), `a fresh install was not refused: [${String(fresh.status)}] ${excerpt(fresh)}`)
+    expect(names(join(work, 'tampered-home', 'runtimes')).filter(name => name.includes(R4)).length === 0, 'the tampered release left files in the store')
+    const updated = await run('delorun', ['update', '--yes'])
+    expect(updated.status === 1, `the update was not refused: [${String(updated.status)}] ${excerpt(updated)}`)
+    expect(await running() === R2, 'the home process no longer runs the previous release')
+    return `fresh install: ${excerpt(fresh).slice(0, 120)}; update: ${excerpt(updated).slice(0, 120)}`
+  })
+
+  await scenario('clock', 'the clock jumps 4 days ahead of the 3-day timestamp: a fresh install is refused naming the expiry, an installed release still starts, and the next signed release updates normally', async () => {
+    clockOffsetMs = 4 * 24 * 3600 * 1000
+    try {
+      const fresh = await npx(['--version'], { DELO_HOME: join(work, 'ahead-home') })
+      const installed = await npx(['--version'])
+      expect(fresh.status !== 0 && /expired/u.test(fresh.stderr), `a fresh install did not refuse naming the expiry: ${excerpt(fresh)}`)
+      expect(installed.status === 0, `a start of the installed release failed: ${excerpt(installed)}`)
+      return `fresh install: ${excerpt(fresh).slice(0, 260)}; start: ${excerpt(installed).slice(0, 80)}`
+    } finally {
+      clockOffsetMs = 0
+    }
+  })
+
+  await scenario('update-after-clock', 'with the clock back, the next signed release updates with no other action', async () => {
+    await run('delorun', [])
+    await publishRelease(R5)
+    const checked = await run('delorun', ['update', '--check'])
+    expect(checked.stdout.includes(R5) || checked.stderr.includes(R5), `update --check does not name ${R5}: ${excerpt(checked)}`)
+    const updated = await run('delorun', ['update', '--yes'])
+    expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
+    const version = await running()
+    expect(version === R5, `the home process runs ${String(version)}, not ${R5}`)
+    return `running ${version}`
+  })
+
+  await scenario('repair', 'delorun repair replaces a program that fails its start check and keeps the data', async () => {
+    const stopped = await run('delorun', ['stop'])
+    expect(stopped.status === 0, `stop failed: ${excerpt(stopped)}`)
+    const entry = join(home, 'runtimes', R5, 'app', 'node_modules', '@delo', 'cli', 'package.json')
+    expect(existsSync(entry), `${entry} does not exist`)
+    chmodSync(entry, 0o644)
+    appendFileSync(entry, ' ')
+    const broken = await run('delorun', ['--version'])
+    const repaired = await terminal('npx', ['--yes', '--offline', `--package=${tarball}`, '--', 'delorun', 'repair'], [{ when: /\[y\/N\]/u, send: 'y\n' }])
+    expect(repaired.status === 0, `repair failed: [${String(repaired.status)}] ${excerpt(repaired)}`)
+    const after = await run('delorun', ['--version'])
+    expect(after.status === 0 && after.stdout.includes(R5), `after the repair delorun does not start ${R5}: ${excerpt(after)}`)
+    expect(existsSync(MARKER), 'the person\'s file is gone')
+    const aside = names(join(home)).filter(name => name.startsWith('runtimes.set-aside-'))
+    expect(aside.length === 1, `expected one set-aside program store, found ${aside.join(', ')}`)
+    const listed = await run('delorun', ['recover', 'status'])
+    expect(listed.stdout.includes(aside[0]!), `delorun recover status does not list ${aside[0]!}: ${excerpt(listed)}`)
+    const discarded = await run('delorun', ['recover', 'discard', aside[0]!])
+    expect(discarded.status === 0 && !existsSync(join(home, aside[0]!)), `delorun recover discard did not remove ${aside[0]!}: ${excerpt(discarded)}`)
+    return `broken start: [${String(broken.status)}] ${excerpt(broken).slice(0, 160)}; repair exit 0; set aside ${aside[0]}, listed by recover status and removed by recover discard; data kept`
+  })
+
+  await scenario('from', 'delorun update --from installs a downloaded release with the channel unreachable, and refuses a lower one', async () => {
+    const page = join(work, 'release-page')
+    mkdirSync(page)
+    const state = { ...trust, state: join(work, 'keys', 'page-state.json') }
+    await publishRelease(R6, page, state)
+    const folder = join(page, 'releases', 'download', `v${R6}`)
+    const lower = join(channel, 'releases', 'download', `v${R1}`)
+    await server.stop()
+    try {
+      const started = await run('delorun', [])
+      expect(started.status === 0, `start failed: ${excerpt(started)}`)
+      const refusedLower = await run('delorun', ['update', '--from', lower, '--yes'])
+      expect(refusedLower.status === 1, `the lower release was not refused: [${String(refusedLower.status)}] ${excerpt(refusedLower)}`)
+      const missing = await run('delorun', ['update', '--from', join(work, 'no-such-folder'), '--yes'])
+      expect(missing.status === 1, `a missing folder was not refused: ${excerpt(missing)}`)
+      const updated = await terminal('delorun', ['update', '--from', folder], [{ when: /cannotconfirmthat.*onitssignature/u, send: 'y' }, { when: /Applytheupdateto/u, send: 'y' }])
+      expect(updated.status === 0, `update --from failed: [${String(updated.status)}] ${excerpt(updated)}`)
+      const version = await running()
+      expect(version === R6, `the home process runs ${String(version)}, not ${R6}`)
+      return `lower: ${excerpt(refusedLower).slice(0, 140)}; from folder: exit 0, running ${version}`
+    } finally {
+      await server.start()
+    }
+  })
+
+  await scenario('by-hand', 'the last resort in the troubleshooting guide, followed literally, brings back a working program', async () => {
+    expect((await run('delorun', ['stop'])).status === 0, 'stop failed')
+    const backup = join(personHome, 'delo-backup')
+    // Step 2 copies the whole home, runtimes included (about 1.5 GB per release); on a full disk the copy leaves the program store out.
+    const wholeHome = execFileSync('du', ['-sk', home], { encoding: 'utf8' }).split('\t')[0]
+    const free = statfsSync(home).bavail * statfsSync(home).bsize / 1024
+    const complete = free > 2 * Number(wholeHome)
+    cpSync(home, backup, { recursive: true, filter: source => complete || source !== join(home, 'runtimes') })
+    const runtimes = join(home, 'runtimes')
+    execFileSync('chmod', ['-R', 'u+rwX', runtimes])
+    execFileSync('mv', [runtimes, join(home, 'runtimes.broken')])
+    if (existsSync(join(home, 'staging'))) execFileSync('mv', [join(home, 'staging'), join(home, 'staging.broken')])
+    const installed = await npx(['--version'])
+    expect(installed.status === 0 && installed.stdout.includes(R5), `step 4 did not install ${R5}: [${String(installed.status)}] ${excerpt(installed)}`)
+    const started = await run('delorun', [])
+    expect(started.status === 0 && await running() === R5, `Delorun does not start after the by-hand steps: ${excerpt(started)}`)
+    expect(existsSync(MARKER), 'the person\'s file is gone')
+    execFileSync('chmod', ['-R', 'u+rwX', join(home, 'runtimes.broken')])
+    rmSync(join(home, 'runtimes.broken'), { recursive: true, force: true })
+    return `npx installed ${R5}, started, data kept; the backup ${complete ? 'copied the whole home' : 'left out runtimes/ for lack of disk space'}`
+  })
+} finally {
+  // Stops the home process this run started, on success, failure and --keep alike.
+  await run('delorun', ['stop'])
+  await server.stop()
+  await log.close()
+}
 const failed = results.filter(result => !result.ok)
 say(`\nrehearsal: ${String(results.length - failed.length)} of ${String(results.length)} scenarios passed; log ${logFile}`)
 for (const result of results) say(`${result.ok ? 'PASS' : 'FAIL'}  ${result.id}  ${result.title}`)
-if (options.keep !== true) {
-  await run('delorun', ['stop'])
+if (options.keep === true) {
+  say(`kept ${work}; remove it with: chmod -R u+w '${work}' && rm -rf '${work}'`)
+} else {
   execFileSync('chmod', ['-R', 'u+rwX', work])
   rmSync(work, { recursive: true, force: true, maxRetries: 3 })
 }
