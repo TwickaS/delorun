@@ -38,6 +38,8 @@ Delo 的保护位于 CLI profile 中，该 profile 由 `delorun setup` 创建、
 | 受限命令不能访问网络 | 否 | 否，与 stock 一致 | 否 |
 | 受限命令不能连接 Docker socket | 否 | 在 bwrap 与 Seatbelt 上对当前上下文的 socket 是；在 Landlock 与 Windows 上否 | 与 CLI profile 相同 |
 | 受限命令不能通过 WSL 的互操作套接字启动 Windows 程序 | 否 | 在 WSL 下的 bwrap 上是；在 Landlock 上，只要互操作存在，每个受限命令都会被拒绝 | 与 CLI profile 相同 |
+| 受限命令不能通过你会话的服务（`systemd-run --user`、会话总线或系统总线、tmux 或 screen 服务器、X 服务器）在沙箱之外启动程序 | 否 | 在 bwrap 与 Seatbelt 上，对其默认套接字是；在 Landlock 上，只要其中一个目录存在，每个受限命令都会被拒绝；X 服务器的抽象套接字以及位于抽象地址的会话总线仍可访问 | 与 CLI profile 相同 |
+| 受限命令不能使用你的 ssh-agent | 否 | 在 bwrap 与 Seatbelt 上，对启动时 `SSH_AUTH_SOCK` 所指的代理，以及 `/tmp` 与运行时目录下的代理是；在 Landlock 上否 | 与 CLI profile 相同 |
 | harness 汇总回合的变更文件时，受限命令在仓库的 git 设置、属性或钩子中指定的程序绝不会在沙箱之外运行 | 否 | 是 | 不适用：未挂载变更汇总 |
 | `web_fetch` 拒绝回环、链路本地与私有网络目标 | 否 | 是 | 是 |
 | 模型对指令文件的写入需要一次说明效果的批准 | 否 | 仅限经由文件工具；shell 命令或 PTC 代码的写入不需要它 | 仅限经由文件工具，且该写入会被拒绝，因为无人能答复 |
