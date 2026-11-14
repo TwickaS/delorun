@@ -48,6 +48,12 @@ describe('the next steps', () => {
     expect(text).toContain('  1. Install the delorun command, which npx does not keep:\n     npm install -g delorun@0.1.0\n  2. Start Delorun')
   })
 
+  it('keep the command from the package file when the launcher was built for another release channel', () => {
+    const text = nextSteps({ profile: 'default', answers: { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV }, env: { ...KEY_SET, DELORUN_LAUNCHER_VERSION: '0.1.0-rc.1' }, channelOrigin: 'http://127.0.0.1:18080' })
+    expect(text).toContain('  1. Keep the delorun command, which npx does not keep: 0.1.0-rc.1 is not on the npm registry, so install the package file this launcher came from:\n     npm install -g ./delorun-0.1.0-rc.1.tgz\n  2. Start Delorun')
+    expect(text).not.toContain('delorun@0.1.0-rc.1')
+  })
+
   it('ask for a key first when no provider was chosen, and name the variable when it is unset', () => {
     expect(steps({ modelProvider: null })).toContain('  1. Add a model key first: delorun setup key\n  2. Start')
     expect(steps({}, {})).toContain('  1. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.')
@@ -62,6 +68,6 @@ describe('the next steps', () => {
 
   it('print the device approval for remote use, or the fix when remote access is off', () => {
     expect(steps({ useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
-    expect(steps({ useCase: 'remote' })).toContain('  2. Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.')
+    expect(steps({ useCase: 'remote' })).toContain('  2. Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.')
   })
 })

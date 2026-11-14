@@ -30,6 +30,7 @@ import { askDangerousConsent, hasDangerousGrant, refuseDangerousAsRoot } from '.
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
+import { channelOriginOf } from './channel-origin.ts'
 import { choiceNote, RECOMMENDED, type ChoiceText } from './choices.ts'
 import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delorun/reach'
@@ -243,8 +244,19 @@ const samePlan = (plan: SectionPlan): Readonly<Record<SetupUseCase, SectionPlan>
  * The statements setup makes about privacy, from the Privacy section's copy.
  * @returns one line per statement.
  */
-export function statementLines(): string[] {
-  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], en['statement.updateCheck']]
+export function statementLines(channelOrigin?: string): string[] {
+  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], channelOrigin === undefined ? en['statement.updateCheck'] : localUpdateStatement(channelOrigin)]
+}
+
+/**
+ * The update-check statement for a launcher built with another channel origin: that origin serves the timestamp, the
+ * root file, the manifest and the log record, and the check reaches no other host.
+ * @param channelOrigin - the recorded channel origin.
+ * @returns the statement, naming the origin's host.
+ */
+export function localUpdateStatement(channelOrigin: string): string {
+  const host = new URL(channelOrigin).host
+  return `Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, a new root file when Delorun's signing keys change, and the newest release's manifest and log record, all from ${host}, the release channel this launcher was built for. It sends nothing about this installation or its plugins; that host sees this computer's address. Turn it off in Settings → General → Updates.`
 }
 
 /** The line the privacy note ends with in the main flow, by the release-check answer: the main flow does not ask, so the line says where to change it. */
@@ -253,11 +265,18 @@ export const MAIN_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
   off: 'This setup turns the release check off, so Delorun makes no release check request.',
 }
 
-/** What the release-check question's choices mean. */
-const UPDATE_CHECK_TEXT: readonly ChoiceText[] = [
-  { label: `Yes${RECOMMENDED}`, lines: ['Once a day Delorun asks releases.delorun.com whether a newer version exists. You hear about security fixes.', 'Change later: delorun setup privacy.'] },
-  { label: 'No', lines: ['Delorun makes no release check request. You update by hand with npx delorun.', 'Change later: delorun setup privacy.'] },
-]
+/**
+ * What the release-check question's choices mean.
+ * @param channelOrigin - the recorded channel origin of a launcher built for another channel, or `undefined` for the production channel.
+ * @returns the two choices.
+ */
+function updateCheckText(channelOrigin?: string): readonly ChoiceText[] {
+  const host = channelOrigin === undefined ? 'releases.delorun.com' : new URL(channelOrigin).host
+  return [
+    { label: `Yes${RECOMMENDED}`, lines: [`Once a day Delorun asks ${host} whether a newer version exists. You hear about security fixes.`, 'Change later: delorun setup privacy.'] },
+    { label: 'No', lines: ['Delorun makes no release check request. You update by hand with npx delorun.', 'Change later: delorun setup privacy.'] },
+  ]
+}
 
 /**
  * The privacy section: the note, where the two upstream opt-ins are changed, and the update check. The main flow shows
@@ -270,13 +289,13 @@ export const privacySection: SetupSection = {
   plan: samePlan('note'),
   asks: phase => phase !== 'main',
   appliesTo: () => true,
-  async ask(io, draft) {
+  async ask(io, draft, environment) {
     if (draft.phase === 'main') {
-      io.note([...statementLines(), MAIN_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
+      io.note([...statementLines(await channelOriginOf(environment.home)), MAIN_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
       return { answers: {}, status: 'seen' }
     }
-    if (draft.phase === 'single') io.note(statementLines().join('\n'), en.title)
-    io.note(choiceNote(UPDATE_CHECK_TEXT), 'Release check')
+    if (draft.phase === 'single') io.note(statementLines(await channelOriginOf(environment.home)).join('\n'), en.title)
+    io.note(choiceNote(updateCheckText(await channelOriginOf(environment.home))), 'Release check')
     const check = await io.select('Check for new releases?', [
       { value: 'on', label: `Yes${RECOMMENDED}` },
       { value: 'off', label: 'No' },

@@ -139,14 +139,15 @@ The launcher removes `NODE_OPTIONS` from the runtime's environment, so the clock
 - **Stop.** Send the process `SIGINT` or `SIGTERM`; it closes the server and exits. Nothing is installed or left behind.
 - **What the person's updater sees.** The launcher fetches `http://127.0.0.1:<port>/timestamp.json`, then the root chain, the manifest named there and the release files under `releases/download/v<version>/`, and verifies them as it does for any channel. An installed `~/delorun-rc` that finds a higher version offers the update; while the server is stopped, updates fail and the installed runtime keeps starting.
 
-To keep it running, save this as `~/.config/systemd/user/delorun-local-channel.service`, then run `systemctl --user enable --now delorun-local-channel` (`loginctl enable-linger $USER` keeps it running after you log out). Replace the paths with yours:
+To keep it running, save this as `~/.config/systemd/user/delorun-local-channel.service`, then run `systemctl --user enable --now delorun-local-channel` (`loginctl enable-linger $USER` keeps it running after you log out). Replace the paths with yours. The unit runs `node_modules/tsx/dist/cli.mjs`, not `node_modules/.bin/tsx`, which pnpm makes a shell script that `node` cannot run, and sets `PATH` to the directory of the same `node` so the scripts it starts find it:
 
 ```ini
 [Unit]
 Description=Delorun local RC channel
 
 [Service]
-ExecStart=%h/path/to/node %h/path/to/repo/node_modules/.bin/tsx %h/path/to/repo/delorun/apps/release/scripts/local-channel.ts serve --channel %h/delorun-rc-release/channel --port 18080 --state %h/delorun-rc-release/timestamp-state.json --timestamp-key %h/.config/delorun/preview-release/timestamp.pem
+Environment=PATH=%h/path/to/node-directory:/usr/bin:/bin
+ExecStart=%h/path/to/node-directory/node %h/path/to/repo/node_modules/tsx/dist/cli.mjs %h/path/to/repo/delorun/apps/release/scripts/local-channel.ts serve --channel %h/delorun-rc-release/channel --port 18080 --state %h/delorun-rc-release/timestamp-state.json --timestamp-key %h/.config/delorun/preview-release/timestamp.pem
 Restart=on-failure
 
 [Install]

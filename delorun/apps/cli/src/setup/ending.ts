@@ -29,6 +29,16 @@ export function installLine(version: string): string {
 }
 
 /**
+ * The command that installs the `delorun` command from the package file of a launcher built for another release channel.
+ * Such a version is not on the npm registry; `npm pack` names the file `delorun-<version>.tgz`.
+ * @param version - the launcher's version, a semantic version.
+ * @returns the command line, with the path of the file left for the person to correct.
+ */
+export function localInstallLine(version: string): string {
+  return `npm install -g ./delorun-${version}.tgz`
+}
+
+/**
  * The version of the launcher that started this run.
  * @param env - the environment `delorun` inherited.
  * @returns the version from `DELORUN_LAUNCHER_VERSION`, or `undefined` when the variable is unset or not a semantic version.
@@ -46,6 +56,8 @@ export interface NextStepsRequest {
   readonly answers: SetupAnswers
   /** The environment `delorun` inherited, which shows whether a key variable is set and whether the launcher started the run. */
   readonly env: Readonly<Record<string, string | undefined>>
+  /** The channel origin of a launcher built for another release channel, or `undefined` for the production channel. */
+  readonly channelOrigin?: string | undefined
 }
 
 /**
@@ -73,7 +85,11 @@ export function nextSteps(request: NextStepsRequest): string {
   const { useCase, reach } = request.answers
   const steps: string[][] = []
   const version = launcherVersion(request.env)
-  if (version !== undefined) steps.push(['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`])
+  if (version !== undefined) {
+    steps.push(request.channelOrigin === undefined
+      ? ['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`]
+      : [`Keep the delorun command, which npx does not keep: ${version} is not on the npm registry, so install the package file this launcher came from:`, `  ${localInstallLine(version)}`])
+  }
   const key = keyStep(request, flag)
   if (key !== undefined) steps.push([key])
   if (useCase === 'automation') {
@@ -83,7 +99,7 @@ export function nextSteps(request: NextStepsRequest): string {
     steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`])
     if (useCase === 'remote') {
       steps.push(reach.option === 'none'
-        ? ['Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.']
+        ? ['Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.']
         : [`Add your phone or another device: delorun devices approve${flag}, then type the code it shows.`])
     }
   }
