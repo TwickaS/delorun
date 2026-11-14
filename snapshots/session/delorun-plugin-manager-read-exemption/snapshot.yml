@@ -1,0 +1,9 @@
+version: 1
+scenario: delorun-plugin-manager-read-exemption
+profile: headless
+composition: plugin-manager
+recording: live
+permission: workspace-write
+header:
+  class: delorun-plugin-manager-read-exemption
+  pin: true

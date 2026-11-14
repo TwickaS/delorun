@@ -343,7 +343,7 @@ const Settings = z.object({ enabled: z.boolean().default(true), limit: z.natural
 type Fields = Record<string, unknown>
 // Its Loader entry id is one the stock manager lists without a read-only reason.
 function editor(config: Fields, inherited: Fields, override: Fields, native: unknown = Settings) {
-  const entry = { id: 'include:1', options: { id: 'delo-agent-context', name: '@delo/plugin-agent-context', config }, fiber: { runtime: { Config: native } } }
+  const entry = { id: 'include:1', options: { id: 'delorun-agent-context', name: '@delorun/plugin-agent-context', config }, fiber: { runtime: { Config: native } } }
   const saved: Array<Record<string, unknown>> = []
   return {
     saved,
@@ -383,7 +383,7 @@ it.each(['read-only', 'workspace-write'] as const)('plugin_manager write actions
   const settings = editor({ enabled: true }, {}, {})
   ctx.provide('configEditor', settings as never)
   for (const action of WRITE_ACTIONS) {
-    const result = await call({ action, target: action === 'restore' ? 'b'.repeat(40) : 'delo-agent-context', enabled: true, runtimeVersion: '0.1.0', config: { enabled: false } })
+    const result = await call({ action, target: action === 'restore' ? 'b'.repeat(40) : 'delorun-agent-context', enabled: true, runtimeVersion: '0.1.0', config: { enabled: false } })
     expect(result.isError).toBe(true)
     expect(JSON.stringify(result.content)).toContain('requires approval, but no approval service is composed')
   }
@@ -392,7 +392,7 @@ it.each(['read-only', 'workspace-write'] as const)('plugin_manager write actions
   for (const method of [history.undo, history.restore, history.history, history.listHistory, settings.edit]) {
     expect(method).not.toHaveBeenCalled()
   }
-  for (const action of READ_ACTIONS) expect((await call({ action, target: 'delo-agent-context' })).isError).toBe(false)
+  for (const action of READ_ACTIONS) expect((await call({ action, target: 'delorun-agent-context' })).isError).toBe(false)
   const reads = [manager.listPlugins, manager.listBundles, manager.listVersionExemptions, history.listHistory]
   expect(reads.map(method => method.mock.calls.length)).toEqual([1, 1, 1, 1])
 })
@@ -414,7 +414,7 @@ it.each(['read-only', 'workspace-write'] as const)('approves each change once in
   const prompted = vi.fn(async () => 'allowed-once' as const)
   ctx.on('approval/request', prompted)
   for (const action of [...READ_ACTIONS, ...WRITE_ACTIONS]) {
-    expect((await call({ action, target: action === 'read_config' || action === 'configure' ? 'delo-agent-context' : 'bundle@1.0.0', enabled: true, runtimeVersion: '0.1.7-alpha.1', acceptRisk: true, config: { limit: 6 } }, agent)).isError).toBe(false)
+    expect((await call({ action, target: action === 'read_config' || action === 'configure' ? 'delorun-agent-context' : 'bundle@1.0.0', enabled: true, runtimeVersion: '0.1.7-alpha.1', acceptRisk: true, config: { limit: 6 } }, agent)).isError).toBe(false)
   }
   expect(prompted).toHaveBeenCalledTimes(WRITE_ACTIONS.length)
   // configure reads the plugin list once more, for the entry's protection.
@@ -523,7 +523,7 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
 
   it.each([
     { action: 'history', limit: 0 }, { action: 'history', limit: 101 }, { action: 'history', limit: 1.5 },
-    { action: 'restore' }, { action: 'read_config' }, { action: 'configure', target: 'delo-agent-context' },
+    { action: 'restore' }, { action: 'read_config' }, { action: 'configure', target: 'delorun-agent-context' },
   ])('rejects incomplete or unbounded tool inputs: %j', async (args) => {
     const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
     ctx.provide('configEditor', editor({}, {}, {}) as never)
@@ -534,16 +534,16 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     const { ctx } = await fixture('danger-full-access', undefined, SWITCHED_ON)
     const definition = ctx.tools.get('plugin_manager')!
     expect(definition.presentCall?.({ action: 'history' })).toMatchObject({ kind: 'read' })
-    expect(definition.presentCall?.({ action: 'read_config', target: 'delo-agent-context' })).toMatchObject({ kind: 'read' })
+    expect(definition.presentCall?.({ action: 'read_config', target: 'delorun-agent-context' })).toMatchObject({ kind: 'read' })
     expect(definition.presentCall?.({ action: 'restore', target: 'a'.repeat(40) })).toMatchObject({ kind: 'other' })
-    expect(definition.presentCall?.({ action: 'configure', target: 'delo-agent-context' })).toMatchObject({ kind: 'other' })
+    expect(definition.presentCall?.({ action: 'configure', target: 'delorun-agent-context' })).toMatchObject({ kind: 'other' })
   })
 
   it('reads an entry\'s settings with secrets left out, what the bundles give it, and its schema', async () => {
     const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
     ctx.provide('configEditor', editor({ enabled: false, token: 't0ken' }, { enabled: true }, { enabled: false }) as never)
-    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delo-agent-context' }))) as Record<string, unknown>
-    expect(read).toMatchObject({ patchId: 'delo-agent-context', name: '@delo/plugin-agent-context', config: { enabled: false }, inherited: { enabled: true }, overridden: true, secrets: [{ path: ['token'], set: true }] })
+    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delorun-agent-context' }))) as Record<string, unknown>
+    expect(read).toMatchObject({ patchId: 'delorun-agent-context', name: '@delorun/plugin-agent-context', config: { enabled: false }, inherited: { enabled: true }, overridden: true, secrets: [{ path: ['token'], set: true }] })
     expect(JSON.stringify(read)).not.toContain('t0ken')
     // The projection Config.listConfigs gives: each field also admits a loader expression.
     expect(read.schema).toMatchObject({ $defs: { loaderExpression: { required: ['__jsExpr'] } } })
@@ -553,8 +553,8 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
   it.each([['no schema', null], ['a function', () => ({})], ['a plain object', { type: 'object' }]])('plugin_manager read_config withholds values of a non-native Config: %s', async (_name, native) => {
     const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
     ctx.provide('configEditor', editor({ apiKey: 's3cret', a: 1 }, { apiKey: 'inherited-s3cret' }, { a: 1 }, native) as never)
-    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delo-agent-context' }))) as Record<string, unknown>
-    expect(read).toEqual({ patchId: 'delo-agent-context', name: '@delo/plugin-agent-context', overridden: true, valuesWithheld: true, schema: null })
+    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delorun-agent-context' }))) as Record<string, unknown>
+    expect(read).toEqual({ patchId: 'delorun-agent-context', name: '@delorun/plugin-agent-context', overridden: true, valuesWithheld: true, schema: null })
     expect(JSON.stringify(read)).not.toContain('s3cret')
   })
 
@@ -574,9 +574,9 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
     const settings = editor({ enabled: true, limit: 9, old: 'x', token: 't0ken' }, { enabled: true, limit: 5 }, { limit: 9, old: 'x' })
     ctx.provide('configEditor', settings as never)
-    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false, extra: 1, token: 'n3w' }, reset: ['limit', 'old', 'unknown'] })))
+    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delorun-agent-context', config: { enabled: false, extra: 1, token: 'n3w' }, reset: ['limit', 'old', 'unknown'] })))
     expect(settings.saved).toEqual([{ enabled: false, limit: 5, extra: 1, token: 'n3w' }])
-    expect(result).toEqual({ patchId: 'delo-agent-context', changed: [
+    expect(result).toEqual({ patchId: 'delorun-agent-context', changed: [
       { field: 'old', before: 'x', after: null }, { field: 'enabled', before: true, after: false },
       { field: 'limit', before: 9, after: 5 }, { field: 'extra', before: null, after: 1 },
     ] })
@@ -585,8 +585,8 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
   it('names the fields a settings change made without their values when the Config is not a native schema', async () => {
     const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
     ctx.provide('configEditor', editor({ apiKey: 's3cret', a: 1 }, { a: 2 }, { a: 1 }, null) as never)
-    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delo-agent-context', config: { apiKey: 'n3w' }, reset: ['a'] })))
-    expect(result).toEqual({ patchId: 'delo-agent-context', valuesWithheld: true, changed: [{ field: 'apiKey' }, { field: 'a' }] })
+    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delorun-agent-context', config: { apiKey: 'n3w' }, reset: ['a'] })))
+    expect(result).toEqual({ patchId: 'delorun-agent-context', valuesWithheld: true, changed: [{ field: 'apiKey' }, { field: 'a' }] })
   })
 
   it('refuses to change the settings of a protected entry, even in full access, before the configuration editor saves', async () => {
@@ -594,9 +594,9 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     const settings = editor({ enabled: true }, {}, {})
     ctx.provide('configEditor', settings as never)
     manager.listPlugins.mockResolvedValue([{ entryId: 'include:1', enabled: true, readOnlyReason: 'management-required' }] as never)
-    const result = await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })
+    const result = await call({ action: 'configure', target: 'delorun-agent-context', config: { enabled: false } })
     expect(result.isError).toBe(true)
-    expect(JSON.stringify(result.content)).toContain('The settings of the entry \\"delo-agent-context\\" cannot be changed (management-required): plugin management protects this entry')
+    expect(JSON.stringify(result.content)).toContain('The settings of the entry \\"delorun-agent-context\\" cannot be changed (management-required): plugin management protects this entry')
     expect(settings.edit).not.toHaveBeenCalled()
   })
 
@@ -605,7 +605,7 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     const settings = editor({ enabled: true }, {}, {})
     ctx.provide('configEditor', settings as never)
     manager.listPlugins.mockResolvedValue([{ entryId: 'include:1', enabled: true, readOnlyReason: 'unaddressable' }] as never)
-    expect(JSON.stringify((await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })).content))
+    expect(JSON.stringify((await call({ action: 'configure', target: 'delorun-agent-context', config: { enabled: false } })).content))
       .toContain('cannot be changed (unaddressable): This entry has no unique profile patch target')
     expect(settings.edit).not.toHaveBeenCalled()
   })
@@ -615,17 +615,17 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     const settings = editor({ enabled: true }, {}, {})
     ctx.provide('configEditor', settings as never)
     manager.listPlugins.mockResolvedValue([])
-    expect(JSON.stringify((await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })).content)).toContain('is not a plugin that list_plugins lists')
+    expect(JSON.stringify((await call({ action: 'configure', target: 'delorun-agent-context', config: { enabled: false } })).content)).toContain('is not a plugin that list_plugins lists')
     expect(settings.edit).not.toHaveBeenCalled()
   })
 
   it('refuses without a configuration editor, an entry it does not address, or nothing to change', async () => {
     const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
     const failure = async (args: object): Promise<string> => JSON.stringify((await call(args)).content)
-    expect(await failure({ action: 'read_config', target: 'delo-agent-context' })).toContain('no configuration editor')
+    expect(await failure({ action: 'read_config', target: 'delorun-agent-context' })).toContain('no configuration editor')
     ctx.provide('configEditor', editor({}, {}, {}) as never)
     expect(await failure({ action: 'read_config' })).toContain('target entry patchId is required')
     expect(await failure({ action: 'configure', target: 'other:row', config: { a: 1 } })).toContain('call list_plugins')
-    expect(await failure({ action: 'configure', target: 'delo-agent-context' })).toContain('needs config fields')
+    expect(await failure({ action: 'configure', target: 'delorun-agent-context' })).toContain('needs config fields')
   })
 })

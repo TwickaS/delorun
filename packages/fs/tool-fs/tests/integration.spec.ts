@@ -685,7 +685,7 @@ describe('the sandbox provider\'s protected home', () => {
   let home: string
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'dsh-tool-fs-protected-'))
-    home = join(dir, '.delo')
+    home = join(dir, '.delorun')
     await mkdir(join(home, 'secrets'), { recursive: true })
     await mkdir(join(home, 'runtimes'), { recursive: true })
     await mkdir(join(dir, 'sub'))
@@ -697,8 +697,8 @@ describe('the sandbox provider\'s protected home', () => {
     await symlink(join(home, 'secrets'), join(dir, 'secrets-link'), 'dir')
     const canonical = await realpath(dir)
     ProtectingProvider.reads = {
-      roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
-      readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+      roots: [join(canonical, '.delorun'), join(canonical, 'other-mount')],
+      readable: [join(canonical, '.delorun', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
     }
     ctx = new Context()
     provideWorkingDirectoryFixture(ctx)
@@ -711,12 +711,12 @@ describe('the sandbox provider\'s protected home', () => {
   })
 
   it('refuses reading under the home, through a link, `..` or another mount of it, and reads readable entries', async () => {
-    for (const path of ['.delo/secrets/key', 'home-link/secrets/key', 'secrets-link/key', 'sub/../.delo/secrets/key', 'other-mount/secrets/key']) {
+    for (const path of ['.delorun/secrets/key', 'home-link/secrets/key', 'secrets-link/key', 'sub/../.delorun/secrets/key', 'other-mount/secrets/key']) {
       const result = await call('read', { file_path: path })
       expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
       expect(text(result)).not.toContain('secret-key')
     }
-    expect(text(await call('read', { file_path: '.delo/runtimes/tool.txt' }))).toContain('runtime')
+    expect(text(await call('read', { file_path: '.delorun/runtimes/tool.txt' }))).toContain('runtime')
   })
 
   it.skipIf(process.platform === 'win32')('refuses a read whose directory is replaced by a link to the home after the check', async () => {
@@ -742,8 +742,8 @@ describe('the sandbox provider\'s protected home', () => {
       await writeFile(join(home, 'spill', `session-${id}`, 'grep.txt'), `spilled output ${id}\n`)
     }
     const canonical = await realpath(dir)
-    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
-    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delo', 'spill', `session-${id}`) } as never)
+    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delorun', 'spill')] }
+    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delorun', 'spill', `session-${id}`) } as never)
     const read = (filePath: string, header: object = { id: 'a', cwd: dir }) => executeToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`spill-${++callCounter}`),
@@ -751,21 +751,21 @@ describe('the sandbox provider\'s protected home', () => {
       arguments: { file_path: filePath },
       agent: { session: { header } } as never,
     })
-    expect(text(await read('.delo/spill/session-a/grep.txt'))).toContain('spilled output a')
-    expect(await read('.delo/spill/session-b/grep.txt')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
-    expect(await read('.delo/secrets/key')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    expect(text(await read('.delorun/spill/session-a/grep.txt'))).toContain('spilled output a')
+    expect(await read('.delorun/spill/session-b/grep.txt')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    expect(await read('.delorun/secrets/key')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
     // A subagent session whose header names `b` as its parent reads `b`'s spill files.
-    expect(text(await read('.delo/spill/session-b/grep.txt', { id: 'c', parentSession: 'b', cwd: dir }))).toContain('spilled output b')
+    expect(text(await read('.delorun/spill/session-b/grep.txt', { id: 'c', parentSession: 'b', cwd: dir }))).toContain('spilled output b')
     // A fork records no parent session: the spill files its inherited log names stay unreadable.
-    expect(await read('.delo/spill/session-b/grep.txt', { id: 'fork-of-b', isSeeded: true, cwd: dir }))
+    expect(await read('.delorun/spill/session-b/grep.txt', { id: 'fork-of-b', isSeeded: true, cwd: dir }))
       .toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
     // A call without a session is granted no spill directory.
-    expect(await call('read', { file_path: '.delo/spill/session-a/grep.txt' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    expect(await call('read', { file_path: '.delorun/spill/session-a/grep.txt' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
   })
 
   it('reads under the home in a session under danger-full-access', async () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
-    expect(text(await call('read', { file_path: '.delo/secrets/key' }))).toContain('secret-key')
+    expect(text(await call('read', { file_path: '.delorun/secrets/key' }))).toContain('secret-key')
     // An agentless call resolves the deployment's policy.
     const agentless = await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('agentless-read'), name: 'read', arguments: { file_path: join(home, 'secrets', 'key') } })
     expect(text(agentless)).toContain('secret-key')
@@ -773,6 +773,6 @@ describe('the sandbox provider\'s protected home', () => {
 
   it('reads under the home when the provider protects nothing', async () => {
     ProtectingProvider.reads = undefined
-    expect(text(await call('read', { file_path: '.delo/secrets/key' }))).toContain('secret-key')
+    expect(text(await call('read', { file_path: '.delorun/secrets/key' }))).toContain('secret-key')
   })
 })

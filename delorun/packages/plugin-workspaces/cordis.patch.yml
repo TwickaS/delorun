@@ -1,0 +1,5 @@
+# This plugin as a bundle of its own, so upstream's plugin manager can install it into a stock harness. The row has no
+# config: Delorun's studio bundle mounts the plugin with its `root` and limits, and the stock composition does not mount it yet.
+- insert:
+    - id: delorun-workspaces
+      name: '@delorun/plugin-workspaces'

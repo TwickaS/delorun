@@ -1,0 +1,28 @@
+{
+  "name": "@delorun/runtime-store",
+  "description": "Delorun's runtime store (contract C1): installed runtime closures under ~/.delorun/runtimes, the current and previous pointers switched by atomic rename, store.lock, retention, and the start check of every installed file against its signed file list (contract C2)",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./identity": "./src/identity.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/contract-verification-checks": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/logs": "workspace:*",
+    "@delorun/release-formats": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

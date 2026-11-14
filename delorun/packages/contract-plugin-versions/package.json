@@ -1,0 +1,18 @@
+{
+  "name": "@delorun/contract-plugin-versions",
+  "description": "Types and fixed values of Delorun contract C17: the two plugin version axes, their exemptions and the version output",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin-interface.json": "./plugin-interface.json"
+  },
+  "dependencies": {
+    "@delorun/contract-release-manifest": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

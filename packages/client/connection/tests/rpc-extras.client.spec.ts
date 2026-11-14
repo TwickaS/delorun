@@ -7,15 +7,15 @@ describe('Connection RPC request extras', () => {
   it('sends the registered headers on each request, read per request, without overriding the content type', async () => {
     let token = 'one'
     const send = vi.fn<RpcFetch>().mockResolvedValue(new Response('{}', { status: 500 }))
-    const rpc = createWebConnectionRpc(send, undefined, () => ({ 'delo-unlock': token, 'content-type': 'text/plain' }))
+    const rpc = createWebConnectionRpc(send, undefined, () => ({ 'delorun-unlock': token, 'content-type': 'text/plain' }))
     await rpc.call('/api', 'session.list', {}).catch(() => undefined)
     token = 'two'
     await rpc.call('/api', 'session.list', {}).catch(() => undefined)
     const headers = send.mock.calls.map(call => call[1]?.headers)
     // Pins the per-request read: a changed credential applies to the next request.
     expect(headers).toEqual([
-      { 'delo-unlock': 'one', 'content-type': 'application/json' },
-      { 'delo-unlock': 'two', 'content-type': 'application/json' },
+      { 'delorun-unlock': 'one', 'content-type': 'application/json' },
+      { 'delorun-unlock': 'two', 'content-type': 'application/json' },
     ])
   })
 })

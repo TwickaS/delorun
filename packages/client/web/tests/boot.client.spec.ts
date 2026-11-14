@@ -342,7 +342,7 @@ describe('the recovery screen', () => {
   const STATE = { atComputer: true, lastStart: { at: '2026-11-10T10:00:00.000Z', plugins: [{ plugin: 'plug-a', loaded: false, error: 'boom' }] }, recent: [{ id: 'c0000000002', summary: 'Applied plug-a', state: 'applied', undoable: true }] }
 
   beforeEach(() => {
-    vi.stubGlobal(RECOVERY_ROUTES_GLOBAL, '/delo/changes')
+    vi.stubGlobal(RECOVERY_ROUTES_GLOBAL, '/delorun/changes')
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(STATE))))
   })
 

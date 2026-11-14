@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delorun-stock-parity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/testing/2026-11-06-delorun-stock-parity.md
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay:
+  en: c7d6e4442cdb4908
+  zh: 6c5daed5c3072857
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/problem:
+  en: d11a241bc190f602
+  zh: 716e8737e5f80089
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/proposal:
+  en: 12ee7369dab6a730
+  zh: 0e5a2c2851fc15fb
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/related:
+  en: bb39994bf5ceb5c8
+  zh: 918a81391f93d1fc
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/alternatives-considered:
+  en: a08313c8da100c40
+  zh: 251b49de004d4a2c
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/acceptance-criteria:
+  en: db4ebfe1d5d0627b
+  zh: f8861d8f79aa610f
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/risks:
+  en: ffca39099bad970e
+  zh: 89b540933bad820c

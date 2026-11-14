@@ -1,0 +1,111 @@
+/* A Delorun section's card: a heading over a bordered box of settings, each setting a block separated by a hairline.
+   The heading reads the Settings panel's card-heading variables, so it matches the cards the panel draws itself.
+   Delorun's sections show only under the Delorun look, which defines the `--delorun-space-*` steps used here. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-8);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+}
+
+.heading {
+  margin: 0;
+  padding: 0 var(--delorun-space-2);
+  font-size: var(--dsh-settings-card-heading-size, 15px);
+  line-height: var(--dsh-settings-card-heading-line-height, 22px);
+  font-weight: var(--dsh-settings-card-heading-weight, 600);
+  letter-spacing: var(--dsh-settings-card-heading-letter-spacing, normal);
+  text-transform: var(--dsh-settings-card-heading-transform, none);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-primary));
+}
+
+.description {
+  margin: 0;
+  padding: 0 var(--delorun-space-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.box {
+  min-width: 0;
+  /* The width a setting's text keeps before its control wraps below it. */
+  --heading-basis: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--delorun-space-7);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5);
+  padding: var(--delorun-space-7) 0;
+}
+
+.block + .block {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+/* A setting's text, then its control at the right edge; the control wraps below on a narrow card. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--delorun-space-5) var(--delorun-space-8);
+}
+
+.block.row {
+  flex-direction: row;
+}
+
+.settingHeading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-1);
+  min-width: 0;
+}
+
+.row > .settingHeading {
+  flex: 1 1 var(--heading-basis);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--dsw-font-s-14-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-s-14-line-height);
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* A failed write: under the last block inside a box, or under the cards of a stack. */
+.failure {
+  margin: 0;
+  padding: 0 0 var(--delorun-space-6);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.stack > .failure {
+  padding: 0 var(--delorun-space-2);
+}
+
+/* A box of preference rows: its border closes the card, so its last row draws no separator of its own. */
+.box > :last-child {
+  border-bottom: none;
+}

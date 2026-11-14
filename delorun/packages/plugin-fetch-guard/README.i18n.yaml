@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-fetch-guard/README.md
+/:
+  en: beb22d18e902899f
+  zh: fcb9c5358cda7da1
+/delorun-plugin-fetch-guard:
+  en: 5508583aa7056354
+  zh: 740287e7f506591f
+/delorun-plugin-fetch-guard/summary:
+  en: 9be3bc26bc7f91b4
+  zh: fb69802eea2d32c3
+/delorun-plugin-fetch-guard/contents:
+  en: 73a8b921c70b4cb6
+  zh: 03d8dbbafebdd50b
+/delorun-plugin-fetch-guard/contract:
+  en: 18f88281a4ffd477
+  zh: d8e1adcc67ba67be
+/delorun-plugin-fetch-guard/configuration:
+  en: aa642a2a64448e68
+  zh: 9a372563a341bee8
+/delorun-plugin-fetch-guard/known-limitations:
+  en: 7b48a44d67ff0ff2
+  zh: 9debe5789affcc2b
+/delorun-plugin-fetch-guard/tests:
+  en: 07d692eac5570e23
+  zh: c1b36cc53db2c7ac

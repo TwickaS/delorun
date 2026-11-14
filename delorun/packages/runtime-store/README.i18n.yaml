@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/runtime-store/README.md
+/:
+  en: 5a4836f24d846842
+  zh: c5042453a819fb2e
+/delorun-runtime-store:
+  en: 8df43720df80adcb
+  zh: cbadd0144b036688
+/delorun-runtime-store/summary:
+  en: 61fcdb7add352509
+  zh: c98b09ae90dcfd03
+/delorun-runtime-store/contents:
+  en: ef27ce2c585869e8
+  zh: c8b07bacc765190f
+/delorun-runtime-store/use-this-package:
+  en: 06bb1e362c62f852
+  zh: 45ec6fe80456481c
+/delorun-runtime-store/pointers-and-switching:
+  en: ff5ffad0a4107a54
+  zh: 06219dd9e9beaef9
+/delorun-runtime-store/rollback:
+  en: 48888f1649cc4b40
+  zh: d9847ce2a1595cc1
+/delorun-runtime-store/installing:
+  en: f2b9be7c6657a637
+  zh: 6b153b3bbfdf6317
+/delorun-runtime-store/retention:
+  en: 4c3b5431c3383fc7
+  zh: 78c63a087fea5d0b
+/delorun-runtime-store/the-start-check:
+  en: 24e34295afb75686
+  zh: fed5f0450e8a1255
+/delorun-runtime-store/launching:
+  en: 17cdd0709c5ccbcb
+  zh: 827fab59d7712d3a
+/delorun-runtime-store/errors:
+  en: e51997e8c2712539
+  zh: b6591facae53decc
+/delorun-runtime-store/crash-safety:
+  en: b85fd17fcb9367c9
+  zh: d617b6bf4ae0ba75
+/delorun-runtime-store/not-covered:
+  en: 78725082a4b4707c
+  zh: 5f3f41921170b357
+/delorun-runtime-store/development:
+  en: ea2f703e23997073
+  zh: a086477c65001052

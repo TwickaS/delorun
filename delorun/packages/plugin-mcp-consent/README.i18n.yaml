@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-mcp-consent/README.md
+/:
+  en: 71e4c7a9c43cae07
+  zh: ba3ba5468698f449
+/delorun-plugin-mcp-consent:
+  en: 856300bc97a3b549
+  zh: 7361ab941aaf7923
+/delorun-plugin-mcp-consent/summary:
+  en: 553e46d79aa8b852
+  zh: e7572d63c696b770
+/delorun-plugin-mcp-consent/contents:
+  en: dbcc66fdedfde92b
+  zh: 32d619b3c1308fa9
+/delorun-plugin-mcp-consent/the-service:
+  en: e038190b849a54e6
+  zh: f3b85632c9fae0f9
+/delorun-plugin-mcp-consent/the-acceptance-store:
+  en: e0d782e0dc5ea434
+  zh: 4cd05512c8b8daa7
+/delorun-plugin-mcp-consent/reviews:
+  en: fec7f0858f48133b
+  zh: ab0b14a07c88da92
+/delorun-plugin-mcp-consent/reviews/pinned-files:
+  en: 7507da958850ecf3
+  zh: 5f5b6b87f4b65c76
+/delorun-plugin-mcp-consent/reviews/places-chats-can-write:
+  en: 0effb466ad1e9fcc
+  zh: 7095509ecd6eedbe
+/delorun-plugin-mcp-consent/recording-an-acceptance:
+  en: 433260a6ca4b1d49
+  zh: f4ac3a7cb8f82aad
+/delorun-plugin-mcp-consent/pending-reviews:
+  en: f1cd7594330204ec
+  zh: 4a170e03c8028ee2
+/delorun-plugin-mcp-consent/the-mcp-add-consent-switch:
+  en: c714ef3ea575a700
+  zh: 6e735fb7c577d1f2
+/delorun-plugin-mcp-consent/development:
+  en: f67c9e0d0bead617
+  zh: eed96c893c847972

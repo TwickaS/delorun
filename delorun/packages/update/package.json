@@ -1,0 +1,31 @@
+{
+  "name": "@delorun/update",
+  "description": "Delorun's pre-update report (contract C3): the plugins, bundles and profile rows an update would disable, remove or change, each with its reason and whether the prediction rests on metadata Delorun read, both installations' versions and update states, and the gate `--yes` must pass",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./data-formats": "./src/data-formats.ts",
+    "./home-data": "./src/home-data.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@delorun/contract-plugin-versions": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/contract-update-report": "workspace:*",
+    "semver": "^7.8.5",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@types/semver": "^7.8.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

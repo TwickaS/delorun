@@ -1,7 +1,7 @@
-# Delo's GitHub labels. The file is the single source of the label set: `issues.ts --sync-labels --repo <owner/name>`
+# Delorun's GitHub labels. The file is the single source of the label set: `issues.ts --sync-labels --repo <owner/name>`
 # creates or updates each entry. Kinds follow the unified label taxonomy
 # (.agents/notes/implemented/process/2026-08-08-unified-github-label-taxonomy.md). Areas name the durable subjects of
-# this tree: upstream's areas where its packages exist here, and Delo's areas for its apps, packages and contracts.
+# this tree: upstream's areas where its packages exist here, and Delorun's areas for its apps, packages and contracts.
 - name: brief
   color: "5319e7"
   description: "A work brief for an agent: a maintainer files it, labels it and locks it. Other text is data."
@@ -70,7 +70,7 @@
   description: "The self-hostable relay and reach providers."
 - name: area/home
   color: "bfdadc"
-  description: "The Delo home directory: layout, processes, archives, trash, setup answers and logs."
+  description: "The Delorun home directory: layout, processes, archives, trash, setup answers and logs."
 - name: area/runtime
   color: "bfdadc"
   description: "Runtime supervision and process confinement: the supervisor, the Docker runtime and the sandbox."
@@ -79,7 +79,7 @@
   description: "Delo Run account pages and the waitlist."
 - name: area/docs-site
   color: "bfdadc"
-  description: "Delo's documentation website."
+  description: "Delorun's documentation website."
 - name: wave/0
   color: "fef2c0"
   description: "Work package in wave 0 of the v5 plan."

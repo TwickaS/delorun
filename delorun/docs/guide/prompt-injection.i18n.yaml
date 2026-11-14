@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for prompt-injection.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/prompt-injection.md
+/:
+  en: fa0c6a2886a0472f
+  zh: 5732eebe581b3ac3
+/prompt-injection-and-data-exfiltration:
+  en: 97283f68ec6742b3
+  zh: 3f400a72c99225fd
+/prompt-injection-and-data-exfiltration/summary:
+  en: d31af083e5dd103f
+  zh: 57b14a19510b0b1c
+/prompt-injection-and-data-exfiltration/contents:
+  en: 0bc61044036eed3e
+  zh: 4f656e6dd8843115
+/prompt-injection-and-data-exfiltration/the-three-ingredients:
+  en: b512ee88ea526eec
+  zh: 3a46330d601dc803
+/prompt-injection-and-data-exfiltration/the-network-setting:
+  en: ed967aa610ac520c
+  zh: 90921d859883d017
+/prompt-injection-and-data-exfiltration/what-each-setting-closes:
+  en: 1d4c5cd8b2e5031e
+  zh: 8adadbd7b32dbcbd
+/prompt-injection-and-data-exfiltration/what-no-setting-closes:
+  en: 2708dec6d14e4d53
+  zh: 83466464e5dd8ad2
+/prompt-injection-and-data-exfiltration/practical-advice:
+  en: 22f25b76e46e1003
+  zh: b5f1b594d9de26b6
+/prompt-injection-and-data-exfiltration/changing-the-setting:
+  en: fce21c72f7a32066
+  zh: 9650210035a3de9a

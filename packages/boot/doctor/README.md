@@ -40,7 +40,7 @@ warn  Command sandbox: This machine enforces workspace-write only in part, such 
 
 `ok` passed; `warn` works with less than it should; `FAIL` does not work, and its line says what to do. The profile initializes on first use from the shipped `doctor` template, the `dsh-base` bundle plus this package's bundle.
 
-The app's `doctor` switch turns the run on. It is a validated Config field that defaults to off, which is Delo's C16 parity value; the shipped `doctor` profile sets it on. An app mounted without the switch runs no check, writes one line to stderr and exits 1.
+The app's `doctor` switch turns the run on. It is a validated Config field that defaults to off, which is Delorun's C16 parity value; the shipped `doctor` profile sets it on. An app mounted without the switch runs no check, writes one line to stderr and exits 1.
 
 The sandbox check does not spawn the command it confines. It calls `confine` on a no-op command under the deployment's default mode and reads the enforcement. On Linux, the sandbox's first `confine` call runs its own functional probe, once per provider lifetime, which runs `true` under `bwrap` or the Landlock launcher to choose the runner.
 

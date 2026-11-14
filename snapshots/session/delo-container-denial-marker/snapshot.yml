@@ -1,8 +1,0 @@
-version: 1
-scenario: delo-container-denial-marker
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delo-container-denial-marker
-  pin: true

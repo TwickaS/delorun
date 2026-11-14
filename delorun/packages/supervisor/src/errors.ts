@@ -1,0 +1,34 @@
+/**
+ * The typed refusal every supervisor operation raises: one of contract C9's error codes and a detail that names
+ * the refused value, never a secret. The server turns it into one failed response line.
+ *
+ * @module @delorun/supervisor/errors
+ */
+import type { SupervisorErrorCode, SupervisorFailure } from '@delorun/contract-runtime-supervisor'
+
+/** A refusal or failure with C9's error code (`delorun/docs/contracts/c09-runtime-supervisor.md`, "Errors"). */
+export class SupervisorError extends Error {
+  /** C9's error code. */
+  readonly code: SupervisorErrorCode
+  /** The refused value or the reason, never a secret, token, credential or environment value. */
+  readonly detail?: string | undefined
+
+  /**
+   * @param code - C9's error code.
+   * @param detail - the refused value or the reason, never a secret, token, credential or environment value.
+   */
+  constructor(code: SupervisorErrorCode, detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`)
+    this.code = code
+    this.detail = detail
+    this.name = 'SupervisorError'
+  }
+
+  /**
+   * The failed response line's fields.
+   * @returns the failure, with `detail` when the error has one.
+   */
+  toFailure(): SupervisorFailure {
+    return this.detail === undefined ? { ok: false, error: this.code } : { ok: false, error: this.code, detail: this.detail }
+  }
+}

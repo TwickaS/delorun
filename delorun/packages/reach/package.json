@@ -1,0 +1,26 @@
+{
+  "name": "@delorun/reach",
+  "description": "Delorun's reach providers (C7): the reach service and its provider registry, and the Tailscale private provider over a C4 reach listener",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-api-gateway": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@delorun/contract-admission": "workspace:*",
+    "@delorun/contract-oidc-passkeys": "workspace:*",
+    "@delorun/contract-reach-providers": "workspace:*",
+    "@delorun/home-auth": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

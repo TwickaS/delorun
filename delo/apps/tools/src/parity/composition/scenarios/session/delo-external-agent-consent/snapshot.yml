@@ -1,8 +1,0 @@
-version: 1
-scenario: delo-external-agent-consent
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delo-external-agent-consent
-  pin: true

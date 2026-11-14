@@ -104,7 +104,7 @@ describe('getOrCreateAnonymousUserId', () => {
   })
 
   it.runIf(process.platform !== 'win32')('writes the id 0600 and creates the home 0700', () => {
-    // A fresh harness home, as an upstream-only run (one that never runs Delo's
+    // A fresh harness home, as an upstream-only run (one that never runs Delorun's
     // `ensureHomeTree`) leaves it: the id belongs to the owner, and the directory this
     // module had to create must not be readable by another local user either.
     const home = join(tempHome(), 'dsh-home')

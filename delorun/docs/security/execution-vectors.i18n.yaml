@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for execution-vectors.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/security/execution-vectors.md
+/:
+  en: 7640cc519ce3a208
+  zh: 751b15af2d42d696
+/trust-across-every-execution-vector:
+  en: b6dbce2f76169268
+  zh: 0b89e6ba29cb9cfb
+/trust-across-every-execution-vector/the-vectors:
+  en: d25e52255a9266f8
+  zh: b1482296920fc2e5
+/trust-across-every-execution-vector/guarantees-by-command:
+  en: 91c1f70654311bae
+  zh: 1babdf34083b4889
+/trust-across-every-execution-vector/combinations:
+  en: 2983e08db7055e71
+  zh: d144d1872fba6dc1
+/trust-across-every-execution-vector/self-hosting:
+  en: 2ffb99bfa80e3100
+  zh: c331dcad28444d94
+/trust-across-every-execution-vector/comparing-with-stock-dsh:
+  en: 304acb5b0e26592e
+  zh: dd685d5caad4d543
+/trust-across-every-execution-vector/what-no-vector-protects-against:
+  en: 982907a636351121
+  zh: f97c50813f86bd03

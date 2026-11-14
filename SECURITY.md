@@ -4,30 +4,30 @@
 
 Report a suspected vulnerability privately by email to support@delorun.com with "security" in the subject. Include the version, the steps to reproduce it and what an attacker gains. If GitHub private vulnerability reporting is enabled on this repository, you can use it instead: open the **Security** tab and choose **Report a vulnerability**.
 
-Never report a vulnerability in a public issue, discussion or pull request, and do not post exploit details in one. Delo pays no bounty.
+Never report a vulnerability in a public issue, discussion or pull request, and do not post exploit details in one. Delorun pays no bounty.
 
 ## Scope
 
-In scope is a vulnerability in Delo's own code under `delo/`, in how Delo configures or composes upstream's code, or in a Delo release artifact. These areas matter most:
+In scope is a vulnerability in Delorun's own code under `delorun/`, in how Delorun configures or composes upstream's code, or in a Delorun release artifact. These areas matter most:
 
 - The sandbox: a confined command that reads, writes or reaches something its policy denies.
 - Approvals: an action that runs without the approval the policy requires, or an approval that applies to more than the person saw.
-- Remote access: a way to reach a Delo home, a session or a phone link without the pairing and sign-in that grant access.
-- Update verification: a release or update that Delo installs without a valid signature and checksum.
+- Remote access: a way to reach a Delorun home, a session or a phone link without the pairing and sign-in that grant access.
+- Update verification: a release or update that Delorun installs without a valid signature and checksum.
 
 A vulnerability in DeepSeek Harness's own code is in scope for reporting here too, because the maintainers handle it as described next. A plugin by a third-party author is the author's responsibility; see [Plugins](#plugins).
 
 ## Vulnerabilities in upstream code
 
-The maintainers report a vulnerability in DeepSeek Harness's code privately to its maintainers at the same time as they fix it here. Delo does not publish details before upstream has had 30 days. The maintainers may shorten that period when a fix is already public.
+The maintainers report a vulnerability in DeepSeek Harness's code privately to its maintainers at the same time as they fix it here. Delorun does not publish details before upstream has had 30 days. The maintainers may shorten that period when a fix is already public.
 
 ## Outside review
 
-No outside security review of Delo has happened yet.
+No outside security review of Delorun has happened yet.
 
 ## Supported versions
 
-Only the newest release receives security fixes. Install the newest release to receive them. Delo does not promise a response time.
+Only the newest release receives security fixes. Install the newest release to receive them. Delorun does not promise a response time.
 
 ## Dependency advisories
 
@@ -35,8 +35,8 @@ Before each release is signed, its runtime lockfile's npm packages, including tr
 
 ## Plugins
 
-Delo does not audit plugins before you install them. A catalogue entry shows what an author or a reviewer claims about a plugin, and Delo does not verify those claims.
+Delorun does not audit plugins before you install them. A catalogue entry shows what an author or a reviewer claims about a plugin, and Delorun does not verify those claims.
 
 ## Goal and threat model
 
-Delo aims never to be less safe than stock DeepSeek Harness (DSH). Delo's [threat model](delo/docs/security/threat-model.md) states what each party can see and do. The [security fundamentals](delo/docs/security/fundamentals.md) list the rules Delo holds itself to, each with the code that enforces it and the test that proves it.
+Delorun aims never to be less safe than stock DeepSeek Harness (DSH). Delorun's [threat model](delorun/docs/security/threat-model.md) states what each party can see and do. The [security fundamentals](delorun/docs/security/fundamentals.md) list the rules Delorun holds itself to, each with the code that enforces it and the test that proves it.

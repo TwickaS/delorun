@@ -1,0 +1,15 @@
+# C16 switch default_workspace_directory on. A Web scenario runs through an e2e
+# driver under apps/web/tests, which mounts upstream's workspace-controller row
+# with defaultWorkspaceDirectory set to a folder named default-workspace, the
+# folder `delorun start` resolves for @delorun/bundle-local's row; the first chat
+# runs in the first-use workspace there, and its tool results show that path.
+version: 1
+scenario: delorun-default-workspace-directory
+profile: web
+composition: web-default
+recording: live
+header:
+  class: delorun-default-workspace-directory
+  pin: true
+input:
+  task: Print the absolute path of the current working directory.

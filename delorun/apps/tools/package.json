@@ -1,0 +1,34 @@
+{
+  "name": "@delorun/tools",
+  "description": "Delorun's fork tooling: the divergence-ledger checker, the check runner and the parity-composition checks",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsx src/check-fork-boundary.ts"
+  },
+  "dependencies": {
+    "@delorun/bundle-local": "workspace:*",
+    "@delorun/contract-oidc-passkeys": "workspace:*",
+    "@delorun/contract-parity-composition": "workspace:*",
+    "@delorun/contract-reach-providers": "workspace:*",
+    "@delorun/contract-relay-protocol": "workspace:*",
+    "@secretlint/node": "13.0.7",
+    "@secretlint/secretlint-rule-pattern": "13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "asn1js": "^3.0.10",
+    "jose": "^6.2.15",
+    "js-yaml": "^4.3.2",
+    "pkijs": "^3.4.0",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-session-snapshot": "workspace:*",
+    "@types/js-yaml": "^4.0.9"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

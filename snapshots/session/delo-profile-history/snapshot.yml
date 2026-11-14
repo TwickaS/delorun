@@ -1,9 +1,0 @@
-version: 1
-scenario: delo-profile-history
-profile: headless
-composition: plugin-manager
-recording: live
-permission: danger-full-access
-header:
-  class: delo-profile-history
-  pin: true

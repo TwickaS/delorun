@@ -400,7 +400,7 @@ export interface LaunchOptions {
    */
   deepSeekMissingCredential?: boolean
   /**
-   * Turn on the `presetInspect` switch of the Standard preset's `tool-preset-inspect` row (Delo's C16 switch
+   * Turn on the `presetInspect` switch of the Standard preset's `tool-preset-inspect` row (Delorun's C16 switch
    * `preset_inspect`, off in the shipped composition), so the Standard tool set includes `preset_inspect`.
    */
   presetInspect?: boolean

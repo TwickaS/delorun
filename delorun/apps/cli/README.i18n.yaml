@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/apps/cli/README.md
+/:
+  en: 2f60a20fc2bdd5af
+  zh: 7553b14405a7c832
+/delorun-cli:
+  en: 577872206f2283aa
+  zh: b822fae1a98295ad
+/delorun-cli/summary:
+  en: 1943af928e78be5f
+  zh: 7d0bfc60669e68bb
+/delorun-cli/contents:
+  en: cbfa723e5a1b301d
+  zh: 637af744541b8a7d
+/delorun-cli/commands:
+  en: d2321dc4cf9d4659
+  zh: b976823e5fab46c2
+/delorun-cli/the-home:
+  en: 847fb2699c2367a2
+  zh: ffde1a214bc0ea26
+/delorun-cli/profiles:
+  en: 8c0ad048e217b39d
+  zh: 41f17eb61565957a
+/delorun-cli/setup:
+  en: c95e2e2bee241abf
+  zh: 2879e1b52e5f01d4
+/delorun-cli/the-home-process:
+  en: 174f51a390bfd947
+  zh: e4c56e512eb62476
+/delorun-cli/opening-the-studio:
+  en: 3f9e7ccc2550c4d1
+  zh: 380d189bcf7ed9b3
+/delorun-cli/how-delorun-runs-upstream:
+  en: d58b27fb03d67575
+  zh: 3ae458e465597da9
+/delorun-cli/extension-points:
+  en: 0a6630dc46113852
+  zh: d7ec59fd355f34d9
+/delorun-cli/not-implemented:
+  en: 1ac67a46a3cd1671
+  zh: b203631e30db99f4
+/delorun-cli/development:
+  en: 9f9f61288fc6c407
+  zh: 711e1afa3f1cf103

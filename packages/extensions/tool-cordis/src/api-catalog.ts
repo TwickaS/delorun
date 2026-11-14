@@ -3031,7 +3031,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'scheduleConsent',
     summary: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer.',
-    description: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer. `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.',
+    description: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer. `@delorun/plugin-schedule-consent` provides one when its `enabled` field is on.',
     methods: [
       {
         signature: 'nameEffect(schedule: ScheduleEffect): string | undefined',

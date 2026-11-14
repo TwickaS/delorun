@@ -1,0 +1,15 @@
+/*
+ * The workspace badge's named colours, the only place the badge's literal colours live: Tailwind's 600 step, and its
+ * 400 step in dark, as T3 Code's project colours are (MIT, © 2026 T3 Tools Inc.). `WorkspaceBadge.module.css` selects
+ * one by `--delorun-badge-<name>`.
+ */
+:root {
+  --delorun-badge-blue: light-dark(oklch(54.6% 0.245 262.881), oklch(70.7% 0.165 254.624));
+  --delorun-badge-green: light-dark(oklch(62.7% 0.194 149.214), oklch(79.2% 0.209 151.711));
+  --delorun-badge-amber: light-dark(oklch(66.6% 0.179 58.318), oklch(82.8% 0.189 84.429));
+  --delorun-badge-violet: light-dark(oklch(54.1% 0.281 293.009), oklch(70.2% 0.183 293.541));
+  --delorun-badge-red: light-dark(oklch(57.7% 0.245 27.325), oklch(70.4% 0.191 22.216));
+  --delorun-badge-pink: light-dark(oklch(59.2% 0.249 0.584), oklch(71.8% 0.202 349.761));
+  --delorun-badge-teal: light-dark(oklch(60% 0.118 184.704), oklch(77.7% 0.152 181.912));
+  --delorun-badge-slate: light-dark(oklch(44.6% 0.043 257.281), oklch(70.4% 0.04 256.788));
+}

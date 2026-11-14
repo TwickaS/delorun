@@ -1,0 +1,30 @@
+{
+  "name": "@delorun/home-process",
+  "description": "Delorun's home process (C19): one process per CLI profile that holds the home lock, writes a new start token, serves the update channel under ~/.delorun, launches the Docker supervisor and moves the profile to a new runtime only when no chat runs",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-home-process": "workspace:*",
+    "@delorun/contract-operational-logs": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/logs": "workspace:*",
+    "@delorun/supervisor": "workspace:*",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:*",
+    "@deepseek-ai/node-addon-system": "workspace:~"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

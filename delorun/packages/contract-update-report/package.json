@@ -1,0 +1,18 @@
+{
+  "name": "@delorun/contract-update-report",
+  "description": "Types and fixed values of Delorun contract C3: the update report, its items and reasons, update states, health-check criteria and rollback triggers",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/contract-plugin-versions": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

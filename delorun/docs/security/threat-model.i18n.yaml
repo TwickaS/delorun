@@ -1,0 +1,112 @@
+# Bilingual-pair consistency record for threat-model.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/security/threat-model.md
+/:
+  en: a8c3f89cfc0ece7e
+  zh: be11eb2234e602cd
+/delorun-threat-model:
+  en: 94808aec7ef01112
+  zh: 0adddfe448e41f16
+/delorun-threat-model/summary:
+  en: 01969c78cf631013
+  zh: d75e99fc9da83cb9
+/delorun-threat-model/contents:
+  en: 7836ffd3e3ac3bc2
+  zh: 9a5e9c9123f57331
+/delorun-threat-model/goal:
+  en: 95fb6809c4f9519c
+  zh: cfdaf504a17f95fc
+/delorun-threat-model/assets:
+  en: 001c95fb2ca3217d
+  zh: 9cf37e4f3b0594bf
+/delorun-threat-model/parties-and-trust:
+  en: c261a17929625605
+  zh: cd8592b6b91f7d1c
+/delorun-threat-model/parties-and-trust/the-person:
+  en: 738ffe53222685a6
+  zh: 37c2aba5c8e1b704
+/delorun-threat-model/parties-and-trust/the-model-and-its-tool-calls:
+  en: 77b28c555b9e386c
+  zh: 44e9950f5f6eb4c5
+/delorun-threat-model/parties-and-trust/plugins:
+  en: 9548735e839f02bf
+  zh: 0a00b4449e470bd4
+/delorun-threat-model/parties-and-trust/other-local-processes-under-the-same-user:
+  en: 7bef8df07155f6ad
+  zh: e6a5ea584c6eb9fe
+/delorun-threat-model/parties-and-trust/other-users-on-the-machine:
+  en: 6f332de6f40f81ad
+  zh: a190b463f39a2bb2
+/delorun-threat-model/parties-and-trust/the-network:
+  en: c3a5f46ea12ed8f0
+  zh: 698cc684c9123679
+/delorun-threat-model/parties-and-trust/tailscale-the-person-s-own-relay-and-oidc-provider:
+  en: 446f25364f5b11bd
+  zh: a222f979f48e81c7
+/delorun-threat-model/parties-and-trust/delo-run-the-project:
+  en: 19759d6f947d0bfd
+  zh: 5ceecb650b24a863
+/delorun-threat-model/parties-and-trust/upstream-and-dependency-authors:
+  en: 62af24c8edcedb46
+  zh: 2432156aac871ddd
+/delorun-threat-model/parties-and-trust/a-party-holding-a-stolen-device:
+  en: 95c5fef0bac9c6cc
+  zh: 19f73f61114ace17
+/delorun-threat-model/boundaries-and-their-defences:
+  en: 59868d4e1d99c745
+  zh: e387884da7e262b7
+/delorun-threat-model/boundaries-and-their-defences/confinement-of-native-commands:
+  en: cf8172ded78e60f1
+  zh: 6aa91f4e90246e34
+/delorun-threat-model/boundaries-and-their-defences/the-home-s-control-channels:
+  en: c2ff3f98496438ce
+  zh: 6a1789c05bb38953
+/delorun-threat-model/boundaries-and-their-defences/container-isolation:
+  en: 9869b012c5e09696
+  zh: b0d62743564a0993
+/delorun-threat-model/boundaries-and-their-defences/admission-and-listeners:
+  en: eb87fcd0e2e00de7
+  zh: 4862fdda5c57afd4
+/delorun-threat-model/boundaries-and-their-defences/device-approval:
+  en: 409ebbe31b3745d6
+  zh: b5c2baa3e1f8c300
+/delorun-threat-model/boundaries-and-their-defences/reach-providers:
+  en: a9657662d771b439
+  zh: 6285b12db5e2c8df
+/delorun-threat-model/boundaries-and-their-defences/sign-in:
+  en: 11396e1768a7eb37
+  zh: f8472fa01c7a95dc
+/delorun-threat-model/boundaries-and-their-defences/releases-the-log-and-the-rebuild:
+  en: cd37be137f75d4bf
+  zh: 7e39c28aedaddd21
+/delorun-threat-model/boundaries-and-their-defences/the-catalogue-and-revocation:
+  en: 9a7dffe43389f699
+  zh: b6e02f407833a556
+/delorun-threat-model/boundaries-and-their-defences/updates-and-rollback:
+  en: 68949ba851d1496e
+  zh: 74904aa2d88993dd
+/delorun-threat-model/boundaries-and-their-defences/archives-and-untrusted-chats:
+  en: 45566f83da954136
+  zh: bf35c6e92483bd22
+/delorun-threat-model/boundaries-and-their-defences/logs-and-redaction:
+  en: f23c84a3561edc58
+  zh: 3b1772e23bdb7ed6
+/delorun-threat-model/boundaries-and-their-defences/verification:
+  en: a66f409a8d74d485
+  zh: 4a753540711eedef
+/delorun-threat-model/boundaries-and-their-defences/parity:
+  en: 886660e2f490ff48
+  zh: a542b853bea3b277
+/delorun-threat-model/boundaries-and-their-defences/the-web-fetch-guard:
+  en: 79a81db7be945814
+  zh: 9d2b2e865b3d3b9f
+/delorun-threat-model/boundaries-and-their-defences/data-sharing:
+  en: ff3f8cdfea974ac6
+  zh: 29724d8892709ec9
+/delorun-threat-model/what-delorun-does-not-protect-against:
+  en: 2036a5e225e19775
+  zh: 5913b8af0a3e7f41
+/delorun-threat-model/how-changes-keep-this-true:
+  en: 4edd79ec3e798d0b
+  zh: d40d983b10bb3db5

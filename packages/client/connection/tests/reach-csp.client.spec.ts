@@ -7,8 +7,8 @@ describe('reachContentSecurityPolicy', () => {
   it("enforces Trusted Types for 'script' and allows exactly the two policies C4 names", () => {
     const policy = reachContentSecurityPolicy('n0nce-n0nce-n0nce-n0nce-n0nce')
     expect(policy).toContain("require-trusted-types-for 'script'")
-    expect(policy).toContain('trusted-types default delo-plugin-loader')
+    expect(policy).toContain('trusted-types default delorun-plugin-loader')
     // The directive list names the default policy and the client module loader's policy, and nothing else.
-    expect(/trusted-types ([^;]+)/.exec(policy)?.[1]).toBe('default delo-plugin-loader')
+    expect(/trusted-types ([^;]+)/.exec(policy)?.[1]).toBe('default delorun-plugin-loader')
   })
 })

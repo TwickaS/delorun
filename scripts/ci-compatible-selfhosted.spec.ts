@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { BUILD_BACKED_NODE_COMPAT_VERSION } from './run-gates.ts'
-import { UPSTREAM_REPOSITORY, upstreamRunsOn } from './tests/delo-repository-guard.ts'
+import { UPSTREAM_REPOSITORY, upstreamRunsOn } from './tests/delorun-repository-guard.ts'
 
 interface Step {
   name?: string

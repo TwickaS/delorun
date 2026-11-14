@@ -1,0 +1,67 @@
+# Bilingual-pair consistency record for c13-catalogue-revocation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/contracts/c13-catalogue-revocation.md
+/:
+  en: 21938af78fd72b06
+  zh: 83c268400ae687f0
+/c13-catalogue-index-and-revocation-list:
+  en: d8d40a481bad969a
+  zh: c363fc36b52b2ef9
+/c13-catalogue-index-and-revocation-list/summary:
+  en: 0785d634188930ae
+  zh: adfee68d99065195
+/c13-catalogue-index-and-revocation-list/contents:
+  en: 3f89cbe15d0d04da
+  zh: 06ccafdacdfb5b12
+/c13-catalogue-index-and-revocation-list/where-the-files-are-served:
+  en: 6607364a7b36c753
+  zh: c60dcd422eac5fdc
+/c13-catalogue-index-and-revocation-list/catalogue-index:
+  en: 952e4469c363ccf7
+  zh: 9d3d7e9cac823d16
+/c13-catalogue-index-and-revocation-list/badge-record:
+  en: 6f93d5ffeb96c96a
+  zh: aaa1ff88c5760c42
+/c13-catalogue-index-and-revocation-list/listed-findings:
+  en: 4f167e71192fc9b5
+  zh: d4232e8320039706
+/c13-catalogue-index-and-revocation-list/installing-from-the-catalogue:
+  en: bd6fcfc34350d6af
+  zh: 5fdbf751eca554e9
+/c13-catalogue-index-and-revocation-list/revocation-list:
+  en: aadd2da16e5ef6ac
+  zh: a0e9bbab667eb275
+/c13-catalogue-index-and-revocation-list/fetching-and-caching:
+  en: b442393b242d86e8
+  zh: 087ab56adf215d1c
+/c13-catalogue-index-and-revocation-list/stale-state:
+  en: ded42e290586341e
+  zh: a15978b9565e5666
+/c13-catalogue-index-and-revocation-list/disabling-a-revoked-plugin:
+  en: 5a3e66f552148c77
+  zh: f31656411d1b1a30
+/c13-catalogue-index-and-revocation-list/catalogue-repository-ci:
+  en: a90b33d26be51ee2
+  zh: a0e9bae5cb2564aa
+/c13-catalogue-index-and-revocation-list/values-and-limits:
+  en: d85b42995219b4bb
+  zh: c9b786e52f83278b
+/c13-catalogue-index-and-revocation-list/consumers:
+  en: b4950f1f733fa6b8
+  zh: 4d3c334f7c8e4b38
+/c13-catalogue-index-and-revocation-list/compatibility:
+  en: c1910cdf4f1b75e4
+  zh: 15938b861928fa46
+/c13-catalogue-index-and-revocation-list/security:
+  en: 52543dba9bf0d349
+  zh: bd232096a834cc62
+/c13-catalogue-index-and-revocation-list/security/requirements:
+  en: e6907eec044db4da
+  zh: 7915fee3c3c2311b
+/c13-catalogue-index-and-revocation-list/security/denial-tests:
+  en: b05ebba3f6307867
+  zh: 9495eb1b6a4c40d0
+/c13-catalogue-index-and-revocation-list/security/what-this-does-not-prove:
+  en: 4410879758cc8423
+  zh: e922ad6782f3ab15

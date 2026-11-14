@@ -1,0 +1,77 @@
+/* The tile grids and previews of the Typeface and Density rows. */
+.typeTiles {
+  --specimen-size: 30px;
+  --specimen-line: 36px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.densityTiles {
+  --density-tile-height: 64px;
+  --density-tile-height-narrow: 48px;
+  --density-line-height: 4px;
+  --density-gap-compact: 5px;
+  --density-gap-comfortable: 8px;
+  --density-gap-spacious: 11px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* The typeface specimen. */
+.specimen {
+  display: flex;
+  align-items: baseline;
+  gap: var(--delorun-space-5);
+  min-width: 0;
+  padding: var(--delorun-space-5);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.specimenGlyphs {
+  flex: none;
+  font-size: var(--specimen-size);
+  font-weight: 500;
+  line-height: var(--specimen-line);
+}
+
+.specimenLine {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-s-14-font-size);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Density: rows drawn at each density's spacing. */
+.densityMock {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: var(--density-tile-height);
+  padding: 0 var(--delorun-space-5);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.densityMock span {
+  height: var(--density-line-height);
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 55%, transparent);
+}
+
+.densityMock span:nth-child(even) {
+  width: 70%;
+}
+
+.densityMock[data-density='compact'] { gap: var(--density-gap-compact); }
+.densityMock[data-density='comfortable'] { gap: var(--density-gap-comfortable); }
+.densityMock[data-density='spacious'] { gap: var(--density-gap-spacious); }
+
+@media (max-width: 560px) {
+  .densityMock {
+    height: var(--density-tile-height-narrow);
+    padding: 0 var(--delorun-space-4);
+  }
+}

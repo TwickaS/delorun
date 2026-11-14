@@ -117,7 +117,7 @@ export interface Config {
    * container's read-only root, as `deniedBy: 'environment'`, whose result
    * carries the environment's marker and no escalation hint (default: off).
    * Off, consumers ignore those signatures and classify every run against
-   * `denialSignatures` alone. This is Delo's C16 switch
+   * `denialSignatures` alone. This is Delorun's C16 switch
    * `container_denial_marker`, off in the parity composition.
    */
   containerDenialMarker?: boolean

@@ -18,9 +18,9 @@ The date in the filename is when the topic was **first proposed** (per git histo
 
 The active lifecycle tree is the working inventory: browse its lifecycle/class folders or search the repository. Do not add a centralized `INDEX.md`: it duplicates path metadata and makes unrelated note changes contend on one generated file. Implemented records with historical decision value but little future guidance move to the separate frozen [`archived/`](archived/AGENTS.md) tree described below.
 
-## Delo's notes
+## Delorun's notes
 
-Delo's decisions are Agent Notes in this tree, beside upstream's, under the same layout, classes and format; each is an English and Chinese pair with its consistency record. The supersession check of a new Delo note covers upstream's notes too: where Delo departs from an upstream decision, the Delo note states the departure and links the upstream note it supersedes. Archiving, deleting or cross-linking an upstream note edits an upstream file, so the change records it in the divergence ledger, and the next upstream merge reconciles that file by hand.
+Delorun's decisions are Agent Notes in this tree, beside upstream's, under the same layout, classes and format; each is an English and Chinese pair with its consistency record. The supersession check of a new Delorun note covers upstream's notes too: where Delorun departs from an upstream decision, the Delorun note states the departure and links the upstream note it supersedes. Archiving, deleting or cross-linking an upstream note edits an upstream file, so the change records it in the divergence ledger, and the next upstream merge reconciles that file by hand.
 
 ## Classification
 

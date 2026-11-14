@@ -1,0 +1,188 @@
+/*
+ * Snooze and idle chats in Settings: the box of a `@delorun/settings-controls` card, each setting a block, and the geometry
+ * of its chips and editor.
+ */
+.section {
+  --chip-height: 32px;
+  --day-height: 28px;
+  --button-size: 32px;
+  --amount-width: 72px;
+  --time-width: 120px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+}
+
+.count {
+  font: var(--dsw-font-xxs-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The presets as chips, worded as the snooze menu words them. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--delorun-space-3);
+  height: var(--chip-height);
+  padding: 0 var(--delorun-space-5) 0 var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chip > svg {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (hover: hover) {
+  .chip:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, var(--dsw-alias-bg-base));
+}
+
+.chip:focus-visible,
+.day:focus-visible,
+.iconButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.chipTime {
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip[data-add] {
+  border-style: dashed;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* The picked chip's editor, a quiet panel under the chips. */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5);
+  padding: var(--delorun-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-base);
+}
+
+.editorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--delorun-space-4);
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-4) var(--delorun-space-5);
+}
+
+.days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-3);
+}
+
+.day {
+  height: var(--day-height);
+  padding: 0 var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-12);
+  cursor: pointer;
+}
+
+.day[aria-pressed='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+}
+
+.day:disabled,
+.iconButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--button-size);
+  height: var(--button-size);
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .iconButton:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+/* The Input primitive's wrapper, sized to a number or a time. */
+.amount > span {
+  width: var(--amount-width);
+}
+
+.time > span {
+  width: var(--time-width);
+}
+
+.control,
+.settleDays {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+}
+
+.settleDays {
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (pointer: coarse) {
+  .amount input,
+  .time input {
+    font-size: var(--dsw-font-base-16-font-size);
+  }
+}

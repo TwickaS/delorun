@@ -1,0 +1,64 @@
+/*
+ * A Workspace's badge. Unchosen, T3 Code's project monogram: a tile rounded at 25%, the colour at 14% behind
+ * monospace letters in the colour. The named colours are in `badge-colors.css`. A chosen icon adds a shape (rounded,
+ * circle, square, hexagon) and a style (soft, solid, outline).
+ */
+.badge {
+  --badge-color: var(--delorun-badge-blue);
+  --badge-size: 16px;
+  --badge-emoji-font: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge-size);
+  height: var(--badge-size);
+  overflow: hidden;
+  border-radius: 25%;
+  background-color: color-mix(in srgb, var(--badge-color) 14%, transparent);
+  color: var(--badge-color);
+  font-family: var(--dsw-font-mono);
+  user-select: none;
+}
+
+.badge[data-shape='circle'] { border-radius: 50%; }
+.badge[data-shape='square'] { border-radius: 12%; }
+.badge[data-shape='hexagon'] {
+  border-radius: 0;
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+
+.badge[data-style='solid'] {
+  background-color: var(--badge-color);
+  color: var(--dsw-static-neutral-00);
+}
+
+.badge[data-style='outline'] {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 max(1px, calc(var(--badge-size) / 16)) var(--badge-color);
+}
+
+.badge[data-style='outline'][data-shape='hexagon'] {
+  background-color: color-mix(in srgb, var(--badge-color) 8%, transparent);
+  box-shadow: none;
+}
+
+.fill {
+  width: 100%;
+  height: 100%;
+}
+
+.emoji {
+  font-family: var(--badge-emoji-font);
+  font-size: calc(var(--badge-size) * 0.72);
+  line-height: 1;
+}
+
+.badge[data-color='green'] { --badge-color: var(--delorun-badge-green); }
+.badge[data-color='amber'] { --badge-color: var(--delorun-badge-amber); }
+.badge[data-color='violet'] { --badge-color: var(--delorun-badge-violet); }
+.badge[data-color='red'] { --badge-color: var(--delorun-badge-red); }
+.badge[data-color='pink'] { --badge-color: var(--delorun-badge-pink); }
+.badge[data-color='teal'] { --badge-color: var(--delorun-badge-teal); }
+.badge[data-color='slate'] { --badge-color: var(--delorun-badge-slate); }

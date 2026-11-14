@@ -1,0 +1,8 @@
+version: 1
+scenario: delorun-sandbox-protected-reads
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-sandbox-protected-reads
+  pin: true

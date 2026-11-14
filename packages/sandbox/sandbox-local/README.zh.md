@@ -79,17 +79,17 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
 
 `RUNNER_PROTECTION` 以每个 runner 的布尔值导出此表，供消费方报告所选 runner 不强制执行哪些规则。提供方还以 `ctx.sandbox.protectedHome` 报告规范化后的主目录，[文件系统围栏](../../fs/fs-sandbox/README.zh.md)读取它来拒绝其下的写入。
 
-消费方传入绝对路径：主目录、命令仍需要的其下条目（相对于主目录），以及命令不得访问的每个套接字；套接字的配置路径与真实路径不同时两者都要传入。对于位于 `/home/me/.delo`、其进程在两个通道套接字上监听、并使用 rootful Docker 引擎的主目录：
+消费方传入绝对路径：主目录、命令仍需要的其下条目（相对于主目录），以及命令不得访问的每个套接字；套接字的配置路径与真实路径不同时两者都要传入。对于位于 `/home/me/.delorun`、其进程在两个通道套接字上监听、并使用 rootful Docker 引擎的主目录：
 
 ```yaml
 - id: sandbox
   name: '@deepseek-ai/dsh-sandbox-local'
   config:
-    protectedHome: /home/me/.delo
+    protectedHome: /home/me/.delorun
     protectedHomeReadable: [runtimes, skills, dsh-runtimes]
     deniedSockets:
-      - /home/me/.delo/run/default/update.sock
-      - /home/me/.delo/run/default/supervisor.sock
+      - /home/me/.delorun/run/default/update.sock
+      - /home/me/.delorun/run/default/supervisor.sock
       - /var/run/docker.sock
       - /run/docker.sock
     deniedSocketDirectories:

@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/apps/relay/README.md
+/:
+  en: f45bac5ff4cde08c
+  zh: 71a8d98997042dbc
+/the-self-hosted-relay:
+  en: 97f7aff1c16fa0a2
+  zh: 0af05111db87cdae
+/the-self-hosted-relay/summary:
+  en: 8456d54573f958fc
+  zh: 20823468cd1caf83
+/the-self-hosted-relay/what-the-relay-can-and-cannot-see:
+  en: 25cd721a7126990e
+  zh: d772c0d93d52657b
+/the-self-hosted-relay/configuration:
+  en: 81de08b26b64fe28
+  zh: a5b4dc9f25549987
+/the-self-hosted-relay/tunnel-token:
+  en: ccfcec1d966e787d
+  zh: 6721173f5c5a2fee
+/the-self-hosted-relay/handshake:
+  en: 56c61ac464cf6877
+  zh: ccc382ff99f0b99b
+/the-self-hosted-relay/frames-and-flow-control:
+  en: e40b885e9f74df6f
+  zh: 09dc228f79096e3f
+/the-self-hosted-relay/sni-routing:
+  en: 866ef92633be87a0
+  zh: 9c7c09a31bfed575
+/the-self-hosted-relay/the-image:
+  en: 1e62a0e007dc32d5
+  zh: 712f1468577735ab
+/the-self-hosted-relay/the-log:
+  en: d74cfda1bcad9627
+  zh: 7fc653b62a416a3f
+/the-self-hosted-relay/specs:
+  en: 763d48842693a9e3
+  zh: d92805ec537aa5c0
+/the-self-hosted-relay/files:
+  en: 1cd7cb5103900785
+  zh: 40092f4235bc45ed
+/the-self-hosted-relay/not-in-this-app:
+  en: e982295d1ba78fd0
+  zh: 98ae41ce2e0f4436

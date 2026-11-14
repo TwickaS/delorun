@@ -1,0 +1,28 @@
+{
+  "schema": "delorun.plugin-interface/1",
+  "covered": [
+    { "kind": "service", "name": "delorunStudio", "side": "browser", "source": "delorun/packages/plugin-theme/src/client/index.ts" },
+    { "kind": "service", "name": "delorunOnboarding", "side": "browser", "source": "delorun/packages/plugin-onboarding/src/client/index.ts" },
+    { "kind": "service", "name": "delorunWorkspaces", "side": "host", "source": "delorun/packages/plugin-workspaces/src/service.ts" },
+    { "kind": "service", "name": "delorunChatStates", "side": "browser", "source": "delorun/packages/plugin-chat-states/src/client/index.ts" },
+    { "kind": "manifest-field", "name": "engines.delorun", "source": "packages/boot/app-boot/src/plugin-compatibility.ts" }
+  ],
+  "internal": [
+    { "kind": "service", "name": "delorunTurnGate", "side": "host", "source": "delorun/packages/bundle-local/src/update-gate.ts" },
+    { "kind": "service", "name": "delorunUpdateCheck", "side": "host", "source": "delorun/packages/bundle-local/src/update-check.ts" },
+    { "kind": "service", "name": "delorunPluginTrust", "side": "host", "source": "delorun/packages/plugin-install-check/src/index.ts" },
+    { "kind": "service", "name": "delorunTrust", "side": "host", "source": "delorun/packages/bundle-local/src/trust.ts" },
+    { "kind": "service", "name": "delorunNotice", "side": "browser", "source": "delorun/packages/bundle-local/src/client/index.ts" },
+    { "kind": "service", "name": "updateReport", "side": "host", "source": "delorun/packages/update/src/service.ts" },
+    { "kind": "service", "name": "homeAuth", "side": "host", "source": "delorun/packages/home-auth/src/service.ts" },
+    { "kind": "service", "name": "delorunSecrets", "side": "host", "source": "delorun/packages/logs/src/cordis.ts" },
+    { "kind": "service", "name": "reachFullAccessGrants", "side": "host", "source": "delorun/packages/home-auth/src/full-access-grants.ts" },
+    { "kind": "service", "name": "reach", "side": "host", "source": "delorun/packages/reach/src/service.ts" },
+    { "kind": "event", "name": "reach/state", "side": "host", "source": "delorun/packages/reach/src/service.ts" },
+    { "kind": "service", "name": "delorunSidebar", "side": "browser", "source": "delorun/packages/plugin-sidebar/src/client/index.ts" },
+    { "kind": "service", "name": "mcpReviews", "side": "host", "source": "delorun/packages/plugin-mcp-consent/src/review.ts" },
+    { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/index.ts" },
+    { "kind": "service", "name": "delorunCommandNetwork", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/command-network.ts" },
+    { "kind": "service", "name": "settingsPluginGroups", "side": "browser", "source": "delorun/packages/plugin-settings-layout/src/client/index.ts" }
+  ]
+}

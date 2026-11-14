@@ -1,4 +1,0 @@
-# The fixture bundle's one row, present only while the bundle is in the profile's bundle list.
-- insert:
-    - id: journey-extra-fixture
-      name: delo-journey-extra-fixture

@@ -1,0 +1,8 @@
+version: 1
+scenario: delorun-plugin-changes-pending
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-plugin-changes-pending
+  pin: true

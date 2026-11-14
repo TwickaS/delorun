@@ -1,8 +1,0 @@
-version: 1
-scenario: delo-approved-plugin-write-consent
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delo-approved-plugin-write-consent
-  pin: true

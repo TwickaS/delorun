@@ -1,0 +1,298 @@
+/* The Colours card's own geometry, declared once on its box; the box, the blocks
+   and the headings and tiles are `@delorun/settings-controls`'. */
+.section {
+  --palette-tile-min: 132px;
+  --slider-width: 280px;
+  --slider-value-width: 44px;
+  --notch-offset: 22px;
+  --notch-tick-offset: -6px;
+  --notch-tick-height: 5px;
+  --mock-min-line: 4px;
+  --swatch-target: 44px;
+  --swatch-dot: 32px;
+  --swatch-custom-core: 9px;
+  --picker-size: 40px;
+  --hex-width: 120px;
+}
+
+/* The tile grids. */
+.schemeTiles {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.paletteTiles {
+  grid-template-columns: repeat(auto-fill, minmax(var(--palette-tile-min), 1fr));
+}
+
+.section [data-muted='true'] {
+  opacity: 0.55;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-5);
+  width: min(100%, var(--slider-width));
+}
+
+.sliderValue {
+  min-width: var(--slider-value-width);
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+  text-align: right;
+}
+
+/* The notch button sits under the track at its value. */
+.sliderTrack {
+  position: relative;
+  flex: 1;
+  padding-bottom: var(--notch-offset);
+}
+
+.sliderTrack input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.notch {
+  position: absolute;
+  top: var(--notch-offset);
+  translate: -50% 0;
+  padding: 0 var(--delorun-space-2);
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: none;
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: var(--dsw-font-xxs-12-line-height);
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.notch::before {
+  content: '';
+  position: absolute;
+  top: var(--notch-tick-offset);
+  left: 50%;
+  width: 1px;
+  height: var(--notch-tick-height);
+  background: currentColor;
+}
+
+.notch[aria-pressed='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.notch:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+}
+
+/* The miniature studio, drawn from the scheme's own colours. */
+.mock {
+  display: flex;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--mock-page);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--mock-text) 14%, transparent);
+}
+
+.mockSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  width: 30%;
+  padding: 10% 5%;
+  box-sizing: border-box;
+  background: var(--mock-sidebar);
+}
+
+.mockRow,
+.mockRowActive {
+  height: 8%;
+  min-height: var(--mock-min-line);
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--mock-quiet) 45%, transparent);
+}
+
+.mockRowActive {
+  width: 80%;
+  background: color-mix(in srgb, var(--mock-text) 70%, transparent);
+}
+
+.mockRow:last-child {
+  width: 60%;
+}
+
+.mockMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  min-width: 0;
+  padding: 12% 9% 8%;
+}
+
+.mockLine,
+.mockLineShort {
+  height: 7%;
+  min-height: var(--mock-min-line);
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--mock-text) 55%, transparent);
+}
+
+.mockLineShort {
+  width: 62%;
+  background: color-mix(in srgb, var(--mock-quiet) 50%, transparent);
+}
+
+.mockComposer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 26%;
+  margin-top: auto;
+  padding: 0 4%;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--mock-layer);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--mock-text) 16%, transparent);
+}
+
+.mockSend {
+  height: 56%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--mock-accent);
+}
+
+/* System: the light studio with the dark one over its right half. */
+.mockPair {
+  position: relative;
+  display: block;
+}
+
+.mockDarkHalf {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 50%);
+}
+
+/* The accent: one row of round swatches, each a target of `--swatch-target`. */
+.accentPicker {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-5);
+}
+
+.accentName {
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.swatches {
+  display: flex;
+  gap: var(--delorun-space-2);
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--swatch-target);
+  height: var(--swatch-target);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.swatch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dot {
+  width: var(--swatch-dot);
+  height: var(--swatch-dot);
+  border-radius: 50%;
+  background-color: var(--chip-light);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dot {
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+}
+
+:global(body[data-ds-dark-theme]) .dot {
+  background-color: var(--chip-dark);
+}
+
+@media (hover: hover) {
+  .swatch:hover:not(:disabled) .dot {
+    transform: scale(1.06);
+  }
+}
+
+.swatch[aria-checked='true'] .dot {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1), 0 0 0 4px var(--dsw-alias-label-primary);
+}
+
+/* Custom: the chosen colour inside a colour-wheel ring. */
+.dot.customDot {
+  background: radial-gradient(circle, var(--custom) 0 var(--swatch-custom-core), transparent calc(var(--swatch-custom-core) + 0.5px)), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+}
+
+:global(body[data-ds-dark-theme]) .dot.customDot {
+  background: radial-gradient(circle, var(--custom) 0 var(--swatch-custom-core), transparent calc(var(--swatch-custom-core) + 0.5px)), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+}
+
+.customRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--delorun-space-4);
+}
+
+.picker {
+  width: var(--picker-size);
+  height: var(--picker-size);
+  padding: var(--delorun-space-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  cursor: pointer;
+}
+
+.hex {
+  width: var(--hex-width);
+  height: var(--picker-size);
+  padding: 0 var(--delorun-space-5);
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
+
+.hex[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* A phone draws each studio square, so a third of the width stays recognisable. */
+@media (max-width: 560px) {
+  .mock {
+    aspect-ratio: 1 / 1;
+  }
+}

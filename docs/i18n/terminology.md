@@ -216,33 +216,33 @@
 | wrapper | 包装层 | | | 软件层或 SDK 包装层 |
 | wrapper script | 包装脚本 | | | 可执行脚本包装层 |
 
-## Delo 术语（Delo 专有名词）
+## Delorun 术语（Delorun 专有名词）
 
-以下译法由 Delo 文档与界面文本使用，适用于 `delo/` 之下的文档与其他 Delo 制品；上游术语仍以上文各表为准。Delo 术语没有上游先例，译法由 Delo 维护者确定。
+以下译法由 Delorun 文档与界面文本使用，适用于 `delorun/` 之下的文档与其他 Delorun 制品；上游术语仍以上文各表为准。Delorun 术语没有上游先例，译法由 Delorun 维护者确定。
 
 | English | 中文 | 首次出现 | 不要译作 | 备注 |
 |---|---|---|---|---|
 | the person | 本人 | 本人（the person） | user、用户 | 维护者文档用 "the person"，界面文本用「你」；"user" 是上游模型对话中的用户角色 |
 | augmentation | 增强功能 | 增强功能（augmentation） | 扩展功能 | 超出 stock 工作流、由本人选择开启的附加功能 |
-| studio additions | studio 附加功能 | | | Delo 的主题、侧边栏、对话状态等附加功能，默认开启 |
+| studio additions | studio 附加功能 | | | Delorun 的主题、侧边栏、对话状态等附加功能，默认开启 |
 | main chat | 主对话 | 主对话（main chat） | 主 chat 区域 | 所有工作区之外的一个 chat，本人在其中询问、引导其他 chat，并在某个工作区开始工作 |
 | owner note | 所有者备注 | 所有者备注（owner note） | | 主对话应本人要求写在工作区 `AGENTS.md` 末尾的带日期备注 |
 | guard | 守卫 | 守卫（guard） | | 主对话在调用非只读工具前向本人询问的机制 |
 | Your chats | 你的对话 | | | 界面标签：主对话旁列出等待本人或正在工作的 chat 的标签页 |
 | preset | preset | | | 保留英文；agent preset，chat 运行所用的模式；上游部分中文文档写作「预设」 |
 | stock | stock | | 原版 | 保留英文；指上游按原样发布的 DeepSeek Harness |
-| stock look | stock 外观 | | | 关闭 studio 附加功能后的 Delo 外观 |
-| studio | studio | | | 保留英文；Delo 的网页界面 |
+| stock look | stock 外观 | | | 关闭 studio 附加功能后的 Delorun 外观 |
+| studio | studio | | | 保留英文；Delorun 的网页界面 |
 | home | home | | 主目录、cell、instance、VM、sandbox、hub | 保留英文；唯一保存本人 studio、harness 配置、机器列表与 chat 历史的位置 |
 | chat | chat | | | 保留英文；绑定到单台机器的对话，对应上游的 session |
 | machine | 机器 | 机器（machine） | | 运行 chat 的计算机 |
-| target | 目标设备 | 目标设备（target） | 目标 | 不运行 Delo、由 agent 通过工具访问的设备 |
+| target | 目标设备 | 目标设备（target） | 目标 | 不运行 Delorun、由 agent 通过工具访问的设备 |
 | native | 原生 | 原生（native） | | 运行时的一种形态 |
 | layer | 层 | 层（layer） | 层级 | 组合包、profile patch、home patch 或 overlay 之一 |
 | tier | 层级 | 层级（tier） | | 具有单一职责的一类文档 |
 | runtime closure | 运行时发行包 | 运行时发行包（runtime closure） | 运行时闭包 | 一次已签名的 `delorun` 发布 |
 | runtime store | 运行时仓库 | 运行时仓库（runtime store） | | 运行时发行包的安装集合 |
-| Docker supervisor | Docker 监管器 | Docker 监管器（Docker supervisor） | | 唯一调用 Docker 的 Delo 组件 |
+| Docker supervisor | Docker 监管器 | Docker 监管器（Docker supervisor） | | 唯一调用 Docker 的 Delorun 组件 |
 | home process | home 进程 | home 进程（home process） | | 持有 CLI profile 锁并运行 Host 的后台进程 |
 | update channel | 更新通道 | | | `delorun update` 与 studio「Update now」使用的套接字 |
 | handover | 交接 | 交接（handover） | | home 进程把 profile 移交给新运行时上的后继进程 |
@@ -254,14 +254,14 @@
 | reach | 远程访问 | 远程访问（reach） | | 从另一台设备或网络打开 studio |
 | reach option | 远程访问方式 | | | 远程访问的一种途径 |
 | Tailscale reach | Tailscale 远程访问 | | | 通过 tailnet 的远程访问 |
-| Delo relay | Delo 中继 | Delo 中继（Delo relay） | 隧道 | Delo Run 的中继 |
+| Delorun relay | Delorun 中继 | Delorun 中继（Delorun relay） | 隧道 | Delo Run 的中继 |
 | relay control | 中继控制面 | | | 中继的 Cloudflare Workers 部分 |
 | relay data plane | 中继数据面 | | | 转发加密字节的无状态直通服务器 |
 | self-hosted relay | 自托管中继 | | | 由本人运行的同一中继数据面 |
 | studio address | studio 地址 | | | 能够访问 home 的 studio 的地址 |
 | gate | 门控 | 门控（gate） | 网关、闸门 | 附加监听器在任何路由、upgrade 处理器或回退之前裁决每个请求的函数 |
 | pre-login | 登录前 | | 预登录 | 远程访问监听器在登录之前即可处理的请求、路由或允许列表 |
-| end-to-end encrypted reach | 端到端加密远程访问 | 端到端加密远程访问（end-to-end encrypted reach） | 零信任（指 Delo 中继） | TLS 在本人的 home 上终止的远程访问 |
+| end-to-end encrypted reach | 端到端加密远程访问 | 端到端加密远程访问（end-to-end encrypted reach） | 零信任（指 Delorun 中继） | TLS 在本人的 home 上终止的远程访问 |
 | certificate alert | 证书告警 | | | 公开证书日志显示未申请证书时的阻断性警告 |
 | owner code | 所有者验证码 | 所有者验证码（owner code） | | home 为第一台设备认领而打印的一次性代码 |
 | trusted device | 受信任设备 | 受信任设备（trusted device） | | 已由 home 批准、绑定到某个 studio 地址的设备 |
@@ -274,7 +274,7 @@
 | undo | 撤销 | | | 恢复到最近一次之前的 profile 版本 |
 | safe mode | 安全模式 | | | 启动时保留附加内容但不加载 |
 | eject | eject | | | 保留英文；将插件源码复制为可编辑替代 |
-| source mode | 源码模式 | | | 从 git 检出版本运行 Delo |
+| source mode | 源码模式 | | | 从 git 检出版本运行 Delorun |
 | update report | 更新报告 | | | 更新应用前显示的变更与破坏性影响 |
 | trash | 回收站 | | | 已删除的 chat 与工作区的等待区 |
 | export file | 导出文件 | | | 工作区、chat 与定制内容的导出 |
@@ -286,31 +286,31 @@
 | activity history | 活动历史 | | | 基于会话日志的只读视图 |
 | system-stats panel | 系统状态面板 | | | 每台机器的实时资源占用 |
 | catalogue | 插件索引 | | 目录 | Discover 列出的公开插件索引；「目录」保留给 directory |
-| compatibility badge | 兼容徽章 | | | 「tested with Delo X」 |
+| compatibility badge | 兼容徽章 | | | 「tested with Delorun X」 |
 | revocation list | 撤销列表 | | | 已签名的被停用插件版本列表 |
 | listed findings | 列出的发现 | | 审计结果 | 目录条目列出的、作者或评审者的主张 |
 | plugin security review | 插件安全审查 | | | 安装前可选运行的 agent 预设 |
 | waitlist | 候补名单 | | | delorun.com 上的报名 |
 | documentation website | 文档网站 | | | `docs.delorun.com` |
-| divergence ledger | 差异台账 | | | `delo/upstream-patches.json` |
+| divergence ledger | 差异台账 | | | `delorun/upstream-patches.json` |
 | divergence record | 差异记录 | | | 对某个上游插件的重大修改及合并方式 |
 | divergence budget | 差异预算 | | | 一次发布可新增的台账条目与差异块上限 |
 | parity checklist | 对等清单 | | | 每项 stock 功能及其证据 |
-| parity composition | 对等组合 | | | 关闭 studio 组合包与 Delo 模型可见修改的运行时 |
+| parity composition | 对等组合 | | | 关闭 studio 组合包与 Delorun 模型可见修改的运行时 |
 | parity replay | 对等回放 | | | 上游场景在对等组合上的原样运行 |
-| extension-point-first rule | 扩展点优先规则 | | | Delo 行为位于 `delo/` 之下，上游的修改只增加扩展点 |
+| extension-point-first rule | 扩展点优先规则 | | | Delorun 行为位于 `delorun/` 之下，上游的修改只增加扩展点 |
 | rehearsal merge | 预演合并 | | | 发布前对上游最新标签的试验性合并 |
 | work package | 工作包 | | | 具有拥有路径与验收证据的并行工作单元 |
 | denial test | 拒绝测试 | | | 证明禁止操作会失败的测试 |
-| check runner | 检查运行器 | 检查运行器（check runner） | | Delo 运行改动所涉及检查的命令（`pnpm check`） |
-| changelog fragment | changelog fragment | | | 保留英文；位于 `delo/changelog/unreleased/` 下，每项可察觉改动一个文件 |
+| check runner | 检查运行器 | 检查运行器（check runner） | | Delorun 运行改动所涉及检查的命令（`pnpm check`） |
+| changelog fragment | changelog fragment | | | 保留英文；位于 `delorun/changelog/unreleased/` 下，每项可察觉改动一个文件 |
 | brief | brief | | | 保留英文；由维护者创建、加 `brief` 标签并锁定的 agent 工作 issue |
 | SBOM | SBOM | SBOM（软件物料清单） | | 保留英文；发布中组件的机器可读清单 |
-| upstream standard | 上游标准 | | | 上游的 AGENTS、文档标准与门禁规则，Delo 就地改写后适用于 Delo |
-| architecture notes | 架构说明 | | | `delo/docs/architecture/` |
+| upstream standard | 上游标准 | | | 上游的 AGENTS、文档标准与门禁规则，Delorun 就地改写后适用于 Delorun |
+| architecture notes | 架构说明 | | | `delorun/docs/architecture/` |
 | consistency record | 一致性记录 | | | `<page>.i18n.yaml`，按小节保存两侧哈希 |
-| zero-trust | 零信任 | | | 只在「应避免的用词」中出现，不用于描述 Delo 中继 |
-| nation of geniuses | 一个天才之国 | | | 「Delo 的目标」一句中的说法，以「」标出 |
+| zero-trust | 零信任 | | | 只在「应避免的用词」中出现，不用于描述 Delorun 中继 |
+| nation of geniuses | 一个天才之国 | | | 「Delorun 的目标」一句中的说法，以「」标出 |
 | start token | 启动令牌 | 启动令牌（start token） |  | home 进程每次启动写入的随机令牌 |
 | capability report | 能力报告 | 能力报告（capability report） |  | `report()` 返回的限制状态陈述 |
 | read exemption | 读取豁免 | 读取豁免（read exemption） |  | 受限命令可读取的目录 |

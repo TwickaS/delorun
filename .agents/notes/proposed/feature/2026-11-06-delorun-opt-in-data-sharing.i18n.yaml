@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delorun-opt-in-data-sharing.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-11-06-delorun-opt-in-data-sharing.md
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own:
+  en: 7732fc5882c4346d
+  zh: 79ec1c27d9cd4f07
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/problem:
+  en: 81962a839dac450a
+  zh: 744c944ab2cd0ee9
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/proposal:
+  en: e99d02f09b176bf5
+  zh: 0f71ba70a1950611
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/related:
+  en: 37b3706e7a0d3e8a
+  zh: e925d0488afeb6d5
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/alternatives-considered:
+  en: a07c4a39e5b050c2
+  zh: ebeb7f57d50faa2e
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/acceptance-criteria:
+  en: ffeffb27eec23c25
+  zh: 1261b701ab47f30c
+/agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/risks:
+  en: 58ddb70df4226164
+  zh: dd1f650a770929bf
