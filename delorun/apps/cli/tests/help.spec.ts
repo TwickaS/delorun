@@ -37,7 +37,7 @@ describe('delorun <command> --help', () => {
     expect(long.stdout).toContain('-h, --help  ')
     expect(long.stdout).toMatch(/\nExit codes: /)
     expect(long.stdout.endsWith('\n') && !long.stdout.endsWith('\n\n')).toBe(true)
-    expect(long.stdout).not.toMatch(/\bDelorun\b|\bC\d{1,2}\b/)
+    expect(long.stdout).not.toMatch(/\bDelo\b|\bC\d{1,2}\b/)
     const short = await run([name, '-h'])
     const named = await run(['help', name])
     expect(short.stdout).toBe(long.stdout)

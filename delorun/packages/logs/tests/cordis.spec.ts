@@ -44,12 +44,12 @@ describe('attachCordisLogs', () => {
     attachCordisLogs(ctx, log)
     ctx.logger('delorun-home').info('mine')
     ctx.logger('@delorun/home-auth').info('mine too')
-    ctx.logger('delorun').info('not a Delorun name')
+    ctx.logger('delorunner').info('not a Delorun name')
     ctx.logger('agent-loop').warn('upstream quoting a chat line')
     expect(recordsOf(location.file).map(record => [record.logger, record.source])).toEqual([
       ['delorun-home', 'delorun'],
       ['@delorun/home-auth', 'delorun'],
-      ['delorun', 'captured'],
+      ['delorunner', 'captured'],
       ['agent-loop', 'captured'],
     ])
     expect(isDelorunLogger('delorun')).toBe(true)

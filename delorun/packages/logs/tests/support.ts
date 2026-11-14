@@ -175,7 +175,7 @@ export interface PatternCanaries {
  * owner-code form reads as a code in either case, so a random body sometimes redacted as an owner code instead of
  * a private key. The lines this seed derives hold no run of 16 such characters.
  */
-const PEM_BODY_SEED = 'delorun-logs-pem-body-484'
+const PEM_BODY_SEED = 'delorun-logs-pem-body-645'
 
 /**
  * One 64-character line of the PEM body, derived from {@link PEM_BODY_SEED}.

@@ -170,7 +170,12 @@ export function formatReport(report: RenameReport, dryRun: boolean): string {
   return lines.join('\n')
 }
 
-/** English Markdown pages with a consistency record that the working tree changed (content or rename). */
+/**
+ * English Markdown pages with a consistency record that the working tree changed (content or rename).
+ *
+ * @param root Repository root whose working tree is inspected.
+ * @returns Repo-relative English page paths, without duplicates.
+ */
 export function changedPairs(root: string): string[] {
   const status = git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=no']).split('\0')
   const pages: string[] = []
