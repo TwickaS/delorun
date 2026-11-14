@@ -114,7 +114,8 @@ export const REACH_ALLOWED_ACTIONS = {
   'userQuestions/answer': 'answer a question the agent asked',
   'userQuestions/attachWait': 'hold a question open while answering it',
   'subagents/prompt': 'send a message to a chat\'s subagent',
-  'subagents/interruptByParent': 'stop a subagent\'s run',
+  'subagents/interruptByUser': 'stop a subagent\'s run',
+  'agentTeams/setEnabled': 'switch Team mode on or off for a chat, which changes what the chat\'s agent can delegate and no permission of any run',
   'agentPresets/list': 'read the agent presets a chat can start with',
   'agentPresets/read': 'read one agent preset',
   'agentPresets/select': 'choose which of the presets you defined at your computer a chat that has not started runs with, which decides its plugins and tools; choosing one grants no access by itself, so the workspace\'s full-access consent and every approval prompt still decide what that chat may do',
@@ -124,8 +125,9 @@ export const REACH_ALLOWED_ACTIONS = {
   'workspaceFiles/readBytes': 'read a file\'s bytes inside a chat\'s workspace within the service\'s window and size caps; an absolute path or one that leaves the workspace is refused',
   'workspaceFiles/stat': 'read a file\'s identity, version and size inside a chat\'s workspace; an absolute path or one that leaves the workspace is refused',
   'workspaceFiles/changes': 'read the Changes view, the working tree of a chat\'s workspace, by the same workspace-file rule',
-  'officeToPdf/render': 'render a document inside a chat\'s workspace as a PDF preview, which reads it through the same workspace-file rule',
-  'officeToPdf/generation': 'read which rendering configuration the PDF previews are cached against',
+  'officeKit/render': 'render a document inside a chat\'s workspace as a PDF preview, which reads it through the same workspace-file rule',
+  'officeKit/generation': 'read which rendering configuration the PDF previews are cached against',
+  'workspaceFiles/search': 'search the file names and paths of a chat\'s workspace, which the service confines to that workspace and reports relative to it',
   'fileReferences/list': 'search the file names of a chat\'s workspace for the composer\'s mention list',
   'pluginManager/history': 'read the profile changes that can be undone; undoing or restoring one needs an unlock',
   'pluginManager/inspect': 'read what a plugin package contains before it is installed; installing it needs an unlock',
@@ -138,6 +140,8 @@ export const REACH_ALLOWED_ACTIONS = {
   'pluginManager/waitForInstall': 'wait on an install that was started',
   'pluginInventory/list': 'read the plugins and presets the Host composed',
   'pluginRegistryProbe/fastest': 'measure which configured plugin registry answers fastest',
+  'web/listProviders': 'read the web search and fetch providers; they hold no credentials the device sees',
+  'event:web/providers-changed': 'follow a change to the web search and fetch providers',
   'llm/listProviders': 'read the model providers; their credentials are never sent',
   'llm/listConfigurableProviders': 'read the model providers; their credentials are never sent',
   'llm/discoverModels': 'refresh a provider\'s model list, which the Host asks the provider with the stored credentials without sending them to the device',
@@ -208,12 +212,13 @@ export const REACH_DENIED_ACTIONS = {
   'credentials/unset': CREDENTIALS,
   'event:credentials/record-updated': CREDENTIALS,
   'event:credentials/reference-updated': CREDENTIALS,
-  'account/ackBonusNotified': ACCOUNT,
+  'account/getNotificationContent': ACCOUNT,
+  'account/getNotifications': ACCOUNT,
+  'account/reportNotificationEvent': ACCOUNT,
   'account/cancelSignIn': ACCOUNT,
   'account/getBalance': ACCOUNT,
   'account/getProfile': ACCOUNT,
   'account/getState': ACCOUNT,
-  'account/getUnnotifiedBonuses': ACCOUNT,
   'account/hasRunningAccountTasks': ACCOUNT,
   'account/signOut': ACCOUNT,
   'account/startSignIn': ACCOUNT,
@@ -246,6 +251,7 @@ const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_A
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
 const SETTINGS_WRITE = 'change a setting of the home'
+const MCP_MANAGEMENT = 'manage the external tool servers, which start the commands the home configured for them'
 const TERMINAL = 'use a terminal, a shell on the home\'s computer outside the sandbox'
 const DIRECTORY_PICKER = 'browse and create folders on the home\'s computer'
 const DYNAMIC_PLUGIN = 'run model-authored plugin code in the Host'
@@ -279,6 +285,10 @@ export const REACH_ELEVATED_ACTIONS = {
   'terminal/rename': TERMINAL,
   'terminal/retain': TERMINAL,
   'terminal/shells': TERMINAL,
+  'terminal/watch': TERMINAL,
+  'mcpManager/probe': MCP_MANAGEMENT,
+  'mcpManager/restart': MCP_MANAGEMENT,
+  'mcpManager/watch': MCP_MANAGEMENT,
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
@@ -352,7 +362,7 @@ const ALLOW: RemoteAccessDecision = { kind: 'allow' }
  * path of the chat's workspace and outside the Delo home.
  */
 const WORKSPACE_PATH_ACTIONS: ReadonlySet<string> = new Set([
-  'workspaceFiles/list', 'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render',
+  'workspaceFiles/list', 'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeKit/render',
   'workspaceFiles/changes',
 ])
 

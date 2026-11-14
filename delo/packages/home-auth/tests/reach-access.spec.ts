@@ -181,7 +181,7 @@ describe('a device\'s workspace-file call', () => {
     const condition = conditionOf()
     // Pins the real-path check: the service follows a link in a parent directory, so `linked-dir/secret.txt` would
     // read a file outside the workspace through a link the chat's agent can create.
-    for (const action of ['workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render', 'workspaceFiles/list', 'workspaceFiles/changes'] as const) {
+    for (const action of ['workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeKit/render', 'workspaceFiles/list', 'workspaceFiles/changes'] as const) {
       expect(condition({ action, resource: chat, args: { path: 'linked-dir/secret.txt' } })).toEqual(refusal(action))
       expect(condition({ action, resource: chat, args: { path: 'linked-file' } })).toEqual(refusal(action))
     }
@@ -555,7 +555,7 @@ const NEVER = [/^credentials\//, /^event:credentials\//, /^account\//, /^event:d
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
-  /^terminal\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
+  /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 
 /**

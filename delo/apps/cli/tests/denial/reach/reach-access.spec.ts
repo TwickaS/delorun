@@ -286,8 +286,8 @@ describe('a reach device through the Gateway', () => {
       .toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
     expect(await call('workspaceFiles/readBytes', { workspaceFileScopeId: created.sessionId, path: 'linked/home/secrets/home-auth/devices.json', options: {} }))
       .toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
-    expect(await call('officeToPdf/render', { workspaceFileScopeId: created.sessionId, path: 'linked/home/secrets/home-auth/devices.json', priority: 'foreground' }))
-      .toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { reason: 'loopback-required: officeToPdf/render with a path outside the chat\'s workspace' } } })
+    expect(await call('officeKit/render', { workspaceFileScopeId: created.sessionId, path: 'linked/home/secrets/home-auth/devices.json', priority: 'foreground' }))
+      .toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { reason: 'loopback-required: officeKit/render with a path outside the chat\'s workspace' } } })
   })
 
   it('needs an unlock for a settings write in every settings namespace, and never opens the settings document', async () => {

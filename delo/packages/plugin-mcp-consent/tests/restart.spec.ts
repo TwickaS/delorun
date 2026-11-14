@@ -34,7 +34,7 @@ const { mockConnect, MockClient, clients } = vi.hoisted(() => {
       await mockConnect.call(this)
     }
     listResources = async () => ({ resources: [] })
-    close = vi.fn(async () => {})
+    close = vi.fn(async () => { await this.transport?.close() })
     listTools = vi.fn(async () => ({ tools: [{ name: 'remote', description: 'A remote tool', inputSchema: { type: 'object' } }], nextCursor: undefined }))
     getServerCapabilities = () => ({ tools: {} })
     getInstructions(): string | undefined { return undefined }

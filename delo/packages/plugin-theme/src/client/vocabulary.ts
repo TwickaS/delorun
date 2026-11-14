@@ -17,7 +17,6 @@ export const VOCABULARY: Readonly<Record<string, { readonly en: Readonly<Record<
       "file.sessionUnavailable": "Chat unavailable; files cannot be uploaded",
       "placeholder.default": "Message or run a task, / commands, @ files or chats",
       "placeholder.hero": "Describe what you want to build, / commands, @ files or chats",
-      "placeholder.parentOffline": "Parent chat offline; sending is unavailable but you can still stop the run",
       "placeholder.unavailable": "Chat unavailable",
       "session.hierarchy": "Chat hierarchy",
       "tool.title.searchSessions": "Search chats",
@@ -29,7 +28,6 @@ export const VOCABULARY: Readonly<Record<string, { readonly en: Readonly<Record<
       "detail.trace.descendants": "后代对话",
       "error.sessionInUse": "当前对话已被占用，可能是其他正在运行的 DSH 导致的（如其他 dsh web、桌面端），请退出其他正在运行的 DSH 后重试。",
       "file.sessionUnavailable": "对话不可用，无法上传文件",
-      "placeholder.parentOffline": "父对话已离线，无法继续发送；仍可停止当前运行",
       "placeholder.unavailable": "对话不可用",
       "session.hierarchy": "对话层级",
       "session.moreViews": "更多对话视图",
@@ -183,6 +181,7 @@ export const VOCABULARY: Readonly<Record<string, { readonly en: Readonly<Record<
       "stats.dialog.title": "Chat statistics"
     },
     zh: {
+      "chat.historyStart": "已到对话开头",
       "message.context.relay.from": "来自对话 {session}",
       "message.contextRecall": "跨对话召回",
       "message.referenceSummary": "引用对话 · {labels}",
@@ -191,12 +190,10 @@ export const VOCABULARY: Readonly<Record<string, { readonly en: Readonly<Record<
   },
   subagent: {
     en: {
-      "readonly.body": "The parent chat is offline; reopen it to continue sending messages.",
       "readonly.unknown.body": "Read the child chat to determine whether it can be continued.",
       "tree.aria": "Subagent chats"
     },
     zh: {
-      "readonly.body": "父对话当前不在线，重新打开父对话后即可继续发送消息。",
       "readonly.unknown.body": "读取子对话后才能确定是否可继续。",
       "tree.aria": "子智能体对话"
     }
