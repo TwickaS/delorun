@@ -28,6 +28,8 @@ export interface PostStep {
   readonly command: readonly string[]
   /** Whether a failure stops the run; a failed optional step is reported and the run goes on. */
   readonly required: boolean
+  /** Exit statuses besides 0 that mean success; the ledger writer exits 3 after it re-records a security digest. */
+  readonly acceptedStatuses?: readonly number[]
 }
 
 /**
@@ -43,7 +45,7 @@ export const POST_STEPS: readonly PostStep[] = [
   { description: 'dependency catalogue', command: ['pnpm', 'run', 'gen-dependency-catalog'], required: false },
   { description: 'persistence catalogue', command: ['pnpm', 'run', 'gen-persistence-catalog'], required: false },
   { description: 'third-party notices', command: ['pnpm', 'run', 'gen-third-party-notices'], required: false },
-  { description: 'divergence ledger paths and security digests', command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/ledger-record.ts'], required: true },
+  { description: 'divergence ledger paths and security digests', command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/ledger-record.ts'], required: true, acceptedStatuses: [3] },
   { description: 'bilingual-pair consistency records', command: ['node_modules/.bin/tsx', 'scripts/verify-translation-pairing.ts', '--write', PAIRS_PLACEHOLDER], required: false },
 ]
 
@@ -183,10 +185,11 @@ export function changedPairs(root: string): string[] {
  * Run (or, in a dry run, list) the regeneration steps with `nice -n 19`.
  * @param root - the repository root.
  * @param dryRun - print the commands only.
+ * @param steps - the steps to run.
  * @returns 0, or 1 when a required step failed.
  */
-export function runPostSteps(root: string, dryRun: boolean): number {
-  for (const step of POST_STEPS) {
+export function runPostSteps(root: string, dryRun: boolean, steps: readonly PostStep[] = POST_STEPS): number {
+  for (const step of steps) {
     const line = step.command.join(' ')
     if (dryRun) {
       console.log(`  would run: ${line}  (${step.description})`)
@@ -197,7 +200,8 @@ export function runPostSteps(root: string, dryRun: boolean): number {
     let failed = 0
     console.log(`  running: ${line}${perPage ? ` (${String(commands.length)} pages)` : ''}`)
     for (const command of commands) {
-      if (spawnSync('nice', ['-n', '19', ...command], { cwd: root, stdio: 'inherit' }).status !== 0) failed += 1
+      const status = spawnSync('nice', ['-n', '19', ...command], { cwd: root, stdio: 'inherit' }).status
+      if (status !== 0 && !(status !== null && (step.acceptedStatuses ?? []).includes(status))) failed += 1
     }
     if (failed === 0) continue
     console.error(`rename: ${step.description} failed for ${String(failed)} of ${String(commands.length)} runs`)

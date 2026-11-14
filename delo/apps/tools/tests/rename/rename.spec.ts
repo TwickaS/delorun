@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFil
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { formatReport, main, POST_STEPS, runPostSteps, runRename } from '../../src/rename/rename.ts'
+import { formatReport, main, POST_STEPS, type PostStep, runPostSteps, runRename } from '../../src/rename/rename.ts'
 
 function repo(files: Record<string, string | Buffer>): string {
   const root = mkdtempSync(join(tmpdir(), 'rename-spec-'))
@@ -95,5 +95,17 @@ describe('main', () => {
     expect(log).toHaveBeenCalledTimes(POST_STEPS.length)
     expect(log.mock.calls[0]?.[0]).toContain('pnpm install --lockfile-only')
     vi.restoreAllMocks()
+  })
+
+  it('accepts a listed non-zero exit status and fails a required step on any other', () => {
+    const exits = (status: number, acceptedStatuses?: readonly number[]): PostStep => ({ description: 'stub', command: ['sh', '-c', `exit ${String(status)}`], required: true, acceptedStatuses })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    expect(runPostSteps('/tmp', false, [exits(3, [3])])).toBe(0)
+    expect(runPostSteps('/tmp', false, [exits(3)])).toBe(1)
+    expect(runPostSteps('/tmp', false, [exits(2, [3])])).toBe(1)
+    expect(POST_STEPS.find(step => step.command.some(word => word.endsWith('ledger-record.ts')))?.acceptedStatuses).toEqual([3])
+    error.mockRestore()
+    log.mockRestore()
   })
 })
