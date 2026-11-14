@@ -41,8 +41,17 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', ELEVATION_PATHS.pending],
   ['exact', ELEVATION_PATHS.approve],
   ['exact', ELEVATION_PATHS.revoke],
+  ['exact', PIN_PATHS.state],
+  ['exact', PIN_PATHS.unlock],
+  ['exact', PIN_PATHS.touch],
+  ['exact', PIN_PATHS.lock],
+  ['exact', PIN_PATHS.mode],
+  ['exact', PIN_PATHS.set],
+  ['exact', PIN_PATHS.off],
+  ['exact', PIN_PATHS.resume],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
+import { PIN_PATHS } from '../src/pin-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 
