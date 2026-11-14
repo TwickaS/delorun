@@ -7,7 +7,7 @@ packages/shell/ @Delo-Run/maintainers
 packages/interaction/ @Delo-Run/maintainers
 packages/credentials/ @Delo-Run/maintainers
 packages/boot/plugin-manager/ @Delo-Run/maintainers
-delo/upstream-patches.json @Delo-Run/maintainers
+delorun/upstream-patches.json @Delo-Run/maintainers
 .github/ @Delo-Run/maintainers
 scripts/ @Delo-Run/maintainers
 SECURITY.md @Delo-Run/maintainers

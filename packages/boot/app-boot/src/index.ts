@@ -23,8 +23,8 @@ import { createLaunchEnvironmentSnapshot, type LaunchEnvironmentSnapshot } from 
 export { readBundlePatches, readProfilePatches, resolveTelemetryPatch, type ProfileContext, type ProfilePnpmInvocation } from './profile-context.ts'
 export { sanitizeProfile } from './profile-sanitize.ts'
 export {
-  DELO_VERSION_ENV, evaluateDeloRequirement, getDeloRuntimeVersion, getDshRuntimeVersion,
-  evaluatePluginCompatibility, pluginCompatibilityWarning, type DeloRequirement, type PluginCompatibility,
+  DELORUN_VERSION_ENV, evaluateDelorunRequirement, getDelorunRuntimeVersion, getDshRuntimeVersion,
+  evaluatePluginCompatibility, pluginCompatibilityWarning, type DelorunRequirement, type PluginCompatibility,
 } from './plugin-compatibility.ts'
 export {
   PROFILE_COMPATIBILITY_FILENAME, readProfileCompatibility, readProfileVersionExemptions,
@@ -163,7 +163,7 @@ const BOOTSTRAP_NAMES = new Set([
 ])
 
 /** Name prefixes no discovered file may set. */
-const BOOTSTRAP_PREFIXES = ['DSH_', 'XDG_', 'DYLD_', 'LD_', 'BASH_FUNC_', 'DELO_LAUNCHER_']
+const BOOTSTRAP_PREFIXES = ['DSH_', 'XDG_', 'DYLD_', 'LD_', 'BASH_FUNC_', 'DELORUN_LAUNCHER_']
 
 /** Proxy names the Harness-home `.env` may set in any letter case: proxy clients read both spellings. */
 const HOME_LAYER_PROXY_NAMES = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'])

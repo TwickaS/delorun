@@ -11,7 +11,7 @@ describe('release-status policy', () => {
       'A file removed before the launcher starts stops the run until the launcher reads it.',
     ].join('\n')
 
-    expect(findReleaseTenseViolations('delo/docs/guide/install.md', source)).toEqual([])
+    expect(findReleaseTenseViolations('delorun/docs/guide/install.md', source)).toEqual([])
   })
 
   it('names the file, line and phrase of each release-status phrase, whatever its case', () => {
@@ -24,7 +24,7 @@ describe('release-status policy', () => {
       'Wait until the launch, or until release; stay off before 0.1.0 and before the public release.',
     ].join('\n')
 
-    expect(findReleaseTenseViolations('delo/docs/guide/logs.md', source).map(({ line, phrase }) => [line, phrase])).toEqual([
+    expect(findReleaseTenseViolations('delorun/docs/guide/logs.md', source).map(({ line, phrase }) => [line, phrase])).toEqual([
       [2, 'No Release Yet'],
       [2, 'First Release'],
       [3, 'not available yet'],
@@ -39,19 +39,19 @@ describe('release-status policy', () => {
   })
 
   it.each([
-    'delo/docs/guide/roadmap.md',
-    'delo/docs/plans/v5-rc-final-plan.md',
-    'delo/changelog/0.1.0/entry.md',
-    'delo/docs/guide/install.zh.md',
+    'delorun/docs/guide/roadmap.md',
+    'delorun/docs/plans/v5-rc-final-plan.md',
+    'delorun/changelog/0.1.0/entry.md',
+    'delorun/docs/guide/install.zh.md',
     'docs/guide/install.md',
-    'delo/docs/guide/meta.json',
+    'delorun/docs/guide/meta.json',
   ])('skips %s', (file) => {
     expect(isReleaseTenseFile(file)).toBe(false)
     expect(findReleaseTenseViolations(file, 'This has no release yet and is coming soon.')).toEqual([])
   })
 
-  it('checks English Markdown anywhere else under delo', () => {
-    expect(isReleaseTenseFile('delo/docs/contracts/c02-release-manifest.md')).toBe(true)
-    expect(isReleaseTenseFile('delo/packages/bundle-local/README.md')).toBe(true)
+  it('checks English Markdown anywhere else under delorun', () => {
+    expect(isReleaseTenseFile('delorun/docs/contracts/c02-release-manifest.md')).toBe(true)
+    expect(isReleaseTenseFile('delorun/packages/bundle-local/README.md')).toBe(true)
   })
 })

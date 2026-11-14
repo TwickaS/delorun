@@ -1,6 +1,6 @@
 /**
  * The active connection's host id and the host-qualified persisted-key algebra
- * of contract C10 (`delo/docs/contracts/c10-host-qualified-keys.md`).
+ * of contract C10 (`delorun/docs/contracts/c10-host-qualified-keys.md`).
  *
  * A host id identifies one studio connection to a home's Host process. The
  * studio creates it when the person adds a connection — with upstream's

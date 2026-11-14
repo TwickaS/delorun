@@ -41,5 +41,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Relevant output of `delorun logs`. Delo redacts its logs, but read them before you post them and remove anything private.
+      description: Relevant output of `delorun logs`. Delorun redacts its logs, but read them before you post them and remove anything private.
       render: text

@@ -322,9 +322,9 @@
       ]
     },
     {
-      // Delorun's own code under delo/ keeps type-only imports explicit; upstream's trees keep their import style.
+      // Delorun's own code under delorun/ keeps type-only imports explicit; upstream's trees keep their import style.
       "files": [
-        "delo/**/*.{ts,tsx}"
+        "delorun/**/*.{ts,tsx}"
       ],
       "rules": {
         "typescript/consistent-type-imports": [

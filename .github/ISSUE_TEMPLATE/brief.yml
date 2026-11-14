@@ -50,7 +50,7 @@ body:
     id: read-first
     attributes:
       label: Read first
-      description: The root `AGENTS.md`, the contract pages under `delo/docs/contracts/`, the architecture notes under `delo/docs/architecture/`, and the owning package README, by path.
+      description: The root `AGENTS.md`, the contract pages under `delorun/docs/contracts/`, the architecture notes under `delorun/docs/architecture/`, and the owning package README, by path.
     validations:
       required: true
   - type: input
@@ -114,7 +114,7 @@ body:
     attributes:
       label: Documentation
       description: |
-        For each document, the tier it belongs in and the pages to update. A Delo document belongs in a `delo/docs/` tier: guide, cookbook, reference, contracts, security, architecture, defensive-patterns or upgrade-guide. An upstream edit belongs in upstream's own tier, edited in place: `docs/` or `.agents/notes/`.
+        For each document, the tier it belongs in and the pages to update. A Delorun document belongs in a `delorun/docs/` tier: guide, cookbook, reference, contracts, security, architecture, defensive-patterns or upgrade-guide. An upstream edit belongs in upstream's own tier, edited in place: `docs/` or `.agents/notes/`.
         Name the Chinese pair of each document, and the changelog fragment or the `Changelog: none (<reason>)` trailer.
     validations:
       required: true

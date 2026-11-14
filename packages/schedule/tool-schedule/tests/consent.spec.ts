@@ -58,7 +58,7 @@ function presetBook(entries: Record<string, string> = {}, defaultPreset = DEPLOY
 }
 
 /**
- * The delivery rule `@delo/plugin-schedule-consent` implements, restated for the same reason as the
+ * The delivery rule `@delorun/plugin-schedule-consent` implements, restated for the same reason as the
  * naming rule: a delivery may proceed only while the chat it reaches still runs the preset its
  * approval captured.
  * @param review - The captured preset and the preset the target chat runs now.
@@ -111,7 +111,7 @@ async function call(test: Setup, name: string, args: unknown) {
 }
 
 /**
- * The naming rule `@delo/plugin-schedule-consent` implements, restated because an upstream spec cannot
+ * The naming rule `@delorun/plugin-schedule-consent` implements, restated because an upstream spec cannot
  * import the fork's plugin: the recurrence, the chat the deliveries reach, and that chat's preset.
  * @param schedule - The effect the approved call would create.
  * @returns The sentence the approval states, or undefined when the effect names no recurrence.

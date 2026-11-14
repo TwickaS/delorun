@@ -57,7 +57,7 @@ export const RECOVERY_AFTER_MS = 30_000
 /**
  * The recovery routes' prefix the page names.
  * @param scope - the object holding the page global; `globalThis` by default.
- * @returns the prefix, such as `/delo/changes`, or undefined when the page names none or names one that is not a path.
+ * @returns the prefix, such as `/delorun/changes`, or undefined when the page names none or names one that is not a path.
  */
 export function recoveryRoutes(scope: object = globalThis): string | undefined {
   const value: unknown = Reflect.get(scope, RECOVERY_ROUTES_GLOBAL)
@@ -81,7 +81,7 @@ const RECOVERY_TEXT = {
     noRecent: 'No changes yet.',
     undo: 'Undo',
     safeMode: 'Safe mode',
-    safeModeHint: 'The next start leaves out every plugin Delo does not ship.',
+    safeModeHint: 'The next start leaves out every plugin Delorun does not ship.',
     safeModeOn: 'Safe mode is on since ',
     startSafeMode: 'Start in safe mode',
     confirmOff: 'Turn off {0}? It stops running until you turn it on again.',
@@ -89,8 +89,8 @@ const RECOVERY_TEXT = {
     confirmSafeMode: 'Start in safe mode next time?',
     working: 'Working…',
     done: 'Done.',
-    wentBack: 'Delo failed to load it and went back: ',
-    restart: 'Restart Delo to load it: delorun stop, then delorun start.',
+    wentBack: 'Delorun failed to load it and went back: ',
+    restart: 'Restart Delorun to load it: delorun stop, then delorun start.',
     notDone: 'It did not work: ',
   },
   zh: {
@@ -108,7 +108,7 @@ const RECOVERY_TEXT = {
     noRecent: '暂无更改。',
     undo: '撤销',
     safeMode: '安全模式',
-    safeModeHint: '下次启动将不加载 Delo 自带插件以外的任何插件。',
+    safeModeHint: '下次启动将不加载 Delorun 自带插件以外的任何插件。',
     safeModeOn: '安全模式已开启，开始于 ',
     startSafeMode: '以安全模式启动',
     confirmOff: '要关闭 {0} 吗？在你重新开启之前它不会运行。',
@@ -116,8 +116,8 @@ const RECOVERY_TEXT = {
     confirmSafeMode: '下次以安全模式启动吗？',
     working: '正在处理…',
     done: '已完成。',
-    wentBack: 'Delo 加载失败，已恢复到之前的状态：',
-    restart: '重新启动 Delo 后生效：先运行 delorun stop，再运行 delorun start。',
+    wentBack: 'Delorun 加载失败，已恢复到之前的状态：',
+    restart: '重新启动 Delorun 后生效：先运行 delorun stop，再运行 delorun start。',
     notDone: '操作未成功：',
   },
 } as const

@@ -1,0 +1,29 @@
+{
+  "name": "@delorun/relay",
+  "description": "The self-hosted relay data plane of contract C6: configuration and bindings, tunnel tokens, the home-key handshake, SNI routing of encrypted browser connections, stream framing with flow control and limits, and the relay's C20 log",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/server.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-operational-logs": "workspace:*",
+    "@delorun/contract-relay-protocol": "workspace:*",
+    "@delorun/logs": "workspace:*",
+    "@delorun/release-formats": "workspace:*",
+    "ws": "^8.21.3",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "selfsigned": "^4.0.1"
+  },
+  "delorun": {
+    "state": "parked"
+  }
+}

@@ -1,0 +1,111 @@
+/**
+ * The release log entry of contract C18: a Rekor v2 `hashedrekord` v0.0.2 whose signature is the targets key's
+ * Ed25519ph (RFC 8032, empty context) signature over the manifest file's bytes, with the SHA-512 digest Ed25519ph
+ * prehashes and the targets public key in DER. The signing machine writes the request; Rekor v2 builds the entry body
+ * from it, and the log's leaf is the body's RFC 8785 serialization. Node's crypto has no Ed25519ph, so signing and
+ * verifying use `@noble/curves`.
+ *
+ * @module @delorun/release-formats/log/entry
+ */
+import { createHash, createPublicKey, type KeyObject } from 'node:crypto'
+import { RELEASE_LOG_ENTRY_API_VERSION, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, RELEASE_LOG_ENTRY_TYPE, type HashedRekordBody, type HashedRekordRequest } from '@delorun/contract-release-log'
+import { ed25519ph } from '@noble/curves/ed25519.js'
+import { z } from 'zod'
+import { rawPublicKey } from '../sign/envelope.ts'
+import { canonicalJson, parseStrictJson, toJsonValue } from '../sign/json.ts'
+
+const base64 = z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u)
+
+/** The fields of a Rekor v2 `Signature` message; `keyDetails` is any string, so a caller can name the refusal. */
+const Signature = z.strictObject({
+  content: base64,
+  verifier: z.strictObject({ publicKey: z.strictObject({ rawBytes: base64 }), keyDetails: z.string() }),
+})
+
+/** The entry body as Rekor v2 serializes a `hashedrekord` v0.0.2; unknown fields fail it. */
+export const EntryBodySchema = z.strictObject({
+  apiVersion: z.literal(RELEASE_LOG_ENTRY_API_VERSION),
+  kind: z.literal(RELEASE_LOG_ENTRY_TYPE),
+  spec: z.strictObject({ hashedRekordV002: z.strictObject({ data: z.strictObject({ algorithm: z.string(), digest: base64 }), signature: Signature }) }),
+})
+
+/** A request file's size limit before parsing. */
+const ENTRY_REQUEST_SIZE_LIMIT = 16 * 1024
+
+/** A request file's JSON fields; unknown fields fail it. */
+const RequestSchema = z.strictObject({ hashedRekordRequestV002: z.strictObject({ digest: base64, signature: Signature }) })
+
+/** An entry body that parsed, whose algorithm and key details the verifier still checks. */
+export type ParsedEntryBody = z.infer<typeof EntryBodySchema>
+
+/**
+ * Sign bytes with Ed25519ph and an empty context.
+ * @param key - an Ed25519 private key.
+ * @param message - the bytes; Ed25519ph signs their SHA-512.
+ * @returns the 64-byte signature.
+ */
+export function signEd25519ph(key: KeyObject, message: Uint8Array): Buffer {
+  const seed = key.export({ format: 'jwk' }).d
+  if (seed === undefined) throw new Error('Ed25519ph signing needs a private key')
+  return Buffer.from(ed25519ph.sign(message, Buffer.from(seed, 'base64url')))
+}
+
+/**
+ * Verify an Ed25519ph signature with an empty context as RFC 8032 does, with canonical encodings and the cofactorless
+ * equation (not ZIP-215), as the envelope verifier's Ed25519 does.
+ * @param key - an Ed25519 public key.
+ * @param message - the signed bytes.
+ * @param signature - the signature.
+ * @returns whether it verifies; a signature of the wrong length or encoding does not.
+ */
+export function verifyEd25519ph(key: KeyObject, message: Uint8Array, signature: Uint8Array): boolean {
+  try {
+    return ed25519ph.verify(signature, message, rawPublicKey(key), { zip215: false })
+  } catch (error) {
+    // noble refuses a signature of the wrong length by throwing; such a signature does not verify.
+    return error instanceof Error ? false : false
+  }
+}
+
+/**
+ * The request the release workflow submits for a manifest.
+ * @param manifest - the manifest file's bytes.
+ * @param key - the targets private key.
+ * @returns the request, as `delorun-<version>.manifest.entry.json` holds it.
+ */
+export function entryRequest(manifest: Uint8Array, key: KeyObject): HashedRekordRequest {
+  return {
+    hashedRekordRequestV002: {
+      digest: createHash('sha512').update(manifest).digest('base64'),
+      signature: {
+        content: signEd25519ph(key, manifest).toString('base64'),
+        verifier: { publicKey: { rawBytes: createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('base64') }, keyDetails: RELEASE_LOG_ENTRY_KEY_DETAILS },
+      },
+    },
+  }
+}
+
+/**
+ * Read a request file.
+ * @param bytes - the file's bytes.
+ * @returns the request.
+ * @throws Error when it exceeds 16 KiB, is not strict JSON, has other fields or names other key details.
+ */
+export function readEntryRequest(bytes: Uint8Array): HashedRekordRequest {
+  const parsed = RequestSchema.safeParse(parseStrictJson(bytes, ENTRY_REQUEST_SIZE_LIMIT))
+  if (!parsed.success) throw new Error(`log entry request: ${z.prettifyError(parsed.error).replaceAll('\n', '; ')}`)
+  const { digest, signature } = parsed.data.hashedRekordRequestV002
+  if (signature.verifier.keyDetails !== RELEASE_LOG_ENTRY_KEY_DETAILS) throw new Error(`log entry request: key details ${signature.verifier.keyDetails} are not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
+  return { hashedRekordRequestV002: { digest, signature: { content: signature.content, verifier: { publicKey: signature.verifier.publicKey, keyDetails: RELEASE_LOG_ENTRY_KEY_DETAILS } } } }
+}
+
+/**
+ * The entry body Rekor v2 builds from a request, in the RFC 8785 serialization that is the log's leaf.
+ * @param request - the request.
+ * @returns the body's bytes.
+ */
+export function entryBody(request: HashedRekordRequest): Buffer {
+  const { digest, signature } = request.hashedRekordRequestV002
+  const body: HashedRekordBody = { apiVersion: RELEASE_LOG_ENTRY_API_VERSION, kind: RELEASE_LOG_ENTRY_TYPE, spec: { hashedRekordV002: { data: { algorithm: RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, digest }, signature } } }
+  return Buffer.from(canonicalJson(toJsonValue(body)))
+}

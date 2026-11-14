@@ -501,9 +501,9 @@ describe('official Claude distribution authorization', () => {
 
 describe('excludedManifestPatterns', () => {
   it('leaves out the members pnpm excludes with !, and reads them as their manifests', () => {
-    const members = ['packages/*/*', 'delo/apps/*', '!delo/apps/docs']
-    expect(manifestPatterns(members)).toEqual(['package.json', 'packages/*/*/package.json', 'delo/apps/*/package.json'])
-    expect(excludedManifestPatterns(members)).toEqual(['delo/apps/docs/package.json'])
+    const members = ['packages/*/*', 'delorun/apps/*', '!delorun/apps/docs']
+    expect(manifestPatterns(members)).toEqual(['package.json', 'packages/*/*/package.json', 'delorun/apps/*/package.json'])
+    expect(excludedManifestPatterns(members)).toEqual(['delorun/apps/docs/package.json'])
   })
 })
 

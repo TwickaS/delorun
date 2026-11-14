@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Delorun local integration",
+    "description": "Delorun's defaults over the stock studio: DeepSeek's session-log upload and desktop analytics stay off until you turn them on in Settings → Privacy; Settings → Devices shows remote access and the devices you approved; Settings → Permissions is where you allow or revoke a workspace's full access and a new MCP server"
+  }
+}

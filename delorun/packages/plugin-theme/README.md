@@ -1,0 +1,95 @@
+---
+description: "Delorun's look across the studio and the switch back to the stock look, for maintainers changing the palette, the accent, the typefaces, the Appearance and Conversation sections and their General rows, or the `studio_additions` switch."
+kind: "package-reference"
+---
+
+# @delorun/plugin-theme
+
+## Summary
+
+`@delorun/plugin-theme` owns C16 switch `studio_additions`. While the switch is on it lays Delorun's Soft palette, an accent and Delorun's typefaces over upstream's theme tokens, adds the Appearance and Conversation sections and four General rows to Settings, sets Delorun's New Session headline and vocabulary, and provides the `delorunStudio` browser service, which every other Delorun studio plugin requires. Turning the switch off unloads all of them, and the studio is upstream's. The plugin then registers one General row (`settings.general.item`, id `delorun-look`) that turns the switch on again.
+
+## Contents
+
+- [Contract](#contract)
+- [Configuration](#configuration)
+- [The look](#the-look)
+- [The stock look](#the-stock-look)
+- [Palettes and attribution](#palettes-and-attribution)
+- [Tests](#tests)
+- [Limits](#limits)
+
+## Contract
+
+- **The switch.** The `studioAdditions` setting is a live-editable boolean in the `delorun-theme` row's `Config` ([`THEME_ROW_ID`](src/config.ts)). Its default is `false`, which is the parity value: a profile that mounts the row without setting it gets upstream's look. `@delorun/bundle-studio`'s row sets it `true`, which is Delorun's default composition ([C16](../../docs/contracts/c16-parity-composition.md)). The switch changes what a person sees and reaches nothing the model reads.
+- **`ctx.delorunStudio`.** `@delorun/plugin-theme/client` merges `delorunStudio: DelorunStudio` into the browser `Context`. The service exists exactly while the stored switch is on and is withdrawn when it is off. A Delorun studio plugin registers everything inside `ctx.inject(['delorunStudio'], …)`, so the stock look disposes its registrations while its entry stays active; a top-level `inject` entry would leave the entry pending, which upstream's web boot reports as a failed start. `DelorunStudio.useStockLook(): Promise<boolean>` writes `studioAdditions: false` through upstream's configuration form and returns whether the Host accepted the write.
+- **Before the Host answers.** Until the settings form first answers, the plugin follows the settings the host half printed into the page (`delorunThemeSettings`, [`src/boot-settings.ts`](src/boot-settings.ts)), so on a page served with Delorun's look the look, the sections and `ctx.delorunStudio` are in place while the studio boots, and every Delorun studio plugin registers before the studio first renders instead of after the stock sidebar has shown. The form's first answer replaces them: the stock look if the switch was turned off after the page was served, nothing when the Host does not serve the row. A page served with the stock look carries no settings, and printed settings that do not validate are reported with a console warning; in both cases the plugin registers nothing and provides no service until the form answers, and it releases everything when the form later reloads.
+- **Exports.** `@delorun/plugin-theme/client` exports `THEME_ROW_ID` (`'delorun-theme'`), `ThemeSettings` with the choice lists and types (`ACCENT_CHOICES`, `PALETTES`, `TYPEFACES`, `DENSITIES`, `EFFORT_DISPLAYS`, `DEFAULT_SETTINGS`), `DelorunStudio`, the section and row ids (`SECTION_ID`, `CONVERSATION.id`, `LOOK_ROW.id`, `STUDIO_ROWS`) with their orders, `STOCK_ATTRIBUTE` and `ThemeController`. A package that offers the look choice elsewhere, such as onboarding, writes the `studioAdditions` field of `THEME_ROW_ID` through `ctx.configForms`.
+- **Host half.** [`src/index.ts`](src/index.ts) stores the settings and tells the settings service to build no automatic form for the row, because the Appearance section and the General rows edit it. While the switch is on it prints the palette, accent, density and contrast as a `style` row through `webserver/index-inject`, so the first paint is already Delorun's look, a `global` row `dshBootWordmark` = `Delorun` (`BOOT_WORDMARK_GLOBAL`, `BOOT_WORDMARK`), which upstream's boot page reads as its wordmark, and a `global` row `delorunThemeSettings` (`BOOT_SETTINGS_GLOBAL`) holding the current settings, which the browser half follows until its settings form answers. While it is off the host prints none of them.
+
+## Configuration
+
+| Field | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `studioAdditions` | boolean | `false` | C16 switch `studio_additions`: on, Delorun's look and every Delorun studio plugin; off, upstream's stock look. |
+| `palette` | `soft`, `t3-code`, `t3-chat`, `grove`, `ocean`, `ember`, `iris` | `soft` | The palette. A T3 Code theme brings its own accent. |
+| `accent` | `peach`, `cobalt`, `moss`, `mono`, `custom` | `peach` | The accent of primary buttons, links, switches and focus, on the Soft palette. |
+| `customAccent` | `#RRGGBB` | `#E5734A` | The colour used when `accent` is `custom`. |
+| `typeface` | `delorun`, `system` | `delorun` | Schibsted Grotesk and JetBrains Mono, or upstream's stacks. |
+| `density` | `compact`, `comfortable`, `spacious` | `comfortable` | `--dsh-density`, the scale spacing rules multiply by: 0.8, 1 and 1.2. |
+| `contrast` | 50 to 200, step 5 | `100` | Quiet text and rules move towards the page below 100 and towards primary text above it. |
+| `effort` | `label`, `bars` | `label` | How the model picker shows reasoning effort. |
+
+Every field is volatile, so the Appearance section and the General rows edit it while the studio runs.
+
+## The look
+
+While the switch is on, the browser half ([`src/client/index.ts`](src/client/index.ts)) registers, and releases when the switch turns off or the plugin is disposed:
+
+- **Token layers** through `ctx.theme.overrideTokens`, one source per layer: palette, accent, type, density and contrast ([`LAYERS`](src/client/controller.ts)). Colours are OKLCH seeds that generate both schemes from upstream's token sheet; the accent is a separate layer, and each text role gets a text-safe shade that reaches 4.5:1 on its surface. The palette also darkens or lightens the secondary and tertiary label roles until each reaches 4.5:1 on every opaque background role ([`TEXT_SURFACES`](src/palette/soft.ts)) at the default accent and contrast, in both schemes. The density layer also defines the spacing tokens `--delorun-space-1` to `--delorun-space-9` (2, 4, 6, 8, 12, 16, 20, 24 and 32 px), each multiplied by `var(--dsh-density, 1)`, which exist only while the look is on. Light, dark and system stay upstream's preference.
+- **Faces and effort bars** as one `<style data-plugin="@delorun/plugin-theme">` element: the two Latin font files from `src/client/assets/fonts`, and the rules that draw the model picker's `data-effort-level` caption as bars while `effort` is `bars`.
+- **Settings sections.** Each section draws its own `<h3>` card headings, styled by the Settings panel's `--dsh-settings-card-heading-*` variables, so it reads the same with or without the grouped Settings layout. `delorun-appearance` (order 1) is one card, "Colours": the colour scheme, the palette, the accent and the contrast. `delorun-conversation` (order 2) edits upstream's `ui-chat` display settings in two cards: "Detail" (the display presets with a live preview, thinking as a select, step grouping, live detail and terminal output) and "Folding" (fold finished turns, when to fold and which replies stay). It appears only while the Host serves that namespace.
+- **General rows** (`settings.general.item`, on the Appearance dictionary), each writing one field of this plugin's settings ([`STUDIO_ROWS`](src/client/index.ts)):
+
+  | Id | Order | Title | Control | Writes |
+  | --- | --- | --- | --- | --- |
+  | `delorun-look` | 1 | Studio look | Delorun / Stock | `studioAdditions: false` through `useStockLook()` |
+  | `delorun-typeface` | 10.5 | Typeface | tiles with a specimen | `typeface` |
+  | `delorun-density` | 11.5 | Density | tiles with rows at each spacing | `density` |
+  | `delorun-effort-labels` | 20.5 | Reasoning effort labels | Name / Bars | `effort` |
+
+  The orders place them among upstream's rows when no layout places them: Typeface between the colour scheme (10) and font size (11), Density after font size, Reasoning effort labels after the composer's Enter behaviour (20). `delorun-look` is the stock look's row id too; the two are never registered together.
+- **The New Session hero.** The text wordmark (`hero.mark`, "Delorun", in the brand dictionary) in `conversation.hero.brand.mark`, at least as wide and as high as upstream's mark for the requested size so the headline keeps its place, and the headline in `conversation.hero.headline`. The brand mark in the sidebar belongs to `@delorun/bundle-local`.
+- **The vocabulary.** One `ctx.locale.override` per namespace and locale of [`src/client/vocabulary.ts`](src/client/vocabulary.ts), which says "chat" where upstream says "session", then the hand-written fixes of [`src/client/copy.ts`](src/client/copy.ts), in English and Chinese. `scripts/gen-vocabulary.ts` writes the first file from upstream's dictionaries.
+- **`ctx.delorunStudio`**, provided for the same span.
+
+The CSS of the sections and rows uses upstream's tokens (`--dsw-alias-*`, `--dsw-radius-*`, `--dsw-font-*`) and the spacing tokens; geometry that is neither is a named custom property declared once per section or row, weights stop at 500 except the card heading, whose weight is the Settings panel's variable, transitions run only under `prefers-reduced-motion: no-preference`, and palette seeds are data in TypeScript. The cards, row frames, radio groups and preview tiles come from [`@delorun/settings-controls`](../settings-controls/README.md): two or three short options are radio groups (`ChoiceGroup`), one tab stop, arrow keys move the choice; options that need a picture are preview tiles (`TileGroup`); and the five thinking displays are a select, upstream's `Menu` behind a button. The sections reflow at phone width: tiles keep their rows and shrink, and every other row wraps.
+
+## The stock look
+
+While the switch is off, nothing of Delorun's look applies: no token layer, no font faces, no style element, no first-paint style, no sections, no headline, no vocabulary and no service. The plugin registers one row in `settings.general.item` (`delorun-look`, after Language) with a switch labelled "Delorun look" and a one-line description; turning it on writes `studioAdditions: true`, and the studio comes up without a reload. It also sets `data-delorun-stock` on `<html>` and removes the first-paint style element the page was served with (found by `FIRST_PAINT_MARK`, the start of its text), so upstream's colours return at once. Disposing the browser half removes that element too. The studio half's Look row is the same switch from the other side: Stock calls `useStockLook()`.
+
+## Palettes and attribution
+
+Soft is Delorun's. T3 Code's six themes are seeded from [`src/palette/t3-themes.ts`](src/palette/t3-themes.ts), copied by [`scripts/sync-t3-themes.ts`](scripts/sync-t3-themes.ts) from T3 Code (MIT, © 2026 T3 Tools Inc.) at a recorded commit; [`src/palette/t3.ts`](src/palette/t3.ts) derives each palette from it: the tint of its greys, the lightness of its light page and sidebar, and its accent in both schemes. The generator fills the rest. [`src/palette/stock.ts`](src/palette/stock.ts) is a copy of upstream's token sheet that `scripts/sync-stock-palette.ts` writes. The typefaces are Schibsted Grotesk and JetBrains Mono, each under the SIL Open Font License 1.1. The licence texts and the T3 Code notice are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and [`fonts/`](fonts), and the package publishes both.
+
+## Tests
+
+`node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-theme` runs the package's specs. The `.spec.ts` specs import upstream's built packages and need `pnpm run build:artifacts`; the `.spec.tsx` specs run in jsdom against upstream's sources.
+
+- [`palette.spec.ts`](tests/palette.spec.ts) holds the generated palettes to upstream's token sheet and to WCAG: body text roles reach 4.5:1 on their surfaces and marks 3:1, for Soft with each preset accent and edge-case custom accents, and for each T3 Code theme, in both schemes; secondary and tertiary label roles reach 4.5:1 on every opaque background role for every palette in both schemes. It also covers the spacing tokens, the contrast setting, the first-paint style and the colour arithmetic.
+- [`t3.spec.ts`](tests/t3.spec.ts) and [`t3-broken.spec.ts`](tests/t3-broken.spec.ts) cover the T3 Code source parser, the shipped themes and the refusals of a theme file that lacks a role.
+- [`vocabulary.spec.ts`](tests/vocabulary.spec.ts) fails when the committed vocabulary differs from what the generator writes from upstream's dictionaries, and checks the hand-written fixes and the attributes the effort bars read.
+- **The main landmark.** While the Delorun look is on, [`src/client/landmark.ts`](src/client/landmark.ts) marks upstream's main pane (`data-slot="main"`, a plain `div` in upstream's frame) `role="main"`, again whenever the frame renders the pane anew, and takes the role off with the look. A pane that already has a role is left alone.
+- [`host.spec.ts`](tests/host.spec.ts) checks the settings defaults, that `studioAdditions` is volatile with default `false`, and that the first-paint style, the boot wordmark and the settings are printed only while the switch is on.
+- [`landmark.client.spec.tsx`](tests/landmark.client.spec.tsx) checks that the main pane is marked when it is present, when it appears later and when the frame replaces it, that a pane with a role is left alone, and that disposing removes the role and stops the watch.
+- [`boot-settings.client.spec.tsx`](tests/boot-settings.client.spec.tsx) reads printed settings back and refuses a value with a missing field or a field the configuration does not accept.
+- [`studio.client.spec.tsx`](tests/studio.client.spec.tsx) proves the switch: off, there is no service, layer, style element, face, section or vocabulary, and only the General row is registered; on, the service, the look, the hero wordmark and the four General rows are present, and the rows write through the theme row's form, and the first-paint element is gone after the look leaves or the plugin is disposed; `useStockLook()` unloads a dependent plugin; without printed settings nothing is registered before the Host answers; with them the look and the service, and so a dependent plugin, are in place while the form loads, the form's first answer replaces them, and invalid printed settings are reported and ignored.
+- [`appearance.client.spec.tsx`](tests/appearance.client.spec.tsx), [`appearance-rows.client.spec.tsx`](tests/appearance-rows.client.spec.tsx), [`conversation.client.spec.tsx`](tests/conversation.client.spec.tsx), [`look-row.client.spec.tsx`](tests/look-row.client.spec.tsx) and [`controller.client.spec.tsx`](tests/controller.client.spec.tsx) render the sections, the rows and the controller: each control writes its field, the headings name their sections, and the Thinking select opens a menu of the offered displays.
+
+## Limits
+
+- The browser half cannot import another Delorun package at run time, because the page's module table provides upstream's packages only.
+- This plugin registers no sidebar brand.
+- Turning the switch off does not reload the page; the first-paint style element is removed and `data-delorun-stock` on `<html>` keeps any copy from applying.
+- The boot page shows the wordmark only on a page served after the host printed `dshBootWordmark`.

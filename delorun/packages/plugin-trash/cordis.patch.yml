@@ -1,0 +1,7 @@
+# This plugin as a bundle of its own, so upstream's plugin manager installs it
+# into a stock harness. The row needs the trash root and the stores in its
+# config; @delorun/bundle-local mounts it in Delorun's CLI profiles with the home's
+# paths.
+- insert:
+    - id: delorun-trash
+      name: '@delorun/plugin-trash'

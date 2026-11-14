@@ -17,7 +17,7 @@ const excludedPrefixes = ['vendor/', '.agents/notes/archived/']
 // Generated lockfiles hold content hashes whose hexadecimal runs can match a commit prefix by chance.
 const excludedNames = ['pnpm-lock.yaml']
 // The divergence ledger pins the upstream commit it is measured against. Only that field is exempt.
-const pinnedCommitFile = 'delo/upstream-patches.json'
+const pinnedCommitFile = 'delorun/upstream-patches.json'
 const pinnedCommitField = /"upstream"\s*:\s*\{[^}]*?"commit"\s*:\s*"([\da-f]{40})"/
 const gitOutputLimit = 64 * 1024 * 1024
 // One 41-byte line per object; 1.2 million objects produce about 49 MiB.

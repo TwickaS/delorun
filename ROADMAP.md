@@ -1,1 +1,1 @@
-The Delo roadmap is maintained in [Delo and stock DeepSeek Harness](delo/docs/guide/delo-vs-stock.md#roadmap).
+The Delorun roadmap is maintained in [Delorun and stock DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.md#roadmap).

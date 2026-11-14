@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delorun-home-directory.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-11-06-delorun-home-directory.md
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh:
+  en: 76f7c90df79e6b31
+  zh: 908f503273b4aa3b
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/problem:
+  en: 171c8bd669c0cd08
+  zh: fed8f7b3637e810f
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/proposal:
+  en: 2187f4f871b5875f
+  zh: f6d246b29bb433e4
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/related:
+  en: 140ce59d04948f2f
+  zh: 6185a5aed93d56c1
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/alternatives-considered:
+  en: f63bcfdbcf60be3f
+  zh: 7d0d152979689aa1
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/acceptance-criteria:
+  en: b1e9b586a264ed51
+  zh: 61ef275b678dbd42
+/agent-note-delorun-keeps-its-state-in-delorun-beside-an-untouched-dsh/risks:
+  en: 25d5eb8557877d49
+  zh: caba5e911c0d7113

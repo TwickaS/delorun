@@ -1,0 +1,29 @@
+{
+  "name": "@delorun/install",
+  "description": "Delorun's install path: the release files a launcher fetches over HTTPS from contract C1's hosts, contract C2's client verification steps 1 to 5, contract C18's bundle and online log check, and the extraction of a verified runtime archive into a staging directory",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-release-log": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/release-formats": "workspace:*",
+    "@delorun/release-verify": "workspace:*",
+    "@delorun/runtime-store": "workspace:*",
+    "semver": "^7.8.5",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

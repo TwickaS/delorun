@@ -1,8 +1,0 @@
-version: 1
-scenario: delo-plugin-changes-pending
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delo-plugin-changes-pending
-  pin: true

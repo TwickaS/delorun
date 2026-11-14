@@ -1,0 +1,8 @@
+version: 1
+scenario: delorun-container-denial-marker
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-container-denial-marker
+  pin: true

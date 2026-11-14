@@ -413,7 +413,7 @@ export interface DshWindow {
   __ModuleLoader__?: ClientModuleLoaderTarget
   /**
    * The page boot's Trusted Types stash (C4), created by `@deepseek-ai/dsh-client-web/page-policy`
-   * when the browser supports Trusted Types: `pluginLoader` is the `delo-plugin-loader`
+   * when the browser supports Trusted Types: `pluginLoader` is the `delorun-plugin-loader`
    * policy the default bundle transport assigns `script.src` through, and `register` keeps
    * the policy's script URL allowlist current with the module registry's boot manifest.
    */

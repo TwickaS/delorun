@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { gatesForMode } from '../run-gates.ts'
-import { upstreamCondition } from './delo-repository-guard.ts'
+import { upstreamCondition } from './delorun-repository-guard.ts'
 
 const root = resolve(import.meta.dirname, '../..')
 const masterPush = "github.event_name == 'push' && github.ref == 'refs/heads/master'"
@@ -51,8 +51,8 @@ function evaluateCondition(expression: string, cancelled: boolean, results: stri
 }
 
 const verdicts = [['ci.yml', 'all-checks-passed'], ['ci-windows.yml', 'windows-checks-passed'], ['ci-python.yml', 'python-checks-passed']] as const
-// Only the Python verdict's condition carries Delo's repository guard.
-const deloGuardedVerdicts = new Set(['python-checks-passed'])
+// Only the Python verdict's condition carries Delorun's repository guard.
+const delorunGuardedVerdicts = new Set(['python-checks-passed'])
 
 describe('master-only platform scheduling', () => {
   it.each(verdicts.flatMap(([file, job]) => ['success', 'failure', 'skipped', 'cancelled'].map(result => [file, job, result] as const)))(
@@ -60,7 +60,7 @@ describe('master-only platform scheduling', () => {
       const aggregate = workflow(file).jobs[job]!
       const results = aggregate.needs!.map(() => 'success')
       results[0] = result
-      const condition = deloGuardedVerdicts.has(job) ? upstreamCondition(aggregate.if as string)! : aggregate.if as string
+      const condition = delorunGuardedVerdicts.has(job) ? upstreamCondition(aggregate.if as string)! : aggregate.if as string
       // A status function prevents Actions from implicitly gating on success().
       expect(condition).toContain('!cancelled()')
       expect(evaluateCondition(condition, false, results)).toBe(true)

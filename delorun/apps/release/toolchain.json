@@ -1,0 +1,33 @@
+{
+  "schema": "delorun.release-toolchain/1",
+  "node": {
+    "version": "24.22.0",
+    "origin": "https://nodejs.org/dist/v24.22.0",
+    "distributions": {
+      "linux-x64": { "file": "node-v24.22.0-linux-x64.tar.gz", "sha256": "28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c" },
+      "linux-arm64": { "file": "node-v24.22.0-linux-arm64.tar.gz", "sha256": "b7e7991d5407815adfa74a2a9cd4db683552c8ce32ff4a295c22e972849c3f5d" },
+      "darwin-x64": { "file": "node-v24.22.0-darwin-x64.tar.gz", "sha256": "495e3f273c645f3c4677d438304cdfc701729ea5dec5728f5c8e76a2dece4b91" },
+      "darwin-arm64": { "file": "node-v24.22.0-darwin-arm64.tar.gz", "sha256": "6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5" },
+      "win32-x64": { "file": "node-v24.22.0-win-x64.zip", "sha256": "f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3" }
+    }
+  },
+  "pnpm": {
+    "version": "11.28.5",
+    "tarball": "https://registry.npmjs.org/pnpm/-/pnpm-11.28.5.tgz",
+    "integrity": "sha512-SEVj0wtMKtJ8tIqpT/KzAtvOvI/2vyiBbCWJiG4UbOf3bzVPO8GkOOb16XaMMCqgpvet2CMpA81M+BQmy8FNng=="
+  },
+  "native": {
+    "builder": {
+      "dockerfile": "native/Dockerfile",
+      "snapshot": "20261104T212339Z",
+      "packages": ["gcc=4:12.2.0-3", "gcc-12=12.2.0-14+deb12u1", "cpp-12=12.2.0-14+deb12u1", "libgcc-12-dev=12.2.0-14+deb12u1", "binutils=2.40-2", "libc6-dev=2.36-9+deb12u14", "linux-libc-dev=6.1.190-1", "musl=1.2.3-1", "musl-dev=1.2.3-1", "musl-tools=1.2.3-1"]
+    },
+    "platforms": { "linux-x64": "source", "linux-arm64": "source", "darwin-x64": "unbuilt", "darwin-arm64": "unbuilt", "win32-x64": "none" },
+    "compiler": "GCC 12.2.0 (Debian 12.2.0-14+deb12u1), with musl-gcc of musl 1.2.3-1 for the static launcher and the musl addon",
+    "linker": "GNU ld of binutils 2.40-2"
+  },
+  "images": {
+    "docker": "29.9.2",
+    "buildkit": "v0.34.0"
+  }
+}

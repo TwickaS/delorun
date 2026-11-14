@@ -1,0 +1,22 @@
+{
+  "update-record": 1,
+  "store-layout": 1,
+  "profile-safety": 1,
+  "safe-mode": 1,
+  "update-report": 3,
+  "session-data-copy": 1,
+  "data-restore-journal": 1,
+  "storage:delorun_workspaces": 1,
+  "storage:delorun_chat_states": 1,
+  "trash-item": 1,
+  "changes-protection": 1,
+  "changes-version": 1,
+  "changes-approved": 1,
+  "changes-log": 1,
+  "changes-work-session": 1,
+  "changes-active": 1,
+  "changes-boot": 1,
+  "changes-work": 1,
+  "changes-migration": 1,
+  "changes-harness": 1
+}

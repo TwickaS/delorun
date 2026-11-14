@@ -1,8 +1,0 @@
-version: 1
-scenario: delo-update-turn-refusal
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delo-update-turn-refusal
-  pin: true

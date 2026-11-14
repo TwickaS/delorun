@@ -1,6 +1,6 @@
 /**
  * Agent-facing current-profile management using the same service as Web controls. Two Config switches, both off by
- * default, add Delo's behaviour: `profileHistory` (C16 switch `profile_history`) offers the settings and history
+ * default, add Delorun's behaviour: `profileHistory` (C16 switch `profile_history`) offers the settings and history
  * actions, and `readActionsExempt` (C16 switch `plugin_manager_read_exemption`) runs the read actions without the
  * escalation. With both off, the tool's description, parameters and approvals are upstream's.
  */
@@ -110,12 +110,12 @@ export interface Config {
   /**
    * Run `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config` without the
    * `danger-full-access` escalation, and say so in the description; every other action still requires it. This is
-   * Delo's C16 switch `plugin_manager_read_exemption`, off in the parity composition.
+   * Delorun's C16 switch `plugin_manager_read_exemption`, off in the parity composition.
    */
   readActionsExempt?: boolean
   /**
    * Offer `read_config`, `configure`, `history`, `undo` and `restore`, with the description and parameters that
-   * state them. This is Delo's C16 switch `profile_history`, off in the parity composition.
+   * state them. This is Delorun's C16 switch `profile_history`, off in the parity composition.
    */
   profileHistory?: boolean
 }

@@ -1,4 +1,0 @@
-# The fixture bundle's one row.
-- insert:
-    - id: journey-engines-fixture
-      name: delo-journey-engines-fixture

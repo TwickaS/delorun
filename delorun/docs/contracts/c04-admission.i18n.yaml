@@ -1,0 +1,61 @@
+# Bilingual-pair consistency record for c04-admission.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/contracts/c04-admission.md
+/:
+  en: f7b0b7dcc5d74a14
+  zh: 0c734da1a0e4b24a
+/contract-c4-admission-and-listeners:
+  en: ce46f0a15bdb4056
+  zh: 3388c01e1b22bfc1
+/contract-c4-admission-and-listeners/summary:
+  en: f41e8395a1daeae4
+  zh: b4978ad880411986
+/contract-c4-admission-and-listeners/contents:
+  en: d1059fdba7423979
+  zh: c175c55ed9390195
+/contract-c4-admission-and-listeners/contract:
+  en: 39cadec1d5dc150e
+  zh: add9ad7d3bf31526
+/contract-c4-admission-and-listeners/contract/authenticator:
+  en: d964af4f53db3615
+  zh: b89045b2f78d07ec
+/contract-c4-admission-and-listeners/contract/listeners:
+  en: f93b0f3f910e881d
+  zh: de5a9f7341da569b
+/contract-c4-admission-and-listeners/contract/dispatch-order:
+  en: c4da1623a77a6d00
+  zh: cf08aaf86a1aadf1
+/contract-c4-admission-and-listeners/contract/pre-login-allowlist:
+  en: 87e724ca86bcedb5
+  zh: 774f34b0173c2d80
+/contract-c4-admission-and-listeners/contract/sessions:
+  en: c02c02fa934bb5ad
+  zh: 42f9e14ec7c6e325
+/contract-c4-admission-and-listeners/contract/rotation-and-revocation:
+  en: 8483dba7430aafc1
+  zh: fb3cde2a0d3d39bb
+/contract-c4-admission-and-listeners/contract/response-headers:
+  en: 2fad8665f0894934
+  zh: 7c9c470a28fcf9af
+/contract-c4-admission-and-listeners/contract/trusted-types:
+  en: 9f14f9a2899fd139
+  zh: 922b3e6e950c5d4b
+/contract-c4-admission-and-listeners/contract/refusals:
+  en: 470799b1c5e4db0a
+  zh: 47e55e929b64222a
+/contract-c4-admission-and-listeners/consumers:
+  en: 7daf2f21ee8ce543
+  zh: c799313456c513dc
+/contract-c4-admission-and-listeners/compatibility:
+  en: 7345dc83de8aacce
+  zh: 1707bebc04a8d8e7
+/contract-c4-admission-and-listeners/security:
+  en: 2cdb48f19325ae1d
+  zh: e9926c0eb3914cf6
+/contract-c4-admission-and-listeners/security/what-this-does-not-prove:
+  en: 8fe953058c0a12bd
+  zh: b486ff093af3cc93
+/contract-c4-admission-and-listeners/decided-values:
+  en: 53fa99724f726790
+  zh: 4a5ebba028768f50

@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/home-process/README.md
+/:
+  en: 096124aa2a61a928
+  zh: bd40f32fce3b05a7
+/delorun-home-process:
+  en: fd369891be27ccd2
+  zh: cd55f4f23ff6b57b
+/delorun-home-process/summary:
+  en: 40072fb3d92da2de
+  zh: 1265c8bacd7a8e6c
+/delorun-home-process/contents:
+  en: dd0fa61b8a0cede3
+  zh: 8238873783e96af8
+/delorun-home-process/starting-a-home-process:
+  en: 4cff4a7f7355ed10
+  zh: 249c07627102d87b
+/delorun-home-process/the-update-channel:
+  en: 2e527b2e8a8f3459
+  zh: e7fcacdac2d7010a
+/delorun-home-process/the-update-handshake:
+  en: 952ec053c2e11fb1
+  zh: 74a2c3e28afe47e5
+/delorun-home-process/the-handover:
+  en: bb2e30ca4182d89c
+  zh: b5fc199a308e6a2c
+/delorun-home-process/interrupted-updates:
+  en: a4f07cf35beebbb0
+  zh: 8818da728245b491
+/delorun-home-process/stopping:
+  en: 75f618d1c45cab19
+  zh: 323a3cc65cc44718
+/delorun-home-process/the-supervisor:
+  en: 8360e1834244610e
+  zh: 852ae6389a358225
+/delorun-home-process/the-operational-log:
+  en: b54b92a8b468aa83
+  zh: f66c3a2f5aabaaee
+/delorun-home-process/seams-for-other-packages:
+  en: 2896d775c8ecab5d
+  zh: 4c2bc6de59ab35ad
+/delorun-home-process/not-implemented:
+  en: 03b6530d8f402d46
+  zh: 6077363ad3e34941
+/delorun-home-process/tests:
+  en: dd7669aa2bbe9688
+  zh: 6b8926b6fb17adc1

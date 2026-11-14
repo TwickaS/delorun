@@ -44,7 +44,7 @@ const NONCE_BYTES = 16
  * carrying the response's nonce. It never allows string evaluation, and it
  * enforces Trusted Types with the two policies C4 names: `default`, whose
  * `createHTML` sanitises the markup upstream components and community client
- * plugins assign to `innerHTML`, and `delo-plugin-loader`, which the client
+ * plugins assign to `innerHTML`, and `delorun-plugin-loader`, which the client
  * module loader assigns `script.src` through.
  * @param nonce - the response's nonce, base64url.
  * @returns the header value.
@@ -67,7 +67,7 @@ export function reachContentSecurityPolicy(nonce: string): string {
     "base-uri 'self'",
     "form-action 'self'",
     "require-trusted-types-for 'script'",
-    'trusted-types default delo-plugin-loader',
+    'trusted-types default delorun-plugin-loader',
   ].join('; ')
 }
 

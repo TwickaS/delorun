@@ -2,7 +2,7 @@
 
 ## Documentation
 
-The documentation at [docs.delorun.com](https://docs.delorun.com) explains how to install, set up and use Delo, and lists the commands and settings. Start there for a question about how something works.
+The documentation at [docs.delorun.com](https://docs.delorun.com) explains how to install, set up and use Delorun, and lists the commands and settings. Start there for a question about how something works.
 
 ## Questions and problems
 
@@ -16,7 +16,7 @@ Never report a vulnerability in a public place. Follow [SECURITY.md](SECURITY.md
 
 ## Response times
 
-Delo is a small project. The maintainers answer as they can and promise no response time ([GOVERNANCE.md](GOVERNANCE.md#response-times)). Only the newest release receives fixes ([SECURITY.md](SECURITY.md#supported-versions)).
+Delorun is a small project. The maintainers answer as they can and promise no response time ([GOVERNANCE.md](GOVERNANCE.md#response-times)). Only the newest release receives fixes ([SECURITY.md](SECURITY.md#supported-versions)).
 
 ## Conduct
 

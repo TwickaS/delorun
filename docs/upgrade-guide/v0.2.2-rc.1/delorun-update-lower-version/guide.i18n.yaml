@@ -3,7 +3,7 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/delorun-update-lower-version/guide.md
 /:
-  en: fdd13dab41995819
+  en: 9fba31adb7e184ce
   zh: d66a2e336202aa4b
 /delorun-update-refuses-a-lower-release:
   en: 7c1e48d2c310abe1

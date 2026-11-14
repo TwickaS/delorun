@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/reach/spikes/serve-socket/README.md
+/:
+  en: 66eba282cec514b3
+  zh: 0c0eb7091e88d22a
+/spike-tailscale-serve-to-a-mode-0600-unix-socket:
+  en: 00cdcf39474a5844
+  zh: 220559d501b4660e
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/summary:
+  en: e126b1edb725c5ca
+  zh: 873df4203b72323a
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/answers:
+  en: 42248cf6a7cf0268
+  zh: cb68ae8e23fbe20f
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/environment:
+  en: 67251995158c1423
+  zh: 5f4f544128c98bf6
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/why-the-socket-target-was-refused:
+  en: 336dbbf1d210d857
+  zh: 362e8c9068f8f0ce
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/who-reaches-a-mode-0600-socket:
+  en: 52c2a0620c303da3
+  zh: 3e243d345b04f556
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/the-fallback-path-through-tailscaled:
+  en: 2445bfb566ec81e2
+  zh: ba239539d0f2992a
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/not-covered:
+  en: c761844df082e48e
+  zh: 7c4fb662f8a0f4ae
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/commands:
+  en: b408c97f22e498fa
+  zh: f74283a0694bc149
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/files:
+  en: 6f6d0b25e81d72da
+  zh: 1cbf4a0e0025974e
+/spike-tailscale-serve-to-a-mode-0600-unix-socket/reset:
+  en: 23158fd6ff58488f
+  zh: fab5f7a70bef0f3a

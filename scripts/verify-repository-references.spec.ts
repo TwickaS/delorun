@@ -146,13 +146,13 @@ describe('maintained repository reference policy', () => {
     const pinned = 'ab'.repeat(20)
     const ledger = JSON.stringify({
       upstream: { repository: 'https://example.invalid/upstream.git', ref: 'v1', commit: pinned },
-      patches: [{ path: 'a.ts', class: 'delo-feature', reason: `cites ${pinned}` }],
+      patches: [{ path: 'a.ts', class: 'delorun-feature', reason: `cites ${pinned}` }],
     }, null, 2)
     const reasonLine = ledger.split('\n').findIndex(line => line.includes('cites')) + 1
-    expect(findRepositoryReferences('delo/upstream-patches.json', ledger, new Set([pinned]))).toEqual([
-      { file: 'delo/upstream-patches.json', line: reasonLine, kind: 'commit-hash' },
+    expect(findRepositoryReferences('delorun/upstream-patches.json', ledger, new Set([pinned]))).toEqual([
+      { file: 'delorun/upstream-patches.json', line: reasonLine, kind: 'commit-hash' },
     ])
-    expect(findRepositoryReferences('delo/other.json', ledger, new Set([pinned]))).toHaveLength(2)
+    expect(findRepositoryReferences('delorun/other.json', ledger, new Set([pinned]))).toHaveLength(2)
   })
 
   it('excludes generated pnpm lockfiles by name in any directory', () => {
