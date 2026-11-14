@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { loadOptionalPatches, loadOverlayPatches, type Profile } from '@deepseek-ai/dsh-app-boot'
 import { homePatchPath } from '@deepseek-ai/dsh/profile-boot'
+import { activeCopiesEntry } from '@delo/changes'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
@@ -59,7 +60,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     const protection = await sandboxProtection(linkedHome, 'default', { DOCKER_HOST: `unix://${link}`, DOCKER_CONFIG: join(base ?? '', 'no-config') }, osHome, UID)
     expect(protection).toEqual({
       protectedHome: home,
-      protectedHomeReadable: [...READ_EXEMPTIONS],
+      protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')],
       deniedSockets: [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), ...DAEMON_SOCKETS, link, engine],
       observedSockets: [link, engine],
       escapeSocketDirectories: escapeDirectories(UID, osHome),
@@ -184,10 +185,10 @@ describe('the CLI profile\'s sandbox protection', () => {
     const { home, osHome } = setUp()
     const protection = await protectionFor(home, osHome)
     const overlay = await writeSandboxOverlay(home, 'default', profileOf(BUNDLES), [], protection)
-    expect(await overlayConfig(overlay)).toEqual({ protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: protection.deniedSockets, escapeSocketDirectories: protection.escapeSocketDirectories, privateTmp: true })
+    expect(await overlayConfig(overlay)).toEqual({ protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')], deniedSockets: protection.deniedSockets, escapeSocketDirectories: protection.escapeSocketDirectories, privateTmp: true })
     // The base bundle's bare row alone has no config to carry over.
     const bare = await writeSandboxOverlay(home, 'default', profileOf([BUNDLES[0]]), [], protection)
-    expect(await overlayConfig(bare)).toEqual({ protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: protection.deniedSockets, escapeSocketDirectories: protection.escapeSocketDirectories, privateTmp: true })
+    expect(await overlayConfig(bare)).toEqual({ protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')], deniedSockets: protection.deniedSockets, escapeSocketDirectories: protection.escapeSocketDirectories, privateTmp: true })
   })
 
   it('carries over the composed settings, which the last layer that sets the row\'s config gives, and keeps every layer\'s denied sockets', async () => {
@@ -208,7 +209,7 @@ describe('the CLI profile\'s sandbox protection', () => {
       privateTmp: true,
       probeTimeoutMs: 5000,
       protectedHome: home,
-      protectedHomeReadable: [...READ_EXEMPTIONS],
+      protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')],
     })
     // Without the home patch the profile's own config is the composed one.
     rmSync(homePatchFile(home))
@@ -218,7 +219,7 @@ describe('the CLI profile\'s sandbox protection', () => {
       extra: 1,
       privateTmp: true,
       protectedHome: home,
-      protectedHomeReadable: [...READ_EXEMPTIONS],
+      protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')],
     })
   })
 

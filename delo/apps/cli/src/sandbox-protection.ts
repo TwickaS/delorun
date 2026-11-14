@@ -1,7 +1,7 @@
 /**
  * C1's confinement of the CLI profile's commands, which the home process sets when it starts the profile: upstream's
  * local sandbox provider (row `sandbox`, `@deepseek-ai/dsh-sandbox-local`) receives the canonical Delo home as
- * `protectedHome`, C1's read exemptions as `protectedHomeReadable`, `privateTmp` on, and as `deniedSockets` the update
+ * `protectedHome`, C1's read exemptions and the profile's approved plugin copies (`changes/profiles/<profile>/active`, read and execute only) as `protectedHomeReadable`, `privateTmp` on, and as `deniedSockets` the update
  * channel's and the supervisor's sockets under `run/<profile>/`, the daemon sockets of {@link DAEMON_SOCKETS}, the
  * active Docker context's socket with its real path, Docker Desktop's macOS sockets under
  * `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present, and the ssh-agent socket
@@ -24,6 +24,7 @@
 import { realpathSync } from 'node:fs'
 import { realpath, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { activeCopiesEntry } from '@delo/changes'
 import { composeEntries, type Profile } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { runDirectory, writeProtectedFile } from '@delo/home'
@@ -43,7 +44,7 @@ export const SANDBOX_OVERLAY = 'sandbox.patch.yml'
 export interface SandboxProtection {
   /** The canonical Delorun home. */
   readonly protectedHome: string
-  /** C1's read exemptions, relative to the home. */
+  /** C1's read exemptions and the profile's approved plugin copies ({@link activeCopiesEntry}), relative to the home. */
   readonly protectedHomeReadable: readonly string[]
   /** The sockets confined commands cannot connect to: the home's own, {@link DAEMON_SOCKETS} and those in {@link observedSockets}. */
   readonly deniedSockets: readonly string[]
@@ -187,7 +188,7 @@ export async function sandboxProtection(home: string, profile: string, env: Read
   const observed = [...new Set(found)].filter(socket => !fixed.includes(socket))
   return {
     protectedHome: canonical,
-    protectedHomeReadable: [...READ_EXEMPTIONS],
+    protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry(profile)],
     deniedSockets: [...new Set([...fixed, ...observed])],
     observedSockets: observed,
     escapeSocketDirectories: escapeDirectories(uid, osHome),

@@ -69,7 +69,9 @@
 # command reads the whole harness home — the consent stores under `secrets/`
 # included. `dshHomePath` is the harness home, which C1 sets to the Delo home
 # for every runtime process; the readable entries are C1's read exemptions,
-# which hold no secret. The provider's protected home is also what every tool
+# which hold no secret; `delorun start` adds the profile's approved plugin copies,
+# `changes/profiles/<profile>/active`, read and execute only, because the row
+# cannot name the profile. The provider's protected home is also what every tool
 # row refuses to read or search, the rows inside each agent preset included:
 # `read`, `read_image`, `apply_patch`, `glob` and `grep` take it from this row
 # and from no setting of their own. They may read their own session's directory

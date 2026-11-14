@@ -97,6 +97,16 @@ export function profileChangesDirectory(home: string, profile: string): string {
 }
 
 /**
+ * The approved copies of one profile's plugins, relative to the home, as a sandbox read exemption names them.
+ * @param profile - the profile's name.
+ * @returns `changes/profiles/<profile>/active`, which holds nothing but approved copies: no pending, unapproved or
+ *   stored content, no record and no log.
+ */
+export function activeCopiesEntry(profile: string): string {
+  return join(DELO_HOME_ENTRIES.changes, CHANGES_ENTRIES.profiles, profile, CHANGES_ENTRIES.active)
+}
+
+/**
  * The directory name of one plugin's active content: the package name with `/` written as `+`, as pnpm writes it.
  * @param name - the package name, such as `@scope/plugin`.
  * @returns the name as one path segment.

@@ -41,7 +41,7 @@ Delorun does not start a [profile](../reference/glossary.md#profile) whose setti
 The sandbox limits the commands the model runs. In a workspace on Workspace Write, which is where every new workspace starts, commands can write only inside the workspace and in the permitted temporary folders. Delorun adds rules that keep its own home folder, `~/.delo`, out of reach:
 
 - Commands cannot write anywhere in your Delorun home.
-- Commands cannot read your keys, Delorun's secrets or the token that controls the running Delorun. They can read only the installed releases, skills and runtimes they need.
+- Commands cannot read your keys, Delorun's secrets or the token that controls the running Delorun. They can read only the installed releases, skills and runtimes they need, and the approved copies of your profile's plugins, so a plugin can hand the agent a tool of its own. They cannot write to those copies, and they cannot read a plugin change that is waiting for your review.
 - Commands cannot connect to the socket that controls the running Delorun, or to Docker's socket.
 
 The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun home themselves.
