@@ -26,10 +26,10 @@ export const COPY = {
   copiedLabel: 'Copied',
   /** Shown beside the install command; `linkText` is the part that links to `href`. */
   platformNote: {
-    before: 'For now, Delorun runs on Linux and on ',
+    before: 'Delorun runs on Linux and on ',
     linkText: 'Windows through WSL2',
     href: `${DOCS_URL}/guide/install#windows-through-wsl2`,
-    after: '. macOS and native Windows come in a later release.',
+    after: '. macOS and native Windows are not supported.',
   },
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
@@ -44,7 +44,7 @@ export const COPY = {
   features: [
     {
       title: 'Make it yours',
-      text: 'Pick a theme and an accent, change any setting, and write your own plugins to add what Delorun does not do yet.',
+      text: 'Pick a theme and an accent, change any setting, and write your own plugins to add what Delorun does not do.',
       href: `${DOCS_URL}/guide/customise`,
       linkText: 'Where to customise what',
     },
@@ -68,7 +68,7 @@ export const COPY = {
     },
     {
       title: 'Safe on your own computer',
-      text: 'Everything stays in a folder on your machine, with no account. Commands run in a sandbox and ask before risky steps, and every release is signed and checked before it runs.',
+      text: 'Your chats and settings stay in a folder on your computer, with no account. Commands run in a sandbox and ask before risky steps, and every release is signed and checked before it runs.',
       href: `${DOCS_URL}/guide/safety`,
       linkText: 'What Delorun protects',
     },
@@ -138,7 +138,7 @@ export const COPY = {
     ],
     updatesRights: `To unsubscribe, use the link in any message. To ask what we hold, correct it or have it deleted, write to ${SUPPORT_EMAIL}.`,
     programHeading: 'The Delorun program',
-    program: 'Delorun has no telemetry of its own. A few small checks, such as the daily check for a newer release, talk to the internet by default, and everything else leaves your computer only when you turn it on. The Trust page says, party by party, what each one can see.',
+    program: 'Delorun has no telemetry of its own. A few small checks, such as the daily check for a newer release, talk to the internet by default. Your messages go to the model provider you choose when you chat, and nothing else leaves your computer unless you turn it on. The Trust page says, party by party, what each one can see.',
     programLinks: [
       { text: 'What you trust when you use Delorun', href: `${DOCS_URL}/guide/trust` },
       { text: 'Updates and the update check', href: `${DOCS_URL}/guide/updates` },
