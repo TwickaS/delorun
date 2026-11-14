@@ -26,7 +26,7 @@ Any text the model reads can carry instructions: a web page, a file in a reposit
 
 Stealing data this way needs all three of these at once. Take any one away and it fails.
 
-1. **Private data the model can reach.** Files in the workspace, a `.env` file, keys under your home folder that commands can read, the chat's own history. On Linux and macOS the [sandbox](../reference/glossary.md#sandbox) keeps commands out of Delorun's [home](../reference/glossary.md#home) (`~/.delo`), but commands can read the rest of your disk that you can read. On Windows they can read Delorun's home too.
+1. **Private data the model can reach.** Files in the workspace, a `.env` file, keys under your home folder that commands can read, the chat's own history. On Linux, WSL2 included, the [sandbox](../reference/glossary.md#sandbox) keeps commands out of Delorun's [home](../reference/glossary.md#home) (`~/.delo`), but commands can read the rest of your disk that you can read. Where the sandbox cannot enforce reads, as on native Windows, which Delorun 0.1.0 does not support, they can read Delorun's home too.
 2. **Untrusted text that reaches the model.** Pages `web_fetch` returns, files you did not write, a dependency's source, an issue or pull request, the output of a command, a reply from an [MCP server](../reference/glossary.md#mcp-server).
 3. **A way out.** Anything that puts data where the attacker reads it: a command that sends a request to the attacker's server, a `web_fetch` of a web address that carries the data, a [plugin](../reference/glossary.md#plugin) or MCP server that sends it, or data placed in something you later share.
 
@@ -61,7 +61,7 @@ Delorun enforces Allowlist and Off only where the sandbox can: bubblewrap on Lin
 <details>
 <summary>Edge cases</summary>
 
-- If your sandbox is Landlock alone (a Linux system without bubblewrap), Windows or macOS, then a workspace set to Allowlist or Off refuses to run commands — set it to Open to run them.
+- If your sandbox is Landlock alone (a Linux system without bubblewrap) or any platform other than Linux, then a workspace set to Allowlist or Off refuses to run commands — set it to Open to run them.
 - If a command needs the system D-Bus, such as `systemctl`, `timedatectl` or `nmcli`, or prints, then it fails in a workspace set to Allowlist or Off — use Open for that workspace, or run the command in your own terminal.
 - If a tool ignores the proxy settings, then it has no network under Allowlist — use a tool that honours `HTTPS_PROXY`, or list the hosts under Open.
 - If a command needs to download dependencies and the workspace is Off, then it fails — install them first, or use Allowlist with your registries.
