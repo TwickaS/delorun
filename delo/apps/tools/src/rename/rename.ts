@@ -111,6 +111,11 @@ export function runRename(root: string, options: RenameOptions): RenameReport {
     throw new Error('rename: the working tree has uncommitted changes; commit or stash them (or pass --allow-dirty to repeat a finished run)')
   }
   const files = git(root, ['ls-files', '-z']).split('\0').filter(path => path !== '')
+  const renames = planPathRenames(files)
+  const occupied = renames.filter(rename => existsSync(join(root, rename.to))).map(rename => rename.to)
+  if (occupied.length > 0) {
+    throw new Error(`rename: the target path already exists (an ignored leftover directory?): ${occupied.slice(0, 5).join(', ')}; remove it and run again`)
+  }
   const replaced = new Map<string, number>()
   const guarded = new Map<string, number>()
   const skippedBinary: string[] = []
@@ -138,7 +143,6 @@ export function runRename(root: string, options: RenameOptions): RenameReport {
     diffSample.push(...diffHunks(path, text, applied.text, DIFF_SAMPLE_LINES - diffSample.length))
     if (!options.dryRun) writeFileSync(absolute, applied.text)
   }
-  const renames = planPathRenames(files)
   if (!options.dryRun) {
     for (const rename of renames) {
       mkdirSync(dirname(join(root, rename.to)), { recursive: true })

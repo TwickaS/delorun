@@ -49,6 +49,14 @@ describe('runRename', () => {
     expect(() => runRename(root, { dryRun: false, allowDirty: false })).toThrow('uncommitted changes')
   })
 
+  it('refuses a rename whose target path already exists, before writing anything', () => {
+    const root = repo(FILES)
+    mkdirSync(join(root, 'delorun'))
+    writeFileSync(join(root, 'delorun', 'leftover'), 'x')
+    expect(() => runRename(root, { dryRun: false, allowDirty: true })).toThrow('target path already exists')
+    expect(readFileSync(join(root, 'delo/a.md'), 'utf8')).toContain('Delo keeps')
+  })
+
   it('rewrites content, renames paths with git mv, and changes nothing on a second run', () => {
     const root = repo(FILES)
     const report = runRename(root, { dryRun: false, allowDirty: false })
