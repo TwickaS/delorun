@@ -85,6 +85,15 @@ interface DomainSpec {
    * to the rejecting default. The global slot always rejects.
    */
   readonly invalidRecords?: 'backup-and-skip'
+  /**
+   * Opt in to damage tolerance for authoritative data that must keep serving what is still good:
+   * the unit keeps a rolling previous copy, an unparsable unit document is set aside and the unit
+   * opens empty, and a table record that fails its schema is set aside (`KvUnit.setAside`) and
+   * removed so the open continues. The consumer reads the set-aside locations from
+   * `Domain.quarantined`, reports them to the person, and may call `Domain.setAside` for its own
+   * consistency findings. A backend without support rejects as it does without this flag.
+   */
+  readonly recoverable?: true
   /** Optional global singleton slot. */
   readonly global?: DomainGlobalSpec<unknown>
   /** Table declarations keyed by table name; each name must match `UNIT_NAME_RE`. */
@@ -127,6 +136,22 @@ interface Domain<S extends DomainSpec> {
    * @returns the typed table handle.
    */
   table<N extends keyof S['tables'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>
+
+  /**
+   * Medium locations of documents set aside while the domain opened or since: an unparsable unit,
+   * records that failed their schema, and consumer findings passed to {@link Domain.setAside}.
+   * Empty unless the spec is `recoverable`. A snapshot, not a live view.
+   */
+  readonly quarantined: readonly string[]
+
+  /**
+   * Preserve a consumer-detected inconsistency next to the unit before the consumer repairs it.
+   * The set-aside document is never replaced or deleted, and the unit's current document stops
+   * counting as the good backup until the repairing write lands.
+   * @param document - JSON-serializable description of what is removed from the domain.
+   * @returns the medium location, or `undefined` when the backend cannot set documents aside.
+   */
+  setAside(document: unknown): Promise<string | undefined>
 
   /**
    * Close this domain: reject new writes immediately, drain already-queued
