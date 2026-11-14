@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runGit } from './git.ts'
-import { applyRules } from './rename/rules.ts'
+import { applyRules, renamePath } from './rename/rules.ts'
 
 /** The upstream checker, relative to the repository root. */
 const CHECKER = 'scripts/verify-translation-pairing.ts'
@@ -60,7 +60,7 @@ function runChecker(root: string, anchors: readonly string[], env: NodeJS.Proces
 /**
  * Map each staged path to the path it had in `HEAD`.
  * @param root - the repository root.
- * @returns new path → old path for every staged rename.
+ * @returns new path → old path for every staged rename, found by git or by the rename rules.
  */
 export function stagedRenames(root: string): Map<string, string> {
   const renames = new Map<string, string>()
@@ -76,6 +76,15 @@ export function stagedRenames(root: string): Map<string, string> {
     } else {
       i += 2
     }
+  }
+  // Git pairs a rename only when enough content survives, and the rename rewrites small files heavily, so a moved
+  // file is also found by applying the rename rules to every path `HEAD` tracks.
+  const tracked = runGit(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD']).stdout.split('\0')
+  const staged = new Set(runGit(root, ['diff', '--cached', '--name-only', '-z']).stdout.split('\0'))
+  for (const old of tracked) {
+    if (old === '') continue
+    const next = renamePath(old)
+    if (next !== old && staged.has(next) && !renames.has(next)) renames.set(next, old)
   }
   return renames
 }
