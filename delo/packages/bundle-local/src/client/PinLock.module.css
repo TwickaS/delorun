@@ -1,0 +1,114 @@
+/* The PIN lock screen: a full-page cover; every control is at least 44px tall and every typed field 16px or larger, so a phone does not zoom the page. */
+
+.cover {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.card {
+  display: flex;
+  width: min(100%, 320px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin: auto;
+}
+
+.mark {
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+}
+
+.text {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  /* 16px or more: a smaller field makes iOS zoom the page when it takes focus. */
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+
+.field:focus-visible {
+  border-color: var(--dsw-alias-state-business-primary);
+  outline: none;
+}
+
+.failed {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.key {
+  min-height: 52px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.key:active:not(:disabled) {
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+}
+
+.key:disabled {
+  opacity: 0.5;
+}
+
+.key:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
+}
+
+.submit {
+  min-height: 48px;
+  font-size: 16px;
+}
