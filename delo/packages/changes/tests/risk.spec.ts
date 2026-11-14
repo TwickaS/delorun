@@ -330,7 +330,7 @@ describe('manages-plugins', () => {
     expect(linesFound('manages-plugins', 'src/market.ts', [
       "await writeFile(join(profile, 'cordis.patch.yml'), yaml)",
       "fs.writeFileSync(path.join(root, 'cordis.yml'), text)",
-      "await ctx.plugin(await import('./fetched.ts'), config)",
+      'await ctx.plugin(loaded.default, config)',
       'const result = await ctx.pluginManager.install(name)',
     ])).toHaveLength(4)
   })
@@ -339,7 +339,8 @@ describe('manages-plugins', () => {
     expect(linesFound('manages-plugins', 'src/market.ts', [
       "ctx.plugin((await import(url)).default)",
       "ctx.plugin(await import(entry))",
-    ])).toHaveLength(2)
+      "await ctx.plugin(await import('./fetched.ts'), config)",
+    ])).toHaveLength(3)
   })
 
   it('does not flag reading cordis.yml, a comment, or the word plugin in prose', () => {
@@ -362,7 +363,7 @@ describe('manages-plugins', () => {
     expect(linesFound('manages-plugins', 'src/index.ts', [
       "import { definePlugin } from '@deepseek-ai/dsh-plugin-sdk'",
       'ctx.plugin(Child)',
-      'ctx.plugin(loaded.default, config)',
+      'ctx.plugin(Child, config)',
     ])).toEqual([])
   })
 })

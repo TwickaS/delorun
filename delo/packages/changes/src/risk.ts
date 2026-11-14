@@ -166,8 +166,11 @@ const pluginCommand = /\b(?:dsh|delorun)\s+plugins?(?:\s+(?:-{1,2}[\w-]+|\$\{[^}
 const pluginArguments = /['"`]plugins?['"`]\s*,[^\]\n]*['"`](?:add|remove|install|uninstall|update)['"`]/
 const configFileWrite = /\bcordis(?:\.patch)?\.ya?ml\b[^\n]*\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b|\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b[^\n]*\bcordis(?:\.patch)?\.ya?ml\b/
 
-/** A `ctx.plugin` call whose plugin is loaded from a dynamic `import()`, which fetches code at run time. */
-const dynamicPluginLoad = /\bctx\??\.plugin\s*\(\s*\(*\s*(?:await\s+)?import\s*\(/
+/**
+ * A `ctx.plugin` call whose plugin comes from a dynamic `import()`, or from a module namespace's `.default` (a plugin
+ * that an earlier `import()` loaded). A statically imported or locally declared plugin is ordinary composition.
+ */
+const dynamicPluginLoad = /\bctx\??\.plugin\s*\(\s*(?:\(*\s*(?:await\s+)?import\s*\(|[\w$.]+\.default\b)/
 
 /** A call on the `pluginManager` service, which installs, removes or changes plugins. */
 const pluginManagerCall = /\bpluginManager\??\.\w+\s*\(/
