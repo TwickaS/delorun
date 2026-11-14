@@ -23,16 +23,12 @@
  * @module @delo/tools/pairing-staged
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runGit } from './git.ts'
 import { applyRules, renamePath } from './rename/rules.ts'
-import {
-  computeTranslationPairingRecord, renderTranslationPairingRecord, translationPairPaths,
-} from '../../../../scripts/translation-pairing-record.ts'
-import { parseTranslationPairingManifest, translationPairSourcePredicate } from '../../../../scripts/translation-pairing.ts'
 
 /** The upstream checker, relative to the repository root. */
 const CHECKER = 'scripts/verify-translation-pairing.ts'
@@ -54,11 +50,12 @@ interface CheckerRun {
  * Run the upstream checker in index mode.
  * @param root - the repository root.
  * @param anchors - the record paths to check.
- * @param env - extra environment variables, such as `GIT_INDEX_FILE`.
+ * @param env - extra environment variables.
+ * @param cached - whether to check the index (`--cached`) or the files on disk under `root`.
  * @returns the exit status and the violation lines.
  */
-function runChecker(root: string, anchors: readonly string[], env: NodeJS.ProcessEnv): CheckerRun {
-  const result = spawnSync(join(root, 'node_modules/.bin/tsx'), [CHECKER, '--cached', ...anchors], {
+function runChecker(root: string, anchors: readonly string[], env: NodeJS.ProcessEnv, cached = true): CheckerRun {
+  const result = spawnSync(join(root, 'node_modules/.bin/tsx'), [CHECKER, ...cached ? ['--cached'] : [], ...anchors], {
     cwd: root, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
   })
   if (result.error !== undefined) throw result.error
@@ -178,61 +175,29 @@ export function compareViolations(
 }
 
 /**
- * Re-record the pairs of `HEAD` in a temporary index, so that the checker compares their structure instead of
- * stopping at a stale record.
- * @param root - the repository root.
- * @param index - the temporary index file, already holding `HEAD`.
- * @param anchors - the `HEAD` record paths.
- */
-function rerecordHeadPairs(root: string, index: string, anchors: readonly string[]): void {
-  const show = (path: string): string | undefined => {
-    const run = runGit(root, ['show', `HEAD:${path}`])
-    return run.status === 0 ? run.stdout : undefined
-  }
-  const tracked = new Set(runGit(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD']).stdout.split('\0'))
-  const manifest = show('scripts/translation-pairing.manifest.json')
-  if (manifest === undefined) return
-  const context = {
-    repoRoot: root,
-    isTranslationPairSource: translationPairSourcePredicate(parseTranslationPairingManifest(manifest)),
-    repositoryFileExists: (file: string) => tracked.has(file),
-  }
-  for (const anchor of anchors) {
-    const paths = translationPairPaths(`${baseOf(anchor)}.md`)
-    const en = show(paths.source)
-    const zh = show(paths.zh)
-    if (en === undefined || zh === undefined) continue
-    let record: string
-    try {
-      record = renderTranslationPairingRecord(paths, computeTranslationPairingRecord(paths, en, zh, context))
-    } catch (error) {
-      // The pair cannot be recorded (for example its heading counts differ), so HEAD's own record and violation stay.
-      void error
-      continue
-    }
-    const hash = spawnSync('git', ['-C', root, 'hash-object', '-w', '--stdin'], { input: record, encoding: 'utf8' })
-    if (hash.status !== 0) throw new Error(`git hash-object failed: ${hash.stderr}`)
-    const update = spawnSync('git', ['-C', root, 'update-index', '--add', '--cacheinfo', `100644,${hash.stdout.trim()},${paths.meta}`], {
-      env: { ...process.env, GIT_INDEX_FILE: index }, encoding: 'utf8',
-    })
-    if (update.status !== 0) throw new Error(`git update-index failed: ${update.stderr}`)
-  }
-}
-
-/**
- * The upstream checker on `HEAD`'s versions of the pairs.
+ * The upstream checker on `HEAD`'s versions of the pairs, run from a checkout of `HEAD` so that `HEAD`'s own checker
+ * and scope rules judge `HEAD`'s files. Each pair is re-recorded there first, so the checker compares its structure
+ * instead of stopping at a stale record.
  * @param root - the repository root.
  * @param anchors - the `HEAD` record paths.
- * @returns the violation lines of the freshly recorded pairs, empty when `HEAD` has no such pair, no commit, or the checker rejects the paths.
+ * @returns the violation lines of the freshly recorded pairs, empty when `HEAD` has no such pair, no commit, or the
+ * checker rejects the paths.
  */
 function headViolations(root: string, anchors: readonly string[]): readonly string[] {
   const dir = mkdtempSync(join(tmpdir(), 'delo-pairing-'))
   try {
-    const index = join(dir, 'index')
-    const read = spawnSync('git', ['-C', root, 'read-tree', 'HEAD'], { env: { ...process.env, GIT_INDEX_FILE: index } })
-    if (read.status !== 0) return []
-    rerecordHeadPairs(root, index, anchors)
-    const run = runChecker(root, anchors, { GIT_INDEX_FILE: index })
+    const tree = join(dir, 'tree')
+    const env = { ...process.env, GIT_INDEX_FILE: join(dir, 'index') }
+    if (spawnSync('git', ['-C', root, 'read-tree', 'HEAD'], { env }).status !== 0) return []
+    const checkout = spawnSync('git', ['-C', root, 'checkout-index', '-a', `--prefix=${tree}/`], { env })
+    if (checkout.status !== 0) throw new Error(`git checkout-index failed: ${checkout.stderr.toString()}`)
+    symlinkSync(join(root, 'node_modules'), join(tree, 'node_modules'))
+    const tsx = join(root, 'node_modules/.bin/tsx')
+    const rerecord = spawnSync(tsx, [join(import.meta.dirname, 'pairing-rerecord.ts'), tree, ...anchors], { encoding: 'utf8' })
+    if (rerecord.status !== 0) throw new Error(`pairing-rerecord failed: ${rerecord.stderr}`)
+    const present = rerecord.stdout.split('\n').filter(line => line !== '')
+    if (present.length === 0) return []
+    const run = runChecker(tree, present, {}, false)
     return run.status === 1 ? run.violations : []
   } finally {
     rmSync(dir, { recursive: true, force: true })
