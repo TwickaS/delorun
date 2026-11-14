@@ -226,6 +226,15 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
       expect(pinSeen).toEqual([])
     })
 
+    it('keeps the computer-only switch on for a device that holds a code unlock but no page unlock', () => {
+      // Pins the lift's condition: only dangerous mode or a PIN page lifts the switch, a code unlock alone does not.
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const elevated = createCondition(facts(false, true, seen, pinSeen, false), page)
+      expect(elevated(consentOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
+      expect(pinSeen).toEqual([])
+    })
+
     it('refuses the write when the PIN record is not saved', () => {
       const refusing: ReachAccessFacts = { ...facts(false, false, [], [], true), pinLiftedSettings: () => 'pin-record-refused' }
       expect(createCondition(refusing, page)(consentOff)).toEqual({ kind: 'deny', reason: 'pin-record-refused' })
