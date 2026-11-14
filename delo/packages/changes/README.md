@@ -36,7 +36,7 @@ output(startNotice(changes))
 
 ## Where the files are
 
-Everything is under `changes/` in the Delo home, which confined commands can neither read nor write (contract C1). `store/objects/` holds file contents by SHA-256 and `store/versions/` the file list of each content version, named by the SHA-256 of its entries. `profiles/<profile>/active/<plugin>/` is the directory the profile's `link:` dependency names; `active.json` says what each holds, `log.json` is the change log and `work-session.json` the work session. `protection.json` holds the protection setting and `migration.json` the profiles the home held at the first start under Changes. The profile's `package.json` records each approved plugin's folder and version under `delo.changes`, so every profile history version holds it.
+Everything is under `changes/` in the Delo home, which confined commands can neither read nor write (contract C1). `store/objects/` holds file contents by SHA-256 and `store/versions/` the file list of each content version, named by the SHA-256 of its entries. `profiles/<profile>/active/<plugin>/` is the directory the profile's `link:` dependency names; `active.json` says what each holds, `log.json` is the change log and `work-session.json` the work session. `protection.json` holds the protection setting and `migration.json` the profiles the home held at the first start under Changes. The profile's `package.json` records each approved plugin's folder and version under `delo.changes`, so every profile history version holds it. Anything a plugin writes into its own active directory, such as a cached token, is readable by sandboxed commands, so a plugin keeps its secrets in the credentials store.
 
 ## How the profile loads approved content
 
