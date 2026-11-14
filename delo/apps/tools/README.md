@@ -98,7 +98,7 @@ It exits 1, with one line per failure, when the total growth in entries or in hu
 
 ## The gates
 
-[`src/checks/gates/index.ts`](src/checks/gates/index.ts) lists each gate as a command that the runner executes from the repository root. A gate passes when its command exits 0. A staged gate accepts paths as trailing arguments, which the runner appends at pre-commit. A range gate compares the commits from `origin/v5` to HEAD unless it is given `--base <rev>`. A gate runs in every gate tier unless it names a lighter one: `gates:docs` and the upstream gates that take more than about ten seconds skip the lane tier, and the upstream gates that take more than about a minute, build a site or read upstream's built output run in the merge tier only ([local checks](#local-checks)).
+[`src/checks/gates/index.ts`](src/checks/gates/index.ts) lists each gate as a command that the runner executes from the repository root. A gate passes when its command exits 0. A staged gate accepts paths as trailing arguments, which the runner appends at pre-commit. A range gate compares the commits from `origin/v5` to HEAD unless it is given `--base <rev>`, and leaves out the commits that the upstream commit pinned in `delo/upstream-patches.json` reaches, because upstream signs and words its own commits. A gate runs in every gate tier unless it names a lighter one: `gates:docs` and the upstream gates that take more than about ten seconds skip the lane tier, and the upstream gates that take more than about a minute, build a site or read upstream's built output run in the merge tier only ([local checks](#local-checks)).
 
 | Gate | Staged | Refuses or checks |
 |---|---|---|
