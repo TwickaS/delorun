@@ -131,7 +131,10 @@ export function ServerStart({ t, start }: { t: Translate; start: PendingServer |
     <dt>{t('mcp.command')}</dt>
     <dd><code className={css.command}>{start.command}</code></dd>
     <dt>{t('mcp.args')}</dt>
-    <dd>{start.args.length === 0 ? t('mcp.argsNone') : <code className={css.command}>{start.args.map(argument => JSON.stringify(argument)).join(' ')}</code>}</dd>
+    <dd>{start.args.length === 0 ? t('mcp.argsNone') : <>
+      <code className={css.command}>{start.args.map(argument => JSON.stringify(argument)).join(' ')}</code>
+      {start.args.some(argument => argument.includes('${credential:')) ? <div className={css.hint}>{t('mcp.argsTemplated')}</div> : null}
+    </>}</dd>
     <dt>{t('mcp.cwd')}</dt>
     <dd>{start.cwd === '' ? t('mcp.cwdHost') : <code className={css.command}>{start.cwd}</code>}</dd>
     <dt>{t('mcp.resolvedCommand')}</dt>

@@ -2,7 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
-import { assertTemplateSyntax, credentialRefsIn, resolveTemplateString } from './templates.ts'
+import { assertLiteralStart, assertNoInjectedOption, assertTemplateSyntax, credentialRefsIn, resolveTemplateString } from './templates.ts'
 import { describeError, McpLocalError, redactSecrets } from './diagnostic.ts'
 import type { Config } from './index.ts'
 
@@ -20,6 +20,7 @@ export class McpTemplateBinding {
     this.refs = new Set(config.expandTemplates ? strings.flatMap(credentialRefsIn) : [])
     if (config.expandTemplates) {
       for (const value of strings) assertTemplateSyntax(value, `mcp-client(${config.serverName})`)
+      if (config.transport === 'stdio') assertLiteralStart(config)
       if (this.refs.size > 0 && ctx.get('credentials') === undefined) {
         throw new McpLocalError('MCP credential templates require a credentials provider')
       }
@@ -82,7 +83,11 @@ export class McpTemplateBinding {
     const config = this.config
     if (config.transport === 'stdio') {
       const args: string[] = []
-      for (const [index, arg] of config.args.entries()) args.push(await resolve(arg, `args[${index}]`))
+      for (const [index, arg] of config.args.entries()) {
+        const value = await resolve(arg, `args[${index}]`)
+        assertNoInjectedOption(arg, value, `mcp-client(${config.serverName})`, index)
+        args.push(value)
+      }
       return {
         ...config,
         command: await resolve(config.command, 'command'),
