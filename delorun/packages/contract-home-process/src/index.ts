@@ -253,6 +253,23 @@ export interface PinSetRequest extends RequestBase {
   }
 }
 
+/**
+ * The `pin.options` request: change the idle minutes and lock-when-hidden of PIN mode that is on, without the PIN or
+ * passcode (C14, "PIN mode"). The hash and the page unlocks stay. Accepted under the same rule as {@link PinSetRequest}
+ * and refused with `PIN_FAILED` (`PIN_MODE_OFF`) while the mode is off.
+ */
+export interface PinOptionsRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'pin.options'
+  /** Arguments; at least one is present. */
+  readonly args: {
+    /** The minutes an unlock may idle, 1 to 60; unchanged when absent. */
+    readonly idleMinutes?: number
+    /** Whether a hidden page locks at once; unchanged when absent. */
+    readonly lockWhenHidden?: boolean
+  }
+}
+
 /** The `pin.off` request: turn PIN mode off and drop the PIN. Accepted under the same rule as {@link PinSetRequest}. */
 export interface PinOffRequest extends RequestBase {
   /** The operation. */
@@ -401,6 +418,7 @@ export type UpdateChannelRequest =
   | PinSetRequest
   | PinOffRequest
   | PinResumeRequest
+  | PinOptionsRequest
   | PermissionReloadRequest
   | McpListRequest
   | McpAcceptRequest

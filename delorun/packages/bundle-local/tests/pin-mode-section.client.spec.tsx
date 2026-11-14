@@ -2,7 +2,7 @@
 /**
  * The PIN mode section lets the person at the computer turn the mode on with a secret typed twice, change its settings,
  * turn it off and resume unlocks, refuses a mismatched or weak secret before any request, never keeps the secret after
- * submit, and shows a device one read-only line without a request.
+ * submit, saves the options without the secret, asks one confirmation before turning off, and shows a device one read-only line without a request.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -44,6 +44,7 @@ const ON: Answer = { status: 200, body: { enabled: true, kind: 'pin', idleMinute
 const PAUSED: Answer = { status: 200, body: { enabled: true, kind: 'pin', idleMinutes: 20, lockWhenHidden: false, paused: true } }
 const MODE: RouteKey = `GET ${PIN_COMPUTER_ROUTES.mode}`
 const SET: RouteKey = `POST ${PIN_COMPUTER_ROUTES.set}`
+const OPTIONS: RouteKey = `POST ${PIN_COMPUTER_ROUTES.options}`
 const OFF_ROUTE: RouteKey = `POST ${PIN_COMPUTER_ROUTES.off}`
 const RESUME: RouteKey = `POST ${PIN_COMPUTER_ROUTES.resume}`
 
@@ -116,8 +117,8 @@ describe('the PIN mode section', () => {
     await screen.findByText(en['state.pin'])
     expect(host.received.filter(request => request.key === SET).map(request => request.body))
       .toEqual([{ secret: '483920', idleMinutes: 20, lockWhenHidden: true }])
-    expect(field(en['secret.label']).value).toBe('')
-    expect(field(en['secret.confirm']).value).toBe('')
+    // The entry form is gone once the mode is on, so no field keeps the secret.
+    expect(screen.queryByLabelText(en['secret.label'])).toBeNull()
     expect(screen.getByRole('button', { name: en.change })).toBeTruthy()
     expect(setItem).not.toHaveBeenCalled()
     expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain('483920')
@@ -135,14 +136,71 @@ describe('the PIN mode section', () => {
     expect(field(en['secret.label']).value).toBe('')
   })
 
-  it('turns the mode off', async () => {
+  it('turns the mode off only after one in-place confirmation', async () => {
     const host = fakeHost({ [MODE]: [ON, OFF], [OFF_ROUTE]: { status: 200, body: { enabled: false } } })
     renderSection(host)
     expect(await screen.findByText(en['state.pin'])).toBeTruthy()
     expect(screen.getByText(`${en['state.settings'].replace('{minutes}', '20')} ${en['state.hidden']}`)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en.off }))
+    expect(screen.getByText(en['off.confirm'])).toBeTruthy()
+    expect(host.count(OFF_ROUTE)).toBe(0)
+    // Keeping the mode on withdraws the question and sends nothing.
+    fireEvent.click(screen.getByRole('button', { name: en['off.no'] }))
+    expect(screen.queryByText(en['off.confirm'])).toBeNull()
+    expect(host.count(OFF_ROUTE)).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: en.off }))
+    fireEvent.click(screen.getByRole('button', { name: en['off.yes'] }))
     await screen.findByText(en['state.off'])
     expect(host.count(OFF_ROUTE)).toBe(1)
+  })
+
+  it('saves the idle time and lock-when-hidden with no secret field and no secret sent', async () => {
+    const host = fakeHost({ [MODE]: [ON, ON], [OPTIONS]: { status: 200, body: { idleMinutes: 30, lockWhenHidden: false } } })
+    renderSection(host)
+    await screen.findByText(en['state.pin'])
+    // Pins the point of the options form: while the mode is on, the PIN is not asked for to change them.
+    expect(screen.queryByLabelText(en['secret.label'])).toBeNull()
+    expect(screen.queryByLabelText(en['secret.confirm'])).toBeNull()
+    type(en['idle.label'], '30')
+    fireEvent.click(screen.getByLabelText(en['hidden.label']))
+    fireEvent.click(screen.getByRole('button', { name: en.change }))
+    await waitFor(() => { expect(host.count(OPTIONS)).toBe(1) })
+    expect(host.received.find(request => request.key === OPTIONS)?.body).toEqual({ idleMinutes: 30, lockWhenHidden: false })
+    expect(host.count(SET)).toBe(0)
+  })
+
+  it('refuses an out-of-range idle time on save before any request', async () => {
+    const host = fakeHost({ [MODE]: ON })
+    renderSection(host)
+    await screen.findByText(en['state.pin'])
+    type(en['idle.label'], '61')
+    fireEvent.click(screen.getByRole('button', { name: en.change }))
+    expect((await screen.findByRole('alert')).textContent).toBe(en['problem.idle'])
+    expect(host.count(OPTIONS)).toBe(0)
+  })
+
+  it('changes the PIN in its own disclosure: both fields and the rules apply, and the saved options go with it', async () => {
+    const host = fakeHost({ [MODE]: [ON, ON], [SET]: { status: 200, body: { enabled: true, secret: 'pin' } } })
+    renderSection(host)
+    await screen.findByText(en['state.pin'])
+    fireEvent.click(screen.getByRole('button', { name: en['pin.toggle'] }))
+    const save = () => fireEvent.click(screen.getByRole('button', { name: en['pin.save'] }))
+    type(en['secret.label'], '483920')
+    type(en['secret.confirm'], '483921')
+    save()
+    expect((await screen.findByRole('alert')).textContent).toBe(en['problem.mismatch'])
+    type(en['secret.label'], '123456')
+    type(en['secret.confirm'], '123456')
+    save()
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe(en['problem.pinWeak']) })
+    expect(host.count(SET)).toBe(0)
+    type(en['secret.label'], '483920')
+    type(en['secret.confirm'], '483920')
+    save()
+    await waitFor(() => { expect(host.count(SET)).toBe(1) })
+    expect(host.received.find(request => request.key === SET)?.body).toEqual({ secret: '483920', idleMinutes: 20, lockWhenHidden: true })
+    await waitFor(() => { expect(screen.queryByLabelText(en['secret.label'])).toBeNull() })
+    expect(document.body.textContent).not.toContain('483920')
   })
 
   it('resumes unlocks after a pause', async () => {

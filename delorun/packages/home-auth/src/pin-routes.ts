@@ -5,8 +5,8 @@
  *   origin, as the elevation routes do. `POST /auth/pin/unlock` takes `{ secret }` and answers the page unlock's token,
  *   once; it answers `PIN_NOT_ALLOWED_ON_ADDRESS` on any listener but the Tailscale private one. `POST /auth/pin/touch`
  *   and `POST /auth/pin/lock` name the unlock by the `Delorun-Unlock` header, never by the URL.
- * - **Computer routes** set or replace the PIN and turn the mode on (`set`), turn it off (`off`) and resume unlocks after
- *   a home-wide pause (`resume`). Each answers only the person at the computer ({@link personAtComputer}), so a device
+ * - **Computer routes** set or replace the PIN and turn the mode on (`set`), change the idle minutes and lock-when-hidden
+ *   without the secret (`options`), turn it off (`off`) and resume unlocks after a home-wide pause (`resume`). Each answers only the person at the computer ({@link personAtComputer}), so a device
  *   is refused with `LOOPBACK_REQUIRED`: in version 1 a device never sets, changes or clears the PIN.
  *
  * @module @delorun/home-auth/pin-routes
@@ -31,6 +31,8 @@ export const PIN_PATHS = {
   mode: '/auth/pin/mode',
   /** `POST` `{ secret, idleMinutes?, lockWhenHidden? }`: the computer sets the PIN and turns the mode on. */
   set: '/auth/pin/set',
+  /** `POST` `{ idleMinutes?, lockWhenHidden? }`: the computer changes the two options without the secret. */
+  options: '/auth/pin/options',
   /** `POST`: the computer turns the mode off. */
   off: '/auth/pin/off',
   /** `POST`: the computer resumes PIN unlocks after a home-wide pause. */
@@ -173,6 +175,22 @@ export function pinSetHandler(auth: HomeAuth, credential: LoopbackCredential): R
     if (idleMinutes !== undefined && typeof idleMinutes !== 'number') throw new HomeAuthError('BAD_REQUEST', 'idleMinutes is a number of minutes')
     if (lockWhenHidden !== undefined && typeof lockWhenHidden !== 'boolean') throw new HomeAuthError('BAD_REQUEST', 'lockWhenHidden is true or false')
     return { enabled: true, secret: await auth.pin.set(secret, { idleMinutes, lockWhenHidden }) }
+  })
+}
+
+/**
+ * Build the route the computer changes the idle minutes and lock-when-hidden with, without the secret.
+ * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
+ * @returns the handler.
+ */
+export function pinOptionsHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
+  return computerPost(auth, credential, 'Changing PIN mode options', async (message) => {
+    const { idleMinutes, lockWhenHidden, ...rest } = message
+    if (Object.keys(rest).length > 0) throw new HomeAuthError('BAD_REQUEST', 'an options change takes idleMinutes and lockWhenHidden only')
+    if (idleMinutes !== undefined && typeof idleMinutes !== 'number') throw new HomeAuthError('BAD_REQUEST', 'idleMinutes is a number of minutes')
+    if (lockWhenHidden !== undefined && typeof lockWhenHidden !== 'boolean') throw new HomeAuthError('BAD_REQUEST', 'lockWhenHidden is true or false')
+    return auth.pin.setOptions({ idleMinutes, lockWhenHidden })
   })
 }
 

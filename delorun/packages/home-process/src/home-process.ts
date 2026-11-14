@@ -604,6 +604,7 @@ export class HomeProcess implements HandshakeSubject {
       case 'devices.elevate':
         return elevateDevices(request, check.callerOf(request.token), this.host?.devices)
       case 'pin.set':
+      case 'pin.options':
       case 'pin.off':
       case 'pin.resume':
         return changePin(request, check.callerOf(request.token), this.host?.devices)

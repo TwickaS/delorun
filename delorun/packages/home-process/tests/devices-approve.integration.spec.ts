@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { newStartToken } from '@delorun/home'
 import { approveDevices, changePin, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinSetRequest } from '@delorun/contract-home-process'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOptionsRequest, PinSetRequest } from '@delorun/contract-home-process'
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 /** A fake of home-auth's half that records every call. */
@@ -71,6 +71,12 @@ class FakeDevices implements LocalDeviceApproval {
     this.calls.push(`pin.set ${String(options.idleMinutes)}`)
     if (this.refusal !== undefined) throw this.refusal
     return Promise.resolve('pin')
+  }
+
+  async setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
+    this.calls.push(`pin.options ${String(options.idleMinutes)} ${String(options.lockWhenHidden)}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve({ idleMinutes: options.idleMinutes ?? 15, lockWhenHidden: options.lockWhenHidden ?? false })
   }
 
   async turnPinOff(): Promise<void> {
@@ -225,6 +231,7 @@ describe('devices.elevate', () => {
 })
 
 describe('pin.set, pin.off and pin.resume', () => {
+  const options: PinOptionsRequest = { v: 1, token: newStartToken(), op: 'pin.options', args: { idleMinutes: 30, lockWhenHidden: true } }
   const set = (secret: string): PinSetRequest => ({ v: 1, token: newStartToken(), op: 'pin.set', args: { secret, idleMinutes: 20 } })
 
   it('are the person\'s alone, and name home-auth\'s refusal without the secret', async () => {
@@ -233,16 +240,18 @@ describe('pin.set, pin.off and pin.resume', () => {
     await expect(changePin(set('482916'), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin(options, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(devices.calls).toEqual([])
     await expect(changePin(set('482916'), 'person', devices)).resolves.toEqual({ enabled: true, secret: 'pin' })
     await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'person', devices)).resolves.toEqual({ enabled: false })
     await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'person', devices)).resolves.toEqual({ paused: false })
+    await expect(changePin(options, 'person', devices)).resolves.toEqual({ enabled: true, idleMinutes: 30, lockWhenHidden: true })
     await expect(changePin(set('482916'), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
     devices.refusal = Object.assign(new Error('weak'), { code: 'PIN_WEAK', detail: 'That PIN is a repeat' })
     const refused: unknown = await changePin(set('482916'), 'person', devices).catch((error: unknown) => error)
     expect(refused).toMatchObject({ code: 'PIN_FAILED', detail: 'PIN_WEAK: That PIN is a repeat' })
     expect(JSON.stringify(refused)).not.toContain('482916')
-    expect(devices.calls).toEqual(['pin.set 20', 'pin.off', 'pin.resume', 'pin.set 20'])
+    expect(devices.calls).toEqual(['pin.set 20', 'pin.off', 'pin.resume', 'pin.options 30 true', 'pin.set 20'])
   })
 })
 

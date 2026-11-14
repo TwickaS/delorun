@@ -1,10 +1,11 @@
 /**
- * `delorun devices pin set | off | resume | status`: turn PIN mode on and off at the computer ([C14](../../../../docs/contracts/c14-oidc-passkeys.md#pin-mode)).
+ * `delorun devices pin set | options | off | resume | status`: turn PIN mode on and off at the computer ([C14](../../../../docs/contracts/c14-oidc-passkeys.md#pin-mode)).
  *
  * - `set` asks for the PIN or passcode twice with the characters hidden, or reads one line from standard input with
  *   `--stdin`. The secret is never read from an argument or an environment variable and never printed or logged. The
  *   command applies the PIN and passcode rules before it sends anything, then sends `pin.set` over the home socket (C19),
  *   which only the person's own command may call.
+ * - `options` changes the idle minutes and lock-when-hidden of a mode that is on, with no secret, by sending `pin.options`.
  * - `off` sends `pin.off`; `resume` sends `pin.resume`.
  * - `status` reads the PIN files in the home, without the home running, and never reads the hash.
  *
@@ -19,7 +20,7 @@ import { parseOptions, type CommandContext } from '../command.ts'
 import { printable } from '../terminal-text.ts'
 
 /** The usage line of the `pin` actions. */
-export const PIN_USAGE = 'Usage: delorun devices pin set [--idle-minutes <1-60>] [--lock-when-hidden] [--stdin] | off | resume | status [--profile <name>]'
+export const PIN_USAGE = 'Usage: delorun devices pin set [--idle-minutes <1-60>] [--lock-when-hidden] [--stdin] | options [--idle-minutes <1-60>] [--lock-when-hidden|--no-lock-when-hidden] | off | resume | status [--profile <name>]'
 
 /** What the PIN actions run against. */
 export interface PinDependencies {
@@ -65,7 +66,7 @@ interface PinWhere {
 
 /**
  * Run one `pin` action.
- * @param action - `set`, `off`, `resume` or `status`.
+ * @param action - `set`, `options`, `off`, `resume` or `status`.
  * @param options - the options after the action.
  * @param where - the home, profile, output and dependencies.
  * @returns the exit code.
@@ -74,6 +75,7 @@ interface PinWhere {
 export async function runPin(action: string | undefined, options: readonly string[], where: PinWhere): Promise<ExitCode> {
   switch (action) {
     case 'set': return set(options, where)
+    case 'options': return options_(options, where)
     case 'off': return off(options, where)
     case 'resume': return resume(options, where)
     case 'status': return status(options, where)
@@ -218,6 +220,49 @@ async function set(options: readonly string[], where: PinWhere): Promise<ExitCod
   }
   const kind = answer.secret === 'passcode' ? 'passcode' : 'PIN'
   where.context.stdout(`${allowedLines(kind, idleMinutes, values['lock-when-hidden']).join('\n')}\n`)
+  return EXIT.ok
+}
+
+/**
+ * Read `--idle-minutes` as a whole number of minutes.
+ * @param text - the option's text, or undefined when absent.
+ * @param command - the command's name, for the message.
+ * @returns the minutes, or undefined when absent.
+ * @throws {CliError} with the usage code for text that is not a whole number from 1 to the maximum.
+ */
+function idleMinutesOf(text: string | undefined, command: string): number | undefined {
+  if (text === undefined) return undefined
+  const minutes = Number(text)
+  if (!/^[0-9]+$/.test(text) || minutes < 1 || minutes > PIN_MODE_LIMITS.maxIdleMinutes) {
+    throw new CliError(EXIT.usage, `delorun devices pin ${command}: --idle-minutes is a whole number of minutes from 1 to ${String(PIN_MODE_LIMITS.maxIdleMinutes)}\n${PIN_USAGE}`)
+  }
+  return minutes
+}
+
+/**
+ * `delorun devices pin options`: change the idle minutes and lock-when-hidden of a mode that is on, with no secret.
+ * @param options - the options.
+ * @param where - the invocation.
+ * @returns the exit code.
+ * @throws {CliError} with the usage code for no option to change, a conflicting pair or a bad value.
+ */
+async function options_(options: readonly string[], where: PinWhere): Promise<ExitCode> {
+  const values = parseOptions('devices pin options', options, { profile: { type: 'string' }, 'idle-minutes': { type: 'string' }, 'lock-when-hidden': { type: 'boolean' }, 'no-lock-when-hidden': { type: 'boolean' } })
+  const idleMinutes = idleMinutesOf(values['idle-minutes'], 'options')
+  if (values['lock-when-hidden'] === true && values['no-lock-when-hidden'] === true) {
+    throw new CliError(EXIT.usage, `delorun devices pin options: choose --lock-when-hidden or --no-lock-when-hidden, not both\n${PIN_USAGE}`)
+  }
+  const lockWhenHidden = values['lock-when-hidden'] === true ? true : values['no-lock-when-hidden'] === true ? false : undefined
+  if (idleMinutes === undefined && lockWhenHidden === undefined) {
+    throw new CliError(EXIT.usage, `delorun devices pin options: name --idle-minutes or --lock-when-hidden or --no-lock-when-hidden\n${PIN_USAGE}`)
+  }
+  const answer = await ask({ op: 'pin.options', args: { ...(idleMinutes === undefined ? {} : { idleMinutes }), ...(lockWhenHidden === undefined ? {} : { lockWhenHidden }) } }, where)
+  if (answer === undefined) return EXIT.failed
+  if (answer.ok !== true) {
+    where.context.stderr(`delorun devices pin options: Delorun refused: ${refusal(answer)}. Nothing was changed.\n`)
+    return EXIT.failed
+  }
+  where.context.stdout(`A page now locks after ${String(answer.idleMinutes)} idle minutes${answer.lockWhenHidden === true ? ', and at once when it is hidden' : ''}. The PIN is unchanged.\n`)
   return EXIT.ok
 }
 

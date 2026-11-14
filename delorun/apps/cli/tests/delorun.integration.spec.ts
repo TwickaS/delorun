@@ -563,6 +563,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       approveElevation: () => ({ id: 'elevation', deviceId: 'device', endsAt: 0 }),
       revokeElevation: () => false,
       setPin: () => Promise.resolve('pin'),
+      setPinOptions: () => Promise.resolve({ idleMinutes: 15, lockWhenHidden: false }),
       turnPinOff: () => Promise.resolve(),
       resumePin: () => Promise.resolve(),
     }

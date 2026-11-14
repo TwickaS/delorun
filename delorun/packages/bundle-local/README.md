@@ -105,12 +105,13 @@ Known debt: the Chinese README does not describe this section yet, so the biling
 
 ## The PIN mode section
 
-The **PIN mode** section (`delorun-pin-mode`, right after Devices, [`src/client/PinModeSection.tsx`](src/client/PinModeSection.tsx)) is where the person at the home's own computer turns PIN mode on and off. It reads `GET /auth/pin/mode` and sends `POST /auth/pin/set`, `/off` and `/resume` ([`src/client/pin-api.ts`](src/client/pin-api.ts)), the computer-only routes of [`@delorun/home-auth`](../home-auth/README.md). It shows whether the mode is on, with a PIN or a passcode, the idle minutes, lock when hidden and whether unlocks are paused.
+The **PIN mode** section (`delorun-pin-mode`, right after Devices, [`src/client/PinModeSection.tsx`](src/client/PinModeSection.tsx)) is where the person at the home's own computer turns PIN mode on and off. It reads `GET /auth/pin/mode` and sends `POST /auth/pin/set`, `/options`, `/off` and `/resume` ([`src/client/pin-api.ts`](src/client/pin-api.ts)), the computer-only routes of [`@delorun/home-auth`](../home-auth/README.md). It shows whether the mode is on, with a PIN or a passcode, the idle minutes, lock when hidden and whether unlocks are paused.
 
 - **Turn on.** A PIN or passcode typed twice in masked fields (16 px, so a phone does not zoom), the idle minutes (1 to 60) and a lock-when-hidden switch. [`src/client/pin-rules.ts`](src/client/pin-rules.ts) checks the length, repeat, run and common-PIN rules and the match before any request; the home's own check stays the authority and its sentence shows in place.
-- **Change.** While the mode is on, the same form saves new idle minutes or lock-when-hidden. The home takes them only with a secret, so the person types the PIN or passcode again; it can be the same.
+- **Options.** While the mode is on, the idle minutes and the lock-when-hidden switch save directly with Save changes (`POST /auth/pin/options`); no secret is asked for, because the computer is already trusted for these settings.
+- **Change PIN.** A separate Change PIN disclosure holds the two secret fields, the same rules and its own Save new PIN button; the new PIN keeps the saved options.
 - **Secret handling.** The secret lives in the component's state until the request leaves, is cleared whatever the answer, and is never written to storage.
-- **Turn off and resume.** Turn off needs no secret. Resume appears while unlocks are paused home-wide after too many wrong tries.
+- **Turn off and resume.** Turn off needs no secret but asks one in-place confirmation ("Devices will no longer need a PIN."). Resume appears while unlocks are paused home-wide after too many wrong tries.
 - **On a device.** The section shows one line saying PIN mode is set at the computer, and sends no request. The home refuses a device's request with `LOOPBACK_REQUIRED` either way.
 
 Onboarding's Phone access step recommends the mode in one line and points at this section and `delorun devices pin set`.

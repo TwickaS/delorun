@@ -18,7 +18,7 @@
  *
  * @module @delorun/home-process/devices-approve
  */
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOffRequest, PinResumeRequest, PinSetRequest } from '@delorun/contract-home-process'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOffRequest, PinOptionsRequest, PinResumeRequest, PinSetRequest } from '@delorun/contract-home-process'
 import { HomeProcessError } from './errors.ts'
 
 /** A pending approval request as the person's command shows it. */
@@ -127,6 +127,13 @@ export interface LocalDeviceApproval {
    * @throws an error with a `code` property, such as `PIN_WEAK`, for a refused secret.
    */
   setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'>
+  /**
+   * Change the idle minutes and lock-when-hidden of PIN mode that is on, without the secret.
+   * @param options - the new values; a missing one stays.
+   * @returns the settings now in force.
+   * @throws an error with a `code` property, such as `PIN_MODE_OFF` while the mode is off.
+   */
+  setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }>
   /**
    * Turn PIN mode off.
    */
@@ -259,7 +266,7 @@ export async function elevateDevices(request: DevicesElevateRequest, caller: Cha
 }
 
 /**
- * Run `pin.set`, `pin.off` or `pin.resume`.
+ * Run `pin.set`, `pin.options`, `pin.off` or `pin.resume`.
  * @param request - the request.
  * @param caller - the credential it carried.
  * @param devices - the Host's local approval, or undefined when the profile does not load `@delorun/home-auth`.
@@ -267,7 +274,7 @@ export async function elevateDevices(request: DevicesElevateRequest, caller: Cha
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
  *   `PIN_FAILED` naming home-auth's code for a refused secret; the message never holds the secret.
  */
-export async function changePin(request: PinSetRequest | PinOffRequest | PinResumeRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+export async function changePin(request: PinSetRequest | PinOffRequest | PinOptionsRequest | PinResumeRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'changing the PIN needs you at your computer: run delorun there')
   }
@@ -276,6 +283,8 @@ export async function changePin(request: PinSetRequest | PinOffRequest | PinResu
     switch (request.op) {
       case 'pin.set':
         return { enabled: true, secret: await devices.setPin(request.args.secret, request.args) }
+      case 'pin.options':
+        return { enabled: true, ...await devices.setPinOptions(request.args) }
       case 'pin.off':
         await devices.turnPinOff()
         return { enabled: false }

@@ -24,7 +24,7 @@ import { DeviceStore } from '../src/devices.ts'
 import type { ElevationChange } from '../src/elevation.ts'
 import { PinModeStore } from '../src/pin-mode.ts'
 import type { PinEvent } from '../src/pin-unlocks.ts'
-import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from '../src/pin-routes.ts'
+import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from '../src/pin-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 
@@ -93,6 +93,7 @@ beforeEach(async () => {
     [PIN_PATHS.mode]: pinModeHandler(home.auth, testCredential),
     [PIN_PATHS.set]: pinSetHandler(home.auth, testCredential),
     [PIN_PATHS.off]: pinOffHandler(home.auth, testCredential),
+    [PIN_PATHS.options]: pinOptionsHandler(home.auth, testCredential),
     [PIN_PATHS.resume]: pinResumeHandler(home.auth, testCredential),
   }
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
@@ -196,6 +197,52 @@ describe('with PIN mode off', () => {
     expect(running()).toBeUndefined()
     expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'pin-mode-off' })
     expect(await unlock()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+  })
+})
+
+describe('changing the options without the secret', () => {
+  /** The bytes of the record's hash fields, which an options change must leave alone. */
+  const hashOf = async (): Promise<string> => JSON.stringify((JSON.parse(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')) as { hash: unknown }).hash)
+
+  it('changes the idle minutes and lock-when-hidden on the computer, keeps the hash and the unlocks', async () => {
+    await turnOn()
+    const before = await hashOf()
+    const unlocked = await unlock()
+    expect(unlocked.status).toBe(200)
+    expect((await send('POST', PIN_PATHS.options, { idleMinutes: 30, lockWhenHidden: true })).body).toEqual({ idleMinutes: 30, lockWhenHidden: true })
+    expect(home.auth.pin.summary()).toMatchObject({ enabled: true, idleMinutes: 30, lockWhenHidden: true })
+    expect(await hashOf()).toBe(before)
+    // Pins that an options change is no secret change: the page's unlock stays.
+    expect(changes.some(change => change.kind === 'ended')).toBe(false)
+    // One field alone leaves the other as it was.
+    expect((await send('POST', PIN_PATHS.options, { lockWhenHidden: false })).body).toEqual({ idleMinutes: 30, lockWhenHidden: false })
+    // The change is on disk and the PIN still opens.
+    const stored = JSON.parse(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')) as { idleMinutes: number; lockWhenHidden: boolean }
+    expect(stored).toMatchObject({ idleMinutes: 30, lockWhenHidden: false })
+    expect((await unlock()).status).toBe(200)
+  })
+
+  it('is the computer\'s alone', async () => {
+    await turnOn()
+    const before = JSON.stringify(home.auth.pin.summary())
+    expect(await send('POST', `${PIN_PATHS.options}?reach`, { idleMinutes: 5 })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect((await unlock()).status).toBe(200)
+    expect(await send('POST', `${PIN_PATHS.options}?reach`, { idleMinutes: 5 })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect(JSON.stringify(home.auth.pin.summary())).toBe(before)
+  })
+
+  it('is refused while the mode is off', async () => {
+    expect(await send('POST', PIN_PATHS.options, { idleMinutes: 5 })).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+    expect(home.auth.pin.summary().enabled).toBe(false)
+  })
+
+  it('refuses an out-of-range, fractional or mistyped value and an empty change, and changes nothing', async () => {
+    await turnOn()
+    const before = await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')
+    for (const body of [{ idleMinutes: 0 }, { idleMinutes: 61 }, { idleMinutes: 1.5 }, { idleMinutes: '5' }, { lockWhenHidden: 'yes' }, {}]) {
+      expect((await send('POST', PIN_PATHS.options, body)).status, JSON.stringify(body)).toBe(400)
+    }
+    expect(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')).toBe(before)
   })
 })
 

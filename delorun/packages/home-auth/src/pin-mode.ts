@@ -253,6 +253,26 @@ export class PinModeStore {
   }
 
   /**
+   * Change the idle minutes and lock-when-hidden of a mode that is on, without the secret. The hash, the kind and the
+   * tries stay as they are; the record is written by the same protected write as every other change.
+   * @param options - the new idle minutes (a whole number from 1 to the maximum) and the lock-when-hidden choice; a missing one stays.
+   * @returns the settings now in force.
+   * @throws {HomeAuthError} `PIN_MODE_OFF` when the mode is off; `BAD_REQUEST` for an empty change or idle minutes out of range.
+   */
+  async setOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
+    const record = this.record
+    if (record === undefined) throw new HomeAuthError('PIN_MODE_OFF', 'PIN mode is off. Turn it on at your computer')
+    const { idleMinutes = record.idleMinutes, lockWhenHidden = record.lockWhenHidden } = options
+    if (options.idleMinutes === undefined && options.lockWhenHidden === undefined) throw new HomeAuthError('BAD_REQUEST', 'an options change names idleMinutes or lockWhenHidden')
+    if (!Number.isInteger(idleMinutes) || idleMinutes < 1 || idleMinutes > PIN_MODE_LIMITS.maxIdleMinutes) {
+      throw new HomeAuthError('BAD_REQUEST', `an unlock idles out after a whole number of minutes from 1 to ${String(PIN_MODE_LIMITS.maxIdleMinutes)}, got ${String(idleMinutes)}`)
+    }
+    this.record = { ...record, idleMinutes, lockWhenHidden }
+    await this.persist()
+    return { idleMinutes, lockWhenHidden }
+  }
+
+  /**
    * Turn the mode off and drop the hash and the tries.
    */
   async off(): Promise<void> {

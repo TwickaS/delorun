@@ -48,7 +48,7 @@ import {
   elevationStateHandler,
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
-import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
+import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -242,6 +242,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PIN_PATHS.mode, handler: pinModeHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.set, handler: pinSetHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
       ]
       return () => {
@@ -534,6 +535,15 @@ export class HomeAuthService extends Service {
    */
   setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'> {
     return this.state().pin.set(secret, options)
+  }
+
+  /**
+   * Change the idle minutes and lock-when-hidden of PIN mode without the secret; the home's own computer only.
+   * @param options - the new values; a missing one stays.
+   * @returns the settings now in force.
+   */
+  setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
+    return this.state().pin.setOptions(options)
   }
 
   /**

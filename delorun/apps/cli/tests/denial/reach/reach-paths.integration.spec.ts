@@ -74,6 +74,7 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/pin/mode': HOME_AUTH,
   'exact /auth/pin/set': HOME_AUTH,
   'exact /auth/pin/off': HOME_AUTH,
+  'exact /auth/pin/options': HOME_AUTH,
   'exact /auth/pin/resume': HOME_AUTH,
 }
 

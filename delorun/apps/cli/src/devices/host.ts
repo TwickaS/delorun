@@ -50,6 +50,7 @@ export function localDeviceApproval(ctx: Pick<Context, 'get'>): LocalDeviceAppro
     },
     revokeElevation: id => homeAuth.revokeElevation(id),
     setPin: (secret, options) => homeAuth.setPin(secret, options),
+    setPinOptions: (options) => homeAuth.setPinOptions(options),
     turnPinOff: () => homeAuth.turnPinOff(),
     resumePin: () => homeAuth.resumePin(),
   }

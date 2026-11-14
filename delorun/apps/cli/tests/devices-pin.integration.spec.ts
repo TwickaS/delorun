@@ -58,6 +58,7 @@ function pinOnlyApproval(): LocalDeviceApproval {
     openWindow: unused, windowOpenUntil: unused, pending: unused, approve: unused, cancel: unused, remove: unused,
     elevations: unused, approveElevation: unused, revokeElevation: unused,
     setPin: async (secret, options) => { await store.load(); return store.set(secret, options) },
+    setPinOptions: async (options) => { await store.load(); return store.setOptions(options) },
     turnPinOff: async () => { await store.load(); await store.off() },
     resumePin: async () => { await store.load(); await store.resume() },
   }
@@ -108,6 +109,38 @@ describe('delorun devices pin', () => {
     out.stdout = ''
     await command().run(['pin', 'status'], context)
     expect(out.stdout).toBe('PIN mode is off. Turn it on with delorun devices pin set.\n')
+  }, 60_000)
+
+  it('changes the idle minutes and lock-when-hidden with no secret, and keeps the PIN', async () => {
+    running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
+    await command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)
+    const hashBefore = readFileSync(join(secrets(), 'pin-mode.json'), 'utf8').match(/"dk":\s*"[^"]+"/)?.[0]
+    expect(hashBefore).toBeDefined()
+    sent = []
+    out.stdout = ''
+    await expect(command().run(['pin', 'options', '--idle-minutes', '7', '--lock-when-hidden'], context)).resolves.toBe(EXIT.ok)
+    expect(sent).toEqual([{ op: 'pin.options', args: { idleMinutes: 7, lockWhenHidden: true } }])
+    expect(out.stdout).toContain('7 idle minutes')
+    expect(out.stdout).toContain('at once when it is hidden')
+    await expect(command().run(['pin', 'options', '--no-lock-when-hidden'], context)).resolves.toBe(EXIT.ok)
+    expect(sent.at(-1)).toEqual({ op: 'pin.options', args: { lockWhenHidden: false } })
+    out.stdout = ''
+    await command().run(['pin', 'status'], context)
+    expect(out.stdout).toBe('PIN mode is on, with a PIN; a page locks after 7 idle minutes.\n')
+    expect(readFileSync(join(secrets(), 'pin-mode.json'), 'utf8').match(/"dk":\s*"[^"]+"/)?.[0]).toBe(hashBefore)
+    // Nothing to change, an out-of-range value and a conflict are refused before anything is sent.
+    sent = []
+    for (const options of [[], ['--idle-minutes', '0'], ['--idle-minutes', '61'], ['--idle-minutes', 'x'], ['--lock-when-hidden', '--no-lock-when-hidden']]) {
+      await expect(command().run(['pin', 'options', ...options], context), options.join(' ')).rejects.toMatchObject({ exit: EXIT.usage })
+    }
+    expect(sent).toEqual([])
+  }, 60_000)
+
+  it('says the home refused an options change while PIN mode is off', async () => {
+    running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
+    await expect(command().run(['pin', 'options', '--idle-minutes', '7'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Delorun refused')
+    expect(out.stderr).toContain('PIN_MODE_OFF')
   }, 60_000)
 
   it('reads one line from standard input with --stdin and takes a passcode', async () => {

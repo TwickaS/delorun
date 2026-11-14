@@ -48,6 +48,7 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', PIN_PATHS.mode],
   ['exact', PIN_PATHS.set],
   ['exact', PIN_PATHS.off],
+  ['exact', PIN_PATHS.options],
   ['exact', PIN_PATHS.resume],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'

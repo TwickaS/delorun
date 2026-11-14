@@ -65,6 +65,14 @@ const request = z.discriminatedUnion('op', [
       lockWhenHidden: z.boolean().optional(),
     }),
   }),
+  z.strictObject({
+    ...base,
+    op: z.literal('pin.options'),
+    args: z.strictObject({
+      idleMinutes: z.number().int().min(1).max(60).optional(),
+      lockWhenHidden: z.boolean().optional(),
+    }).refine(args => args.idleMinutes !== undefined || args.lockWhenHidden !== undefined, 'name idleMinutes or lockWhenHidden'),
+  }),
   z.strictObject({ ...base, op: z.literal('pin.off') }),
   z.strictObject({ ...base, op: z.literal('pin.resume') }),
   z.strictObject({ ...base, op: z.literal('permission.reload') }),

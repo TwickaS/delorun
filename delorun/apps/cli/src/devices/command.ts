@@ -14,7 +14,7 @@
  *   `devices.elevate`, which only the person's own command may call. It lists the waiting requests and the running
  *   unlocks; the person approves a request by typing the 8-digit code its device shows, declines one, or ends an unlock.
  * - `code` prints a new owner code, only to a terminal.
- * - `pin set | off | resume | status` turns PIN mode on and off at this computer (C14, "PIN mode"); see `./pin.ts`.
+ * - `pin set | options | off | resume | status` turns PIN mode on and off and changes its options at this computer (C14, "PIN mode"); see `./pin.ts`.
  *
  * @module @delorun/cli/devices/command
  */
@@ -65,7 +65,7 @@ export interface DevicesDependencies {
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code | pin set|off|resume|status [--profile <name>]'
+const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code | pin set|options|off|resume|status [--profile <name>]'
 
 /** How many codes `approve` and `elevate` take for one request: C5's and C14's count before the home cancels it. */
 const CODE_ATTEMPTS = 3
