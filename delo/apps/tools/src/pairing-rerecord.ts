@@ -21,7 +21,7 @@ if (tree === undefined) {
  * @param name - the file name under `scripts/`.
  * @returns the module's exports.
  */
-const load = async (name: string): Promise<Record<string, any>> => import(pathToFileURL(join(tree, 'scripts', name)).href) // eslint-disable-line @typescript-eslint/no-explicit-any -- the checkout's modules are not part of this program's types
+const load = async (name: string): Promise<Record<string, any>> => import(pathToFileURL(join(tree, 'scripts', name)).href)
 const record = await load('translation-pairing-record.ts')
 const pairing = await load('translation-pairing.ts')
 const manifest = pairing.parseTranslationPairingManifest(readFileSync(join(tree, 'scripts/translation-pairing.manifest.json'), 'utf8'))
