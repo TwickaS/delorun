@@ -274,7 +274,7 @@ describe('the route', () => {
 describe('the optional rows', () => {
   it('checks the configured rows against the Loader when it applies', () => {
     const ctx = new Context()
-    ctx.provide('loader', { entries: () => [{ id: 'delo-cost-meter' }] } as never)
+    ctx.provide('loader', { entries: () => [{ id: 'include:delo-cost-meter', options: { id: 'delo-cost-meter' } }] } as never)
     ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
     expect(() => apply(ctx, Config({ optionalRows: ['delo-cost-meter'] }))).not.toThrow()
     expect(() => apply(ctx, Config({ optionalRows: ['delo-nope'] }))).toThrow('"delo-nope"')
