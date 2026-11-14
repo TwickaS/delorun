@@ -12,14 +12,22 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import type { Transport } from '@modelcontextprotocol/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { mockConnect, MockClient } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>(async () => {})
   class MockClient {
-    transport = {}
+    transport: Transport | undefined
     onclose: (() => void) | undefined
-    connect = mockConnect
+    async connect(transport: Transport): Promise<void> {
+      this.transport = transport
+      const onclose = transport.onclose
+      transport.onclose = () => { onclose?.(); this.onclose?.() }
+      await transport.start()
+      await mockConnect.call(this)
+    }
+    listResources = async () => ({ resources: [] })
     close = vi.fn(async () => {})
     listTools = vi.fn(async () => ({ tools: [], nextCursor: undefined }))
     getServerCapabilities = () => ({ tools: {} })
@@ -28,8 +36,22 @@ const { mockConnect, MockClient } = vi.hoisted(() => {
   return { mockConnect, MockClient }
 })
 
-vi.mock('@modelcontextprotocol/client', () => ({ Client: MockClient, StreamableHTTPClientTransport: vi.fn() }))
-vi.mock('@modelcontextprotocol/client/stdio', () => ({ StdioClientTransport: vi.fn() }))
+vi.mock('@modelcontextprotocol/client', () => ({ Client: MockClient, StreamableHTTPClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }) }))
+vi.mock('@modelcontextprotocol/client/stdio', () => ({ StdioClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }) }))
 
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import { McpConsentUnavailableError } from '@deepseek-ai/dsh-mcp-client'
