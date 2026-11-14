@@ -56,7 +56,7 @@ The main chat runs in the directory that holds every workspace, and untrusted te
 
 ## Carry-forward review
 
-The package is carried from Delo's earlier main chat and reviewed for this tree, whose base is `dsh-v0.2.2-rc.1`.
+The package is carried from Delo's earlier main chat and reviewed for this tree, whose base is `dsh-v0.2.2-rc.3`.
 
 - **Decision: the write-class tools always ask.** The earlier guard asked only in a turn that read another chat's text, while untrusted text also arrives through fetched pages, files and other workspaces' `AGENTS.md`. `workspace_instructions_write`, `workspace_import` and `workspace_restore` now ask in every turn, like `workspace_trash`, and refuse with `MAIN_CHAT_DECLINED` when declined; [`untrusted-input.spec.ts`](tests/untrusted-input.spec.ts) proves it.
 - **Widened with it, as lead decisions.** `workspace_note` and `workspace_note_remove` always ask too, since an owner note is instructions every chat of the workspace reads. `workspace_create` always asks as well, so a reach device cannot add a workspace: `@delo/home-auth` refuses its granting answer as it refuses every other `workspace-management` question. `workspace_instructions` records a read, so the rest of its turn asks before a message or a delegation. Every other tool that is not read-only asks in every turn, `web_fetch` and `run_code` included, because the main chat now runs in the directory that holds every workspace, where a file write, a command or a program reaches any workspace's `AGENTS.md`. The `deloWorkspaces` Service Definition lives here until Delo's workspace import package provides it and takes it over.
