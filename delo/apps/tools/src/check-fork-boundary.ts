@@ -74,16 +74,14 @@ function nameStatus(tracked: readonly string[]): ChangedPath[] {
 }
 
 /**
- * Collect every path that differs from the upstream commit, including uncommitted and untracked files.
+ * Collect every tracked path that differs from the upstream commit, including uncommitted edits to tracked files.
+ * Untracked and ignored files are not considered, so build checks writing scratch output cannot race the ledger.
  * @param root - the repository root.
  * @param commit - the pinned upstream commit.
- * @returns the changed paths with their status; untracked paths are marked.
+ * @returns the changed paths with their status.
  */
 export function changedSince(root: string, commit: string): ChangedPath[] {
   const changed = nameStatus(nulSeparated(git(root, ['diff', '--name-status', '--no-renames', '-z', commit])))
-  for (const path of nulSeparated(git(root, ['ls-files', '--others', '--exclude-standard', '-z']))) {
-    changed.push({ path, status: 'added', untracked: true })
-  }
   return changed
 }
 
@@ -111,19 +109,15 @@ export function treeFiles(root: string, commit: string): Set<string> {
 
 /**
  * Count the hunks of one changed path against the pinned commit, as `git diff --unified=0` splits them.
- * An untracked path is shown as a new file, so its whole content is one hunk.
  * @param root - the repository root.
  * @param commit - the pinned upstream commit.
  * @param change - one changed path from {@link changedSince}.
  * @returns the number of hunk headers.
- * @throws Error when git fails; `git diff --no-index` exits 1 when the files differ, which is the expected case.
+ * @throws Error when git fails.
  */
 export function hunkCount(root: string, commit: string, change: ChangedPath): number {
-  const run = change.untracked === true
-    ? runGit(root, ['diff', '--no-index', '--no-color', '--unified=0', '/dev/null', change.path])
-    : runGit(root, ['diff', '--no-color', '--no-ext-diff', '--no-renames', '--unified=0', commit, '--', change.path])
-  const expected = change.untracked === true ? [0, 1] : [0]
-  if (run.status === null || !expected.includes(run.status)) {
+  const run = runGit(root, ['diff', '--no-color', '--no-ext-diff', '--no-renames', '--unified=0', commit, '--', change.path])
+  if (run.status !== 0) {
     throw new Error(`git diff for ${change.path} exited ${String(run.status)}: ${run.stderr.trim()}`)
   }
   return run.stdout.split('\n').filter(line => line.startsWith('@@')).length
@@ -221,7 +215,7 @@ export function checkRepository(root: string): CheckResult {
     }
   }
   const changed = changedSince(root, pinned)
-  const files = new Set(nulSeparated(git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])))
+  const files = new Set(nulSeparated(git(root, ['ls-files', '--cached', '-z'])))
   return {
     manifest,
     errors: [

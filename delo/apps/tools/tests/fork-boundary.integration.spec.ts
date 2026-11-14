@@ -150,6 +150,18 @@ describe('divergence ledger checks', () => {
     ])
   })
 
+  it('ignores untracked files, which build checks write concurrently, and still fails a tracked unlisted one', (test) => {
+    const repo = fixture(test)
+    const base = repo.commit({ 'upstream.ts': 'a\n' })
+    repo.commit({ 'delo/upstream-patches.json': ledgerText(base) })
+    repo.write({ 'website/.vitepress/.temp/favicon.svg': '<svg/>\n' })
+    expect(checkRepository(repo.root).errors).toEqual([])
+    repo.run(['add', 'website/.vitepress/.temp/favicon.svg'])
+    expect(checkRepository(repo.root).errors).toEqual([
+      'website/.vitepress/.temp/favicon.svg: added upstream file is not listed in delo/upstream-patches.json and no path rule covers it',
+    ])
+  })
+
   it('fails a stale entry whose path no longer differs from upstream', (test) => {
     const repo = fixture(test)
     const base = repo.commit({ 'upstream.ts': 'a\n' })
@@ -202,6 +214,7 @@ describe('divergence ledger checks', () => {
       '.agents/notes/implemented/architecture/2026-11-06-delo-ledger.i18n.yaml': 'source: x\n',
       '.agents/notes/implemented/architecture/2026-11-06-upstream-ledger.md': '# Upstream\n',
     })
+    repo.run(['add', '-A'])
     expect(checkRepository(repo.root).errors).toEqual([
       '.agents/notes/implemented/architecture/2026-11-06-upstream-ledger.md: added upstream file is not listed in delo/upstream-patches.json and no path rule covers it',
     ])
@@ -399,10 +412,12 @@ describe('path rules', () => {
     const base = repo.commit({ 'packages/core/session/src/index.ts': 'a\n' })
     repo.commit({ 'delo/upstream-patches.json': ledgerText(base, [], [], ['delo/'], [TESTS_RULE]) })
     repo.write({ 'packages/core/session/tests/zz-probe.spec.ts': 'probe\n' })
+    repo.run(['add', '-A'])
     const ruled = checkRepository(repo.root)
     expect(ruled.errors).toEqual([])
     expect(ruled.coverage).toEqual(new Map([['**/tests/**', 1]]))
     repo.write({ 'packages/core/session/src/zz-probe.ts': 'probe\n' })
+    repo.run(['add', '-A'])
     expect(checkRepository(repo.root).errors).toEqual([
       'packages/core/session/src/zz-probe.ts: added upstream source file is not listed in delo/upstream-patches.json; source needs an entry',
     ])
