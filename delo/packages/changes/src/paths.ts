@@ -30,7 +30,7 @@
  * @module @delo/changes/paths
  */
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, RUNTIME_VERSION_MAX_LENGTH, RUNTIME_VERSION_PATTERN } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, profileNameProblem, RUNTIME_VERSION_MAX_LENGTH, RUNTIME_VERSION_PATTERN } from '@delo/contract-home-layout'
 import { ChangesError } from './errors.ts'
 
 /** What a package name under Changes is: npm's form, with an optional scope. */
@@ -89,21 +89,34 @@ export function versionsDirectory(home: string): string {
 
 /**
  * @param home - the Delo home.
- * @param profile - the profile's name.
+ * @param profile - the profile's name, which must pass {@link profileNameProblem}.
  * @returns the profile's directory under `changes/profiles/`.
+ * @throws {ChangesError} `INVALID_REQUEST` when the name is not a profile name, so no path is built from it.
  */
 export function profileChangesDirectory(home: string, profile: string): string {
+  requireProfileName(profile)
   return join(changesDirectory(home), CHANGES_ENTRIES.profiles, profile)
 }
 
 /**
  * The approved copies of one profile's plugins, relative to the home, as a sandbox read exemption names them.
- * @param profile - the profile's name.
+ * @param profile - the profile's name, which must pass {@link profileNameProblem}.
  * @returns `changes/profiles/<profile>/active`, which holds nothing but approved copies: no pending, unapproved or
  *   stored content, no record and no log.
+ * @throws {ChangesError} `INVALID_REQUEST` when the name is not a profile name, so no path is built from it.
  */
 export function activeCopiesEntry(profile: string): string {
+  requireProfileName(profile)
   return join(DELO_HOME_ENTRIES.changes, CHANGES_ENTRIES.profiles, profile, CHANGES_ENTRIES.active)
+}
+
+/**
+ * @param profile - a profile's name.
+ * @throws {ChangesError} `INVALID_REQUEST`, with the reason {@link profileNameProblem} gives, when the name is refused.
+ */
+function requireProfileName(profile: string): void {
+  const problem = profileNameProblem(profile)
+  if (problem !== undefined) throw new ChangesError('INVALID_REQUEST', profile, problem)
 }
 
 /**
