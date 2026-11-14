@@ -14,7 +14,7 @@ kind: "package-library"
 ## 目录
 
 - [使用本包](#use-this-package)
-- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [已知限制](#known-limitations)
 
 <a id="use-this-package"></a>
 
@@ -22,8 +22,8 @@ kind: "package-library"
 
 发布工作流写入 bundle；安装脚本、npm 启动器、CLI（命令行界面）启动器与 home 进程（home process）、`delorun verify` 以及桌面更新器读取它们并记录检查状态。用 `import type` 导入类型，用值导入从 `@delorun/contract-release-log` 导入常量；读取或写入本约定所定义文件的包仍须在其解析器中校验这些文件，因为这些类型描述的是有效文件，并不检查它们。
 
-<a id="known-limitations-and-deferred-work"></a>
+<a id="known-limitations"></a>
 
-## 已知限制与延期工作
+## 已知限制
 
 - 检查点、共同签名与证明的格式是该约定页面所指明的 C2SP 与 RFC 6962 格式；本包将它们类型化为字符串与十六进制列表，并不解析它们。

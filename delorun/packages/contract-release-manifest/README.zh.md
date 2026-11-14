@@ -14,7 +14,7 @@ kind: "package-library"
 ## 目录
 
 - [使用本包](#use-this-package)
-- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [已知限制](#known-limitations)
 
 <a id="use-this-package"></a>
 
@@ -22,8 +22,8 @@ kind: "package-library"
 
 `delorun/apps/release/` 中的发布构建、安装脚本与 npm 启动器、运行时仓库（runtime store）的启动检查以及桌面更新器使用它，其他发布与插件索引约定包导入它的摘要、版本与信封类型。从 `@delorun/contract-release-manifest` 导入时，类型用 `import type`，常量用值导入；读取或写入本约定所定义文件的包仍须在其解析器中验证这些文件，因为这些类型描述的是有效文件，并不检查它们。
 
-<a id="known-limitations-and-deferred-work"></a>
+<a id="known-limitations"></a>
 
-## 已知限制与延期工作
+## 已知限制
 
 - 规范 JSON 序列化与 Ed25519 验证交由各消费方自选的库完成；本包只指明算法，不实现它们。
