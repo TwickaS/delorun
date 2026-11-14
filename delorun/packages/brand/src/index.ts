@@ -2,11 +2,11 @@
  * Delorun's brand: the tokens, the hex mark and the component set. The components compose upstream's studio
  * primitives for keyboard, focus and accessibility behaviour and add Delorun's look and API. The package exports its
  * source: a Delorun studio plugin's browser bundle inlines it, and the website and the docs import it through Vite.
- * It needs no Cordis host. Importing this module loads `tokens.css`; load `fonts.css` as well where the page does not
+ * It needs no Cordis host. Importing this module adds the `tokens.css` rules to the document; load `fonts.css` as well where the page does not
  * already provide Schibsted Grotesk and JetBrains Mono.
  * @module @delorun/brand
  */
-import './tokens.css'
+import './tokens-style.ts'
 
 export { BRAND_COLOURS, BRAND_FONTS, BRAND_RADII, BRAND_SPACE } from './tokens.ts'
 export { MARK, Mark } from './mark.tsx'

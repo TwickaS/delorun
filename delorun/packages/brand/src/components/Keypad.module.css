@@ -4,7 +4,7 @@
   box-sizing: border-box;
   width: 72px;
   height: 72px;
-  border: 0;
+  border: 0.5px solid var(--dl-border);
   border-radius: 50%;
   corner-shape: round;
   background: var(--dl-surface-sunken);
@@ -21,7 +21,7 @@
   transition: background-color var(--dl-motion), transform var(--dl-motion);
 }
 
-.erase { background: transparent; font-size: 22px; }
+.erase { border-color: transparent; background: transparent; font-size: 22px; }
 .key:active:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 20%, var(--dl-surface-sunken)); transform: scale(0.94); }
 .key:disabled { opacity: 0.5; }
 .key:focus-visible { outline: var(--dl-focus-ring); outline-offset: 2px; }

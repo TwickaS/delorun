@@ -6,7 +6,9 @@
   "private": true,
   "type": "module",
   "sideEffects": [
-    "*.css"
+    "*.css",
+    "./src/index.ts",
+    "./src/tokens-style.ts"
   ],
   "exports": {
     ".": "./src/index.ts",
