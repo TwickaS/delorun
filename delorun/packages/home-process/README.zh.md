@@ -21,7 +21,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 - [监管器](#the-supervisor)
 - [运行日志](#the-operational-log)
 - [其他包的 seams](#seams-for-other-packages)
-- [尚未实现的部分](#not-yet-implemented)
+- [尚未实现的部分](#not-implemented)
 - [测试](#tests)
 
 <a id="starting-a-home-process"></a>
@@ -36,7 +36,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 5. 在更新通道上监听；从此时起，通道以 `starting` 应答 `status`；
 6. 当设置了 `options.supervisor` 时启动监管器；
 7. 通过 `options.host` 启动 Host；
-8. 尚未运行隔离探测（[尚未实现的部分](#not-yet-implemented)）；
+8. 尚未运行隔离探测（[尚未实现的部分](#not-implemented)）；
 9. 进入 `running`。
 
 无论进程以何种方式结束，`exit` 监听器都会删除本次启动的令牌文件与套接字，并释放锁；每一项只有在仍属于本次启动时才会处理。一旦持有锁，进程就通过 `options.onSignal`（在真实进程中为 `listenProcessSignals`）注册它唯一的 `SIGTERM` 与 `SIGINT` 监听器：第一个信号以代码 0（`SIGTERM`）或 130（`SIGINT`）运行 `HomeProcess.shutdown`，在该停止运行期间收到第二个信号时立即调用 `options.exit`。该监听器在进程启动的每个 Host 之间保持不变，因此 Host 的 profile 运行器启动时不带它自己的信号处理器。在其 Host 已启动之后失败的启动，会先通过 `RunningHost.suspend`（不结束任何进程）停止该 Host，最多等待 `REFUSED_HOST_STOP_S`（5 秒），再进行其余的失败处理；`refuseBootedHost` 给在 `HostRunner.boot` 内被检查拒绝的 Host 同样的等待。失败或耗时更长的拆除会把该失败变为 `HostNotStoppedError`，其 `cause` 为原始失败：Host 可能仍在使用数据，因此启动不回滚任何内容、不重新启动任何内容，移除其信号监听器，并保留锁直到进程结束。同一 profile 的第二次启动发现锁已被持有，并以 `HOME_RUNNING` 失败；桌面应用的 `profiles/desktop/lock` 是另一个文件，home 进程从不读取或写入它。
@@ -51,6 +51,8 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 `devices.approve`（`src/devices-approve.ts`）是 C5 的本地批准：不带参数时，它通过 `RunningHost.devices` 打开 `@delorun/home-auth` 的批准窗口，并在有请求待处理或窗口关闭时应答一次；带 `requestId` 与 `typedCode` 时，它批准该请求；只带 `cancelRequestId` 时，它取消该待处理请求。它只接受令牌文件中的令牌，Host 的令牌在任何内容打开之前就以 `LOOPBACK_REQUIRED` 被拒绝（`the channel token cannot call devices.approve` 规范）。
 
 同意操作（`src/consents.ts`）通过 `RunningHost.consents` 访问 Host 的同意：`permission.reload` 让 Host 在 `delorun workspace full-access` 写入按工作区权限存储之后重新读取它，并返回它现在持有的条目的摘要；`mcp.list` 返回添加时同意让其保持停止的 stdio MCP 服务器，每个都带有其启动自该服务器的接受以来变化的部分（`change`，以及变化的变量）和本人是否拒绝或撤销了它（`state`），以及已接受的启动，每个服务器名称一项（`accepted`）；`mcp.accept` 与 `mcp.decline` 以 `mcp.list` 显示的审查 id 答复其中一个服务器，`mcp.revoke` 以 `mcp.list` 显示的接受 id 撤回一个服务器的接受，并停止该服务器。这三种操作只接受令牌文件中的令牌，Host 的令牌在读取任何同意之前就以 `LOOPBACK_REQUIRED` 被拒绝（`the channel token cannot answer an MCP server` 规范）；服务器已不再持有的审查或存储已不再持有的接受以 `STALE_REVIEW` 被拒绝，没有该同意的 profile 以 `CONSENT_UNAVAILABLE` 被拒绝。
+
+`changes.reload` 不携带任何内容：当进程处于 `running` 且没有更新或回滚在运行时（否则返回 `UPDATE_IN_PROGRESS`），它要求 Host 加载 profile 的文件现在所指名的内容，并回答 `{"reload":{"ok":true}}` 或 `{"reload":{"ok":false,"error":"…"}}`。`delorun changes` 在改动了 profile 的文件之后发送它（[C21](../../docs/contracts/c21-changes.md#commands)）；它自身不改动任何文件。
 
 <a id="the-update-handshake"></a>
 ## 更新握手
@@ -103,7 +105,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 
 测试通过 `tests/support.ts` 中的 fixture（测试前置数据）store 驱动握手，该 fixture 保存 C1 的指针文件，并从 `tests/fixtures/home-entry.ts` 启动后继进程。
 
-<a id="not-yet-implemented"></a>
+<a id="not-implemented"></a>
 ## 尚未实现的部分
 
 - CLI 的 Host 不保持定时投递：闸门保持期间到期的投递被记录为已投递，其回合以 `UPDATE_PENDING` 被拒绝。在 Host 报告之前就已开始的工作不计入。
