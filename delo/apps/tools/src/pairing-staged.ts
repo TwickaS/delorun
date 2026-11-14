@@ -9,6 +9,11 @@
  * (`--cached`), and once on the same pairs as `HEAD` holds them, read through a temporary index file selected with
  * `GIT_INDEX_FILE`. A pair that a staged rename moved is looked up under its old path.
  *
+ * A stale record at `HEAD` makes the checker stop at "out of sync" before it compares structure, so `HEAD`'s
+ * structural drift (headings, tables, link anchors) would be missing from the baseline and a commit that re-records
+ * the pair, such as the rename, would be refused for drift it did not cause. The baseline therefore re-records every
+ * `HEAD` pair in the temporary index first. A pair nothing in the commit touches stays reported as it is today.
+ *
  * It parses the checker's output by two stable keys: exit status 0 means no violation, 1 means violations listed on
  * standard error, one per line indented by two spaces, 2 means a usage error. Violation lines are compared after
  * the old path of a renamed pair becomes its new path and `:<line>:` numbers are removed. A violation fails the
@@ -24,6 +29,10 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runGit } from './git.ts'
 import { applyRules, renamePath } from './rename/rules.ts'
+import {
+  computeTranslationPairingRecord, renderTranslationPairingRecord, translationPairPaths,
+} from '../../../../scripts/translation-pairing-record.ts'
+import { parseTranslationPairingManifest, translationPairSourcePredicate } from '../../../../scripts/translation-pairing.ts'
 
 /** The upstream checker, relative to the repository root. */
 const CHECKER = 'scripts/verify-translation-pairing.ts'
@@ -169,10 +178,52 @@ export function compareViolations(
 }
 
 /**
+ * Re-record the pairs of `HEAD` in a temporary index, so that the checker compares their structure instead of
+ * stopping at a stale record.
+ * @param root - the repository root.
+ * @param index - the temporary index file, already holding `HEAD`.
+ * @param anchors - the `HEAD` record paths.
+ */
+function rerecordHeadPairs(root: string, index: string, anchors: readonly string[]): void {
+  const show = (path: string): string | undefined => {
+    const run = runGit(root, ['show', `HEAD:${path}`])
+    return run.status === 0 ? run.stdout : undefined
+  }
+  const tracked = new Set(runGit(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD']).stdout.split('\0'))
+  const manifest = show('scripts/translation-pairing.manifest.json')
+  if (manifest === undefined) return
+  const context = {
+    repoRoot: root,
+    isTranslationPairSource: translationPairSourcePredicate(parseTranslationPairingManifest(manifest)),
+    repositoryFileExists: (file: string) => tracked.has(file),
+  }
+  for (const anchor of anchors) {
+    const paths = translationPairPaths(`${baseOf(anchor)}.md`)
+    const en = show(paths.source)
+    const zh = show(paths.zh)
+    if (en === undefined || zh === undefined) continue
+    let record: string
+    try {
+      record = renderTranslationPairingRecord(paths, computeTranslationPairingRecord(paths, en, zh, context))
+    } catch (error) {
+      // The pair cannot be recorded (for example its heading counts differ), so HEAD's own record and violation stay.
+      void error
+      continue
+    }
+    const hash = spawnSync('git', ['-C', root, 'hash-object', '-w', '--stdin'], { input: record, encoding: 'utf8' })
+    if (hash.status !== 0) throw new Error(`git hash-object failed: ${hash.stderr}`)
+    const update = spawnSync('git', ['-C', root, 'update-index', '--add', '--cacheinfo', `100644,${hash.stdout.trim()},${paths.meta}`], {
+      env: { ...process.env, GIT_INDEX_FILE: index }, encoding: 'utf8',
+    })
+    if (update.status !== 0) throw new Error(`git update-index failed: ${update.stderr}`)
+  }
+}
+
+/**
  * The upstream checker on `HEAD`'s versions of the pairs.
  * @param root - the repository root.
  * @param anchors - the `HEAD` record paths.
- * @returns the violation lines, empty when `HEAD` has no such pair, no commit, or the checker rejects the paths.
+ * @returns the violation lines of the freshly recorded pairs, empty when `HEAD` has no such pair, no commit, or the checker rejects the paths.
  */
 function headViolations(root: string, anchors: readonly string[]): readonly string[] {
   const dir = mkdtempSync(join(tmpdir(), 'delo-pairing-'))
@@ -180,6 +231,7 @@ function headViolations(root: string, anchors: readonly string[]): readonly stri
     const index = join(dir, 'index')
     const read = spawnSync('git', ['-C', root, 'read-tree', 'HEAD'], { env: { ...process.env, GIT_INDEX_FILE: index } })
     if (read.status !== 0) return []
+    rerecordHeadPairs(root, index, anchors)
     const run = runChecker(root, anchors, { GIT_INDEX_FILE: index })
     return run.status === 1 ? run.violations : []
   } finally {

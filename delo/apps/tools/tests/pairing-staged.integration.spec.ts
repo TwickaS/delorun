@@ -44,6 +44,9 @@ function hook(repo: Scratch, records: readonly string[]): { status: number; line
   return { status, lines }
 }
 
+/** The Chinese side with a table the English side lacks: structural drift that recording a pair accepts. */
+const TABLE_ZH = `${ZH}\n| 列 |\n| --- |\n| 值 |\n`
+
 /** Drift the Chinese side from the record by adding a section only there. */
 const DRIFTED_ZH = `${ZH}\n## 多余\n\n只在这里。\n`
 
@@ -129,6 +132,38 @@ describe('the staged pairing hook', () => {
     const { status, lines } = hook(repo, ['docs/moved/guide.i18n.yaml'])
     expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
     expect(status).toBe(0)
+  })
+
+  describe('a pair whose record is stale at HEAD', () => {
+    /**
+     * A repository whose Chinese side drifted at HEAD with the record left stale, so the checker stops at "out of
+     * sync" and never lists the structural drift; the staged side re-records it, which exposes that drift.
+     * @param test - the running test.
+     * @param zh - the staged Chinese text.
+     * @returns the repository with the re-recorded pair staged.
+     */
+    function staleThenRerecorded(test: Parameters<typeof scratchRepo>[0], zh: string): Scratch {
+      const repo = pairingRepo(test)
+      repo.commit({ 'docs/guide.zh.md': TABLE_ZH })
+      repo.write({ 'docs/guide.zh.md': zh })
+      execFileSync(TSX, ['scripts/verify-translation-pairing.ts', '--write', 'docs/guide.md'], { cwd: repo.root, timeout: 30_000 })
+      repo.run(['add', '-A'])
+      return repo
+    }
+
+    it('passes when re-recording exposes only the structural drift HEAD already hid', (test) => {
+      const repo = staleThenRerecorded(test, TABLE_ZH)
+      const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
+      expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
+      expect(status).toBe(0)
+    })
+
+    it('refuses a structural difference the commit adds on top of the hidden drift', (test) => {
+      const repo = staleThenRerecorded(test, `${TABLE_ZH}\n- 只在这里的项目\n`)
+      const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
+      expect(lines.join('\n')).toContain('new bilingual-pairing violation')
+      expect(status).toBe(1)
+    })
   })
 
   it('refuses a new record that has a violation', (test) => {
