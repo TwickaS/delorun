@@ -1617,10 +1617,22 @@
       "reason": "Delorun's documentation under delorun/docs/ is held to upstream's pairing rules: every page has a Chinese pair and a consistency record."
     },
     {
+      "path": "scripts/translation-links.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "A Chinese page links the English page while that page has no Chinese twin, and a `.zh.md` link to a missing twin is refused, so Delorun's partly translated guide can be paired page by page."
+    },
+    {
       "path": "scripts/types/client-assets/index.d.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "Declares `*.woff2` font modules for Delorun's studio theme fonts."
+    },
+    {
+      "path": "scripts/verify-translation-pairing.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Names the missing Chinese twin in the wrong-locale link message, so the fix (link the English page) is clear."
     },
     {
       "path": "scripts/verify-export-jsdoc.ts",

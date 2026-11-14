@@ -276,7 +276,8 @@ for (const source of [...pairAnchors].sort()) {
       repositoryFileExists,
     }, sourceSwitcherTargets, zhTree),
   ]) {
-    errors.push(`${violation.sourcePath}:${violation.line}: link target ${JSON.stringify(violation.url)} uses the wrong locale; expected ${JSON.stringify(violation.expectedUrl)}`)
+    const missingTwin = violation.url.includes('.zh.md') && !violation.expectedUrl.includes('.zh.md')
+    errors.push(`${violation.sourcePath}:${violation.line}: link target ${JSON.stringify(violation.url)} uses the wrong locale; expected ${JSON.stringify(violation.expectedUrl)}${missingTwin ? ' (no zh twin; link the English page)' : ''}`)
     state.set(source, 'out-of-sync')
   }
 

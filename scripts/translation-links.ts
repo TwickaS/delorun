@@ -135,6 +135,15 @@ function resolveRepositoryTarget(
   return repositoryFileExists(context, exact) ? exact : undefined
 }
 
+/** Path of a `.zh.md` link target that does not exist although its English source does. */
+function missingTwinTarget(rawPath: string, context: TranslationLinkContext): string | undefined {
+  const decoded = decodePath(rawPath)
+  if (!decoded.endsWith('.zh.md')) return undefined
+  const zh = repositoryRelativePath(posix.join(posix.dirname(context.sourcePath), decoded))
+  if (zh === undefined) return undefined
+  return repositoryFileExists(context, zh.replace(/\.zh\.md$/, '.md')) ? zh : undefined
+}
+
 function translationPairTarget(targetPath: string, context: TranslationLinkContext): TranslationPairTarget | undefined {
   const source = targetPath.endsWith('.zh.md')
     ? targetPath.replace(/\.zh\.md$/, '.md')
@@ -166,7 +175,7 @@ function expectedLocalePath(
   context: TranslationLinkContext,
   expectedPath: string,
 ): string {
-  if (locale === 'zh' && rawPath.endsWith('.md') && !rawPath.endsWith('.zh.md')) {
+  if (locale === 'zh' && expectedPath.endsWith('.zh.md') && rawPath.endsWith('.md') && !rawPath.endsWith('.zh.md')) {
     return rawPath.replace(/\.md$/, '.zh.md')
   }
   if (locale === 'en' && rawPath.endsWith('.zh.md')) return rawPath.replace(/\.zh\.md$/, '.md')
@@ -182,12 +191,13 @@ function resolveTranslationLink(
   const { path } = splitMarkdownUrlTarget(url)
   const authored = splitMarkdownUrlTarget(authoredUrl)
   if (path === '') return undefined
-  const targetPath = resolveRepositoryTarget(path, context)
+  const targetPath = resolveRepositoryTarget(path, context) ?? missingTwinTarget(path, context)
   if (targetPath === undefined) return undefined
   const pair = translationPairTarget(targetPath, context)
   if (pair === undefined) return undefined
   const locale = context.sourcePath.endsWith('.zh.md') ? 'zh' : 'en'
-  const expectedPath = locale === 'zh' ? pair.zh : pair.source
+  // A Chinese page links the English page while that page has no Chinese twin.
+  const expectedPath = locale === 'zh' && repositoryFileExists(context, pair.zh) ? pair.zh : pair.source
   return {
     pair,
     targetPath,
