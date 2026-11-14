@@ -55,7 +55,7 @@ import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted
 import type { BootRow, ChatGate, HostProtection, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
-import { approveDevices, elevateDevices, removeDevice } from './devices-approve.ts'
+import { approveDevices, changePin, elevateDevices, removeDevice } from './devices-approve.ts'
 import { reloadChanges } from './reload.ts'
 import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
 import { reachApply, reachStatus } from './reach.ts'
@@ -603,6 +603,10 @@ export class HomeProcess implements HandshakeSubject {
         return removeDevice(request, check.callerOf(request.token), this.host?.devices)
       case 'devices.elevate':
         return elevateDevices(request, check.callerOf(request.token), this.host?.devices)
+      case 'pin.set':
+      case 'pin.off':
+      case 'pin.resume':
+        return changePin(request, check.callerOf(request.token), this.host?.devices)
       case 'permission.reload':
         return reloadPermissions(this.host?.consents)
       case 'mcp.list':

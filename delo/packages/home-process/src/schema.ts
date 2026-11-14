@@ -56,6 +56,17 @@ const request = z.discriminatedUnion('op', [
       revokeId: approvalRequestId.optional(),
     }),
   }),
+  z.strictObject({
+    ...base,
+    op: z.literal('pin.set'),
+    args: z.strictObject({
+      secret: z.string().min(1).max(1024),
+      idleMinutes: z.number().int().min(1).max(60).optional(),
+      lockWhenHidden: z.boolean().optional(),
+    }),
+  }),
+  z.strictObject({ ...base, op: z.literal('pin.off') }),
+  z.strictObject({ ...base, op: z.literal('pin.resume') }),
   z.strictObject({ ...base, op: z.literal('permission.reload') }),
   z.strictObject({ ...base, op: z.literal('mcp.list') }),
   z.strictObject({ ...base, op: z.literal('mcp.accept'), args: mcpReview }),

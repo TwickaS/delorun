@@ -31,6 +31,8 @@ import {
   type ApprovalRequestState, type DevicePublicKeyJwk,
 } from '@delo/contract-device-approval'
 import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { PinModeStore } from './pin-mode.ts'
+import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
@@ -253,6 +255,10 @@ export class HomeAuth {
   private readonly elevationListeners = new Set<(change: ElevationChange) => void>()
   /** The elevations of this home and the requests waiting for the person at the computer (C14, "Elevation"). */
   private readonly elevations: Elevations
+  /** PIN mode: the PIN store and the page unlocks it mints (C14, "PIN mode"). */
+  readonly pin: PinUnlocks
+  private readonly pinStore: PinModeStore
+  private readonly pinListeners = new Set<(event: PinEvent) => void>()
   /** The tail of the queue that serialises a claim and a revocation against each other. */
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -278,9 +284,21 @@ export class HomeAuth {
         // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects
         // without it.
         if (change.kind === 'ended') this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        this.pin.elevationChanged(change)
         for (const listener of this.elevationListeners) listener(change)
       },
     })
+    this.pinStore = new PinModeStore({ directory: options.directory, now: this.now, secrets: options.secrets })
+    this.pin = new PinUnlocks({
+      store: this.pinStore,
+      elevations: this.elevations,
+      now: this.now,
+      random: this.random,
+      secrets: options.secrets,
+      removeDevice: deviceId => this.revokeDevice(deviceId),
+      report: (event) => { for (const listener of this.pinListeners) listener(event) },
+    })
+    this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), secrets: options.secrets, ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
@@ -299,6 +317,7 @@ export class HomeAuth {
   async start(): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     this.homeKey = await loadHomeKey(this.directory, this.secrets)
+    await this.pinStore.load()
     await this.refresh()
   }
 
@@ -537,6 +556,16 @@ export class HomeAuth {
       this.served.delete(served.listener)
       this.elevations.endListener(served.listener, 'listener-stopped')
     }
+  }
+
+  /**
+   * Call a listener for each PIN mode event: a wrong try, a lockout, a pause or resume, a PIN set, the mode turned off.
+   * @param listener - called with the event, which never carries the PIN.
+   * @returns the disposer.
+   */
+  onPinEvent(listener: (event: PinEvent) => void): () => void {
+    this.pinListeners.add(listener)
+    return () => { this.pinListeners.delete(listener) }
   }
 
   /**

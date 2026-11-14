@@ -69,6 +69,8 @@ export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS, sessionCookie } fr
 export { ELEVATION_PATHS } from './elevation-routes.ts'
 export type { ReachFullAccessGrants } from './full-access-grants.ts'
 export { isElevationMinutes } from './elevation.ts'
+export { PIN_PATHS, UNLOCK_HEADER } from './pin-routes.ts'
+export { checkNewSecret } from './pin-mode.ts'
 export { REACH_DEVICE_PATHS, plainPathname, reachesDevicePath, type ReachDevicePath, type ReachDevicePathMatch } from './reach-paths.ts'
 export { HomeAuthService, Config as HomeAuthConfig, HOME_AUTH_SWITCH, REACH_SWITCH, type Config } from './service.ts'
 export {

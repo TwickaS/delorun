@@ -47,6 +47,7 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
+import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -188,6 +189,10 @@ export class HomeAuthService extends Service {
       const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
       this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
     }), 'home-auth elevation log')
+    // Every PIN event is logged without the PIN, which is never in an event.
+    this.ctx.effect(() => core.onPinEvent((event) => {
+      this.ctx.logger.info(`home-auth: pin ${event.kind}${'deviceId' in event ? `: device=${event.deviceId}` : ''}${event.kind === 'wrong' ? ` triesLeft=${String(event.triesLeft)}` : ''}`)
+    }), 'home-auth pin log')
     // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
     this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
     this.ctx.effect(() => this.registerComputerOnlySwitch(REACH_SWITCH), 'home-auth: computer-only reach settings')
@@ -214,6 +219,14 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.state, handler: pinStateHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.unlock, handler: pinUnlockHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.touch, handler: pinTouchHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.lock, handler: pinLockHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.mode, handler: pinModeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.set, handler: pinSetHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -431,6 +444,30 @@ export class HomeAuthService extends Service {
    */
   approveElevation(requestId: string, typedCode: string): ElevationRecord {
     return this.state().approveElevation(requestId, typedCode)
+  }
+
+  /**
+   * Set or replace the PIN and turn PIN mode on; the home's own computer only. Every page unlock ends.
+   * @param secret - the PIN or passcode.
+   * @param options - the idle minutes and the lock-when-hidden choice.
+   * @returns the kind of secret.
+   */
+  setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'> {
+    return this.state().pin.set(secret, options)
+  }
+
+  /**
+   * Turn PIN mode off; the home's own computer only.
+   */
+  turnPinOff(): Promise<void> {
+    return this.state().pin.off()
+  }
+
+  /**
+   * Resume PIN unlocks after a home-wide pause; the home's own computer only.
+   */
+  resumePin(): Promise<void> {
+    return this.state().pin.resume()
   }
 
   /**

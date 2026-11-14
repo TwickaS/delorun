@@ -18,7 +18,7 @@
  *
  * @module @delo/home-process/devices-approve
  */
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOffRequest, PinResumeRequest, PinSetRequest } from '@delo/contract-home-process'
 import { HomeProcessError } from './errors.ts'
 
 /** A pending approval request as the person's command shows it. */
@@ -119,6 +119,22 @@ export interface LocalDeviceApproval {
    * @returns whether either was found.
    */
   revokeElevation(id: string): boolean
+  /**
+   * Set or replace the PIN and turn PIN mode on.
+   * @param secret - the PIN or passcode.
+   * @param options - the idle minutes and the lock-when-hidden choice.
+   * @returns the kind of secret.
+   * @throws an error with a `code` property, such as `PIN_WEAK`, for a refused secret.
+   */
+  setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'>
+  /**
+   * Turn PIN mode off.
+   */
+  turnPinOff(): Promise<void>
+  /**
+   * Resume PIN unlocks after a home-wide pause.
+   */
+  resumePin(): Promise<void>
 }
 
 /** Which credential a request carried. */
@@ -185,7 +201,7 @@ export async function approveDevices(
  * @param fallback - the sentence for an error without one.
  * @returns the refusal.
  */
-function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVATION_FAILED', error: unknown, fallback: string): HomeProcessError {
+function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVATION_FAILED' | 'PIN_FAILED', error: unknown, fallback: string): HomeProcessError {
   const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
   const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : fallback
   return new HomeProcessError(refusal, `${code}: ${detail}`)
@@ -240,4 +256,45 @@ export async function elevateDevices(request: DevicesElevateRequest, caller: Cha
   } catch (error) {
     throw homeAuthRefusal('ELEVATION_FAILED', error, 'the unlock did not change')
   }
+}
+
+/**
+ * Run `pin.set`, `pin.off` or `pin.resume`.
+ * @param request - the request.
+ * @param caller - the credential it carried.
+ * @param devices - the Host's local approval, or undefined when the profile does not load `@delo/home-auth`.
+ * @returns whether PIN mode is on and, for a set, the kind of secret; a resume answers `paused: false`.
+ * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
+ *   `PIN_FAILED` naming home-auth's code for a refused secret; the message never holds the secret.
+ */
+export async function changePin(request: PinSetRequest | PinOffRequest | PinResumeRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+  if (caller !== 'person') {
+    throw new HomeProcessError('LOOPBACK_REQUIRED', 'changing the PIN needs you at your computer: run delorun there')
+  }
+  if (devices === undefined) throw new HomeProcessError('APPROVALS_UNAVAILABLE', 'this profile does not load @delo/home-auth')
+  try {
+    switch (request.op) {
+      case 'pin.set':
+        return { enabled: true, secret: await devices.setPin(request.args.secret, request.args) }
+      case 'pin.off':
+        await devices.turnPinOff()
+        return { enabled: false }
+      case 'pin.resume':
+        await devices.resumePin()
+        return { paused: false }
+      default:
+        return assertNever(request)
+    }
+  } catch (error) {
+    throw homeAuthRefusal('PIN_FAILED', error, 'PIN mode did not change')
+  }
+}
+
+/**
+ * Fail at compile time when an operation is not handled.
+ * @param value - the value no case handled.
+ * @throws {Error} always.
+ */
+function assertNever(value: never): never {
+  throw new Error(`unhandled PIN operation ${JSON.stringify(value)}`)
 }

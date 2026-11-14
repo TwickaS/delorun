@@ -86,6 +86,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delorun did not remove the device.', remedies: [`See the trusted devices: delorun devices list${profile}`] }
     case 'ELEVATION_FAILED':
       return { lead: 'Delorun did not unlock sensitive actions on the device, or did not end the unlock.', remedies: [`See the requests and the running unlocks again: delorun devices elevate${profile}`] }
+    case 'PIN_FAILED':
+      return { lead: 'Delorun did not change PIN mode.', remedies: [`Check that PIN mode is on and the PIN is accepted, then try again: delorun reach status${profile}`] }
     case 'CONSENT_UNAVAILABLE':
       return { lead: 'Delorun changed nothing: the running profile does not ask this consent, because its switch is off.', remedies: [`See which prompts the profile asks: delorun setup prompts${profile}`] }
     case 'STALE_REVIEW':

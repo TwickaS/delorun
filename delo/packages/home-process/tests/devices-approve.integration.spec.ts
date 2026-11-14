@@ -7,8 +7,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { newStartToken } from '@delo/home'
-import { approveDevices, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
+import { approveDevices, changePin, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinSetRequest } from '@delo/contract-home-process'
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 /** A fake of home-auth's half that records every call. */
@@ -64,6 +64,23 @@ class FakeDevices implements LocalDeviceApproval {
   revokeElevation(id: string): boolean {
     this.calls.push(`revoke ${id}`)
     return true
+  }
+
+  async setPin(_secret: string, options: { readonly idleMinutes?: number | undefined }): Promise<'pin' | 'passcode'> {
+    // The fake records the idle minutes and never the secret, as the real service never logs it.
+    this.calls.push(`pin.set ${String(options.idleMinutes)}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve('pin')
+  }
+
+  async turnPinOff(): Promise<void> {
+    this.calls.push('pin.off')
+    return Promise.resolve()
+  }
+
+  async resumePin(): Promise<void> {
+    this.calls.push('pin.resume')
+    return Promise.resolve()
   }
 }
 
@@ -204,6 +221,28 @@ describe('devices.elevate', () => {
     devices.refusal = new Error('broken')
     await expect(elevateDevices(elevation(), 'person', devices)).rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: 'INTERNAL_ERROR: the unlock did not change' })
     expect(devices.calls).toEqual(['elevations', 'elevate BBBBBBBBBBBBBBBBBBBBBB 1234 5678', 'revoke elevation', 'elevate y 00000000', 'elevations'])
+  })
+})
+
+describe('pin.set, pin.off and pin.resume', () => {
+  const set = (secret: string): PinSetRequest => ({ v: 1, token: newStartToken(), op: 'pin.set', args: { secret, idleMinutes: 20 } })
+
+  it('are the person\'s alone, and name home-auth\'s refusal without the secret', async () => {
+    const devices = new FakeDevices()
+    // Pins the caller rule: the Host's channel token acts for reach sessions, so it never sets the PIN.
+    await expect(changePin(set('482916'), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    expect(devices.calls).toEqual([])
+    await expect(changePin(set('482916'), 'person', devices)).resolves.toEqual({ enabled: true, secret: 'pin' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'person', devices)).resolves.toEqual({ enabled: false })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'person', devices)).resolves.toEqual({ paused: false })
+    await expect(changePin(set('482916'), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
+    devices.refusal = Object.assign(new Error('weak'), { code: 'PIN_WEAK', detail: 'That PIN is a repeat' })
+    const refused: unknown = await changePin(set('482916'), 'person', devices).catch((error: unknown) => error)
+    expect(refused).toMatchObject({ code: 'PIN_FAILED', detail: 'PIN_WEAK: That PIN is a repeat' })
+    expect(JSON.stringify(refused)).not.toContain('482916')
+    expect(devices.calls).toEqual(['pin.set 20', 'pin.off', 'pin.resume', 'pin.set 20'])
   })
 })
 

@@ -16,6 +16,7 @@ This package is the home of the authenticator provider of [contract C4](../../do
 - [Reach sign-in](#reach-sign-in)
 - [The admission denial suite](#the-admission-denial-suite)
 - [Dangerous mode](#dangerous-mode)
+- [PIN mode](#pin-mode)
 - [Notes for the provider](#notes-for-the-provider)
 - [Tests](#tests)
 
@@ -95,6 +96,19 @@ While dangerous mode holds, an unlocked, signed-in device does what the computer
 Each consent and permission route above calls `requireComputerUnlessDangerous` from its `connection/request` hook and registers `admitUnlockedDevice` as its `admitPeer`, both in `src/computer-only.ts`. The hook lets a request through that arrived on a reach listener only while the mode holds, and the Peer check admits only a `reach-device` that holds a running unlock then; a request the home cannot place, or that names a foreign `Host` on the loopback listener, is refused in both modes. The reach policy decides the actions: `REACH_DANGEROUS_ACTIONS` lists the credential and application actions, which the role lists and the condition refuses with `loopback-required` while the mode is off and with `elevation-required` to a locked device, and the workspace-file path bound moves only for an unlocked device while the mode holds. A computer-only settings switch is lifted only when `DANGEROUS_LIFTABLE_SWITCHES` names its namespace (the external-agent consent today); registering a switch lifts nothing, so the reach and pairing settings stay at the computer in every mode. The workspace-file service does not consult the chat's permission; the chat's own tools do.
 
 These stay at the computer in every mode: turning the mode on (only `delorun setup` writes the grant, and no route or call does), approving a device and opening the approval window, the device sign-in, approving or revoking an unlock, removing a device, and the home's reset, recovery kit and reach settings. Account actions and opening the settings document stay in `REACH_DENIED_ACTIONS`. `tests/dangerous-mode.spec.ts` proves each lifted refusal in both modes and fails when one of the routes that approve, sign in, remove a device or change remote access reads the mode.
+
+## PIN mode
+
+PIN mode lets a person who holds an approved device unlock a page with a PIN or passcode instead of typing a code at the computer ([C14, "PIN mode"](../../docs/contracts/c14-oidc-passkeys.md#pin-mode)). Version 1 serves the Tailscale private address only. The mode is off until the person sets a PIN at the computer; while it is off, every route and refusal of this package is as described above, and `POST /auth/pin/unlock` answers `PIN_MODE_OFF`.
+
+- **Store.** `src/pin-mode.ts` keeps `pin-mode.json` (whether the mode is on, the secret's kind, a salted `scrypt` hash with its parameters, the idle minutes) and `pin-attempts.json` (wrong tries per device and across the home), both through the protected-file helpers at mode 0600. A PIN is 6 to 128 digits that is not a repeat, a run or a common PIN; a passcode is 10 to 128 characters. The hash is compared in constant time, and the secret is registered with the log redactor while it is handled and appears in no error or log line. The limits are `PIN_MODE_LIMITS` of `@delo/contract-oidc-passkeys`.
+- **Unlock.** `src/pin-unlocks.ts` verifies the secret and starts an elevation for the device, listener and session, so the reach policy's `elevationOf` admits the unlock table of C14. The page receives a 32-byte token once; the home keeps its SHA-256 digest and binds it to that device, listener and session. A token presented by anything else is refused with `UNLOCK_INVALID` and ends the unlock. The page sends it in the `Delo-Unlock` header only.
+- **Ends.** An unlock ends after the idle minutes (15 by default, 60 at most) without `POST /auth/pin/touch`, at the 12-hour cap however active the page is, on `POST /auth/pin/lock`, when the PIN changes or the mode turns off, and with every ending an elevation has.
+- **Wrong tries.** A try is counted and written before the secret is compared, one at a time per device. The fifth wrong try removes the device exactly as a removal at the computer does. Ten wrong tries across the home within 24 hours pause PIN unlocks until the computer resumes them. A restart keeps both counts.
+- **Routes.** `src/pin-routes.ts` answers `GET /auth/pin/state`, `POST /auth/pin/unlock`, `/touch` and `/lock` for a device on the private listener. `GET /auth/pin/mode` and `POST /auth/pin/set`, `/off` and `/resume` answer the person at the computer only; a device is refused with `LOOPBACK_REQUIRED`. `delorun` reaches the same changes through the home process's `pin.set`, `pin.off` and `pin.resume`.
+- **What is not built.** The page-unlock token does not yet bind a single tab: the unlock admits the device on its listener, as an unlock approved at the computer does. The client's lock screen, the `Delo-Unlock` header on API requests and WebSocket upgrades, the lifts of dangerous mode for an unlocked page, the answer guard, step-up, passkeys, the Funnel and relay addresses, and setting the PIN from a device are not built.
+
+`tests/pin-mode.spec.ts` proves each defence by a test that fails without it: the count before the comparison, the device removal, the home-wide pause, the address rule, the token binding, the idle end and the cap, the computer-only routes, and that the PIN is in no file, log or answer.
 
 ## Notes for the provider
 
