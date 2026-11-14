@@ -37,7 +37,7 @@ describe.skipIf(process.platform === 'win32')('the stdio spawn', () => {
       env: {},
       cwd: root,
       toolCallTimeoutMs: 60_000,
-      failOnStartupError: false,
+      closeTimeoutMs: 5000, expandTemplates: false, failOnStartupError: false,
     }
     const transport = createTransport(config)
     await transport.start()

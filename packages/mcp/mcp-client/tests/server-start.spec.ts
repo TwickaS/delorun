@@ -67,7 +67,7 @@ function start(command: string, extra: Partial<Pick<Config & { transport: 'stdio
     env: extra.env ?? {},
     cwd: extra.cwd ?? '',
     toolCallTimeoutMs: 1000,
-    failOnStartupError: false,
+    closeTimeoutMs: 5000, expandTemplates: false, failOnStartupError: false,
   }
 }
 

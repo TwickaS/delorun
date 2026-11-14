@@ -75,7 +75,7 @@ const stdioConfig: Config & { transport: 'stdio' } = {
   env: {},
   cwd: '',
   toolCallTimeoutMs: 60_000,
-  failOnStartupError: false,
+  closeTimeoutMs: 5000, expandTemplates: false, failOnStartupError: false,
 }
 
 /**
@@ -279,7 +279,7 @@ describe('the optional mcpAddConsent seam', () => {
       url: 'http://localhost:3000/mcp',
       headers: {},
       toolCallTimeoutMs: 30_000,
-      failOnStartupError: false,
+      closeTimeoutMs: 5000, expandTemplates: false, failOnStartupError: false,
     })
 
     expect(consent.calls).toEqual([])

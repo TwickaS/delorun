@@ -100,7 +100,7 @@ describe('the add-time consent before a reconnect', () => {
       env: {},
       cwd: '',
       toolCallTimeoutMs: 60_000,
-      failOnStartupError: false,
+      closeTimeoutMs: 5000, expandTemplates: false, failOnStartupError: false,
       reconnect: { initialDelayMs: 1, maxDelayMs: 4, maxAttempts: 3 },
     }
   }

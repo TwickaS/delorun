@@ -75,7 +75,7 @@ function mountRail(options: MountOptions = {}) {
       useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)}
       useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
-      useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
+      useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook} renderFactorySlot={() => null}
       {...allowAllAccess}
       startSession={startSession} toggleSidebar={toggleSidebar} trackEntryClick={vi.fn()} t={t}
       renderSlot={((key: string, owner: SidebarSectionOwnerProps) => {

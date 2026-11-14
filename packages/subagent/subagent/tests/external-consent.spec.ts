@@ -48,7 +48,7 @@ async function setup(consent?: DelegationConsentService) {
     ctx, parent, backend, start,
     startRun: (signal: AbortSignal = new AbortController().signal) => ctx.subagents.startActivation({
       provider: 'claude-code', label: 'Review the diff', signal, delivery: 'caller',
-      request: { parent, prompt: [{ type: 'text', text: 'Review the diff' }] },
+      parent, prompt: [{ type: 'text', text: 'Review the diff' }],
     }),
   }
 }
