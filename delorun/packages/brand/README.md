@@ -78,7 +78,7 @@ Each is a function component with a documented props interface. "Upstream" means
 
 ## The desktop icon
 
-`node --experimental-strip-types delorun/packages/brand/scripts/render-icon.ts <outDir>` draws the icon (the mark on an ink tile) from the tokens and renders previews at 16, 32, 256 and 1024 px on a light and a dark background. It writes no release file.
+[`src/icons.ts`](src/icons.ts) draws every application icon from the mark and the brand colours: an ink tile with the nut in paper and the plug in peach. `node_modules/.bin/tsx delorun/packages/brand/scripts/render-icon.ts --write` rewrites `apps/desktop/resources/icon*.svg|png`, `tray-windows.ico` (through `apps/desktop/scripts/render-tray-icon.ts`, which enlarges the hex in the `tray-glyph` group for 16 to 64 px) and the web app's favicons and PNG icons. `--previews <dir>` writes previews at 16, 32, 256 and 1024 px on a light and a dark background. `tests/icons.spec.ts` fails when a committed SVG differs from its builder.
 
 ## Tests
 

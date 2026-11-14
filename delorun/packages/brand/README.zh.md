@@ -84,7 +84,7 @@ kind: "package-library"
 <a id="the-desktop-icon"></a>
 ## 桌面图标
 
-`node --experimental-strip-types delorun/packages/brand/scripts/render-icon.ts <outDir>` 根据令牌绘制图标（墨色底板上的标志），并在浅色和深色背景上渲染 16、32、256 和 1024 px 的预览。它不写入任何发布文件。
+[`src/icons.ts`](src/icons.ts) 根据标志和品牌色绘制所有应用图标：墨色底板，螺母为纸色，插头为桃色。`node_modules/.bin/tsx delorun/packages/brand/scripts/render-icon.ts --write` 会重写 `apps/desktop/resources/icon*.svg|png`、`tray-windows.ico`（通过 `apps/desktop/scripts/render-tray-icon.ts`，它会为 16 到 64 px 放大 `tray-glyph` 组中的六角标志）以及网页应用的网站图标和 PNG 图标。`--previews <dir>` 在浅色和深色背景上写出 16、32、256 和 1024 px 的预览。已提交的 SVG 与其生成器不一致时，`tests/icons.spec.ts` 会失败。
 
 <a id="tests"></a>
 ## 测试
