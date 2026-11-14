@@ -23,7 +23,7 @@ export function FootLauncher({ settingsOpen, settingsShortcut, openSettings, t }
     <div className={css.utility}>
       <Tooltip label={t('foot.settings')} side="top" delayMs={500} shortcutKeys={settingsShortcut?.keys} disabled={settingsOpen}>
         <button type="button" className={css.utilityButton} aria-label={t('foot.settings')} aria-haspopup="dialog" aria-expanded={settingsOpen}
-          aria-keyshortcuts={settingsShortcut?.aria} onClick={openSettings}>
+          aria-keyshortcuts={settingsShortcut?.aria} onClick={() => { openSettings() }}>
           <IconSettingsOutlineRegular size={16} className={css.utilityIcon} />
         </button>
       </Tooltip>
