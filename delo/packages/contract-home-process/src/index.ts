@@ -234,6 +234,41 @@ export interface DevicesElevateRequest extends RequestBase {
 }
 
 /**
+ * The `pin.set` request: the person at the home's own computer sets or replaces the PIN or passcode and turns PIN mode
+ * on (C14, "PIN mode"). Every page unlock ends. The secret travels only to the home process on its local socket, is
+ * never echoed in a refusal and is never logged. Accepted only with the token the person's own `delorun` reads from the
+ * token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface PinSetRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'pin.set'
+  /** Arguments. */
+  readonly args: {
+    /** The PIN (6 or more digits) or passcode (10 or more characters). */
+    readonly secret: string
+    /** The minutes an unlock may idle, 1 to 60; the current value, else 15, when absent. */
+    readonly idleMinutes?: number
+    /** Whether a hidden page locks at once; the current choice, else false, when absent. */
+    readonly lockWhenHidden?: boolean
+  }
+}
+
+/** The `pin.off` request: turn PIN mode off and drop the PIN. Accepted under the same rule as {@link PinSetRequest}. */
+export interface PinOffRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'pin.off'
+}
+
+/**
+ * The `pin.resume` request: resume PIN unlocks that a home-wide count of wrong tries paused. Accepted under the same rule
+ * as {@link PinSetRequest}.
+ */
+export interface PinResumeRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'pin.resume'
+}
+
+/**
  * The `permission.reload` request: the running Host reads the per-workspace permission store of
  * `@delo/plugin-permission-defaults` again, and sets the open chats of a workspace that lost its grant back to the safer
  * preset. No Delo process sends it, because each Host watches the store; it stays for a caller holding the token.
@@ -363,6 +398,9 @@ export type UpdateChannelRequest =
   | DevicesApproveRequest
   | DevicesRemoveRequest
   | DevicesElevateRequest
+  | PinSetRequest
+  | PinOffRequest
+  | PinResumeRequest
   | PermissionReloadRequest
   | McpListRequest
   | McpAcceptRequest
@@ -404,6 +442,7 @@ export type HomeProcessErrorCode =
   | 'APPROVALS_UNAVAILABLE'
   | 'REMOVAL_FAILED'
   | 'ELEVATION_FAILED'
+  | 'PIN_FAILED'
   | 'CONSENT_UNAVAILABLE'
   | 'STALE_REVIEW'
   | 'CONSENT_FAILED'

@@ -40,6 +40,7 @@ export const LOOPBACK_REQUIRED_ACTIONS = [
   'reach-settings',
   'elevation-approve',
   'elevation-revoke',
+  'pin-mode-change',
 ] as const
 
 /** One action of {@link LOOPBACK_REQUIRED_ACTIONS}. */
@@ -180,6 +181,9 @@ export const ELEVATION_END_REASONS = [
   'device-removed',
   'listener-stopped',
   'home-stopped',
+  'pin-changed',
+  'pin-mode-off',
+  'token-refused',
 ] as const
 
 /** One reason of {@link ELEVATION_END_REASONS}. */
@@ -238,6 +242,12 @@ export const IDENTITY_ERROR_CODES = [
   'PASSKEY_COUNTER_REGRESSED',
   'TAILNET_IDENTITY_UNAVAILABLE',
   'LOOPBACK_REQUIRED',
+  'PIN_INVALID',
+  'PIN_WEAK',
+  'PIN_MODE_OFF',
+  'PIN_NOT_ALLOWED_ON_ADDRESS',
+  'PIN_UNLOCKS_PAUSED',
+  'UNLOCK_INVALID',
 ] as const
 
 /** One code of {@link IDENTITY_ERROR_CODES}. */
@@ -260,3 +270,44 @@ export interface TsNetRelyingPartySpikeEvidence {
   /** Whether a passkey registered on the private origin asserts on the Funnel origin of the same machine. */
   readonly crossOriginSameHostAsserts: boolean
 }
+
+/**
+ * PIN mode (C14, "PIN mode"): the rules for the secret and the limits that keep a stolen device from guessing it.
+ * Every value is a security invariant except `defaultIdleMinutes`, which the person sets between 1 and `maxIdleMinutes`.
+ */
+export const PIN_MODE_LIMITS = {
+  /** The fewest digits of a PIN. */
+  minPinDigits: 6,
+  /** The fewest characters of a passcode, which is any secret that is not all digits. */
+  minPasscodeChars: 10,
+  /** The most characters of either, after NFC normalisation. */
+  maxSecretChars: 128,
+  /** Wrong tries one device may make before the home removes it. */
+  deviceWrongTries: 5,
+  /** Wrong tries across the home within `homeWindowMs` that pause PIN unlocks until the computer resumes them. */
+  homeWrongTries: 10,
+  /** The window the home-wide count covers: 24 hours. */
+  homeWindowMs: 24 * 60 * MINUTE_MS,
+  /** The idle minutes of an unlock when the person sets none. */
+  defaultIdleMinutes: 15,
+  /** The most idle minutes the person may set. */
+  maxIdleMinutes: 60,
+  /** The longest an unlock lasts however active the page is: 12 hours. */
+  absoluteCapMs: 12 * 60 * MINUTE_MS,
+  /** Random bytes of a page-unlock token. */
+  tokenBytes: 32,
+  /** Random bytes of an unlock id. */
+  idBytes: 16,
+  /** The most scrypt derivations running at once. */
+  concurrentHashes: 2,
+  /** scrypt parameters a new PIN is hashed with; the record stores the parameters it used. */
+  scrypt: { N: 32768, r: 8, p: 1, keyBytes: 32, saltBytes: 16, maxmemBytes: 64 * 1024 * 1024 },
+} as const
+
+/** What kind of secret the person set: all digits is a `pin`, anything else a `passcode`. */
+export type PinKind = 'pin' | 'passcode'
+
+/** What a device's own studio learns of PIN mode without unlocking: whether it is on and what it takes. */
+export type PinModeState =
+  | { readonly kind: 'off' }
+  | { readonly kind: 'on'; readonly secret: PinKind; readonly idleMinutes: number; readonly paused: boolean; readonly unlock: { readonly unlockId: string; readonly endsAt: number; readonly idleEndsAt: number } | null }

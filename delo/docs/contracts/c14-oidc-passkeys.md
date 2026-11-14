@@ -40,6 +40,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [Tailnet membership](#tailnet-membership)
   - [What a device may call](#what-a-device-may-call)
   - [Elevation](#elevation)
+  - [PIN mode](#pin-mode)
   - [Limits](#limits)
   - [Errors](#errors)
   - [Delo Run issuer](#delo-run-issuer)
@@ -210,6 +211,22 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 - **Check.** The condition of the device's bindings reads the unlock before each elevated action, for a call and for an event, a snapshot or a list filter alike, and refuses one past its end even before its timer fires. Each call an unlock admits is logged with the device, the listener, the action and the unlock's id. The Gateway decides a stream only when it opens, so when an unlock ends the home closes the device's reach connections, and the studio reconnects without it.
 - **End.** An unlock ends at its end, when the person revokes it at the computer, when the device locks it, when a new approval replaces it, when the session that asked ends (its limits or a rotation; a roll continues it), when the device is removed, when the listener stops and when the Host stops. Each start and ending is logged with the device, the listener, the unlock's id and the reason, `ELEVATION_END_REASONS`.
 
+<a id="pin-mode"></a>
+### PIN mode
+
+PIN mode lets a person who holds an approved device unlock it with a PIN or passcode in place of typing a code at the computer. It adds a second kind of [elevation](#elevation), the page unlock, and changes nothing else about sign-in: the device key and the reach session stay as they are. Version 1 of the mode is built for the Tailscale private address only; the passkey unlock, the Funnel and relay addresses, and the setting of the PIN, the turning on of the mode and the pairing of devices from a device are not built, and each stays at the computer.
+
+- **State.** `~/.delo/secrets/home-auth/pin-mode.json` holds `enabled`, the secret's `kind`, a salted `scrypt` hash with its parameters, the idle minutes and the lock-when-hidden choice. `pin-attempts.json` holds the wrong tries per device and across the home, and a restart keeps them. A home without the file, or with `enabled: false`, is exactly the home this page describes everywhere else: every route below answers `PIN_MODE_OFF` and no elevation follows from a PIN.
+- **The secret.** A PIN is 6 to 128 digits that is not a repeat (`111111`, `123123`), a run (`345678`) or a common PIN. Any other secret is a passcode of 10 to 128 characters that is not one character repeated. Both are normalised to NFC. The home compares in constant time and never writes the secret to a log, an error or a file in the clear. The limits are `PIN_MODE_LIMITS` of `@delo/contract-oidc-passkeys`.
+- **Setting it.** Only the person at the computer sets, replaces or clears the PIN and turns the mode on or off: `POST /auth/pin/set`, `/auth/pin/off` and `/auth/pin/resume` answer a request that arrived on the loopback listener with the studio's credential and refuse a device with `LOOPBACK_REQUIRED`; the `pin.set`, `pin.off` and `pin.resume` requests of [C19](c19-home-process.md) do the same for `delorun`. `pin-mode-change` is in `LOOPBACK_REQUIRED_ACTIONS`. A change ends every page unlock.
+- **Unlocking.** `POST /auth/pin/unlock` with `{ "secret": "…" }`, from the studio's own origin and under a live session of the Tailscale private listener, answers `{ token, unlockId, endsAt, idleEndsAt }`. The token is 32 random bytes, appears once, and the home keeps only its SHA-256 digest. The unlock is an [elevation](#elevation) of that device, listener and session, so `elevationOf` admits the actions of the unlock table. On another reach listener the route answers `PIN_NOT_ALLOWED_ON_ADDRESS`, and on the loopback listener it is not a device route.
+- **Using the token.** The page sends the token as the `Delo-Unlock` header, never in a URL. `POST /auth/pin/touch` pushes the idle end forward, never past the cap; `POST /auth/pin/lock` ends the unlock; `GET /auth/pin/state` reports the mode and, for a page that holds a token, its unlock. A token presented with another device's, listener's or session's cookie, or one the home does not know, is `401 UNLOCK_INVALID`; a token presented by the wrong party also ends its unlock.
+- **It ends.** After `idleMinutes` without a touch (15 by default, 60 at most), at the absolute cap of 12 hours, on lock, when the PIN changes or the mode turns off, and at every ending an elevation has: its session ends, its device is removed, its listener or the Host stops.
+- **Wrong tries.** A try is counted and written before the secret is compared, one at a time per device. The fifth wrong try of a device removes the device exactly as a removal at the computer does, so its sessions and connections close and it needs approval again at the computer. Ten wrong tries across the home within 24 hours pause PIN unlocks, answering `PIN_UNLOCKS_PAUSED`, until the person resumes them at the computer. A correct secret clears the device's count.
+- **Logs.** Each unlock start and end is an elevation start and end. Each wrong try, lockout, pause, resume, PIN change and mode change is a log line that names the device and never the secret.
+
+The error codes `PIN_INVALID`, `PIN_WEAK`, `PIN_MODE_OFF`, `PIN_NOT_ALLOWED_ON_ADDRESS`, `PIN_UNLOCKS_PAUSED` and `UNLOCK_INVALID` join [the errors below](#errors).
+
 <a id="limits"></a>
 ### Limits
 
@@ -251,6 +268,12 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 | `PASSKEY_USER_VERIFICATION_REQUIRED` | The user-verified flag is not set. |
 | `PASSKEY_COUNTER_REGRESSED` | A counter that did not increase. |
 | `TAILNET_IDENTITY_UNAVAILABLE` | The `tailnet` factor outside C7's socket variant, or `tailnet-membership` declared for a listener or address other than the Tailscale private one. |
+| `PIN_INVALID` | A PIN or passcode that is not right; the fifth of a device also removes the device. |
+| `PIN_WEAK` | A new PIN or passcode that breaks the rules of [PIN mode](#pin-mode). |
+| `PIN_MODE_OFF` | A PIN unlock while the mode is off. |
+| `PIN_NOT_ALLOWED_ON_ADDRESS` | A PIN unlock on a reach listener other than the Tailscale private one. |
+| `PIN_UNLOCKS_PAUSED` | A PIN unlock after ten wrong tries across the home in 24 hours, until the person resumes them at the computer. |
+| `UNLOCK_INVALID` | A page-unlock token that is unknown, ended, or presented with another device, listener or session. |
 | `LOOPBACK_REQUIRED` | A session whose factor is `tailnet-membership` answers a prompt or sends a request for an action granted only at the home's own computer ([tailnet membership](#tailnet-membership)). |
 
 <a id="delo-run-issuer"></a>
@@ -321,6 +344,13 @@ Denial tests:
 | `a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent` | An `allowed-once` answer from a `tailnet-membership` session to a prompt that grants full access is refused with `LOOPBACK_REQUIRED`; the escalated call does not run and the workspace records no consent, and the same prompt answered on the loopback studio grants. |
 | `a tailnet-route session cannot start an external agent` | An `allowed-once` answer from a `tailnet-membership` session to a prompt marked `external-agent` is refused with `LOOPBACK_REQUIRED`, so the agent does not start; declining it from the session applies, and the same prompt answered on the loopback studio is applied. |
 | `a tailnet-route session cannot remove a device, reset, enrol a factor or change reach` | Each such request from a `tailnet-membership` session is refused, and the home's devices and reach state are unchanged. |
+| `five wrong PINs remove the device and close its sessions` | The fifth wrong PIN of a device removes it as a removal at the computer does, closes its sessions, and a restart keeps the count; twenty parallel guesses spend at most five. |
+| `ten wrong PINs across the home pause unlocks` | Ten wrong tries by several devices within 24 hours answer `PIN_UNLOCKS_PAUSED` to a correct PIN until the computer resumes. |
+| `the PIN routes refuse a Funnel listener, the loopback listener and a device that sets the PIN` | `PIN_NOT_ALLOWED_ON_ADDRESS`, a non-device refusal and `LOOPBACK_REQUIRED`. |
+| `a page-unlock token from another device, session or listener is refused` | `UNLOCK_INVALID`, and the unlock ends. |
+| `a page unlock ends idle, at its cap, on lock and when the PIN changes` | `elevationOf` admits nothing afterwards. |
+| `with PIN mode off nothing changes` | Unlock answers `PIN_MODE_OFF`, no elevation exists, and the elevated actions are refused as before. |
+| `the PIN is in no log, error or file in the clear` | The PIN text is absent from the log lines, the response bodies and the files. |
 | `a stale re-authentication is refused` | A `reauth` token with `auth_time` older than 120 seconds, or with a `nonce` other than the approval hash, does not approve. |
 | `a device chooses the preset a chat that has not started runs with` | `agentPresets/select` from a `reach-device` Peer returns the chosen preset and the chat records `agent-preset/selected`; a preset that names full access still meets the workspace's consent refusal, which is granted only at the computer. |
 | `a device reads the files of its chat's workspace and no path outside it` | `workspaceFiles/list`, `read`, `readBytes` and `stat` succeed for a path whose real path lies inside the Session's workspace and are refused with `loopback-required: <action> with a path outside the chat's workspace` for a path outside it, one through a symbolic link that leads outside it, one into the Delo home and one that does not exist; `workspaceFiles/changes` stays refused. |

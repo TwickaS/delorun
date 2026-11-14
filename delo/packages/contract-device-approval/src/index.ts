@@ -43,6 +43,10 @@ export const HOME_AUTH_FILES = {
   recovery: 'recovery.json',
   /** The settings a device loosened while dangerous mode held, set back when it ends (C14, "Elevation"). */
   reachDangerousSettings: 'reach-dangerous-settings.json',
+  /** PIN mode: whether it is on and the salted scrypt hash of the PIN or passcode (C14, "PIN mode"). */
+  pinMode: 'pin-mode.json',
+  /** PIN mode's wrong tries per device and across the home, which a restart keeps. */
+  pinAttempts: 'pin-attempts.json',
 } as const
 
 /** IndexedDB database and store that hold a browser device key on its origin. */
