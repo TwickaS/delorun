@@ -1,10 +1,11 @@
 /**
- * The studio's brand faces reach the browser: the source copies match @delorun/brand, every font url() names a shipped
- * file, and the built bundle emits and references those files. Run after `pnpm run build`.
+ * The brand faces reach the browser: the build copies @delorun/brand's stylesheet and woff2 files, every font url() names
+ * a copied file, the copies are git-ignored, and the built bundle emits and references those files. The bundle check
+ * needs `pnpm run build` first.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { copyBrandFonts } from '../scripts/copy-brand-fonts.ts'
 
 const at = (path: string): URL => new URL(path, import.meta.url)
 const readText = (path: string): string => readFileSync(at(path), 'utf8')
@@ -16,11 +17,23 @@ function urlsIn(css: string): string[] {
 }
 
 describe('the brand faces in the studio', () => {
-  it('ships a source copy of @delorun/brand fonts.css and its woff2 files, byte for byte', () => {
+  beforeAll(() => {
+    copyBrandFonts()
+  })
+
+  it('copies @delorun/brand fonts.css and its woff2 files into the build input, byte for byte', () => {
     expect(readText('../src/client/fonts.css')).toBe(readText('../../brand/src/fonts.css'))
-    for (const name of readdirSync(at('../../brand/src/assets/fonts'))) {
+    const brandFonts = readdirSync(at('../../brand/src/assets/fonts')).sort()
+    expect(readdirSync(at('../src/client/assets/fonts')).sort()).toEqual(brandFonts)
+    for (const name of brandFonts) {
       expect(readBytes(`../src/client/assets/fonts/${name}`).equals(readBytes(`../../brand/src/assets/fonts/${name}`))).toBe(true)
     }
+  })
+
+  it('keeps the copies out of git, so packages/brand/src holds the only committed files', () => {
+    const ignored = readText('../.gitignore').split('\n')
+    expect(ignored).toContain('/src/client/fonts.css')
+    expect(ignored).toContain('/src/client/assets/fonts/')
   })
 
   it('names only files that exist beside the stylesheet, so the url() rewrite can publish them', () => {

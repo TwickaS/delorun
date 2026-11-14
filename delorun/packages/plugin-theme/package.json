@@ -41,7 +41,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b tsconfig.json && tsdown",
+    "build": "node scripts/copy-brand-fonts.ts && tsc -b tsconfig.json && tsdown",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "peerDependencies": {
