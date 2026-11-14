@@ -31,6 +31,11 @@ describe('a profile\'s directories', () => {
     expect(activeCopiesEntry('work-2')).toBe(join('changes', 'profiles', 'work-2', 'active'))
   })
 
+  it('accept a reserved name, since `delorun headless` keeps the headless profile\'s changes', () => {
+    expect(profileChangesDirectory(HOME, 'headless')).toBe(join(HOME, 'changes', 'profiles', 'headless'))
+    expect(activeCopiesEntry('headless')).toBe(join('changes', 'profiles', 'headless', 'active'))
+  })
+
   it('refuse a name that is not a profile name before any path is built from it', () => {
     for (const name of ['../../secrets', '/abs', 'a/b', '']) {
       let profileRefused: unknown

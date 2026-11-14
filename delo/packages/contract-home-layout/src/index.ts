@@ -126,6 +126,14 @@ const RESERVED_ALTERNATIVES = [...RESERVED_PROFILE_NAMES.keys()].join('|')
 export const PROFILE_NAME_PATTERN = new RegExp(`^(?!(?:${RESERVED_ALTERNATIVES})$)[a-z0-9][a-z0-9_-]{0,31}$`, 'u')
 
 /**
+ * The spelling of a profile name alone, without the reserved names: a name that matches never leaves `profiles/` and a
+ * shell passes it unquoted. Code that builds a path under a profile's directory for any profile, including the reserved
+ * `headless` profile that `delorun headless` boots, checks this; a name offered as a new CLI profile uses
+ * {@link profileNameProblem}.
+ */
+export const PROFILE_NAME_SYNTAX = /^[a-z0-9][a-z0-9_-]{0,31}$/u
+
+/**
  * Why a name cannot be a CLI profile (C1, "Profiles"). The launcher and `delorun` refuse every name this check
  * refuses, before the name becomes a path. A reserved name is recognised in any letter case, since the home may lie on
  * a case-insensitive filesystem.

@@ -30,7 +30,7 @@
  * @module @delo/changes/paths
  */
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, profileNameProblem, RUNTIME_VERSION_MAX_LENGTH, RUNTIME_VERSION_PATTERN } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, PROFILE_NAME_SYNTAX, RUNTIME_VERSION_MAX_LENGTH, RUNTIME_VERSION_PATTERN } from '@delo/contract-home-layout'
 import { ChangesError } from './errors.ts'
 
 /** What a package name under Changes is: npm's form, with an optional scope. */
@@ -89,9 +89,9 @@ export function versionsDirectory(home: string): string {
 
 /**
  * @param home - the Delo home.
- * @param profile - the profile's name, which must pass {@link profileNameProblem}.
+ * @param profile - the profile's name, which must match {@link PROFILE_NAME_SYNTAX}; reserved names such as `headless` are valid here.
  * @returns the profile's directory under `changes/profiles/`.
- * @throws {ChangesError} `INVALID_REQUEST` when the name is not a profile name, so no path is built from it.
+ * @throws {ChangesError} `INVALID_REQUEST` when the name does not match {@link PROFILE_NAME_SYNTAX}, so no path is built from it.
  */
 export function profileChangesDirectory(home: string, profile: string): string {
   requireProfileName(profile)
@@ -100,10 +100,10 @@ export function profileChangesDirectory(home: string, profile: string): string {
 
 /**
  * The approved copies of one profile's plugins, relative to the home, as a sandbox read exemption names them.
- * @param profile - the profile's name, which must pass {@link profileNameProblem}.
+ * @param profile - the profile's name, which must match {@link PROFILE_NAME_SYNTAX}; reserved names such as `headless` are valid here.
  * @returns `changes/profiles/<profile>/active`, which holds nothing but approved copies: no pending, unapproved or
  *   stored content, no record and no log.
- * @throws {ChangesError} `INVALID_REQUEST` when the name is not a profile name, so no path is built from it.
+ * @throws {ChangesError} `INVALID_REQUEST` when the name does not match {@link PROFILE_NAME_SYNTAX}, so no path is built from it.
  */
 export function activeCopiesEntry(profile: string): string {
   requireProfileName(profile)
@@ -112,11 +112,12 @@ export function activeCopiesEntry(profile: string): string {
 
 /**
  * @param profile - a profile's name.
- * @throws {ChangesError} `INVALID_REQUEST`, with the reason {@link profileNameProblem} gives, when the name is refused.
+ * @throws {ChangesError} `INVALID_REQUEST` when the name does not match {@link PROFILE_NAME_SYNTAX}.
  */
 function requireProfileName(profile: string): void {
-  const problem = profileNameProblem(profile)
-  if (problem !== undefined) throw new ChangesError('INVALID_REQUEST', profile, problem)
+  if (!PROFILE_NAME_SYNTAX.test(profile)) {
+    throw new ChangesError('INVALID_REQUEST', profile, `${JSON.stringify(profile)} is not a profile name: a profile is 1 to 32 lowercase letters, digits, hyphens or underscores, starting with a letter or digit`)
+  }
 }
 
 /**
