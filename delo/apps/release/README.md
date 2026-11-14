@@ -153,6 +153,21 @@ Restart=on-failure
 WantedBy=default.target
 ```
 
+## Cutting a release candidate
+
+`node_modules/.bin/tsx delo/apps/release/scripts/cut-rc.ts --version 0.1.0-rc.<n> --channel <dir> --state <signer state file> --keys <dir> --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>] [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>] [--log-poll-seconds <n>] [--dry-run]` turns the steps of the release runbook into one command, run from a checkout of `--commit`. Run it with `--dry-run` first: it prints the plan and the commands, and runs nothing.
+
+1. **Tree.** `--commit` must be `HEAD` and tracked files must be clean.
+2. **Changelog.** When `delo/changelog/changelog.json` has no entry for the version, it assembles one with [`assemble.ts`](#assembly) and stops with exit code 3 so you can review and commit the changed files; run it again with the new `--commit`. With an entry, it goes on.
+3. **Release notes.** From rc.2 on, it writes the notes (`assemble.ts --highlights`) to `--highlights` (`<work>/notes-<version>.txt` by default) and signs them into the manifest as `notes` through `local-release.ts --notes`. rc.1 carries none.
+4. **Closure.** It removes stale build stages (directories beside the build root that carry its marker, and a lock whose process has gone), then runs [`build-closure.ts`](#runtime-closures) into `<work>/closure-<version>`. `--closures-from` signs closure files an earlier run built and skips both steps, which is the rerun after a logging failure.
+5. **Sign.** [`local-release.ts`](#local-release) signs, logs and writes the candidate into `--channel` with the key files in `--keys` (`targets.pem`, `timestamp.pem`) and the signer state in `--state`. Only the key files' paths appear in the plan and the log. The log endpoints default to the public Rekor v2 instance of the runbook; a checkpoint wait can take up to 30 minutes (`--log-poll-seconds`, 60 polls), so run the command in the background.
+6. **Verify.** It checks the channel as a client does: root chain, timestamp, the manifest the timestamp names, the signed notes against their bytes, and the manifest signature of every other release in the channel, so the previous candidate is still there to update from. rc.N requires rc.N-1 in the channel and refuses a version already in it.
+
+Every step is logged with its duration; all command output goes to `<work>/cut-rc-<version>.log`. A failure names the step and the next action, and the channel still serves what it served. If the log submission succeeded but the wait timed out, run `log-release.ts` with the same endpoints rather than submitting again. The command never tags, pushes or touches an installed home. It ends by printing those commands: the tag and its push, keeping the [local channel](#the-local-rc-channel) served, and `rc update --check` / `rc update` in the installed `~/delo-rc` home with the runbook's wrapper. `tests/local/cut-rc.integration.spec.ts` cuts two candidates with throwaway keys into a scratch channel and checks that the second signs its notes and that the first stays offered as the release to update from.
+
+Pairing debt: `README.zh.md` has no counterpart of this section yet.
+
 ## Rebuild comparison
 
 `node_modules/.bin/tsx delo/apps/release/src/compare-rebuild.ts <first> <second>` compares two output directories of the same release, such as the release workflow's and the targets-key holder's rebuild. It exits 0 when the two hold the same file names and every file matches, printing each difference that an entry of `rebuild-exceptions.json` accepts with that entry's id. It exits 1 on any other difference, printing each one, and signing refuses such a rebuild. It exits 2 on a usage error, an unreadable directory or an exceptions file that does not validate.
