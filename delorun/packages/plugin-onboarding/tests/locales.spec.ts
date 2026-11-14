@@ -15,7 +15,7 @@ describe('the copy', () => {
   })
 
   it('names the product Delorun, and uses sentence case for a step\'s name', () => {
-    for (const text of Object.values(en)) expect(text).not.toMatch(/\bDelorun\b(?! Run)/)
+    for (const text of Object.values(en)) expect(text).not.toMatch(/\bDelo\b(?! Run)/)
     expect(en['step.look']).toBe('Look')
     expect(en['step.plugins']).toBe('Recommended plugins')
     expect(en['step.reach']).toBe('Phone access')

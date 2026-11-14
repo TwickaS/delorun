@@ -93,13 +93,13 @@ describe('staged renames', () => {
 describe('staged renames by name', () => {
   it('maps a file whose content changed too much for git to see a rename back through the rename rules', (test) => {
     const repo = scratchRepo(test)
-    repo.commit({ 'delorun/docs/a.md': '# Delorun\n\nOne line.\n', 'delorun/docs/delorun-b.md': 'x\n' })
-    repo.run(['rm', '-rq', 'delorun'])
+    repo.commit({ 'delo/docs/a.md': '# Delo\n\nOne line.\n', 'delo/docs/delo-b.md': 'x\n' })
+    repo.run(['rm', '-rq', 'delo'])
     repo.write({ 'delorun/docs/a.md': '# Something else entirely\n\nNothing in common with the old text.\n', 'delorun/docs/delorun-b.md': 'y\n' })
     repo.run(['add', '-A'])
     const renames = stagedRenames(repo.root)
-    expect(renames.get('delorun/docs/a.md')).toBe('delorun/docs/a.md')
-    expect(renames.get('delorun/docs/delorun-b.md')).toBe('delorun/docs/delorun-b.md')
+    expect(renames.get('delorun/docs/a.md')).toBe('delo/docs/a.md')
+    expect(renames.get('delorun/docs/delorun-b.md')).toBe('delo/docs/delo-b.md')
   })
 })
 
