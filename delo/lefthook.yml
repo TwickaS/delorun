@@ -8,8 +8,17 @@
 # groups the push leaves out, such as tests:snapshots.
 pre-commit:
   jobs:
+    # Overrides upstream's job of the same name: a staged record fails only for drift that HEAD did not have.
+    - name: translation pairing (staged records)
+      run: node_modules/.bin/tsx delo/apps/tools/src/pairing-staged.ts {staged_files}
+
     - name: delo checks (staged)
       run: node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --pre-commit
+
+pre-merge-commit:
+  jobs:
+    - name: translation pairing (staged records)
+      run: node_modules/.bin/tsx delo/apps/tools/src/pairing-staged.ts {staged_files}
 
 pre-push:
   jobs:
