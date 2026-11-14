@@ -253,7 +253,7 @@ describe('which steps apply', () => {
     await forward(3)
     expect(heading().textContent).toBe(en['step.plugins'])
     await settle()
-    expect(screen.getByRole('heading', { level: 4 }).textContent).toBe('@scope/p')
+    expect(screen.getByRole('heading', { level: 4 }).textContent).toBe('P')
   })
 
   it.each<readonly [string, ReachState, SetupRecord, boolean]>([
