@@ -1,6 +1,6 @@
 # @delo/plugin-cost-meter
 
-An estimate of what each chat has cost, shown under the composer, with the chats it started added up under it. Off by default: a person turns it on in the sidebar's Plugins page.
+An estimate of what each chat has cost, shown under the composer, with the chats it started added up under it. Off by default: a person turns it on under Components on the Delo studio page of the sidebar's Plugins.
 
 ## What it shows
 

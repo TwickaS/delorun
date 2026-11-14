@@ -14,6 +14,7 @@ import type { InjectFace, PropsLocale, PropsStore, TranslateNS } from '@deepseek
 import { ReadingController, type ReaderSnapshot, type ReaderState } from './controller.ts'
 import { readingWords } from './feed.ts'
 import type { NS } from './locales.ts'
+import { plainText } from './words.ts'
 import { MAX_DELAY_SECONDS, MAX_WPM, MIN_WPM, readerSettings, type createReaderStore } from './store.ts'
 import type { ReadingPage, ReadingPart, ReadingWord, ThinkingPaneInjected } from './types.ts'
 import css from './ThinkingPane.module.css'
@@ -60,11 +61,14 @@ function pageRuns(parts: readonly ReadingPart[], word: ReadingWord | undefined, 
   const at = word === undefined ? -1 : parts.findIndex(part => part.key === word.part)
   const runs: ReactNode[] = []
   for (const [index, part] of parts.entries()) {
-    let text = part.text
+    let text = plainText(part.text, true)
     let labelled = true
     if (index === at && word !== undefined) {
       // The band stands between the two sides, so neither keeps the whitespace that separated it from the band's word.
-      text = side === 'read' ? part.text.slice(0, word.start).trimEnd() : part.text.slice(word.end).trimStart()
+      const rest = part.text.slice(word.end)
+      text = side === 'read'
+        ? plainText(part.text.slice(0, word.start), true).trimEnd()
+        : plainText(rest, /^[^\S\n]*\n/.test(rest)).trimStart()
       // The band's part keeps its label above the band, where the part begins.
       labelled = side === 'read'
     } else if (side === 'read' ? index > at || at < 0 : index < at) continue

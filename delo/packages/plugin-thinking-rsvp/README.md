@@ -1,6 +1,6 @@
 # @delo/plugin-thinking-rsvp
 
-The Thinking tab: read the model's reasoning and its reply word by word, in the studio's right sidebar, as the model writes them. Off by default: a person turns it on in the sidebar's Plugins page. The user guide is [Read the model's thinking word by word](../../docs/guide/thinking-tab.md).
+The Thinking tab: read the model's reasoning and its reply word by word, in the studio's right sidebar, as the model writes them. Off by default: a person turns it on under Components on the Delo studio page of the sidebar's Plugins. The user guide is [Read the model's thinking word by word](../../docs/guide/thinking-tab.md).
 
 ## Using the tab
 
@@ -28,7 +28,7 @@ Your choices stay in this browser. The copy is in English and Chinese, and Chine
   - A newer turn starts a new page; an older one is not read. The page publishes at most once an animation frame.
   - The feed reads the window only while the tab observes it. It is released when its Session's scope ends or the plugin unloads.
 - **The controller** ([`src/client/controller.ts`](src/client/controller.ts)) decides which word the band shows from the clock alone, one word at most per call: the interval is a minute over the words a minute, times the word's dwell, and a word waits until it has been written for the delay. The model's rate is measured over its newest 30 written words, needs at least 5, and is kept between 60 and 1,500 words a minute.
-- **The words** ([`src/client/words.ts`](src/client/words.ts)) are the text's runs between whitespace, unchanged; a run of Han, Hiragana or Katakana is split by `Intl.Segmenter`, with punctuation kept on the word before it.
+- **The words** ([`src/client/words.ts`](src/client/words.ts)) are the text's runs between whitespace, shown without Markdown markup: emphasis marks, code backticks, link syntax (the link text stays), and at a line's start heading hashes, list bullets, quote marks, rules and code fences (the code lines stay). Each word is judged alone, so a marker split across chunks never changes an earlier word or its key. A run of Han, Hiragana or Katakana is split by `Intl.Segmenter`, with punctuation kept on the word before it. The page's text around the band is cleaned the same way.
 - **Preferences** are a browser-persisted store ([`src/client/store.ts`](src/client/store.ts)), key `delo.thinking-rsvp.reader.v2`. The pane reads them through `readerSettings`, so a field it cannot use falls back to its default and a number is kept inside its range.
 
 ## Development
