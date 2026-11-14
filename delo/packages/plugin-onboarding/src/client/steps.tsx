@@ -440,6 +440,17 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 }
 
 /**
+ * A readable stand-in for a plugin's title while its registered title is unknown: the package name without its scope,
+ * with dashes as spaces and a capital first letter, so a package id never shows.
+ * @param name - the package name.
+ * @returns the words, such as `Codex quota` for `@scope/codex-quota`.
+ */
+export function readableName(name: string): string {
+  const words = name.slice(name.lastIndexOf('/') + 1).replaceAll('-', ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
  * Recommended plugins: the configured packages, those that fit the person's connections first with the connections
  * named; a package that declares only connections the person lacks is left out. Packages that are not installed are
  * read from the registry only when the person asks.
@@ -472,7 +483,7 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
             : <p className={css.status} data-tone="done">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</p>
           return (
             <BundleCard key={name} name={name} services={services} note={note}
-              title={view?.title === undefined ? name : resolveText(view.title)}
+              title={view?.title === undefined ? readableName(name) : resolveText(view.title)}
               description={view?.description === undefined ? undefined : resolveText(view.description)} />
           )
         })}

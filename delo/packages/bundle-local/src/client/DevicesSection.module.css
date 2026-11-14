@@ -15,6 +15,14 @@
   display: var(--dsh-settings-section-title-display, block);
 }
 
+/* A heading and its switch share a line, as in Delo's other settings rows. */
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
 .subheading {
   margin: 20px 0 0;
   font-size: 14px;
@@ -29,6 +37,10 @@
   font-size: 13px;
   line-height: 20px;
   overflow-wrap: anywhere;
+}
+
+.intro {
+  padding: 0 4px;
 }
 
 .command {

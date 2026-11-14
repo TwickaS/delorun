@@ -471,3 +471,21 @@
 .activity { display: flex; align-items: center; flex: none; }
 .activity:empty { display: none; }
 .activityExpanded { flex: 1; min-width: 0; }
+
+/* Phone widths give the attach and send circles a 44px hit area without moving them. */
+@media (max-width: 767px) {
+  .add,
+  .primary {
+    position: relative;
+  }
+
+  .add::after,
+  .primary::after {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}

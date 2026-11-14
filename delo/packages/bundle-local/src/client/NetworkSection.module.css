@@ -24,6 +24,10 @@
   overflow-wrap: anywhere;
 }
 
+.intro {
+  padding: 0 4px;
+}
+
 .list {
   margin: 0;
   padding: 0;

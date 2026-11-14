@@ -1,8 +1,9 @@
 /**
  * `@delo/bundle-local`'s browser half: the Privacy section in Settings, with the consent switches for upstream's two
  * opt-ins, DeepSeek's session-log upload (`session-log-deepseek`) and the desktop app's analytics
- * (`product-analytics`) and the npm mirror for plugin installs (`npmMirror` of `delo-plugin-install-check`); the General
- * row with the switch of Delo's release check (`delo-update-check`) and the General row that names both versions; and
+ * (`product-analytics`); the plugin downloads section in Settings, Plugins, with the npm mirror switch (`npmMirror` of
+ * `delo-plugin-install-check`); the General row with the switch of Delo's release check (`delo-update-check`) and the
+ * General row that names both versions; and
  * the About section with the licence and the project's links. Each switch writes only its own row's field, `enabled`
  * or `npmMirror`, through upstream's configuration form, into the active profile's `cordis.patch.yml`.
  *
@@ -55,6 +56,7 @@ import { VersionsSection, type VersionsSectionInjected } from './VersionsSection
 import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
 import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
 import { OPT_IN_FIELDS, OptIn, type OptInId, type OptInSettings } from './opt-in.ts'
+import { PluginInstallsSection, type PluginInstallsSectionInjected } from './PluginInstallsSection.tsx'
 import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.tsx'
 import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.tsx'
 import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
@@ -189,6 +191,12 @@ export const PRIVACY_SECTION_ID = 'delo-privacy'
 /** The section's place in the Settings navigation: after upstream's Plugins section (15). */
 export const PRIVACY_SECTION_ORDER = 20
 
+/** The `settings.section` id of the plugin downloads section, which holds the npm mirror switch. */
+export const PLUGIN_INSTALLS_SECTION_ID = 'delo-plugin-installs'
+
+/** The plugin downloads section's place in the Settings navigation: right after upstream's Plugins section (15). */
+export const PLUGIN_INSTALLS_SECTION_ORDER = 16
+
 /** The row of Delo's release check, whose `enabled` is C16 switch `update_check`; setup's `updateCheck` answer writes the same field. */
 export const UPDATE_CHECK_ROW = SETUP_UPDATE_CHECK_ROW
 
@@ -297,7 +305,7 @@ export const EXTERNAL_AGENT_ACTION_ID = 'delo-external-agent'
 export const inject = ['slots', 'locale', 'configForms', 'sessions', 'connection']
 
 /**
- * Register the Privacy, About, Devices and Network sections, the release check's General row, the Delo sidebar brand, the
+ * Register the Privacy, plugin downloads, About, Devices and Network sections, the release check's General row, the Delo sidebar brand, the
  * product name as the document title, Delo's preview notice, `ctx.deloNotice`, the refused-answer notice, and, when the
  * harness printed both versions into the page, the version row that names Delo's version and the DeepSeek Harness
  * version and, while a Settings layout is in force, the General row that names both on one line. All of them come from this bundle's
@@ -333,10 +341,12 @@ export function apply(ctx: Context): void {
       sessionLogMutation: optIns.sessionLog.state,
       analytics: optIns.analytics.form,
       analyticsMutation: optIns.analytics.state,
-      npmMirror: optIns.npmMirror.form,
-      npmMirrorMutation: optIns.npmMirror.state,
     },
     setEnabled: (id, enabled) => optIns[id].setEnabled(enabled),
+  })
+  const installsFace = (): PluginInstallsSectionInjected => ({
+    hooks: { npmMirror: optIns.npmMirror.form, npmMirrorMutation: optIns.npmMirror.state },
+    setEnabled: enabled => optIns.npmMirror.setEnabled(enabled),
   })
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -391,6 +401,14 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: face,
   }, PrivacySection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: PLUGIN_INSTALLS_SECTION_ID,
+    order: PLUGIN_INSTALLS_SECTION_ORDER,
+    label: () => t('installs.nav'),
+    locale: NS,
+    inject: installsFace,
+  }, PluginInstallsSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: ABOUT_SECTION_ID,
