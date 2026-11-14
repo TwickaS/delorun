@@ -101,6 +101,8 @@ interface DomainSpec {
 }
 ```
 
+设置了 `recoverable: true` 的 spec 会为其 unit 保留一份滚动的上一份副本；遇到无法解析的 unit 或未通过其 schema 的记录时，会将其隔离存放而不是拒绝打开，并通过 `Domain.quarantined` 报告被隔离存放的位置。
+
 `defineDomain(spec)` 固定 spec 的字面量类型，并在拥有方的模块加载时、任何介质被触碰之前就明确报错：领域名或表名不匹配 `UNIT_NAME_RE`、版本不是非负整数、global schema 接受 `null`，这些都会抛出（`null` 是介质的「从未写入」哨兵值，可空的 global 一旦存储就无法往返还原）。`domainTable<K, V>(schema)` 声明一张表，其键类型是仅存在于编译期的 phantom 类型（通常是[品牌化 id](core.zh.md#branded-ids)）；`descriptorOf(spec)` 投影出面向后端的 unit 描述符。
 
 <a id="domain-versioning"></a>
