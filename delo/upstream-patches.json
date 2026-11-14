@@ -2249,7 +2249,7 @@
       "path": "packages/mcp/mcp-client/src/templates.ts",
       "class": "security",
       "reason": "Template rules (2026-11-14): adds `isRunAffectingEnv`, `isWholeTemplate`, `assertLiteralStart` and `assertNoInjectedOption`, and the `RefusedTemplateValue` failure that leaves the server waiting like a missing credential. The run-affecting names match the consent's `showsEnvValue` list.",
-      "sha256": "8f873be8bd290a1a27dd0ab880d8ebc84ba397ee0a2f206185a42432b119969f"
+      "sha256": "b002055657c5ed2daeb568c5229d543f476f0635a86ddd64e571b5297bf4cd52"
     }
   ],
   "retired": []
