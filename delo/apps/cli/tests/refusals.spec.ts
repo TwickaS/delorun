@@ -63,6 +63,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   AcceptanceStoreError: PLUGIN,
   FilePinError: PLUGIN,
   BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',
+  PruneRuleError: 'raised by the release tooling\'s closure build when a foreign prebuild rule is wrong, which no runtime carries',
   HomeAuthError: 'raised by the home process\'s Web sign-in, which answers the browser over HTTP',
   TrustError: 'raised by the home process\'s trust bill routes, which answer the studio over HTTP',
   RelayError: 'raised by the relay server under delo/apps/relay, which delorun does not run',
