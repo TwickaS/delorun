@@ -483,6 +483,8 @@ describe('a server start the mcp-client resolves before the review', () => {
     env: {},
     cwd: '',
     toolCallTimeoutMs: 1_000,
+    closeTimeoutMs: 5_000,
+    expandTemplates: false,
     failOnStartupError: true,
   }
 

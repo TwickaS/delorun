@@ -604,7 +604,7 @@ function assertAcceptable(start: McpServerCommand): void {
 
 /**
  * The stdio configuration a shown start was resolved from, for {@link resolveServerStart}, which reads its server
- * name, command, environment and working directory; the call timeout and startup flag are not read.
+ * name, command, environment and working directory; the call and close timeouts, template expansion and startup flag are not read.
  * @param start - the shown start.
  * @returns the configuration.
  */
@@ -617,6 +617,8 @@ function stdioConfigOf(start: McpServerCommand): StdioConfig {
     env: { ...start.env },
     cwd: start.cwd,
     toolCallTimeoutMs: 0,
+    closeTimeoutMs: 1,
+    expandTemplates: false,
     failOnStartupError: true,
   }
 }

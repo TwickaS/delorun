@@ -621,7 +621,7 @@ describe('through the subagent runtime', () => {
     ctx.subagents.registerProvider({ name: 'claude-code', capabilities: { agentOptions: false, agentPreset: false, outputSchema: false, depthLimit: false }, inheritsParentContext: false, start })
     const delegate = () => ctx.subagents.startActivation({
       provider: 'claude-code', label: 'Fix the bug', signal: new AbortController().signal, delivery: 'caller',
-      request: { parent, prompt: [{ type: 'text', text: 'Fix the bug' }] },
+      parent, prompt: [{ type: 'text', text: 'Fix the bug' }],
     })
     await expect(delegate()).rejects.toMatchObject({ code: 'DELEGATION_CONSENT_REFUSED' })
     expect(start).not.toHaveBeenCalled()
