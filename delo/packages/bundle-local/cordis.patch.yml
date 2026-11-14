@@ -178,6 +178,16 @@
           - '@delo/bundle-local'
           - '@delo/bundle-studio'
 
+    # The rename_workspace tool (C16 switch `rename_workspace_tool`): it renames a
+    # workspace through upstream's workspace registry, as the studio's rename
+    # does, and asks the person inside the call, so only an allowed-once answer
+    # renames. The row is not protected: it adds one tool that asks, and turning
+    # it off only removes that tool.
+    - id: delo-workspace-rename
+      name: '@delo/bundle-local/workspace-rename'
+      config:
+        enabled: true
+
 # The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
 # a stop waits for running chats (C19's `waiting` phase), the first step of
 # every new turn is refused with UPDATE_PENDING, so the wait ends once the

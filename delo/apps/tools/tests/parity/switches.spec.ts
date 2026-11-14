@@ -510,6 +510,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { id: 'delo-plugin-authoring', name: '@delo/skill-plugin-authoring', disabled: true },
       { id: 'delo-delegation-consent', name: '@delo/plugin-delegation-consent', config: { enabled: true }, disabled: true },
       { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
+      { id: 'delo-workspace-rename', name: '@delo/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
@@ -560,6 +561,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
           { id: 'delo-plugin-authoring', name: '@delo/skill-plugin-authoring', disabled: true },
           { id: 'delo-delegation-consent', name: '@delo/plugin-delegation-consent', config: { enabled: true }, disabled: true },
           { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
+          { id: 'delo-workspace-rename', name: '@delo/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
         ],
       },
       GATE_INSERT,

@@ -175,6 +175,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no listener or guard holds plugin_manager back, so it installs and removes as upstream does, behind its own approval.' },
   },
   {
+    id: 'delo-workspace-rename',
+    kind: 'added',
+    reason: 'The C16 switch `rename_workspace_tool` on: the agent has a `rename_workspace` tool that renames a workspace through the workspace registry, the way the studio\'s rename does, after the person allows it; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the model has no tool for renaming a workspace.' },
+  },
+  {
     id: 'delo-update-gate',
     kind: 'added',
     reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; and the first step of every turn waits until `delorun` has checked the booted Host\'s rows and services (`holdUntilChecked`). The plugin\'s own default, off, is the parity value.',
