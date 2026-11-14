@@ -15,7 +15,7 @@
     "@delo/contract-runtime-supervisor": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/logs": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

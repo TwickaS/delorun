@@ -82,7 +82,7 @@
     "@delo/skill-plugin-authoring": "workspace:*",
     "@delo/reach": "workspace:*",
     "@delo/settings-controls": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

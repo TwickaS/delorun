@@ -15,7 +15,7 @@
     "@delo/contract-home-layout": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/home-auth": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

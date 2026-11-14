@@ -42,7 +42,7 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
