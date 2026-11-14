@@ -60,7 +60,7 @@ The release root that these releases are signed under:
 
 | | Value |
 | --- | --- |
-| Release root 1, SHA-256 of `1.root.json` | `4b0f224c5a0221ee232f61506bd7d367e4ebff81293513d764f38fdf76207bc2` |
+| Release root 1, SHA-256 of `1.root.json` | `e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746` |
 | Root key id | `d8cb882168a05fe18b7139ad904de8634bcac2e8b3bebad3776b7efb008be734` |
 | Targets key id | `cd269895db6714d341b1fe23e6d290e42e141da44789d754f3729543fdc9d769` |
 | Timestamp key id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
