@@ -128,6 +128,31 @@ The launcher removes `NODE_OPTIONS` from the runtime's environment, so the clock
 
 `--windows` runs a shorter probe from WSL for Windows: the packed launcher runs under the Windows `node.exe` (`REHEARSAL_WINDOWS_NODE` overrides `/mnt/c/nvm4w/nodejs/node.exe`) with a home in a new folder under the Windows temporary directory. Releases publish no Windows runtime, so the probe needs no closure and its one scenario, `win-refuses`, checks that the launcher stops before it downloads, says Delorun 0.1.0 runs in WSL2, and writes nothing into the home. It is a manual check; it does not exercise the named pipes a native Windows runtime would need, which the release does not yet support. The folder is left in place for you to remove. The rehearsal does not cover macOS, the public release log, the npm registry or the production hosts.
 
+## The local RC channel
+
+`node_modules/.bin/tsx delo/apps/release/scripts/local-channel.ts serve --channel <dir> --port <n> --state <state.json> --timestamp-key <timestamp.pem> [--host 127.0.0.1] [--resign-hours 24]` serves a release channel directory from this computer, so release candidates update through the real updater. It adds no signing code: it serves the output of [`local-release.ts`](#local-release) and re-signs the timestamp with the signer of `sign/timestamp.ts`.
+
+- **Server.** It answers GET and HEAD for regular files below `--channel` and nothing else: no directory listing, no `..` or encoded separator, no symlink that points outside the directory (each answers 404), and 405 for other methods. `--host` is `127.0.0.1` or `::1`; any other address stops the command. JSON is `application/json`, archives `application/gzip`, and `timestamp.json` carries `Cache-Control: no-store`. It logs one line per request error and per re-signing; it never prints key material.
+- **Re-signing.** On start, and every `--resign-hours` (24 by default; at most 48, because a timestamp lives 72 hours), it writes the next `timestamp.json`: the same channel entries and root, the version plus one, `issued` one hour before now and `expires` 72 hours after it. The signer state in `--state` moves with it, written first, and both files are replaced through a temporary name, so a reader never sees half of one. If a re-signing fails (a bad key, a state that no longer matches the served timestamp), the old files stay and the log says why; the next interval tries again. Updates and fresh installs refuse a timestamp that has expired, so keep the command running.
+- **Start.** Sign rc.1 into a new channel directory with `local-release.ts` (the [runbook](#local-release) options, `--out <channel dir>`, `--state <state.json>`, and `--log-submit`, `--log-checkpoint` and `--log-tiles` for the release log), build the launcher with `npm-launcher/src/build.ts --channel-origin http://127.0.0.1:<port>` (the launcher accepts `http:` on loopback only), then run the `serve` command with the same directory, state and the timestamp key. The port is part of the launcher, so use the same one every time.
+- **Add an RC.** Run `local-release.ts` again with the next `--version`, the same `--out` and the same `--state`, while the server runs. The release files go in first and the timestamp last; the server needs no restart, and the next re-signing continues from the timestamp the release wrote. A version that is not higher, or already in the channel, is refused.
+- **Stop.** Send the process `SIGINT` or `SIGTERM`; it closes the server and exits. Nothing is installed or left behind.
+- **What the person's updater sees.** The launcher fetches `http://127.0.0.1:<port>/timestamp.json`, then the root chain, the manifest named there and the release files under `releases/download/v<version>/`, and verifies them as it does for any channel. An installed `~/delo-rc` that finds a higher version offers the update; while the server is stopped, updates fail and the installed runtime keeps starting.
+
+To keep it running, save this as `~/.config/systemd/user/delo-local-channel.service`, then run `systemctl --user enable --now delo-local-channel` (`loginctl enable-linger $USER` keeps it running after you log out). Replace the paths with yours:
+
+```ini
+[Unit]
+Description=Delo local RC channel
+
+[Service]
+ExecStart=%h/path/to/node %h/path/to/repo/node_modules/.bin/tsx %h/path/to/repo/delo/apps/release/scripts/local-channel.ts serve --channel %h/delo-rc-release/channel --port 18080 --state %h/delo-rc-release/timestamp-state.json --timestamp-key %h/.config/delo/preview-release/timestamp.pem
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
 ## Rebuild comparison
 
 `node_modules/.bin/tsx delo/apps/release/src/compare-rebuild.ts <first> <second>` compares two output directories of the same release, such as the release workflow's and the targets-key holder's rebuild. It exits 0 when the two hold the same file names and every file matches, printing each difference that an entry of `rebuild-exceptions.json` accepts with that entry's id. It exits 1 on any other difference, printing each one, and signing refuses such a rebuild. It exits 2 on a usage error, an unreadable directory or an exceptions file that does not validate.
