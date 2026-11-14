@@ -16,6 +16,7 @@ Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run
 
 - [What runs on your computer](#what-runs-on-your-computer)
 - [What Delo Run can and cannot do](#what-delo-run-can-and-cannot-do)
+- [How releases are signed before 1.0](#how-releases-are-signed-before-10)
 - [What each reach option shows its provider](#what-each-reach-option-shows-its-provider)
 - [What leaves your machine](#what-leaves-your-machine)
 - [Checking it yourself](#checking-it-yourself)
@@ -50,6 +51,22 @@ What you still trust:
 - Delo Run's releases and the `delorun.com` addresses that serve them;
 - each plugin you install, and the place you installed it from;
 - DeepSeek Harness's code, which Delorun runs at a named release.
+
+## How releases are signed before 1.0
+
+Every release before 1.0 is signed with a key kept on a development computer. No key ceremony has happened yet: the keys were made on that computer, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. Anyone who gains access to that computer could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it.
+
+The release root that these releases are signed under:
+
+| | Value |
+| --- | --- |
+| Release root 1, SHA-256 of `1.root.json` | `4b0f224c5a0221ee232f61506bd7d367e4ebff81293513d764f38fdf76207bc2` |
+| Root key id | `d8cb882168a05fe18b7139ad904de8634bcac2e8b3bebad3776b7efb008be734` |
+| Targets key id | `cd269895db6714d341b1fe23e6d290e42e141da44789d754f3729543fdc9d769` |
+| Timestamp key id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
+| Catalogue key id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
+
+At 1.0 the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delo/release/production-keys.json`.
 
 ## What each reach option shows its provider
 
@@ -111,7 +128,7 @@ Each file these checks download is checked against its signature, so a server th
 <summary>Go further</summary>
 
 - **Check the launcher.** npm serves the `delorun` [launcher](../reference/glossary.md#launcher) before any Delorun check runs, so check it separately. `delorun verify` prints a `Launcher` line with the integrity that the installed release's signed manifest gives the launcher you ran. Compare it with the output of `npm view delorun@<version> dist.integrity`.
-- **Compare the release roots.** Delo Run publishes the SHA-256 of each release root file and its key ids in the README, on this page, in each release's notes and in `delo/release/production-keys.json`. Compare them with the root files under the launcher package's `roots/` directory.
+- **Compare the release roots.** Delo Run publishes the SHA-256 of each release root file and its key ids on this page and in each release's notes. Compare them with the root files under the launcher package's `roots/` directory.
 - Setup installs the `delorun` command at the version you ran, never the newest version npm serves.
 
 </details>
