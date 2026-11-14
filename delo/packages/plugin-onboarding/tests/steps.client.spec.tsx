@@ -491,11 +491,11 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', 'DeepSeek', 'done'],
-      ['Look', 'Soft · Peach', 'done'],
+      ['Look', 'Soft · Peach', undefined],
       ['Agents', 'Claude Code', 'done'],
       ['Plugins', '1 added', 'done'],
       ['Phone access', 'On', 'done'],
-      ['Workspace', '/home/person/app', 'done'],
+      ['Workspace', '/home/person/app', undefined],
     ])
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
   })
@@ -508,7 +508,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', en['ready.model.none'], 'attention'],
-      ['Look', 'Grove', 'done'],
+      ['Look', 'Grove', undefined],
       ['Agents', en['ready.none'], undefined],
       ['Plugins', en['ready.none'], undefined],
       ['Workspace', en['ready.workspace.none'], 'attention'],
@@ -526,7 +526,7 @@ describe('the ready step', () => {
   it('names the default look while the theme settings are still loading', async () => {
     ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
     await settle()
-    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', 'done'])
+    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', undefined])
   })
 
   it('shows the default workspace once the dialog chose it', async () => {
@@ -534,7 +534,7 @@ describe('the ready step', () => {
     guide.chooseWorkspace({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
     ready(guide, { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, 'done'])
+    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, undefined])
     expect(KEYS.providers).toHaveLength(1)
   })
 })

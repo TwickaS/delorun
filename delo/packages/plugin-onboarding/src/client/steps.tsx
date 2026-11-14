@@ -608,12 +608,12 @@ export function ReadyStep({ services, guide, reach, target }: StepProps & { read
     working.length > 0
       ? { key: 'model', label: t('ready.model'), value: working.map(each => each.name).join(', '), tone: 'done' }
       : { key: 'model', label: t('ready.model'), value: t('ready.model.none'), tone: 'attention' },
-    { key: 'look', label: t('ready.look'), value: palette === 'soft' ? `${appearance('palette.soft')} · ${appearance(`accent.${settings.value?.accent ?? 'peach'}`)}` : appearance(`palette.${palette}`), tone: 'done' },
+    { key: 'look', label: t('ready.look'), value: palette === 'soft' ? `${appearance('palette.soft')} · ${appearance(`accent.${settings.value?.accent ?? 'peach'}`)}` : appearance(`palette.${palette}`), tone: undefined },
     { key: 'agents', label: t('ready.agents'), value: agents.length === 0 ? t('ready.none') : agents.join(', '), tone: agents.length === 0 ? undefined : 'done' },
     { key: 'plugins', label: t('ready.plugins'), value: extra === 0 ? t('ready.none') : t('ready.plugins.count', { count: String(extra) }), tone: extra === 0 ? undefined : 'done' },
     ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' ? 'ready.reach.on' : 'ready.reach.off'), tone: reach === 'set-up' ? 'done' as const : undefined }],
     workspace !== undefined
-      ? { key: 'workspace', label: t('ready.workspace'), value: workspace.path, tone: 'done' }
+      ? { key: 'workspace', label: t('ready.workspace'), value: workspace.path, tone: undefined }
       : target.kind === 'other'
         ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
         : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },

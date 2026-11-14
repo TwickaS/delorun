@@ -42,6 +42,18 @@
   }
 }
 
+/* On a phone the label and the dismiss button share a line and the chips take the full width beneath them. */
+@media (max-width: 767px) {
+  .lead {
+    flex: 1;
+  }
+
+  .chips {
+    flex-basis: 100%;
+    order: 1;
+  }
+}
+
 @media (pointer: coarse) {
   .chip {
     min-height: 44px;
