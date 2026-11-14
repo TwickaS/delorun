@@ -12,7 +12,7 @@
 export const PARITY_REGISTRY_VERSION = 1 as const
 
 /** Upstream release tag whose recorded scenarios the parity composition replays. */
-export const PARITY_BASE_TAG = 'dsh-v0.2.2-rc.1' as const
+export const PARITY_BASE_TAG = 'dsh-v0.2.2-rc.3' as const
 
 /** Repository path of the Cordis overlay that sets every switch and default to its parity value. */
 export const PARITY_OVERLAY_PATH = 'delo/apps/tools/src/parity/composition/parity.overlay.yml' as const

@@ -291,7 +291,7 @@ describe('the plugin', () => {
   })
 
   it('puts the version row in the stock version row\'s place when the page carries both versions, and adds the versions line only while a layout is in force', async () => {
-    Reflect.set(globalThis, VERSIONS_GLOBAL, { delo: '0.1.0', dsh: '0.2.2-rc.1' })
+    Reflect.set(globalThis, VERSIONS_GLOBAL, { delo: '0.1.0', dsh: '0.2.2-rc.3' })
     const ctx = new Context()
     try {
       await ctx.plugin(SlotRegistry).await()
@@ -311,7 +311,7 @@ describe('the plugin', () => {
       expect(VERSION_ROW).toEqual({ id: 'current-version', priority: -1 })
       const face = row?.inject?.()
       if (face === undefined || !('versions' in face) || !('t' in face) || typeof face.t !== 'function') throw new Error('no row face')
-      expect(face.versions).toEqual({ delo: '0.1.0', dsh: '0.2.2-rc.1' })
+      expect(face.versions).toEqual({ delo: '0.1.0', dsh: '0.2.2-rc.3' })
       expect(face.t('version.delo', { version: '0.1.0' })).toBe('Delorun version: 0.1.0')
       const ids = (): string[] => slots.entries('settings.general.item').map(entry => String(entry.options.id)).sort()
       // Without the layout registry, the flat list keeps the version row alone.
@@ -326,7 +326,7 @@ describe('the plugin', () => {
       const unregisterLayout = layouts.register(layout)
       const line = slots.entries('settings.general.item').find(entry => entry.options.id === VERSIONS_ITEM.id)
       expect(line?.options).toMatchObject({ order: VERSIONS_ITEM.order })
-      expect(line?.inject?.()).toEqual({ versions: { delo: '0.1.0', dsh: '0.2.2-rc.1' } })
+      expect(line?.inject?.()).toEqual({ versions: { delo: '0.1.0', dsh: '0.2.2-rc.3' } })
       // A second change while in force registers nothing twice.
       const unregisterSecond = layouts.register(layout)
       expect(ids()).toEqual([VERSION_ROW.id, UPDATE_CHECK_ITEM.id, VERSIONS_ITEM.id].sort())
