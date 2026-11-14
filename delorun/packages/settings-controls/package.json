@@ -1,6 +1,6 @@
 {
   "name": "@delorun/settings-controls",
-  "description": "The settings controls Delorun's Settings sections share: the card with its heading, setting titles, the General row frame, the radio segmented control and the preview tiles",
+  "description": "The settings controls Delorun's Settings sections share, re-exported from @delorun/brand so a section's imports keep working",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -8,12 +8,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "peerDependencies": {
-    "react": "^18.2.0"
+  "dependencies": {
+    "@delorun/brand": "workspace:*"
   },
-  "devDependencies": {
-    "@testing-library/react": "^16.3.3",
-    "@types/react": "~18.3.1",
+  "peerDependencies": {
     "react": "^18.2.0"
   },
   "delorun": {

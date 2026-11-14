@@ -7,12 +7,6 @@ declare module '*.module.css' {
 /** The brand's plain stylesheets, imported for their side effect. */
 declare module '*/tokens.css'
 
-/** The tokens as text, which `tokens-style.ts` injects. */
-declare module '*.css?inline' {
-  const css: string
-  export default css
-}
-
 /** Upstream's markdown styles, which the studio build bundles. */
 declare module 'katex/dist/katex.min.css'
 

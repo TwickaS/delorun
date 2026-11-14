@@ -46,7 +46,7 @@ const MARK = /M16 2\.5L27\.7|A6\.6 6\.6 0 1 0 9\.4 16/
 const FONT = /font-family\s*:[^;{}]*['"]/i
 
 /** The source trees the gate reads; the brand package is the one place the literals live. */
-const SCANNED = /^delorun\/(?:packages\/(?!brand\/)[^/]+\/src\/|apps\/(?:website|docs)\/(?:src|public)\/|packages\/site-design\/)/
+const SCANNED = /^delorun\/(?:packages\/(?!brand\/)[^/]+\/src\/|apps\/(?:website|docs)\/(?:src|public|scripts)\/|packages\/site-design\/)/
 const EXTENSIONS = /\.(?:css|ts|tsx|svg|html)$/
 
 /**

@@ -24,6 +24,7 @@ export function remarkDelorun(): (tree: Root, file: PageFile) => void {
     if (path === undefined) throw new Error('docs-site: a page reached the build without its path')
     const root = repositoryRoot()
     const englishIds = /\.zh\.md$/.test(path) ? englishHeadingIds(path.replace(/\.zh\.md$/, '.md')) : undefined
+    dropLanguageLine(tree)
     let heading = 0
     const visit = (node: RootContent | Root): void => {
       if ('children' in node && node.type !== 'paragraph' && node.type !== 'heading') foldDetails(node, path)
@@ -34,6 +35,20 @@ export function remarkDelorun(): (tree: Root, file: PageFile) => void {
     }
     visit(tree)
   }
+}
+
+/**
+ * Remove the paragraph that names a page's only language, such as a bare `English` line under the title of a page with
+ * no Chinese twin. The Markdown keeps the line, which the doc gates read; the site renders the page without it.
+ * @param tree - the page's root; the paragraph is removed from its top-level children.
+ */
+export function dropLanguageLine(tree: Root): void {
+  tree.children = tree.children.filter(node => !isBareLanguageName(node))
+}
+
+/** A paragraph whose only content is one language name. */
+function isBareLanguageName(node: RootContent): boolean {
+  return node.type === 'paragraph' && node.children.length === 1 && node.children[0]?.type === 'text' && node.children[0].value.trim() === 'English'
 }
 
 /**

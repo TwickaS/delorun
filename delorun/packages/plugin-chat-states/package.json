@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@delorun/contract-archive-and-trash": "workspace:*",
+    "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*",
     "zod": "4.6.6"
   },

@@ -2530,6 +2530,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
@@ -3313,6 +3316,9 @@ importers:
 
   delorun/packages/plugin-sidebar:
     dependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
@@ -3809,13 +3815,10 @@ importers:
         version: 7.8.0
 
   delorun/packages/settings-controls:
-    devDependencies:
-      '@testing-library/react':
-        specifier: ^16.3.3
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@types/react':
-        specifier: ~18.3.1
-        version: 18.3.31
+    dependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       react:
         specifier: ^18.2.0
         version: 18.3.1

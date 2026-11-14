@@ -7,3 +7,40 @@
 @import 'fumadocs-ui/css/preset.css';
 @import '../../brand/src/tokens.css';
 @import '../../brand/src/fonts.css';
+
+/*
+ * Fumadocs UI's roles on Delorun's brand tokens, so the docs and the website draw with the brand: the typefaces, the
+ * brand surfaces and the peach accent. Links and accent text take the text-safe peach, and a peach fill carries dark
+ * text. Fumadocs switches to its dark colours with a `.dark` class, which also sets the page's `color-scheme` so the
+ * brand tokens' `light-dark()` follows it.
+ */
+@theme {
+  --font-sans: var(--dl-font-sans);
+  --font-mono: var(--dl-font-mono);
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+:root,
+.dark {
+  --color-fd-background: var(--dl-surface);
+  --color-fd-foreground: var(--dl-text);
+  --color-fd-muted: var(--dl-surface-sunken);
+  --color-fd-muted-foreground: var(--dl-text-muted);
+  --color-fd-card: var(--dl-surface-raised);
+  --color-fd-card-foreground: var(--dl-text);
+  --color-fd-popover: var(--dl-surface-raised);
+  --color-fd-popover-foreground: var(--dl-text);
+  --color-fd-border: var(--dl-border);
+  --color-fd-primary: var(--dl-accent-text);
+  --color-fd-primary-foreground: light-dark(#FFFFFF, var(--dl-on-accent));
+  --color-fd-accent: var(--dl-surface-sunken);
+  --color-fd-accent-foreground: var(--dl-text);
+  --color-fd-ring: var(--dl-accent);
+}

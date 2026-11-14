@@ -150,7 +150,7 @@ export const GATES: readonly GateCheck[] = withDebt([
     id: 'gates:brand-drift',
     title: 'No brand colour, named typeface or copy of the hex mark outside @delorun/brand',
     command: [TSX, `${GATE_DIR}/brand-drift.ts`],
-    inputs: ['delorun/packages/*/src/**', 'delorun/packages/site-design/**', 'delorun/apps/website/{src,public}/**', 'delorun/apps/docs/{src,public}/**', `${GATE_DIR}/brand-drift.*`],
+    inputs: ['delorun/packages/*/src/**', 'delorun/packages/site-design/**', 'delorun/apps/website/{src,public,scripts}/**', 'delorun/apps/docs/{src,public,scripts}/**', `${GATE_DIR}/brand-drift.*`],
   },
   {
     id: 'gates:dco',
