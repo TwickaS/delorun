@@ -217,10 +217,27 @@ describe('the PIN mode section', () => {
     const host = fakeHost({ [MODE]: waiting })
     renderSection(host)
     const notice = await screen.findByRole('status')
-    expect(notice.textContent).toContain('network.lan')
-    expect(notice.textContent).toContain('shell.yolo')
+    expect(notice.textContent).toContain(en['setBack.title'])
+    expect(notice.textContent).toContain('network lan')
+    expect(notice.textContent).toContain('shell yolo')
+    expect(notice.textContent).not.toContain('network.lan')
     expect(notice.textContent).toContain(en['setBack.auto'])
     expect(screen.queryByRole('button', { name: /try now/i })).toBeNull()
+  })
+
+  it('names a waiting computer-only settings row in words', async () => {
+    const waiting = { status: 200, body: { ...OFF.body as object, setBackWaiting: [{ ns: 'delorun-reach', field: '*' }, { ns: 'delorun-home-auth', field: '*' }] } }
+    renderSection(fakeHost({ [MODE]: waiting }))
+    const notice = await screen.findByRole('status')
+    expect(notice.textContent).toContain(en['setBack.name.reach'])
+    expect(notice.textContent).toContain(en['setBack.name.homeAuth'])
+    expect(notice.textContent).not.toContain('delorun-reach')
+  })
+
+  it('shows the status as a pill beside the sentence', async () => {
+    renderSection(fakeHost({ [MODE]: ON }))
+    expect(await screen.findByText(en['pill.on'])).toBeTruthy()
+    expect(screen.getByText(en['state.pin']).getAttribute('data-state')).toBe('on')
   })
 
   it('shows no set-back notice when nothing waits', async () => {

@@ -1,14 +1,15 @@
-/* PIN mode section: the state, the entry form and the turn-off and resume actions. */
+/* PIN mode section: a status card, then cards for the options, the secret and turning off. The cards come from @delorun/settings-controls. */
 
 .section {
   display: flex;
   flex-direction: column;
+  gap: var(--delorun-space-8, 16px);
   max-width: var(--dsh-settings-section-max-width, 760px);
   color: var(--dsw-alias-label-primary);
 }
 
 .heading {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: var(--dsh-settings-section-title-size, 18px);
   font-weight: var(--dsh-settings-section-title-weight, 600);
   line-height: var(--dsh-settings-section-title-line-height, normal);
@@ -17,30 +18,29 @@
 
 .intro,
 .line {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
   overflow-wrap: anywhere;
 }
 
-.state {
-  margin: 0 0 4px;
-  font-size: 14px;
-  line-height: 20px;
-}
+
+
+
+
+
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-  max-width: 360px;
+  gap: 12px;
 }
 
-.label {
-  font-size: 13px;
-  line-height: 20px;
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* 16 px keeps iOS from zooming the page when a field takes focus. */
@@ -61,8 +61,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  font-size: 13px;
-  line-height: 20px;
+}
+
+.checkText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .failed {
@@ -77,5 +82,53 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
+}
+
+
+
+
+
+/* "Change PIN": a full-width row that opens its form below it. */
+.disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.disclosure:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  transition: transform 160ms ease-out;
+}
+
+.open {
+  transform: rotate(180deg);
+}
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
 }

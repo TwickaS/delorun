@@ -1,0 +1,244 @@
+/* Reusable brand parts: dots, keypad, notice and status card. They use only the studio's design tokens. */
+
+.dots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 4px;
+}
+
+.dot {
+  box-sizing: border-box;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+  corner-shape: round;
+  background: transparent;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+}
+
+.filled {
+  border-color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-label-primary);
+  transform: scale(1.08);
+}
+
+.dots[data-tone="error"] .dot {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.dots[data-tone="error"] .filled {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.dots[data-shake] {
+  animation: shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  justify-content: center;
+  gap: 14px 20px;
+  margin: 8px 0 4px;
+}
+
+.key {
+  box-sizing: border-box;
+  width: 72px;
+  height: 72px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  transition: background-color 120ms ease-out, transform 120ms ease-out;
+}
+
+/* Backspace sits on the surface like iOS's delete key: no disc until pressed. */
+.erase {
+  border-color: transparent;
+  background: transparent;
+  font-size: 22px;
+}
+
+.key:active:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+  transform: scale(0.94);
+}
+
+@media (hover: hover) {
+  .key:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.key:disabled {
+  opacity: 0.5;
+}
+
+.key:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 359px) {
+  .keypad {
+    grid-template-columns: repeat(3, 64px);
+    gap: 12px 16px;
+  }
+
+  .key {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noticeIcon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.notice[data-tone="error"] .noticeIcon {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.noticeText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.noticeTitle {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.noticeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.statusIcon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.statusIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.statusIcon[data-on] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.statusText {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.statusTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.statusDetail {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.confirmText {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.danger {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots[data-shake] {
+    animation: none;
+  }
+
+  .dot,
+  .key {
+    transition: none;
+  }
+
+  .key:active:not(:disabled) {
+    transform: none;
+  }
+}

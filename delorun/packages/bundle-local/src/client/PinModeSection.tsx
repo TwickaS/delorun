@@ -7,11 +7,13 @@
  */
 import { useCallback, useEffect, useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, IconPauseOutlineRegular, IconShieldOutlineRegular, IconWarningOutlineRegular, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import { PIN_MAX_IDLE_MINUTES, readPinMode, resumePin, setPinMode, setPinOptions, turnPinOff, type PinMode } from './pin-api.ts'
 import { secretProblem } from './pin-rules.ts'
+import { ConfirmAction, Notice, StatusCard } from './brand-parts.tsx'
+import { cardCss, SettingsCard } from '@delorun/settings-controls'
 import css from './PinModeSection.module.css'
 
 /** What the plugin supplies. */
@@ -40,6 +42,21 @@ export function pinModeFailureText(t: Translate, error: unknown): string {
     unreachable: t('failed.unreachable'),
     unreadable: t('failed.unreadable'),
   })
+}
+
+/** The settings rows whose whole namespace is computer-only, by namespace, in words. */
+const NAMESPACE_WORDS = { 'delorun-home-auth': 'setBack.name.homeAuth', 'delorun-reach': 'setBack.name.reach' } as const
+
+/**
+ * Name a setting waiting to be put back in words.
+ * @param t - the section's copy.
+ * @param setting - the settings row and field.
+ * @returns the phrase for a known row, otherwise the row and field with their separators as spaces.
+ */
+export function settingWords(t: Translate, setting: { readonly ns: string; readonly field: string }): string {
+  const known = (NAMESPACE_WORDS as Record<string, 'setBack.name.homeAuth' | 'setBack.name.reach'>)[setting.ns]
+  if (known !== undefined && setting.field === '*') return t(known)
+  return `${setting.ns} ${setting.field}`.replace(/[-_.]+/g, ' ')
 }
 
 /**
@@ -154,83 +171,107 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
   }
 
   const secretFields = <>
-    <label className={css.label} htmlFor={`${id}-secret`}>{t('secret.label')}</label>
-    <Input id={`${id}-secret`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
-      autoCapitalize="off" spellCheck={false} value={secret} disabled={busy}
-      onChange={(event) => { setSecret(event.target.value) }} />
-    <label className={css.label} htmlFor={`${id}-again`}>{t('secret.confirm')}</label>
-    <Input id={`${id}-again`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
-      autoCapitalize="off" spellCheck={false} value={again} disabled={busy}
-      onChange={(event) => { setAgain(event.target.value) }} />
+    <div className={css.fieldRow}>
+      <label className={cardCss.title} htmlFor={`${id}-secret`}>{t('secret.label')}</label>
+      <Input id={`${id}-secret`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
+        autoCapitalize="off" spellCheck={false} value={secret} disabled={busy}
+        onChange={(event) => { setSecret(event.target.value) }} />
+    </div>
+    <div className={css.fieldRow}>
+      <label className={cardCss.title} htmlFor={`${id}-again`}>{t('secret.confirm')}</label>
+      <Input id={`${id}-again`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
+        autoCapitalize="off" spellCheck={false} value={again} disabled={busy}
+        onChange={(event) => { setAgain(event.target.value) }} />
+    </div>
     <p className={css.hint}>{t('secret.hint')}</p>
   </>
   const optionFields = <>
-    <label className={css.label} htmlFor={`${id}-idle`}>{t('idle.label')}</label>
-    <Input id={`${id}-idle`} className={css.field ?? ''} type="text" inputMode="numeric" autoComplete="off"
-      value={idle} disabled={busy} onChange={(event) => { setIdle(event.target.value) }} />
-    <p className={css.hint}>{t('idle.hint')}</p>
+    <div className={css.fieldRow}>
+      <label className={cardCss.title} htmlFor={`${id}-idle`}>{t('idle.label')}</label>
+      <p className={css.hint}>{t('idle.hint')}</p>
+      <Input id={`${id}-idle`} className={css.field ?? ''} type="text" inputMode="numeric" autoComplete="off"
+        value={idle} disabled={busy} onChange={(event) => { setIdle(event.target.value) }} />
+    </div>
     <div className={css.check}>
-      <span>{t('hidden.label')}</span>
+      <div className={css.checkText}>
+        <span className={cardCss.title}>{t('hidden.label')}</span>
+        <span className={css.hint}>{t('hidden.hint')}</span>
+      </div>
       <Switch checked={hidden} label={t('hidden.label')} disabled={busy} onChange={setHidden} />
     </div>
   </>
   const failure = problem === undefined ? null : <p className={css.failed} role="alert">{problem}</p>
+  const waiting = mode.setBackWaiting ?? []
 
-  return <>
-    <p className={css.state} data-pin-mode-state={mode.enabled ? 'on' : 'off'}>
-      {t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
-    </p>
-    {mode.enabled ? <p className={css.line}>{t('state.settings', { minutes: String(mode.idleMinutes) })}{mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}</p> : null}
-    {mode.setBackWaiting !== undefined && mode.setBackWaiting.length > 0
-      ? <p className={css.failed} role="status" data-pin-mode-set-back>
-        {t('setBack.waiting', { settings: mode.setBackWaiting.map(({ ns, field }) => `${ns}.${field}`).join(', ') })} {t('setBack.auto')}
-      </p>
+  return <div className={cardCss.stack}>
+    <SettingsCard title={t('card.status')} group="pin-status">
+      <div className={cardCss.block}>
+        <StatusCard Icon={IconShieldOutlineRegular} on={mode.enabled} titleAttribute={mode.enabled ? 'on' : 'off'} pill={t(mode.enabled ? 'pill.on' : 'pill.off')}
+          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
+          detail={mode.enabled ? `${t('state.settings', { minutes: String(mode.idleMinutes) })}${mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}` : undefined} />
+      </div>
+    </SettingsCard>
+    {waiting.length > 0
+      ? <div data-pin-mode-set-back>
+        <Notice Icon={IconWarningOutlineRegular} title={t('setBack.title')}>
+          {t('setBack.waiting', { settings: waiting.map(setting => settingWords(t, setting)).join(', ') })} {t('setBack.auto')}
+        </Notice>
+      </div>
       : null}
-    {mode.paused ? <p className={css.failed} role="status">{t('paused')}</p> : null}
-    {mode.paused ? <div className={css.actions}>
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => resumePin(fetch)) }}>{t('resume')}</Button>
-    </div> : null}
+    {mode.paused
+      ? <Notice Icon={IconPauseOutlineRegular} title={t('paused.title')}
+        actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => resumePin(fetch)) }}>{t('resume')}</Button>}>
+        {t('paused')}
+      </Notice>
+      : null}
     {mode.enabled
       ? <>
-        <form className={css.form} onSubmit={saveOptions} noValidate data-pin-mode-options>
-          {optionFields}
-          {changingPin ? null : failure}
-          <div className={css.actions}>
-            <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('change')}</Button>
-          </div>
-        </form>
-        {changingPin
-          ? <form className={css.form} onSubmit={changePin} noValidate data-pin-mode-change>
-            <p className={css.hint}>{t('pin.hint')}</p>
-            {secretFields}
-            {failure}
+        <SettingsCard title={t('card.options')} group="pin-options">
+          <form className={`${cardCss.block} ${css.form}`} onSubmit={saveOptions} noValidate data-pin-mode-options>
+            {optionFields}
+            {changingPin ? null : failure}
             <div className={css.actions}>
-              <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('pin.save')}</Button>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => { setChangingPin(false); setSecret(''); setAgain(''); setProblem(undefined) }}>{t('pin.cancel')}</Button>
+              <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('change')}</Button>
             </div>
           </form>
-          : <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => { setProblem(undefined); setChangingPin(true) }}>{t('pin.toggle')}</Button>
-          </div>}
-        {confirmingOff
-          ? <div className={css.form} role="group" aria-label={t('off')} data-pin-mode-confirm-off>
-            <p className={css.line}>{t('off.confirm')}</p>
-            <div className={css.actions}>
-              <Button variant="primary" size="sm" disabled={busy} onClick={() => { setConfirmingOff(false); void run(() => turnPinOff(fetch)) }}>{t('off.yes')}</Button>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => { setConfirmingOff(false) }}>{t('off.no')}</Button>
-            </div>
+        </SettingsCard>
+        <SettingsCard title={t('card.secret')} group="pin-secret">
+          <div className={cardCss.block}>
+            <button type="button" className={css.disclosure} aria-expanded={changingPin} disabled={busy}
+              onClick={() => { setProblem(undefined); if (changingPin) { setSecret(''); setAgain('') } setChangingPin(!changingPin) }}>
+              <span>{t('pin.toggle')}</span>
+              <IconChevronDownOutlineRegular className={changingPin ? `${css.chevron} ${css.open}` : css.chevron} aria-hidden="true" />
+            </button>
+            {changingPin
+              ? <form className={css.form} onSubmit={changePin} noValidate data-pin-mode-change>
+                <p className={css.hint}>{t('pin.hint')}</p>
+                {secretFields}
+                {failure}
+                <div className={css.actions}>
+                  <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('pin.save')}</Button>
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => { setChangingPin(false); setSecret(''); setAgain(''); setProblem(undefined) }}>{t('pin.cancel')}</Button>
+                </div>
+              </form>
+              : null}
           </div>
-          : <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => { setConfirmingOff(true) }}>{t('off')}</Button>
-          </div>}
+        </SettingsCard>
+        <SettingsCard title={t('card.off')} description={t('off.lead')} group="pin-off">
+          <div className={cardCss.block}>
+            <ConfirmAction confirming={confirmingOff} disabled={busy} label={t('off')} question={t('off.confirm')} yes={t('off.yes')} no={t('off.no')}
+              confirmAttribute="" onAsk={() => { setConfirmingOff(true) }} onCancel={() => { setConfirmingOff(false) }}
+              onConfirm={() => { setConfirmingOff(false); void run(() => turnPinOff(fetch)) }} />
+          </div>
+        </SettingsCard>
       </>
-      : <form className={css.form} onSubmit={turnOn} noValidate>
-        {secretFields}
-        {optionFields}
-        {failure}
-        <div className={css.actions}>
-          <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('on')}</Button>
-        </div>
-      </form>}
-  </>
+      : <SettingsCard title={t('card.on')} description={t('card.on.lead')} group="pin-on">
+        <form className={`${cardCss.block} ${css.form}`} onSubmit={turnOn} noValidate>
+          {secretFields}
+          {optionFields}
+          {failure}
+          <div className={css.actions}>
+            <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('on')}</Button>
+          </div>
+        </form>
+      </SettingsCard>}
+  </div>
 }

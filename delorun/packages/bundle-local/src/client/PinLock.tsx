@@ -6,9 +6,14 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Button, IconShieldOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconCloseCircleFillRegular, IconInfoOutlineRegular, IconLinkOutlineRegular, IconPauseOutlineRegular,
+  IconShieldOutlineRegular, IconWarningOutlineRegular,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PinOutcome, PinSource } from './pin-lock.ts'
+import { DotRow, Keypad, Notice } from './brand-parts.tsx'
+import { BRAND_NAME, DelorunBrandMark } from './brand.tsx'
 import css from './PinLock.module.css'
 
 /** Props of the `shell.overlay` entry: the store's view, its unlock action and the lock screen's copy. */
@@ -18,9 +23,6 @@ type Translate = PinLockProps['t']
 
 /** The fewest digits of a PIN the home accepts. */
 const MIN_PIN_DIGITS = 6
-
-/** The keypad's keys in reading order; the empty entry is the blank cell beside 0. */
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'] as const
 
 /**
  * The sentence of an unlock outcome.
@@ -45,6 +47,19 @@ function outcomeText(t: Translate, outcome: Exclude<PinOutcome, { kind: 'removed
     default:
       return outcome satisfies never
   }
+}
+
+/** The icon and heading key of each outcome that is not a wrong PIN, which the dots report themselves. */
+const NOTICE_OF = {
+  paused: { Icon: IconPauseOutlineRegular, title: 'paused.title' },
+  unreachable: { Icon: IconWarningOutlineRegular, title: 'unreachable.title' },
+  address: { Icon: IconLinkOutlineRegular, title: 'address.title' },
+  failed: { Icon: IconInfoOutlineRegular, title: 'failed.title' },
+} as const
+
+/** Whether the person asked the system for less motion. */
+function reducedMotion(): boolean {
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 }
 
 /**
@@ -78,27 +93,31 @@ export function PinLock({ usePin, unlock, t }: PinLockProps): ReactNode {
     if (view.busy) return
     setValue(current => key === '⌫' ? current.slice(0, -1) : current.length < 128 ? current + key : current)
   }
-  return <div className={css.cover} role="dialog" aria-modal="true" aria-labelledby="delorun-pin-title" data-pin-lock={removed ? 'removed' : view.outcome?.kind ?? 'ask'}>
+  const outcome = view.outcome
+  const wrong = outcome?.kind === 'wrong'
+  const notice = outcome === undefined || outcome.kind === 'removed' || outcome.kind === 'wrong' ? undefined : NOTICE_OF[outcome.kind]
+  // Each wrong answer is a new outcome object, so the shake restarts; a person who asked for less motion sees none.
+  const shake = wrong && !reducedMotion()
+  return <div className={css.cover} role="dialog" aria-modal="true" aria-labelledby="delorun-pin-title" data-pin-lock={removed ? 'removed' : outcome?.kind ?? 'ask'}>
     <form className={css.card} onSubmit={submit}>
-      <IconShieldOutlineRegular className={css.mark} aria-hidden="true" />
+      <div className={css.brand}><DelorunBrandMark size={22} /><span>{BRAND_NAME}</span></div>
+      <div className={css.badge} data-removed={removed ? '' : undefined}>
+        {removed ? <IconCloseCircleFillRegular className={css.badgeIcon} aria-hidden="true" /> : <IconShieldOutlineRegular className={css.badgeIcon} aria-hidden="true" />}
+      </div>
       <h1 id="delorun-pin-title" className={css.title}>{removed ? t('removed.title') : t('title')}</h1>
-      {view.outcome?.kind === 'removed'
+      {removed
         ? <p className={css.text} role="alert">{t('removed.body')}</p>
         : <>
           <p className={css.text}>{t(isPin ? 'lead.pin' : 'lead.passcode')}</p>
-          <input ref={inputRef} className={css.field} type="password" name="delorun-pin" aria-label={t(isPin ? 'label.pin' : 'label.passcode')}
+          {isPin ? <DotRow count={value.length} minimum={MIN_PIN_DIGITS} tone={wrong ? 'error' : 'neutral'} shake={shake} /> : null}
+          <input ref={inputRef} className={isPin ? css.hiddenField : css.field} type="password" name="delorun-pin" aria-label={t(isPin ? 'label.pin' : 'label.passcode')}
             inputMode={isPin ? 'numeric' : 'text'} pattern={isPin ? '[0-9]*' : undefined} autoComplete="off" autoCorrect="off"
             autoCapitalize="off" spellCheck={false} enterKeyHint="go" disabled={view.busy} value={value}
             onChange={event => { setValue(isPin ? event.target.value.replace(/\D/g, '') : event.target.value) }} />
-          {view.outcome === undefined ? null : <p className={css.failed} role="alert">{outcomeText(t, view.outcome)}</p>}
-          {isPin
-            ? <div className={css.keypad}>
-              {KEYS.map((key, index) => key === ''
-                ? <span key={index} />
-                : <button key={key} type="button" className={css.key} disabled={view.busy}
-                  aria-label={key === '⌫' ? t('key.delete') : key} onClick={() => { press(key) }}>{key}</button>)}
-            </div>
-            : null}
+          {wrong ? <p className={css.failed} role="alert">{outcomeText(t, outcome)}</p> : null}
+          {notice === undefined || outcome === undefined || outcome.kind === 'wrong' || outcome.kind === 'removed' ? null
+            : <Notice Icon={notice.Icon} title={t(notice.title)} role="alert" outcome={outcome.kind}>{outcomeText(t, outcome)}</Notice>}
+          {isPin ? <Keypad onKey={press} deleteLabel={t('key.delete')} disabled={view.busy} /> : null}
           <Button variant="primary" type="submit" className={css.submit} disabled={!ready}>{t(view.busy ? 'unlocking' : 'unlock')}</Button>
         </>}
     </form>

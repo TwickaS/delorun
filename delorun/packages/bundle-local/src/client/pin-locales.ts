@@ -19,6 +19,10 @@ export const en = {
   'unreachable': 'Your computer can\'t be reached right now. Check that Delorun is running there, then try again.',
   'address': 'A PIN unlocks only on your computer\'s private Tailscale address. Open the studio from that address.',
   'failed': 'The unlock did not work. Try again.',
+  'paused.title': 'Unlocks are paused',
+  'unreachable.title': 'Your computer is out of reach',
+  'address.title': 'Use the private address',
+  'failed.title': 'That did not work',
 }
 
 /** A key of the lock screen's dictionary. */
@@ -43,4 +47,8 @@ export const zh: typeof en = {
   'unreachable': '暂时无法连接你的电脑。请确认 Delorun 正在那里运行，然后重试',
   'address': 'PIN 只能在你电脑的 Tailscale 私有地址上解锁。请从该地址打开 studio。',
   'failed': '解锁未成功，请重试',
+  'paused.title': '解锁已暂停',
+  'unreachable.title': '连接不到你的电脑',
+  'address.title': '请使用私有地址',
+  'failed.title': '未成功',
 }

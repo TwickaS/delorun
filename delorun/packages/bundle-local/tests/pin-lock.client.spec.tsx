@@ -193,6 +193,55 @@ describe('the lock screen on a device', () => {
     expect(field.value).toBe('1234')
   })
 
+  it('fills one dot per digit typed and never writes a digit into the dots', async () => {
+    // Fails without: the dots, which count digits and must not carry their value in text or attributes.
+    const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn() })
+    const { container } = render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={async () => {}} />)
+    const dots = container.querySelector('[data-dots]') as HTMLElement
+    expect(dots.children).toHaveLength(6)
+    expect(dots.getAttribute('data-dots')).toBe('0')
+    for (const digit of '8420') fireEvent.click(screen.getByRole('button', { name: digit }))
+    expect(dots.getAttribute('data-dots')).toBe('4')
+    expect(dots.textContent).toBe('')
+    expect(dots.outerHTML).not.toContain('8420')
+    expect(dots.getAttribute('aria-hidden')).toBe('true')
+    for (const digit of '17935') fireEvent.click(screen.getByRole('button', { name: digit }))
+    expect(dots.children).toHaveLength(9)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the last digit' }))
+    expect(dots.getAttribute('data-dots')).toBe('8')
+  })
+
+  it('shakes the dots on a wrong PIN and says the tries left, unless the person asked for less motion', () => {
+    // Fails without: the shake on a wrong answer, or its removal under prefers-reduced-motion.
+    const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind: 'wrong', triesLeft: 3 }, paused: false } as const
+    const usePin = ((select: (current: typeof view) => unknown) => select(view)) as never
+    const matchMedia = (reduce: boolean) => vi.fn((query: string) => ({ matches: query.includes('reduce') ? reduce : false }))
+    vi.stubGlobal('matchMedia', matchMedia(false))
+    const first = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} />)
+    expect(first.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(true)
+    expect(screen.getByRole('alert').textContent).toBe(en['wrong.other'].replace('{count}', '3'))
+    first.unmount()
+    vi.stubGlobal('matchMedia', matchMedia(true))
+    const second = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} />)
+    expect(second.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(false)
+    expect(screen.getByRole('alert').textContent).toContain('3 tries left')
+    vi.unstubAllGlobals()
+  })
+
+  it('shows each other outcome with its own heading and the one sentence that helps', () => {
+    // Fails without: a heading and an icon for paused, unreachable, address and failed outcomes.
+    const headings = { paused: 'paused.title', unreachable: 'unreachable.title', address: 'address.title', failed: 'failed.title' } as const
+    for (const [kind, title] of Object.entries(headings) as [keyof typeof headings, (typeof headings)[keyof typeof headings]][]) {
+      const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind }, paused: false } as const
+      const { container, unmount } = render(<PinLock t={t} usePin={((select: (current: typeof view) => unknown) => select(view)) as never} unlock={async () => {}} />)
+      const notice = container.querySelector(`[data-outcome="${kind}"]`) as HTMLElement
+      expect(notice.textContent).toContain(en[title])
+      expect(notice.textContent).toContain(en[kind])
+      expect(notice.querySelector('svg')).not.toBeNull()
+      unmount()
+    }
+  })
+
   it('asks for a passcode in a text field without a keypad when the home takes a passcode', async () => {
     // Fails without: the passcode kind, which takes any characters and no keypad.
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn({ secret: 'passcode' }) })
