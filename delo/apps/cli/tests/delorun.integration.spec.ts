@@ -642,14 +642,14 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     const secret = 'sk-saved-by-an-earlier-delo'
     const patch = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
-    writeFileSync(patch, `${readFileSync(patch, 'utf8')}\n- id: web-deepseek-api\n  config:\n    apiKey: ${secret}\n`)
+    writeFileSync(patch, `${readFileSync(patch, 'utf8')}\n- id: web-search-deepseek\n  config:\n    apiKey: ${secret}\n`)
     const started = startDriver()
     expect(started.report.outcome, started.stderr).toBe('started')
     expect(started.status).toBe(0)
     expect(readFileSync(patch, 'utf8')).not.toContain(secret)
-    expect(readFileSync(patch, 'utf8')).toContain('apiKeyEnv: WEB_DEEPSEEK_API_APIKEY')
-    expect(readFileSync(join(deloHome, '.credentials.yaml'), 'utf8')).toContain(`WEB_DEEPSEEK_API_APIKEY: ${secret}`)
-    expect(started.stderr).toContain(`${patch}: moved the value of the secret field apiKey of web-deepseek-api`)
+    expect(readFileSync(patch, 'utf8')).toContain('apiKeyEnv: WEB_SEARCH_DEEPSEEK_APIKEY')
+    expect(readFileSync(join(deloHome, '.credentials.yaml'), 'utf8')).toContain(`WEB_SEARCH_DEEPSEEK_APIKEY: ${secret}`)
+    expect(started.stderr).toContain(`${patch}: moved the value of the secret field apiKey of web-search-deepseek`)
     expect(started.stderr).not.toContain(secret)
   })
 
