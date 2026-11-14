@@ -10,6 +10,8 @@
  * global panel rows and the foot is the `sidebar.workspaces` registrant's,
  * and the foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
  * hands them the wide flag (plus an expand request callback for the browser).
+ * Through the browser's hookContext, the shell also hands it the scroller hook
+ * that continues wheel scrolling over the sidebar viewport into its list.
  *
  * The column also owns whether the scroll regions nested in it draw a
  * scrollbar at all: the shell tracks the pointer and rebinds ui-theme's
@@ -26,19 +28,21 @@
  * a rail control, so every rail click keeps its meaning. Without a hovering
  * fine pointer, or in the phone drawer, there is no peek.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import {
   FishLogo, IconAppsAddOutlineRegular, IconNewChatOutlineMedium, IconNewChatOutlineRegular,
-  IconPanelLeftOutlineRegular, focusWithoutRing, isBehindModal, isDarwinDesktop, Menu, ShortcutKeys, Toast, Tooltip, useModalLayer,
-  writeClipboard,
+  IconPanelLeftOutlineRegular, IconPinFillRegular, focusWithoutRing, isBehindModal, isDarwinDesktop, Menu, ShortcutKeys, Toast,
+  Tooltip, useModalLayer, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsRenderFactories, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {
-  SidebarPanelActionsOwnerProps, SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps,
+  SidebarPanelActionsOwnerProps, SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionHookContext,
+  SidebarSectionOwnerProps,
 } from './contract/slots.ts'
 import { FIXED_PANEL_ID } from './panel-pins.ts'
+import { createScrollHandoff } from './scroll-handoff.ts'
 import css from './SidebarRoot.module.css'
 
 /** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
@@ -134,8 +138,9 @@ type PanelRowProps =
   Pick<SidebarPanelMetadata, 'id' | 'label'>
   & Pick<SidebarSectionOwnerProps, 'wide'>
   & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
-  & Pick<InjectFace<SidebarRootInjected>, 'selectPanel' | 'trackEntryClick'>
-  & PropsRenderSlots<'sidebar.panellist'>
+  & Pick<InjectFace<SidebarRootInjected>, 'selectPanel' | 'trackEntryClick' | 'setPinned'>
+  & { readonly unpinLabel: string; readonly unpinTooltip: string; readonly canUnpin: boolean }
+  & PropsRenderFactories
   & { readonly current?: ObservableSnapshot<boolean> }
 
 /** A row that nothing but its own panel marks current. */
@@ -148,34 +153,50 @@ function officialEntry(id: string): 'plugin' | 'cron' | undefined {
 }
 
 /** Each panel row subscribes only to its own selection state. */
-function PanelRow({ id, label, wide, usePanelInfo, selectPanel, trackEntryClick, renderSlot, current = NOT_CURRENT }: PanelRowProps) {
+function PanelRow({
+  id, label, wide, unpinLabel, unpinTooltip, canUnpin, usePanelInfo, selectPanel, setPinned, trackEntryClick, renderFactorySlot,
+  current = NOT_CURRENT,
+}: PanelRowProps) {
   const selected = usePanelInfo(info => info.activePanelId === id)
   const subscribe = useCallback((listener: () => void) => current.subscribe(listener), [current])
   const standsFor = useSyncExternalStore(subscribe, () => current.getSnapshot())
   const active = selected || standsFor
   return (
-    <Tooltip label={label} delayMs={500} disabled={wide}>
-      <button
-        type="button"
-        className={clsx(css.panelRow, active && css.panelActive)}
-        aria-label={label}
-        aria-current={active ? 'page' : undefined}
-        onClick={() => {
-          const entry = officialEntry(id)
-          if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar' })
-          selectPanel(id)
-        }}
-      >
-        <span className={css.panelGlyph} aria-hidden="true">
-          {renderSlot('sidebar.panellist', { size: wide ? 16 : 18, active }, { only: id })}
-        </span>
-        {wide && (
-          <span className={clsx(css.panelTitle, css.wide)}>
-            {label}
+    <div className={clsx(css.panelEntry, wide && css.panelEntryWide, active && css.panelEntryActive)}>
+      <Tooltip label={label} delayMs={500} disabled={wide}>
+        <button
+          type="button"
+          className={css.panelRow}
+          aria-label={label}
+          aria-current={active ? 'page' : undefined}
+          onClick={() => {
+            const entry = officialEntry(id)
+            if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar' })
+            selectPanel(id)
+          }}
+        >
+          <span className={css.panelGlyph} aria-hidden="true">
+            {renderFactorySlot('sidebar.panel.icon', { id, size: wide ? 16 : 18, active })}
           </span>
-        )}
-      </button>
-    </Tooltip>
+          {wide && (
+            <span className={clsx(css.panelTitle, css.wide)}>
+              {label}
+            </span>
+          )}
+        </button>
+      </Tooltip>
+      {wide && canUnpin && <Tooltip label={unpinTooltip} side="bottom" align="end" delayMs={500} portal>
+        <button type="button" className={css.panelUnpin} aria-label={unpinLabel} onClick={(event) => {
+          // Unpin is rendered only while this navigation also renders More.
+          const navigation = event.currentTarget.closest('nav') as HTMLElement
+          const more = navigation.querySelector('button[aria-haspopup="menu"]') as HTMLButtonElement
+          focusWithoutRing(more)
+          setPinned(id, false)
+        }}>
+          <IconPinFillRegular size={14} />
+        </button>
+      </Tooltip>}
+    </div>
   )
 }
 
@@ -235,6 +256,7 @@ export function SidebarRoot({
   usePanelInfo,
   t,
   renderSlot,
+  renderFactorySlot,
 }: SidebarRootComponentProps) {
   const panels = usePanels(snapshot => snapshot)
   const unpinned = useEntryPins(ids => ids)
@@ -270,6 +292,10 @@ export function SidebarRoot({
   peekRef.current = peek
   const peeked = peek !== 'closed' && collapsed && !drawer
   const wide = drawer || peeked || (windowsTitlebar ? !collapsed : !collapsed || !settled)
+  const [scrollHandoff] = useState(createScrollHandoff)
+  const sectionHookContext = useMemo<SidebarSectionHookContext>(
+    () => ({ useSectionScroller: scrollHandoff.useSectionScroller }), [scrollHandoff],
+  )
   // The Windows titlebar hosts the New Session controls while the sidebar is collapsed.
   const openNewSession = (): void => {
     trackEntryClick({ menu_name: 'new_session', position: windowsTitlebar && collapsed ? 'titlebar' : 'sidebar' })
@@ -454,16 +480,20 @@ export function SidebarRoot({
   const panelsWide = wide && !inFoot
   const panelList = listed.length === 0 ? null : (
     <nav className={clsx(css.panelList, inFoot && css.footPanels)} aria-label={t('panels.label')}>
-      {listed.filter(({ id }) => id === FIXED_PANEL_ID || !unpinned.includes(id)).map(({ id, label }) => (
+      {listed.filter(({ id }) => id === FIXED_PANEL_ID || !hasEntryActions || !unpinned.includes(id)).map(({ id, label }) => (
         <PanelRow
           key={id}
           id={id}
           label={label}
           wide={panelsWide}
+          unpinLabel={t('panels.unpin', { name: label })}
+          unpinTooltip={t('panels.unpinTooltip')}
+          canUnpin={hasEntryActions && id !== FIXED_PANEL_ID}
+          setPinned={setPinned}
           usePanelInfo={usePanelInfo}
           selectPanel={selectPanel}
           trackEntryClick={trackEntryClick}
-          renderSlot={renderSlot}
+          renderFactorySlot={renderFactorySlot}
         />
       ))}
       {hasEntryActions && (
@@ -576,7 +606,7 @@ export function SidebarRoot({
         {/* Expanded, the brand doubles as a New Session shortcut while the
             access snapshot allows `session/create` — except on
             macOS, where it stays part of the logo row's window-drag surface
-            (a button would subtract itself through the global no-drag rule);
+            (the drag-row controls rule would subtract a button);
             the collapsed rail's logo is the expand toggle below instead.
             Mouse clicks on the local-build fallbacks copy the version instead. */}
         {wide && (() => {
@@ -630,10 +660,14 @@ export function SidebarRoot({
             id={lead.id}
             label={lead.label}
             wide={wide}
+            unpinLabel={t('panels.unpin', { name: lead.label })}
+            unpinTooltip={t('panels.unpinTooltip')}
+            canUnpin={false}
+            setPinned={setPinned}
             usePanelInfo={usePanelInfo}
             selectPanel={selectPanel}
             trackEntryClick={trackEntryClick}
-            renderSlot={renderSlot}
+            renderFactorySlot={renderFactorySlot}
             {...(leadEntry?.current === undefined ? {} : { current: leadEntry.current })}
           />
         </div>
@@ -641,36 +675,48 @@ export function SidebarRoot({
 
       {/* The label fades before the hover/focus shortcut, including on translucent backgrounds. */}
       {canStartSession && (newSessionButton || !wide) && (
-        <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
-          <button
-            type="button"
-            className={css.newSession}
-            aria-label={t('session.new.label')}
-            aria-keyshortcuts={newShortcut?.aria}
-            onClick={openNewSession}
-          >
-            <span className={css.newSessionLabelMask}><span className={css.newSessionContent}>
-              {wide
-                ? <IconNewChatOutlineMedium size={14} />
-                : <IconNewChatOutlineRegular size={windowsTitlebar ? 16 : 18} />}
-              {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
-            </span></span>
-            {wide && newShortcut !== undefined && newShortcut.keys.length > 0 && <span className={css.newSessionShortcut} aria-hidden="true">
-              <ShortcutKeys keys={newShortcut.keys} />
-            </span>}
-          </button>
-        </Tooltip>
+        <div className={css.newSessionRow}>
+          {renderSlot('sidebar.session.action', { wide }, {
+            children: (
+              <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
+                <button
+                  type="button"
+                  className={css.newSession}
+                  aria-label={t('session.new.label')}
+                  aria-keyshortcuts={newShortcut?.aria}
+                  onClick={openNewSession}
+                >
+                  <span className={css.newSessionLabelMask}><span className={css.newSessionContent}>
+                    {wide
+                      ? <IconNewChatOutlineMedium size={14} />
+                      : <IconNewChatOutlineRegular size={windowsTitlebar ? 16 : 18} />}
+                    {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
+                  </span></span>
+                  {wide && newShortcut !== undefined && newShortcut.keys.length > 0 && <span className={css.newSessionShortcut} aria-hidden="true">
+                    <ShortcutKeys keys={newShortcut.keys} />
+                  </span>}
+                </button>
+              </Tooltip>
+            ),
+          })}
+        </div>
       )}
 
-      {!inFoot && panelList}
-
-      {/* The browsing region fills the column between the controls and the
-          foot in both states; its rail icon column rides the same slot. */}
-      <div className={css.regionArea}>
-        {renderSlot('sidebar.workspaces', {
-          wide,
-          expandSidebar: () => { if (collapsed) toggleSidebar() },
-        })}
+      <div className={css.scrollRegion}>
+        <div
+          ref={scrollHandoff.bindViewportRef}
+          className={css.scrollArea}
+          data-sidebar-scrollport={wide ? '' : undefined}
+        >
+          {!inFoot && panelList}
+          <div className={css.regionArea}>
+            {renderSlot('sidebar.workspaces', {
+              wide,
+              expandSidebar: () => { if (collapsed) toggleSidebar() },
+            }, { hookContext: sectionHookContext })}
+          </div>
+        </div>
+        <span className={css.scrollFade} aria-hidden="true" />
       </div>
 
       {copiedToast !== null && (

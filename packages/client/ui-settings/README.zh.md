@@ -55,7 +55,7 @@ kind: "package-reference"
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
-可选的 `settings.launcher` 贡献接收侧栏布局、设置面板是否覆盖侧栏、设置导航回调，以及有效的设置键位标签和无障碍组合。命令未绑定时，外壳不传快捷键展示信息；未注册入口时，外壳保留普通设置按钮。外壳之外的代码通过 `ctx.settingsShell`（[`contract/shell.ts`](src/client/contract/shell.ts)）导航设置，该对象由外壳插件提供：`open()`、`openSection(id)` 与 `openOnboarding(id)`，其中 `openOnboarding(id)` 与入口的 `openOnboarding` 相同，会关闭设置并打开该引导步骤；未挂载外壳时，每次调用都不产生任何效果。
+可选的 `settings.launcher` 贡献接收侧栏布局、设置面板是否覆盖侧栏、设置导航回调，以及有效的设置键位标签和无障碍组合。命令未绑定时，外壳不传快捷键展示信息；未注册入口时，外壳保留普通设置按钮。 入口可以向 openSettings 传入分区 ID，直接打开对应分区；未传 ID 时使用默认分区。外壳之外的代码通过 `ctx.settingsShell`（[`contract/shell.ts`](src/client/contract/shell.ts)）导航设置，该对象由外壳插件提供：`open()`、`openSection(id)` 与 `openOnboarding(id)`，其中 `openOnboarding(id)` 与入口的 `openOnboarding` 相同，会关闭设置并打开该引导步骤；未挂载外壳时，每次调用都不产生任何效果。
 
 <details>
 <summary>实现细节——点击展开</summary>

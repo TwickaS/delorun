@@ -45,6 +45,9 @@
       "path": "../../session/working-directory"
     },
     {
+      "path": "../../util/ripgrep"
+    },
+    {
       "path": "../../sandbox/sandbox"
     },
     {

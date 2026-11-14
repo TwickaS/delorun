@@ -13,7 +13,7 @@ import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { TextDecoder, promisify } from 'node:util'
 import { homedir } from 'node:os'
-import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
+import { FsError, FsTargetKey, FsVersion, fsErrorFromErrno } from '@deepseek-ai/dsh-fs'
 import { copyFileDaclWin32, replaceFileWin32 } from './win32.ts'
 
 const BINARY_SAMPLE_BYTES = 8192
@@ -177,8 +177,7 @@ export async function resolveLocalTarget(cwd: string, path: string): Promise<Loc
     // so surface the structured taxonomy instead of a raw Node ENOTDIR.
     /* v8 ignore next -- Windows reports this case as ENOENT and repairs it in the ancestor walk below. */
     if (isENOTDIR(error)) throw new FsError(`cannot resolve "${displayPath}": a parent path segment is not a directory`, 'FS_NOT_FOUND')
-    /* v8 ignore next -- non-ENOENT realpath failure needs a permission/IO fault; ENOENT falls through to ancestor resolution. */
-    if (!isENOENT(error)) throw error
+    if (!isENOENT(error)) throw fsErrorFromErrno('resolve', displayPath, error)
   }
   // File absent: realpath the nearest existing ancestor and re-append the
   // missing suffix (the file basename plus any not-yet-created intermediate
@@ -206,8 +205,8 @@ export async function resolveLocalTarget(cwd: string, path: string): Promise<Loc
     } catch (error: unknown) {
       /* v8 ignore next -- native Windows coverage exercises the FsError raised by the repair above. */
       if (error instanceof FsError) throw error
-      /* v8 ignore next -- a non-ENOENT realpath failure needs a permission/IO fault. */
-      if (!isENOENT(error)) throw error
+      /* v8 ignore next -- needs an ancestor realpath fault after the full path reported ENOENT. */
+      if (!isENOENT(error)) throw fsErrorFromErrno('resolve', displayPath, error)
       const parent = dirname(ancestor)
       /* v8 ignore next -- the filesystem root always realpaths, so the walk terminates before parent === ancestor. */
       if (parent === ancestor) return { displayPath, targetKey: FsTargetKey(displayPath) }
@@ -240,8 +239,7 @@ async function probeStats<T extends Stats | BigIntStats>(
     // ENOENT (no such file) and ENOTDIR (a parent segment is a file) both mean
     // the target is absent; any other metadata failure is a real permission/IO
     // fault.
-    /* v8 ignore next -- a non-ENOENT/ENOTDIR metadata failure needs a permission/IO fault; surface it. */
-    if (!isENOENT(error) && !isENOTDIR(error)) throw error
+    if (!isENOENT(error) && !isENOTDIR(error)) throw fsErrorFromErrno('stat', absolutePath, error)
     return null
   }
 }
@@ -279,16 +277,6 @@ export async function probeNoFollow(absolutePath: string): Promise<PathLinkInfo 
 }
 
 // --- Directory listing ---
-
-function listingIoError(displayPath: string, error: unknown): FsError {
-  /* v8 ignore next -- defensive pass-through for races where a child resolver has already produced a structured FsError. */
-  if (error instanceof FsError) return error
-  /* v8 ignore next -- requires the listed target/parent to disappear between successful preflight and listing/child resolution. */
-  if (isENOENT(error) || isENOTDIR(error)) return new FsError(`cannot list "${displayPath}": not found`, 'FS_NOT_FOUND', { cause: error })
-  /* v8 ignore next -- Windows chmod does not deny directory listing; POSIX covers permission translation. */
-  if (isPermissionError(error)) return new FsError(`cannot list "${displayPath}": permission denied`, 'FS_PERMISSION_DENIED', { cause: error })
-  return new FsError(`cannot list "${displayPath}": ${errorMessage(error)}`, 'FS_IO_ERROR', { cause: error })
-}
 
 async function resolveListedChildTarget(parent: LocalTarget, name: string): Promise<LocalTarget> {
   const identity = await resolveLocalTarget(parent.targetKey, name)
@@ -340,7 +328,7 @@ export async function listDirectory(target: LocalTarget, signal?: AbortSignal): 
   try {
     info = await probe(target.targetKey)
   } catch (error: unknown) {
-    throw listingIoError(target.displayPath, error)
+    throw fsErrorFromErrno('list', target.displayPath, error)
   }
   if (!info) throw new FsError(`cannot list "${target.displayPath}": not found`, 'FS_NOT_FOUND')
   if (info.type !== 'directory') throw new FsError(`cannot list "${target.displayPath}": not a directory`, 'FS_NOT_DIRECTORY')
@@ -349,7 +337,8 @@ export async function listDirectory(target: LocalTarget, signal?: AbortSignal): 
   try {
     entries = await readDirectoryEntries(target)
   } catch (error: unknown) {
-    throw listingIoError(target.displayPath, error)
+    /* v8 ignore next -- requires permission/kernel failure from readdir after a successful directory stat. */
+    throw fsErrorFromErrno('list', target.displayPath, error)
   }
   throwIfAborted(signal, 'list')
 
@@ -369,7 +358,7 @@ export async function listDirectory(target: LocalTarget, signal?: AbortSignal): 
     } catch (error: unknown) {
       // A link that resolves to itself names nothing a listing can show; it is left out instead of failing the listing.
       if (isELOOP(error)) continue
-      throw listingIoError(localDisplayPath(target.displayPath, entry.name), error)
+      throw fsErrorFromErrno('list', localDisplayPath(target.displayPath, entry.name), error)
     }
     throwIfAborted(signal, 'list')
   }
@@ -413,9 +402,7 @@ async function statRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
   try {
     info = await stat(target.targetKey)
   } catch (error: unknown) {
-    /* v8 ignore next 2 -- a non-ENOENT stat failure needs a permission/IO fault; only the not-found path is reachable in tests. */
-    if (!isENOENT(error)) throw error
-    throw new FsError(`cannot ${verb} "${target.displayPath}": not found`, 'FS_NOT_FOUND')
+    throw fsErrorFromErrno(verb, target.displayPath, error)
   }
   if (!info.isFile()) throw new FsError(`cannot ${verb} "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
   return info
@@ -485,10 +472,8 @@ async function openRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
   try {
     handle = await open(target.targetKey, READ_FLAGS)
   } catch (error: unknown) {
-    /* v8 ignore start -- the file must vanish between the regular-file check and the open. */
-    if (isENOENT(error) || isENOTDIR(error)) throw new FsError(`cannot ${verb} "${target.displayPath}": not found`, 'FS_NOT_FOUND', { cause: error })
-    throw error
-    /* v8 ignore stop */
+    /* v8 ignore next -- the file must vanish or become unreadable between the regular-file check and the open. */
+    throw fsErrorFromErrno(verb, target.displayPath, error)
   }
   try {
     await assertOpenedTarget(handle, target, 'read')
@@ -515,9 +500,8 @@ export async function readWholeText(target: LocalTarget, signal?: AbortSignal): 
   try {
     raw = await handle.readFile(signal ? { signal } : {})
   } catch (error: unknown) {
-    /* v8 ignore next 2 -- a non-abort read rejection needs a permission/IO fault racing an open file. */
-    if (!isAbortError(error)) throw error
-    throw new FsError('read aborted', 'FS_ABORTED')
+    if (isAbortError(error)) throw new FsError('read aborted', 'FS_ABORTED')
+    throw fsErrorFromErrno('read', target.displayPath, error)
   } finally {
     await handle.close()
   }
@@ -573,9 +557,9 @@ export async function readWholeBytes(
       chunks.push(chunk)
     }
   } catch (error: unknown) {
-    /* v8 ignore next 2 -- a mid-stream abort needs cancellation racing an active read; pre-abort is deterministic. */
+    /* v8 ignore next -- a mid-stream abort needs cancellation racing an active read; pre-abort is deterministic. */
     if (isAbortError(error)) throw new FsError('read aborted', 'FS_ABORTED')
-    throw error
+    throw fsErrorFromErrno('read', target.displayPath, error)
   }
   return Buffer.concat(chunks, bytes)
 }
@@ -614,10 +598,10 @@ export async function readByteWindow(
       bytes += chunk.length
     }
   } catch (error: unknown) {
-    /* v8 ignore next 2 -- a mid-stream abort needs cancellation racing an active read; pre-abort is deterministic. */
+    /* v8 ignore next -- a mid-stream abort needs cancellation racing an active read; pre-abort is deterministic. */
     if (isAbortError(error)) throw new FsError('read aborted', 'FS_ABORTED')
-    /* v8 ignore next -- any other stream failure needs an I/O fault after a successful stat. */
-    throw error
+    /* v8 ignore next -- needs a permission fault after a successful stat; Windows chmod cannot deny reads, POSIX covers it. */
+    throw fsErrorFromErrno('read', target.displayPath, error)
   }
   return Buffer.concat(chunks, bytes)
 }
@@ -652,9 +636,10 @@ export async function* streamWholeText(target: LocalTarget, signal?: AbortSignal
     }
     yield decodeUtf8Stream(decoder, undefined, 'read', target.displayPath)
   } catch (error: unknown) {
-    /* v8 ignore next 4 -- mid-stream errors need an abort/IO fault racing the loop; pre-abort is caught by throwIfAborted. */
+    /* v8 ignore next -- a mid-stream abort needs cancellation racing an active read; pre-abort is caught by throwIfAborted. */
     if (isAbortError(error)) throw new FsError('read aborted', 'FS_ABORTED')
-    throw error
+    /* v8 ignore next -- needs a permission fault after a successful stat; Windows chmod cannot deny reads, POSIX covers it. */
+    throw fsErrorFromErrno('read', target.displayPath, error)
   }
 }
 
@@ -1238,7 +1223,7 @@ export async function readForEdit(
   } catch (error: unknown) {
     /* v8 ignore next -- a mid-read abort needs cancellation racing an active read. */
     if (isAbortError(error)) throw new FsError('edit aborted', 'FS_ABORTED')
-    throw error
+    throw fsErrorFromErrno('edit', displayPath, error)
   } finally {
     await handle.close()
   }

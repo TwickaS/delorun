@@ -21,8 +21,11 @@
   en: 6704447e52ec295b
   zh: 9ed812d9e29d5533
 /deepseek-ai-dsh-sandbox-policy/use-this-package/minimal-configuration:
-  en: 42d281af0ad2ab4d
-  zh: e396b1ea466923df
+  en: bea3b616af95cc8a
+  zh: 7b6d7c02ab76d6bb
+/deepseek-ai-dsh-sandbox-policy/use-this-package/registering-a-session-s-writable-directory:
+  en: 841ea47ef1ed7ee6
+  zh: cd573e67a67742e2
 /deepseek-ai-dsh-sandbox-policy/use-this-package/switching-a-session-s-mode:
   en: 957d72691e470e5c
   zh: c22a3a750af0e4a3
@@ -75,8 +78,8 @@
   en: a16a657e0e5145fb
   zh: 4b19263a728990dc
 /deepseek-ai-dsh-sandbox-policy/known-limitations-and-deferred-work:
-  en: 549bba1d0abc799b
-  zh: abfffb2beed0c552
+  en: 74be3b6dc368a747
+  zh: 30de59ca95cf3334
 /deepseek-ai-dsh-sandbox-policy/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

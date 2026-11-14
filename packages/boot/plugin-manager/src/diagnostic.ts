@@ -62,6 +62,7 @@ const operation: z.ZodType<PluginOperation> = z.discriminatedUnion('phase', [
       'stale-approval': 'stale-approval',
       'incompatible-version': 'incompatible-version',
       'unsupported-platform': 'unsupported-platform',
+      'unexpected-package': 'unexpected-package',
       'audit-findings': 'audit-findings',
       'audit-refused': 'audit-refused',
       'nothing-to-undo': 'nothing-to-undo',

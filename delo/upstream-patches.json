@@ -2,8 +2,8 @@
   "$schema": "./upstream-patches.schema.json",
   "upstream": {
     "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
-    "ref": "dsh-v0.2.2-rc.1",
-    "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db"
+    "ref": "dsh-v0.2.2-rc.3",
+    "commit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced"
   },
   "forkOwned": [
     "delo/",
@@ -2233,6 +2233,11 @@
       "class": "delo-feature",
       "feature": "fork-gates",
       "reason": "Adds one override for delo/**/*.{ts,tsx}: typescript/consistent-type-imports, so Delorun's own code keeps type-only imports explicit; upstream's trees keep their import style."
+    },
+    {
+      "path": "packages/experimental/deepseek-chat-import/src/client/mount.ts",
+      "class": "generic-fix",
+      "reason": "Ends the file with exactly one newline; rc.3 has a blank line at its end, which the repository's whitespace gate refuses. Offer upstream."
     }
   ],
   "retired": []

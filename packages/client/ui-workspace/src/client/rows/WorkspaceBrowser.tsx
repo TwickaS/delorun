@@ -14,7 +14,7 @@
  * are slot entries with their own behavior, so this component threads no
  * action callbacks and hosts no action surface.
  */
-import { type CSSProperties, Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { WorkspaceDialogs } from './WorkspaceDialogs.tsx'
 import {
@@ -254,9 +254,9 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
-  'useSessionStatus' | 'startSession' | 'open' | 'openSessionMenu' | 'openWorkspaceMenu' | 'useContextMenuTarget' | 'useContextMenu'
+  'useSessionStatus' | 'startSession' | 'open' | 'renderFactorySlot' | 'useContextMenuTarget' | 'useContextMenu'
   | 'insertWorkspaceBefore' | 't' | 'usePanelInfo'
-  | 'useRemoteAccess' | 'useSessionAccess' | 'useWorkspaceAccess'
+  | 'useSessionAccess' | 'useWorkspaceAccess'
 > & PropsRenderSlots<
   | 'sidebar.workspaces.session.row.action'
   | 'sidebar.session.row.trailing'
@@ -316,9 +316,9 @@ function EmptySessions({ rowState, onLeaveArchivedOnly, t }: Pick<SessionTreePro
 function SessionTree({
   list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds,
   rowState, onLeaveArchivedOnly,
-  workspaceReady, animationResetKey, usePanelInfo, useRemoteAccess, useSessionAccess, useWorkspaceAccess,
+  workspaceReady, animationResetKey, usePanelInfo, useSessionAccess, useWorkspaceAccess,
   onSessionRenameRequest,
-  renderSlot, openSessionMenu, openWorkspaceMenu, useContextMenuTarget, useContextMenu,
+  renderSlot, renderFactorySlot, useContextMenuTarget, useContextMenu,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
   setSessionOrder, home, t,
@@ -556,8 +556,7 @@ function SessionTree({
         <ProjectRowItem
           newShortcut={shortcuts.find(row => row.id === 'session.new')}
           group={group}
-          openWorkspaceMenu={openWorkspaceMenu} useContextMenu={useContextMenu} useContextMenuTarget={useContextMenuTarget}
-          useRemoteAccess={useRemoteAccess}
+          renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu} useContextMenuTarget={useContextMenuTarget}
           useWorkspaceAccess={useWorkspaceAccess}
           containsCurrentDescendant={currentAncestors.has(group.key)}
           home={home}
@@ -566,11 +565,9 @@ function SessionTree({
             if (group.expanded) dropWatermarks(key => withinGroup(key, group.key))
             setGroupExpanded(group.key, !group.expanded)
           }}
-          onCreate={() => {
-            if (group.workspaceId !== undefined) {
-              setGroupExpanded(group.key, true)
-              startSession(group.workspaceId)
-            }
+          onCreate={(workspaceId) => {
+            setGroupExpanded(group.key, true)
+            startSession(workspaceId)
           }}
           drag={workspaceDragProps}
         />
@@ -619,7 +616,7 @@ function SessionTree({
               onOpen={open}
               onRenameRequest={onSessionRenameRequest}
               renderSlot={renderSlot}
-              openSessionMenu={openSessionMenu} useContextMenu={useContextMenu}
+              renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
               useContextMenuTarget={useContextMenuTarget}
               onReveal={node.id === revealSessionId && group.key === revealGroup
                 ? () => { onSessionRevealed(node.id) }
@@ -675,7 +672,6 @@ function SessionTree({
         )}
         {groupRows}
       </AnimatedRows>
-      <span className={css.fade} />
     </HoverCardGroup>
   )
 }
@@ -703,7 +699,7 @@ export function workspaceColors(titles: Iterable<string>): Map<string, string | 
 function FlatList({
   list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, useSessionAccess, open, onSessionRenameRequest,
   usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
-  revealSessionId, onSessionRevealed, renderSlot, openSessionMenu, useContextMenuTarget, useContextMenu, home,
+  revealSessionId, onSessionRevealed, renderSlot, renderFactorySlot, useContextMenuTarget, useContextMenu, home,
   workspaceTitles, shelves, sectioned, t,
 }: Pick<
   SessionTreeProps,
@@ -712,7 +708,7 @@ function FlatList({
   | 'open'
   | 'onSessionRenameRequest'
   | 'renderSlot'
-  | 'openSessionMenu' | 'useContextMenuTarget' | 'useContextMenu'
+  | 'renderFactorySlot' | 'useContextMenuTarget' | 'useContextMenu'
   | 'usePanelInfo'
   | 'setSessionOrder'
   | 'workspaceReady'
@@ -779,7 +775,7 @@ function FlatList({
         onOpen={open}
         onRenameRequest={onSessionRenameRequest}
         renderSlot={renderSlot}
-        openSessionMenu={openSessionMenu} useContextMenu={useContextMenu}
+        renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
         useContextMenuTarget={useContextMenuTarget}
         onReveal={node.id === revealSessionId
           ? () => { onSessionRevealed(node.id) }
@@ -866,7 +862,6 @@ function FlatList({
           )
         })}
       </AnimatedRows>
-      <span className={css.fade} />
     </HoverCardGroup>
   )
 }
@@ -971,7 +966,6 @@ function SearchResults({
           </div>
         )}
       </div>
-      <span className={css.fade} />
     </div>
   )
 }
@@ -985,10 +979,10 @@ export function WorkspaceBrowser({
   wide,
   usePanelInfo,
   expandSidebar,
+  useSectionScroller,
   useSessions,
   useHiddenSessions,
   useSessionStatus,
-  useRemoteAccess,
   useSessionAccess,
   useWorkspaceAccess,
   useWorkspaces,
@@ -1016,7 +1010,7 @@ export function WorkspaceBrowser({
   requestAddWorkspace,
   closeAddWorkspace,
   setDirectoryBusy,
-  renderSlot, openSessionMenu, openWorkspaceMenu, useContextMenuTarget, useContextMenu,
+  renderSlot, renderFactorySlot, openSessionMenu, useContextMenuTarget, useContextMenu,
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
@@ -1200,6 +1194,12 @@ export function WorkspaceBrowser({
   })
   const searchRoot = useRef<HTMLDivElement | null>(null)
   const searchInput = useRef<HTMLInputElement | null>(null)
+  // The list area is this section's own vertical scroller; the sidebar hands wheel
+  // scrolling over its viewport to it once the navigation has moved away.
+  const { bindScrollerRef } = useSectionScroller()
+  const focusSearch = useCallback(() => {
+    searchInput.current?.focus({ preventScroll: true })
+  }, [])
   // Section-header ＋ opens the picker menu (same popover in wide and rail
   // states; the menu anchors on this button).
   const wsPickerOpen = shortcutState.addRequested
@@ -1228,25 +1228,25 @@ export function WorkspaceBrowser({
   useEffect(() => {
     if (wide && searchOnExpand) {
       const timer = window.setTimeout(() => {
-        searchInput.current?.focus({ preventScroll: true })
+        focusSearch()
         setSearchOnExpand(false)
       }, EXPAND_SLIDE_MS)
       return () => { window.clearTimeout(timer) }
     }
-  }, [wide, searchOnExpand])
+  }, [wide, searchOnExpand, focusSearch])
   useEffect(() => {
     if (shortcutState.searchRequest === 0) return
     closeAddWorkspace()
     if (!wide || searchInput.current?.closest('[inert]')) {
       setSearchOnExpand(true)
       expandSidebar()
-    } else searchInput.current?.focus({ preventScroll: true })
-  }, [shortcutState.searchRequest])
+    } else focusSearch()
+  }, [shortcutState.searchRequest, focusSearch])
 
   useEffect(() => {
     if (!wide || !searchExpanded || searchOnExpand) return
-    searchInput.current?.focus({ preventScroll: true })
-  }, [wide, searchExpanded, searchOnExpand])
+    focusSearch()
+  }, [wide, searchExpanded, searchOnExpand, focusSearch])
 
   // Outside-click dismissal stays off while the rail gesture is in flight
   // (searchOnExpand): the rail click flips the shell wide and mounts this
@@ -1343,6 +1343,8 @@ export function WorkspaceBrowser({
   )
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
+      {/* FIXME(rehearse-rc2): the occupant binds no section scroller (`useSectionScroller`), so wheel scrolling over the
+          sidebar viewport stays native while it replaces the list area. */}
       {listBody && renderSlot('sidebar.workspaces.list', {
         list,
         workspaces,
@@ -1360,7 +1362,7 @@ export function WorkspaceBrowser({
         openSessionMenu,
       })}
       {listBody && pickFlow}
-      {!listBody && <div className={clsx(css.sectionHeader, wide && searchSpacingMotionEnabled && css.searchSpacingMotion)}>
+      {!listBody && <div className={clsx(css.sectionHeader, wide && searchSpacingMotionEnabled && css.searchSpacingMotion)} data-sidebar-workspace-header="">
         {wide && !searchField && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
             {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
@@ -1374,7 +1376,7 @@ export function WorkspaceBrowser({
               onClick={() => {
                 closeAddWorkspace()
                 changeSearchExpanded(true)
-                searchInput.current?.focus()
+                focusSearch()
               }}
             >
               <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} side="bottom" delayMs={500} disabled={searchExpanded} portal>
@@ -1483,7 +1485,7 @@ export function WorkspaceBrowser({
 
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
-      {!listBody && <div className={css.listArea}>
+      {!listBody && <div ref={wide ? bindScrollerRef : undefined} className={css.listArea} data-sidebar-list-area="">
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults
@@ -1521,7 +1523,7 @@ export function WorkspaceBrowser({
                 open={guardedOpen}
                 onSessionRenameRequest={requestSessionRename}
                 renderSlot={renderSlot}
-                openSessionMenu={openSessionMenu} useContextMenu={useContextMenu}
+                renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
                 useContextMenuTarget={useContextMenuTarget}
                 setSessionOrder={saveSessionOrder}
                 revealSessionId={revealSessionId}
@@ -1532,7 +1534,6 @@ export function WorkspaceBrowser({
             )
             : (
               <SessionTree
-                useRemoteAccess={useRemoteAccess}
                 useSessionAccess={useSessionAccess}
                 useWorkspaceAccess={useWorkspaceAccess}
                 usePanelInfo={usePanelInfo}
@@ -1541,8 +1542,7 @@ export function WorkspaceBrowser({
                 useSessionStatus={useSessionStatus}
                 onSessionRenameRequest={requestSessionRename}
                 renderSlot={renderSlot}
-                openSessionMenu={openSessionMenu} useContextMenu={useContextMenu}
-                openWorkspaceMenu={openWorkspaceMenu}
+                renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
                 useContextMenuTarget={useContextMenuTarget}
                 workspaces={orderedWorkspaces}
                 ungroupedSessionIds={orderedUngroupedSessionIds}

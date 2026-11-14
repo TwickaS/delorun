@@ -20,3 +20,12 @@ patches/*.patch whitespace=-blank-at-eol,-space-before-tab
 # The divergence ledger merges per entry through the delo-ledger driver, which each clone configures once
 # (delo/apps/tools/README.md#the-divergence-ledger).
 delo/upstream-patches.json merge=delo-ledger
+
+# Review layers of the forge changes view (dsh-review-layer), for this repository's own conventions:
+# plugin locale dictionaries and the session snapshot tree hide with test files, generated bilingual
+# pairing records join them, and a package's types-only module is part of its interface.
+packages/*/*/locale/*.json dsh-review-layer=test
+locales.ts dsh-review-layer=test
+snapshots/** dsh-review-layer=test
+*.i18n.yaml dsh-review-layer=test
+packages/*/*/src/types.ts dsh-review-layer=interface

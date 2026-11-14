@@ -16,6 +16,21 @@ export type MarkdownMenuTarget =
   | { kind: 'url'; url: string }
   | { kind: 'image'; url: string; path?: string; name?: string; mediaType?: string }
 
+/** One Markdown code fence whose language is final, as {@link MarkdownDelegate.renderCode} receives it. */
+export interface MarkdownDelegateFenceInfo {
+  /**
+   * The info string's language word, cut at its first character outside
+   * letters, digits, `_`, and `-`, then lowercased (`c++` yields `c`).
+   */
+  readonly lang: string
+  /** The fence body without its closing newline. */
+  readonly code: string
+  /** The surrounding document is still streaming, so `code` may still change. */
+  readonly streaming: boolean
+  /** The info string after the language word, as the author wrote it; absent when the fence names only a language. */
+  readonly meta?: string | undefined
+}
+
 /** Navigation capabilities supplied by the nearest Markdown owner. */
 export interface MarkdownDelegate {
   /** Open an object menu without executing its normal activation. */
@@ -50,6 +65,14 @@ export interface MarkdownDelegate {
    * @param options - First line to reveal when the destination specifies a line or range.
    */
   readonly openFile?: ((path: string, options?: { line?: number }) => void) | undefined
+  /**
+   * Render one fence whose language is final: it has a language and content.
+   * Absent, the document renders fences with its built-in code and math blocks;
+   * present, the owner renders every such fence, including `diff` and `math`.
+   * @param fence - language, body, and streaming state.
+   * @returns the rendered block.
+   */
+  readonly renderCode?: ((fence: MarkdownDelegateFenceInfo) => ReactNode) | undefined
 }
 
 const MarkdownDelegateContext = createContext<MarkdownDelegate>({})
@@ -72,9 +95,10 @@ export function MarkdownDelegateProvider({
   fileImages,
   getTriggerProps,
   remoteImages,
+  renderCode,
 }: MarkdownDelegateProviderProps): ReactNode {
-  const delegate = useMemo(() => ({ openExternalLink, openFile, fileImages, getTriggerProps, remoteImages }),
-    [openExternalLink, openFile, fileImages, getTriggerProps, remoteImages])
+  const delegate = useMemo(() => ({ openExternalLink, openFile, fileImages, getTriggerProps, remoteImages, renderCode }),
+    [openExternalLink, openFile, fileImages, getTriggerProps, remoteImages, renderCode])
   return (
     <MarkdownDelegateContext.Provider value={delegate}>
       {children}

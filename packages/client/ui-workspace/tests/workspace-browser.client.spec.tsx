@@ -25,6 +25,8 @@ import { createWorkspaceShortcutControls } from '../src/client/shortcuts.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser, workspaceColors } from '../src/client/rows/WorkspaceBrowser.tsx'
+import { renderMenuButton } from './menu-button.tsx'
+import rowCss from '../src/client/rows/Rows.module.css'
 import { zh } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
@@ -111,12 +113,14 @@ const renderDirectoryFlowOnly: WorkspaceBrowserProps['renderSlot'] = (name: stri
     ? <div data-testid="directory-flow" />
     : null
 
+// Mounted outside a sidebar, the browser binds its list area to nothing.
+const SECTION_SCROLLER = { bindScrollerRef: () => {} }
+
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const controls = createWorkspaceShortcutControls()
   const request = createSnapshotStore<WorkspaceActionRequest | null>(null)
   const store = createWorkspaceViewStore().create()
   const props: WorkspaceBrowserProps = {
-    openWorkspaceMenu: vi.fn(),
     useWorkspaceActionRequest: bindSnapshotSelector(request),
     settleWorkspaceAction: () => { request.set(null) },
     // The Host action stores the request that WorkspaceDialogs renders, seeded with the stored title.
@@ -153,6 +157,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
+    useSectionScroller: () => SECTION_SCROLLER,
     notifyArchivedNotOpenable: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
@@ -162,6 +167,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
     renderSlot: renderDirectoryFlowOnly,
+    renderFactorySlot: renderMenuButton,
     t,
     ...overrides,
   }
@@ -192,6 +198,42 @@ describe('WorkspaceBrowser', () => {
     expect(rows()).toEqual(['session:kept'])
     rerender(b, { useHiddenSessions: hook(new Set()) })
     expect(rows()).toEqual(['session:main', 'session:kept'])
+  })
+
+  it.each(['workspace', 'flat', 'ungrouped'] as const)('passes the standard menu factory through the %s list', (mode) => {
+    const preferences = createWorkspaceViewStore().create()
+    preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
+    preferences.actions.setGroupExpanded(mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha', true)
+    const renderFactorySlot = vi.fn(renderMenuButton)
+    mount({
+      useSessions: hook(sessionState([summary('session-one', 10)])),
+      useWorkspaces: hook(workspaceState(mode === 'ungrouped' ? [] : [workspace('alpha', ['session-one'])])),
+      renderFactorySlot,
+    })
+    expect(renderFactorySlot).toHaveBeenCalledWith('contextMenu.button', {
+      target: { kind: 'session', value: { sessionId: sid('session-one'), displayTitle: 'session-one' } },
+      label: '会话“session-one”的操作', className: rowCss.iconButton,
+    })
+    if (mode === 'workspace') {
+      expect(renderFactorySlot).toHaveBeenCalledWith('contextMenu.button', {
+        target: { kind: 'workspace', value: { workspaceId: wid('alpha'), path: '/projects/alpha', displayTitle: 'alpha' } },
+        label: '工作区“alpha”的操作', className: rowCss.iconButton,
+      })
+    }
+  })
+
+  it('binds the list area as the section scroller only while the sidebar is wide', () => {
+    const bindScrollerRef = vi.fn()
+    const browser = mount({ useSectionScroller: () => ({ bindScrollerRef }) })
+    const list = browser.view.container.querySelector<HTMLElement>('[data-sidebar-list-area]')!
+    expect(bindScrollerRef).toHaveBeenLastCalledWith(list)
+    rerender(browser, { wide: false })
+    expect(bindScrollerRef).toHaveBeenLastCalledWith(null)
+    expect(browser.view.container.querySelector('[data-sidebar-list-area]')).toBe(list)
+    rerender(browser, { wide: true })
+    expect(bindScrollerRef).toHaveBeenLastCalledWith(list)
+    browser.view.unmount()
+    expect(bindScrollerRef).toHaveBeenLastCalledWith(null)
   })
 
   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
@@ -1434,18 +1476,15 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
-  it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ is inert', () => {
-    const startSession = vi.fn()
+  it('auto-expands the Ungrouped bucket for a loose current session; its header has neither menu nor ＋', () => {
     mount({
       useSessions: hook(sessionState([summary('loose', 1)], { main: sid('loose') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
-      startSession,
     })
     // The loose session's group is UNGROUPED_KEY: expanded by the effect.
     expect(screen.getByText('loose')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
-    expect(startSession).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '在“未分组”中新建会话' })).toBeNull()
   })
 
   it('keeps an already-expanded group when the selection moves within it', () => {

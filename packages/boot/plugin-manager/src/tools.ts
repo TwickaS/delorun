@@ -35,6 +35,7 @@ const ERROR_STEPS: Record<ManagementError['code'], string> = {
   'stale-approval': 'Call install_bundle again without approvedBuilds to read the current pendingBuilds.',
   'incompatible-version': 'Install a version compatible with the running DSH. A version exemption needs the user\'s explicit acceptance of crash and data-loss risk.',
   'unsupported-platform': 'This bundle cannot run on the current Host platform; ask the user to use a supported Host.',
+  'unexpected-package': 'The source installed another package or version than requested and was rolled back; report this to the user.',
   'audit-findings': 'The plugin audit found what error.audit lists; tell the user. Only the user can accept findings, by installing the package again on the Plugins page after reading them; you cannot accept them for the user.',
   'audit-refused': 'The plugin audit refused this package for a critical finding in error.audit; tell the user it cannot be installed or enabled here.',
   'nothing-to-undo': 'The profile\'s history holds no earlier version to go back to.',
@@ -280,7 +281,7 @@ async function execute(ctx: Context, args: ManagerArgs, exec: ToolRunContext, ex
       const entries = rows.slice(offset, offset + limit).map(({ meta: _meta, ...row }) =>
         'rows' in row
           // GUI listing and update eligibility do not change the tool's management operations.
-          ? (({ updatable: _updatable, listedByDefault: _listedByDefault, ...bundle }) => ({
+          ? (({ update: _update, listedByDefault: _listedByDefault, ...bundle }) => ({
             ...bundle, rows: bundle.rows.map(({ meta: _rowMeta, ...declared }) => declared),
           }))(row)
           : row)

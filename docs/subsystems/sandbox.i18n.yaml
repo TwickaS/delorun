@@ -6,11 +6,11 @@
   en: e0d4876306b192c3
   zh: 63baaa0c79e87deb
 /process-sandbox/modes-and-enforcement:
-  en: 6777e1b1270ec3e1
-  zh: 22533fb3304c1dd8
+  en: 3e518b62c9bbcd6e
+  zh: d59d4a3830ce7cf6
 /process-sandbox/per-call-policy:
-  en: 43337e4a406fa071
-  zh: 9a0819020070736b
+  en: bbe5b45b95f1fe98
+  zh: b072892457df9078
 /process-sandbox/network:
   en: 356264472b9f1014
   zh: 1f3b78875c562bd1
@@ -18,5 +18,5 @@
   en: 29c001b767e376ad
   zh: c0798af1daa3b19f
 /process-sandbox/provider-and-fail-closed-errors:
-  en: a90a38fe4b11737c
-  zh: 2397768e48712617
+  en: a1f9649b3cde0aca
+  zh: 6708348a70eb2451

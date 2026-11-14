@@ -60,6 +60,7 @@ const CODE_KEYS = {
   'stale-approval': 'reasonStaleApproval',
   'incompatible-version': 'reasonIncompatibleVersionUnnamed',
   'unsupported-platform': 'reasonUnsupportedPlatform',
+  'unexpected-package': 'reasonUnexpectedPackage',
   'audit-findings': 'reasonAuditFindings',
   'audit-refused': 'reasonAuditRefused',
   'nothing-to-undo': 'reasonNothingToUndo',
