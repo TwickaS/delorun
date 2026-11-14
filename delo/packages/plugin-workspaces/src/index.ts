@@ -13,7 +13,7 @@ import { Service } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-subprocess'
-import { WorkspaceUnknownSessionError, type Workspace, type WorkspaceId } from '@deepseek-ai/dsh-workspace'
+import { WorkspaceId, WorkspaceUnknownSessionError, type Workspace } from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import {
@@ -21,11 +21,12 @@ import {
   type WorkspaceLocationHomes,
 } from '@delo/home'
 import { cloneRepository } from './clone.ts'
+import { renameWorkspaceTool } from './rename-tool.ts'
 import { INSTRUCTIONS, InstructionsRefusedError, readInstructions, writeInstructions } from './files.ts'
 import { cloneUrlProblem, redactClone } from './git.ts'
 import { folderName, WorkspaceRefusedError } from './service.ts'
 import type {
-  CreateRequest, DeloWorkspaces, ImportRequest, ImportRow, InstructionsRequest, InstructionsResponse, TrashEntry, WorkspacesListing,
+  CreateRequest, DeloWorkspaces, ImportRequest, ImportRow, InstructionsRequest, InstructionsResponse, RenamePlan, RenameRequest, TrashEntry, WorkspacesListing,
 } from './service.ts'
 import type { ImportRecord, TrashRecord } from './spec.ts'
 import { workspacesDomain } from './spec.ts'
@@ -157,6 +158,9 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
     void this.serial(() => this.sweep()).catch((error: unknown) => {
       this.warn(`the sweep at start failed: ${reasonOf(error)}`)
     })
+    this.ctx.inject(['tools'], (child) => {
+      child.effect(() => child.tools.register(renameWorkspaceTool(child)), `${PLUGIN}: rename_workspace`)
+    })
   }
 
   /**
@@ -274,6 +278,50 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
    */
   restore(request: { readonly trash: string }): Promise<{ readonly workspaces: readonly WorkspaceId[] }> {
     return this.call('restoring the folder', () => this.serial(() => this.restoreFolder(request.trash)))
+  }
+
+  /**
+   * Check a rename without changing anything.
+   * @param request - the workspace, by id or current title, and the new title.
+   * @returns what the rename would change.
+   * @throws WorkspaceRefusedError `invalid` for a blank title, `not-found` for an unknown workspace, and `conflict` for a title another workspace has or a current title that names several workspaces.
+   */
+  planRename(request: RenameRequest): Promise<RenamePlan> {
+    return this.call('checking the rename', () => Promise.resolve(this.renamePlan(request)))
+  }
+
+  /**
+   * Rename a workspace, checking again at the change's turn in the queue.
+   * @param request - the workspace, by id or current title, and the new title.
+   * @returns what the rename changed.
+   * @throws WorkspaceRefusedError as {@link planRename}.
+   */
+  rename(request: RenameRequest): Promise<RenamePlan> {
+    return this.call('renaming the workspace', () => this.serial(async () => {
+      const plan = this.renamePlan(request)
+      if (plan.from !== plan.to) await (this.ctx.workspaceRegistry.get(plan.workspace) as Workspace).setTitle(plan.to)
+      return plan
+    }))
+  }
+
+  private renamePlan(request: RenameRequest): RenamePlan {
+    const registry = this.ctx.workspaceRegistry
+    const title = request.name.trim()
+    if (title === '') throw new WorkspaceRefusedError('invalid', 'the new name is blank')
+    const wanted = request.workspace.trim()
+    const byId = registry.get(WorkspaceId(wanted))
+    const named = byId === undefined ? registry.list().filter(candidate => candidate.title === wanted) : [byId]
+    if (named.length === 0) {
+      throw new WorkspaceRefusedError('not-found', `no workspace has the id or name ${JSON.stringify(wanted)}`)
+    }
+    if (named.length > 1) {
+      throw new WorkspaceRefusedError('conflict', `${String(named.length)} workspaces are named ${JSON.stringify(wanted)}; name one by its id: ${named.map(candidate => candidate.id).join(', ')}`)
+    }
+    const workspace = named[0] as Workspace
+    if (registry.list().some(candidate => candidate.id !== workspace.id && candidate.title === title)) {
+      throw new WorkspaceRefusedError('conflict', `the name ${JSON.stringify(title)} is already in use by another workspace`)
+    }
+    return { workspace: workspace.id, from: workspace.title, to: title }
   }
 
   /**

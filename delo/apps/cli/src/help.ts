@@ -138,7 +138,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   recover: {
-    usage: ['delorun recover [status | rollback [--profile-only] | restore <version> | safe-mode [--reason <text>] | exit-safe-mode | discard <path>] [--profile <name>] [--json]'],
+    usage: ['delorun recover [status | rollback [--profile-only] | restore <version> | safe-mode [--reason <text>] | exit-safe-mode | discard <path> | workspaces [--yes]] [--profile <name>] [--json]'],
     about: ['Shows where your profile stands after an update, and the way back.'],
     actions: [
       { name: 'status', text: 'Where the profile stands (the default).' },
@@ -147,10 +147,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       { name: 'safe-mode', text: 'Start with your extra plugins left out.' },
       { name: 'exit-safe-mode', text: 'Load everything again.' },
       { name: 'discard <path>', text: 'Delete a copy that an update or rollback set aside.' },
+      { name: 'workspaces', text: 'Bring back the previous good copy of the workspace list, after showing what it replaces and asking. The current file is kept aside.' },
     ],
     options: [
       { name: '--profile-only', text: 'With rollback: go back in the profile and keep your chats as they are.' },
       { name: '--reason <text>', text: 'With safe-mode: a note for the profile\'s history.' },
+      { name: '--yes', text: 'With workspaces: answer yes to the question, for a script.' },
       JSON_OUTPUT,
       PROFILE,
     ],

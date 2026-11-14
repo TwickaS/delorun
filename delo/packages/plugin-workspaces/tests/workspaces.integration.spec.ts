@@ -189,6 +189,33 @@ describe.skipIf(process.platform !== 'linux')('AGENTS.md through the provider', 
     expect(await readFile(join(root, 'alpha', 'AGENTS.md'), 'utf8')).toBe('Edited.')
   })
 
+  it('renames by id or by current title with the studio\'s rules, and changes only the title', async () => {
+    const mounted = await mount({ config: base() })
+    const [alpha, beta] = [(await mounted.service.create({ directory: 'alpha' })).workspaces[0] as WorkspaceId, (await mounted.service.create({ directory: 'beta' })).workspaces[0] as WorkspaceId]
+    const before = mounted.registry.get(alpha) as Workspace
+    const path = before.path
+    expect(await mounted.service.planRename({ workspace: 'alpha', name: ' Site ' })).toEqual({ workspace: alpha, from: 'alpha', to: 'Site' })
+    expect(mounted.registry.get(alpha)?.title).toBe('alpha')
+    expect(await mounted.service.rename({ workspace: 'alpha', name: ' Site ' })).toEqual({ workspace: alpha, from: 'alpha', to: 'Site' })
+    expect(mounted.registry.get(alpha)).toMatchObject({ title: 'Site', path })
+    expect(await mounted.service.rename({ workspace: beta, name: 'Docs' })).toMatchObject({ from: 'beta', to: 'Docs' })
+    expect(await mounted.service.rename({ workspace: alpha, name: 'Site' })).toMatchObject({ from: 'Site', to: 'Site' })
+    await expect(mounted.service.rename({ workspace: alpha, name: 'Docs' })).rejects.toMatchObject({ code: 'conflict' })
+    await expect(mounted.service.rename({ workspace: 'missing', name: 'X' })).rejects.toMatchObject({ code: 'not-found' })
+    await expect(mounted.service.rename({ workspace: alpha, name: '   ' })).rejects.toMatchObject({ code: 'invalid' })
+    expect(mounted.registry.get(alpha)?.title).toBe('Site')
+  })
+
+  it('refuses a current title that several workspaces share, naming their ids', async () => {
+    const mounted = await mount({ config: base() })
+    const first = (await mounted.service.create({ directory: 'one', title: 'Same' })).workspaces[0] as WorkspaceId
+    const second = (await mounted.service.create({ directory: 'two', title: 'Same' })).workspaces[0] as WorkspaceId
+    const refused = await mounted.service.rename({ workspace: 'Same', name: 'Other' }).catch((error: unknown) => error)
+    expect(refused).toMatchObject({ code: 'conflict' })
+    expect((refused as Error).message).toContain(first)
+    expect((refused as Error).message).toContain(second)
+  })
+
   it('refuses text over the limit as too-large, and a file over the limit on read as too-large', async () => {
     const mounted = await mount({ config: { ...base(), instructionsMaxBytes: 16 } })
     const [id] = (await mounted.service.create({ directory: 'alpha' })).workspaces

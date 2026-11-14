@@ -21,7 +21,7 @@ import { checkPrivateDirectory, HomeLayoutError, resolveDeloHome, runDirectory, 
  * `sandbox` is the Linux line of [sandbox](./sandbox.ts), `changes` the lines of [changes](./changes.ts), and `plugins` and `plugin`
  * the lines of [plugins](./plugins.ts) and [last-start](./last-start.ts).
  */
-export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update' | 'dangerous-mode' | 'changes' | 'plugins' | 'plugin'
+export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update' | 'dangerous-mode' | 'changes' | 'plugins' | 'plugin' | 'workspaces'
 
 /**
  * A check's verdict. `pass` needs nothing. `warn` names something optional or

@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
-import { WorkspaceRefusedError, type CreateRequest, type DeloWorkspaces, type ImportRequest, type InstructionsRequest, type InstructionsResponse, type TrashEntry, type WorkspacesListing } from '@delo/plugin-workspaces/service'
+import { WorkspaceRefusedError, type CreateRequest, type DeloWorkspaces, type ImportRequest, type InstructionsRequest, type InstructionsResponse, type RenamePlan, type RenameRequest, type TrashEntry, type WorkspacesListing } from '@delo/plugin-workspaces/service'
 
 /** One fixture workspace, as the workspace registry stand-in lists it. */
 export interface FixtureWorkspace {
@@ -62,6 +62,24 @@ export class FixtureWorkspaces implements DeloWorkspaces {
   create(request: CreateRequest): Promise<{ readonly workspaces: readonly WorkspaceId[] }> {
     this.changes.push(['create', request])
     return Promise.resolve({ workspaces: [WorkspaceId(`ws-${request.directory}`)] })
+  }
+
+  /**
+   * @param request - the rename.
+   * @returns the plan, without changing anything.
+   */
+  planRename(request: RenameRequest): Promise<RenamePlan> {
+    const found = this.workspaces.find(workspace => workspace.id === request.workspace) ?? this.workspaces[0]!
+    return Promise.resolve({ workspace: found.id, from: found.title, to: request.name })
+  }
+
+  /**
+   * @param request - the rename.
+   * @returns the plan, recording the change.
+   */
+  async rename(request: RenameRequest): Promise<RenamePlan> {
+    this.changes.push(['rename', request])
+    return await this.planRename(request)
   }
 
   /**

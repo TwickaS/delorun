@@ -9,6 +9,7 @@
  * | `restore <version>` | brings back a named profile history version |
  * | `safe-mode [--reason <text>]`, `exit-safe-mode` | starts without third-party plugins, and ends it |
  * | `discard <path>` | removes one copy or set-aside directory `status` lists |
+ * | `workspaces [--yes]` | restores the workspace registry's previous good copy after showing what it replaces and asking; the current file is moved aside, never deleted |
  *
  * A rollback, with or without a home process, refuses with C19's `GIT_UNAVAILABLE` before any step when git, which
  * restores the profile, cannot run. A runtime rollback with no home process running then registers as an exclusive user
@@ -32,6 +33,7 @@ import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { parseFailure, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
+import { recoverWorkspaces, terminalRestoreConfirm } from './recover-workspaces.ts'
 import { helpPointer } from './help.ts'
 import { cliRedactor } from './refusals.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
@@ -46,13 +48,14 @@ const RECOVER_OPTIONS = {
   'profile-only': { type: 'boolean' },
   reason: { type: 'string' },
   json: { type: 'boolean' },
+  yes: { type: 'boolean' },
 } as const
 
 /** The store's retention reports nothing here: a rollback removes no installation. */
 export const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
 
 /** The actions, in usage order. */
-const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard'] as const
+const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard', 'workspaces'] as const
 
 /** One action and its argument. */
 type Requested =
@@ -62,6 +65,7 @@ type Requested =
   | { readonly kind: 'safe-mode', readonly reason: string }
   | { readonly kind: 'exit-safe-mode' }
   | { readonly kind: 'discard', readonly path: string }
+  | { readonly kind: 'workspaces', readonly yes: boolean }
 
 /**
  * Read the action from the command line.
@@ -82,11 +86,13 @@ function requested(args: readonly string[]): { readonly action: Requested, reado
   if (known === undefined || extra.length > 0 || needsArgument !== (argument !== undefined)) throw new CliError(EXIT.usage, `delorun recover: ${JSON.stringify(parsed.positionals.join(' '))} is not an action. ${helpPointer('recover')}`)
   if (parsed.values['profile-only'] === true && known !== 'rollback') throw new CliError(EXIT.usage, `delorun recover: --profile-only belongs to rollback. ${helpPointer('recover')}`)
   if (parsed.values.reason !== undefined && known !== 'safe-mode') throw new CliError(EXIT.usage, `delorun recover: --reason belongs to safe-mode. ${helpPointer('recover')}`)
+  if (parsed.values.yes === true && known !== 'workspaces') throw new CliError(EXIT.usage, `delorun recover: --yes belongs to workspaces. ${helpPointer('recover')}`)
   const action: Requested = known === 'rollback' ? { kind: 'rollback', profileOnly: parsed.values['profile-only'] === true }
     : known === 'restore' ? { kind: 'restore', version: argument! }
       : known === 'safe-mode' ? { kind: 'safe-mode', reason: parsed.values.reason ?? 'the person asked for safe mode' }
         : known === 'discard' ? { kind: 'discard', path: argument! }
-          : { kind: known }
+          : known === 'workspaces' ? { kind: 'workspaces', yes: parsed.values.yes === true }
+            : { kind: known }
   return { action, profile: parsed.values.profile, json: parsed.values.json === true }
 }
 
@@ -240,7 +246,7 @@ async function rollbackLive(home: string, profile: string, profileOnly: boolean,
 /** `delorun recover`: where the profile stands, and the ways back contract C3 offers. */
 export const recoverCommand: CliCommand = {
   name: 'recover',
-  summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>',
+  summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>, workspaces [--yes]',
   /**
    * Run `delorun recover`.
    * @param args - the arguments after `recover`.
@@ -259,6 +265,8 @@ export const recoverCommand: CliCommand = {
           : await rollbackOffline(home.path, profile, action.profileOnly, context, launcherAnchor(home.path, context.env).root)
       case 'discard':
         return await discard(home.path, profile, action.path, context)
+      case 'workspaces':
+        return await recoverWorkspaces({ home: home.path, profile, yes: action.yes, confirm: terminalRestoreConfirm() }, context)
       default:
         break
     }

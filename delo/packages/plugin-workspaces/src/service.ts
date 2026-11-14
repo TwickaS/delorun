@@ -38,6 +38,22 @@ export const ImportRequest = z.strictObject({ url: repositoryUrl, directory: fol
 /** {@link ImportRequest}'s parsed value. */
 export type ImportRequest = z.output<typeof ImportRequest>
 
+/** A workspace to rename, by id or by its current title, and its new title. */
+export const RenameRequest = z.strictObject({
+  workspace: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(200),
+})
+
+/** {@link RenameRequest}'s parsed value. */
+export type RenameRequest = z.output<typeof RenameRequest>
+
+/** What a rename changes: the workspace, its title now and the title it would get. */
+export interface RenamePlan {
+  readonly workspace: WorkspaceId
+  readonly from: string
+  readonly to: string
+}
+
 /**
  * Why the workspaces service refused a request. `location` names a folder Delo never adds as a workspace: the filesystem
  * root, the home directory itself, or a folder that is, lies inside or contains the Delo home or the stock home.
@@ -125,6 +141,19 @@ export interface DeloWorkspaces {
    * @returns the import's id and its folder.
    */
   startImport(request: ImportRequest): Promise<{ readonly import: string, readonly directory: string }>
+  /**
+   * Check a rename without changing anything, so a caller can ask the person about a change that will go through.
+   * @param request - the workspace, by id or current title, and the new title.
+   * @returns what the rename would change.
+   */
+  planRename(request: RenameRequest): Promise<RenamePlan>
+  /**
+   * Rename a workspace with the rules of the studio's rename: the new title is not blank and no other workspace has it.
+   * Nothing but the title changes.
+   * @param request - the workspace, by id or current title, and the new title.
+   * @returns what the rename changed.
+   */
+  rename(request: RenameRequest): Promise<RenamePlan>
   /**
    * Read a workspace's `AGENTS.md`.
    * @param workspace - the workspace's id.

@@ -59,6 +59,7 @@ import { checkLastStart } from './last-start.ts'
 import { checkPlugins, checkSafeMode } from './plugins.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
+import { checkWorkspaces } from './workspaces.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
 import { runtimeOfFile } from '../update/runtime.ts'
 import { launcherAnchor } from '../update/trusted-root.ts'
@@ -289,7 +290,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes and the plugins',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes, the workspace registry and the plugins',
     async run(args, context) {
       const values = parseOptions('doctor', args, { port: { type: 'string' } })
       const option = values.port === undefined ? undefined : parsePort(values.port)
@@ -303,6 +304,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         ...await guardedLines('changes', () => checkChanges(context.env, profile)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
+        await guarded('workspaces', async () => checkWorkspaces((await resolveDeloHome(context.env)).path)),
         ...await pluginLines(context, profile, environment),
       ]
       const dangerous = await dangerousModeCheck(context, profile).catch((error: unknown): CheckResult => ({ name: 'dangerous-mode', status: 'fail', message: `the check could not complete: ${error instanceof Error ? error.message.replace(/\s*\n\s*/g, ' ') : String(error)}` }))
