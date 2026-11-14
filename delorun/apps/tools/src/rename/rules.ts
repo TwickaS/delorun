@@ -199,7 +199,7 @@ export function applyRules(text: string, path: string, rules: readonly ReplaceRu
   for (const rule of rules) {
     // A Chinese page keeps its prose but shares code and output blocks with its English page, so a rule that
     // skips Chinese pages still reaches their fenced blocks.
-    const fencedOnly = !appliesTo(rule, path) && /\.zh\.md$/u.test(path) && appliesTo({ include: rule.include }, path)
+    const fencedOnly = !appliesTo(rule, path) && /\.zh\.md$/u.test(path) && appliesTo(rule.include === undefined ? {} : { include: rule.include }, path)
     if (!fencedOnly && !appliesTo(rule, path)) continue
     const ranges = guardRanges(current, guards)
     const fenced = fencedOnly ? fencedRanges(current) : []
