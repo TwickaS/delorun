@@ -68,6 +68,8 @@ import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { PinLock } from './PinLock.tsx'
+import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
+import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { attachPinTriggers } from './pin-triggers.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
 import { UnlockOverlay } from './UnlockOverlay.tsx'
@@ -102,6 +104,8 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
 export type { PinLocaleKey } from './pin-locales.ts'
+export type { PinModeLocaleKey } from './pin-mode-locales.ts'
+export type { PinModeSectionProps } from './PinModeSection.tsx'
 export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
 export type { PinLockProps } from './PinLock.tsx'
 export type { TrustLocaleKey } from './trust-locales.ts'
@@ -172,6 +176,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunDevices': DevicesLocaleKey
     /** The PIN lock screen's copy. */
     'delorunPin': PinLocaleKey
+    /** The PIN mode settings section's copy. */
+    'delorunPinMode': PinModeLocaleKey
     /** The trust badge's and the trust panel's copy. */
     'delorunTrust': TrustLocaleKey
     /** The full-access consent, the approval card's action, the MCP server review and notice, and the Permissions and External agents sections. */
@@ -191,6 +197,15 @@ export const DEVICES_NS = 'delorunDevices'
 
 /** Dictionary namespace of the PIN lock screen. */
 export const PIN_NS = 'delorunPin'
+
+/** Dictionary namespace of the PIN mode settings section. */
+export const PIN_MODE_NS = 'delorunPinMode'
+
+/** The `settings.section` id of the PIN mode section. */
+export const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
+
+/** The PIN mode section's place in the Settings navigation: right after Devices. */
+export const PIN_MODE_SECTION_ORDER = 21.5
 
 /** The `shell.overlay` id of the PIN lock screen. */
 export const PIN_LOCK_OVERLAY_ID = 'delorun-pin-lock'
@@ -475,6 +490,17 @@ export function apply(ctx: Context): void {
     locale: DEVICES_NS,
     inject: devicesFace,
   }, DevicesSection))
+  ctx.effect(() => ctx.locale.register(PIN_MODE_NS, { en: pinModeEn, zh: pinModeZh }), 'delorun-pin-mode: section dictionaries')
+  const pinModeT = ctx.locale.bind(PIN_MODE_NS)
+  const pinModeFace = (): PinModeSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: PIN_MODE_SECTION_ID,
+    order: PIN_MODE_SECTION_ORDER,
+    label: () => pinModeT('nav'),
+    locale: PIN_MODE_NS,
+    inject: pinModeFace,
+  }, PinModeSection))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
   const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })

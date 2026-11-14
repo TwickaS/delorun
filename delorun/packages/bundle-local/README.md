@@ -103,6 +103,18 @@ When the home has PIN mode on, a phone or other device shows a full-page lock un
 
 Known debt: the Chinese README does not describe this section yet, so the bilingual pairing record for this file is out of date until the pairing is brought along. The state does not yet carry `lockWhenHidden`, and the home's `PIN_INVALID` answer carries tries left and the removal only in its sentence, which the page reads in [`pinMissOf`](src/client/pin-api.ts); a structured field on the home's side replaces both.
 
+## The PIN mode section
+
+The **PIN mode** section (`delorun-pin-mode`, right after Devices, [`src/client/PinModeSection.tsx`](src/client/PinModeSection.tsx)) is where the person at the home's own computer turns PIN mode on and off. It reads `GET /auth/pin/mode` and sends `POST /auth/pin/set`, `/off` and `/resume` ([`src/client/pin-api.ts`](src/client/pin-api.ts)), the computer-only routes of [`@delorun/home-auth`](../home-auth/README.md). It shows whether the mode is on, with a PIN or a passcode, the idle minutes, lock when hidden and whether unlocks are paused.
+
+- **Turn on.** A PIN or passcode typed twice in masked fields (16 px, so a phone does not zoom), the idle minutes (1 to 60) and a lock-when-hidden switch. [`src/client/pin-rules.ts`](src/client/pin-rules.ts) checks the length, repeat, run and common-PIN rules and the match before any request; the home's own check stays the authority and its sentence shows in place.
+- **Change.** While the mode is on, the same form saves new idle minutes or lock-when-hidden. The home takes them only with a secret, so the person types the PIN or passcode again; it can be the same.
+- **Secret handling.** The secret lives in the component's state until the request leaves, is cleared whatever the answer, and is never written to storage.
+- **Turn off and resume.** Turn off needs no secret. Resume appears while unlocks are paused home-wide after too many wrong tries.
+- **On a device.** The section shows one line saying PIN mode is set at the computer, and sends no request. The home refuses a device's request with `LOOPBACK_REQUIRED` either way.
+
+Onboarding's Phone access step recommends the mode in one line and points at this section and `delorun devices pin set`.
+
 ## The consent surfaces
 
 The same row carries the studio's surfaces of the two consent plugins it mounts, each over its plugin's routes through same-origin requests ([`src/client/consents-api.ts`](src/client/consents-api.ts), over the shared [`src/client/host-api.ts`](src/client/host-api.ts)). A profile whose switch is off — one set up with "Ask less (like DeepSeek Harness)", or a composition without the plugin — mounts no route, so the section says only that the profile does not ask, and the permission control switches as upstream's does. Every route answers only the home's own computer, except the waiting MCP servers' names: a remote studio, such as a phone, is told on each surface to approve at the computer, with the commands for that computer, and gets no way to answer. The copy is in English and Chinese ([`src/client/consents-locales.ts`](src/client/consents-locales.ts)).

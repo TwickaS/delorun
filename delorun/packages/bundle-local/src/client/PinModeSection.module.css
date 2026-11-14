@@ -1,0 +1,81 @@
+/* PIN mode section: the state, the entry form and the turn-off and resume actions. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--dsh-settings-section-max-width, 760px);
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0 0 12px;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
+}
+
+.intro,
+.line {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.state {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 360px;
+}
+
+.label {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* 16 px keeps iOS from zooming the page when a field takes focus. */
+.field input {
+  font-size: 16px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.failed {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}

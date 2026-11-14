@@ -134,3 +134,66 @@ export function pinMissOf(fields: Readonly<Record<string, unknown>> | undefined)
   if (fields?.removed === true) return { kind: 'removed' }
   return { kind: 'wrong', triesLeft: typeof fields?.triesLeft === 'number' ? fields.triesLeft : undefined }
 }
+
+/** The computer-only PIN mode routes. */
+export const PIN_COMPUTER_ROUTES = {
+  mode: '/auth/pin/mode',
+  set: '/auth/pin/set',
+  off: '/auth/pin/off',
+  resume: '/auth/pin/resume',
+} as const
+
+/** The longest idle time the home accepts, in minutes. */
+export const PIN_MAX_IDLE_MINUTES = 60
+
+/** PIN mode as the computer reads it. */
+export interface PinMode {
+  readonly enabled: boolean
+  /** What the secret is; absent while the mode is off. */
+  readonly kind?: 'pin' | 'passcode'
+  readonly idleMinutes: number
+  readonly lockWhenHidden: boolean
+  /** Whether PIN unlocks are paused home-wide after too many wrong tries. */
+  readonly paused: boolean
+}
+
+const isPinMode: Check = value => fields({ enabled: isBoolean, idleMinutes: isTime, lockWhenHidden: isBoolean, paused: isBoolean })(value)
+  && (!('kind' in (value as object)) || (value as { kind?: unknown }).kind === undefined || ['pin', 'passcode'].includes((value as { kind: string }).kind))
+
+/**
+ * Read PIN mode at the computer.
+ * @param fetch - the request function.
+ * @returns the mode, or undefined for a home without the routes (404).
+ * @throws {HostRequestError} `LOOPBACK_REQUIRED` away from the computer, an unreachable Host or an unreadable answer.
+ */
+export function readPinMode(fetch: HostFetch): Promise<PinMode | undefined> {
+  return readServedRoute<PinMode>(fetch, PIN_COMPUTER_ROUTES.mode, isPinMode)
+}
+
+/**
+ * Set the PIN or passcode and turn the mode on, or change its idle time and lock-when-hidden with the secret typed again.
+ * @param fetch - the request function.
+ * @param body - the secret and the two settings.
+ * @throws {HostRequestError} `PIN_WEAK` for a secret that breaks a rule, `BAD_REQUEST`, an unreachable Host or an unreadable answer.
+ */
+export async function setPinMode(fetch: HostFetch, body: { readonly secret: string; readonly idleMinutes: number; readonly lockWhenHidden: boolean }): Promise<void> {
+  await call<{ enabled: boolean }>(fetch, PIN_COMPUTER_ROUTES.set, fields({ enabled: isBoolean }), body)
+}
+
+/**
+ * Turn PIN mode off.
+ * @param fetch - the request function.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function turnPinOff(fetch: HostFetch): Promise<void> {
+  await call<{ enabled: boolean }>(fetch, PIN_COMPUTER_ROUTES.off, fields({ enabled: isBoolean }), {})
+}
+
+/**
+ * Resume PIN unlocks after a home-wide pause.
+ * @param fetch - the request function.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function resumePin(fetch: HostFetch): Promise<void> {
+  await call<{ paused: boolean }>(fetch, PIN_COMPUTER_ROUTES.resume, fields({ paused: isBoolean }), {})
+}
