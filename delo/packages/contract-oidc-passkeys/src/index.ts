@@ -310,4 +310,4 @@ export type PinKind = 'pin' | 'passcode'
 /** What a device's own studio learns of PIN mode without unlocking: whether it is on and what it takes. */
 export type PinModeState =
   | { readonly kind: 'off' }
-  | { readonly kind: 'on'; readonly secret: PinKind; readonly idleMinutes: number; readonly paused: boolean; readonly lockWhenHidden: boolean; readonly unlock: { readonly unlockId: string; readonly endsAt: number; readonly idleEndsAt: number } | null }
+  | { readonly kind: 'on'; readonly secret: PinKind; readonly idleMinutes: number; readonly lockWhenHidden: boolean; readonly paused: boolean; readonly unlock: { readonly unlockId: string; readonly endsAt: number; readonly idleEndsAt: number } | null }
