@@ -19,6 +19,12 @@ import { shareViewerPrincipal } from '../src/host/viewer-principal.ts'
 import { endpointContribution } from './viewer-endpoint-fixture.ts'
 
 const worker = vi.hoisted(() => ({ event: undefined as ((event: TunnelWorkerEvent) => void) | undefined }))
+/** Fixture plugin endpoints need a class, because the catalog offers no unclassified endpoint. */
+vi.mock('../src/endpoint-classification.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/endpoint-classification.ts')>()
+  return { ...original, VIEWER_ENDPOINT_CLASSES: { ...original.VIEWER_ENDPOINT_CLASSES, 'mekGit/getGraph': 'plugin-offered', 'mekGit/graphMeta': 'plugin-offered' } }
+})
+
 vi.mock('../src/host/tunnel-worker.ts', () => ({ TunnelWorker: class {
   start() {}
   onEvent(callback: (event: TunnelWorkerEvent) => void) { worker.event = callback; return () => {} }
@@ -65,7 +71,7 @@ function stubRelay(): void {
  * endpoints this case can select.
  * @returns The mounted host and the calls these cases make against it.
  */
-async function harness() {
+async function harness(extraEndpoints: readonly string[] = []) {
   const directory = mkdtempSync(join(tmpdir(), 'liveshare-capabilities-'))
   onTestFinished(() => { rmSync(directory, { recursive: true, force: true }) })
   const file = join(directory, 'owner.json')
@@ -79,7 +85,7 @@ async function harness() {
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('connection', connectionService(routes))
   await ctx.plugin(TypertRegistry)
-  ctx.typert.register(endpointContribution('@fixture/platform', [...CATALOG.endpoints]))
+  ctx.typert.register(endpointContribution('@fixture/platform', [...CATALOG.endpoints, ...extraEndpoints]))
   await ctx.plugin(RemoteAccessService)
   stubRelay()
   const config: Config = { ownerStateFile: file }
@@ -166,6 +172,16 @@ describe('owner endpoint selection over the platform catalog', () => {
     expect(host.decide('mekGit/getGraph')).toEqual({ kind: 'allow' })
     expect(host.decide('mekGit/graphMeta')).toEqual({ kind: 'allow' })
     expect(host.persisted()).toMatchObject({ viewerPluginAccess: 'all' })
+  })
+
+  it('keeps owner-only and unclassified endpoints closed when the global switch is all', async () => {
+    const ownerOnly = ['commands/execute', 'mcpManager/restart', 'agentTeams/setEnabled', 'speech/configure']
+    const host = await harness([...ownerOnly, 'mekGit/unclassified'])
+    await host.setCapabilities([], 'all')
+    expect(host.decide('mekGit/getGraph')).toEqual({ kind: 'allow' })
+    for (const endpoint of [...ownerOnly, 'mekGit/unclassified']) {
+      expect(host.decide(endpoint as RemoteAccessAction)).toMatchObject({ kind: 'deny' })
+    }
   })
 
   it('refuses an unknown global switch', async () => {

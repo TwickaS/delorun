@@ -13,6 +13,12 @@ import type { ForkToolExecution } from '../src/host/fork-tool-guard.ts'
 import { FakeTunnelWorker } from './tunnel-supervision-fake-worker.ts'
 import { shareViewerPrincipal } from '../src/host/viewer-principal.ts'
 
+/** Fixture plugin endpoints need a class, because the catalog offers no unclassified endpoint. */
+vi.mock('../src/endpoint-classification.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/endpoint-classification.ts')>()
+  return { ...original, VIEWER_ENDPOINT_CLASSES: { ...original.VIEWER_ENDPOINT_CLASSES, 'forgePanel/changeRequestStates': 'plugin-offered', 'agentAudit/list': 'plugin-offered', 'unbundledStatus/read': 'plugin-offered' } }
+})
+
 vi.mock('../src/host/tunnel-worker.ts', async () => {
   const { FakeTunnelWorker: Fake } = await import('./tunnel-supervision-fake-worker.ts')
   return { TunnelWorker: Fake }
