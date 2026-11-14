@@ -52,6 +52,12 @@ export interface SettingsFieldAccess {
   read(ns: string, field: string): unknown
   /**
    * @param ns - the settings namespace.
+   * @returns whether the namespace's row is described now; a lift whose row is not described is kept, never dropped,
+   *   because an absent row cannot show whether the person changed the field.
+   */
+  described?(ns: string): boolean
+  /**
+   * @param ns - the settings namespace.
    * @param field - the field.
    * @param value - the value to write; undefined unsets the field.
    * @returns when the settings service has applied it.
@@ -151,6 +157,7 @@ export class DangerousSettingsLedger {
   private async revertAll(access: SettingsFieldAccess, dangerous: () => boolean): Promise<void> {
     for (const lift of [...this.lifts]) {
       if (dangerous()) return
+      if (access.described?.(lift.ns) === false) continue
       const current = access.read(lift.ns, lift.field)
       const deviceOwned = lift.unset === true ? current === undefined : 'set' in lift ? isDeepStrictEqual(current, lift.set) : !isDeepStrictEqual(current, lift.previous)
       try {

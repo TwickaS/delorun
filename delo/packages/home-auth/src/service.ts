@@ -182,6 +182,8 @@ export class HomeAuthService extends Service {
     await this.pinLifts.load()
     // A lift left by a run whose PIN mode has since been turned off is set back before the first request.
     await this.endPinSettings()
+    // The settings service mounting after this one retries a lift its absence kept.
+    this.ctx.inject(['settings'], () => { if (this.pinLifts?.pending() === true) this.endPinSettingsLogged() })
     // A lift left by a run whose mode has ended is set back before the first request; without the permission-defaults
     // provider the mode cannot be read yet, and the first read of it ends the lift.
     if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
@@ -204,9 +206,7 @@ export class HomeAuthService extends Service {
       this.ctx.logger.info(`home-auth: pin ${event.kind}${'deviceId' in event ? `: device=${event.deviceId}` : ''}${event.kind === 'wrong' ? ` triesLeft=${String(event.triesLeft)}` : ''}`)
       // Turning the mode off, by any route, sets back what unlocked pages loosened.
       if (event.kind === 'off') {
-        this.endPinSettings().catch((error: unknown) => {
-          this.ctx.logger.warn(`home-auth: PIN mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
-        })
+        this.endPinSettingsLogged()
       }
     }), 'home-auth pin log')
     // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
@@ -344,7 +344,16 @@ export class HomeAuthService extends Service {
    * @returns whether it is; false before the service started.
    */
   pinEnabled(): boolean {
-    return this.core?.pin.enabled() ?? false
+    const on = this.core?.pin.enabled() ?? false
+    // A lift whose settings row was not described, or whose write failed, is retried by the next read after PIN mode is off.
+    if (!on && this.pinLifts?.pending() === true) this.endPinSettingsLogged()
+    return on
+  }
+
+  private endPinSettingsLogged(): void {
+    this.endPinSettings().catch((error: unknown) => {
+      this.ctx.logger.warn(`home-auth: PIN mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
+    })
   }
 
   /**
@@ -440,6 +449,7 @@ export class HomeAuthService extends Service {
   private settingsFields(): SettingsFieldAccess {
     const settings: SettingsServiceView | undefined = this.ctx.get('settings')
     return {
+      described: ns => settings?.describe().some(row => row.ns === ns) ?? false,
       read: (ns, field) => Reflect.get(settings?.describe().find(row => row.ns === ns)?.value ?? {}, field),
       write: async (ns, field, value) => {
         if (settings === undefined) throw new Error('home-auth: no settings service is mounted')
