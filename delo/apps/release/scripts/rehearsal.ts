@@ -23,7 +23,7 @@ import { delimiter, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { buildBaseClosure, deriveInChild, launcher, publish, runTrust } from '../tests/journey/parts.ts'
 import { runEntryAsync } from '../tests/local/support.ts'
-import { serveJourneyLog } from '../tests/journey/servers.ts'
+import { freeLoopbackPort, serveJourneyLog } from '../tests/journey/servers.ts'
 
 /** The releases: the first signed release, a later one, one whose Host never answers, one with a changed archive byte, a recovery release, and one that only a folder carries. */
 const R1 = '0.1.0-rc.1'
@@ -341,7 +341,7 @@ await scenario('setup', 'the pinned command is installed, setup runs non-interac
   const globalInstall = await run('npm', ['install', '--global', '--offline', '--prefix', join(personHome, '.local'), tarball])
   expect(globalInstall.status === 0, `npm install --global failed: ${excerpt(globalInstall)}`)
   const answers = join(work, 'answers.json')
-  writeFileSync(answers, `${JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }, undefined, 2)}\n`)
+  writeFileSync(answers, `${JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: await freeLoopbackPort() }, reach: { option: 'none', identityFactor: null }, importStockHome: false }, undefined, 2)}\n`)
   const setup = await run('delorun', ['setup', '--config', answers])
   expect(setup.status === 0, `setup failed: ${excerpt(setup)}`)
   const started = await run('delorun', [])
