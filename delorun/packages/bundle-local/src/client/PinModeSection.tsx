@@ -181,6 +181,11 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
       {t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
     </p>
     {mode.enabled ? <p className={css.line}>{t('state.settings', { minutes: String(mode.idleMinutes) })}{mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}</p> : null}
+    {mode.setBackWaiting !== undefined && mode.setBackWaiting.length > 0
+      ? <p className={css.failed} role="status" data-pin-mode-set-back>
+        {t('setBack.waiting', { settings: mode.setBackWaiting.map(({ ns, field }) => `${ns}.${field}`).join(', ') })} {t('setBack.auto')}
+      </p>
+      : null}
     {mode.paused ? <p className={css.failed} role="status">{t('paused')}</p> : null}
     {mode.paused ? <div className={css.actions}>
       <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => resumePin(fetch)) }}>{t('resume')}</Button>

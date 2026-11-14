@@ -212,6 +212,24 @@ describe('the PIN mode section', () => {
     expect(host.count(RESUME)).toBe(1)
   })
 
+  it('names the settings waiting to be put back and says they return automatically', async () => {
+    const waiting = { status: 200, body: { ...OFF.body as object, setBackWaiting: [{ ns: 'network', field: 'lan' }, { ns: 'shell', field: 'yolo' }] } }
+    const host = fakeHost({ [MODE]: waiting })
+    renderSection(host)
+    const notice = await screen.findByRole('status')
+    expect(notice.textContent).toContain('network.lan')
+    expect(notice.textContent).toContain('shell.yolo')
+    expect(notice.textContent).toContain(en['setBack.auto'])
+    expect(screen.queryByRole('button', { name: /try now/i })).toBeNull()
+  })
+
+  it('shows no set-back notice when nothing waits', async () => {
+    const host = fakeHost({ [MODE]: { status: 200, body: { ...OFF.body as object, setBackWaiting: [] } } })
+    renderSection(host)
+    await screen.findByText(en['state.off'])
+    expect(screen.queryByText(en['setBack.auto'], { exact: false })).toBeNull()
+  })
+
   it('says in place when the home refuses a device, has no routes or does not answer', async () => {
     renderSection(fakeHost({ [MODE]: { status: 403, body: { error: 'LOOPBACK_REQUIRED', message: 'x' } } }))
     expect((await screen.findByRole('alert')).textContent).toBe(en.loopback)
