@@ -49,10 +49,10 @@
 /* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. Both tests look through the slot's anchor, and `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
 .root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .logoRow,
 .root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .topStrip {
-  color: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 72%, transparent);
+  color: var(--dsw-alias-label-on-color);
+  --dsw-alias-label-primary: var(--dsw-alias-label-on-color);
+  --dsw-alias-label-secondary: var(--dsw-alias-label-on-color);
+  --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-alias-label-on-color) 72%, transparent);
 }
 
 /* Under the same test, the brand and the toggle's icon draw through the SVG filters the art supplies by these ids, which edge the light ink in a dark tone so it reads on light art. Art that supplies no such filter leaves the ink unedged, since browsers ignore a filter reference to a missing element. */

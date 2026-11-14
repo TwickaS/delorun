@@ -38,6 +38,12 @@ body {
   --dsh-settings-section-title-weight: initial;
   --dsh-settings-section-title-line-height: initial;
   --dsh-settings-section-title-display: initial;
+  /* The Workspace dot colours of the sidebar's one-list view. */
+  --dsw-alias-workspace-dot-1: var(--dsw-static-blue-450);
+  --dsw-alias-workspace-dot-2: var(--dsw-static-green-500);
+  --dsw-alias-workspace-dot-3: var(--dsw-static-amber-500);
+  --dsw-alias-workspace-dot-4: var(--dsw-static-violet-400);
+  --dsw-alias-workspace-dot-5: var(--dsw-static-red-400);
 }
 
 [data-dsh-automatic-focus]:focus,
