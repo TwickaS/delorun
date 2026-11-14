@@ -133,6 +133,23 @@ export const KeyTestAnswer = z.strictObject({
 /** {@link KeyTestAnswer}'s parsed value. */
 export type KeyTestAnswer = z.output<typeof KeyTestAnswer>
 
+/** The most set-aside file names the notice route lists. */
+export const MAX_SET_ASIDE = 64
+
+/**
+ * The harness's route that tells the studio which workspace record files the registry set aside when it started.
+ * `GET` answers {@link WorkspaceNoticeAnswer}; it is present only while the workspace registry is.
+ */
+export const WORKSPACE_NOTICE_PATH = '/api/deloOnboarding.workspaceNotice'
+
+/** The names, not the paths, of the files the registry set records aside into, oldest first; empty when nothing was set aside. */
+export const WorkspaceNoticeAnswer = z.strictObject({
+  setAside: z.array(z.string().min(1).max(300)).max(MAX_SET_ASIDE),
+})
+
+/** {@link WorkspaceNoticeAnswer}'s parsed value. */
+export type WorkspaceNoticeAnswer = z.output<typeof WorkspaceNoticeAnswer>
+
 /** The harness's route that starts cloning a Git repository into a new folder. `POST` takes {@link CloneRequest} and answers {@link CloneStart}. */
 export const CLONE_PATH = '/api/deloOnboarding.clone'
 

@@ -8,6 +8,7 @@
  * which refuse the folders Delo never adds and answer only the loopback listener.
  * @module @delo/plugin-onboarding
  */
+import { basename } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.profileContext merge.
 import type {} from '@deepseek-ai/dsh-app-boot'
@@ -33,7 +34,10 @@ import type { Config } from './config.ts'
 import { listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
-import { ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH } from './wire.ts'
+import {
+  ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
+  type WorkspaceNoticeAnswer,
+} from './wire.ts'
 import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
@@ -41,7 +45,7 @@ export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_
 export {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
   CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
-  RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord,
+  MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneFailure, type CloneProblem, type FolderKind, type KeyResult, type LocationProblem,
 } from './wire.ts'
 export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './clone.ts'
@@ -84,6 +88,12 @@ export function apply(ctx: Context, config: Config): void {
     child.on('connection/request', async (request, response, next) => {
       if (loopbackOnly.has(routedPathname(request.url)) && !arrivedOnLoopback(request, response, child.get('homeAuth'))) return
       await next()
+    })
+    child.connection.fetch.register({
+      path: WORKSPACE_NOTICE_PATH,
+      methods: ['GET'],
+      requestBody: 'buffered',
+      fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
     child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => addWorkspace(request, deps) })
     child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.start(request) })

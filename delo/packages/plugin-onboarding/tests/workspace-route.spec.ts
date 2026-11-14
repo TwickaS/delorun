@@ -12,7 +12,7 @@ import type { HomeAuthService } from '@delo/home-auth'
 import type { WorkspaceLocationProblem } from '@delo/home'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import {
-  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, CLONE_PATH, CLONE_STATUS_PATH, apply, Config, inject, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
+  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer, CLONE_PATH, CLONE_STATUS_PATH, apply, Config, inject, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
 } from '../src/index.ts'
 
 /** The scratch layout: the OS home three levels down with its stock home, and the Delo home beside it. */
@@ -37,8 +37,8 @@ afterEach(async () => {
 })
 
 /** A registry that records the folders it is asked to add. */
-function registryFake() {
-  return { create: vi.fn(async (_path: string) => ({ id: 'workspace-7' })) }
+function registryFake(quarantined: readonly string[] = []) {
+  return { create: vi.fn(async (_path: string) => ({ id: 'workspace-7' })), quarantined }
 }
 
 /** The plugin over a stub Connection and, unless `null`, a registry, reached as the studio reaches the route. */
@@ -237,5 +237,31 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
       await ctx.waterfall('connection/request', request, response, next)
       expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
     }
+  })
+})
+
+describe('the workspace notice route', () => {
+  const get = async (registry: ReturnType<typeof registryFake>) => {
+    const { routes } = await mount(registry)
+    const route = routes.get(WORKSPACE_NOTICE_PATH)
+    return { route, response: await route?.fetch(new Request('http://harness.test/api')) }
+  }
+
+  it('is one exact GET route, present only while the workspace registry is', async () => {
+    expect(WORKSPACE_NOTICE_PATH).toBe('/api/deloOnboarding.workspaceNotice')
+    const { route } = await get(registryFake())
+    expect([route?.methods, route?.requestBody]).toEqual([['GET'], 'buffered'])
+    expect((await mount(null)).routes.has(WORKSPACE_NOTICE_PATH)).toBe(false)
+  })
+
+  it('exposes the quarantine by file name, not path, oldest first', async () => {
+    const { response } = await get(registryFake(['/home/p/.delo/workspaces.json.quarantined-1.json', '/home/p/.delo/workspaces.json.quarantined-2.json']))
+    expect([response?.status, response?.headers.get('cache-control')]).toEqual([200, 'no-store'])
+    expect(WorkspaceNoticeAnswer.parse(await response?.json())).toEqual({ setAside: ['workspaces.json.quarantined-1.json', 'workspaces.json.quarantined-2.json'] })
+  })
+
+  it('answers an empty list when nothing was set aside', async () => {
+    const { response } = await get(registryFake())
+    expect(await response?.json()).toEqual({ setAside: [] })
   })
 })

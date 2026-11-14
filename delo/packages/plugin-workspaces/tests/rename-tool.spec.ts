@@ -68,7 +68,10 @@ describe('rename_workspace', () => {
 
   it('checks, asks, then renames and returns the new name', async () => {
     const { tool, calls, requests } = setup('allowed-once')
-    expect(await run(tool, { workspace: 'Old', name: ' New ' })).toBe('Renamed the workspace "Old" to "New".')
+    const value = await run(tool, { workspace: 'Old', name: ' New ' })
+    expect(value).toEqual({ from: 'Old', to: 'New', changed: true })
+    expect(tool.output?.render?.({} as never, value as never)).toEqual([{ type: 'text', text: 'Renamed the workspace "Old" to "New".' }])
+    expect(tool.output?.presentationMeta?.({} as never, value as never)).toEqual({ from: 'Old', to: 'New' })
     expect(calls).toEqual(['plan', 'ask', 'rename'])
     expect(requests[0]).toMatchObject({ toolName: 'rename_workspace', reason: 'rename_workspace: rename the workspace "Old" to "New".' })
   })
@@ -107,7 +110,9 @@ describe('rename_workspace', () => {
 
   it('says so, without asking, when the name is already the workspace\'s', async () => {
     const { tool, calls } = setup('allowed-once')
-    expect(await run(tool, { workspace: 'same', name: 'Same' })).toBe('The workspace is already named "Same".')
+    const value = await run(tool, { workspace: 'same', name: 'Same' })
+    expect(value).toEqual({ from: 'Same', to: 'Same', changed: false })
+    expect(tool.output?.render?.({} as never, value as never)).toEqual([{ type: 'text', text: 'The workspace is already named "Same".' }])
     expect(calls).toEqual(['plan'])
   })
 

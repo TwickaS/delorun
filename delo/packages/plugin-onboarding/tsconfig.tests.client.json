@@ -67,6 +67,9 @@
       "path": "../../../packages/client/ui-theme/tsconfig.client.json"
     },
     {
+      "path": "../../../packages/client/ui-tool"
+    },
+    {
       "path": "../../../packages/client/ui-workspace"
     },
     {

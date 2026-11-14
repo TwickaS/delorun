@@ -3081,6 +3081,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-theme':
         specifier: workspace:*
         version: link:../../../packages/client/ui-theme
+      '@deepseek-ai/dsh-client-ui-tool':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-tool
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:*
         version: link:../../../packages/client/ui-workspace

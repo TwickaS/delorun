@@ -11,6 +11,16 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { RenameRequest, WorkspaceRefusedError } from './service.ts'
 
+/** What a rename call returns: the names before and after, and whether anything changed. */
+export interface RenameOutcome {
+  /** The name before the call. */
+  readonly from: string
+  /** The name after the call. */
+  readonly to: string
+  /** False when the workspace already had that name. */
+  readonly changed: boolean
+}
+
 /** The codes of {@link RenameToolError}. */
 export type RenameToolErrorCode = 'WORKSPACE_RENAME_INVALID' | 'WORKSPACE_RENAME_REFUSED' | 'WORKSPACE_RENAME_DECLINED'
 
@@ -44,8 +54,22 @@ export function renameWorkspaceTool(ctx: Context): ToolDefinition {
       name: { type: 'string', required: true, description: 'The new name. It must not be blank or used by another workspace.' },
     },
     output: {
-      schema: { type: 'string' },
-      render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }],
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          from: { type: 'string', required: true, description: 'The workspace\'s name before the call.' },
+          to: { type: 'string', required: true, description: 'The workspace\'s name after the call.' },
+          changed: { type: 'boolean', required: true, description: 'False when the workspace already had that name.' },
+        },
+      },
+      render: (_args: unknown, value: RenameOutcome) => [{
+        type: 'text' as const,
+        text: value.changed
+          ? `Renamed the workspace ${JSON.stringify(value.from)} to ${JSON.stringify(value.to)}.`
+          : `The workspace is already named ${JSON.stringify(value.to)}.`,
+      }],
+      presentationMeta: (_args: unknown, value: RenameOutcome) => ({ from: value.from, to: value.to }),
     },
     async execute(args, exec) {
       const request = RenameRequest.safeParse(args)
@@ -53,7 +77,7 @@ export function renameWorkspaceTool(ctx: Context): ToolDefinition {
         throw new RenameToolError('WORKSPACE_RENAME_INVALID', 'Give the workspace\'s id or current name, and a new name of 1 to 200 characters.')
       }
       const plan = await refusal(() => ctx.deloWorkspaces.planRename(request.data))
-      if (plan.from === plan.to) return `The workspace is already named ${JSON.stringify(plan.to)}.`
+      if (plan.from === plan.to) return { from: plan.from, to: plan.to, changed: false }
       const approval = ctx.get('approval')
       const outcome = approval === undefined || exec.agent === undefined
         ? 'unavailable'
@@ -69,7 +93,7 @@ export function renameWorkspaceTool(ctx: Context): ToolDefinition {
         throw new RenameToolError('WORKSPACE_RENAME_DECLINED', `The person did not allow it (${outcome}), so nothing changed. Ask them in a reply instead.`)
       }
       const renamed = await refusal(() => ctx.deloWorkspaces.rename(request.data))
-      return `Renamed the workspace ${JSON.stringify(renamed.from)} to ${JSON.stringify(renamed.to)}.`
+      return { from: renamed.from, to: renamed.to, changed: true }
     },
     presentCall: args => ({ card: 'generic', title: `Rename the workspace ${args.workspace} to ${args.name}`, kind: 'other', rawInput: args }),
   })
