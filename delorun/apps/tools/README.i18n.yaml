@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/apps/tools/README.md
+/delorun-tools:
+  en: 5675537982409791
+  zh: 554ff6aed62fc1b2
+/delorun-tools/modules:
+  en: f005edeaa51c3248
+  zh: 956c7733e915c7e4
+/delorun-tools/the-divergence-ledger:
+  en: 6b9db91d3f89e63e
+  zh: e452bd29f5b28986
+/delorun-tools/the-rehearsal-merge:
+  en: 78a9666d76c50544
+  zh: 6592a27fcbd6cbcc
+/delorun-tools/the-gates:
+  en: 62b2529ce1ba076b
+  zh: a2c8ff2ffc408be7
+/delorun-tools/workflows:
+  en: d7a988598da4d95c
+  zh: e3b1ffabb83cf89b
+/delorun-tools/brief-issues:
+  en: 8cce82ede4ac52ca
+  zh: 4361aba5e555ddd3
+/delorun-tools/local-checks:
+  en: d0e001a7f37148aa
+  zh: 00b0e263716610a1
+/delorun-tools/the-stand-in-stack:
+  en: 0ff16754c0ed2e45
+  zh: dd2d39fc1ba352e6
+/delorun-tools/parity-composition:
+  en: 473ce5274405809c
+  zh: 5ac12bfcdcc0a9e4
+/delorun-tools/parity-composition/the-overlay:
+  en: 393e4fed4d84b972
+  zh: 96e1351cfa074aec
+/delorun-tools/parity-composition/the-registry:
+  en: 54705d327c28a15d
+  zh: afea12652d4e2875
+/delorun-tools/parity-composition/what-parity-switches-detects:
+  en: e9c8e791b6c02ff3
+  zh: fbb617f3aa71d498
+/delorun-tools/parity-composition/what-it-cannot-detect:
+  en: 341d63ec8cc23b8e
+  zh: 428a4faeb6044021
+/delorun-tools/parity-composition/the-switch-sweep:
+  en: 37b224a300cf2fc0
+  zh: cee616647c591654
+/delorun-tools/parity-composition/commands:
+  en: 33426141a410c907
+  zh: 08164f2269132637
+/delorun-tools/reconciliation-against-rc-1:
+  en: 729b74aa034647ec
+  zh: 82e076dc8074d4b8

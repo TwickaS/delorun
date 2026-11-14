@@ -355,7 +355,7 @@ describe('real Loader composition', () => {
     expect(manifestReads.count).toBe(2)
   })
 
-  it('/recovery is not served when Delo\'s Changes service is not mounted', { timeout: 60_000 }, async () => {
+  it('/recovery is not served when Delorun\'s Changes service is not mounted', { timeout: 60_000 }, async () => {
     const loaded = await loadComposition()
     const port = loaded.webServer.port
     const { authenticated } = await signIn(loaded)
@@ -363,15 +363,15 @@ describe('real Loader composition', () => {
     // routes, whose boot page then offers no recovery screen.
     expect(await request(port, '/recovery', authenticated())).toEqual({ status: 404, type: null, body: '' })
     expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
-    // A distribution that names its recovery routes, as `@delo/plugin-changes` does, gets the page behind the index fence.
+    // A distribution that names its recovery routes, as `@delorun/plugin-changes` does, gets the page behind the index fence.
     const offRecovery = loaded.on('webserver/index-inject', (rows) => {
-      rows.push({ kind: 'global', name: FrontendStatic.RECOVERY_ROUTES_GLOBAL, value: '/delo/changes' })
+      rows.push({ kind: 'global', name: FrontendStatic.RECOVERY_ROUTES_GLOBAL, value: '/delorun/changes' })
     })
     expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
     const page = await request(port, '/recovery', authenticated())
     expect(page).toMatchObject({ status: 200, type: 'text/html; charset=utf-8' })
     expect(page.body).toContain('shell')
-    expect(page.body).toContain('globalThis["dshRecoveryRoutes"] = "/delo/changes"')
+    expect(page.body).toContain('globalThis["dshRecoveryRoutes"] = "/delorun/changes"')
     expect(page.body.match(/<base\b/g)).toHaveLength(1)
     offRecovery()
     expect((await request(port, '/recovery', authenticated())).status).toBe(404)

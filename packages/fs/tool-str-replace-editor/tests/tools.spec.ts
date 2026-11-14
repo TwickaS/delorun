@@ -710,7 +710,7 @@ class ProtectingProvider extends SandboxProvider {
  * directory standing in for another mount of it, registered with {@link ProtectingProvider}.
  */
 async function protectedHomeFixture(root: string) {
-  const home = join(root, '.delo')
+  const home = join(root, '.delorun')
   await mkdir(join(home, 'secrets'), { recursive: true })
   await mkdir(join(home, 'runtimes'), { recursive: true })
   await mkdir(join(root, 'sub'), { recursive: true })
@@ -723,8 +723,8 @@ async function protectedHomeFixture(root: string) {
   await writeFile(join(alias, 'secrets', 'key'), 'secret-key\n')
   const canonical = await realpath(root)
   ProtectingProvider.reads = {
-    roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
-    readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+    roots: [join(canonical, '.delorun'), join(canonical, 'other-mount')],
+    readable: [join(canonical, '.delorun', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
   }
   return { home, alias }
 }
@@ -739,7 +739,7 @@ describe('the sandbox provider\'s protected home', () => {
       home,
       join(root, 'home-link', 'secrets', 'key'),
       join(root, 'secrets-link', 'key'),
-      join(root, 'sub', '..', '.delo', 'secrets', 'key'),
+      join(root, 'sub', '..', '.delorun', 'secrets', 'key'),
       join(alias, 'secrets', 'key'),
     ]) {
       const result = await call(ctx, owner, { command: 'view', path })
@@ -809,10 +809,10 @@ describe('the sandbox provider\'s protected home', () => {
     const unconfined = await setup()
     await protectedHomeFixture(unconfined.root)
     await unconfined.ctx.plugin(ProtectingProvider)
-    expect(text(await call(unconfined.ctx, unconfined.owner, { command: 'view', path: join(unconfined.root, '.delo', 'secrets', 'key') }))).toContain('protected home')
+    expect(text(await call(unconfined.ctx, unconfined.owner, { command: 'view', path: join(unconfined.root, '.delorun', 'secrets', 'key') }))).toContain('protected home')
     const plain = await setup({}, { sandboxMode: 'workspace-write' })
     await protectedHomeFixture(plain.root)
-    expect(text(await call(plain.ctx, plain.owner, { command: 'view', path: join(plain.root, '.delo', 'secrets', 'key') }))).toContain('secret-key')
+    expect(text(await call(plain.ctx, plain.owner, { command: 'view', path: join(plain.root, '.delorun', 'secrets', 'key') }))).toContain('secret-key')
   })
 })
 

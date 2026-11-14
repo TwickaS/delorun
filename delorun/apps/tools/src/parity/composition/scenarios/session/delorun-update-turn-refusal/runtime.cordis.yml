@@ -1,0 +1,15 @@
+# C16 switch update_turn_refusal on: the delorunTurnGate service is mounted, and
+# the first step of a new turn is refused with UPDATE_PENDING while a source
+# attached to it is held. The replay attaches no source, so the turn runs; the
+# refusal itself is proven by the package's spec on the production loop.
+- id: delorun-update-gate
+  name: '@delorun/bundle-local/update-gate'
+  config:
+    enabled: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

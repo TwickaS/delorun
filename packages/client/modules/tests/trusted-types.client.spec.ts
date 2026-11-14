@@ -73,7 +73,7 @@ const registerAndLoad = (marker: string) => (script: HTMLScriptElement): void =>
   script.dispatchEvent(new Event('load'))
 }
 
-it('assigns script.src through the delo-plugin-loader policy the page created', async () => {
+it('assigns script.src through the delorun-plugin-loader policy the page created', async () => {
   const createScriptURL = vi.fn((input: string) => `https://loader.trusted/${encodeURIComponent(input)}`)
   const register = vi.fn()
   stashGlobal.__DSH_TRUSTED_TYPES__ = { pluginLoader: { createScriptURL }, register }
@@ -93,7 +93,7 @@ it('a URL the policy refuses fails the load without requesting anything', async 
   const { appended } = captureScript(registerAndLoad('never'))
   const { loader } = benchWithDefaultTransport()
   await expect(loader.import('dee', '', {}))
-    .rejects.toThrow(`bundle script ${APPLICATION_URL} refused by the delo-plugin-loader policy`)
+    .rejects.toThrow(`bundle script ${APPLICATION_URL} refused by the delorun-plugin-loader policy`)
   expect(appended).toEqual([])
   expect([...document.querySelectorAll('script')]).toEqual([])
 })

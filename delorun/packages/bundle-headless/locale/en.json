@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Delorun headless guards",
+    "description": "Delorun's guards for one-shot headless tasks: the fetch guard, the instruction write consent, the full-access consent and the turn gate"
+  }
+}

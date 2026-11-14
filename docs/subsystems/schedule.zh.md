@@ -285,7 +285,7 @@ Source: [`packages/schedule/schedule/src/index.ts`](../../packages/schedule/sche
 
 ### `ctx.scheduleConsent` — `ScheduleConsentService`
 
-Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get('scheduleConsent')`: a deployment that composes no consent keeps upstream's approval text and delivery behaviour at every consumer. `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.
+Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get('scheduleConsent')`: a deployment that composes no consent keeps upstream's approval text and delivery behaviour at every consumer. `@delorun/plugin-schedule-consent` provides one when its `enabled` field is on.
 
 ```ts cordis-catalog
 /**

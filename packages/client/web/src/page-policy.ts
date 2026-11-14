@@ -1,6 +1,6 @@
 /**
  * Client boot adaptations for a page served under a nonce-based Content
- * Security Policy, such as a Delo reach listener's. Such a policy admits a
+ * Security Policy, such as a Delorun reach listener's. Such a policy admits a
  * `<style>` element only when it carries the nonce of the response that served
  * the page, and refuses string evaluation. Evaluating this module, when the
  * page has a `<script nonce>` element, stamps that nonce on every `<style>`
@@ -15,10 +15,10 @@
  * upstream components and community client plugins that assign `innerHTML`
  * keep working, whose `createScriptURL` admits only the plugin bundle URLs the
  * client module registry's current boot manifest lists, and whose `createScript`
- * refuses every string; and the `delo-plugin-loader` policy, which applies the
+ * refuses every string; and the `delorun-plugin-loader` policy, which applies the
  * same URL rule and which the client module loader assigns `script.src`
  * through. Both are inert on a page whose Content Security Policy does not
- * enforce Trusted Types. The loader reads the `delo-plugin-loader` policy from
+ * enforce Trusted Types. The loader reads the `delorun-plugin-loader` policy from
  * the `__DSH_TRUSTED_TYPES__` page global and keeps the URL allowlist current
  * through the stash's `register`.
  *
@@ -146,7 +146,7 @@ interface TrustedTypePolicyFactory {
  * current, exposed as the `__DSH_TRUSTED_TYPES__` page global.
  */
 export interface TrustedTypesStash {
-  /** The `delo-plugin-loader` policy, which applies the script URL rule. */
+  /** The `delorun-plugin-loader` policy, which applies the script URL rule. */
   readonly pluginLoader: TrustedScriptUrlPolicy
   /** Replace the allowlist with the client module registry's current boot manifest. */
   register(manifest: BootBundleRows): void
@@ -193,7 +193,7 @@ function sanitiseParsed(html: string): string {
 }
 
 /**
- * Create the `default` and `delo-plugin-loader` Trusted Types policies and
+ * Create the `default` and `delorun-plugin-loader` Trusted Types policies and
  * expose the latter, with the allowlist registry, to the client module loader.
  * Does nothing when the page's browser has no `trustedTypes`, and leaves the
  * page unchanged when a policy name is already taken.
@@ -209,7 +209,7 @@ export function installTrustedTypes(scope: { trustedTypes?: TrustedTypePolicyFac
       createScriptURL: pluginScriptUrl,
       createScript: () => null,
     })
-    const pluginLoader = factory.createPolicy<TrustedScriptUrlPolicy>('delo-plugin-loader', {
+    const pluginLoader = factory.createPolicy<TrustedScriptUrlPolicy>('delorun-plugin-loader', {
       createScriptURL: pluginScriptUrl,
     })
     const stash: TrustedTypesStash = { pluginLoader, register: registerPluginScriptBundles }

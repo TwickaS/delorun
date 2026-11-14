@@ -1,0 +1,22 @@
+{
+  "name": "delorun-journey-engines-fixture",
+  "version": "1.0.0",
+  "description": "The journey's fixture plugin: it runs on Delorun 0.1 only, so an update to Delorun 0.2 disables it and the update report names it",
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "dsh": ">=0.2.2-rc.1 <0.3.0",
+    "delorun": ">=0.1.0 <0.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

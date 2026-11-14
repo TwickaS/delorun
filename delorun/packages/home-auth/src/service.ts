@@ -1,0 +1,597 @@
+/**
+ * The `homeAuth` service: the owner's claim and device list as a Cordis plugin, with the routes that answer them and the
+ * reach connections that a revocation closes.
+ *
+ * Mounting the plugin creates `~/.delorun/secrets/home-auth/` at mode 0700, opens the stores and registers the claim route,
+ * the device list route and the removal route with the web server, all inside `ctx.effect()`, so disposing the plugin
+ * unregisters them. The reach closer is read from `ctx.connection` when it exists: `closeReachConnections({ deviceId })`
+ * ends the streams and upgraded sockets a revoked device's sessions admitted, and `closeReachConnections({ sessionId })`
+ * those of a session that was rotated or passed its idle limit, its absolute limit or a roll's grace, streams that carry
+ * no Peer included.
+ *
+ * @module @delorun/home-auth/service
+ */
+import type {} from './full-access-grants.ts'
+import { basename, dirname, join } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
+import { Service, type Volatile } from '@deepseek-ai/cordis'
+import type {} from '@delorun/logs/cordis'
+import schema from '@deepseek-ai/schemastery'
+import type { DeviceId, ReachListenerId } from '@delorun/contract-admission'
+import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
+import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
+import type { DeviceRecord } from './records.ts'
+import { PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type PairingConfig, type PairingView } from './pairing.ts'
+import type { IssuedOwnerCode } from './owner-code.ts'
+import {
+  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
+} from './home-auth.ts'
+import type { PendingSummary } from './approvals.ts'
+import type { ElevationChange, ElevationRecord } from './elevation.ts'
+import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
+import { DangerousSettingsLedger, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
+import type { ElevationState } from '@delorun/contract-oidc-passkeys'
+import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
+import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
+import {
+  approvalRequestHandler, approveHandler, assetHandler, cancelHandler, challengeHandler, pendingHandler, REACH_PATHS, sessionHandler, signInPageHandler,
+  windowHandler,
+} from './reach-routes.ts'
+import { HomeAuthAuthenticator } from './authenticator.ts'
+import {
+  ELEVATION_PATHS,
+  elevationApproveHandler,
+  elevationLockHandler,
+  elevationPendingHandler,
+  elevationRequestHandler,
+  elevationRevokeHandler,
+  elevationStateHandler,
+} from './elevation-routes.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The home's owner claim and device list. */
+    homeAuth: HomeAuthService
+  }
+}
+
+/** The service's configuration as `cordis.yml` writes it. */
+export interface ConfigInput {
+  /** The absolute path of the secrets directory, `~/.delorun/secrets/home-auth`, under the Delorun home. */
+  readonly secretsDirectory?: string
+  /** The pairing choices, each optional; see {@link Config.pairing}. */
+  readonly pairing?: PairingConfig
+}
+
+/** The service's configuration: where the home keeps the sign-in records. */
+export interface Config {
+  /** The absolute path of the secrets directory, `~/.delorun/secrets/home-auth`, under the Delorun home. */
+  readonly secretsDirectory?: string
+  /**
+   * The pairing choices, read at each use: Settings changes them without a restart. The schema fills Delorun's defaults
+   * and fails the load for a value out of bounds. Approval only at the home's own computer, the 8-digit match code, the cancel after 3 wrong codes,
+   * the global cap of 5 waiting requests and session rotation on approval are fixed and have no field. A reach device
+   * cannot write this section.
+   */
+  readonly pairing: Volatile<PairingConfig>
+}
+
+const MINUTE_MS = 60 * 1000
+
+/**
+ * A whole-number pairing field with its bounds.
+ * @param field - the field, whose bounds {@link PAIRING_BOUNDS} holds.
+ * @param fallback - the default.
+ * @returns the schema.
+ */
+function pairingMinutes(field: keyof typeof PAIRING_BOUNDS, fallback: number): schema<number> {
+  const { min, max } = PAIRING_BOUNDS[field]
+  return schema.number().step(1).min(min).max(max).default(fallback)
+}
+
+/** The plugin's configuration schema. */
+export const Config: schema<ConfigInput, Config> = schema.object({
+  // The path check belongs to `[Service.init]`, which refuses a relative directory with a sentence naming the problem;
+  // a pattern here would answer with the schema's own syntax instead.
+  secretsDirectory: schema.string()
+    .description('The absolute path of the home-auth secrets directory, ~/.delorun/secrets/home-auth; the bundle sets it, and a profile row that omits it (as the CLI\'s pairing writes do) takes the Delorun home\'s own.'),
+  pairing: schema.object({
+    mayAskWithoutWindow: schema.union(WINDOWLESS_MODES).default(PAIRING_DEFAULTS.mayAskWithoutWindow).description('Who may ask to pair a device without an approval window: own-user (devices signed in as this computer\'s Tailscale user, the default), tailnet (any device on the tailnet) or window-only (no one).'),
+    showRequest: schema.union(REQUEST_DISPLAYS).default(PAIRING_DEFAULTS.showRequest).description('How the studio at this computer shows a request: notice (the default), dialog (opens the code box at once) or none (only the lists show it).'),
+    windowMinutes: pairingMinutes('windowMinutes', PAIRING_DEFAULTS.windowMs / MINUTE_MS).description('How long an approval window stays open, from 1 to 15 minutes; 5 by default.'),
+    requestExpiryMinutes: pairingMinutes('requestExpiryMinutes', PAIRING_DEFAULTS.requestExpiryMs / MINUTE_MS).description('How long a request waits before it expires, from 1 to 10 minutes; 5 by default.'),
+    pendingPerIdentity: pairingMinutes('pendingPerIdentity', PAIRING_DEFAULTS.pendingPerIdentity).description('How many requests one Tailscale user may have waiting without a window, from 1 to 5; 1 by default.'),
+  }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
+})
+
+/** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
+interface SettingsServiceView {
+  describe(): readonly { readonly ns: string; readonly value: unknown }[]
+  update(ns: string, patch: object): Promise<void>
+  mutate(ns: string, ops: readonly { readonly op: 'unset'; readonly path: readonly string[] }[]): Promise<void>
+}
+
+/** The settings writes a reach device is refused: any write to the home-auth row, whose `pairing` and `secretsDirectory` decide who is admitted. */
+export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-home-auth', field: EVERY_FIELD, label: 'the home-auth settings' }
+
+/** The settings writes a reach device is refused: any write to the reach row, whose options decide what the home exposes. */
+export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-reach', field: EVERY_FIELD, label: 'the remote-access settings' }
+
+/** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
+const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
+
+/** The `homeAuth` service. */
+export class HomeAuthService extends Service {
+  static inject = ['webServer']
+  static Config = Config
+
+  private core: HomeAuth | undefined
+  /** The settings a device loosened while dangerous mode held, set back when it ends. */
+  private lifts: DangerousSettingsLedger | undefined
+
+  /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
+  private readonly switches = new Set<ComputerOnlySwitch>()
+
+  /** The configuration. */
+  private readonly config: Config
+
+  /** The absolute path of the secrets directory: the configured one, or the Delorun home's own `secrets/home-auth`. */
+  private get secretsDirectory(): string {
+    return this.config.secretsDirectory ?? this.ctx.get('dshHomePath')?.('secrets', 'home-auth') ?? ''
+  }
+
+  /**
+   * @param ctx - the plugin context, which injects the web server.
+   * @param config - the secrets directory.
+   */
+  constructor(ctx: Context, config: Config) {
+    super(ctx, 'homeAuth')
+    this.config = config
+  }
+
+  /**
+   * Create the secrets directory, open the stores and register the routes, all owned by this fiber.
+   * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
+   */
+  protected async [Service.init](): Promise<void> {
+    if (!this.secretsDirectory.startsWith('/')) {
+      throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.secretsDirectory)}`)
+    }
+    if (basename(dirname(this.secretsDirectory)) !== DELORUN_HOME_ENTRIES.secrets) {
+      throw new Error(`home-auth: the secrets directory must lie in the Delorun home's ${DELORUN_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.secretsDirectory)}`)
+    }
+    const core = new HomeAuth({
+      pairing: () => resolvePairing(this.config.pairing.get()),
+      directory: this.secretsDirectory,
+      closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
+      loopbackPort: () => this.ctx.webServer.port,
+      secrets: this.ctx.get('delorunSecrets'),
+    })
+    await core.start()
+    this.core = core
+    this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
+    await this.lifts.load()
+    // A lift left by a run whose mode has ended is set back before the first request; without the permission-defaults
+    // provider the mode cannot be read yet, and the first read of it ends the lift.
+    if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
+    this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    // A mode that ends sets back at once what a device loosened under it, without waiting for a device call or a restart.
+    this.ctx.inject(['reachFullAccessGrants'], (grants) => {
+      grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { this.setBackLogged() }), 'home-auth: dangerous-mode settings set back')
+      // A provider that restarts with the mode already off never fires the ending, so the pass runs at once.
+      if (!this.readDangerousMode()) this.setBackLogged()
+    })
+    // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
+    // stays out, being the person's own text.
+    this.ctx.effect(() => core.onElevationChange((change) => {
+      const { deviceId, listener, id } = change.elevation
+      const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
+      this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
+    }), 'home-auth elevation log')
+    // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
+    this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
+    this.ctx.effect(() => this.registerComputerOnlySwitch(REACH_SWITCH), 'home-auth: computer-only reach settings')
+    const credential = loopbackCredentialOf(this.ctx)
+    this.ctx.effect(() => {
+      const server = this.ctx.webServer
+      const registered = [
+        server.register({ kind: 'exact', path: OWNER_CLAIM_PATH, handler: claimHandler(core) }),
+        server.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core, credential) }),
+        server.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.signIn, handler: signInPageHandler(core) }),
+        server.register({ kind: 'prefix', path: REACH_PATHS.assets, handler: assetHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
+        server.register({ kind: 'prefix', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.challenge, handler: challengeHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.session, handler: sessionHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.window, handler: windowHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.cancel, handler: cancelHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.state, handler: elevationStateHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.request, handler: elevationRequestHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.lock, handler: elevationLockHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
+      ]
+      return () => {
+        for (const off of registered) off()
+      }
+    }, 'home-auth routes')
+    this.ctx.plugin(HomeAuthAuthenticator)
+  }
+
+  /**
+   * The Delorun home the secrets directory lies in, which no device's workspace-file read reaches.
+   * @returns its absolute path.
+   */
+  get delorunHome(): string {
+    return dirname(dirname(this.secretsDirectory))
+  }
+
+  /**
+   * Serve one reach listener with the identity factor its provider declares, and announce the policy change.
+   * @param served - the listener, its address and the declared factor.
+   * @returns the disposer, which stops serving it and announces that too.
+   */
+  serve(served: ServedListener): () => void {
+    const off = this.state().serve(served)
+    this.ctx.emit('authenticator/policy', served.listener)
+    return () => {
+      off()
+      this.ctx.emit('authenticator/policy', served.listener)
+    }
+  }
+
+  /**
+   * The served listener of an id.
+   * @param listener - the listener id.
+   * @returns its declaration, or undefined.
+   */
+  servedListener(listener: string): ServedListener | undefined {
+    return this.core?.servedListener(listener)
+  }
+
+  /**
+   * Admit a session token on a reach listener, synchronously; refuses until the service has started.
+   * @param token - the token.
+   * @param listener - the listener.
+   * @param options - whether the session may roll on this request.
+   * @returns the admission.
+   */
+  admitToken(token: string, listener: ReachListenerId, options?: { readonly roll: boolean }): TokenAdmission {
+    return this.core?.admitToken(token, listener, options) ?? { kind: 'refused', code: 'NOT_SIGNED_IN' }
+  }
+
+  /**
+   * Where a request arrived, failing closed: the listener that admitted it, its `Host` and its source.
+   * @param request - the request.
+   * @returns the arrival; `undefined` listener before the service started.
+   */
+  arrivalOf(request: Parameters<HomeAuth['arrivalOf']>[0]): ClaimArrival {
+    return this.core?.arrivalOf(request) ?? { listener: undefined, host: request.headers.host, source: 'unknown' }
+  }
+
+  /**
+   * Call a listener for each removed device.
+   * @param listener - called with the device id.
+   * @returns the disposer.
+   */
+  onDeviceRemoved(listener: (deviceId: DeviceId) => void): () => void {
+    return this.state().onDeviceRemoved(listener)
+  }
+
+  /**
+   * Call a listener for each elevation that starts or ends (C14, "Elevation").
+   * @param listener - called with the change.
+   * @returns the disposer.
+   */
+  onElevationChange(listener: (change: ElevationChange) => void): () => void {
+    return this.state().onElevationChange(listener)
+  }
+
+  /**
+   * The running elevation of one device on one listener.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the elevation, or undefined, also before the service started.
+   */
+  elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
+    return this.core?.elevationOf(deviceId, listener)
+  }
+
+  /**
+   * Whether dangerous mode holds now, read from the permission-defaults service when asked. While it does, an unlocked
+   * device does what the computer does, except turn the mode on, approve a device and sign in.
+   * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
+   */
+  dangerousMode(): boolean {
+    const holds = this.readDangerousMode()
+    // A setting a device loosened does not outlive the mode: the first read that finds it ended sets it back.
+    if (!holds && this.lifts?.pending() === true) void this.endDangerousSettings()
+    return holds
+  }
+
+  private setBackLogged(): void {
+    this.endDangerousSettings().catch((error: unknown) => {
+      this.ctx.logger.warn(`home-auth: dangerous-mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
+  private readDangerousMode(): boolean {
+    try {
+      return this.ctx.get('reachFullAccessGrants')?.dangerousMode() ?? false
+    } catch (_unreadable) {
+      // An unreadable store cannot show the grant, so no refusal is lifted.
+      return false
+    }
+  }
+
+  /**
+   * Record the settings a device is about to loosen while dangerous mode holds, with the values they have now.
+   * @param lifts - the fields and the values the call sets.
+   * @returns undefined once the record is saved to disk, or the refusal the device's write meets when it cannot be (the
+   *   write must not proceed unrecorded).
+   */
+  recordLifts(lifts: readonly SettingsLift[]): string | undefined {
+    if (this.lifts === undefined) return RECORD_REFUSAL
+    try {
+      this.lifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+      return undefined
+    } catch (error) {
+      this.ctx.logger.warn(`home-auth: the record of dangerous-mode settings could not be saved, so a device's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
+      return RECORD_REFUSAL
+    }
+  }
+
+  /**
+   * Write back, through the settings service, every setting a device loosened under a mode that has ended, except one
+   * the person changed since.
+   * @returns when the pass is done; a failed write is retried at the next read of the mode.
+   */
+  async endDangerousSettings(): Promise<void> {
+    await this.lifts?.revert(this.settingsFields(), () => this.readDangerousMode())
+  }
+
+  private settingsFields(): SettingsFieldAccess {
+    const settings: SettingsServiceView | undefined = this.ctx.get('settings')
+    return {
+      read: (ns, field) => Reflect.get(settings?.describe().find(row => row.ns === ns)?.value ?? {}, field),
+      write: async (ns, field, value) => {
+        if (settings === undefined) throw new Error('home-auth: no settings service is mounted')
+        if (value === undefined) await settings.mutate(ns, [{ op: 'unset', path: [field] }])
+        else await settings.update(ns, { [field]: value })
+      },
+    }
+  }
+
+  /**
+   * Register a setting only the home's own computer turns off: the reach policy refuses a device's settings write that
+   * could turn it off, unlocked or not (C14, "What a device may call").
+   * @param target - the switch's namespace, field and label.
+   * @returns the disposer, which the registering plugin's scope holds while it is mounted.
+   */
+  registerComputerOnlySwitch(target: ComputerOnlySwitch): () => void {
+    const entry = { ...target }
+    this.switches.add(entry)
+    return () => { this.switches.delete(entry) }
+  }
+
+  /**
+   * The computer-only switches registered now.
+   * @returns the switches.
+   */
+  computerOnlySwitches(): readonly ComputerOnlySwitch[] {
+    return [...this.switches]
+  }
+
+  /**
+   * Record a signed-in device's request to elevate.
+   * @param sessionId - the admitted session.
+   * @param session - its record.
+   * @returns the device's state, with the code it shows.
+   */
+  requestElevation(sessionId: string, session: SessionRecord): ElevationState {
+    return this.state().requestElevation(sessionId, session)
+  }
+
+  /**
+   * What one device's own studio shows about elevation.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the state.
+   */
+  elevationState(deviceId: string, listener: ReachListenerId): ElevationState {
+    return this.state().elevationState(deviceId, listener)
+  }
+
+  /**
+   * End a device's elevation and its waiting request, from the device's own studio.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  lockElevation(deviceId: string, listener: ReachListenerId): void {
+    this.state().lockElevation(deviceId, listener)
+  }
+
+  /**
+   * The waiting requests and the running elevations, for the home's own computer only.
+   * @returns both, without any code.
+   */
+  elevationsAtComputer(): ReturnType<HomeAuth['elevationsAtComputer']> {
+    return this.state().elevationsAtComputer()
+  }
+
+  /**
+   * Approve a request to elevate with the code the person typed; the home's own computer only.
+   * @param requestId - the request.
+   * @param typedCode - the code.
+   * @returns the elevation that started.
+   */
+  approveElevation(requestId: string, typedCode: string): ElevationRecord {
+    return this.state().approveElevation(requestId, typedCode)
+  }
+
+  /**
+   * Decline a request or end an elevation; the home's own computer only.
+   * @param id - the request id or the elevation id.
+   * @returns whether either was found.
+   */
+  revokeElevation(id: string): boolean {
+    return this.state().revokeElevation(id)
+  }
+
+  /**
+   * Open the approval window, claiming the home for the local person when it has no owner. Callers are the home's own
+   * computer only.
+   * @returns when the window closes.
+   */
+  openApprovalWindow(): Promise<number> {
+    return this.state().openApprovalWindow()
+  }
+
+  /**
+   * When the open approval window closes.
+   * @returns the time, or undefined with no window open.
+   */
+  approvalWindowOpenUntil(): number | undefined {
+    return this.state().approvals.windowOpenUntil()
+  }
+
+  /**
+   * The resolved pairing choices.
+   * @returns who may ask without a window, how a request is shown and the limits.
+   */
+  pairing(): PairingView {
+    return this.state().pairing()
+  }
+
+  /**
+   * The pending approval requests.
+   * @returns their summaries.
+   */
+  pendingApprovals(): readonly PendingSummary[] {
+    return this.state().pendingApprovals()
+  }
+
+  /**
+   * Approve a request at the home's own computer.
+   * @param requestId - the request.
+   * @param typedCode - the match code the person typed.
+   * @returns the new device's record.
+   */
+  approveLocally(requestId: string, typedCode: string): Promise<DeviceRecord> {
+    return this.state().approveLocally(requestId, typedCode)
+  }
+
+  /**
+   * Cancel a pending approval request at the home's own computer, which frees its place among the 5 pending.
+   * @param requestId - the request.
+   * @throws {HomeAuthError} `APPROVAL_EXPIRED` when the request is not pending.
+   */
+  cancelApproval(requestId: string): void {
+    this.state().approvals.cancel(requestId)
+  }
+
+  /**
+   * The owner record, or undefined for a home nobody has claimed.
+   * @returns the record.
+   */
+  owner(): ReturnType<HomeAuth['owner']> {
+    return this.state().owner()
+  }
+
+  /**
+   * The owner record, refusing an unclaimed home.
+   * @returns the record.
+   */
+  assertOwner(): ReturnType<HomeAuth['assertOwner']> {
+    return this.state().assertOwner()
+  }
+
+  /**
+   * Claim the home for a device.
+   * @param request - the claim message and where it arrived.
+   * @returns the records the claim wrote.
+   */
+  claim(request: ClaimRequest): Promise<ClaimResult> {
+    return this.state().claim(request)
+  }
+
+  /**
+   * The owner and the trusted devices.
+   * @returns the listing.
+   */
+  devices(): Promise<DevicesListing> {
+    return this.state().devices()
+  }
+
+  /**
+   * Revoke a device, ending its live sessions and their reach connections.
+   * @param deviceId - the device.
+   * @returns what was removed, invalidated and closed.
+   */
+  revokeDevice(deviceId: DeviceId): Promise<RevocationResult> {
+    return this.state().revokeDevice(deviceId)
+  }
+
+  /**
+   * Print a new owner code.
+   * @returns the code and its expiry.
+   */
+  issueOwnerCode(): Promise<IssuedOwnerCode> {
+    return this.state().issueOwnerCode()
+  }
+
+  /**
+   * Whether an owner code is outstanding and unexpired.
+   * @returns whether a claim has a code to compare against.
+   */
+  ownerCodeOutstanding(): Promise<boolean> {
+    return this.state().ownerCodeOutstanding()
+  }
+
+  /**
+   * Mint a session token and record the session under its digest.
+   * @param request - the device, the address and the lifetime.
+   * @returns the session id and the token.
+   */
+  openSession(request: OpenSessionRequest): Promise<OpenedSession> {
+    return this.state().openSession(request)
+  }
+
+  /**
+   * The live session a token names.
+   * @param token - the token as presented.
+   * @returns the record, or undefined for an unknown or expired token.
+   */
+  sessionOf(token: string): Promise<SessionRecord | undefined> {
+    return this.state().sessionOf(token)
+  }
+
+  /**
+   * The coordinator this service was mounted with.
+   * @returns the coordinator.
+   * @throws Error before the service's initialization finished.
+   */
+  private state(): HomeAuth {
+    if (this.core === undefined) throw new Error('home-auth: the service has not started yet')
+    return this.core
+  }
+}
+
+export default HomeAuthService
+
+/**
+ * The studio's loopback credential check, as upstream's own loopback routes make it: `connection.requestRejection`,
+ * read per request. Without the connection service no request carries the credential, so every device route refuses.
+ * @param ctx - the plugin context.
+ * @returns the check the device routes take.
+ */
+export function loopbackCredentialOf(ctx: Context): LoopbackCredential {
+  return (request) => {
+    const connection = ctx.get('connection')
+    return connection === undefined ? 401 : connection.requestRejection(request)
+  }
+}

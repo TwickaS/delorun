@@ -20,10 +20,10 @@
 ## Checklist
 
 - [ ] Each commit carries a `Signed-off-by` line from `git commit -s`. A pseudonym is accepted.
-- [ ] If the pull request changes a file outside `delo/`, the Motivation names the Delo feature the change serves. Maintainers' tooling writes the ledger entry at merge; do not edit `delo/upstream-patches.json`.
+- [ ] If the pull request changes a file outside `delorun/`, the Motivation names the Delorun feature the change serves. Maintainers' tooling writes the ledger entry at merge; do not edit `delorun/upstream-patches.json`.
 - [ ] A generic fix to an upstream file is in its own commit.
 - [ ] A visible change has a recording, or the Testing section says it is a small fix and a maintainer records it at merge.
-- Changelog: a fragment path under `delo/changelog/unreleased/`, or `Changelog: none (reason)`.
+- Changelog: a fragment path under `delorun/changelog/unreleased/`, or `Changelog: none (reason)`.
 
 ## AI Usage
 

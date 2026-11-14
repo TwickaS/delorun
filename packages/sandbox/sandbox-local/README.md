@@ -79,17 +79,17 @@ With `protectedHome` set, confined commands cannot create, change or delete anyt
 
 `RUNNER_PROTECTION` exports this table as booleans per runner, so a consumer can report which rules the selected runner does not enforce. The provider also reports the canonical home as `ctx.sandbox.protectedHome`, which the [filesystem fence](../../fs/fs-sandbox/README.md) reads to refuse writes under it.
 
-A consumer passes absolute paths: the home, the entries under it that commands still need, relative to it, and every socket commands must not reach, with a socket's configured path and its real path when they differ. For a home at `/home/me/.delo` whose processes listen on two channel sockets, with a rootful Docker engine:
+A consumer passes absolute paths: the home, the entries under it that commands still need, relative to it, and every socket commands must not reach, with a socket's configured path and its real path when they differ. For a home at `/home/me/.delorun` whose processes listen on two channel sockets, with a rootful Docker engine:
 
 ```yaml
 - id: sandbox
   name: '@deepseek-ai/dsh-sandbox-local'
   config:
-    protectedHome: /home/me/.delo
+    protectedHome: /home/me/.delorun
     protectedHomeReadable: [runtimes, skills, dsh-runtimes]
     deniedSockets:
-      - /home/me/.delo/run/default/update.sock
-      - /home/me/.delo/run/default/supervisor.sock
+      - /home/me/.delorun/run/default/update.sock
+      - /home/me/.delorun/run/default/supervisor.sock
       - /var/run/docker.sock
       - /run/docker.sock
     deniedSocketDirectories:

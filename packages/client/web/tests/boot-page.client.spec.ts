@@ -12,12 +12,12 @@ function mount() {
 
 describe('the boot wordmark', () => {
   it('shows the product a distribution names through the page global, and HARNESS otherwise', () => {
-    expect(bootWordmark({ [BOOT_WORDMARK_GLOBAL]: 'Delo' })).toBe('Delo')
+    expect(bootWordmark({ [BOOT_WORDMARK_GLOBAL]: 'Delorun' })).toBe('Delorun')
     for (const value of [undefined, '', '  ', 42, 'x'.repeat(41)]) expect(bootWordmark({ [BOOT_WORDMARK_GLOBAL]: value })).toBe('HARNESS')
-    Reflect.set(globalThis, BOOT_WORDMARK_GLOBAL, 'Delo')
+    Reflect.set(globalThis, BOOT_WORDMARK_GLOBAL, 'Delorun')
     try {
       const { el } = mount()
-      expect(el.textContent).toContain('Delo')
+      expect(el.textContent).toContain('Delorun')
       expect(el.textContent).not.toContain('HARNESS')
     } finally {
       Reflect.deleteProperty(globalThis, BOOT_WORDMARK_GLOBAL)
@@ -85,7 +85,7 @@ describe('BootPage', () => {
 })
 
 describe('the recovery screen', () => {
-  const ROUTES = '/delo/changes'
+  const ROUTES = '/delorun/changes'
   const STATE = {
     atComputer: true,
     lastStart: { at: '2026-11-10T10:00:00.000Z', failure: 'plug-b failed to start', plugins: [{ plugin: 'plug-a', loaded: true }, { plugin: 'plug-b', loaded: false, error: 'TypeError: boom' }, { plugin: 'plug-c', loaded: false }, { loaded: true }] },
@@ -139,8 +139,8 @@ describe('the recovery screen', () => {
   afterEach(() => { Reflect.deleteProperty(globalThis, RECOVERY_ROUTES_GLOBAL) })
 
   it('reads the routes the page names and nothing else', () => {
-    expect(recoveryRoutes({ [RECOVERY_ROUTES_GLOBAL]: '/delo/changes' })).toBe('/delo/changes')
-    for (const value of [undefined, '', 'delo', '/delo/', 'https://evil.example/x', '/a?b', 7]) expect(recoveryRoutes({ [RECOVERY_ROUTES_GLOBAL]: value })).toBeUndefined()
+    expect(recoveryRoutes({ [RECOVERY_ROUTES_GLOBAL]: '/delorun/changes' })).toBe('/delorun/changes')
+    for (const value of [undefined, '', 'delorun', '/delorun/', 'https://evil.example/x', '/a?b', 7]) expect(recoveryRoutes({ [RECOVERY_ROUTES_GLOBAL]: value })).toBeUndefined()
     expect(recoveryText('zh-CN').title).toBe('恢复')
     expect(recoveryText('en-GB').title).toBe('Recovery')
     expect(recoveryText(undefined).title).toBe('Recovery')
@@ -164,7 +164,7 @@ describe('the recovery screen', () => {
     expect(screen.lang).toBe('en')
     expect(document.activeElement?.textContent).toBe('Recovery')
     await vi.waitFor(() => { expect(screen.textContent).toContain('Recent changes') })
-    expect(fetch).toHaveBeenCalledWith('/delo/changes/state')
+    expect(fetch).toHaveBeenCalledWith('/delorun/changes/state')
     for (const line of ['c0000000005 ()', 'plug-b failed to start', 'plug-b: TypeError: boom', 'plug-c: did not load', 'Edits plug-d: did not build', 'Edits plug-e: did not load', 'The work session cannot be read: broken', 'Applied <b>plug-b</b> (applied)', 'Turned off plug-z (undone)', 'Start in safe mode']) {
       expect(screen.textContent).toContain(line)
     }
@@ -217,15 +217,15 @@ describe('the recovery screen', () => {
     button(el, 'Turn off: plug-b').click()
     await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Done.') })
     expect(confirm).toHaveBeenCalledWith('Turn off plug-b? It stops running until you turn it on again.')
-    expect(posted).toEqual([{ url: '/delo/changes/off', body: { plugin: 'plug-b' } }])
-    expect(fetch.mock.calls.filter(([url]) => url === '/delo/changes/state')).toHaveLength(2)
+    expect(posted).toEqual([{ url: '/delorun/changes/off', body: { plugin: 'plug-b' } }])
+    expect(fetch.mock.calls.filter(([url]) => url === '/delorun/changes/state')).toHaveLength(2)
     button(el, 'Undo: Applied').click()
-    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Delo failed to load it and went back: plug-b failed again') })
-    expect(posted[1]).toEqual({ url: '/delo/changes/undo', body: { id: 'c0000000002' } })
+    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Delorun failed to load it and went back: plug-b failed again') })
+    expect(posted[1]).toEqual({ url: '/delorun/changes/undo', body: { id: 'c0000000002' } })
     button(el, 'Turn off: plug-a').click()
-    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Done. Restart Delo to load it: delorun stop, then delorun start.') })
+    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Done. Restart Delorun to load it: delorun stop, then delorun start.') })
     button(el, 'Turn off: plug-c').click()
-    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Delo failed to load it and went back: ') })
+    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Delorun failed to load it and went back: ') })
   })
 
   it('starts safe mode and names what the next start leaves out', async () => {
@@ -234,8 +234,8 @@ describe('the recovery screen', () => {
     page.recover()
     await vi.waitFor(() => { expect(el.querySelectorAll('button')).toHaveLength(5) })
     button(el, 'Start in safe mode').click()
-    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Done. The next start leaves out plug-b. Restart Delo to load it: delorun stop, then delorun start.') })
-    expect(posted).toEqual([{ url: '/delo/changes/safe-mode', body: {} }])
+    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Done. The next start leaves out plug-b. Restart Delorun to load it: delorun stop, then delorun start.') })
+    expect(posted).toEqual([{ url: '/delorun/changes/safe-mode', body: {} }])
   })
 
   it('does nothing the person does not confirm, and names a refusal or a failed request', async () => {

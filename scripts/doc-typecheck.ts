@@ -203,7 +203,7 @@ function remapBlockPaths(output: string, blocks: Block[]): string {
   })
 }
 
-const markdownGlobs = ['README.md', '.agents/notes/**/*.md', 'docs/**/*.md', 'delo/docs/**/*.md', 'packages/*/*.md', 'packages/*/*/*.md']
+const markdownGlobs = ['README.md', '.agents/notes/**/*.md', 'docs/**/*.md', 'delorun/docs/**/*.md', 'packages/*/*.md', 'packages/*/*/*.md']
 
 const files: string[] = []
 const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }

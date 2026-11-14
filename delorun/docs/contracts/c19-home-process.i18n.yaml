@@ -1,0 +1,76 @@
+# Bilingual-pair consistency record for c19-home-process.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/contracts/c19-home-process.md
+/:
+  en: 627d35b67a600693
+  zh: c3cb469be3ad73a7
+/c19-home-process-and-update-handshake:
+  en: b0f63cd4368e214c
+  zh: 6f285dd68792bd4d
+/c19-home-process-and-update-handshake/summary:
+  en: 1659ce5da47a08b9
+  zh: 7278b37aa9a01b41
+/c19-home-process-and-update-handshake/status:
+  en: 2542e8a86d106e35
+  zh: 8e5799f50f497663
+/c19-home-process-and-update-handshake/contents:
+  en: 3ef67699fbb0b789
+  zh: a9861e6985ba100f
+/c19-home-process-and-update-handshake/the-home-process:
+  en: 857fb6d6cb8ff4f0
+  zh: 1e8be0025d4349a5
+/c19-home-process-and-update-handshake/the-home-process/host-invariants:
+  en: 6dab3c0caef5611a
+  zh: 95e46abc7dd9ac9f
+/c19-home-process-and-update-handshake/commands:
+  en: 7f76260dd6e333c4
+  zh: 73ff95cf2346f070
+/c19-home-process-and-update-handshake/start-at-login:
+  en: 7c58071ad07367ad
+  zh: 98901c1ca1552d82
+/c19-home-process-and-update-handshake/the-update-channel:
+  en: a915dc926f816bef
+  zh: 31ad2b4d0b6c62bd
+/c19-home-process-and-update-handshake/requests-and-responses:
+  en: bcaf16a8357c5362
+  zh: 9a236cbf3d72f408
+/c19-home-process-and-update-handshake/the-update-handshake:
+  en: 2bb07dee7e9ffbe1
+  zh: d9846c00b6cdab3d
+/c19-home-process-and-update-handshake/interrupted-updates:
+  en: 90c34fbe0ecfb835
+  zh: 5f0738793b57399d
+/c19-home-process-and-update-handshake/rollback:
+  en: ef1f90e4179a9db9
+  zh: 362ce78467cec583
+/c19-home-process-and-update-handshake/the-desktop-app:
+  en: 0b1366159dcd67f9
+  zh: db1a42e53779c811
+/c19-home-process-and-update-handshake/limits:
+  en: 580c2c1fe9afed7a
+  zh: 724b38b4f39b1436
+/c19-home-process-and-update-handshake/errors:
+  en: 3d2f0c48ce154270
+  zh: 2eb49f6568956520
+/c19-home-process-and-update-handshake/consumers:
+  en: 480e03b94384852d
+  zh: f698f226478b978a
+/c19-home-process-and-update-handshake/compatibility:
+  en: d259d39f6f5bc822
+  zh: 2c4d0063a185bea0
+/c19-home-process-and-update-handshake/security:
+  en: 52543dba9bf0d349
+  zh: e612a6c5b83e9afc
+/c19-home-process-and-update-handshake/security/requirements:
+  en: 786b17acf1d355ec
+  zh: 3e6ff86286da27ed
+/c19-home-process-and-update-handshake/security/denial-tests:
+  en: 17d4a3e9f838ab08
+  zh: e27807af6cf03aa4
+/c19-home-process-and-update-handshake/security/what-this-does-not-prove:
+  en: 7c3f9583b983c00c
+  zh: d7f1efac8241ee96
+/c19-home-process-and-update-handshake/enforcement-per-platform-and-dialect:
+  en: 2eabc996e07c44d8
+  zh: 9c2d4e814095734a

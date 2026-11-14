@@ -1,0 +1,39 @@
+{
+  "name": "@delorun/home-auth",
+  "description": "Delorun's sign-in for reach (C4, C5, C14): the owner claim and device list, the authenticator provider, its session store and pre-login routes",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wire": "./src/wire.ts",
+    "./assets/sign-in.js": "./assets/sign-in.js"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-api-gateway": "workspace:*",
+    "@deepseek-ai/dsh-api-remote-access": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-commands": "workspace:*",
+    "@deepseek-ai/dsh-permission-presets": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/dsh-working-directory": "workspace:*",
+    "@deepseek-ai/dsh-workspace": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@delorun/contract-admission": "workspace:*",
+    "@delorun/contract-device-approval": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-oidc-passkeys": "workspace:*",
+    "@delorun/contract-operational-logs": "workspace:*",
+    "@delorun/contract-reach-providers": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/logs": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

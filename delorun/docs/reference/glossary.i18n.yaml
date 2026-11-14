@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for glossary.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/reference/glossary.md
+/delorun-glossary:
+  en: 907ec6597f505426
+  zh: 421ea462c41e2f4e
+/delorun-glossary/contents:
+  en: 16b4c54858b530cb
+  zh: 4eb0e0aeff70ac4f
+/delorun-glossary/the-product:
+  en: 2d7dddeecd1ccef2
+  zh: bdbc3bf5eced96d8
+/delorun-glossary/where-things-run:
+  en: fadbb31868ee1c5b
+  zh: e27c1906370593f2
+/delorun-glossary/reaching-a-studio:
+  en: 9c509e8133c1cab6
+  zh: 9f78f02491ed51ed
+/delorun-glossary/signing-in:
+  en: f4edd414d2172eb3
+  zh: 7b585ba70b129502
+/delorun-glossary/changing-the-harness:
+  en: 4b31627c1583cb48
+  zh: 42acab99e6f4ed35
+/delorun-glossary/keeping-work-safe:
+  en: bb4274445c3a7ff4
+  zh: 79b3aca2ac0f2ca1
+/delorun-glossary/community:
+  en: da08503cb44f7d30
+  zh: b8f801e961dc5dfd
+/delorun-glossary/building-delorun:
+  en: 19a5898513d76fb0
+  zh: 9f1d38bc64dc826f
+/delorun-glossary/writing-delorun-s-documentation:
+  en: 7d6f64a4c72f226b
+  zh: 5d27c01eac877062
+/delorun-glossary/words-to-avoid:
+  en: d9fd1df4de836593
+  zh: 4f0417cf15e902d8

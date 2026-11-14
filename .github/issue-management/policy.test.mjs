@@ -156,7 +156,7 @@ const reviewedPull = (labels) => ({
   issues: new Map([[2, { priority: null }]]),
 })
 
-test('keeps the Delo Issue forms and the Task template with used frontmatter', () => {
+test('keeps the Delorun Issue forms and the Task template with used frontmatter', () => {
   const directory = new URL('../ISSUE_TEMPLATE/', import.meta.url)
   assert.deepEqual(readdirSync(directory).sort(), [
     'brief.yml',

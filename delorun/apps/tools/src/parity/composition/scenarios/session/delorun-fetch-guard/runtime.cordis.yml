@@ -1,0 +1,14 @@
+# C16 switch fetch_guard on: the mounted fetchGuard service refuses loopback,
+# link-local, private-network and IPv6 unique-local destinations, and the
+# unspecified address, before each hop of a web_fetch connects.
+- id: fetch-guard
+  name: '@delorun/plugin-fetch-guard'
+  config:
+    enabled: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

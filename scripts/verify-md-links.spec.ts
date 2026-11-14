@@ -63,13 +63,13 @@ describe('Markdown source discovery', () => {
     ])
   })
 
-  it('checks Delo documentation under delo/docs/ and its anchors, and leaves other Delo files out', () => {
+  it('checks Delorun documentation under delorun/docs/ and its anchors, and leaves other Delorun files out', () => {
     const root = layout({
-      'delo/docs/guide/page.md': '# Page\n\n[missing](missing.md) [dead](other.md#nowhere)\n',
-      'delo/docs/guide/other.md': '# Other\n',
-      'delo/apps/tools/README.md': '[missing](missing.md)\n',
+      'delorun/docs/guide/page.md': '# Page\n\n[missing](missing.md) [dead](other.md#nowhere)\n',
+      'delorun/docs/guide/other.md': '# Other\n',
+      'delorun/apps/tools/README.md': '[missing](missing.md)\n',
     })
-    const page = join('delo', 'docs', 'guide', 'page.md')
+    const page = join('delorun', 'docs', 'guide', 'page.md')
     const found = markdownLinkSourcePaths(root)
       .flatMap(file => findViolations(join(root, file), markdownLinkCache(), root))
       .map(violation => `${violation.file} ${violation.reason}`)

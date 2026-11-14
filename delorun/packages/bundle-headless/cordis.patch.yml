@@ -1,0 +1,118 @@
+# The @delorun/bundle-headless patch: Delorun's guard rows in the home's `headless`
+# profile, after upstream's `@deepseek-ai/dsh-base` and
+# `@deepseek-ai/dsh-headless` bundles. `delorun headless` links this bundle
+# into the profile on its first run and refuses a headless profile that does
+# not load it, and holds every row here to Delorun's Host invariants before and
+# after boot (C19).
+#
+# Each guard keeps its CLI-profile value whatever setup's prompts answer says,
+# because a headless profile has no setup answer. A guard that asks a person
+# refuses here: the headless profile composes no approval answerer, so an ask
+# resolves `unavailable` and the guard refuses the action with its reason.
+
+# C11's privacy defaults, as in Delorun's CLI profiles: DeepSeek's session-log
+# upload is off until the person turns it on in this profile's own patch, and
+# the feedback telemetry exporter, which has no feedback surface here, is off.
+- id: session-log-deepseek
+  config:
+    enabled: false
+
+- id: session-telemetry-otel
+  disabled: true
+
+- insert:
+    # A model-authored write to an instruction layer asks for consent, which no
+    # one answers in a one-shot run, so the write is refused.
+    # The agent's first write in a chat to the folder of a plugin the person
+    # approved under Changes asks too, and is refused the same way.
+    - id: delorun-instruction-consent
+      name: '@delorun/plugin-instruction-consent'
+      config:
+        enabled: true
+        approvedPluginWrites: true
+
+    # A new stdio MCP server or a scheduled follow-up asks for consent. The
+    # headless template mounts neither an MCP client nor a schedule runtime;
+    # these rows guard one that the person's own profile patch adds.
+    - id: delorun-mcp-consent
+      name: '@delorun/plugin-mcp-consent'
+      config:
+        enabled: true
+
+    - id: delorun-schedule-consent
+      name: '@delorun/plugin-schedule-consent'
+      config:
+        enabled: true
+
+    # A full-access mode for a workspace whose full access the person has not
+    # granted in the studio is refused; a recorded grant stands.
+    - id: delorun-permission-defaults
+      name: '@delorun/plugin-permission-defaults'
+      config:
+        enabled: true
+        # `delorun headless` overlays true here only while setup's Dangerous answer and its grant file hold.
+        fullAccessEverywhere: false
+
+    # A fetch of a private, loopback or link-local address is refused.
+    - id: delorun-fetch-guard
+      name: '@delorun/plugin-fetch-guard'
+      config:
+        enabled: true
+
+    # An external agent such as Claude Code or Codex starts only with a grant
+    # recorded for the workspace: no one answers its ask in a one-shot run.
+    - id: delorun-delegation-consent
+      name: '@delorun/plugin-delegation-consent'
+      config:
+        enabled: true
+
+    # An agent's `plugin_manager` install or removal does not run: it is
+    # recorded in the profile's change log as a change waiting for the person's
+    # review at their computer (C21). The headless profile serves no studio, so
+    # the plugin registers no Changes route here.
+    - id: delorun-plugin-changes
+      name: '@delorun/plugin-changes'
+      config:
+        enabled: true
+
+    # The first step of every turn waits until `delorun headless` has checked
+    # the booted Host's rows and services, so the task starts only after that
+    # check. No update or stop waits on a headless run's chats.
+    - id: delorun-update-gate
+      name: '@delorun/bundle-local/update-gate'
+      config:
+        enabled: true
+        holdUntilChecked: true
+
+# Plugin management protects these guard rows and the sandbox rows as
+# `@delorun/bundle-local` does in the CLI profile: the `plugin_manager` tool, which
+# runs without a prompt in full access, cannot disable a protected row, change
+# its settings, or deselect or remove a bundle that carries one, so a model in a
+# workspace with a full-access grant cannot turn a guard off for the rest of the
+# run. Upstream's base bundle gives the row no config, so `protectedPlugins` is
+# the only key besides `fallbackRegistries`, which asks the npmmirror registry
+# only when the `npmMirror` setting is on, as in the CLI profile.
+- id: plugin-manager
+  config:
+    fallbackRegistries: !!js "process.env.DELORUN_NPM_MIRROR === 'on' ? ['https://registry.npmmirror.com/'] : []"
+    protectedPlugins:
+      - '@delorun/plugin-instruction-consent'
+      - '@delorun/plugin-mcp-consent'
+      - '@delorun/plugin-permission-defaults'
+      - '@delorun/plugin-schedule-consent'
+      - '@delorun/plugin-fetch-guard'
+      - '@delorun/plugin-delegation-consent'
+      - '@delorun/plugin-install-check'
+      - '@delorun/plugin-changes'
+      - '@delorun/bundle-local/update-gate'
+      - '@deepseek-ai/dsh-sandbox-local'
+      - '@deepseek-ai/dsh-sandbox-policy'
+
+# The plugin install check, as in the CLI profile: a plugin installed into this
+# profile is checked and recorded, and a known critical advisory refuses it
+# until the person accepts it.
+- insert:
+    - id: delorun-plugin-install-check
+      name: '@delorun/plugin-install-check'
+      config:
+        enabled: true

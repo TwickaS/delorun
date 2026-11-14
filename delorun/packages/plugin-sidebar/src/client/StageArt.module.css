@@ -1,0 +1,280 @@
+/*
+ * The header art's box and palettes. The fade into the sidebar is T3 Code's (`apps/web/src/index.css`, MIT, © 2026 T3
+ * Tools Inc.). Each palette's colours are named in `art-palettes.css`; here a palette's names become the `--stage-*`
+ * colours the scenes draw with, and Accent mixes the studio's accent into Blueprint's.
+ */
+.backdrop {
+  --stage-fade: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  user-select: none;
+  pointer-events: none;
+  mask-image: var(--stage-fade-mask);
+}
+
+.backdrop::after {
+  position: absolute;
+  inset: 0;
+  background: var(--stage-fade-wash);
+  content: '';
+}
+
+/*
+ * The fades: a mask that lets the art go and a wash of the sidebar's fill that covers what remains. Soft is T3 Code's.
+ * Short and long ease with smoothstep stops, so neither shows a band where the ramp starts or ends.
+ */
+.backdrop {
+  --stage-fade-mask: linear-gradient(to bottom, var(--dsw-alias-label-primary) 0%, var(--dsw-alias-label-primary) 55%, transparent 92%);
+  --stage-fade-wash: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 28%,
+    color-mix(in srgb, var(--stage-fade) 10%, transparent) 40%,
+    color-mix(in srgb, var(--stage-fade) 30%, transparent) 52%,
+    color-mix(in srgb, var(--stage-fade) 58%, transparent) 64%,
+    color-mix(in srgb, var(--stage-fade) 82%, transparent) 75%,
+    color-mix(in srgb, var(--stage-fade) 96%, transparent) 85%,
+    var(--stage-fade) 93%
+  );
+}
+
+.backdrop[data-fade='short'] {
+  --stage-fade-mask: linear-gradient(
+    to bottom,
+    var(--dsw-alias-label-primary) 0%,
+    var(--dsw-alias-label-primary) 70%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 97%, transparent) 72.5%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 90%, transparent) 75%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 65%, transparent) 80%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent) 85%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent) 90%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent) 92.5%,
+    transparent 95%
+  );
+  --stage-fade-wash: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 70%,
+    color-mix(in srgb, var(--stage-fade) 3%, transparent) 72.5%,
+    color-mix(in srgb, var(--stage-fade) 10%, transparent) 75%,
+    color-mix(in srgb, var(--stage-fade) 35%, transparent) 80%,
+    color-mix(in srgb, var(--stage-fade) 65%, transparent) 85%,
+    color-mix(in srgb, var(--stage-fade) 90%, transparent) 90%,
+    color-mix(in srgb, var(--stage-fade) 97%, transparent) 92.5%,
+    var(--stage-fade) 95%
+  );
+}
+
+.backdrop[data-fade='long'] {
+  --stage-fade-mask: linear-gradient(
+    to bottom,
+    var(--dsw-alias-label-primary) 12%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 97%, transparent) 20.8%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 90%, transparent) 29.6%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 78%, transparent) 38.4%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 65%, transparent) 47.2%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 50%, transparent) 56%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent) 64.8%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent) 73.6%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent) 82.4%,
+    color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent) 91.2%,
+    transparent 100%
+  );
+  --stage-fade-wash: linear-gradient(
+    to bottom,
+    transparent 12%,
+    color-mix(in srgb, var(--stage-fade) 3%, transparent) 20.8%,
+    color-mix(in srgb, var(--stage-fade) 10%, transparent) 29.6%,
+    color-mix(in srgb, var(--stage-fade) 22%, transparent) 38.4%,
+    color-mix(in srgb, var(--stage-fade) 35%, transparent) 47.2%,
+    color-mix(in srgb, var(--stage-fade) 50%, transparent) 56%,
+    color-mix(in srgb, var(--stage-fade) 65%, transparent) 64.8%,
+    color-mix(in srgb, var(--stage-fade) 78%, transparent) 73.6%,
+    color-mix(in srgb, var(--stage-fade) 90%, transparent) 82.4%,
+    color-mix(in srgb, var(--stage-fade) 97%, transparent) 91.2%,
+    var(--stage-fade) 100%
+  );
+}
+
+/* None: the art stops where its box does, with a hairline in the sidebar's border colour so the cut looks chosen. */
+.backdrop[data-fade='none'] {
+  --stage-fade-mask: none;
+}
+
+.backdrop[data-fade='none']::after {
+  inset: auto 0 0;
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
+}
+
+/* False: the art whole, as a swatch or a pill shows it. */
+.backdrop[data-fade='false'] {
+  --stage-fade-mask: none;
+}
+
+.backdrop[data-fade='false']::after {
+  content: none;
+}
+
+.art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.backdrop {
+  --stage-art-top: var(--delorun-art-blueprint-top);
+  --stage-art-mid: var(--delorun-art-blueprint-mid);
+  --stage-art-bottom: var(--delorun-art-blueprint-bottom);
+  --stage-art-highlight: var(--delorun-art-blueprint-highlight);
+  --stage-art-secondary: var(--delorun-art-blueprint-secondary);
+  --stage-art-tertiary: var(--delorun-art-blueprint-tertiary);
+  --stage-art-line: var(--delorun-art-blueprint-line);
+  --stage-art-celeste-highlight: var(--delorun-art-blueprint-celeste-highlight);
+  --stage-art-celeste-secondary: var(--delorun-art-blueprint-celeste-secondary);
+  --stage-art-violet-highlight: var(--delorun-art-blueprint-violet-highlight);
+  --stage-art-grid-line: var(--delorun-art-blueprint-grid-line);
+  --stage-night-base-top: var(--delorun-art-blueprint-night-base-top);
+  --stage-night-base-mid: var(--delorun-art-blueprint-night-base-mid);
+  --stage-night-base-bottom: var(--delorun-art-blueprint-night-base-bottom);
+  --stage-night-top: var(--stage-night-base-top);
+  --stage-night-mid: var(--stage-night-base-mid);
+  --stage-night-bottom: var(--stage-night-base-bottom);
+  --stage-night-highlight: var(--delorun-art-blueprint-night-highlight);
+  --stage-night-secondary: var(--delorun-art-blueprint-night-secondary);
+  --stage-night-tertiary: var(--delorun-art-blueprint-night-tertiary);
+  --stage-night-line: var(--delorun-art-blueprint-night-line);
+  --stage-night-glow-highlight: var(--delorun-art-blueprint-night-glow-highlight);
+  --stage-night-glow-secondary: var(--delorun-art-blueprint-night-glow-secondary);
+  --stage-night-sparkle: var(--delorun-art-blueprint-night-sparkle);
+}
+
+.backdrop[data-palette='rose'] {
+  --stage-art-top: var(--delorun-art-rose-top);
+  --stage-art-mid: var(--delorun-art-rose-mid);
+  --stage-art-bottom: var(--delorun-art-rose-bottom);
+  --stage-art-highlight: var(--delorun-art-rose-highlight);
+  --stage-art-secondary: var(--delorun-art-rose-secondary);
+  --stage-art-tertiary: var(--delorun-art-rose-tertiary);
+  --stage-art-line: var(--delorun-art-rose-line);
+}
+
+.backdrop[data-palette='grove'] {
+  --stage-art-top: var(--delorun-art-grove-top);
+  --stage-art-mid: var(--delorun-art-grove-mid);
+  --stage-art-bottom: var(--delorun-art-grove-bottom);
+  --stage-art-highlight: var(--delorun-art-grove-highlight);
+  --stage-art-secondary: var(--delorun-art-grove-secondary);
+  --stage-art-tertiary: var(--delorun-art-grove-tertiary);
+  --stage-art-line: var(--delorun-art-grove-line);
+  --stage-night-top: var(--delorun-art-grove-night-top);
+  --stage-night-mid: var(--delorun-art-grove-night-mid);
+  --stage-night-bottom: var(--delorun-art-grove-night-bottom);
+  --stage-night-highlight: var(--delorun-art-grove-night-highlight);
+  --stage-night-secondary: var(--delorun-art-grove-night-secondary);
+  --stage-night-tertiary: var(--delorun-art-grove-night-tertiary);
+  --stage-night-line: var(--delorun-art-grove-night-line);
+}
+
+.backdrop[data-palette='ocean'] {
+  --stage-art-top: var(--delorun-art-ocean-top);
+  --stage-art-mid: var(--delorun-art-ocean-mid);
+  --stage-art-bottom: var(--delorun-art-ocean-bottom);
+  --stage-art-highlight: var(--delorun-art-ocean-highlight);
+  --stage-art-secondary: var(--delorun-art-ocean-secondary);
+  --stage-art-tertiary: var(--delorun-art-ocean-tertiary);
+  --stage-art-line: var(--delorun-art-ocean-line);
+}
+
+.backdrop[data-palette='ember'] {
+  --stage-art-top: var(--delorun-art-ember-top);
+  --stage-art-mid: var(--delorun-art-ember-mid);
+  --stage-art-bottom: var(--delorun-art-ember-bottom);
+  --stage-art-highlight: var(--delorun-art-ember-highlight);
+  --stage-art-secondary: var(--delorun-art-ember-secondary);
+  --stage-art-tertiary: var(--delorun-art-ember-tertiary);
+  --stage-art-line: var(--delorun-art-ember-line);
+  --stage-night-top: var(--delorun-art-ember-night-top);
+  --stage-night-mid: var(--delorun-art-ember-night-mid);
+  --stage-night-bottom: var(--delorun-art-ember-night-bottom);
+  --stage-night-highlight: var(--delorun-art-ember-night-highlight);
+  --stage-night-secondary: var(--delorun-art-ember-night-secondary);
+  --stage-night-tertiary: var(--delorun-art-ember-night-tertiary);
+  --stage-night-line: var(--delorun-art-ember-night-line);
+}
+
+.backdrop[data-palette='iris'] {
+  --stage-art-top: var(--delorun-art-iris-top);
+  --stage-art-mid: var(--delorun-art-iris-mid);
+  --stage-art-bottom: var(--delorun-art-iris-bottom);
+  --stage-art-highlight: var(--delorun-art-iris-highlight);
+  --stage-art-secondary: var(--delorun-art-iris-secondary);
+  --stage-art-tertiary: var(--delorun-art-iris-tertiary);
+  --stage-art-line: var(--delorun-art-iris-line);
+}
+
+.backdrop:is([data-palette='rose'], [data-palette='ocean'], [data-palette='iris'], [data-palette='accent']) {
+  --stage-night-top: color-mix(in oklch, var(--stage-art-top) 38%, var(--stage-night-base-top));
+  --stage-night-mid: color-mix(in oklch, var(--stage-art-mid) 38%, var(--stage-night-base-mid));
+  --stage-night-bottom: color-mix(in oklch, var(--stage-art-bottom) 38%, var(--stage-night-base-bottom));
+  --stage-night-highlight: var(--stage-art-highlight);
+  --stage-night-secondary: color-mix(in oklch, var(--stage-art-secondary) 55%, var(--stage-night-mid));
+  --stage-night-tertiary: color-mix(in oklch, var(--stage-art-tertiary) 60%, var(--stage-night-top));
+  --stage-night-line: color-mix(in oklch, var(--stage-art-line) 82%, var(--delorun-art-night-line-lift));
+}
+
+.backdrop:not([data-palette='blueprint']) {
+  --stage-art-celeste-highlight: var(--stage-art-highlight);
+  --stage-art-celeste-secondary: var(--stage-art-secondary);
+  --stage-art-violet-highlight: var(--stage-art-highlight);
+  --stage-art-grid-line: var(--stage-art-line);
+  --stage-night-glow-highlight: var(--stage-night-highlight);
+  --stage-night-glow-secondary: var(--stage-night-secondary);
+  --stage-night-sparkle: var(--stage-night-line);
+}
+
+.backdrop[data-palette='accent'] {
+  --stage-art-top: color-mix(in oklch, var(--dsw-alias-brand-primary) 70%, var(--delorun-art-accent-top));
+  --stage-art-mid: color-mix(in oklch, var(--dsw-alias-brand-primary) 80%, var(--delorun-art-accent-mid));
+  --stage-art-bottom: color-mix(in oklch, var(--dsw-alias-brand-primary) 55%, var(--delorun-art-accent-bottom));
+  --stage-art-highlight: color-mix(in oklch, var(--dsw-alias-brand-primary) 20%, var(--delorun-art-accent-highlight));
+  --stage-art-secondary: color-mix(in oklch, var(--dsw-alias-brand-primary) 75%, var(--delorun-art-accent-secondary));
+  --stage-art-tertiary: color-mix(in oklch, var(--dsw-alias-brand-primary) 60%, var(--delorun-art-accent-tertiary));
+  --stage-art-line: color-mix(in oklch, var(--dsw-alias-brand-primary) 12%, var(--delorun-art-accent-line));
+}
+
+/* Strength: the art quieter, or richer, than drawn. */
+.backdrop[data-strength='subtle'] .art {
+  opacity: 0.55;
+}
+
+.backdrop[data-strength='vivid'] .art {
+  filter: saturate(1.45) contrast(1.12);
+}
+
+/* The pill: T3 Code's environment badge, the art in a capsule at the brand row's end, left of the toggle. */
+.pill {
+  --pill-top: 26px;
+  --pill-end: 48px;
+  --pill-width: 36px;
+  --pill-height: 16px;
+
+  position: absolute;
+  top: var(--pill-top);
+  right: var(--pill-end);
+  width: var(--pill-width);
+  height: var(--pill-height);
+  overflow: hidden;
+  border-radius: var(--dsw-radius-xl);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+
+/* The holder of the brand row's edge filters: no box of its own, and not `display: none`, which would switch the filters off. */
+.inkEdge {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}

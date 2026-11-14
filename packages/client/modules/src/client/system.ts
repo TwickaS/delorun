@@ -14,7 +14,7 @@ import type {
 
 /**
  * The page boot's Trusted Types stash (`page-policy`), read structurally: the
- * `delo-plugin-loader` policy the loader assigns `script.src` through, and the
+ * `delorun-plugin-loader` policy the loader assigns `script.src` through, and the
  * registry that keeps the script URL allowlist current with this system's boot
  * manifest. Absent on pages whose boot did not create the policies.
  */
@@ -29,7 +29,7 @@ function trustedTypesStash(): TrustedTypesStash | undefined {
 }
 
 /** Default bundle-load hook: same-origin external classic script, its `src` assigned through the page's
- * `delo-plugin-loader` policy when the page created one, the raw URL otherwise (a browser without Trusted Types). */
+ * `delorun-plugin-loader` policy when the page created one, the raw URL otherwise (a browser without Trusted Types). */
 const defaultLoadBundle = (url: string): Promise<void> => new Promise((resolve, reject) => {
   const el = document.createElement('script')
   el.async = true
@@ -40,7 +40,7 @@ const defaultLoadBundle = (url: string): Promise<void> => new Promise((resolve, 
     const trusted = pluginLoaderPolicy.createScriptURL(url)
     if (trusted === null) {
       // The policy refused the URL: the bundle load fails before any request.
-      reject(new Error(`client-modules: bundle script ${url} refused by the delo-plugin-loader policy`))
+      reject(new Error(`client-modules: bundle script ${url} refused by the delorun-plugin-loader policy`))
       return
     }
     el.src = trusted

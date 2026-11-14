@@ -1,0 +1,21 @@
+{
+  "name": "@delorun/home",
+  "description": "Delorun's home (contract C1): resolving ~/.delorun, creating its tree at mode 0700, reading and writing protected files at 0600 with the refusal of laxer ones, and the per-profile home lock",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./refusal": "./src/refusal.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@delorun/contract-admission": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

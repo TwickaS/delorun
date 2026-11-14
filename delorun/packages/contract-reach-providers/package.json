@@ -1,0 +1,17 @@
+{
+  "name": "@delorun/contract-reach-providers",
+  "description": "Reach option ids, provider states, configuration rows, the Tailscale serve target variants, identity header rules, the named certificate authority and error codes of reach providers, as specified by contract C7.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delorun/contract-admission": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

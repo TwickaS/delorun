@@ -17,9 +17,9 @@ docs/persistence-changes/historical-formats/*.schema.json linguist-generated=tru
 # Unified patch context lines require their leading space, also before a blank line's end or a tab indent.
 patches/*.patch whitespace=-blank-at-eol,-space-before-tab
 
-# The divergence ledger merges per entry through the delo-ledger driver, which each clone configures once
-# (delo/apps/tools/README.md#the-divergence-ledger).
-delo/upstream-patches.json merge=delo-ledger
+# The divergence ledger merges per entry through the delorun-ledger driver, which each clone configures once
+# (delorun/apps/tools/README.md#the-divergence-ledger).
+delorun/upstream-patches.json merge=delorun-ledger
 
 # Review layers of the forge changes view (dsh-review-layer), for this repository's own conventions:
 # plugin locale dictionaries and the session snapshot tree hide with test files, generated bilingual

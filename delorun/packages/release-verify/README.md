@@ -1,0 +1,31 @@
+---
+description: "Client-side release-log verification of contract C18: the offline check of an installed release's bundle against the trusted root, the online consistency check over the log's tlog-tiles, the stored checkpoint and the check state."
+---
+
+# @delorun/release-verify
+
+English | [中文](README.zh.md)
+
+## Summary
+
+An installed release ships a release-log bundle beside its manifest: the Rekor v2 `hashedrekord` entry of the manifest file, the entry's inclusion proof, and a checkpoint the log signed and a witness cosigned. This package verifies that bundle offline against the keys of the client's own trusted root, proves consistency with the log's latest checkpoint online, keeps the verified checkpoint and the check state of each installed release, and answers what a start does: go on, go on with a warning naming the unchecked release, or stop. The caller states what a missing bundle means (`missingBundle`): `failed` (`bundle-malformed`) for a release the runtime store installed, which keeps the bundle it verified, and `unchecked` only for a client that fetches its bundle after installing. The installer, the launcher's start and `delorun verify` all run it through `record`, so one check and one format of each record exist. The check service's retry of an `unchecked` release while the home process runs (`ReleaseVerification`) is built and used by no shipped process, so a release stays `unchecked` until the next start or `delorun verify`. The specification is [contract C18](../../docs/contracts/c18-release-log.md).
+
+## Modules
+
+- `bundle`, `entry`, `json` and `merkle`: the five offline steps, the Rekor v2 body, the strict reader, and RFC 6962 hashing. The leaf is the entry body's bytes as the bundle carries them, so the same body serialised another way breaks the inclusion proof.
+- `note`, `checkpoint` and `online`: signed notes, the stored checkpoint that never moves backwards, and the consistency check.
+- `transport`: `tilesTransport`, the online check's reads over an injected `fetch`: the latest checkpoint, and RFC 6962 consistency proofs built from the log's C2SP tlog-tiles hash tiles, since a Rekor v2 log serves no proof endpoint. `logEndpoints` derives both from the trusted root's `log.origin`, a host with an optional port: `https://<origin>/api/v2/checkpoint` and the tiles below `https://<origin>/api/v2/tile/`.
+- `state`, `start`, `record`, `service` and `paths`: the recorded check state, what a start does, the check with its two records (`checkAndStore`, which an installer runs before it installs, `recordResult`, and `checkAndRecord`, both together), the check service with its 15-minute retry, and the two files' paths.
+- `store`: the one module that reaches the filesystem, through `@delorun/home`'s protected-file rule.
+
+## Limits
+
+The online check takes a transport. Every request of `tilesTransport` goes through the `fetch` the caller passes, over HTTPS, with C18's 30-second timeout and a size limit, following at most two redirects on the log's own host. The whole check runs under one 90-second deadline, `ONLINE_CHECK_DEADLINE_SECONDS`, which every request and redirect counts against.
+
+One rule sorts every outcome: anything before the checkpoint's log signature verifies leaves the release `unchecked`, and once it verifies, anything that does not hold together is `failed`. No answer, a timeout, the deadline, a `5xx`, a `404` or `410` for the checkpoint, an answer over its limit or a redirect to another host for the checkpoint, and a body that is not a checkpoint the root's log key signed leave the release `unchecked`. A signed checkpoint smaller than the stored one, a consistency proof that does not verify, and a tile the signed tree size says exists answering `404` or `410`, with the wrong length, over its limit or with a redirect to another host are `failed` (`consistency-proof-invalid` for the proof and the tiles). A failure of this package's own code is thrown as `ReleaseLogInternalError`, never read as an unreachable log. The recorded vectors under `tests/real/` are two witnessed checkpoints and the tiles between them from the public Rekor v2 log `log2025-1.rekor.sigstore.dev`; `tests/real/record-real-log.ts` refreshes them by hand, and no spec reaches the network. The package never signs: nothing here can mint a checkpoint or an entry, and it trusts no key a bundle carries.
+
+A latest checkpoint the witnesses have not cosigned, or whose newest cosignature is older than 24 hours, leaves the release `unchecked`, after the rollback and consistency checks have run, so leaving the cosignature out avoids neither. A listed witness's cosignature that is present and does not verify, or is dated more than 300 seconds after the client's clock, is `failed` (`witness-cosignature-missing`), and the detail names the witness, the cosigning time and the local clock. The offline bundle check still refuses a bundle without a valid cosignature.
+
+The trusted root is a precondition: the caller reads it under contract C2 first, which checks its signature, its `expires` against the clock, and that the log verifier key's name is the log origin. Nothing here can check those without the root's own signatures.
+
+The stored checkpoint sets the rollback floor only when its note carries a valid signature from the trusted root's log key over the tree the record names. A record no trusted key signed, and a record that does not read, are no record: the check starts from the bundle's own checkpoint, the checkpoint that verifies replaces the file, and the result carries a notice saying the floor started again, naming the releases the home recorded as `verified`. A file in the installer's earlier format, a tree size and a root hash with no note, is kept as the floor only when a consistency proof from it to the log's signed latest checkpoint verifies; otherwise it sets no floor, the verified checkpoint replaces it and a notice names its tree size, and an unreachable log leaves it in place. The check state of a release keeps `uncheckedSince`, the first attempt of its current `unchecked` run, and the attempt's notices. Both records live under the home's `trust/` and are refused, as C1 requires, when they are a symbolic link, another user's file or readable by others.

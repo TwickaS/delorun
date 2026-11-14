@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/home-auth/spikes/ts-net-rp-id/README.md
+/:
+  en: 8734657b6f57bce9
+  zh: 9c65f02bae2968b3
+/spike-passkey-relying-party-ids-on-ts-net:
+  en: 94d311e74602e615
+  zh: d99eae59c3284ea6
+/spike-passkey-relying-party-ids-on-ts-net/summary:
+  en: bc112aabc124862c
+  zh: 2cfa5179f8a4079f
+/spike-passkey-relying-party-ids-on-ts-net/answers:
+  en: c23c014306f42624
+  zh: 53d2df0753091837
+/spike-passkey-relying-party-ids-on-ts-net/public-suffix-list:
+  en: 178a7fd5de1d0865
+  zh: e6665ab58fa9d743
+/spike-passkey-relying-party-ids-on-ts-net/browser-results:
+  en: 661bf0aa08171c98
+  zh: c200b2d2aa2f6d00
+/spike-passkey-relying-party-ids-on-ts-net/not-covered:
+  en: 743aacdddfe13814
+  zh: 442b167c3b33fc87
+/spike-passkey-relying-party-ids-on-ts-net/commands:
+  en: 83693e11ac8301be
+  zh: 51be5024f78bb644
+/spike-passkey-relying-party-ids-on-ts-net/files:
+  en: 63319a87f6ca4f1a
+  zh: 34895ffd7b5156ab
+/spike-passkey-relying-party-ids-on-ts-net/reset:
+  en: 8011c21725f4fb03
+  zh: 80836fa4881eccbe

@@ -1,0 +1,26 @@
+{
+  "name": "@delorun/skill-plugin-authoring",
+  "description": "The delorun-plugin-authoring skill: how an agent makes or changes a Delorun plugin in the chat's workspace, and why turning it on is the person's step at the computer",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

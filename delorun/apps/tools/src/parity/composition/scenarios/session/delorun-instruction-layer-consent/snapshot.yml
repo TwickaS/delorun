@@ -1,0 +1,8 @@
+version: 1
+scenario: delorun-instruction-layer-consent
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-instruction-layer-consent
+  pin: true

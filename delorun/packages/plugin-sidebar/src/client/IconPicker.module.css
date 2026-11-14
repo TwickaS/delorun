@@ -1,0 +1,238 @@
+/*
+ * The workspace icon picker: the icon on a stage at the left, its choices at the right; one column on a phone.
+ * Spacing, type sizes and corners are the studio's tokens; the lengths below are the picker's own geometry.
+ */
+.dialog {
+  --picker-width: 720px;
+  --picker-stage: 200px;
+  --picker-cell: 36px;
+  --picker-hit: 32px;
+  --picker-swatch: 22px;
+  --picker-option: 36px;
+  --picker-letters: 120px;
+
+  width: min(var(--picker-width), calc(100vw - var(--delorun-space-9)));
+  max-height: calc(100dvh - var(--delorun-space-8) * 2);
+}
+
+/* On a short screen the choices scroll and the footer stays. */
+.scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--picker-stage) minmax(0, 1fr);
+  gap: var(--delorun-space-8);
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
+
+@media (width < 640px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--delorun-space-6);
+  min-width: 0;
+  padding: var(--delorun-space-8) var(--delorun-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background:
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent), transparent 70%),
+    var(--dsw-alias-bg-base);
+  align-self: start;
+}
+
+.hero {
+  display: flex;
+  padding: var(--delorun-space-5);
+}
+
+/* The icon at the list's own size beside the Workspace's name, as a row of the sidebar shows it. */
+.inList {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-3);
+  max-width: 100%;
+  padding: var(--delorun-space-3) calc(var(--delorun-space-4) + var(--delorun-space-1));
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12-font-size);
+}
+
+.inListTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--delorun-space-6) + var(--delorun-space-1));
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+}
+
+.label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12-font-size);
+  font-weight: 500;
+}
+
+.letters {
+  width: min(var(--picker-letters), 100%);
+}
+
+/* The letters and emoji fields show the studio's focus ring while they hold focus. */
+.letters:focus-within {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: var(--delorun-space-1);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--picker-cell), 1fr));
+  gap: var(--delorun-space-3);
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: var(--picker-hit);
+  min-height: var(--picker-hit);
+  border: 0.5px solid transparent;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .cell:hover {
+    color: var(--dsw-alias-label-primary);
+    border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
+  }
+}
+
+.cell[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, var(--dsw-alias-bg-base));
+}
+
+.emojiCell {
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: var(--dsw-font-m-18-font-size);
+}
+
+.swatches,
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-4);
+}
+
+.swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--picker-hit);
+  height: var(--picker-hit);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.swatch[aria-checked='true'],
+.swatch[data-checked='true'] {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1), 0 0 0 3.5px var(--dsw-alias-label-primary);
+}
+
+/* The "any colour" swatch shows a colour wheel until a custom colour is chosen. */
+.colorInput {
+  width: var(--picker-swatch);
+  height: var(--picker-swatch);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 90deg,
+    var(--dsw-static-red-500),
+    var(--dsw-static-amber-500),
+    var(--dsw-static-green-500),
+    var(--dsw-static-blue-500),
+    var(--dsw-static-violet-600),
+    var(--dsw-static-red-500)
+  );
+  cursor: pointer;
+  appearance: none;
+}
+
+.colorInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.colorInput::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.swatch[data-checked='true'] .colorInput::-webkit-color-swatch {
+  opacity: 1;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+  min-height: var(--picker-option);
+  padding: 0 var(--delorun-space-5) 0 var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.optionPreview {
+  display: inline-flex;
+}
+
+.option[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, var(--dsw-alias-bg-base));
+}
+
+.cell:focus-visible,
+.swatch:focus-visible,
+.swatch:focus-within,
+.option:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.reset {
+  margin-right: auto;
+}

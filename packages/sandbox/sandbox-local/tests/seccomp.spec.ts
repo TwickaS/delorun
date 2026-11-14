@@ -3,7 +3,7 @@
  * architecture it names, and the shell loader's byte-exact copy of the program. The interpreter runs the program's
  * jumps over numbers this file restates, so it guards the jump layout only: a wrong system call number would be wrong
  * in both places. The real kernel's answers for the native, x32 and 32-bit entries are `wsl-vsock-denied`'s, in the
- * Delo CLI's WSL integration spec, and `vsock-socket-denied`'s, in `bwrap.e2e.ts`.
+ * Delorun CLI's WSL integration spec, and `vsock-socket-denied`'s, in `bwrap.e2e.ts`.
  */
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'

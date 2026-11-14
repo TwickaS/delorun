@@ -1,0 +1,29 @@
+{
+  "name": "@delorun/release-formats",
+  "description": "The release file formats both the release tooling and the shipped verifiers read: signed metadata and its verification (C2), the release-log bundle, signed notes and Merkle proofs (C18), and the deterministic archive formats; no dependency on the CLI, the developer tooling or the runtime closure",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./advisory/*": "./src/advisory/*.ts",
+    "./archive/*": "./src/archive/*.ts",
+    "./brands": "./src/brands.ts",
+    "./log/*": "./src/log/*.ts",
+    "./sign/*": "./src/sign/*.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-release-log": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@noble/curves": "^2.4.0",
+    "semver": "^7.8.5",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

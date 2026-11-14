@@ -23,11 +23,11 @@
 
 ## 提交与变更日志
 
-为每次提交编写 Conventional Commits 格式的主题行，例如 `docs(contributing): explain the sign-off`。用户能感知到的变更，需要在 `delo/changelog/unreleased/` 下添加一个变更片段（fragment），维护者会将这些片段汇编为发布说明。用户感知不到的变更，则在提交信息末尾写 `Changelog: none (<reason>)`。
+为每次提交编写 Conventional Commits 格式的主题行，例如 `docs(contributing): explain the sign-off`。用户能感知到的变更，需要在 `delorun/changelog/unreleased/` 下添加一个变更片段（fragment），维护者会将这些片段汇编为发布说明。用户感知不到的变更，则在提交信息末尾写 `Changelog: none (<reason>)`。
 
 ## fork 边界与上游台账
 
-Delo 的行为位于 `delo/` 下，并依托上游代码的 seam 实现：钩子、Service Definition 和配置字段。对 `delo/` 之外任何文件的修改，都是对上游代码树的编辑。此类变更需要在 [delo/upstream-patches.json](delo/upstream-patches.json) 中为每个被修改或新增的文件添加一条记录，写明原因和类别：`delo-feature`、`generic-fix` 或 `security`。通用修复应放在独立的提交中。
+Delo 的行为位于 `delorun/` 下，并依托上游代码的 seam 实现：钩子、Service Definition 和配置字段。对 `delorun/` 之外任何文件的修改，都是对上游代码树的编辑。此类变更需要在 [delorun/upstream-patches.json](delorun/upstream-patches.json) 中为每个被修改或新增的文件添加一条记录，写明原因和类别：`delorun-feature`、`generic-fix` 或 `security`。通用修复应放在独立的提交中。
 
 ## 运行检查
 
@@ -38,7 +38,7 @@ Delo 的行为位于 `delo/` 下，并依托上游代码的 seam 实现：钩子
 - `pnpm run build` 构建产物并检查构建输出。开发期间，请先运行 `pnpm run build:artifacts`。
 - `pnpm run test:snapshot` 回放录制的会话，适用于模型或用户可见的变更。
 - `pnpm run doc-sync` 检查文档，`pnpm run test:docs` 运行快速文档检查。
-- `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --changed` 对你的变更涉及的内容运行 Delo 的检查。
+- `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --changed` 对你的变更涉及的内容运行 Delo 的检查。
 
 不要跳过 pre-push hook。真实 API 测试（`pnpm run test:e2e`）需要 `DEEPSEEK_API_KEY`，没有该密钥时会跳过。切勿提交密钥或任何其他凭据。
 

@@ -1,0 +1,6 @@
+# This plugin as a bundle of its own, so upstream's plugin manager can install it into a stock harness. The row has no
+# config: the switch defaults to off, and Delorun's composition mounts the plugin with `enabled: true` when the asking
+# surface of Delorun's composition lands.
+- insert:
+    - id: delorun-instruction-consent
+      name: '@delorun/plugin-instruction-consent'

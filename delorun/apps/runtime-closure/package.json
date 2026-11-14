@@ -1,0 +1,20 @@
+{
+  "name": "@delorun/runtime-closure",
+  "description": "The root package of Delorun's runtime closures: upstream's runtime closure with the delorun command and Delorun's packages",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@delorun/cli": "workspace:*",
+    "dsh-python-runtime-closure": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  },
+  "devDependencies": {
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/release-formats": "workspace:*",
+    "@delorun/runtime-store": "workspace:*"
+  }
+}

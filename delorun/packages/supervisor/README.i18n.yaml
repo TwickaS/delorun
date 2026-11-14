@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/supervisor/README.md
+/:
+  en: 42ce7a282943d0ca
+  zh: 8d61ab356cbfc34c
+/delorun-supervisor:
+  en: a95fc0e0157008fd
+  zh: 335396572e4fc938
+/delorun-supervisor/summary:
+  en: edda8862819182ed
+  zh: f7e666b28c1793d8
+/delorun-supervisor/contents:
+  en: 0b23dd251b2d7c72
+  zh: a8ee2fa0f31bff36
+/delorun-supervisor/launching-the-supervisor:
+  en: 41cb08d20fbb9ec7
+  zh: 11cce261937aea82
+/delorun-supervisor/the-socket-and-the-token:
+  en: 28a30848d31d9719
+  zh: 2e24ef784087cb9c
+/delorun-supervisor/the-api:
+  en: 007e668b4aa99f36
+  zh: 8b53cf86ccc05311
+/delorun-supervisor/supervisor-roots:
+  en: 2462a499125d5721
+  zh: 38ea97cd2695a891
+/delorun-supervisor/images-and-the-verified-manifest:
+  en: 61e7fe1f52488651
+  zh: 4cac76367a0a6047
+/delorun-supervisor/the-capability-report:
+  en: 2cd42e3f323fb624
+  zh: a876c179142a21d1
+/delorun-supervisor/workspace-containers:
+  en: 3797733f340cf6e8
+  zh: 887f511e2294ecaf
+/delorun-supervisor/the-operational-log:
+  en: 87a5fb2c58d42905
+  zh: 97350acdae5d5558
+/delorun-supervisor/not-implemented:
+  en: 40253ebfecdc3bce
+  zh: ec7cf6060aa185c8
+/delorun-supervisor/tests:
+  en: 8d10c3365233d4ea
+  zh: 222c4c9632d10f42

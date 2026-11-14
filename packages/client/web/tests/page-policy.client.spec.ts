@@ -78,10 +78,10 @@ it('on evaluation, stamps style nonces and makes zod jitless only on a page with
   expect(config().jitless).toBe(true)
 })
 
-it('creates the default and delo-plugin-loader policies with the names C4 states and stashes the loader policy', () => {
+it('creates the default and delorun-plugin-loader policies with the names C4 states and stashes the loader policy', () => {
   const { created, trustedTypes } = policyFactory()
   const stash = installTrustedTypes({ trustedTypes })
-  expect(created.map(policy => policy.name)).toEqual(['default', 'delo-plugin-loader'])
+  expect(created.map(policy => policy.name)).toEqual(['default', 'delorun-plugin-loader'])
   const [fallback, loader] = created
   expect(Object.keys(fallback?.definition ?? {}).sort()).toEqual(['createHTML', 'createScript', 'createScriptURL'])
   expect(Object.keys(loader?.definition ?? {})).toEqual(['createScriptURL'])

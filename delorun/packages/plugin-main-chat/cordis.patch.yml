@@ -1,0 +1,7 @@
+# This plugin as a bundle of its own, so upstream's plugin manager installs it
+# into a stock harness. The row needs `root` and `preset` in its config, and
+# registers nothing until `enabled` (C16 switch `main_chat`) is true, which a
+# row that mounts it sets; no Delorun profile mounts it.
+- insert:
+    - id: delorun-main-chat
+      name: '@delorun/plugin-main-chat'

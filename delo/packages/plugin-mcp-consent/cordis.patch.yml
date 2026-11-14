@@ -1,6 +1,0 @@
-# This plugin as a bundle of its own, so upstream's plugin manager can install it into a stock harness. The row has no
-# config: the switch defaults to off, and Delo's composition mounts the plugin with `enabled: true` when the studio and
-# CLI surfaces of the MCP server add flow land.
-- insert:
-    - id: delo-mcp-consent
-      name: '@delo/plugin-mcp-consent'
