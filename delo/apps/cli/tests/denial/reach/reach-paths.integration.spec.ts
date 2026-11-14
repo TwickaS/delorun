@@ -99,6 +99,7 @@ const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the 
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.list': { device: 'refused', reason: 'snooze and settle states order the chat list at the computer; a device renders every chat without them, and the client keeps its last states' },
   '/api/deloChatStates.set': { device: 'refused', reason: 'snoozing or settling a chat is not in the device rule' },
+  '/api/deloOnboarding.workspaceNotice': { device: 'refused', reason: 'names the workspace record files the registry set aside at start-up, which is workspace housekeeping the home\'s computer shows' },
   '/api/deloOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
   '/api/deloOnboarding.addWorkspace': { device: 'refused', reason: 'adds a folder as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
   '/api/deloNetwork.list': { device: 'refused', reason: 'lists each workspace\'s network setting, which is read and changed only at the home\'s computer', refusal: 'LOOPBACK_REQUIRED' },
@@ -117,6 +118,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloVersions.save': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloVersions.switch': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
+  '/api/deloUpdateCheck.notes': { device: 'refused', reason: 'the release notes of the update that would run, which is read where the update notice is, at the computer that runs the update' },
   '/api/deloTrash.list': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteChat': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteWorkspace': { device: 'refused', reason: TRASH },
