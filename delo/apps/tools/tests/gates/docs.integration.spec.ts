@@ -136,6 +136,7 @@ describe('the documentation gate\'s upstream checks, on planted violations in fi
     const compilerOptions = { strict: true, noEmit: true, module: 'esnext', moduleResolution: 'bundler', target: 'es2024', types: [] }
     const fence = (value: string): string => ['# A', '', '```ts', `const value: number = ${value}`, '```', ''].join('\n')
     const broken = fixture(test, ['doc-typecheck.ts', 'doc-typecheck-paths.ts'], {
+      'package.json': '{"version": "0.0.0"}\n',
       'tsconfig.host.json': JSON.stringify({ compilerOptions, references: [] }),
       'delo/docs/guide/a.md': fence("'text'"),
     })
@@ -145,6 +146,7 @@ describe('the documentation gate\'s upstream checks, on planted violations in fi
     expect(failed.output).toContain('delo/docs/guide/a.md')
 
     const sound = fixture(test, ['doc-typecheck.ts', 'doc-typecheck-paths.ts'], {
+      'package.json': '{"version": "0.0.0"}\n',
       'tsconfig.host.json': JSON.stringify({ compilerOptions, references: [] }),
       'delo/docs/guide/a.md': fence('1'),
     })
