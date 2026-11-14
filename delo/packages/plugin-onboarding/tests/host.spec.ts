@@ -28,13 +28,13 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()] }
+  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()] }
 }
 
 describe('the configuration', () => {
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delo-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [] })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [], optionalRows: [] })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -56,6 +56,8 @@ describe('the configuration', () => {
     ['a timeout of zero', { keyTestTimeoutMs: 0 }],
     ['a package name with a capital', { plugins: ['Bad'] }],
     ['a package that is a path', { plugins: ['../x'] }],
+    ['a row id with a capital', { optionalRows: ['Delo-Cost-Meter'] }],
+    ['a row id that is a path', { optionalRows: ['../x'] }],
     ['a package that is a URL', { plugins: ['https://example.test/p.tgz'] }],
     ['more packages than the step lists', { plugins: Array.from({ length: RECOMMENDED_LIMIT + 1 }, (_, index) => `p${String(index)}`) }],
   ])('refuses %s', (_, value) => {
@@ -266,5 +268,14 @@ describe('the route', () => {
 
   it('requires only the Connection', () => {
     expect(inject).toEqual(['connection'])
+  })
+})
+
+describe('the optional rows', () => {
+  it('checks the configured rows against the Loader when it applies', () => {
+    const ctx = new Context()
+    ctx.provide('loader', { entries: () => [{ id: 'delo-cost-meter' }] } as never)
+    expect(() => apply(ctx, Config({ optionalRows: ['delo-cost-meter'] }))).not.toThrow()
+    expect(() => apply(ctx, Config({ optionalRows: ['delo-nope'] }))).toThrow('"delo-nope"')
   })
 })

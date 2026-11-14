@@ -22,6 +22,8 @@ This page shows how to see an estimate of what a [chat](../reference/glossary.md
 
 Open Plugins in the sidebar and open **Delo studio**. Under Components, find **Cost meter** and turn it on; it starts at once, with no restart. You should see a figure under the message box in every chat, after the token count.
 
+The first-run guide's Recommended plugins step offers the same switch.
+
 ## What it shows
 
 The box shows what this chat cost, such as `$0.42`. When a chat has started subagents or teammates, it shows two figures, `$0.42 · $0.61 with agents`: this chat alone, then this chat with the chats it started.

@@ -1,6 +1,6 @@
 /**
  * Host entry of Delo's onboarding. The flow is browser-only; this half keeps the row's configuration (progress and
- * the recommended packages) as live settings and serves the guide's exact Connection Fetch routes: what the terminal
+ * the recommended packages and rows) as live settings and serves the guide's exact Connection Fetch routes: what the terminal
  * setup recorded ({@link SETUP_RECORD_PATH}), so onboarding can leave out what the terminal covered; this computer's
  * readiness ({@link READINESS_PATH}); the key test ({@link KEY_TEST_PATH}); which connections the recommended plugins
  * are for ({@link RECOMMEND_PATH}); and, while upstream's workspace registry is present, adding a folder
@@ -31,13 +31,14 @@ import { readSetupRecord } from './answers.ts'
 import { createCloneService, spawnGit } from './clone.ts'
 import type { Config } from './config.ts'
 import { listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
+import { assertRowsExist, type RowSource } from './rows.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import { ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH } from './wire.ts'
 import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
-export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, type OnboardingSettings } from './config.ts'
+export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, ROW_ID, type OnboardingSettings } from './config.ts'
 export {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
   CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
@@ -47,6 +48,7 @@ export {
 export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './clone.ts'
 export { isCloneAddress, isFolderName, suggestedName } from './clone-address.ts'
 export { declaredConnections } from './recommend.ts'
+export { assertRowsExist, type RowSource } from './rows.ts'
 
 /** The plugin's name in logs. */
 export const name = 'delo-onboarding'
@@ -68,8 +70,11 @@ function json(body: unknown): Response {
  * add or clone workspaces while the registry is present.
  * @param ctx - the plugin context with the injected services.
  * @param config - the row's configuration.
+ * @throws when `optionalRows` names a row the profile does not hold.
  */
 export function apply(ctx: Context, config: Config): void {
+  const loader: RowSource | undefined = ctx.get('loader')
+  assertRowsExist(config.optionalRows.get(), loader)
   const warn = (message: string): void => { ctx.logger.warn(`${name}: ${message}`) }
   // Onboarding edits its own settings in the studio, so the settings service builds no form for them.
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })

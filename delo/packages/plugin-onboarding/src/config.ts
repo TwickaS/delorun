@@ -1,7 +1,7 @@
 /**
  * Onboarding's row configuration, kept by the host half and read and written by the studio half: whether the person
  * finished or skipped onboarding, the step they reached, the chat whose empty state still offers starter prompts and
- * what its folder holds, the packages the recommended-plugins step offers, and the limits of the routes that reach the
+ * what its folder holds, the packages and the bundled rows the recommended-plugins step offers, and the limits of the routes that reach the
  * network or run Git.
  * @module @delo/plugin-onboarding/config
  */
@@ -17,6 +17,9 @@ export const THEME_ROW_ID = 'delo-theme'
 
 /** An npm package name, scoped or not. */
 export const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/
+
+/** A Loader row id as a bundle's patch declares it: lower-case letters, digits, dots, underscores and hyphens. */
+export const ROW_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
 /** The most packages the recommended-plugins step offers: more would not fit one screen. */
 export const RECOMMENDED_LIMIT = 8
@@ -40,12 +43,14 @@ export interface OnboardingSettings {
   starterSession: string
   /** Packages the recommended-plugins step offers; the step is left out when the list is empty. */
   plugins: string[]
+  /** Rows a bundle inserts disabled, by row id, that the recommended-plugins step offers to turn on; the step is left out when this and `plugins` are empty. */
+  optionalRows: string[]
   /** What the first chat's folder holds, which picks its starting prompts; empty for the general prompts. */
   starterKind: string
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], starterKind: '' }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], optionalRows: [], starterKind: '' }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -53,6 +58,7 @@ export interface Config {
   step: Volatile<string>
   starterSession: Volatile<string>
   plugins: Volatile<string[]>
+  optionalRows: Volatile<string[]>
   starterKind: Volatile<string>
   registry: string
   registryTimeoutMs: number
@@ -68,6 +74,9 @@ export const Config = z.object({
   plugins: z.array(z.string().pattern(PACKAGE_NAME).max(214)).max(RECOMMENDED_LIMIT)
     .description('Packages the recommended-plugins step offers, by npm package name. With none, the step is left out.')
     .default([...DEFAULT_SETTINGS.plugins]).volatile(),
+  optionalRows: z.array(z.string().pattern(ROW_ID)).max(RECOMMENDED_LIMIT)
+    .description('Rows of the profile that a bundle inserts disabled, by row id, which the recommended-plugins step offers to turn on. Each must name a row of the profile, or the plugin does not load.')
+    .default([...DEFAULT_SETTINGS.optionalRows]).volatile(),
   starterKind: z.union(['', ...FOLDER_KINDS] as const).default('').volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')

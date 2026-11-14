@@ -21,6 +21,8 @@ This page shows how to read the model's reasoning and reply one word at a time, 
 
 Open Plugins in the sidebar and open **Delo studio**. Under Components, find **Thinking tab** and turn it on; it starts at once, with no restart. Then open the right sidebar and pick **Thinking**. The tab follows the latest turn of the chat you are in.
 
+The first-run guide's Recommended plugins step offers the same switch.
+
 ## The band and the page
 
 The band shows one word at a time, in a fixed place, with the letter your eye fixes on marked. A word that ends a sentence or a clause stays a little longer.
