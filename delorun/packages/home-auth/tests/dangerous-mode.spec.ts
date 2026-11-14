@@ -199,7 +199,7 @@ function recording(): { response: ServerResponse; answered: { status?: number; b
 function home(listener: string | undefined, mode: boolean, unlocked = true, pin = false, pageUnlocked = false) {
   return {
     pinEnabled: () => pin,
-    pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
+    pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
     dangerousMode: () => mode,
     elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined),
