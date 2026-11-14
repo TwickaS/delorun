@@ -308,6 +308,56 @@ function BundleCard({ name, title, description, note, services, onAdd, children 
   )
 }
 
+/**
+ * One bundled row the person can turn on: its title, description and icon from its package, and the action for its
+ * state. Nothing is turned on unless the person presses the button.
+ */
+function RowCard({ id, services }: { readonly id: string; readonly services: StepServices }): ReactNode {
+  const { t, bundles, resolveText } = services
+  const view = useSyncExternalStore(useCallback(listener => bundles.rows.subscribe(listener), [bundles]), () => bundles.rows.getSnapshot()[id])
+  const title = view?.title === undefined ? id : resolveText(view.title)
+  const state = view?.state ?? 'checking'
+  let action: ReactNode
+  switch (state) {
+    case 'checking':
+      action = <span className={css.status}>{t('bundle.checking')}</span>
+      break
+    case 'available':
+      action = <Button variant="outline" size="sm" aria-label={t('optional.turnOnNamed', { name: title })} onClick={() => { void bundles.enableRow(id) }}>{t('optional.turnOn')}</Button>
+      break
+    case 'installing':
+      action = <span className={css.status}>{t('optional.turningOn')}</span>
+      break
+    case 'installed':
+      action = <span className={css.status} data-tone="done">{t('optional.on')}</span>
+      break
+    case 'restart':
+      action = <span className={css.status} data-tone="done">{t('optional.restart')}</span>
+      break
+    case 'unavailable':
+      action = <PluginsAction status={t('bundle.unavailable')} services={services} />
+      break
+    case 'failed':
+      action = <PluginsAction status={t('bundle.failed')} services={services} tone="failed" />
+      break
+    /* v8 ignore next 2 -- closed-union default only defends future widening of BundleState */
+    default:
+      return assertNever(state)
+  }
+  return (
+    <li className={css.card}>
+      <div className={css.cardMain}>
+        {view?.icon !== undefined && <img className={css.cardIcon} src={view.icon} alt="" />}
+        <div className={css.cardText}>
+          <h4 className={css.cardTitle}>{title}</h4>
+          {view?.description !== undefined && <p className={css.cardLead}>{resolveText(view.description)}</p>}
+        </div>
+        {action}
+      </div>
+    </li>
+  )
+}
+
 /** Read which of some bundles are installed or available once the step opens. */
 function useRefresh(services: StepServices, names: readonly string[]): void {
   const { bundles } = services
@@ -397,7 +447,7 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
  * @returns the step body.
  */
 export function PluginsStep({ services, guide }: StepProps): ReactNode {
-  const { t, plugins, bundles, resolveText } = services
+  const { t, plugins, optionalRows, bundles, resolveText } = services
   const keys = useStore(guide.keys)
   const readiness = useStore(guide.readiness)
   const recommendations = useStore(guide.recommendations)
@@ -406,6 +456,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
   const present = presentConnections(keys, readiness)
   const shown = fits(plugins, answer, present)
   useRefresh(services, shown.map(each => each.name))
+  const rowKey = optionalRows.join('\n')
+  useEffect(() => { if (rowKey !== '') bundles.refreshRows(rowKey.split('\n')) }, [bundles, rowKey])
   const views = useSyncExternalStore(useCallback(listener => bundles.views.subscribe(listener), [bundles]), () => bundles.views.getSnapshot())
   const names = new Map(keys.status === 'ready' ? keys.value.providers.map(each => [each.provider, each.name]) : [])
   const unread = answer?.plugins.some(each => each.source === 'unknown') === true && answer.registry === 'not-asked'
@@ -424,10 +476,11 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
               description={view?.description === undefined ? undefined : resolveText(view.description)} />
           )
         })}
+        {optionalRows.map(id => <RowCard key={id} id={id} services={services} />)}
       </ul>
       <div aria-live="polite">
         {recommendations?.status === 'loading' && <p className={css.status}>{t('plugins.reading')}</p>}
-        {shown.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}
+        {shown.length === 0 && optionalRows.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}
         {answer?.registry === 'unreachable' && <p className={css.status} data-tone="attention">{t('plugins.registry.unreachable')}</p>}
         {recommendations?.status === 'failed' && <p className={css.status} data-tone="attention">{t('plugins.unread')}</p>}
       </div>
@@ -529,7 +582,7 @@ interface CheckLine {
  * @returns the step body.
  */
 export function ReadyStep({ services, guide, reach, target }: StepProps & { readonly reach: ReachState; readonly target: StartTarget }): ReactNode {
-  const { t, appearance, look, plugins, bundles } = services
+  const { t, appearance, look, plugins, optionalRows, bundles } = services
   const keys = useStore(guide.keys)
   const workspace = useStore(guide.workspace)
   const settings = useSyncExternalStore(useCallback(listener => look.settings.subscribe(listener), [look]), () => look.settings.getSnapshot())
@@ -538,7 +591,8 @@ export function ReadyStep({ services, guide, reach, target }: StepProps & { read
   const working = keys.status === 'ready' ? keys.value.providers.filter(each => each.result === 'works') : []
   const palette = settings.value?.palette ?? 'soft'
   const agents = AGENT_BUNDLES.filter(each => added(each.name)).map(each => t(`agents.${each.key}.title`))
-  const extra = plugins.filter(added).length
+  const rowViews = useSyncExternalStore(useCallback(listener => bundles.rows.subscribe(listener), [bundles]), () => bundles.rows.getSnapshot())
+  const extra = plugins.filter(added).length + optionalRows.filter(id => rowViews[id]?.state === 'installed' || rowViews[id]?.state === 'restart').length
   const lines: CheckLine[] = [
     working.length > 0
       ? { key: 'model', label: t('ready.model'), value: working.map(each => each.name).join(', '), tone: 'done' }

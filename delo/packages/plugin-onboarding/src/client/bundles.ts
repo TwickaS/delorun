@@ -11,6 +11,7 @@ import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 
 type PluginManager = ClientRemote['pluginManager']
 type BundleInfo = Extract<Awaited<ReturnType<PluginManager['listBundles']>>, { ok: true }>['value'][number]
+type PluginEntryId = Parameters<PluginManager['setPluginEnabled']>[0]
 type InstallOptions = NonNullable<Parameters<PluginManager['installBundle']>[1]>
 
 /**
@@ -31,6 +32,12 @@ export interface BundleView {
   readonly description?: LocalizedText
 }
 
+/** One offered bundled row as the steps draw it: a bundle view with the row's icon, when its package has one. */
+export interface RowView extends BundleView {
+  /** The package's icon as an image data URL. */
+  readonly icon?: string
+}
+
 /** What the steps use to offer bundles. */
 export interface BundleInstaller {
   /** Every offered bundle's view by package name; a name is absent until `refresh` names it. */
@@ -46,6 +53,20 @@ export interface BundleInstaller {
    * @returns when the attempt settled; it never rejects.
    */
   install(name: string): Promise<void>
+  /** Every offered bundled row's view by row id; a row id is absent until `refreshRows` names it. */
+  readonly rows: { getSnapshot(): Readonly<Record<string, RowView>>; subscribe(listener: () => void): () => void }
+  /**
+   * Read where the named rows of installed bundles stand. Never changes anything.
+   * @param ids - row ids.
+   */
+  refreshRows(ids: readonly string[]): void
+  /**
+   * Turn on a row the person chose, through the plugin manager's `setPluginEnabled`, which keeps its checks of
+   * protected and unaddressable rows. Only a row in the `available` state is changed.
+   * @param id - row id.
+   * @returns when the attempt settled; it never rejects.
+   */
+  enableRow(id: string): Promise<void>
   /** Open Plugins, where an addition that needs a decision is finished. */
   openPlugins(): void
 }
@@ -88,6 +109,41 @@ function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined 
 export function createBundleInstaller(ctx: Context): BundleInstaller {
   const views = createSnapshotStore<Readonly<Record<string, BundleView>>>({})
   const known = new Map<string, BundleInfo>()
+  const rows = createSnapshotStore<Readonly<Record<string, RowView>>>({})
+  const knownRows = new Map<string, PluginEntryId>()
+  const setRow = (id: string, view: RowView): void => { rows.set({ ...rows.getSnapshot(), [id]: view }) }
+  const setAllRows = (ids: readonly string[], state: BundleState): void => {
+    rows.set({ ...rows.getSnapshot(), ...Object.fromEntries(ids.map(id => [id, { state }])) })
+  }
+  const readRows = async (ids: readonly string[]): Promise<void> => {
+    const remote = pluginManager(ctx)
+    if (remote === undefined) {
+      setAllRows(ids, 'failed')
+      return
+    }
+    const [listed, live] = await Promise.all([remote.listBundles(), remote.listPlugins()])
+    if (!listed.ok || !live.ok) {
+      setAllRows(ids, 'failed')
+      return
+    }
+    for (const id of ids) {
+      const found = listed.value.flatMap(bundle => bundle.rows.filter(each => each.rowId === id).map(each => ({ bundle, each })))[0]
+      const plugin = found?.each.entryId === undefined ? undefined : live.value.find(each => each.entryId === found.each.entryId)
+      if (found?.each.entryId === undefined || plugin === undefined) {
+        knownRows.delete(id)
+        setRow(id, { state: found === undefined || !found.bundle.enabled ? 'unavailable' : 'failed' })
+        continue
+      }
+      knownRows.set(id, found.each.entryId)
+      const meta = found.each.meta
+      setRow(id, {
+        state: plugin.enabled ? 'installed' : plugin.readOnlyReason === undefined ? 'available' : 'failed',
+        ...meta?.title === undefined ? {} : { title: meta.title },
+        ...meta?.description === undefined ? {} : { description: meta.description },
+        ...meta?.icon === undefined ? {} : { icon: meta.icon },
+      })
+    }
+  }
   const set = (name: string, view: BundleView): void => { views.set({ ...views.getSnapshot(), [name]: view }) }
   const setAll = (names: readonly string[], state: BundleState): void => {
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
@@ -145,6 +201,30 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
         // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
         console.warn('delo onboarding: the plugin was not added', error)
         set(name, { ...before, state: 'failed' })
+      }
+    },
+    rows,
+    refreshRows: (ids) => {
+      setAllRows(ids, 'checking')
+      readRows(ids).catch((error: unknown) => {
+        console.warn('delo onboarding: the optional plugins were not read', error)
+        setAllRows(ids, 'failed')
+      })
+    },
+    enableRow: async (id) => {
+      const entry = knownRows.get(id)
+      const remote = pluginManager(ctx)
+      const before = rows.getSnapshot()[id]
+      if (before?.state !== 'available' || entry === undefined || remote === undefined) return
+      setRow(id, { ...before, state: 'installing' })
+      try {
+        const result = await remote.setPluginEnabled(entry, true)
+        const application = result.ok ? result.value.application : 'failed'
+        setRow(id, { ...before, state: application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed' })
+      } catch (error) {
+        // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
+        console.warn('delo onboarding: the optional plugin was not turned on', error)
+        setRow(id, { ...before, state: 'failed' })
       }
     },
     openPlugins: () => { ctx.get('pluginNavigation')?.openList() },
