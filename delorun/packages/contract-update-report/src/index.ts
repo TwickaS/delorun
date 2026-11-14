@@ -492,6 +492,19 @@ export const UPDATE_COMMAND = 'delorun update'
 /** The harness's Connection Fetch route that answers `GET` with {@link UpdateNoticeResponse}. */
 export const UPDATE_NOTICE_PATH = '/api/delorunUpdateCheck.notice'
 
+/** The harness's Connection Fetch route that answers `GET` with {@link UpdateChannelResponse}; it is served whether or not the release check is on. */
+export const UPDATE_CHANNEL_PATH = '/api/delorunUpdateCheck.channel'
+
+/** The answer of {@link UPDATE_CHANNEL_PATH}: the host the release check contacts when this installation's launcher was built for another channel. */
+export interface UpdateChannelResponse {
+  /**
+   * The host, with its port when it has one, of the channel origin recorded in the home's `trust/channel.json`; the
+   * channel serves the timestamp, the root file, the manifest and the log record, so no other host is contacted.
+   * `null` on the production channel, which contacts releases.delorun.com and GitHub.
+   */
+  readonly host: string | null
+}
+
 /** The answer of {@link UPDATE_NOTICE_PATH}: the notice, or `null` when no newer release is known. */
 export interface UpdateNoticeResponse {
   /** The notice, or `null`. */

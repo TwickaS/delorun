@@ -81,6 +81,8 @@ CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun reco
 
 当 `newest.delorun` 比正在运行的 Delo 版本更新时，存在一条提示。它写明正在运行的发布、更新的发布、按语义化版本划分的跨度（`patch`、`minor` 或 `major`），以及该更新的发布会在任一版本轴上停用 profile 中多少个已安装插件；这一数目由[条目](#items)中的插件评估在没有撤销列表的情况下决定，依据读取提示时已安装的 profile。提示指明 `delorun update`，不应用任何内容。终端把它显示为一行；studio 的侧边栏通过 Connection 路由 `GET /api/delorunUpdateCheck.notice` 显示它，该路由向所有者回答 `{ "notice": <notice> | null }`，并拒绝远程访问设备；`delorun doctor` 把它显示为其 `update` 行。开关关闭时，该行不注册任何路由，下一次启动会移除该记录。
 
+Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateCheck.channel`，无论检查是否开启。`host` 是启动器记录在主目录 `trust/channel.json` 中的渠道来源的主机（有端口时包含端口）；该渠道提供时间戳、根文件、清单和日志记录，因此检查不会联系其他主机。生产渠道为 `null`，联系 releases.delorun.com 和 GitHub。工作室用它在发布检查的同意文案中写明所联系的主机。
+
 <a id="when-a-report-is-made"></a>
 
 ## 何时生成报告

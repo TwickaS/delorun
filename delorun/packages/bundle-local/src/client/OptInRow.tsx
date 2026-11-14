@@ -21,6 +21,8 @@ export interface OptInRowProps {
   readonly form: ConfigFormSnapshot<OptInSettings>
   /** The switch's write state. */
   readonly mutation: OptInMutation
+  /** The host of another release channel the release check contacts, from the channel route; its copy names it in place of the production hosts. Absent for the production channel and for the other switches. */
+  readonly channelHost?: string | undefined
   /** The line that says why a profile that does not serve the switch's Host row shows no switch. */
   readonly unavailable?: PrivacyLocaleKey | undefined
   /**
@@ -37,13 +39,16 @@ export interface OptInRowProps {
  * @param props - the switch, its copy, form and write state, and the writer.
  * @returns the row, with its dialog while it asks.
  */
-export function OptInRow({ id, t, form, mutation, unavailable, setEnabled }: OptInRowProps): ReactNode {
+export function OptInRow({ id, t, form, mutation, unavailable, channelHost, setEnabled }: OptInRowProps): ReactNode {
   const [asking, setAsking] = useState(false)
+  const copy = (part: 'description' | 'confirm.body'): string => id === 'updateCheck' && channelHost !== undefined
+    ? t(`updateCheck.${part}.channel`).replace('{host}', channelHost)
+    : t(`${id}.${part}`)
   const served = form.status !== 'unavailable'
   return <div className={css.row} data-opt-in={id}>
     <div className={css.text}>
       <div className={css.title}>{t(`${id}.title`)}</div>
-      <div className={css.description}>{t(`${id}.description`)}</div>
+      <div className={css.description}>{copy('description')}</div>
       {served || unavailable === undefined ? null : <div className={css.description}>{t(unavailable)}</div>}
       {mutation.failed ? <div className={css.failed} role="alert">{t('failed')}</div> : null}
     </div>
@@ -61,7 +66,7 @@ export function OptInRow({ id, t, form, mutation, unavailable, setEnabled }: Opt
             void setEnabled(true)
           }}>{t('confirm.accept')}</Button>
         </>}>
-        <p className={css.consent}>{t(`${id}.confirm.body`)}</p>
+        <p className={css.consent}>{copy('confirm.body')}</p>
       </Modal>
       : null}
   </div>

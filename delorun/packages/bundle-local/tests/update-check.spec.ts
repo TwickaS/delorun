@@ -3,8 +3,12 @@
  * so no check can run; on, it runs an attached check at start when one is due and then on its interval, never waits
  * for one, and serves the notice over one exact Connection route.
  */
+import { chmodSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delorun/contract-update-report'
+import { writeChannelRecord } from '@delorun/install'
+import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delorun/contract-update-report'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as UpdateCheck from '../src/update-check.ts'
 import { Config, MAX_INTERVAL_HOURS, UPDATE_CHECK_DEFAULTS, type UpdateCheckSource, type UpdateCheckState, type UpdateNotes } from '../src/update-check.ts'
@@ -40,7 +44,16 @@ interface Route {
  * @returns the context and the routes it registered.
  */
 async function mount(config: Partial<UpdateCheck.Config>) {
-  const ctx = new Context()
+  return mountIn(new Context(), config)
+}
+
+/**
+ * Mount the row in a given context.
+ * @param ctx - the context, which may carry a `profileContext`.
+ * @param config - the row's configuration.
+ * @returns the context and the routes it registered.
+ */
+async function mountIn(ctx: Context, config: Partial<UpdateCheck.Config>) {
   const routes = new Map<string, Route>()
   ctx.provide('connection', {
     fetch: {
@@ -85,7 +98,7 @@ describe('the switch', () => {
     expect(parse({}).enabled).toBe(false)
     const { ctx, routes } = await mount({})
     expect(ctx.get('delorunUpdateCheck')).toBeUndefined()
-    expect(routes.size).toBe(0)
+    expect([...routes.keys()]).toEqual([UPDATE_CHANNEL_PATH])
   })
 
   it('validates the interval and the deadline', () => {
@@ -228,5 +241,30 @@ describe('the notes route', () => {
     dispose()
     ctx.delorunUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }, undefined, { version: NOTICE.release.delorun, text: 'Delorun 0.1.3\n- A change.\n' }).source)
     expect(await (await get()).json()).toEqual({ version: NOTICE.release.delorun, notes: 'Delorun 0.1.3\n- A change.\n' })
+  })
+})
+
+describe('the channel route', () => {
+  /** @returns the route's answer for a home whose launcher recorded `origins`, or for no home at all. */
+  async function answer(origins: { channelOrigin?: string } | undefined, enabled: boolean) {
+    const home = origins === undefined ? undefined : mkdtempSync(join(tmpdir(), 'delorun-channel-'))
+    if (home !== undefined) {
+      chmodSync(home, 0o700)
+      await writeChannelRecord(home, origins!)
+    }
+    const context = new Context()
+    context.provide('profileContext', { home } as never)
+    const { routes } = await mountIn(context, { enabled })
+    return (await routes.get(UPDATE_CHANNEL_PATH)!.fetch(new Request('http://harness.test/api'))).json()
+  }
+
+  it('names the host of the recorded channel origin, with the switch off or on', async () => {
+    expect(await answer({ channelOrigin: 'http://127.0.0.1:18080' }, false)).toEqual({ host: '127.0.0.1:18080' })
+    expect(await answer({ channelOrigin: 'http://127.0.0.1:18080' }, true)).toEqual({ host: '127.0.0.1:18080' })
+  })
+
+  it('answers null for the production channel and for a Host without a profile', async () => {
+    expect(await answer({}, false)).toEqual({ host: null })
+    expect(await answer(undefined, false)).toEqual({ host: null })
   })
 })
