@@ -889,6 +889,23 @@ describe('the MCP server review', () => {
     expect(within(dialog).getByText('/Windows/System32/cmd.exe')).toBeTruthy()
   })
 
+  it('shows a templated argument unresolved with a note that it is filled from stored credentials at start', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, args: ['--token=${credential:MCP_TOKEN}'] })
+    renderReview(source)
+    const details = screen.getByText(en['mcp.details']).closest('details')
+    if (details === null) throw new Error('no details')
+    expect(within(details).getByText('"--token=${credential:MCP_TOKEN}"')).toBeTruthy()
+    expect(within(details).getByText(en['mcp.argsTemplated'])).toBeTruthy()
+  })
+
+  it('adds no credential note to a start without templates', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask(SERVER)
+    renderReview(source)
+    expect(screen.queryByText(en['mcp.argsTemplated'])).toBeNull()
+  })
+
   it('says what changed since the person allowed the server', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, change: 'environment', changedVariables: ['NODE_OPTIONS', 'PATH'] })

@@ -148,12 +148,14 @@ The `web_fetch` [guard](../reference/glossary.md#fetch-guard), the update protec
 
 An MCP server is a helper program that gives the model extra tools. One that runs a command runs it on your computer with your access, outside the sandbox. With Ask me first, Delorun holds a new one stopped until you allow it in Settings, Safety, Permissions or with `delorun mcp accept <server>`. When it worked, the server shows as Allowed and running.
 
-Before you answer you see its command, arguments, folder and the names of its environment variables, and the exact file that will run. Delorun asks again when any of these changes, including when the same command now finds a different file. To stop a server you allowed, choose Revoke in Settings, Safety, Permissions or run `delorun mcp revoke <server>`.
+Before you answer you see its command, arguments, folder and the names of its environment variables, and the exact file that will run. Delorun asks again when any of these changes, including when the same command now finds a different file. A server can take a secret from your stored credentials as `${credential:NAME}` in an argument or in an ordinary environment variable. The review shows that text, never the secret, and notes that it is filled in when the server starts. To stop a server you allowed, choose Revoke in Settings, Safety, Permissions or run `delorun mcp revoke <server>`.
 
 <details>
 <summary>Edge cases</summary>
 
 - If the file changes between your look and your answer, then your answer is refused as stale — look at the new review and answer again.
+- If a server's command, folder or a variable that changes what runs, such as `PATH` or `NODE_OPTIONS`, holds a `${credential:NAME}`, then the server does not load — write the value directly or use another variable name.
+- If an argument that is only a `${credential:NAME}` would start with `-` once filled in, then the server does not start, because a program would read it as an option — put the option in the argument itself, as in `--token=${credential:NAME}`.
 - If you decline or revoke a server, then it stays stopped until its start changes or you allow it again.
 - If you run `delorun mcp accept` without a terminal, then nothing is accepted — run it in a terminal on the computer that runs Delorun.
 - If Delorun is not running, then `delorun mcp` commands cannot reach it — start it with `delorun start`.
