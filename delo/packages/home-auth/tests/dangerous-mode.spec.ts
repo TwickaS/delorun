@@ -284,6 +284,29 @@ describe('an unlocked PIN page without dangerous mode', () => {
     expect(off.answered.status).toBe(403)
   })
 
+  it('is bound to no settings-document or account action, and no mode or unlock lifts them', () => {
+    const pagePrincipal = reachDevicePrincipal('device-1', LISTENER, 'page-1')
+    const state: ReachAccessFacts = { ...facts(false, false), pageUnlockOf: () => ({ id: 'page-1' }) }
+    const denied = Object.keys(REACH_DENIED_ACTIONS).filter(action => action === 'settings/openSettingsDocument' || action.startsWith('account/'))
+    expect(denied).toContain('settings/openSettingsDocument')
+    expect(denied).toContain('account/signOut')
+    const bindings = createReachAccessPolicy(state).bindings(pagePrincipal)
+    expect(bindings.length).toBeGreaterThan(0)
+    for (const binding of bindings) {
+      // Pins the role lists: an action outside them is refused by default, whatever the unlock.
+      for (const action of denied) expect(binding.role.actions, action).not.toContain(action)
+    }
+  })
+
+  it('is refused approving a device, reach and network exposure, and PIN changes, which keep requireComputer', () => {
+    const request = { headers: { host: 'home.example.ts.net' } } as never
+    for (const action of ['Approving a device', 'Changing remote access', 'Changing network exposure', 'Changing the PIN']) {
+      const { response, answered } = recording()
+      expect(requireComputer(request, response, home(LISTENER, false, false, true, true), action), action).toBe(false)
+      expect(answered.status).toBe(403)
+    }
+  })
+
   it('is still refused the step-up routes, which keep requireComputer and read neither mode nor unlock', () => {
     const { response, answered } = recording()
     expect(requireComputer(request, response, home(LISTENER, false, false, true, true), 'Changing remote access')).toBe(false)
