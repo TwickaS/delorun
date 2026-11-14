@@ -18,7 +18,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId } from '@delo/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delo/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
-import { HomeAuthError, refusalBody } from './errors.ts'
+import { HomeAuthError, refusalBody, STRUCTURED_REFUSALS } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delo/home'
 import { isRecord } from './files.ts'
 import { devicePublicKeyOf } from './records.ts'
@@ -326,7 +326,7 @@ export function sendThrown(response: ServerResponse, error: unknown): void {
 export function sendError(response: ServerResponse, error: HomeAuthError): void {
   response.statusCode = error.status
   response.setHeader('content-type', 'application/json; charset=utf-8')
-  response.end(refusalBody(error.code, error.detail))
+  response.end(refusalBody(error.code, error.detail, STRUCTURED_REFUSALS.has(error.code) ? error.details : {}))
 }
 
 /**

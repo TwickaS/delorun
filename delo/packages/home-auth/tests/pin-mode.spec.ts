@@ -525,6 +525,24 @@ describe('home-wide pause on every miss path', () => {
   })
 })
 
+describe('structured PIN refusals and the state fields', () => {
+  it('answers triesLeft and removed on a wrong PIN, paused on a pause, and lockWhenHidden in the state', async () => {
+    expect((await send('POST', PIN_PATHS.set, { secret: PIN, lockWhenHidden: true })).status).toBe(200)
+    // Pins the state field: the client locks on hide only when the home says so.
+    expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toMatchObject({ kind: 'on', lockWhenHidden: true })
+    const second = await addDevice(2)
+    const third = await addDevice(3)
+    const fourth = await addDevice(4)
+    // Pins the structured miss: the client reads numbers, not the sentence.
+    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 4, removed: false } })
+    for (let miss = 0; miss < 3; miss += 1) await unlock('135790', second.token)
+    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 0, removed: true } })
+    for (let miss = 0; miss < 5; miss += 1) await unlock('135790', await signIn(third.deviceId))
+    // Pins the structured pause.
+    expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
+  }, 40_000)
+})
+
 describe('the unlock state and the hash cost', () => {
   it('reports the idle end and the cap as the unlock and the touch do', async () => {
     await turnOn()
