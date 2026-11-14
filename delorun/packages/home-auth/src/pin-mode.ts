@@ -18,7 +18,7 @@ import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 import { PIN_MODE_LIMITS, type PinKind } from '@delorun/contract-oidc-passkeys'
-import type { SecretSink } from '@delorun/contract-operational-logs'
+import { MIN_REGISTERED_SECRET_LENGTH, type SecretSink } from '@delorun/contract-operational-logs'
 import { HomeAuthError } from './errors.ts'
 import { isRecord, isTime, readStoreFile, writeStoreFile } from './files.ts'
 
@@ -234,7 +234,7 @@ export class PinModeStore {
       throw new HomeAuthError('BAD_REQUEST', `an unlock idles out after a whole number of minutes from 1 to ${String(PIN_MODE_LIMITS.maxIdleMinutes)}, got ${String(idleMinutes)}`)
     }
     const { secret, kind } = checkNewSecret(presented)
-    const release = this.secrets?.register(secret, 'session-secret')
+    const release = this.protect(secret)
     try {
       const salt = randomBytes(PIN_MODE_LIMITS.scrypt.saltBytes)
       const { N, r, p } = PIN_MODE_LIMITS.scrypt
@@ -333,7 +333,7 @@ export class PinModeStore {
     this.attempts = { ...this.attempts, devices: { ...this.attempts.devices, [deviceId]: before + 1 }, home: [...kept, at] }
     await this.persist()
     const secret = normalised(presented)
-    const release = this.secrets?.register(secret, 'session-secret')
+    const release = this.protect(secret)
     let matches = false
     try {
       const salt = Buffer.from(record.hash.salt, 'base64url')
@@ -362,6 +362,17 @@ export class PinModeStore {
     }
     if (count >= PIN_MODE_LIMITS.deviceWrongTries) return { kind: 'lockout' }
     return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries - count }
+  }
+
+  /**
+   * Hand a secret to the log redactor while it is handled. The redactor matches nothing under
+   * {@link MIN_REGISTERED_SECRET_LENGTH} characters and refuses to register it, and a PIN has 6 digits, so a short
+   * secret is not registered; no code path logs it.
+   * @param secret - the normalised PIN or passcode.
+   * @returns the disposer of the registration, or undefined when nothing was registered.
+   */
+  private protect(secret: string): (() => void) | undefined {
+    return secret.length < MIN_REGISTERED_SECRET_LENGTH ? undefined : this.secrets?.register(secret, 'session-secret')
   }
 
   /**
