@@ -116,6 +116,8 @@ async function setup(options: { readonly listed?: Listed[], readonly reportBytes
     },
     trash: (request) => { changes.push(['trash', request]); return Promise.resolve({ ...entry, id: '00000000-0000-4000-8000-000000000004', directory: 'app' }) },
     restore: (request) => { changes.push(['restore', request]); return Promise.resolve({ workspaces: [WorkspaceId('ws-old')] }) },
+    planRename: request => Promise.resolve({ workspace: WorkspaceId('ws-old'), from: 'Old', to: request.name }),
+    rename: (request) => { changes.push(['rename', request]); return Promise.resolve({ workspace: WorkspaceId('ws-old'), from: 'Old', to: request.name }) },
   }
   if (options.workspacesService !== false) ctx.provide('deloWorkspaces', deloWorkspaces)
   // The person's answers to approval questions, in order, and the questions.
