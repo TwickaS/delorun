@@ -8,7 +8,7 @@ The root [AGENTS.md](AGENTS.md) is the one guide for people and agents. Read it 
 
 ## Ways to contribute
 
-- Report bugs and request features with the issue templates, and ask questions in GitHub Discussions.
+- Report bugs and request features with the issue templates, and ask questions in GitHub Discussions ([SUPPORT.md](SUPPORT.md)).
 - Open a pull request against the default branch with a fix, a feature or a documentation change. Work on Delo's own code and plugins under `delo/` is welcome.
 - Create a plugin and share it. A GitHub project tagged with the `dsh-plugin` topic is easy for others to find. Plugins are the preferred place for new behaviour.
 - Write guides, answer questions and help other members of the community.
@@ -78,4 +78,4 @@ Delo is an independent community project. It is not a DeepSeek product, and noth
 
 ## Questions
 
-Write to support@delorun.com for questions that are not suited to an issue.
+[SUPPORT.md](SUPPORT.md) lists where to ask. Write to support@delorun.com for questions that are not suited to an issue.

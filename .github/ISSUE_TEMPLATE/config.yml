@@ -6,3 +6,6 @@ contact_links:
   - name: Ask a question
     url: https://github.com/Delo-Run/delo/discussions
     about: Ask questions and discuss ideas in GitHub Discussions.
+  - name: Read the documentation and support options
+    url: https://github.com/Delo-Run/delo/blob/HEAD/SUPPORT.md
+    about: SUPPORT.md lists the documentation, the support channels and what to include in a report.
