@@ -179,6 +179,17 @@ export interface ConnectionHandle {
    * @returns a newly connecting socket using the installed authentication factory.
    */
   openWebSocket(path: string): ConnectionWebSocket
+  /**
+   * Register a provider of extra request headers and WebSocket subprotocols for the browser carrier, which a client
+   * plugin uses to attach a credential it holds in page memory. The provider is read for every `rpc` request and every
+   * `openWebSocket`, so a changed credential applies to the next request or socket; a socket already open keeps the
+   * subprotocols it offered, and the plugin calls `reconnect` to replace it. Headers are not sent by a Host-provided
+   * `transport.rpc`, and subprotocols are not offered by a `transport.createWebSocket`. Several
+   * providers merge in registration order, a later one winning a header name.
+   * @param provider - called per request; returns the headers and the subprotocols to add.
+   * @returns disposer that withdraws the provider.
+   */
+  registerRequestExtras(provider: RequestExtrasProvider): () => void
   /** Reset retry progression and replace the current attempt immediately. */
   reconnect(): void
   /**
@@ -197,6 +208,15 @@ export interface ConnectionHandle {
    */
   start(sinks: ConnectionSinks, config?: ConnectionRecoveryConfig): ConnectionLoop
 }
+
+/** Extra request headers and WebSocket subprotocols a client plugin adds to the browser carrier. */
+export interface RequestExtras {
+  readonly headers?: Readonly<Record<string, string>>
+  readonly subprotocols?: readonly string[]
+}
+
+/** Reads the {@link RequestExtras} of one request or socket. */
+export type RequestExtrasProvider = () => RequestExtras
 
 /** Controls retained by the sole owner of a running connection loop. */
 export interface ConnectionLoop {
@@ -252,7 +272,18 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
   const transport = options.transport
   const recovery = options.recovery ?? {}
   const interactions = options.interactions ?? (pageLocation === undefined ? 'none' : 'answer')
-  const rpc = transport?.rpc ?? createWebConnectionRpc(transport?.fetch, transport?.openStream)
+  const extrasProviders = new Set<RequestExtrasProvider>()
+  interface MergedExtras { headers: Record<string, string>; subprotocols: string[] }
+  const requestExtras = (): MergedExtras => {
+    const merged: MergedExtras = { headers: {}, subprotocols: [] }
+    for (const provider of extrasProviders) {
+      const extras = provider()
+      Object.assign(merged.headers, extras.headers)
+      merged.subprotocols.push(...extras.subprotocols ?? [])
+    }
+    return merged
+  }
+  const rpc = transport?.rpc ?? createWebConnectionRpc(transport?.fetch, transport?.openStream, () => requestExtras().headers)
   let generationSource: ConnectionGenerationSource | undefined
   let owner: ConnectionOwner | undefined
   let generationId = 0
@@ -292,7 +323,9 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
   }
   const handle: ConnectionHandle = {
     interactions,
-    openWebSocket: path => openConnectionWebSocket(path, transport?.createWebSocket, transport?.streamBaseUrl),
+    openWebSocket: path => openConnectionWebSocket(
+      path, transport?.createWebSocket, transport?.streamBaseUrl, requestExtras().subprotocols,
+    ),
     isLoopback: transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
     remoteMedia: options.remoteMedia ?? 'load',
     generation: {
@@ -310,6 +343,10 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
       },
     },
     rpc,
+    registerRequestExtras(provider) {
+      extrasProviders.add(provider)
+      return () => { extrasProviders.delete(provider) }
+    },
     reconnect() {
       owner?.controller.reconnect()
     },

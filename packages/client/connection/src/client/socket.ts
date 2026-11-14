@@ -47,20 +47,32 @@ export interface ConnectionWebSocket {
 export type ConnectionWebSocketFactory = (url: string) => ConnectionWebSocket
 
 /**
+ * Create a socket on the browser API, offering the subprotocols a request augmenter supplies.
+ * @param url - absolute WebSocket URL.
+ * @param protocols - WebSocket subprotocols to offer; none offers none.
+ * @returns a newly connecting socket.
+ */
+function browserSocket(url: string, protocols: readonly string[]): ConnectionWebSocket {
+  return protocols.length === 0 ? new WebSocket(url) : new WebSocket(url, [...protocols])
+}
+
+/**
  * Resolve a logical channel against the explicit Host or the page's document base.
  * @param path - absolute logical channel path.
  * @param factory - authenticated socket factory; omission uses the browser API.
  * @param baseUrl - Host base URL, required outside a document.
+ * @param protocols - subprotocols the browser API offers; a `factory` of the caller's own receives none.
  * @returns a socket owned by the calling channel.
  */
 export function openConnectionWebSocket(
   path: string,
-  factory: ConnectionWebSocketFactory = url => new WebSocket(url),
+  factory?: ConnectionWebSocketFactory,
   baseUrl?: string,
+  protocols: readonly string[] = [],
 ): ConnectionWebSocket {
   const base = baseUrl ?? (typeof document === 'undefined' ? undefined : document.baseURI)
   if (base === undefined) throw new Error('connection: WebSocket carrier requires streamBaseUrl outside a document')
   const url = new URL(path.slice(1), base)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  return factory(url.href)
+  return factory === undefined ? browserSocket(url.href, protocols) : factory(url.href)
 }

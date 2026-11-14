@@ -62,6 +62,7 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     workspaceRootOf: () => undefined,
     deloHome: '/nowhere',
     elevationOf: () => (unlocked ? UNLOCK : undefined),
+    pageUnlockOf: () => undefined,
     logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),

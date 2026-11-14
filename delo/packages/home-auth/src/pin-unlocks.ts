@@ -1,7 +1,7 @@
 /**
  * Page unlocks of PIN mode (C14, "PIN mode"): the PIN or passcode a person types on an approved device mints a page
- * unlock, an {@link ElevationRecord} that the reach policy's `elevationOf` admits, and a 32-byte token the page keeps in
- * memory.
+ * unlock, an {@link ElevationRecord} marked `page` that only the Peer admitted under its id holds (never the device-wide
+ * `elevationOf`), and a 32-byte token the page keeps in memory.
  *
  * - **The token.** It is returned once and kept only as a SHA-256 digest. It is bound to the unlock's device, listener
  *   and session: a presentation from another device, listener or session ends the unlock ({@link PinUnlocks.resolve}),
@@ -65,10 +65,12 @@ export interface PinUnlocksOptions {
    */
   readonly removeDevice: (deviceId: DeviceId) => Promise<unknown>
   /**
-   * Whether the asker's device is still recorded, its session still admitted and its listener still served.
-   * @param asker - the device, listener and session.
-   * @returns whether all three still stand.
+   * Whether a presented session id is the bound session or the one it rolled from, which still admits requests in flight.
+   * @param presented - the session id the request arrived with.
+   * @param bound - the session id the unlock is bound to.
+   * @returns whether they are one session.
    */
+  readonly sameSession: (presented: string, bound: string) => boolean
   readonly stillAdmitted: (asker: UnlockAsker) => boolean
   /**
    * Called with each PIN event.
@@ -154,6 +156,24 @@ export class PinUnlocks {
   }
 
   /**
+   * Whether PIN mode is on.
+   * @returns whether it is.
+   */
+  enabled(): boolean {
+    return this.options.store.summary().enabled
+  }
+
+  /**
+   * The running page unlock an id names.
+   * @param unlockId - the id in a page Peer's principal.
+   * @returns the unlock, or undefined once it ended or for an id that names a computer-approved elevation.
+   */
+  pageUnlock(unlockId: string): ElevationRecord | undefined {
+    const record = this.options.elevations.get(unlockId)
+    return record?.page === true ? record : undefined
+  }
+
+  /**
    * Find the unlock a token names for one asker.
    * @param token - the token the page presented.
    * @param asker - the device, listener and session the request arrived with.
@@ -169,7 +189,7 @@ export class PinUnlocks {
       this.drop(digest)
       throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
     }
-    if (record.deviceId !== asker.deviceId || record.listener !== asker.listener || record.sessionId !== asker.sessionId) {
+    if (record.deviceId !== asker.deviceId || record.listener !== asker.listener || !this.options.sameSession(asker.sessionId, record.sessionId)) {
       this.options.elevations.endById(id, 'token-refused')
       throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
     }

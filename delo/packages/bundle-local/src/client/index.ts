@@ -32,6 +32,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the 'connection/reset' event merge and the connection service's type.
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import { applyUnlockConnection } from './unlock-connection.ts'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -314,6 +315,7 @@ export const inject = ['slots', 'locale', 'configForms', 'sessions', 'connection
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
+  applyUnlockConnection(ctx)
   const t = ctx.locale.bind(NS)
   ctx.provide('deloNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DeloNoticeService)
   ctx.effect(() => overrideTitle(ctx.locale), 'delo-privacy: the product name as the document title')

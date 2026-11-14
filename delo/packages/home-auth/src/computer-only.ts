@@ -36,7 +36,7 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
 }
 
 /** What {@link requireComputerUnlessDangerous} and {@link admitUnlockedDevice} read of the home. */
-export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf'>
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf'>
 
 /**
  * {@link requireComputer} for a route that an unlocked device may also use while dangerous mode holds: a request that
@@ -66,7 +66,9 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
   return (_request, peer) => {
     const home = homeAuth()
     if (home === undefined || peer.principal.kind !== REACH_DEVICE || !home.dangerousMode()) return false
-    const { deviceId, listener } = peer.principal as ReachDevicePrincipal
+    const { deviceId, listener, unlockId } = peer.principal as ReachDevicePrincipal
+    // A page's Peer holds only its own page unlock, never the device's.
+    if (unlockId !== undefined) return home.pageUnlockOf(unlockId) !== undefined
     return home.elevationOf(deviceId, listener) !== undefined
   }
 }
