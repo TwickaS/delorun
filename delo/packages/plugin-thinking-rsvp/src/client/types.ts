@@ -19,7 +19,7 @@ export interface ReadingWord {
   readonly start: number
   /** Offset after the word in the part's text. */
   readonly end: number
-  /** The word as the model wrote it. */
+  /** The word as shown, without its Markdown markup. */
   readonly text: string
   /** Index, within the word, of the letter the eye fixes on. */
   readonly pivot: number

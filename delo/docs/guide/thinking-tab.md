@@ -19,7 +19,7 @@ This page shows how to read the model's reasoning and reply one word at a time, 
 
 ## Turn it on
 
-Open Plugins in the sidebar, find **Thinking tab** and turn it on. Then open the right sidebar and pick **Thinking**. The tab follows the latest turn of the chat you are in.
+Open Plugins in the sidebar and open **Delo studio**. Under Components, find **Thinking tab** and turn it on; it starts at once, with no restart. Then open the right sidebar and pick **Thinking**. The tab follows the latest turn of the chat you are in.
 
 ## The band and the page
 

@@ -244,7 +244,7 @@ export class ReadingFeed implements ReadingSource {
     if (words.length > 0) {
       part.words = [...part.words, ...words.map((span, offset) => ({
         key: `${part.key}#${String(part.words.length + offset)}`, part: part.key, start: span.start, end: span.end,
-        text: part.text.slice(span.start, span.end), pivot: span.pivot, dwell: span.dwell, readyAt: time,
+        text: span.text, pivot: span.pivot, dwell: span.dwell, readyAt: time,
       }))]
     }
     part.consumed = next

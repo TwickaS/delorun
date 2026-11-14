@@ -20,7 +20,7 @@ This page shows how to see an estimate of what a [chat](../reference/glossary.md
 
 ## Turn it on
 
-Open Plugins in the sidebar, find **Cost meter** and turn it on. You should see a figure under the message box in every chat, after the token count.
+Open Plugins in the sidebar and open **Delo studio**. Under Components, find **Cost meter** and turn it on; it starts at once, with no restart. You should see a figure under the message box in every chat, after the token count.
 
 ## What it shows
 

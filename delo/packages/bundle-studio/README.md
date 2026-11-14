@@ -33,7 +33,7 @@ kind: "package-bundle"
 | `delo-chat-states` | [`@delo/plugin-chat-states`](../plugin-chat-states/README.md) | Snooze and settle chats, with their shelves |
 | `delo-sidebar` | [`@delo/plugin-sidebar`](../plugin-sidebar/README.md) | The chat list as cards, workspace icons and header art |
 | `delo-onboarding` | [`@delo/plugin-onboarding`](../plugin-onboarding/README.md) | The first-run guide that ends in a new chat; this bundle sets its `plugins` to four experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool and session titles |
-| `delo-cost-meter` | [`@delo/plugin-cost-meter`](../plugin-cost-meter/README.md) | The estimated chat cost under the composer; inserted with `disabled: true`, so it mounts only after the person turns it on in the sidebar's Plugins page |
+| `delo-cost-meter` | [`@delo/plugin-cost-meter`](../plugin-cost-meter/README.md) | The estimated chat cost under the composer; inserted with `disabled: true`, so it mounts only after the person turns it on under Components on the Delo studio page of the sidebar's Plugins |
 | `delo-thinking-rsvp` | [`@delo/plugin-thinking-rsvp`](../plugin-thinking-rsvp/README.md) | The Thinking tab, which shows the model's reasoning and reply word by word in the right sidebar; inserted with `disabled: true`, like the cost meter |
 
 ## The first-run key dialog

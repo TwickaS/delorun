@@ -70,6 +70,21 @@ describe('the reading feed', () => {
     expect(feed.getSnapshot()).toEqual({ turn: undefined, parts: [], complete: true })
   })
 
+  it('shows words without Markdown and keeps their keys when a marker arrives in pieces', () => {
+    const { source, frames, feed } = setup()
+    source.append(live({ type: 'block-start', index: 0, blockType: 'reasoning' }))
+    source.append(live({ type: 'reasoning-delta', index: 0, text: '## Cost\nIt is **5 pe' }))
+    frames.flush()
+    const first = feed.getSnapshot()
+    expect(texts(first)).toEqual(['Cost', 'It', 'is', '5'])
+    source.append(live({ type: 'reasoning-delta', index: 0, text: 'nce** total' }))
+    frames.flush()
+    const second = feed.getSnapshot()
+    expect(texts(second)).toEqual(['Cost', 'It', 'is', '5', 'pence'])
+    expect(second.parts[0]?.words.map(word => word.key)).toEqual(['1:1:0#0', '1:1:0#1', '1:1:0#2', '1:1:0#3', '1:1:0#4'])
+    expect(second.parts[0]?.words.slice(0, 4)).toEqual(first.parts[0]?.words)
+  })
+
   it('reads a streaming block’s complete words as chunks arrive, keeping each earlier word’s object', () => {
     let now = 5_000
     const { source, frames, feed } = setup(() => now)
