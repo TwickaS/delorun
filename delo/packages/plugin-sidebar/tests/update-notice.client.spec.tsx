@@ -67,7 +67,7 @@ describe('what\'s new', () => {
 
   it('opens the notes as text in a dialog, never as markup', async () => {
     const markup = '<script>window.hacked = true</script>\n<img src=x onerror=alert(1)>'
-    show(noticeOf({ notes: true }), vi.fn(), async () => markup)
+    show(noticeOf({ notes: true }), vi.fn(), async () => ({ version: v('0.1.3'), notes: markup }))
     fireEvent.click(screen.getByText('What\'s new'))
     const pre = (await screen.findByText(/window\.hacked/u)).closest('pre')
     expect(pre?.textContent).toBe(markup)
@@ -76,12 +76,19 @@ describe('what\'s new', () => {
     expect(screen.getByText('What\'s new in 0.1.3')).toBeTruthy()
   })
 
+  it('does not show notes that belong to another release than the card\'s', async () => {
+    show(noticeOf({ notes: true }), vi.fn(), async () => ({ version: v('0.1.2'), notes: 'Notes of an older release' }))
+    fireEvent.click(screen.getByText('What\'s new'))
+    expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
+    expect(screen.queryByText(/older release/u)).toBeNull()
+  })
+
   it('says the notes could not be shown when the read finds none, and names the dialog in Chinese', async () => {
     show(noticeOf({ notes: true }))
     fireEvent.click(screen.getByText('What\'s new'))
     expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
     cleanup()
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => '- 更新', dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), dismiss: null }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     fireEvent.click(screen.getByText('新功能'))
     expect((await screen.findByText(/更新/u)).closest('pre')?.textContent).toBe('- 更新')

@@ -7,7 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delo/contract-update-report'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as UpdateCheck from '../src/update-check.ts'
-import { Config, MAX_INTERVAL_HOURS, UPDATE_CHECK_DEFAULTS, type UpdateCheckSource, type UpdateCheckState } from '../src/update-check.ts'
+import { Config, MAX_INTERVAL_HOURS, UPDATE_CHECK_DEFAULTS, type UpdateCheckSource, type UpdateCheckState, type UpdateNotes } from '../src/update-check.ts'
 
 const HOUR = 3_600_000
 /** A semantic version as the notice's types brand it. */
@@ -62,7 +62,7 @@ async function mount(config: Partial<UpdateCheck.Config>) {
  * @param check - what `check` answers.
  * @returns the source and its calls.
  */
-function source(read: UpdateCheckState, check: UpdateCheckState = read, notes?: string) {
+function source(read: UpdateCheckState, check: UpdateCheckState = read, notes?: UpdateNotes) {
   const calls = { read: 0, check: [] as number[] }
   const value: UpdateCheckSource = {
     read: async () => { calls.read++; return read },
@@ -222,11 +222,11 @@ describe('the notes route', () => {
     const get = async () => route.fetch(new Request('http://harness.test/api', { method: 'GET' }))
     const empty = await get()
     expect([empty.status, empty.headers.get('cache-control'), empty.headers.get('content-type')]).toEqual([200, 'no-store', 'application/json'])
-    expect(await empty.json()).toEqual({ notes: null })
+    expect(await empty.json()).toEqual({ version: null, notes: null })
     const dispose = ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }).source)
-    expect(await (await get()).json()).toEqual({ notes: null })
+    expect(await (await get()).json()).toEqual({ version: null, notes: null })
     dispose()
-    ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }, undefined, 'Delorun 0.1.3\n- A change.\n').source)
-    expect(await (await get()).json()).toEqual({ notes: 'Delorun 0.1.3\n- A change.\n' })
+    ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }, undefined, { version: NOTICE.release.delo, text: 'Delorun 0.1.3\n- A change.\n' }).source)
+    expect(await (await get()).json()).toEqual({ version: NOTICE.release.delo, notes: 'Delorun 0.1.3\n- A change.\n' })
   })
 })

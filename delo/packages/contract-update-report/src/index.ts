@@ -478,8 +478,10 @@ export interface UpdateNotice {
 /** The harness's Connection Fetch route that answers `GET` with {@link UpdateNotesResponse}. */
 export const UPDATE_NOTES_PATH = '/api/deloUpdateCheck.notes'
 
-/** The answer of {@link UPDATE_NOTES_PATH}: the plain-text notes of the notice's release, or `null` when there are none to show. */
+/** The answer of {@link UPDATE_NOTES_PATH}: the plain-text notes and the release they belong to, or `null` for both when there are none to show. */
 export interface UpdateNotesResponse {
+  /** The release the notes belong to; a client shows the notes only for the notice of this release. */
+  readonly version: SemanticVersion | null
   /** The verified notes, plain text, or `null`. */
   readonly notes: string | null
 }

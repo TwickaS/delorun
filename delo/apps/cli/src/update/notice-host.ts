@@ -92,7 +92,11 @@ export function updateCheckSource(options: UpdateWatchOptions): UpdateCheckSourc
   return {
     read: async () => stateOf(await readUpdateCheck(options.home, options.profile)),
     check: async timeoutMs => stateOf(await checkForUpdate({ ...options, timeoutMs })),
-    notes: async () => readUpdateNotes(options.home, options.profile, await readUpdateCheck(options.home, options.profile)),
+    notes: async () => {
+      const record = await readUpdateCheck(options.home, options.profile)
+      const text = await readUpdateNotes(options.home, options.profile, record)
+      return text === undefined || record?.newest === undefined ? undefined : { version: record.newest.delo, text }
+    },
   }
 }
 

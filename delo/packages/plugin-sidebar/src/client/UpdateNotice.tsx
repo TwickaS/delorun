@@ -20,9 +20,9 @@ export interface UpdateNoticeFace {
   /**
    * Read the verified release notes of the notice's release.
    * @param signal - aborts the read.
-   * @returns plain text, or null when there are none.
+   * @returns the plain-text notes and the release they belong to, or null when there are none.
    */
-  readonly notes: (signal: AbortSignal) => Promise<string | null>
+  readonly notes: (signal: AbortSignal) => Promise<{ readonly version: SemanticVersion, readonly notes: string } | null>
   /** Hide the notice for one release; null on a remote session, whose notice offers no action. */
   readonly dismiss: ((release: SemanticVersion) => void) | null
 }
@@ -49,7 +49,8 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
     if (!notesOpen) return undefined
     const controller = new AbortController()
     setNotes(undefined)
-    void face.notes(controller.signal).then(text => { if (!controller.signal.aborted) setNotes(text) })
+    // Notes of another release than the card's are not shown.
+    void face.notes(controller.signal).then(found => { if (!controller.signal.aborted) setNotes(found !== null && found.version === shownVersion ? found.notes : null) })
     return () => { controller.abort() }
   }, [notesOpen, face, shownVersion])
   if (notice === null) return null

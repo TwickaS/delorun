@@ -241,6 +241,24 @@ describe('the release notes', { timeout: 60_000 }, () => {
     expect(await readUpdateNotes(home, PROFILE, record)).toBeUndefined()
   })
 
+  it('whats-new-rechecks-text-at-display: a record whose digest matches bidi or control bytes still shows nothing', async () => {
+    const record = await checkWithNotes()
+    for (const text of ['Fixed \u202Egnirts', 'Fixed\u0007bell']) {
+      const bytes = Buffer.from(text)
+      writeFileSync(updateNotesPath(home, PROFILE), bytes, { mode: 0o600 })
+      const forged: UpdateCheckRecord = { ...record, newest: { ...record.newest!, notes: { sha256: brandString<Sha256Hex>(createHash('sha256').update(bytes).digest('hex')), length: bytes.byteLength } } }
+      expect(await readUpdateNotes(home, PROFILE, forged), JSON.stringify(text)).toBeUndefined()
+    }
+  })
+
+  it('whats-new-size-before-read: a stored notes file above the limit is refused before it is read, even when the record names its digest', async () => {
+    const record = await checkWithNotes()
+    const big = Buffer.alloc(65_537, 'a')
+    writeFileSync(updateNotesPath(home, PROFILE), big, { mode: 0o600 })
+    const forged: UpdateCheckRecord = { ...record, newest: { ...record.newest!, notes: { sha256: brandString<Sha256Hex>(createHash('sha256').update(big).digest('hex')), length: big.byteLength } } }
+    expect(await readUpdateNotes(home, PROFILE, forged)).toBeUndefined()
+  })
+
   it('serves nothing for a record without notes', async () => {
     expect(await readUpdateNotes(home, PROFILE, await check())).toBeUndefined()
     expect(await readUpdateNotes(home, PROFILE, undefined)).toBeUndefined()

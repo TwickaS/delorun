@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { RUN_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { ReleaseChannel, ReleaseManifest, RootMetadata, RuntimePlatform, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
-import { isValidNotes, isValidSummary } from '@delo/contract-release-manifest'
+import { isValidNotes, isValidSummary, RELEASE_FILE_SIZE_LIMITS } from '@delo/contract-release-manifest'
 import { UPDATE_CHECK_FAILURES, UPDATE_CHECK_SCHEMA, UPDATE_COMMAND, type CheckedRelease, type UpdateCheckFailure, type UpdateCheckRecord, type UpdateKind, type UpdateNotice } from '@delo/contract-update-report'
 import { readProtectedFile, runDirectory, writeProtectedFile } from '@delo/home'
 import { isInstallError, messageOf } from '@delo/install'
@@ -116,9 +116,9 @@ export async function readUpdateNotes(home: string, profile: string, record: Upd
   if (expected === undefined) return undefined
   let bytes: Buffer
   try {
-    bytes = await readProtectedFile(updateNotesPath(home, profile))
+    bytes = await readProtectedFile(updateNotesPath(home, profile), RELEASE_FILE_SIZE_LIMITS.notes)
   } catch (_unreadable) {
-    // Absent, or not a file this user alone can read: no notes.
+    // Absent, above the notes limit, or not a file this user alone can read: no notes.
     return undefined
   }
   if (bytes.byteLength !== expected.length || createHash('sha256').update(bytes).digest('hex') !== expected.sha256 || !isValidNotes(bytes)) return undefined

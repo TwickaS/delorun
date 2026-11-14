@@ -69,6 +69,14 @@ export interface UpdateCheckState {
   readonly notice?: UpdateNotice
 }
 
+/** Verified release notes with the release they belong to. */
+export interface UpdateNotes {
+  /** The release version. */
+  readonly version: UpdateNotice['release']['delo']
+  /** The plain-text notes. */
+  readonly text: string
+}
+
 /** The check `delorun` attaches: it owns the channel, the verification and the record. */
 export interface UpdateCheckSource {
   /**
@@ -84,9 +92,9 @@ export interface UpdateCheckSource {
   check(timeoutMs: number): Promise<UpdateCheckState>
   /**
    * The release notes of the notice's release, as the check verified them.
-   * @returns the plain-text notes, or `undefined` when there are none or the stored file no longer matches what was verified.
+   * @returns the plain-text notes and the release they belong to, or `undefined` when there are none or the stored file no longer matches what was verified.
    */
-  notes(): Promise<string | undefined>
+  notes(): Promise<UpdateNotes | undefined>
 }
 
 /** The `deloUpdateCheck` service. */
@@ -161,9 +169,9 @@ export class UpdateCheckService extends Service {
 
   /**
    * The verified release notes for the notice's release.
-   * @returns the plain-text notes, or `undefined` when no check is attached or no verified notes are stored.
+   * @returns the notes with their release, or `undefined` when no check is attached or no verified notes are stored.
    */
-  async notes(): Promise<string | undefined> {
+  async notes(): Promise<UpdateNotes | undefined> {
     return this.source?.notes()
   }
 }
@@ -191,7 +199,8 @@ export function apply(ctx: Context, config: Config): void {
       methods: ['GET'],
       requestBody: 'buffered',
       fetch: async () => {
-        const body: UpdateNotesResponse = { notes: await service.notes() ?? null }
+        const found = await service.notes()
+        const body: UpdateNotesResponse = { version: found?.version ?? null, notes: found?.text ?? null }
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
       },
     }), `${name}: the notes route`)
