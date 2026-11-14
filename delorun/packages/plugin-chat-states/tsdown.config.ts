@@ -7,6 +7,7 @@ const configs = clientBundle(import.meta.dirname, ['lib/types/index.js'])
 
 // The page's module table does not provide Delorun's packages, so the browser half inlines the ones it reads from their source.
 const INLINED = {
+  '@delorun/brand': fileURLToPath(new URL('../brand/src/index.ts', import.meta.url)),
   '@delorun/settings-controls': fileURLToPath(new URL('../settings-controls/src/index.ts', import.meta.url)),
 }
 

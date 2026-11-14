@@ -51,3 +51,9 @@ describe('the mark', () => {
     }
   })
 })
+
+describe('the package manifest', () => {
+  it('declares no sideEffects, because the studio bundler then drops the tokens.css import and the components lose every --dl-* value', () => {
+    expect(JSON.parse(read('../package.json'))).not.toHaveProperty('sideEffects')
+  })
+})

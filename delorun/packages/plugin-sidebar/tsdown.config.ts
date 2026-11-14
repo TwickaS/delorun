@@ -9,6 +9,7 @@ const configs = clientBundle(import.meta.dirname, ['lib/types/index.js'])
 const INLINED = {
   '@delorun/contract-release-manifest': fileURLToPath(new URL('../contract-release-manifest/src/index.ts', import.meta.url)),
   '@delorun/contract-update-report': fileURLToPath(new URL('../contract-update-report/src/index.ts', import.meta.url)),
+  '@delorun/brand': fileURLToPath(new URL('../brand/src/index.ts', import.meta.url)),
   '@delorun/settings-controls': fileURLToPath(new URL('../settings-controls/src/index.ts', import.meta.url)),
 }
 
