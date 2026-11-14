@@ -296,6 +296,8 @@ export class HomeAuth {
       random: this.random,
       secrets: options.secrets,
       removeDevice: deviceId => this.revokeDevice(deviceId),
+      stillAdmitted: asker => this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
+        && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener),
       report: (event) => { for (const listener of this.pinListeners) listener(event) },
     })
     this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })

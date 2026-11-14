@@ -301,7 +301,7 @@ export const PIN_MODE_LIMITS = {
   /** The most scrypt derivations running at once. */
   concurrentHashes: 2,
   /** scrypt parameters a new PIN is hashed with; the record stores the parameters it used. */
-  scrypt: { N: 32768, r: 8, p: 1, keyBytes: 32, saltBytes: 16, maxmemBytes: 64 * 1024 * 1024 },
+  scrypt: { N: 131072, r: 8, p: 1, keyBytes: 32, saltBytes: 16, maxmemBytes: 256 * 1024 * 1024 },
 } as const
 
 /** What kind of secret the person set: all digits is a `pin`, anything else a `passcode`. */

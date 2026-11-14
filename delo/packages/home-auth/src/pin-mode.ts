@@ -320,6 +320,9 @@ export class PinModeStore {
       const expected = Buffer.from(record.hash.dk, 'base64url')
       const derived = await this.derive(secret, salt, record.hash, expected.length)
       matches = derived.length === expected.length && timingSafeEqual(derived, expected)
+      if (this.record === undefined) throw new HomeAuthError('PIN_MODE_OFF', 'PIN mode is off. Turn it on at your computer')
+      // A set or off during the comparison made this record stale: its secret no longer opens anything.
+      if (this.record !== record) return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries }
     } finally {
       release?.()
     }
@@ -333,11 +336,11 @@ export class PinModeStore {
       return { kind: 'ok' }
     }
     const count = this.attempts.devices[deviceId] ?? before + 1
-    if (count >= PIN_MODE_LIMITS.deviceWrongTries) return { kind: 'lockout' }
-    if (this.attempts.home.length >= PIN_MODE_LIMITS.homeWrongTries) {
+    if (this.attempts.home.length >= PIN_MODE_LIMITS.homeWrongTries && !this.attempts.paused) {
       this.attempts = { ...this.attempts, paused: true }
       await this.persist()
     }
+    if (count >= PIN_MODE_LIMITS.deviceWrongTries) return { kind: 'lockout' }
     return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries - count }
   }
 

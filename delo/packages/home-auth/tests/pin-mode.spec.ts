@@ -9,13 +9,15 @@
  * Each test's comment names the check whose removal makes that test fail.
  */
 import { once } from 'node:events'
-import { readFile } from 'node:fs/promises'
+import { randomBytes, scryptSync } from 'node:crypto'
+import { readFile, writeFile } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type ReachListenerId, type StudioAddress } from '@delo/contract-admission'
+import { HOME_AUTH_FILES } from '@delo/contract-device-approval'
 import { PIN_MODE_LIMITS } from '@delo/contract-oidc-passkeys'
 import { stampListener } from '@delo/home'
 import { DeviceStore } from '../src/devices.ts'
@@ -43,6 +45,7 @@ let port = 0
 let first: DeviceId
 let token = ''
 let close: () => Promise<void> = () => Promise.resolve()
+let stopServing: () => void = () => undefined
 let events: PinEvent[]
 let changes: ElevationChange[]
 const texts: string[] = []
@@ -75,7 +78,7 @@ beforeEach(async () => {
   texts.length = 0
   home.auth.onPinEvent((event) => { events.push(event) })
   home.auth.onElevationChange((change) => { changes.push(change) })
-  home.auth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+  stopServing = home.auth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
   const issued = await home.auth.issueOwnerCode()
   const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
   first = claimed.device.id
@@ -411,5 +414,124 @@ describe('the store', () => {
     const store = new PinModeStore({ directory: home.directory, now: home.clock.read })
     await store.set('café au lait 1')
     expect(await store.check('a', 'café au lait 1')).toEqual({ kind: 'ok' })
+  })
+})
+
+describe('a change while a secret is being compared', () => {
+  beforeEach(async () => { await turnOn() })
+
+  /**
+   * Start an unlock whose comparison waits until the gate opens.
+   * @returns the pending reply, the point the comparison started and the gate's opener.
+   */
+  async function gated(): Promise<{ readonly reply: Promise<Reply>; readonly open: () => void }> {
+    const store = home.auth['pinStore']
+    const real = store['derive'].bind(store)
+    let open: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { open = resolve })
+    let entered: () => void = () => undefined
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    let first = true
+    store['derive'] = async (...args: Parameters<typeof real>) => {
+      if (!first) return real(...args)
+      first = false
+      entered()
+      await gate
+      return real(...args)
+    }
+    const reply = unlock()
+    await started
+    return { reply, open }
+  }
+
+  it('refuses the old PIN when the computer turns the mode off', async () => {
+    const { reply, open } = await gated()
+    await home.auth.pin.off()
+    open()
+    // Pins the generation check: an emergency turn-off is not followed by an unlock from a try already in flight.
+    expect((await reply).status).not.toBe(200)
+    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+  })
+
+  it('refuses the old PIN when the computer changes it', async () => {
+    const { reply, open } = await gated()
+    await home.auth.pin.set('739150', {})
+    open()
+    expect((await reply).status).not.toBe(200)
+    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+  })
+
+  it('mints nothing when the device is removed', async () => {
+    const { reply, open } = await gated()
+    await home.auth.revokeDevice(first)
+    open()
+    expect((await reply).status).not.toBe(200)
+    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+  })
+
+  it('mints nothing when the session ends', async () => {
+    const { reply, open } = await gated()
+    home.clock.advance(61 * MINUTE)
+    home.auth.admitToken(token, PRIVATE)
+    open()
+    expect((await reply).status).not.toBe(200)
+    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+  })
+
+  it('mints nothing when the listener stops being served', async () => {
+    const { reply, open } = await gated()
+    stopServing()
+    open()
+    expect((await reply).status).not.toBe(200)
+    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+  })
+})
+
+describe('home-wide pause on every miss path', () => {
+  /**
+   * Miss five times with one session, which removes its device.
+   * @param cookie - the session token.
+   */
+  async function ceiling(cookie: string): Promise<void> {
+    for (let miss = 0; miss < 5; miss += 1) await unlock('135790', cookie)
+  }
+
+  it('pauses after two devices miss five times each', async () => {
+    await turnOn()
+    const second = await addDevice(2)
+    const third = await addDevice(3)
+    const fourth = await addDevice(4)
+    await ceiling(second.token)
+    // A removal rotates the home's sessions, so the next device signs in again.
+    await ceiling(await signIn(third.deviceId))
+    // Pins the count on the lockout path: ten misses pause even when each device was removed by its own fifth.
+    expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
+    expect(events.some(event => event.kind === 'paused')).toBe(true)
+  })
+})
+
+describe('the unlock state and the hash cost', () => {
+  it('reports the idle end and the cap as the unlock and the touch do', async () => {
+    await turnOn()
+    const reply = await unlock()
+    const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delo-unlock': reply.body.token as string })
+    expect(state.body).toMatchObject({ unlock: { unlockId: reply.body.unlockId, endsAt: reply.body.endsAt, idleEndsAt: reply.body.idleEndsAt } })
+    expect(reply.body.endsAt).not.toBe(reply.body.idleEndsAt)
+  })
+
+  it('hashes a new PIN at 2^17 and still verifies a record with the earlier parameters', async () => {
+    const options = { directory: home.directory, now: home.clock.read }
+    const store = new PinModeStore(options)
+    await store.set(PIN)
+    const written = JSON.parse(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')) as { hash: { N: number; r: number; p: number; salt: string; dk: string } }
+    expect(written.hash).toMatchObject({ N: 131072, r: 8, p: 1 })
+    const salt = randomBytes(16)
+    const old = scryptSync(PIN, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 })
+    const file = join(home.directory, HOME_AUTH_FILES.pinMode)
+    await writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, 'utf8')) as object, hash: { alg: 'scrypt', N: 32768, r: 8, p: 1, salt: salt.toString('base64url'), dk: old.toString('base64url') } }), { mode: 0o600 })
+    const reloaded = new PinModeStore(options)
+    await reloaded.load()
+    // Pins the stored parameters: a record made at 2^15 still verifies after the cost rose.
+    expect(await reloaded.check('a', PIN)).toEqual({ kind: 'ok' })
   })
 })

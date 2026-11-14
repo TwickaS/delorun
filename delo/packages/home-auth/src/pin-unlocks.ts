@@ -65,6 +65,12 @@ export interface PinUnlocksOptions {
    */
   readonly removeDevice: (deviceId: DeviceId) => Promise<unknown>
   /**
+   * Whether the asker's device is still recorded, its session still admitted and its listener still served.
+   * @param asker - the device, listener and session.
+   * @returns whether all three still stand.
+   */
+  readonly stillAdmitted: (asker: UnlockAsker) => boolean
+  /**
    * Called with each PIN event.
    * @param event - what happened.
    */
@@ -107,7 +113,7 @@ export class PinUnlocks {
     const mine = record?.deviceId === deviceId && record.listener === listener ? record : undefined
     return {
       kind: 'on', secret: summary.kind, idleMinutes: summary.idleMinutes, paused: summary.paused,
-      unlock: mine === undefined ? null : { unlockId: mine.id, endsAt: mine.endsAt, idleEndsAt: mine.endsAt },
+      unlock: mine === undefined ? null : { unlockId: mine.id, endsAt: mine.startedAt + PIN_MODE_LIMITS.absoluteCapMs, idleEndsAt: mine.endsAt },
     }
   }
 
@@ -126,11 +132,14 @@ export class PinUnlocks {
     const outcome = await this.options.store.check(asker.deviceId, secret)
     switch (outcome.kind) {
       case 'ok':
+        // The comparison awaited: a removal, a session end or a listener stop in that time leaves nothing to unlock.
+        if (!this.options.stillAdmitted(asker)) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
         return this.mint(asker)
       case 'paused':
         throw new HomeAuthError('PIN_UNLOCKS_PAUSED', 'PIN unlocks are paused after too many wrong tries. Resume them at your computer')
       case 'lockout':
         this.options.report({ kind: 'lockout', deviceId: asker.deviceId })
+        if (this.options.store.summary().paused) this.options.report({ kind: 'paused' })
         await this.options.removeDevice(asker.deviceId)
         throw new HomeAuthError('PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer')
       case 'wrong': {
