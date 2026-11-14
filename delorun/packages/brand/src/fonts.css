@@ -1,6 +1,6 @@
 /* Delorun's faces, served from this package's assets. Both files hold the Latin
  * subset only; the theme's font stacks fall back to system and Chinese faces
- * for every other character. Licences: fonts/ in this package (SIL OFL 1.1). */
+ * for every other character. Licences: fonts/ in @delorun/plugin-theme (SIL OFL 1.1). */
 @font-face {
   font-family: 'Schibsted Grotesk';
   src: url('./assets/fonts/schibsted-grotesk-latin.woff2') format('woff2');

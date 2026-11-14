@@ -1,0 +1,44 @@
+{
+  "entries": [
+    {
+      "path": "delorun/apps/website/public/favicon.svg",
+      "rule": "colour",
+      "reason": "A static file a browser fetches before any script runs; packages/brand/tests/tokens.spec.ts keeps it equal to MARK and the brand peach."
+    },
+    {
+      "path": "delorun/apps/website/public/favicon.svg",
+      "rule": "mark",
+      "reason": "A static file a browser fetches before any script runs; packages/brand/tests/tokens.spec.ts keeps it equal to MARK and the brand peach."
+    },
+    {
+      "path": "delorun/apps/docs/public/favicon.svg",
+      "rule": "colour",
+      "reason": "A static file a browser fetches before any script runs; packages/brand/tests/tokens.spec.ts keeps it equal to MARK and the brand peach."
+    },
+    {
+      "path": "delorun/apps/docs/public/favicon.svg",
+      "rule": "mark",
+      "reason": "A static file a browser fetches before any script runs; packages/brand/tests/tokens.spec.ts keeps it equal to MARK and the brand peach."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/IconPicker.module.css",
+      "rule": "font",
+      "reason": "The emoji cell needs the platform emoji faces, which are not brand typefaces."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/IconPicker.tsx",
+      "rule": "colour",
+      "reason": "Legacy: a custom pick starts from peach; moves to BRAND_COLOURS when the sidebar adopts the brand package."
+    },
+    {
+      "path": "delorun/packages/plugin-theme/src/client/locales.ts",
+      "rule": "colour",
+      "reason": "Example hex in a validation sentence, not a style."
+    },
+    {
+      "path": "delorun/packages/plugin-theme/src/config.ts",
+      "rule": "colour",
+      "reason": "The host half cannot bundle the browser-only brand package; packages/brand/tests/tokens.spec.ts keeps the default equal to BRAND_COLOURS.peach."
+    }
+  ]
+}

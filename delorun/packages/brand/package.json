@@ -1,0 +1,35 @@
+{
+  "name": "@delorun/brand",
+  "description": "Delorun's brand: one source of tokens, the hex mark and the component set that the studio, PIN mode, the website and the docs share",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./fonts.css": "./src/fonts.css",
+    "./mark": "./src/mark.tsx"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  },
+  "imports": {
+    "#upstream": "./src/upstream.ts"
+  }
+}

@@ -1,0 +1,6 @@
+.pill { font-family: var(--dl-font-sans); }
+.pill[data-tone="success"] { color: var(--dl-success); }
+.pill[data-tone="warning"] { color: var(--dl-warning); }
+.pill[data-tone="error"] { color: var(--dl-error); }
+.pill[data-tone="accent"] { color: var(--dl-accent-text); }
+.pill:focus-visible { outline: var(--dl-focus-ring); outline-offset: 2px; }

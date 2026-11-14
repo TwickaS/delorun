@@ -4,6 +4,7 @@
  * @module @delorun/website/copy-button
  */
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@brand'
 import { COPY } from '../site/copy.ts'
 
 /** How long the button shows that the copy worked, in milliseconds. */
@@ -55,19 +56,20 @@ export function CopyButton({ text }: { text: string }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-fd-foreground py-1 pl-4 pr-1 text-fd-background">
       <code className="min-w-0 break-words font-mono text-base">{text}</code>
-      <button
-        type="button"
+      <Button
+        variant="primary"
         onClick={copy}
         aria-label={COPY.copyLabel}
         title={copied ? COPY.copiedLabel : COPY.copyLabel}
-        className="grid size-9 shrink-0 place-items-center rounded-md hover:bg-fd-background/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-background"
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          {copied
-            ? <path d="M20 6 9 17l-5-5" />
-            : <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>}
-        </svg>
-      </button>
+        className="shrink-0"
+        icon={(
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {copied
+              ? <path d="M20 6 9 17l-5-5" />
+              : <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>}
+          </svg>
+        )}
+      />
       <span role="status" aria-live="polite" className="sr-only">{copied ? COPY.copiedLabel : ''}</span>
     </span>
   )

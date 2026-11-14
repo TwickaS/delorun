@@ -1,0 +1,49 @@
+/*
+ * Delorun's brand tokens as custom properties. Each token reads the studio's `--dsw-*` role where the studio defines
+ * one, so the components follow the studio's palette and its accent setting, and falls back to the brand value on a page
+ * that has no studio, such as the website and the docs. `light-dark()` follows the page's `color-scheme`, which defaults
+ * to the system setting below. Hex values here are the brand package's own; `tests/tokens.spec.ts` keeps them equal to
+ * `tokens.ts`.
+ */
+:where(:root) {
+  color-scheme: light dark;
+
+  --dl-peach: #E5734A;
+  --dl-accent: var(--dsw-alias-brand-primary, var(--dl-peach));
+  --dl-accent-text: var(--dsw-alias-brand-text, light-dark(#B84A1B, #E5734A));
+  --dl-on-accent: #111110;
+
+  --dl-text: var(--dsw-alias-label-primary, light-dark(#111110, #EBEBEB));
+  --dl-text-muted: var(--dsw-alias-label-secondary, light-dark(#525252, #A3A3A3));
+  --dl-surface: var(--dsw-alias-bg-base, light-dark(#FCFCFC, #111110));
+  --dl-surface-raised: var(--dsw-alias-bg-layer-1, light-dark(#FFFFFF, #1A1A19));
+  --dl-surface-sunken: var(--dsw-alias-bg-layer-2, light-dark(#F5F5F4, #232322));
+  --dl-border: var(--dsw-alias-border-l2, light-dark(#E4E4E2, #333332));
+
+  --dl-info: var(--dsw-alias-state-business-primary, light-dark(#1B4ED8, #7AA2F7));
+  --dl-success: var(--dsw-alias-state-success-primary, light-dark(#157347, #4ADE80));
+  --dl-warning: var(--dsw-alias-state-warn-primary, light-dark(#A15C07, #F5B14C));
+  --dl-error: var(--dsw-alias-state-error-primary, light-dark(#B42318, #F87171));
+
+  --dl-font-sans: var(--dsw-font-family, 'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif);
+  --dl-font-mono: var(--dsw-font-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --dl-radius-xs: var(--dsw-radius-xs, 4px);
+  --dl-radius-sm: var(--dsw-radius-sm, 8px);
+  --dl-radius-md: var(--dsw-radius-md, 12px);
+  --dl-radius-lg: var(--dsw-radius-lg, 16px);
+
+  --dl-space-1: calc(4px * var(--dsh-density, 1));
+  --dl-space-2: calc(8px * var(--dsh-density, 1));
+  --dl-space-3: calc(12px * var(--dsh-density, 1));
+  --dl-space-4: calc(16px * var(--dsh-density, 1));
+  --dl-space-5: calc(24px * var(--dsh-density, 1));
+  --dl-space-6: calc(32px * var(--dsh-density, 1));
+
+  --dl-focus-ring: 2px solid var(--dl-accent-text);
+  --dl-motion: 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(:root) { --dl-motion: 0ms linear; }
+}

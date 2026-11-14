@@ -1,0 +1,11 @@
+.card {
+  box-sizing: border-box;
+  padding: var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+}
+
+.title { margin: 0 0 var(--dl-space-2); font-size: 15px; font-weight: 600; line-height: 24px; }

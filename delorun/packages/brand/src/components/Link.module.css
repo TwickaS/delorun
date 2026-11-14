@@ -1,0 +1,10 @@
+.link {
+  color: var(--dl-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  transition: color var(--dl-motion);
+}
+
+.link:hover { text-decoration-thickness: 2px; }
+.link:focus-visible { outline: var(--dl-focus-ring); outline-offset: 2px; border-radius: var(--dl-radius-xs); }

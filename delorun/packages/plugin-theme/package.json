@@ -74,6 +74,7 @@
     "state": "shipped"
   },
   "dependencies": {
+    "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*"
   }
 }

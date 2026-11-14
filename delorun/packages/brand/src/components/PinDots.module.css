@@ -1,0 +1,26 @@
+.dots { display: flex; justify-content: center; gap: 14px; margin: var(--dl-space-2) 0 var(--dl-space-1); }
+
+.dot {
+  box-sizing: border-box;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--dl-text-muted);
+  border-radius: 50%;
+  transition: background-color var(--dl-motion), border-color var(--dl-motion), transform var(--dl-motion);
+}
+
+.filled { border-color: var(--dl-text); background: var(--dl-text); transform: scale(1.08); }
+.dots[data-tone="error"] .dot { border-color: var(--dl-error); }
+.dots[data-tone="error"] .filled { background: var(--dl-error); }
+.dots[data-shake] { animation: shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots[data-shake] { animation: none; }
+}
