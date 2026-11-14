@@ -7,7 +7,7 @@ import {
   EXCLUDED_SHARE_NAMESPACES,
   packageRoot,
   readTitles,
-  shareableViewerCatalog,
+  shareableViewerCatalog as classifiedCatalog,
   type PluginMetadata,
 } from '../src/host/shareable-catalog.ts'
 
@@ -41,6 +41,13 @@ function fixture(files: Readonly<Record<string, string>>): string {
   }
   return root
 }
+
+/** The catalog with every listed endpoint classified `plugin-offered`, so fixtures need no table entry. */
+const shareableViewerCatalog: typeof classifiedCatalog = (local, readMetadata) => classifiedCatalog(
+  local,
+  readMetadata,
+  Object.fromEntries((local?.list() ?? []).map(d => [`${d.namespace}/${d.method}`, 'plugin-offered' as const])),
+)
 
 const metadata = (value: PluginMetadata) => () => value
 
@@ -178,6 +185,32 @@ describe('shareableViewerCatalog', () => {
       titles: { zh: '变更请求与工作树' },
       endpoints: ['forgePanel/follow', 'worktree/create'],
     }])
+  })
+})
+
+describe('shareableViewerCatalog endpoint classes', () => {
+  const ownerOnly = [
+    'commands/execute', 'mcpManager/restart', 'agentTeams/setEnabled', 'speech/configure',
+    'pluginManager/history', 'pluginManager/undo', 'pluginManager/restore',
+  ]
+  const offeredEndpoints = (groups: ReturnType<typeof classifiedCatalog>) => groups.flatMap(group => [...group.endpoints])
+
+  it('never offers an owner-only endpoint of the shipped table', () => {
+    for (const name of ownerOnly) {
+      expect(offeredEndpoints(classifiedCatalog(registry(name), metadata({})))).toEqual([])
+    }
+  })
+
+  it('never offers an endpoint with no class', () => {
+    expect(classifiedCatalog(registry('mekGit/unlisted'), metadata({}), {})).toEqual([])
+    expect(classifiedCatalog(registry('mekGit/toString'), metadata({}), {})).toEqual([])
+  })
+
+  it('still offers an endpoint classified plugin-offered', () => {
+    expect(offeredEndpoints(classifiedCatalog(registry('mekGit/getGraph', 'commands/execute'), metadata({}), {
+      'mekGit/getGraph': 'plugin-offered',
+      'commands/execute': 'owner-only',
+    }))).toEqual(['mekGit/getGraph'])
   })
 })
 

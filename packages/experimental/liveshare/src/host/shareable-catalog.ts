@@ -6,6 +6,10 @@
  * LiveShare itself are excluded. The owner still chooses which of the remaining methods one share
  * exposes; the catalog only states the offer, and never distinguishes read from write.
  *
+ * An endpoint is offered only when `VIEWER_ENDPOINT_CLASSES` gives it a class other than
+ * `owner-only`; an unclassified endpoint is refused, as is every `owner-only` one, whatever the
+ * share's plugin access says.
+ *
  * Each group also carries the registering package and that package's localized plugin titles, so the
  * share dialog can show a product name instead of a wire namespace.
  * @module @deepseek-ai/dsh-experimental-liveshare/src/host/shareable-catalog
@@ -14,6 +18,7 @@
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { VIEWER_ENDPOINT_CLASSES, type ViewerEndpointClass } from '../endpoint-classification.ts'
 import type { ShareablePluginCatalog } from './viewer-capability-types.ts'
 
 /**
@@ -130,17 +135,22 @@ export interface ShareableEndpointRegistry {
  * Build the catalog from the live local Typert registry.
  * @param local - The Host's local Typert registry, when the composition mounts Typert.
  * @param readMetadata - Package metadata reader; defaults to reading the installed package.
+ * @param classes - Endpoint classes that decide what may be offered; defaults to the shipped table.
  * @returns One group per included namespace, sorted by namespace and then endpoint.
  */
 export function shareableViewerCatalog(
   local?: ShareableEndpointRegistry,
   readMetadata: PluginMetadataReader = readPluginMetadata,
+  classes: Readonly<Record<string, ViewerEndpointClass | undefined>> = VIEWER_ENDPOINT_CLASSES,
 ): readonly ShareablePluginCatalog[] {
   if (local === undefined) return []
   const byPlugin = new Map<string, PluginMetadata & { endpoints: Set<string>; descriptions: Map<string, string> }>()
   for (const descriptor of local.list()) {
     const namespace = descriptor.namespace
     if (namespace === '' || descriptor.method === '' || EXCLUDED_SHARE_NAMESPACES.has(namespace)) continue
+    const endpoint = `${namespace}/${descriptor.method}`
+    const endpointClass = Object.hasOwn(classes, endpoint) ? classes[endpoint] : undefined
+    if (endpointClass === undefined || endpointClass === 'owner-only') continue
     const separator = descriptor.id.indexOf('#')
     const packageName = separator > 0 ? descriptor.id.slice(0, separator) : undefined
     const metadata = packageName === undefined ? {} : readMetadata(packageName)
@@ -151,7 +161,6 @@ export function shareableViewerCatalog(
       group = { ...metadata, endpoints: new Set<string>(), descriptions: new Map<string, string>() }
       byPlugin.set(groupKey, group)
     }
-    const endpoint = `${namespace}/${descriptor.method}`
     group.endpoints.add(endpoint)
     if (descriptor.description !== undefined && descriptor.description !== '') {
       group.descriptions.set(endpoint, descriptor.description)

@@ -1091,7 +1091,7 @@
     {
       "path": "packages/experimental/liveshare/src/endpoint-classification.ts",
       "class": "security",
-      "reason": "LiveShare endpoint classes: classifies the `pluginManager/history`, `pluginManager/restore` and `pluginManager/undo` Remotes as `owner-only`, so a share viewer can never call them. Lead verdict: kept; stricter or equal, since LiveShare refuses an unclassified endpoint by default.",
+      "reason": "LiveShare endpoint classes: classifies the `pluginManager/history`, `pluginManager/restore` and `pluginManager/undo` Remotes as `owner-only`, so a share viewer can never call them. The class is enforced where the share catalogue is built (`host/shareable-catalog.ts`), which offers no `owner-only` or unclassified endpoint. Lead verdict: kept; stricter or equal.",
       "sha256": "25203e17a9af3c571a611d83905305fe8b3dd444cb8d5ee0586c3b23d176f9d0"
     },
     {
@@ -1535,8 +1535,8 @@
     {
       "path": "packages/web/web-fetch-http/src/provider.ts",
       "class": "security",
-      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10). Lead verdict (2026-11-11): kept; an IPv6 literal reaches the fetch guard as its unbracketed address with no DNS lookup, and the connection goes to that same address.",
-      "sha256": "096ec911cc78835de3f97caafdc7f361e40026a5a5ae05db98d4639cb38be74e"
+      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10). The picker description says local and private-network addresses are refused while the fetch guard is on (copy only). Lead verdict (2026-11-11): kept; an IPv6 literal reaches the fetch guard as its unbracketed address with no DNS lookup, and the connection goes to that same address.",
+      "sha256": "724b8a0a22d2628ff32f3eac1c4acf95941131e59cf4ce6c6afebb09341035f8"
     },
     {
       "path": "pnpm-workspace.yaml",
@@ -2317,6 +2317,12 @@
       "class": "security",
       "reason": "Template rules (2026-11-14): adds `isRunAffectingEnv`, `isWholeTemplate`, `assertLiteralStart` and `assertNoInjectedOption`, and the `RefusedTemplateValue` failure that leaves the server waiting like a missing credential. The run-affecting names match the consent's `showsEnvValue` list.",
       "sha256": "b002055657c5ed2daeb568c5229d543f476f0635a86ddd64e571b5297bf4cd52"
+    },
+    {
+      "path": "packages/experimental/liveshare/src/host/shareable-catalog.ts",
+      "class": "security",
+      "reason": "LiveShare share catalogue: an endpoint is offered to a share only when `VIEWER_ENDPOINT_CLASSES` gives it a class other than `owner-only`; an `owner-only` or unclassified endpoint is never offered, so plugin access `all` cannot reach `commands/execute`, `mcpManager/restart`, `agentTeams/setEnabled`, `speech/configure` or `pluginManager/history|undo|restore`. Stricter than upstream, whose namespace exclusion list alone decided the offer.",
+      "sha256": "78d13e27174e73420d3584ce3eed5175e346879160f6689374324b694dcc5dab"
     }
   ],
   "retired": []
