@@ -64,6 +64,14 @@ describe('pairing keys', () => {
     expect(verdict).toEqual({ added: [], existing: [after] })
   })
 
+  it('matches a violation whose quoted value the checker truncated at a different point after the rename', () => {
+    const value = 'dsh-translation-target:delo/docs/contracts/c19-home-process.md#interaction-with-the-supervisor-and-more'
+    const before = `delo/a.md ↔ delo/a.zh.md: link target #3 diverges between the pair: "${value.slice(0, 80)}…`
+    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${value.replaceAll('delo', 'delorun').slice(0, 80)}…`
+    const verdict = compareViolations([after], [before], new Map([['delo/a', 'delorun/a']]))
+    expect(verdict.added).toEqual([])
+  })
+
   it('counts a repeated violation once per occurrence', () => {
     const verdict = compareViolations(['v', 'v'], ['v'], new Map())
     expect(verdict.existing).toEqual(['v'])
