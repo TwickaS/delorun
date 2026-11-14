@@ -13,7 +13,7 @@
   zh: 79010c84fa56bf2b
 /c2-release-manifest-and-signature/status:
   en: 66eefe3309fc69c7
-  zh: 1c4636a12be06906
+  zh: 031c00a71f4b6b64
 /c2-release-manifest-and-signature/contents:
   en: d12cbc7eb3f6e865
   zh: a45e701f55e97403
@@ -31,16 +31,16 @@
   zh: 062d89264ec34b85
 /c2-release-manifest-and-signature/timestamp-metadata:
   en: fcc74d28d68ce6e3
-  zh: 6fee8bee6e4b2085
+  zh: fea8e84698a80e6a
 /c2-release-manifest-and-signature/release-manifest:
   en: 39f74e1862d77ecb
-  zh: 39840ed7753a142b
+  zh: 864c8789f0d23ed1
 /c2-release-manifest-and-signature/runtime-file-list:
   en: 865ccdd3be486a45
   zh: 7637ce72dc06658f
 /c2-release-manifest-and-signature/client-verification:
   en: a3e22bfae07bf619
-  zh: 4f74b7f766e47b1c
+  zh: f7875b61863cd776
 /c2-release-manifest-and-signature/freshness-and-rollback-protection:
   en: 7ea8a30581b611ed
   zh: c4e366c00a7a9112
@@ -73,10 +73,10 @@
   zh: bd232096a834cc62
 /c2-release-manifest-and-signature/security/requirements:
   en: 4739d95131498523
-  zh: a3fc4ee9ab047501
+  zh: 8579be6852ef8bcf
 /c2-release-manifest-and-signature/security/denial-tests:
   en: 5742bc19fcd967f7
-  zh: 6b28e76551a7f32e
+  zh: cea707314db2a365
 /c2-release-manifest-and-signature/security/what-this-does-not-prove:
   en: 6e87204f048d03d1
   zh: ad527b41af729604
