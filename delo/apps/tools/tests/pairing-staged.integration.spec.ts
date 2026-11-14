@@ -64,12 +64,12 @@ describe('pairing keys', () => {
     expect(verdict).toEqual({ added: [], existing: [after] })
   })
 
-  it('matches a violation whose quoted value the checker truncated at a different point after the rename', () => {
-    const value = 'dsh-translation-target:delo/docs/contracts/c19-home-process.md#interaction-with-the-supervisor-and-more'
-    const before = `delo/a.md ↔ delo/a.zh.md: link target #3 diverges between the pair: "${value.slice(0, 80)}…`
-    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${value.replaceAll('delo', 'delorun').slice(0, 80)}…`
-    const verdict = compareViolations([after], [before], new Map([['delo/a', 'delorun/a']]))
-    expect(verdict.added).toEqual([])
+  it('matches a violation whose quoted value the rename lengthened so that the checker now cuts it', () => {
+    const value = 'dsh-translation-target:delo/docs/contracts/c04-admission.md#sessions'
+    const grown = value.replaceAll('delo', 'delorun')
+    const before = `delo/a.md ↔ delo/a.zh.md: link target #3 diverges between the pair: "${value}" vs "#requirements"`
+    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${grown.slice(0, 70)}… vs "#requirements"`
+    expect(compareViolations([after], [before], new Map([['delo/a', 'delorun/a']])).added).toEqual([])
   })
 
   it('counts a repeated violation once per occurrence', () => {

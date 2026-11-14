@@ -37,10 +37,11 @@ const CHECKER = 'scripts/verify-translation-pairing.ts'
 const LISTED_EXISTING = 10
 
 /**
- * A quoted value that the checker cut at a fixed length and ended with an ellipsis. The rename changes how much of the
- * original text fits before the cut, so only the first characters identify the value.
+ * A quoted value of at least 60 characters. The checker cuts long values at a fixed length and ends them with an
+ * ellipsis, and the rename lengthens a value, so one value is cut after the rename and whole before it. Only its first
+ * 60 characters identify it.
  */
-const TRUNCATED_QUOTE = /"([^"]{40})[^"]*…/g
+const LONG_QUOTE = /"([^"…]{60})[^"…]*[…"]/g
 
 /** One run of the upstream checker. */
 interface CheckerRun {
@@ -130,7 +131,7 @@ export function headBase(base: string, renames: ReadonlyMap<string, string>): st
  * @param pathMap - old base → new base for renamed pairs, applied longest first.
  * @returns the comparable key: paths mapped, line numbers removed, and the text that names renamed files, such as a
  * link target, passed through the rename rules so that a violation `HEAD` carries under the old names matches, and
- * with a value the checker truncated reduced to its first 40 characters.
+ * with a value the checker truncated reduced to its first 60 characters.
  */
 export function violationKey(line: string, pathMap: ReadonlyMap<string, string>): string {
   let key = line
@@ -138,7 +139,7 @@ export function violationKey(line: string, pathMap: ReadonlyMap<string, string>)
     key = key.split(oldBase).join(newBase)
   }
   const path = key.trimStart().split(/[:\s]/, 1)[0] ?? ''
-  return applyRules(key, path).text.replace(/:\d+:/g, ':').replace(TRUNCATED_QUOTE, '"$1…')
+  return applyRules(key, path).text.replace(/:\d+:/g, ':').replace(LONG_QUOTE, '"$1…')
 }
 
 /** The result of comparing the staged violations with `HEAD`'s. */
