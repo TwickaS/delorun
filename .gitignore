@@ -53,3 +53,6 @@ native/system/test/bin/
 
 # Each worktree's local hooks, which extend delo/lefthook.yml.
 lefthook-local.yml
+
+# Vite's temporary bundled config, written and removed during a build or dev start; gates that list files race with its removal.
+*.timestamp-*.mjs

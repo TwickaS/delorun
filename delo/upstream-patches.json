@@ -2227,6 +2227,12 @@
       "class": "generic-fix",
       "feature": "changes",
       "reason": "A writer lock whose record is empty or lacks its newline for ten seconds is taken over, because only a writer killed between creating the file and writing its PID leaves one, and no PID probe can ever clear it. A takeover claim older than the same ten seconds is aged out too, because its claimant was killed before releasing it and the claim's name repeats for the same lock record. The ageing renames the claim to a unique name before deleting it and links a fresh claim back, so two contenders cannot both age one out, and a claimant re-checks that the claim at its name is still its own before it removes the lock. Offer upstream."
+    },
+    {
+      "path": ".oxlintrc.json",
+      "class": "delo-feature",
+      "feature": "fork-gates",
+      "reason": "Adds one override for delo/**/*.{ts,tsx}: typescript/consistent-type-imports, so Delorun's own code keeps type-only imports explicit; upstream's trees keep their import style."
     }
   ],
   "retired": []
