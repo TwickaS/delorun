@@ -106,7 +106,7 @@ describe('main', () => {
   })
 
   it('accepts a listed non-zero exit status and fails a required step on any other', () => {
-    const exits = (status: number, acceptedStatuses?: readonly number[]): PostStep => ({ description: 'stub', command: ['sh', '-c', `exit ${String(status)}`], required: true, acceptedStatuses })
+    const exits = (status: number, acceptedStatuses?: readonly number[]): PostStep => ({ description: 'stub', command: ['sh', '-c', `exit ${String(status)}`], required: true, ...acceptedStatuses === undefined ? {} : { acceptedStatuses } })
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     expect(runPostSteps('/tmp', false, [exits(3, [3])])).toBe(0)
