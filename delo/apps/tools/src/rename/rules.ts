@@ -104,7 +104,7 @@ export const RULES: readonly ReplaceRule[] = [
   },
   {
     id: 'capitalised',
-    description: 'the capitalised product name Delo in English prose (Delo\'s); Chinese pages keep their prose, only identifiers change',
+    description: 'the capitalised product name Delo in English prose (Delo\'s); Chinese pages keep their prose, only identifiers and fenced blocks change',
     pattern: /Delo(?![a-z])/gu,
     replacement: 'Delorun',
     exclude: /\.zh\.md$/u,
@@ -155,6 +155,15 @@ function guardRanges(text: string, guards: readonly GuardRule[]): Range[] {
   return ranges
 }
 
+/** The fenced code blocks of a Markdown text; an unterminated fence runs to the end of the text. */
+function fencedRanges(text: string): Range[] {
+  const ranges: Range[] = []
+  for (const match of text.matchAll(/^(```|~~~)[^\n]*\n[\s\S]*?(?:^\1[^\n]*$|(?![\s\S]))/gmu)) {
+    ranges.push({ start: match.index, end: match.index + match[0].length })
+  }
+  return ranges
+}
+
 /** Count the guard matches in a text that still carry the old name, by guard id. */
 function keptByGuard(text: string, guards: readonly GuardRule[]): Map<string, number> {
   const kept = new Map<string, number>()
@@ -188,11 +197,16 @@ export function applyRules(text: string, path: string, rules: readonly ReplaceRu
   const replaced = new Map<string, number>()
   let current = text
   for (const rule of rules) {
-    if (!appliesTo(rule, path)) continue
+    // A Chinese page keeps its prose but shares code and output blocks with its English page, so a rule that
+    // skips Chinese pages still reaches their fenced blocks.
+    const fencedOnly = !appliesTo(rule, path) && /\.zh\.md$/u.test(path) && appliesTo({ include: rule.include }, path)
+    if (!fencedOnly && !appliesTo(rule, path)) continue
     const ranges = guardRanges(current, guards)
+    const fenced = fencedOnly ? fencedRanges(current) : []
     current = current.replace(rule.pattern, (match, offset: number) => {
       const end = offset + match.length
       if (ranges.some(range => offset < range.end && end > range.start)) return match
+      if (fencedOnly && !fenced.some(range => offset >= range.start && end <= range.end)) return match
       replaced.set(rule.id, (replaced.get(rule.id) ?? 0) + 1)
       return rule.replacement
     })

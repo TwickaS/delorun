@@ -85,6 +85,19 @@ describe('rename rules', () => {
   })
 })
 
+describe('fenced blocks in Chinese pages', () => {
+  it('renames the product name inside a fenced block like the English page, and keeps it in prose', () => {
+    const page = 'Delo 的输出：\n\n```text\nDelo did not run delo verify\n```\n\nDelo 结束。\n'
+    expect(applyRules(page, 'docs/x.zh.md').text).toBe('Delo 的输出：\n\n```text\nDelorun did not run delorun verify\n```\n\nDelo 结束。\n')
+    expect(applyRules('```text\nDelo did\n```\n', 'docs/x.md').text).toBe('```text\nDelorun did\n```\n')
+  })
+
+  it('treats a tilde fence and an unterminated fence the same way', () => {
+    expect(applyRules('~~~\nDelo\n~~~\nDelo', 'a.zh.md').text).toBe('~~~\nDelorun\n~~~\nDelo')
+    expect(applyRules('Delo\n```\nDelo', 'a.zh.md').text).toBe('Delo\n```\nDelorun')
+  })
+})
+
 describe('path filters', () => {
   const filtered: ReplaceRule = { id: 'only-docs', description: 'x', pattern: /delo/gu, replacement: 'delorun', include: /^docs\//u, exclude: /\.zh\.md$/u }
 
