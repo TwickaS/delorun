@@ -12,7 +12,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import { PIN_MAX_IDLE_MINUTES, readPinMode, resumePin, setPinMode, setPinOptions, turnPinOff, type PinMode } from './pin-api.ts'
 import { secretProblem } from './pin-rules.ts'
-import { ConfirmAction, Notice, StatusCard } from './brand-parts.tsx'
+import { ConfirmAction, Notice, StatusCard } from '@delorun/brand'
 import { cardCss, SettingsCard } from '@delorun/settings-controls'
 import css from './PinModeSection.module.css'
 
@@ -213,13 +213,13 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
     </SettingsCard>
     {waiting.length > 0
       ? <div data-pin-mode-set-back>
-        <Notice Icon={IconWarningOutlineRegular} title={t('setBack.title')}>
+        <Notice tone="warning" Icon={IconWarningOutlineRegular} title={t('setBack.title')}>
           {t('setBack.waiting', { settings: waiting.map(setting => settingWords(t, setting)).join(', ') })} {t('setBack.auto')}
         </Notice>
       </div>
       : null}
     {mode.paused
-      ? <Notice Icon={IconPauseOutlineRegular} title={t('paused.title')}
+      ? <Notice tone="warning" Icon={IconPauseOutlineRegular} title={t('paused.title')}
         actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => resumePin(fetch)) }}>{t('resume')}</Button>}>
         {t('paused')}
       </Notice>

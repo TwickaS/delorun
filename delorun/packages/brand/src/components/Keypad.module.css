@@ -6,6 +6,7 @@
   height: 72px;
   border: 0;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dl-surface-sunken);
   color: var(--dl-text);
   font: inherit;

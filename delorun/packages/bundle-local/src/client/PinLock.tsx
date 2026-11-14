@@ -12,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PinOutcome, PinSource } from './pin-lock.ts'
-import { DotRow, Keypad, Notice } from './brand-parts.tsx'
+import { Keypad, Notice, PinDots } from '@delorun/brand'
 import { BRAND_NAME, DelorunBrandMark } from './brand.tsx'
 import css from './PinLock.module.css'
 
@@ -109,14 +109,14 @@ export function PinLock({ usePin, unlock, t }: PinLockProps): ReactNode {
         ? <p className={css.text} role="alert">{t('removed.body')}</p>
         : <>
           <p className={css.text}>{t(isPin ? 'lead.pin' : 'lead.passcode')}</p>
-          {isPin ? <DotRow count={value.length} minimum={MIN_PIN_DIGITS} tone={wrong ? 'error' : 'neutral'} shake={shake} /> : null}
+          {isPin ? <PinDots count={value.length} minimum={MIN_PIN_DIGITS} tone={wrong ? 'error' : 'neutral'} shake={shake} /> : null}
           <input ref={inputRef} className={isPin ? css.hiddenField : css.field} type="password" name="delorun-pin" aria-label={t(isPin ? 'label.pin' : 'label.passcode')}
             inputMode={isPin ? 'numeric' : 'text'} pattern={isPin ? '[0-9]*' : undefined} autoComplete="off" autoCorrect="off"
             autoCapitalize="off" spellCheck={false} enterKeyHint="go" disabled={view.busy} value={value}
             onChange={event => { setValue(isPin ? event.target.value.replace(/\D/g, '') : event.target.value) }} />
           {wrong ? <p className={css.failed} role="alert">{outcomeText(t, outcome)}</p> : null}
           {notice === undefined || outcome === undefined || outcome.kind === 'wrong' || outcome.kind === 'removed' ? null
-            : <Notice Icon={notice.Icon} title={t(notice.title)} role="alert" outcome={outcome.kind}>{outcomeText(t, outcome)}</Notice>}
+            : <Notice tone="warning" Icon={notice.Icon} title={t(notice.title)} role="alert" outcome={outcome.kind}>{outcomeText(t, outcome)}</Notice>}
           {isPin ? <Keypad onKey={press} deleteLabel={t('key.delete')} disabled={view.busy} /> : null}
           <Button variant="primary" type="submit" className={css.submit} disabled={!ready}>{t(view.busy ? 'unlocking' : 'unlock')}</Button>
         </>}
