@@ -7,7 +7,7 @@ import { formatReport, main, POST_STEPS, type PostStep, runPostSteps, runRename 
 
 function repo(files: Record<string, string | Buffer>): string {
   const root = mkdtempSync(join(tmpdir(), 'rename-spec-'))
-  const run = (...args: string[]): void => { execFileSync('git', args, { cwd: root, stdio: 'ignore' }) }
+  const run = (...args: string[]): void => { execFileSync('git', args, { cwd: root, stdio: 'ignore', timeout: 30_000 }) }
   run('init', '-q')
   run('config', 'user.email', 'spec@example.invalid')
   run('config', 'user.name', 'spec')
@@ -66,7 +66,7 @@ describe('runRename', () => {
     expect(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')).toContain('@delo/cli')
     expect(readFileSync(join(root, 'snapshots/x/system-prompt.expected.md'), 'utf8')).toBe('Delo\n')
     expect(existsSync(join(root, 'delo'))).toBe(false)
-    expect(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' })).toContain('RM delo/delo-b.ts -> delorun/delorun-b.ts')
+    expect(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8', timeout: 30_000 })).toContain('RM delo/delo-b.ts -> delorun/delorun-b.ts')
     const again = runRename(root, { dryRun: false, allowDirty: true })
     expect(again.changedFiles).toBe(0)
     expect(again.renames).toEqual([])
