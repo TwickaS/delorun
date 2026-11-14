@@ -1038,7 +1038,7 @@
     {
       "area": "Safety and privacy",
       "section": "Security",
-      "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, Windows and macOS), a workspace set to allowlist or off runs no commands instead of running them with your network."
+      "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, or any platform other than Linux), a workspace set to allowlist or off runs no commands instead of running them with your network."
     },
     {
       "area": "Safety and privacy",
@@ -2296,7 +2296,7 @@
             },
             {
               "section": "Security",
-              "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, Windows and macOS), a workspace set to allowlist or off runs no commands instead of running them with your network."
+              "text": "The setting holds on Linux with bubblewrap, WSL2 included. Where the sandbox cannot enforce it (Landlock alone, or any platform other than Linux), a workspace set to allowlist or off runs no commands instead of running them with your network."
             },
             {
               "section": "Security",
