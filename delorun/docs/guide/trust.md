@@ -66,7 +66,7 @@ The release root that these releases are signed under:
 | Timestamp key id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
 | Catalogue key id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
 
-At 1.0 the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delo/release/production-keys.json`.
+At 1.0 the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delorun/release/production-keys.json`.
 
 ## What each reach option shows its provider
 
