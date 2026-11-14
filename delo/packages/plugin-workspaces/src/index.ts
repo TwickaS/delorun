@@ -80,6 +80,8 @@ export interface Config {
    * public roots too.
    */
   readonly caFile?: string
+  /** C16 switch `rename_workspace_tool`: register the `rename_workspace` tool, which renames a workspace after the person agrees. */
+  readonly renameWorkspaceTool: boolean
 }
 
 /** The plugin's configuration schema. Each limit has its default; the paths have none. */
@@ -94,6 +96,7 @@ export const Config: schema<Config> = schema.object({
     file: schema.string().pattern(/^\/.*[^/]$/).required().description('The absolute path of the token file, directly in the home\'s secrets directory.'),
   })]).description('A token for clones from one host, read from a token file in the home\'s secrets directory.'),
   caFile: schema.string().pattern(/^\/.*[^/]$/).description('The CA bundle git trusts for every clone; it replaces the system bundle, so include the public roots too.'),
+  renameWorkspaceTool: schema.boolean().description('C16 switch rename_workspace_tool: register the rename_workspace tool, which renames a workspace after the person agrees.').default(false),
 })
 
 /** A chat's id, as the workspace registry brands it. */
@@ -158,7 +161,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
     void this.serial(() => this.sweep()).catch((error: unknown) => {
       this.warn(`the sweep at start failed: ${reasonOf(error)}`)
     })
-    this.ctx.inject(['tools'], (child) => {
+    if (this.config.renameWorkspaceTool) this.ctx.inject(['tools'], (child) => {
       child.effect(() => child.tools.register(renameWorkspaceTool(child)), `${PLUGIN}: rename_workspace`)
     })
   }

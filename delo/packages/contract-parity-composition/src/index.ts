@@ -529,6 +529,25 @@ export const PARITY_SWITCHES = [
     // call runs and asks as upstream's does.
     sources: ['delo/packages/plugin-changes/src/index.ts'],
   },
+  {
+    id: 'rename_workspace_tool',
+    state: 'built',
+    registeredBy: '@delo/plugin-workspaces',
+    // No Delo profile mounts the workspaces plugin; every row that mounts it turns the switch on, so `true` is its value
+    // wherever Delo's composition includes it.
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-rename-workspace-tool',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/plugin-workspaces',
+      source: 'delo/packages/plugin-workspaces/src/index.ts',
+      key: 'renameWorkspaceTool',
+    },
+    // Off, the plugin registers no `rename_workspace` tool, so the model has no tool for renaming a workspace.
+    sources: ['delo/packages/plugin-workspaces/src/index.ts', 'delo/packages/plugin-workspaces/src/rename-tool.ts'],
+  },
 ] as const satisfies readonly ParitySwitchEntry[]
 
 /** One registry entry, as declared. */

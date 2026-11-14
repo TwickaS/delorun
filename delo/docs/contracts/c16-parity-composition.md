@@ -79,6 +79,7 @@ The registry has these entries.
 | Switch id | Registered by | Default | Parity | Model-visible contributions it switches |
 | --- | --- | --- | --- | --- |
 | `studio_additions` | `@delo/plugin-theme`, which `@delo/bundle-studio` mounts with the switch on | On | Off | None: a feature switch for the theme, sidebar, chat states, settings layout and onboarding. Off is the stock look. |
+| `rename_workspace_tool` | `@delo/plugin-workspaces`, which no Delo profile mounts | On wherever a row mounts it | Off | The `rename_workspace` tool. |
 | `main_chat` | `@delo/plugin-main-chat`, an experimental plugin no Delo profile mounts | On wherever a row mounts it | Off | The main chat's tools, including its write-class tools, its guard and its reports. |
 | `permission_defaults` | `@delo/plugin-permission-defaults` | On | Off | The workspace default preset, the one-consent requirement for full access, and each workspace's network for sandboxed commands and `web_fetch`. |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |

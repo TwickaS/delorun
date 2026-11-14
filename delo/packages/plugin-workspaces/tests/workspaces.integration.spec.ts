@@ -251,6 +251,20 @@ const REFUSED_LOCATIONS: readonly (readonly [string, WorkspaceLocationProblem, (
 ]
 
 describe('the configuration at load', () => {
+  it.each([[true, ['rename_workspace']], [false, []]])('with renameWorkspaceTool %s registers the tools %j', async (renameWorkspaceTool, expected) => {
+    const mounted = await mount({ config: { ...base(), renameWorkspaceTool } })
+    const registered: string[] = []
+    mounted.ctx.provide('tools', { register: (tool: { name: string }) => { registered.push(tool.name); return () => {} } } as never)
+    expect(registered).toEqual(expected)
+  })
+
+  it('leaves the rename_workspace tool off when the switch is not set', async () => {
+    const mounted = await mount({ config: base() })
+    const registered: string[] = []
+    mounted.ctx.provide('tools', { register: (tool: { name: string }) => { registered.push(tool.name); return () => {} } } as never)
+    expect(registered).toEqual([])
+  })
+
   it.each(REFUSED_LOCATIONS)('refuses a root that is %s, naming %s, and creates nothing in it', async (_label, problem, pick) => {
     await scratchOsHome()
     await mkdir(join(home, 'workspaces'), { recursive: true })

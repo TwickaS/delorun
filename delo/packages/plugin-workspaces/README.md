@@ -43,6 +43,7 @@ English | [中文](README.zh.md)
 | `instructionsMaxBytes` | 65536 | The longest `AGENTS.md` read or written, in UTF-8 bytes, from 1 to 16 MiB. |
 | `importTimeoutMs` | 1800000 | How long a clone may take, in milliseconds, from 1000 to 86400000. |
 | `credential` | none | `host` and `file` together: the clone host that receives the token, and the token file directly in the home's `secrets` directory. |
+| `renameWorkspaceTool` | `false` | C16 switch `rename_workspace_tool`: register the `rename_workspace` tool. Delo's composition turns it on wherever it mounts the plugin. |
 | `caFile` | none | The CA bundle git trusts for every clone. It replaces the system bundle, so it must include the public roots too. |
 
 ## Carry-forward review
