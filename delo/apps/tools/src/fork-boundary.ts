@@ -135,8 +135,6 @@ export interface ChangedPath {
   readonly path: string
   /** How the path differs from the upstream commit. */
   readonly status: 'added' | 'modified' | 'deleted'
-  /** True when git does not track the path yet, so its whole content is the difference. */
-  readonly untracked?: true
 }
 
 const COMPILED_SUFFIXES = ['.d.ts.map', '.js.map', '.d.ts', '.js'] as const
@@ -393,7 +391,7 @@ function ruleErrors(manifest: PatchManifest, paths: Iterable<string>): string[] 
  * entry lists it, or when a rule covers it: a path that is not upstream source, or a source path that an exact
  * `generated` rule names.
  * @param manifest - the parsed ledger.
- * @param changed - paths that differ from the upstream commit, including uncommitted and untracked ones.
+ * @param changed - paths that differ from the upstream commit, including uncommitted edits to tracked files.
  * @param files - every path present in the working tree, used to find compiled twins and to hold each rule to.
  * @returns one message per violation; empty when the fork boundary holds.
  */
