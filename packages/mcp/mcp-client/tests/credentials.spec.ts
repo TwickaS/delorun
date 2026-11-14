@@ -70,9 +70,9 @@ describe('McpTemplateBinding', () => {
 
   it('keeps a partial argument template and a plain dash-free whole template', async () => {
     const config = Config({ transport: 'stdio', serverName: 'binding', expandTemplates: true,
-      command: 'fixture-command', args: ['--token=${credential:MCP_TOKEN}', '${credential:MCP_TOKEN}'], env: {}, cwd: '' })
+      command: 'fixture-command', args: ['--token=${credential:MCP_TOKEN}'], env: {}, cwd: '' })
     provider.values.set(ref, '-dash')
-    const binding = new McpTemplateBinding(ctx, { ...config, args: ['--token=${credential:MCP_TOKEN}'] })
+    const binding = new McpTemplateBinding(ctx, config)
     expect(await binding.resolve(new AbortController().signal)).toMatchObject({ args: ['--token=-dash'] })
   })
 
