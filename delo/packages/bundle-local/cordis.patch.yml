@@ -21,11 +21,6 @@
 - id: deepseek-account
   disabled: true
 
-# The API controller over that account service: it requires `deepseekAccount`, which no enabled row provides once the row
-# above is disabled, so left mounted it waits for the service for good and the Host starts with a did-not-activate warning.
-- id: account-controller
-  disabled: true
-
 # Feedback goes nowhere outside the machine. Upstream's feedback telemetry exporter sends a session-log prefix to
 # DeepSeek's collector when the person sends feedback, and Delo has no DeepSeek feedback service, so the row is disabled.
 - id: session-telemetry-otel
@@ -42,6 +37,11 @@
 # The account menu, the sign-in dialog and the account section need DeepSeek's account service, which Delo's
 # composition removes; without this row the More menu shows no Sign in entry.
 - id: ui-settings-account
+  disabled: true
+
+# The account notifications poll DeepSeek's servers for server-authored cards and show them beside the account menu,
+# which the row above removes; Delo has no DeepSeek account service in the first release, so the row is disabled.
+- id: ui-account-notifications
   disabled: true
 
 # Upstream's Web preview notice names DeepSeek Harness; Delo shows its own notice from @delo/bundle-local instead.
@@ -177,6 +177,16 @@
           - '@deepseek-ai/dsh-web-app'
           - '@delo/bundle-local'
           - '@delo/bundle-studio'
+
+    # The rename_workspace tool (C16 switch `rename_workspace_tool`): it renames a
+    # workspace through upstream's workspace registry, as the studio's rename
+    # does, and asks the person inside the call, so only an allowed-once answer
+    # renames. The row is not protected: it adds one tool that asks, and turning
+    # it off only removes that tool.
+    - id: delo-workspace-rename
+      name: '@delo/bundle-local/workspace-rename'
+      config:
+        enabled: true
 
 # The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
 # a stop waits for running chats (C19's `waiting` phase), the first step of

@@ -252,7 +252,7 @@ describe('a Delo CLI profile', () => {
 
   it('composes no enabled feedback exporter, feedback surface or account surface', () => {
     const rows = home.rows(DELO_PROFILE)
-    for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account', 'account-controller']) {
+    for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account', 'ui-account-notifications']) {
       expect(rows.filter(row => row.id === id && row.disabled !== true), id).toEqual([])
     }
   })

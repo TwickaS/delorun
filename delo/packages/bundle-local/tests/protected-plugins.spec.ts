@@ -33,7 +33,8 @@ function baseRowName(id: string): unknown {
 
 describe('the plugin-manager row of @delo/bundle-local', () => {
   it('protects every row this bundle mounts with a C16 switch on, and nothing it does not mount', () => {
-    const guards = inserted.filter(row => (row['config'] as Patch | undefined)?.['enabled'] === true && row['disabled'] === undefined).map(row => row['name'])
+    // The rename tool only adds one tool that asks, so turning it off removes a convenience and no guard.
+    const guards = inserted.filter(row => (row['config'] as Patch | undefined)?.['enabled'] === true && row['disabled'] === undefined && row['name'] !== '@delo/bundle-local/workspace-rename').map(row => row['name'])
     expect(guards).toEqual([
       '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent', '@delo/plugin-permission-defaults',
       '@delo/plugin-schedule-consent', '@delo/plugin-fetch-guard', '@delo/plugin-delegation-consent', '@delo/plugin-changes', '@delo/bundle-local/update-gate', '@delo/bundle-local/update-check',

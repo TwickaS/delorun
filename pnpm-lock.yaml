@@ -2025,6 +2025,12 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
@@ -3598,9 +3604,6 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@deepseek-ai/dsh-llm':
-        specifier: workspace:*
-        version: link:../../../packages/llm/llm
       '@deepseek-ai/dsh-storage':
         specifier: workspace:*
         version: link:../../../packages/storage/storage
@@ -3613,12 +3616,6 @@ importers:
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:*
         version: link:../../../packages/subprocess/subprocess
-      '@deepseek-ai/dsh-tools':
-        specifier: workspace:*
-        version: link:../../../packages/core/tools
-      '@deepseek-ai/dsh-user-approval':
-        specifier: workspace:*
-        version: link:../../../packages/interaction/user-approval
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace

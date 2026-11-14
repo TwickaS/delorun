@@ -49,7 +49,6 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
     { id: 'product-analytics', disabled: false },
     // The client analytics plugin waits for the account service, which the bundle turns off with the account surfaces.
     { id: 'deepseek-account', disabled: false },
-    { id: 'account-controller', disabled: false },
     { id: 'desktop-product-telemetry', disabled: false, config: {
       endpoint: 'http://127.0.0.1:9/v1/logs', serviceName: 'delo-privacy-fixture', serviceVersion: 'fixture',
       scheduledDelayMillis: 1000, timeoutMillis: 1000, exportTimeoutMillis: 2000, shutdownTimeoutMillis: 2000,

@@ -53,6 +53,20 @@ async function seed(root: string): Promise<{ file: string; document: Document; f
   return { file, document: JSON.parse(await readFile(file, 'utf8')) as Document, folders }
 }
 
+/** The id at a position of the seeded registry order; the seed holds three. */
+function idAt(document: Document, index: number): string {
+  const id = document.global.workspaceIds[index]
+  if (id === undefined) throw new Error(`the seeded registry order has no entry ${String(index)}`)
+  return id
+}
+
+/** The seeded record of a workspace id. */
+function recordOf(document: Document, id: string): Record<string, unknown> {
+  const found = document.tables.workspaces[id]
+  if (found === undefined) throw new Error(`the seeded document has no record ${id}`)
+  return found
+}
+
 const asides = async (store: string): Promise<string[]> =>
   (await readdir(store)).filter(name => name.includes('.quarantined-')).sort()
 
@@ -60,12 +74,12 @@ describe('registry quarantine', () => {
   it('boots with the consistent records and sets the inconsistent ones aside', async () => {
     const root = await freshRoot()
     const { file, document, folders } = await seed(root)
-    const [first, second, third] = document.global.workspaceIds
+    const [first, second, third] = [idAt(document, 0), idAt(document, 1), idAt(document, 2)]
     // A record outside the order, a dangling and a repeated order entry, a path claimed twice and a session claimed twice.
-    document.tables.workspaces.orphan = { ...document.tables.workspaces[first!], path: join(root, 'orphan') }
-    document.tables.workspaces.twin = { ...document.tables.workspaces[second!] }
-    document.tables.workspaces[third!].sessionIds = ['s1']
-    document.tables.workspaces[second!].sessionIds = ['s1']
+    document.tables.workspaces.orphan = { ...recordOf(document, first), path: join(root, 'orphan') }
+    document.tables.workspaces.twin = { ...recordOf(document, second) }
+    recordOf(document, third).sessionIds = ['s1']
+    recordOf(document, second).sessionIds = ['s1']
     document.global.workspaceIds = [...document.global.workspaceIds, 'twin', 'ghost', second]
     await writeFile(file, JSON.stringify(document), 'utf8')
 
@@ -118,8 +132,7 @@ describe('registry quarantine', () => {
   it('keeps the other records when one record does not match the record format', async () => {
     const root = await freshRoot()
     const { file, document } = await seed(root)
-    const [first] = document.global.workspaceIds as string[]
-    document.tables.workspaces[first!].title = 5
+    recordOf(document, idAt(document, 0)).title = 5
     await writeFile(file, JSON.stringify(document), 'utf8')
     const { registry, fiber } = await boot(new JsonStorageBackend(join(root, 'store')))
     // The record is gone from the table, so the order entry for it is dangling and set aside too.
@@ -158,7 +171,8 @@ describe('inspectRegistryText', () => {
     expect(inspectRegistryText(document(null, { a: record }))).toEqual({ state: 'readable', workspaces: 1, problems: [] })
     const damaged = inspectRegistryText(document({ initialized: true, workspaceIds: ['a', 'x'] }, { a: record, b: record, c: { ...record, title: 4 } }))
     expect(damaged).toMatchObject({ state: 'readable', workspaces: 2 })
-    expect((damaged as { problems: string[] }).problems.join('\n')).toMatch(/record 'c' does not match the record format[\s\S]*missing workspace 'x'[\s\S]*'b' is absent[\s\S]*claimed by both/)
+    if (damaged.state !== 'readable') throw new Error('the damaged registry reads as unreadable')
+    expect(damaged.problems.join('\n')).toMatch(/record 'c' does not match the record format[\s\S]*missing workspace 'x'[\s\S]*'b' is absent[\s\S]*claimed by both/)
     expect(inspectRegistryText(document({ initialized: 'yes' }, {}))).toMatchObject({ problems: [expect.stringContaining('state format')] })
   })
 })

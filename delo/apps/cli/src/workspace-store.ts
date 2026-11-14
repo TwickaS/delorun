@@ -6,7 +6,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { inspectRegistryText, type RegistryInspection } from '@deepseek-ai/dsh-workspace/src/inspect.ts'
+import { inspectRegistryText, type RegistryInspection } from '@deepseek-ai/dsh-workspace'
 import { previousPath } from '@deepseek-ai/dsh-storage-json'
 
 /** One registry file as found: its path, and its reading unless the file is missing. */

@@ -11,6 +11,7 @@
   "include": [
     "src/profile.ts",
     "src/update-gate.ts",
+    "src/workspace-rename.ts",
     "src/profile-versions.ts",
     "tests"
   ],

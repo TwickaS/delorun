@@ -58,6 +58,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   TrashOperationError: PLUGIN,
   OwnerNotesError: PLUGIN,
   MainChatToolError: PLUGIN,
+  RenameToolError: PLUGIN,
   CostMeterConfigError: 'raised while the cost meter loads its price table: the row does not start, and delorun reports it as an inactive Delorun row',
   AcceptanceStoreError: PLUGIN,
   FilePinError: PLUGIN,

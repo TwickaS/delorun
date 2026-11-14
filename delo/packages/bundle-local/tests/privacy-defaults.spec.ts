@@ -120,9 +120,9 @@ describe('a Delo CLI profile', () => {
   it('lists the two upstream opt-in rows it turns off, and the rows it removes or overrides', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
       .toEqual([
-        SETUP_OPT_IN_ROWS.desktopAnalytics, 'account-controller', 'command-feedback', 'connection', 'deepseek-account',
+        SETUP_OPT_IN_ROWS.desktopAnalytics, 'command-feedback', 'connection', 'deepseek-account',
         'plugin-manager', 'sandbox', 'session-telemetry-otel', 'workspace-controller',
-        SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
+        SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-account-notifications', 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
       ].sort())
   })
 
@@ -172,6 +172,7 @@ describe('a Delo CLI profile', () => {
       '@delo/skill-plugin-authoring',
       '@delo/plugin-delegation-consent',
       '@delo/plugin-changes',
+      '@delo/bundle-local/workspace-rename',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
       `${LOCAL_BUNDLE}/trust`,

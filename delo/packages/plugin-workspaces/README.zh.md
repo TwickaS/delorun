@@ -33,7 +33,7 @@ kind: "package-bundle"
   - **残留风险。** git 运行期间，令牌位于 git 的环境变量中，也位于 git 启动的进程的环境变量中。同一用户的其他进程可以在那里读取它，例如通过 `/proc/<pid>/environ`，直到克隆结束为止。
 - **根目录与主目录。** 根目录会被规范化，并在加载时创建。根目录若是 Delo 主目录、位于其内或包含它，则加载失败，因此主目录绝不会位于可写的根目录之内。主目录由 [`resolveDeloHome`](../home/src/resolve.ts) 解析。
 - **证书颁发机构。** `caFile` 替换每次克隆时 git 使用的 CA 证书包，它以 `http.sslCAInfo` 传入，因此 git 不再读取系统证书包。私有证书颁发机构因此需要一个同时包含公共根证书的文件。可将系统证书包与私有颁发机构的 PEM 拼接生成：在基于 Debian 的系统上可执行 `cat /etc/ssl/certs/ca-certificates.crt private-ca.pem > ca-bundle.pem`，也可使用操作系统导出的证书包，然后让 `caFile` 指向该结果。文件路径必须是绝对路径。未配置 `caFile` 时，克隆使用 git 的默认证书包。
-- **重命名工具。** 模型工具 `rename_workspace`（[`rename-tool.ts`](src/rename-tool.ts)）。
+- **重命名工具。** 模型工具 `rename_workspace`（[`workspace-rename.ts`](../bundle-local/src/workspace-rename.ts)）。
 - **错误。** 每一次拒绝都是 `WorkspaceRefusedError`，其代码取自 [`service.ts`](src/service.ts)。非预期的失败应答 `failed` 并附错误代码，若无代码则为 `unexpected error`；该消息不含路径也不含凭据，并且会被记录到日志中。
 
 <a id="configuration"></a>

@@ -88,13 +88,10 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
-    id: 'account-controller',
+    id: 'ui-account-notifications',
     kind: 'changed',
-    reason: 'The API controller over the DeepSeek account service is removed with it: the controller requires `deepseekAccount`, which no enabled row provides, so mounted it would never activate; upstream mounts it.',
-    parity: {
-      kind: 'upstream',
-      reason: 'C16\'s changed default takes upstream\'s value: the replay signs no account in, and the overlay does not restate the row.',
-    },
+    reason: 'The account notifications are hidden, because they poll DeepSeek\'s servers for cards shown beside the account menu and the first release has no DeepSeek account service.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
     id: 'workspace-controller',
@@ -173,6 +170,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no listener or guard holds plugin_manager back, so it installs and removes as upstream does, behind its own approval.' },
+  },
+  {
+    id: 'delo-workspace-rename',
+    kind: 'added',
+    reason: 'The C16 switch `rename_workspace_tool` on: the agent has a `rename_workspace` tool that renames a workspace through the workspace registry, the way the studio\'s rename does, after the person allows it; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the model has no tool for renaming a workspace.' },
   },
   {
     id: 'delo-update-gate',

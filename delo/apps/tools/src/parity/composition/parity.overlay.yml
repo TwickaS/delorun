@@ -127,6 +127,12 @@
           - '@delo/bundle-studio'
       disabled: true
 
+    - id: delo-workspace-rename
+      name: '@delo/bundle-local/workspace-rename'
+      config:
+        enabled: true
+      disabled: true
+
 - insert:
     - id: delo-update-gate
       name: '@delo/bundle-local/update-gate'

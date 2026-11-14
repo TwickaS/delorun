@@ -420,6 +420,7 @@ The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/READM
 | `one_time_launch_tokens` | built | `@deepseek-ai/dsh-client-connection` `oneTimeLaunchTokens` | on | on, through `@delo/bundle-local`'s `connection` row | off | no |
 | `default_workspace_directory` | built | `@deepseek-ai/dsh-api-workspace-controller` `defaultWorkspaceDirectory` | on | on, through `@delo/bundle-local`'s `workspace-controller` row, when `delorun start` boots the profile | off | yes |
 | `plugin_changes_pending` | built | `@delo/plugin-changes` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `rename_workspace_tool` | built | `@delo/bundle-local/workspace-rename` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
 
 The registry default is the value the registry states for Delo's default composition; the CLI profile column is what the profile that `delorun` starts composes today, which differs from it for `main_chat`, `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`. `delorun headless` runs upstream's `headless` template with `@delo/bundle-headless`, which turns `permission_defaults`, `fetch_guard`, `instruction_layer_consent` and `update_turn_refusal` on, as in the CLI profile; the parity composition does not mount that bundle, so the check holds no row of it to the registry. Each built field's schema default is the parity value.
 

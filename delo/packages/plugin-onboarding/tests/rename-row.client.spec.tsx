@@ -11,14 +11,14 @@ type Block = Extract<RenameRowProps, { phase: 'started' | 'running' | 'settled' 
 
 const args = JSON.stringify({ workspace: 'Old', name: 'New' })
 /** A call that is still running. */
-const running = { callId: 'c1', name: 'rename_workspace', argsRaw: args } as unknown as Block
+const running = { callId: 'c1', name: 'rename_workspace', argsRaw: args } as Block
 /** A settled call with the given result fields. */
 const settled = (fields: Record<string, unknown>) => ({
   kind: 'tool-result', callId: 'c1', name: 'rename_workspace', call: { name: 'rename_workspace', argsRaw: args }, content: [], isError: false, ...fields,
-}) as unknown as Block
+}) as Block
 
 /** The row over a block, as a started call. */
-const show = (block: Block) => render(<RenameRow {...{ phase: 'result', block, t } as unknown as RenameRowProps} />)
+const show = (block: Block) => render(<RenameRow {...{ phase: 'result', block, t } as RenameRowProps} />)
 
 describe('the rename_workspace row model', () => {
   it('reads the old and new name from the persisted result', () => {
@@ -56,7 +56,7 @@ describe('the rename_workspace row', () => {
     expect(show(running).container.textContent).toBe('Rename workspaceOld')
   })
   it('shows only the title while the call is being prepared', () => {
-    const { container } = render(<RenameRow {...{ phase: 'preparing', t } as unknown as RenameRowProps} />)
+    const { container } = render(<RenameRow {...{ phase: 'preparing', t } as RenameRowProps} />)
     expect(container.textContent).toBe(en['rename.title'])
   })
   it('has Chinese copy with the same placeholders', () => {

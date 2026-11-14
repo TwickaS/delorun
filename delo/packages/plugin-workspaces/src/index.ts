@@ -21,7 +21,6 @@ import {
   type WorkspaceLocationHomes,
 } from '@delo/home'
 import { cloneRepository } from './clone.ts'
-import { renameWorkspaceTool } from './rename-tool.ts'
 import { INSTRUCTIONS, InstructionsRefusedError, readInstructions, writeInstructions } from './files.ts'
 import { cloneUrlProblem, redactClone } from './git.ts'
 import { folderName, WorkspaceRefusedError } from './service.ts'
@@ -157,9 +156,6 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
     this.mounted = { root, homes, imports: domain.table('imports'), trash: domain.table('trash') }
     void this.serial(() => this.sweep()).catch((error: unknown) => {
       this.warn(`the sweep at start failed: ${reasonOf(error)}`)
-    })
-    this.ctx.inject(['tools'], (child) => {
-      child.effect(() => child.tools.register(renameWorkspaceTool(child)), `${PLUGIN}: rename_workspace`)
     })
   }
 
