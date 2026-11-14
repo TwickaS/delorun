@@ -43,6 +43,7 @@ import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { deduplicateStagedWorkspacePackages, materializeStagedLinks } from '../../../../scripts/build-exe-for-python-sdk-staging.ts'
 import { verifyStagedDependencies } from '../../../../scripts/executable-packaging.ts'
 import { semanticVersion } from '@delo/release-formats/brands'
+import { pruneForeignPrebuilds } from './closure/prune.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { claimBuildRoot } from './closure/build-root.ts'
@@ -208,6 +209,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)
     await writeDataFormats(stage, source)
+    await pruneForeignPrebuilds(stage, platform, recipe.closure.foreignPrebuilds, console.log)
     const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)

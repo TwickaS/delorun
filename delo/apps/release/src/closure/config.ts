@@ -21,6 +21,8 @@ export const RECIPE_FILES = ['toolchain.json', 'prebuilt-pins.json', 'closure.js
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u, 'a lowercase hex SHA-256')
 const integrity = z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/u, 'an npm sha512 integrity string')
 const exactVersion = z.string().regex(/^\d+\.\d+\.\d+$/u, 'an exact version')
+/** Rejects a path with a `.` or `..` segment, so a rule cannot name a location outside its package. */
+const noDotSegment = (path: string): boolean => path.split('/').every(segment => segment !== '.' && segment !== '..')
 /**
  * How a closure obtains upstream's native system addon: `source` compiles it in the pinned builder image, `none` is a
  * platform `native/system` publishes no package for, and `unbuilt` is a platform whose package the recipe cannot
@@ -81,6 +83,16 @@ export const ClosureRecipe = z.strictObject({
   deployRoot: z.string().min(1),
   /** The product name the client artifacts are built with, as `DSH_CLIENT_TITLE`. */
   clientTitle: z.string().min(1).max(64),
+  /**
+   * Packages that carry other platforms' prebuilds in their main package, with the platform directories to drop from a
+   * closure before its native files are checked against the pins; a directory not listed here is never removed. Each
+   * `directory` is a relative path with no `.` or `..` segment. Parsing fails on any other value.
+   */
+  foreignPrebuilds: z.array(z.strictObject({
+    package: z.string().regex(/^(@[a-z0-9-]+\/)?[a-z0-9._-]+$/u, 'an npm package name').refine(noDotSegment, 'no . or .. segment'),
+    directory: z.string().regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/u, 'a relative path inside the package').refine(noDotSegment, 'no . or .. segment'),
+    platforms: z.array(z.string().regex(/^[a-z0-9]+-[a-z0-9]+$/u, 'a platform such as darwin-arm64')).min(1),
+  })),
   /** The install anchor upstream's runtime resolution reads, and the Delo bundles it must declare as dependencies. */
   anchor: z.strictObject({
     package: z.string().min(1),
