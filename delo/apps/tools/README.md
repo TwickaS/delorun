@@ -61,7 +61,7 @@ The checker fails when:
 - a security entry's recorded digest differs from its file at HEAD;
 - a fork-owned tree holds a compiled twin of a TypeScript source.
 
-It prints how many differing paths each rule covers, and a warning line for a rule that covers none; such a rule does not fail the check. `--count` prints the listed entries and their hunks, and the rule-covered paths and their hunks. A hunk is one `@@` header of `git diff --unified=0` against the pinned commit, and an untracked file counts as one hunk. Retired entries are credited and listed separately; they are not part of the count.
+It prints how many differing paths each rule covers, and a warning line for a rule that covers none; such a rule does not fail the check. `--count` prints the listed entries and their hunks, and the rule-covered paths and their hunks. A hunk is one `@@` header of `git diff --unified=0` against the pinned commit. Only tracked files count: a new file joins once it is added to the index. Retired entries are credited and listed separately; they are not part of the count.
 
 [`src/ledger-record.ts`](src/ledger-record.ts) writes the ledger, so no person or agent writes entries or digests by hand:
 

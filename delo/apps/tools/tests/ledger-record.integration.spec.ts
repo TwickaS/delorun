@@ -69,6 +69,7 @@ describe('the ledger writer', () => {
       'delo/own.ts': 'own\n',
       'docs/a.md': 'b\n',
     })
+    repo.run(['add', '-A'])
     expect(main(['--check'], repo.root)).toBe(1)
     expect(ledgerOf(repo).patches).toEqual([])
     expect(printed).toContain('ledger-record: packages/core/session/src/zz-probe.ts: would add a stub entry; the lead writes its class, feature and reason')

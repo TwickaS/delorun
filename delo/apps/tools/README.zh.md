@@ -47,7 +47,7 @@
 - 某个 retired 条目仍与锁定提交不同；
 - fork 自有的目录中含有某个 TypeScript 源文件的编译产物。
 
-`--count` 打印已列出条目及其差异块数。差异块是 `git diff --unified=0` 相对于锁定提交输出的一个 `@@` 头，未跟踪文件计为一个差异块。retired 条目被计入抵免并单独列出；它们不计入总数。
+`--count` 打印已列出条目及其差异块数。差异块是 `git diff --unified=0` 相对于锁定提交输出的一个 `@@` 头。只计入已跟踪文件：新文件加入索引后才计入。retired 条目被计入抵免并单独列出；它们不计入总数。
 
 [`src/ledger-merge.ts`](src/ledger-merge.ts) 是台账的 git 合并驱动，[`.gitattributes`](../../../.gitattributes) 将 `delo/upstream-patches.json` 指向它。每个克隆仓库配置一次该驱动，该克隆的所有工作树共享这一设置：
 
