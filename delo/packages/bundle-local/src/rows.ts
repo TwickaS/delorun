@@ -88,13 +88,10 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
-    id: 'account-controller',
+    id: 'ui-account-notifications',
     kind: 'changed',
-    reason: 'The API controller over the DeepSeek account service is removed with it: the controller requires `deepseekAccount`, which no enabled row provides, so mounted it would never activate; upstream mounts it.',
-    parity: {
-      kind: 'upstream',
-      reason: 'C16\'s changed default takes upstream\'s value: the replay signs no account in, and the overlay does not restate the row.',
-    },
+    reason: 'The account notifications are hidden, because they poll DeepSeek\'s servers for cards shown beside the account menu and the first release has no DeepSeek account service.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
     id: 'workspace-controller',
