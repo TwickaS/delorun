@@ -162,6 +162,7 @@ export async function runningRelease(home: string, platform: RuntimePlatform, ru
 /**
  * The facts of a verified manifest the notice shows.
  * @param manifest - the channel's verified manifest.
+ * @param notes - the digest and length of the release notes the manifest names, when it names them; absent, the release has no notes.
  * @returns the release; no security mark reads as false and no summary as none.
  */
 export function checkedReleaseOf(manifest: ReleaseManifest, notes?: { readonly sha256: Sha256Hex, readonly length: number }): CheckedRelease {

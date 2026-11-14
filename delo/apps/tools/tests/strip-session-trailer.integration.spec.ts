@@ -31,7 +31,7 @@ describe('rewriteBranch', () => {
     const base = commitWith(repo, 'base.txt', 'upstream: base')
     const tree = repo.run(['rev-parse', `${base}^{tree}`])
     const signed = `tree ${tree}\nparent ${base}\nauthor Up <up@example.test> 1700000000 +0000\ncommitter Up <up@example.test> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n abc\n -----END PGP SIGNATURE-----\n\nupstream: signed\n\n${TRAILER_LINE}\n`
-    const upstream = execFileSync('git', ['hash-object', '-t', 'commit', '-w', '--stdin'], { cwd: repo.root, input: signed, encoding: 'utf8' }).trim()
+    const upstream = execFileSync('git', ['hash-object', '-t', 'commit', '-w', '--stdin'], { cwd: repo.root, input: signed, encoding: 'utf8', timeout: 30_000 }).trim()
     repo.run(['update-ref', 'refs/remotes/upstream/main', upstream])
     repo.run(['reset', '-q', '--hard', upstream])
     return { repo, upstream }
