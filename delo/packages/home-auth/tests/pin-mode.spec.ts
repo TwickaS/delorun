@@ -32,6 +32,8 @@ const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
 const PRIVATE: ReachListenerId = 'reach-tailscale-private'
 const FUNNEL: ReachListenerId = 'reach-tailscale-funnel'
 const PIN = '482916'
+/** Each secret comparison is one scrypt derivation at the production cost; these specs make a dozen or more, so they outlast the default 10 s under load. */
+const SCRYPT_TIMEOUT_MS = 60_000
 const MINUTE = 60_000
 
 interface Reply {
@@ -426,7 +428,7 @@ describe('the store', () => {
     }
     // Pins the window: nine recent misses and five old ones do not pause.
     expect(store.summary().paused).toBe(false)
-  })
+  }, SCRYPT_TIMEOUT_MS)
 
   it('compares a passcode in NFC and refuses a store another user could read', async () => {
     const store = new PinModeStore({ directory: home.directory, now: home.clock.read })
@@ -525,7 +527,7 @@ describe('home-wide pause on every miss path', () => {
     // Pins the count on the lockout path: ten misses pause even when each device was removed by its own fifth.
     expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
     expect(events.some(event => event.kind === 'paused')).toBe(true)
-  })
+  }, SCRYPT_TIMEOUT_MS)
 })
 
 describe('structured PIN refusals and the state fields', () => {
