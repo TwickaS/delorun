@@ -246,6 +246,27 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     refusedWithoutWriting(fixture, await fixture.sign(), `${installer} does not match desktop.${DESKTOP_PLATFORMS[0]}.installer in the draft`)
   })
 
+  it('refuses a draft whose notes are over the limit or hold a bidirectional override, and signs valid notes into the manifest', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const name = `delorun-${VERSION}.notes.txt`
+    const notesPath = join(fixture.release, name)
+    const draftNotes = (bytes: Buffer, length = bytes.byteLength) => {
+      writeFileSync(notesPath, bytes)
+      editDraftFields(fixture, (draft) => { draft.notes = { name, length, sha256: createHash('sha256').update(bytes).digest('hex') } })
+    }
+    const over = Buffer.alloc(65_537, 'a')
+    draftNotes(over)
+    refusedWithoutWriting(fixture, await fixture.sign(), 'the manifest draft manifest-draft.json does not read')
+    draftNotes(Buffer.from('Fixed \u202Egnirts'))
+    refusedWithoutWriting(fixture, await fixture.sign(), `${name} is not valid release notes`)
+    const good = Buffer.from('Delorun 0.1.0\n\n- A change.\n')
+    draftNotes(good)
+    const signed = await fixture.sign()
+    expect(signed.status, signed.stderr).toBe(0)
+    expect(JSON.parse(readFileSync(join(fixture.release, MANIFEST), 'utf8')).signed.notes).toEqual({ name, length: good.byteLength, sha256: createHash('sha256').update(good).digest('hex') })
+  })
+
   it('refuses without the rebuild attestation, or with one another key made or that covers another build', async (test) => {
     const fixture = await releaseFixture(test)
     expect(fixture.record().status).toBe(0)
