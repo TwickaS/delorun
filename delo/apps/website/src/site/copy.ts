@@ -26,10 +26,10 @@ export const COPY = {
   copiedLabel: 'Copied',
   /** Shown beside the install command; `linkText` is the part that links to `href`. */
   platformNote: {
-    before: 'Delorun runs on Linux and on ',
+    before: 'For now, Delorun runs on Linux and on ',
     linkText: 'Windows through WSL2',
     href: `${DOCS_URL}/guide/install#windows-through-wsl2`,
-    after: '. macOS and native Windows are not supported.',
+    after: '. macOS and native Windows come in a later release.',
   },
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
