@@ -254,7 +254,7 @@ describe('changing the options without the secret', () => {
   it('refuses an out-of-range, fractional or mistyped value and an empty change, and changes nothing', async () => {
     await turnOn()
     const before = await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')
-    for (const body of [{ idleMinutes: 0 }, { idleMinutes: 61 }, { idleMinutes: 1.5 }, { idleMinutes: '5' }, { lockWhenHidden: 'yes' }, {}]) {
+    for (const body of [{ idleMinutes: 0 }, { idleMinutes: 61 }, { idleMinutes: 1.5 }, { idleMinutes: '5' }, { lockWhenHidden: 'yes' }, {}, { idleMinutes: 5, secret: PIN }, { secret: PIN }]) {
       expect((await send('POST', PIN_PATHS.options, body)).status, JSON.stringify(body)).toBe(400)
     }
     expect(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')).toBe(before)
