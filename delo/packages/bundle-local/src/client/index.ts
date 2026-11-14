@@ -64,6 +64,10 @@ import { AboutSection } from './AboutSection.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
+import { createPinSource, type PinSource } from './pin-lock.ts'
+import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
+import { PinLock } from './PinLock.tsx'
+import { attachPinTriggers } from './pin-triggers.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
 import { UnlockOverlay } from './UnlockOverlay.tsx'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
@@ -96,6 +100,9 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delo/pl
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
+export type { PinLocaleKey } from './pin-locales.ts'
+export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
+export type { PinLockProps } from './PinLock.tsx'
 export type { TrustLocaleKey } from './trust-locales.ts'
 export type { TrustBadgeInjected, TrustBadgeProps } from './TrustBadge.tsx'
 export { badgeLabel, formatTime, rowStateLabel, TrustBadge, VERIFY_COMMAND } from './TrustBadge.tsx'
@@ -162,6 +169,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'deloPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'deloDevices': DevicesLocaleKey
+    /** The PIN lock screen's copy. */
+    'deloPin': PinLocaleKey
     /** The trust badge's and the trust panel's copy. */
     'deloTrust': TrustLocaleKey
     /** The full-access consent, the approval card's action, the MCP server review and notice, and the Permissions and External agents sections. */
@@ -178,6 +187,12 @@ export const NS = 'deloPrivacy'
 
 /** Dictionary namespace of the Devices section and the remote refused-answer notice. */
 export const DEVICES_NS = 'deloDevices'
+
+/** Dictionary namespace of the PIN lock screen. */
+export const PIN_NS = 'deloPin'
+
+/** The `shell.overlay` id of the PIN lock screen. */
+export const PIN_LOCK_OVERLAY_ID = 'delo-pin-lock'
 
 /** Dictionary namespace of the Network section. */
 export const NETWORK_NS = 'deloNetwork'
@@ -418,9 +433,18 @@ export function apply(ctx: Context): void {
   }, AboutSection))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delo-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
+  ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delo-pin: lock screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback, pin)
+  // The unlock banner follows the page's PIN unlock: read the elevation again when the page unlocks or locks.
+  let pinPhase = pin.hooks.pin.getSnapshot().phase
+  ctx.effect(() => pin.hooks.pin.subscribe(() => {
+    const phase = pin.hooks.pin.getSnapshot().phase
+    if (phase !== pinPhase) void unlock.refresh()
+    pinPhase = phase
+  }), 'delo-pin: the unlock banner reads the elevation again when the page unlocks or locks')
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({
@@ -644,8 +668,13 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
  * @returns the store, which the Devices section reads too.
  */
-export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false): UnlockSource {
+export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
   const unlock = createUnlockSource(fetch, Date.now, onComputer)
+  // Lock now ends the page's PIN unlock when it holds one, and the device's elevation otherwise.
+  const lock = async (): Promise<void> => {
+    if (pin?.holdsUnlock() === true) await pin.lock()
+    else await unlock.lock()
+  }
   ctx.effect(() => () => { unlock.dispose() }, 'delo-devices: the unlock\'s timers stop once the plugin unloads')
   ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
   ctx.on('connection/reset', () => { void unlock.refresh() })
@@ -654,9 +683,32 @@ export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false):
     name: 'shell.overlay',
     id: UNLOCK_OVERLAY_ID,
     locale: DEVICES_NS,
-    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock: unlock.lock, dismissEnded: unlock.dismissEnded }),
+    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock, dismissEnded: unlock.dismissEnded }),
   }, UnlockOverlay))
   return unlock
+}
+
+/**
+ * Register PIN mode's lock screen: its store, the page events that keep the unlock alive or lock it, and its
+ * `shell.overlay` entry. Where PIN mode does not apply the store settles on `off` and the entry renders nothing.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the request function.
+ * @param onComputer - whether the page is on the home's own computer ({@link createPinSource}).
+ * @returns the store, which the unlock banner's Lock now reads too.
+ */
+export function applyPin(ctx: Context, fetch: HostFetch, onComputer = false): PinSource {
+  const pin = createPinSource(fetch, Date.now, onComputer)
+  ctx.effect(() => pin.dispose, 'delo-pin: the lock\'s timers stop once the plugin unloads')
+  ctx.effect(() => attachPinTriggers(pin), 'delo-pin: input, visibility and page events keep the unlock alive or lock it')
+  ctx.on('connection/reset', () => { void pin.refresh() })
+  void pin.refresh()
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: PIN_LOCK_OVERLAY_ID,
+    locale: PIN_NS,
+    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock }),
+  }, PinLock))
+  return pin
 }
 
 /**
