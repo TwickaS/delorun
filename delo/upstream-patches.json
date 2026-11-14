@@ -1535,8 +1535,8 @@
     {
       "path": "packages/web/web-fetch-http/src/provider.ts",
       "class": "security",
-      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10). Lead verdict (2026-11-11): kept; an IPv6 literal reaches the fetch guard as its unbracketed address with no DNS lookup, and the connection goes to that same address.",
-      "sha256": "096ec911cc78835de3f97caafdc7f361e40026a5a5ae05db98d4639cb38be74e"
+      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10). The picker description says local and private-network addresses are refused while the fetch guard is on (copy only). Lead verdict (2026-11-11): kept; an IPv6 literal reaches the fetch guard as its unbracketed address with no DNS lookup, and the connection goes to that same address.",
+      "sha256": "724b8a0a22d2628ff32f3eac1c4acf95941131e59cf4ce6c6afebb09341035f8"
     },
     {
       "path": "pnpm-workspace.yaml",

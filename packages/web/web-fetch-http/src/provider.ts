@@ -145,14 +145,14 @@ export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
   /** Picker description: what this provider suits and what it costs or cannot do. */
   readonly description: NonNullable<WebFetchProvider['description']> = {
-    en: 'Free, and can reach intranet and local addresses. Does not support pages that need JavaScript or sign-in, or PDFs.',
-    zh: '免费，可访问内网和本机。不支持需要 JavaScript 或登录的页面，也不支持 PDF。',
-    ja: '無料で、イントラネットやローカルのアドレスにもアクセスできます。JavaScript やログインが必要なページ、PDF には対応しません。',
-    es: 'Gratis y puede acceder a direcciones de la intranet y locales. No admite páginas que requieran JavaScript o inicio de sesión, ni PDF.',
-    fr: 'Gratuit, et accède aux adresses intranet et locales. Ne prend pas en charge les pages nécessitant JavaScript ou une connexion, ni les PDF.',
-    de: 'Kostenlos und erreicht auch Intranet- und lokale Adressen. Keine Seiten, die JavaScript oder eine Anmeldung erfordern, und keine PDFs.',
-    ru: 'Бесплатно, доступны адреса интрасети и локальные адреса. Не поддерживает страницы, требующие JavaScript или входа, а также PDF.',
-    pt: 'Gratuito e acessa endereços da intranet e locais. Não oferece suporte a páginas que exigem JavaScript ou login, nem a PDFs.',
+    en: 'Free. Local and private-network addresses are refused while the fetch guard is on. Does not support pages that need JavaScript or sign-in, or PDFs.',
+    zh: '免费。抓取防护开启时，本机和私有网络地址会被拒绝。不支持需要 JavaScript 或登录的页面，也不支持 PDF。',
+    ja: '無料です。フェッチガードが有効な間は、ローカルおよびプライベートネットワークのアドレスは拒否されます。JavaScript やログインが必要なページ、PDF には対応しません。',
+    es: 'Gratis. Las direcciones locales y de redes privadas se rechazan mientras la protección de fetch está activa. No admite páginas que requieran JavaScript o inicio de sesión, ni PDF.',
+    fr: 'Gratuit. Les adresses locales et de réseaux privés sont refusées tant que la protection de fetch est active. Ne prend pas en charge les pages nécessitant JavaScript ou une connexion, ni les PDF.',
+    de: 'Kostenlos. Lokale Adressen und Adressen privater Netze werden abgelehnt, solange der Fetch-Schutz aktiv ist. Keine Seiten, die JavaScript oder eine Anmeldung erfordern, und keine PDFs.',
+    ru: 'Бесплатно. Локальные адреса и адреса частных сетей отклоняются, пока включена защита загрузки. Не поддерживает страницы, требующие JavaScript или входа, а также PDF.',
+    pt: 'Gratuito. Endereços locais e de redes privadas são recusados enquanto a proteção de fetch está ativa. Não oferece suporte a páginas que exigem JavaScript ou login, nem a PDFs.',
   }
 
   /**
