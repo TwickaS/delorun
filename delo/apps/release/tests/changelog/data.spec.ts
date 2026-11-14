@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, renderChangelog, renderEntry, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
+import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
 import type { Area, Fragment, Section } from '../../src/changelog/fragment.ts'
 
 const UPSTREAM = { ref: 'dsh-v0.2.2-rc.1', commit: 'a'.repeat(40) }
@@ -68,6 +68,23 @@ describe('an entry', () => {
   it('renders the release notes with area headings one level up', () => {
     const notes = renderNotes(buildEntry('0.1.0-preview.1', '2026-11-10', UPSTREAM.ref, FRAGMENTS.slice(0, 1)))
     expect(notes).toBe('# Delo 0.1.0-preview.1\n\n## Commands\n- **Fixed:** Logs open again.\n\n## From upstream\n- Based on DeepSeek Harness `dsh-v0.2.2-rc.1`.\n')
+  })
+})
+
+describe('the highlights', () => {
+  const entry = buildEntry('0.1.0', '2026-11-10', UPSTREAM.ref, FRAGMENTS)
+
+  it('prints the bullets as plain text under their area, without Markdown marks or the upstream line', () => {
+    const text = renderHighlights(buildEntry('0.1.0', '2026-11-10', UPSTREAM.ref, [fragment('a.md', 'Commands', 'Fixed', ['**Logs** open again, see [the guide](https://example.com/x) and `delorun logs`.'])]), 65_536)
+    expect(text).toBe('Delorun 0.1.0\n\nCommands\n- Logs open again, see the guide and delorun logs.\n')
+    expect(text).not.toMatch(/[*`\]]/u)
+  })
+
+  it('fits the byte limit by replacing the bullets that do not fit with one counting line', () => {
+    const text = renderHighlights(entry, 120)
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(120)
+    expect(text).toMatch(/\n\d+ more changes are in the full changelog\.\n$/u)
+    expect(renderHighlights(entry, 65_536)).not.toContain('more changes')
   })
 })
 

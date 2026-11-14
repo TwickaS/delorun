@@ -316,6 +316,12 @@ export interface ReleaseManifest {
    * an absent value as no summary.
    */
   readonly summary?: string
+  /**
+   * The release notes, a plain-text file in the release directory that {@link isValidNotes} accepts and whose length
+   * is at most {@link RELEASE_FILE_SIZE_LIMITS}`.notes`. A reader treats an absent value as no notes. A reader older
+   * than this field refuses a manifest that carries it, so a release signs it only after the readers in use know it.
+   */
+  readonly notes?: FileRef
 }
 
 /** The most Unicode code points a release summary holds. */
@@ -457,4 +463,31 @@ export const RELEASE_FILE_SIZE_LIMITS = {
   files: 32 * 1024 * 1024,
   rebuild: 1024 * 1024,
   advisories: 8 * 1024 * 1024,
+  notes: 64 * 1024,
 } as const
+
+/**
+ * {@link isValidNotes}'s rule: no control character except line feed and tab, no format (Cf, which holds the
+ * bidirectional overrides), line separator (Zl), paragraph separator (Zp) or lone surrogate. The `u` flag reads a
+ * surrogate pair as one code point.
+ */
+const RELEASE_NOTES_FORBIDDEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
+
+/**
+ * Whether bytes are valid release notes: well-formed UTF-8 of 1 to {@link RELEASE_FILE_SIZE_LIMITS}`.notes` bytes
+ * whose text holds no character the studio could use to change how the text reads. Line feeds and tabs are allowed.
+ * Carriage returns are not.
+ * @param bytes - the notes file's bytes.
+ * @returns true when the bytes are valid notes.
+ */
+export function isValidNotes(bytes: Uint8Array): boolean {
+  if (bytes.byteLength === 0 || bytes.byteLength > RELEASE_FILE_SIZE_LIMITS.notes) return false
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
+  } catch (_notUtf8) {
+    // Not well-formed UTF-8: not notes.
+    return false
+  }
+  return !RELEASE_NOTES_FORBIDDEN.test(text.replaceAll(/[\n\t]/gu, ''))
+}

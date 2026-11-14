@@ -17,7 +17,7 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { UPDATE_NOTICE_PATH, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
+import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delo/contract-update-report'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -82,6 +82,11 @@ export interface UpdateCheckSource {
    * @returns the state after it.
    */
   check(timeoutMs: number): Promise<UpdateCheckState>
+  /**
+   * The release notes of the notice's release, as the check verified them.
+   * @returns the plain-text notes, or `undefined` when there are none or the stored file no longer matches what was verified.
+   */
+  notes(): Promise<string | undefined>
 }
 
 /** The `deloUpdateCheck` service. */
@@ -153,6 +158,14 @@ export class UpdateCheckService extends Service {
   async notice(): Promise<UpdateNotice | undefined> {
     return (await this.source?.read())?.notice
   }
+
+  /**
+   * The verified release notes for the notice's release.
+   * @returns the plain-text notes, or `undefined` when no check is attached or no verified notes are stored.
+   */
+  async notes(): Promise<string | undefined> {
+    return this.source?.notes()
+  }
 }
 
 /**
@@ -173,5 +186,14 @@ export function apply(ctx: Context, config: Config): void {
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
       },
     }), `${name}: the notice route`)
+    scope.effect(() => scope.connection.fetch.register({
+      path: UPDATE_NOTES_PATH,
+      methods: ['GET'],
+      requestBody: 'buffered',
+      fetch: async () => {
+        const body: UpdateNotesResponse = { notes: await service.notes() ?? null }
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+      },
+    }), `${name}: the notes route`)
   })
 }

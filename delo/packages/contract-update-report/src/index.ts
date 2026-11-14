@@ -412,6 +412,12 @@ export interface CheckedRelease {
   readonly security: boolean
   /** The release's one-line summary; absent for a manifest that carries none. */
   readonly summary?: string
+  /**
+   * The release notes the check downloaded and verified against the signed manifest, named by their digest; absent
+   * when the manifest names none or the check could not verify them. The text is served only while the stored notes
+   * file has this digest and length.
+   */
+  readonly notes?: { readonly sha256: Sha256Hex, readonly length: number }
 }
 
 /** Why the last update check failed, as a closed list: the record stores the code, never a message the check received. */
@@ -467,6 +473,15 @@ export interface UpdateNotice {
   readonly kind: UpdateKind
   /** How many installed plugins of the profile the release would disable on either version axis. */
   readonly disables: number
+}
+
+/** The harness's Connection Fetch route that answers `GET` with {@link UpdateNotesResponse}. */
+export const UPDATE_NOTES_PATH = '/api/deloUpdateCheck.notes'
+
+/** The answer of {@link UPDATE_NOTES_PATH}: the plain-text notes of the notice's release, or `null` when there are none to show. */
+export interface UpdateNotesResponse {
+  /** The verified notes, plain text, or `null`. */
+  readonly notes: string | null
 }
 
 /** The command a notice names; the notice itself applies nothing. */

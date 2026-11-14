@@ -9,12 +9,13 @@
  *
  * @module @delo/cli/update/notice
  */
+import { createHash } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { RUN_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
-import type { ReleaseChannel, ReleaseManifest, RootMetadata, RuntimePlatform, SemanticVersion, UtcTimestamp } from '@delo/contract-release-manifest'
-import { isValidSummary } from '@delo/contract-release-manifest'
+import type { ReleaseChannel, ReleaseManifest, RootMetadata, RuntimePlatform, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
+import { isValidNotes, isValidSummary } from '@delo/contract-release-manifest'
 import { UPDATE_CHECK_FAILURES, UPDATE_CHECK_SCHEMA, UPDATE_COMMAND, type CheckedRelease, type UpdateCheckFailure, type UpdateCheckRecord, type UpdateKind, type UpdateNotice } from '@delo/contract-update-report'
 import { readProtectedFile, runDirectory, writeProtectedFile } from '@delo/home'
 import { isInstallError, messageOf } from '@delo/install'
@@ -58,6 +59,7 @@ const recordSchema = z.strictObject({
     channel: z.enum(['stable', 'beta']),
     security: z.boolean(),
     summary: z.string().refine(isValidSummary, 'one line of at most 200 characters with no control character').exactOptional(),
+    notes: z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/u).transform(text => brandString<Sha256Hex>(text)), length: z.number().int().min(1) }).exactOptional(),
   }).exactOptional(),
   verified: timestamp.exactOptional(),
   timestamp: z.number().int().min(1).exactOptional(),
@@ -91,6 +93,39 @@ export async function readUpdateCheck(home: string, profile: string): Promise<Up
 }
 
 /**
+ * The update notes file's path for a profile.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @returns `run/<profile>/update-notes.txt`.
+ */
+export function updateNotesPath(home: string, profile: string): string {
+  return join(runDirectory(home, profile), RUN_ENTRIES.updateNotes)
+}
+
+/**
+ * The verified release notes a record supports. The stored file is read again and held to the digest and length the
+ * record stored when the check verified the notes, and to the notes rule, so a file changed since shows nothing.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @param record - the update-check record, if any.
+ * @returns the notes' text, or `undefined` when the record names none or the file is absent, laxer than mode 0600,
+ *   or differs from what was verified.
+ */
+export async function readUpdateNotes(home: string, profile: string, record: UpdateCheckRecord | undefined): Promise<string | undefined> {
+  const expected = record?.newest?.notes
+  if (expected === undefined) return undefined
+  let bytes: Buffer
+  try {
+    bytes = await readProtectedFile(updateNotesPath(home, profile))
+  } catch (_unreadable) {
+    // Absent, or not a file this user alone can read: no notes.
+    return undefined
+  }
+  if (bytes.byteLength !== expected.length || createHash('sha256').update(bytes).digest('hex') !== expected.sha256 || !isValidNotes(bytes)) return undefined
+  return bytes.toString('utf8')
+}
+
+/**
  * Write a profile's update-check record atomically at mode 0600.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
@@ -107,6 +142,7 @@ export async function writeUpdateCheck(home: string, profile: string, record: Up
  */
 export async function removeUpdateCheck(home: string, profile: string): Promise<void> {
   await rm(updateCheckPath(home, profile), { force: true })
+  await rm(updateNotesPath(home, profile), { force: true })
 }
 
 /**
@@ -128,13 +164,14 @@ export async function runningRelease(home: string, platform: RuntimePlatform, ru
  * @param manifest - the channel's verified manifest.
  * @returns the release; no security mark reads as false and no summary as none.
  */
-export function checkedReleaseOf(manifest: ReleaseManifest): CheckedRelease {
+export function checkedReleaseOf(manifest: ReleaseManifest, notes?: { readonly sha256: Sha256Hex, readonly length: number }): CheckedRelease {
   return {
     delo: manifest.version,
     dsh: manifest.dsh,
     channel: manifest.channel,
     security: manifest.security === true,
     ...manifest.summary === undefined ? {} : { summary: manifest.summary },
+    ...notes === undefined ? {} : { notes },
   }
 }
 
@@ -303,6 +340,30 @@ export function withDeadline(base: typeof globalThis.fetch, deadline: AbortSigna
 }
 
 /**
+ * Download and store the release notes the verified manifest names. A notes file that does not download, verify or
+ * pass the notes rule is dropped: the release shows without notes and the update still shows.
+ * @param channel - the channel that verified the manifest.
+ * @param manifest - the verified manifest.
+ * @param options - the check's home, profile and log.
+ * @returns the stored notes' digest and length, or `undefined` when there are none to show.
+ */
+async function verifiedNotes(channel: { notesOf(manifest: ReleaseManifest): Promise<Uint8Array | undefined> }, manifest: ReleaseManifest, options: CheckOptions): Promise<{ readonly sha256: Sha256Hex, readonly length: number } | undefined> {
+  try {
+    const bytes = await channel.notesOf(manifest)
+    if (bytes === undefined) {
+      await rm(updateNotesPath(options.home, options.profile), { force: true })
+      return undefined
+    }
+    await writeProtectedFile(updateNotesPath(options.home, options.profile), Buffer.from(bytes))
+    return { sha256: brandString<Sha256Hex>(createHash('sha256').update(bytes).digest('hex')), length: bytes.byteLength }
+  } catch (error) {
+    options.log?.(`delo-update-check: the release notes were not shown: ${printable(messageOf(error))}`)
+    await rm(updateNotesPath(options.home, options.profile), { force: true })
+    return undefined
+  }
+}
+
+/**
  * Run one check and record it. Every request shares one deadline; a check that fails, does not verify or passes its
  * deadline is recorded with its reason and keeps the last verified release.
  * @param options - the home, the profile, the platform, the running version, the deadline, the clock and the fetch.
@@ -324,11 +385,12 @@ export async function checkForUpdate(options: CheckOptions): Promise<UpdateCheck
     })
     const channel = await homeCheckChannel(options.home, { platform: options.platform, channel: running.channel, shipped, fetch, timeoutMs: options.timeoutMs, now: () => now().getTime(), ...options.publication === undefined ? {} : { publication: options.publication } })
     const newest = await channel.newest()
-    const release = checkedReleaseOf(newest.manifest)
     if (previous?.timestamp !== undefined && newest.timestamp < previous.timestamp) throw new RegressionError(`timestamp ${String(newest.timestamp)} is older than ${String(previous.timestamp)}`)
-    if (previous?.newest !== undefined && previous.newest.channel === release.channel && semver.lt(release.delo, previous.newest.delo)) {
-      throw new RegressionError(`the channel names ${release.delo}, older than ${previous.newest.delo}`)
+    const named = checkedReleaseOf(newest.manifest)
+    if (previous?.newest !== undefined && previous.newest.channel === named.channel && semver.lt(named.delo, previous.newest.delo)) {
+      throw new RegressionError(`the channel names ${named.delo}, older than ${previous.newest.delo}`)
     }
+    const release = checkedReleaseOf(newest.manifest, await verifiedNotes(channel, newest.manifest, options))
     const checked = utc(now())
     record = { schema: UPDATE_CHECK_SCHEMA, checked, newest: release, verified: checked, timestamp: newest.timestamp }
   } catch (error) {

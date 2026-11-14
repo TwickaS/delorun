@@ -2,13 +2,17 @@
  * Builds one signed release into a directory laid out as a release channel, for a launcher built with that directory's
  * origin as its channel origin. The same commit can be built as two versions, so an update exists to take:
  *
- * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --summary <text> [--security] --out <channel dir>
+ * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --summary <text> [--security] [--notes <file>] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
  * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--platform <platform>]... [--artifacts build|existing]
  * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
+ *
+ * `--notes` is a plain-text release-notes file of at most 64 KiB (the highlights `assemble.ts --notes` writes). The
+ * command copies it to the release directory and the manifest names it as `notes`. Without the flag the manifest has no
+ * `notes` field, which an updater that predates the field requires.
  *
  * `--platform` names each runtime platform the release carries, one of the release platforms `closure.json` lists;
  * `linux-x64` alone when none is named. Without `--closures-from`, the command builds those platforms' runtime closures
@@ -75,6 +79,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
     options: {
       'version': { type: 'string' },
       'summary': { type: 'string' },
+      'notes': { type: 'string' },
       'security': { type: 'boolean', default: false },
       'out': { type: 'string' },
       'root': { type: 'string', multiple: true },
@@ -128,6 +133,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       dsh: upstreamVersion(repository, commit),
       security: values.security,
       summary,
+      ...values.notes === undefined ? {} : { notes: readFileSync(resolve(values.notes)) },
       channel: resolve(out),
       roots: root.map(path => readFileSync(resolve(path))),
       targetsKey: readSigningKey(resolve(values['targets-key']!)),

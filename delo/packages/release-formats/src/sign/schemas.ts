@@ -122,6 +122,9 @@ export const LOCAL_RELEASE_BUILDER = 'local release (no independent rebuild)'
 export const DesktopSchema = z.strictObject(Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, z.strictObject({ installer: desktopRef, update: desktopRef, blockmap: fileRef })])) as Record<(typeof DESKTOP_PLATFORMS)[number], z.ZodObject<{ installer: typeof desktopRef, update: typeof desktopRef, blockmap: typeof fileRef }, z.core.$strict>>)
 /** The S2 and S3 images; optional in {@link ManifestSchema}, required to sign. */
 export const ImagesSchema = z.strictObject({ s2: ImageRefSchema, s3: ImageRefSchema })
+/** The release notes file's reference: a file reference whose length is within the notes limit and above zero. */
+export const ReleaseNotesRefSchema = fileRef.refine(ref => ref.length >= 1 && ref.length <= RELEASE_FILE_SIZE_LIMITS.notes, `release notes of 1 to ${String(RELEASE_FILE_SIZE_LIMITS.notes)} bytes`)
+
 /** The install scripts; optional in {@link ManifestSchema}, required to sign. */
 export const InstallSchema = z.strictObject({ sh: fileRef, ps1: fileRef })
 
@@ -158,6 +161,7 @@ export const ManifestSchema = z.strictObject({
   advisories: z.strictObject({ report: fileRef, accepted: z.array(z.string().regex(/^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u).transform(value => brandString<AdvisoryId>(value))) }),
   security: z.boolean().exactOptional(),
   summary: ReleaseSummarySchema.exactOptional(),
+  notes: ReleaseNotesRefSchema.exactOptional(),
 })
 
 /** The signed content of a runtime file list. */

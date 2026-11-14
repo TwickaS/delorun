@@ -208,6 +208,29 @@ describe('a local release', () => {
     expect(built).toBe(false)
   })
 
+  it('signs release notes into the manifest as a file reference the client checks, and writes the notes beside the other files', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    const notes = Buffer.from('Delorun 0.1.0\n\nStudio\n- A change.\n')
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0', { notes }))
+    const channel = join(directory, 'channel')
+    const root = trustRootChain([readFileSync(join(channel, 'root', '1.root.json'))], Math.floor(Date.now() / 1000)).at(-1)!
+    const manifest = verifySignedManifest(root.metadata, readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0.manifest.json')))
+    expect(manifest.notes).toEqual({ name: 'delorun-0.1.0.notes.txt', length: notes.byteLength, sha256: createHash('sha256').update(notes).digest('hex') })
+    expect(readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0.notes.txt'))).toEqual(notes)
+  })
+
+  it('refuses notes a client would refuse, before building anything', async (test) => {
+    for (const notes of [Buffer.from('Right-to-left \u202Eoverride'), Buffer.alloc(0), Buffer.alloc(65_537, 'a')]) {
+      const directory = scratch(test)
+      let built = false
+      await expect(buildLocalRelease(await request(test, directory, trust(), '0.1.0', { notes, closures: () => { built = true; return Promise.resolve() } })))
+        .rejects.toThrow('the release notes are not valid')
+      expect(built).toBe(false)
+      expect(existsSync(join(directory, 'channel'))).toBe(false)
+    }
+  })
+
   it('refuses a summary that is not one plain line, before building anything', async (test) => {
     const directory = scratch(test)
     const trusted = trust()

@@ -4,7 +4,7 @@
  * for one, and serves the notice over one exact Connection route.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { UPDATE_NOTICE_PATH, type UpdateNotice } from '@delo/contract-update-report'
+import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delo/contract-update-report'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as UpdateCheck from '../src/update-check.ts'
 import { Config, MAX_INTERVAL_HOURS, UPDATE_CHECK_DEFAULTS, type UpdateCheckSource, type UpdateCheckState } from '../src/update-check.ts'
@@ -62,11 +62,12 @@ async function mount(config: Partial<UpdateCheck.Config>) {
  * @param check - what `check` answers.
  * @returns the source and its calls.
  */
-function source(read: UpdateCheckState, check: UpdateCheckState = read) {
+function source(read: UpdateCheckState, check: UpdateCheckState = read, notes?: string) {
   const calls = { read: 0, check: [] as number[] }
   const value: UpdateCheckSource = {
     read: async () => { calls.read++; return read },
     check: async (timeoutMs) => { calls.check.push(timeoutMs); return check },
+    notes: async () => notes,
   }
   return { source: value, calls }
 }
@@ -122,7 +123,7 @@ describe('the schedule', () => {
     const { ctx } = await mount({ enabled: true })
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     const reads: number[] = []
-    ctx.deloUpdateCheck.attach({ read: async () => { reads.push(1); throw new Error('no record') }, check: async () => Promise.reject('offline') })
+    ctx.deloUpdateCheck.attach({ read: async () => { reads.push(1); throw new Error('no record') }, check: async () => Promise.reject('offline'), notes: async () => undefined })
     await vi.advanceTimersByTimeAsync(0)
     expect(warn).toHaveBeenCalledWith('delo-update-check: the update check failed: no record')
     await vi.advanceTimersByTimeAsync(HOUR)
@@ -136,6 +137,7 @@ describe('the schedule', () => {
     const at: number[] = []
     ctx.deloUpdateCheck.attach({
       read: async () => ({ checked: started, failed: true }),
+      notes: async () => undefined,
       check: async () => { at.push((Date.now() - started) / HOUR); return { checked: Date.now(), failed: true } },
     })
     await vi.advanceTimersByTimeAsync(20 * HOUR)
@@ -209,5 +211,22 @@ describe('the notice route', () => {
     expect(await empty.json()).toEqual({ notice: null })
     ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }).source)
     expect(await (await get()).json()).toEqual({ notice: NOTICE })
+  })
+})
+
+describe('the notes route', () => {
+  it('serves the attached check\'s verified notes uncached, and null without a check or without notes', async () => {
+    const { ctx, routes } = await mount({ enabled: true })
+    const route = routes.get(UPDATE_NOTES_PATH)!
+    expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
+    const get = async () => route.fetch(new Request('http://harness.test/api', { method: 'GET' }))
+    const empty = await get()
+    expect([empty.status, empty.headers.get('cache-control'), empty.headers.get('content-type')]).toEqual([200, 'no-store', 'application/json'])
+    expect(await empty.json()).toEqual({ notes: null })
+    const dispose = ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }).source)
+    expect(await (await get()).json()).toEqual({ notes: null })
+    dispose()
+    ctx.deloUpdateCheck.attach(source({ checked: Date.now(), notice: NOTICE }, undefined, 'Delorun 0.1.3\n- A change.\n').source)
+    expect(await (await get()).json()).toEqual({ notes: 'Delorun 0.1.3\n- A change.\n' })
   })
 })

@@ -20,7 +20,9 @@ import { join } from 'node:path'
 import {
   RELEASE_REPOSITORY_URL,
   RELEASE_SCHEMAS,
+  RELEASE_FILE_SIZE_LIMITS,
   RUNTIME_PLATFORMS,
+  isValidNotes,
   type FileRef,
   type ReleaseManifest,
   type RebuildRecord,
@@ -146,6 +148,7 @@ function draftRefs(draft: ManifestDraft): Array<{ where: string, ref: FileRef }>
     if (seccomp !== undefined) refs.push({ where: `images.${image}.seccomp`, ref: seccomp })
   }
   refs.push({ where: 'sbom', ref: draft.sbom }, { where: 'install.sh', ref: draft.install.sh }, { where: 'install.ps1', ref: draft.install.ps1 }, { where: 'advisories.report', ref: draft.advisories.report })
+  if (draft.notes !== undefined) refs.push({ where: 'notes', ref: draft.notes })
   return refs
 }
 
@@ -347,6 +350,9 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
     if (!existsSync(join(request.release, ref.name))) throw new SigningRefusal(`signing refuses: ${where} names ${ref.name}, which is not in ${request.release}`)
     const actual = await refOf(request.release, ref.name)
     if (actual.length !== ref.length || actual.sha256 !== ref.sha256) throw new SigningRefusal(`signing refuses: ${ref.name} does not match ${where} in the draft`)
+  }
+  if (draft.notes !== undefined && !isValidNotes(await readFile(join(request.release, draft.notes.name)))) {
+    throw new SigningRefusal(`signing refuses: ${draft.notes.name} is not valid release notes: well-formed UTF-8 of 1 to ${String(RELEASE_FILE_SIZE_LIMITS.notes)} bytes with no control (except line feed and tab), format, line-separator or lone-surrogate character`)
   }
   for (const entry of draft.npm) {
     const problem = await npmPackageProblem(request.release, entry)
