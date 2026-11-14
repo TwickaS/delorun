@@ -40,7 +40,9 @@ function isENOTDIR(error: unknown): boolean {
 }
 
 function isELOOP(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ELOOP'
+  if (!(error instanceof Error)) return false
+  // Target resolution wraps the errno in an FsError that keeps it as the cause.
+  return ('code' in error && error.code === 'ELOOP') || isELOOP(error.cause)
 }
 
 function isAbortError(error: unknown): boolean {
@@ -1215,7 +1217,12 @@ export async function readForEdit(
   signal?: AbortSignal,
 ): Promise<{ content: string; lineEndings: LineEndings }> {
   throwIfAborted(signal, 'edit')
-  const handle = await open(absolutePath, READ_FLAGS)
+  let handle: FileHandle
+  try {
+    handle = await open(absolutePath, READ_FLAGS)
+  } catch (error: unknown) {
+    throw fsErrorFromErrno('edit', displayPath, error)
+  }
   let buffer: Buffer
   try {
     await assertOpenedTarget(handle, { displayPath, targetKey: FsTargetKey(absolutePath) }, 'edit')

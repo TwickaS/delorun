@@ -1066,17 +1066,17 @@ describe('Node errno classification', () => {
     await expect(readWholeText(localTarget(loop))).rejects.toMatchObject(ioError)
   })
 
-  it('classifies a regular file replaced by a directory after the raw-read stat', async () => {
+  it('reads the opened file when a directory replaces it after the raw-read stat', async () => {
     const file = join(dir, 'swap.bin')
     await writeFile(file, 'bytes')
-    const failure = await readWholeBytes(localTarget(file), undefined, 1024, {
+    // The read holds the descriptor opened before the swap, so the replacement is never read.
+    const bytes = await readWholeBytes(localTarget(file), undefined, 1024, {
       inspectReadBytesAfterStat: async () => {
         await unlink(file)
         await mkdir(file)
       },
-    }).then(() => undefined, (caught: unknown) => caught)
-    expect(failure).toBeInstanceOf(FsError)
-    expect(failure).toMatchObject({ name: 'FsError', code: 'FS_NOT_REGULAR_FILE', cause: expect.objectContaining({ code: 'EISDIR' }) as Error })
+    })
+    expect(Buffer.from(bytes).toString()).toBe('bytes')
   })
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('maps unreadable file content to FS_PERMISSION_DENIED', async () => {

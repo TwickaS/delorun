@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import type { Transport } from '@modelcontextprotocol/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -20,9 +21,16 @@ const { mockConnect, mockClose, mockListTools, MockClient, instances } = vi.hois
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
   class MockClient {
-    transport: object | undefined = {}
+    transport: Transport | undefined
     onclose: (() => void) | undefined
-    connect = mockConnect
+    async connect(transport: Transport): Promise<void> {
+      this.transport = transport
+      const onclose = transport.onclose
+      transport.onclose = () => { onclose?.(); this.onclose?.() }
+      await transport.start()
+      await mockConnect.call(this)
+    }
+    listResources = async () => ({ resources: [] })
     close = mockClose
     listTools = mockListTools
     getServerCapabilities = () => ({ tools: {} })
@@ -38,12 +46,26 @@ const { mockConnect, mockClose, mockListTools, MockClient, instances } = vi.hois
 vi.mock('@modelcontextprotocol/client', async importOriginal => ({
   ...await importOriginal<typeof import('@modelcontextprotocol/client')>(),
   Client: MockClient,
-  StreamableHTTPClientTransport: vi.fn(),
+  StreamableHTTPClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }),
 }))
 
 vi.mock('@modelcontextprotocol/client/stdio', async importOriginal => ({
   ...await importOriginal<typeof import('@modelcontextprotocol/client/stdio')>(),
-  StdioClientTransport: vi.fn(function () { return { close: () => Promise.resolve() } }),
+  StdioClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }),
 }))
 
 const startShell = vi.hoisted(() => ({ path: undefined as string | undefined }))
@@ -120,8 +142,8 @@ describe('the add-time consent before a reconnect', () => {
     startShell.path = undefined
     instances.length = 0
     mockConnect.mockResolvedValue(undefined)
-    mockClose.mockImplementation(function (this: { onclose?: () => void }) {
-      this.onclose?.()
+    mockClose.mockImplementation(function (this: { transport?: Transport }) {
+      this.transport?.onclose?.()
       return Promise.resolve()
     })
     mockListTools.mockResolvedValue({ tools: [{ name: 'remote', inputSchema: { type: 'object' } }], nextCursor: undefined })

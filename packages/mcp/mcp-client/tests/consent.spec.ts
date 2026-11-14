@@ -11,6 +11,7 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, w
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import type { Transport } from '@modelcontextprotocol/client'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -27,8 +28,16 @@ const { mockConnect, mockClose, mockListTools, MockClient } = vi.hoisted(() => {
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
   const mockSetNotificationHandler = vi.fn()
   class MockClient {
-    transport = {}
-    connect = mockConnect
+    transport: Transport | undefined
+    onclose: (() => void) | undefined
+    async connect(transport: Transport): Promise<void> {
+      this.transport = transport
+      const onclose = transport.onclose
+      transport.onclose = () => { onclose?.(); this.onclose?.() }
+      await transport.start()
+      await mockConnect.call(this)
+    }
+    listResources = async () => ({ resources: [] })
     close = mockClose
     listTools = mockListTools
     constructor(_info: unknown, options: { listChanged: { tools: { onChanged: () => void } } }) {
@@ -42,12 +51,26 @@ const { mockConnect, mockClose, mockListTools, MockClient } = vi.hoisted(() => {
 
 vi.mock('@modelcontextprotocol/client', () => ({
   Client: MockClient,
-  StreamableHTTPClientTransport: vi.fn(),
+  StreamableHTTPClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }),
 }))
 
 vi.mock('@modelcontextprotocol/client/stdio', async importOriginal => ({
   ...await importOriginal<typeof import('@modelcontextprotocol/client/stdio')>(),
-  StdioClientTransport: vi.fn(),
+  StdioClientTransport: vi.fn(function () {
+    return {
+      onclose: undefined as (() => void) | undefined,
+      start: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      close() { this.onclose?.(); return Promise.resolve() },
+    }
+  }),
 }))
 
 import * as McpClient from '@deepseek-ai/dsh-mcp-client/src/index.ts'
@@ -153,8 +176,8 @@ describe('the optional mcpAddConsent seam', () => {
     tree = toolTree()
     vi.clearAllMocks()
     mockConnect.mockResolvedValue(undefined)
-    mockClose.mockImplementation(function (this: { onclose?: () => void }) {
-      this.onclose?.()
+    mockClose.mockImplementation(function (this: { transport?: Transport }) {
+      this.transport?.onclose?.()
       return Promise.resolve()
     })
     mockListTools.mockResolvedValue({
