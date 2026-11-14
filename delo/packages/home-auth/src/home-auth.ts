@@ -259,6 +259,8 @@ export class HomeAuth {
   readonly pin: PinUnlocks
   private readonly pinStore: PinModeStore
   private readonly pinListeners = new Set<(event: PinEvent) => void>()
+  /** Each rolled session id to the id that continues it, for the 30 seconds its predecessor still admits requests. */
+  private readonly successors = new Map<string, string>()
   /** The tail of the queue that serialises a claim and a revocation against each other. */
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -283,7 +285,12 @@ export class HomeAuth {
         // The Gateway decides a stream once, when it opens, so a terminal or another elevated stream opened under an
         // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects
         // without it.
-        if (change.kind === 'ended') this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        // A page unlock closes the connections of its session only: the device's other pages reconnect with their own
+        // tokens, or locked.
+        if (change.kind === 'ended') {
+          if (change.elevation.page === true) this.closeSessionConnections(change.elevation.sessionId)
+          else this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        }
         this.pin.elevationChanged(change)
         for (const listener of this.elevationListeners) listener(change)
       },
@@ -296,6 +303,7 @@ export class HomeAuth {
       random: this.random,
       secrets: options.secrets,
       removeDevice: deviceId => this.revokeDevice(deviceId),
+      sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
       stillAdmitted: asker => this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
         && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener),
       report: (event) => { for (const listener of this.pinListeners) listener(event) },
@@ -614,6 +622,15 @@ export class HomeAuth {
   }
 
   /**
+   * The running PIN mode page unlock one Peer was admitted under, which the reach-device policy reads.
+   * @param unlockId - the id in the Peer's principal.
+   * @returns the unlock, or undefined once it ended.
+   */
+  pageUnlockOf(unlockId: string): ElevationRecord | undefined {
+    return this.pin.pageUnlock(unlockId)
+  }
+
+  /**
    * End a device's elevation on one listener and cancel its waiting request, from the device's own studio.
    * @param deviceId - the device.
    * @param listener - the listener.
@@ -864,6 +881,17 @@ export class HomeAuth {
   }
 
   /**
+   * Close the reach connections of one session and of the sessions it rolled from.
+   * @param sessionId - the session id.
+   */
+  private closeSessionConnections(sessionId: string): void {
+    this.closeReachConnections?.({ sessionId })
+    for (const [oldId, newId] of this.successors) {
+      if (newId === sessionId) this.closeReachConnections?.({ sessionId: oldId })
+    }
+  }
+
+  /**
    * Roll a session (C4, "Sessions"): mint a new token with the same creation time and absolute expiry, keep the old one
    * for 30 seconds for requests in flight, and write both within the store's persistence delay.
    * @param view - the in-memory copy.
@@ -884,6 +912,8 @@ export class HomeAuth {
     view.sessions.set(newId, record)
     // The new token continues the session, so its elevation and its waiting request follow it.
     this.elevations.moveSession(oldId, newId)
+    this.successors.set(oldId, newId)
+    setTimeout(() => { this.successors.delete(oldId) }, SESSION_LIMITS.reach.rollGraceMs).unref()
     // The old token's connections close when its grace ends; the new token's at its own limits.
     this.arm(oldId, deadlineOf(graced))
     this.arm(newId, deadlineOf(record))

@@ -47,6 +47,7 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
+import type { UnlockAsker } from './pin-unlocks.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -312,6 +313,35 @@ export class HomeAuthService extends Service {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     return this.core?.elevationOf(deviceId, listener)
+  }
+
+  /**
+   * The running PIN mode page unlock one Peer was admitted under.
+   * @param unlockId - the id in the Peer's principal.
+   * @returns the unlock, or undefined, also before the service started.
+   */
+  pageUnlockOf(unlockId: string): ElevationRecord | undefined {
+    return this.core?.pageUnlockOf(unlockId)
+  }
+
+  /**
+   * Whether PIN mode is on.
+   * @returns whether it is; false before the service started.
+   */
+  pinEnabled(): boolean {
+    return this.core?.pin.enabled() ?? false
+  }
+
+  /**
+   * Check the unlock token a page presented against the session that carried it.
+   * @param token - the token.
+   * @param asker - the device, listener and session the request arrived with.
+   * @returns the unlock's id.
+   * @throws {HomeAuthError} `UNLOCK_INVALID` for an unknown or ended token, and for one from another device, listener or
+   *   session, which also ends the unlock.
+   */
+  resolvePageUnlock(token: string, asker: UnlockAsker): string {
+    return this.state().pin.resolve(token, asker).id
   }
 
   /**

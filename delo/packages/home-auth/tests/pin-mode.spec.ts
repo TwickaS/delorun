@@ -149,6 +149,16 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
   })
 }
 
+/**
+ * The first device's running page unlock on a listener. The device-wide `elevationOf` never returns a page unlock, so the
+ * computer's list of running unlocks is the one place to read it.
+ * @param listener - the listener.
+ * @returns the unlock, or undefined.
+ */
+function running(listener: ReachListenerId = PRIVATE): { readonly id: string; readonly sessionId: string } | undefined {
+  return home.auth.elevationsAtComputer().running.find(record => record.deviceId === first && record.listener === listener)
+}
+
 /** Turn the mode on at the computer. */
 async function turnOn(secret: string = PIN): Promise<void> {
   expect((await send('POST', PIN_PATHS.set, { secret })).status).toBe(200)
@@ -169,7 +179,7 @@ describe('with PIN mode off', () => {
     // Pins the mode check: an unlock on a home that never turned the mode on succeeds nowhere.
     expect(await unlock()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
     expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toEqual({ kind: 'off' })
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
     expect(home.auth.elevationsAtComputer().running).toEqual([])
     // A header the old home never reads changes nothing.
     expect((await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delo-unlock': 'anything' })).body).toEqual({ kind: 'off' })
@@ -181,7 +191,7 @@ describe('with PIN mode off', () => {
     expect(unlocked.status).toBe(200)
     expect((await send('POST', PIN_PATHS.off, {})).body).toEqual({ enabled: false })
     // Pins the end at mode off: the unlock goes with the mode.
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
     expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'pin-mode-off' })
     expect(await unlock()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
   })
@@ -237,7 +247,7 @@ describe('a page unlock', () => {
   it('admits the device\'s elevated actions and reports its state to the page that holds the token', async () => {
     const reply = await unlock()
     expect(reply).toMatchObject({ status: 200, body: { token: expect.any(String), unlockId: expect.any(String) } })
-    expect(home.auth.elevationOf(first, PRIVATE)?.id).toBe(reply.body.unlockId)
+    expect(running()?.id).toBe(reply.body.unlockId)
     // Pins the once-only token: the home keeps a digest, so no read gives it back.
     const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delo-unlock': reply.body.token as string })
     expect(state.body).toMatchObject({ kind: 'on', secret: 'pin', paused: false, unlock: { unlockId: reply.body.unlockId } })
@@ -251,8 +261,8 @@ describe('a page unlock', () => {
     // Pins the address rule: version 1 unlocks with a PIN on the private address only.
     expect(await send('POST', `${PIN_PATHS.unlock}?funnel`, { secret: PIN }, { cookie: `${REACH_SESSION_COOKIE}=${funnelToken}` })).toMatchObject({ status: 403, body: { error: 'PIN_NOT_ALLOWED_ON_ADDRESS' } })
     expect(await send('POST', PIN_PATHS.unlock, { secret: PIN })).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
-    expect(home.auth.elevationOf(first, FUNNEL)).toBeUndefined()
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running(FUNNEL)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('answers a wrong secret with the tries left and a foreign page\'s POST with a refusal', async () => {
@@ -262,7 +272,7 @@ describe('a page unlock', () => {
     expect(wrong.text).not.toContain('135790')
     // Pins the origin fence on the unlock.
     expect(await send('POST', `${PIN_PATHS.unlock}?reach`, { secret: PIN }, { 'sec-fetch-site': 'cross-site' })).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('refuses a token from another device, another session or another listener, and ends the unlock', async () => {
@@ -272,11 +282,11 @@ describe('a page unlock', () => {
     for (const [label, cookie, suffix] of [['device', other.token, 'reach'], ['session', sameDeviceElsewhere, 'reach'], ['listener', funnelSession, 'funnel']] as const) {
       const unlocked = await unlock()
       const header = unlocked.body.token as string
-      expect(home.auth.elevationOf(first, PRIVATE), label).toBeDefined()
+      expect(running(), label).toBeDefined()
       // Pins the binding: the digest names its device, listener and session, and a mismatch burns the unlock.
       const replay = await send('POST', `${PIN_PATHS.touch}?${suffix}`, undefined, { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delo-unlock': header })
       expect(replay, label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-      expect(home.auth.elevationOf(first, PRIVATE), label).toBeUndefined()
+      expect(running(), label).toBeUndefined()
       const burnt = await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delo-unlock': header })
       expect(burnt, label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
     }
@@ -289,14 +299,14 @@ describe('a page unlock', () => {
     // Pins the header-only rule: a query or body token is no token.
     expect(await send('POST', `${PIN_PATHS.touch}?reach&token=${header}`, { token: header })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
     expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delo-unlock': 'unknown-token' })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeDefined()
+    expect(running()).toBeDefined()
   })
 
   it('locks on the lock route', async () => {
     const header = (await unlock()).body.token as string
     expect(await send('POST', `${PIN_PATHS.lock}?reach`, undefined, { 'delo-unlock': header })).toMatchObject({ status: 200, body: { locked: true } })
     // Pins the server-side end: the lock button ends the unlock, not only the page's copy of the token.
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
     expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delo-unlock': header })).toMatchObject({ status: 401 })
   })
 
@@ -306,37 +316,42 @@ describe('a page unlock', () => {
     expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delo-unlock': header })).toMatchObject({ status: 200 })
     home.clock.advance(10 * MINUTE)
     // Pins the touch: 20 minutes after the unlock, 10 after the touch, it stands.
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeDefined()
-    home.clock.advance(PIN_MODE_LIMITS.defaultIdleMinutes * MINUTE)
+    expect(running()).toBeDefined()
+    // A poll that carries the token is not activity: only a touch moves the idle end.
+    for (let poll = 0; poll < PIN_MODE_LIMITS.defaultIdleMinutes; poll += 1) {
+      home.clock.advance(MINUTE)
+      await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delo-unlock': header })
+    }
+    home.clock.advance(MINUTE)
     // Pins the idle end.
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
     expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'expired' })
   })
 
   it('ends at the absolute cap however active the page is', async () => {
     const unlocked = await unlock()
     const header = unlocked.body.token as string
-    const asker = { deviceId: first, listener: PRIVATE, sessionId: home.auth.elevationOf(first, PRIVATE)?.sessionId ?? '' }
+    const asker = { deviceId: first, listener: PRIVATE, sessionId: running()?.sessionId ?? '' }
     let elapsed = 0
     while (elapsed + 10 * MINUTE < PIN_MODE_LIMITS.absoluteCapMs) {
       home.clock.advance(10 * MINUTE)
       elapsed += 10 * MINUTE
       home.auth.pin.touch(header, asker)
     }
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeDefined()
+    expect(running()).toBeDefined()
     home.clock.advance(PIN_MODE_LIMITS.absoluteCapMs - elapsed + 1)
     // Pins the cap: touching never pushes the end past twelve hours from the unlock.
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('ends when the PIN changes, and when the device\'s session ends', async () => {
     await unlock()
     expect((await send('POST', PIN_PATHS.set, { secret: '739150' })).status).toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
     expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'pin-changed' })
     expect((await unlock('739150')).status).toBe(200)
     await home.auth.revokeDevice(first)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 })
 
@@ -450,7 +465,7 @@ describe('a change while a secret is being compared', () => {
     open()
     // Pins the generation check: an emergency turn-off is not followed by an unlock from a try already in flight.
     expect((await reply).status).not.toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('refuses the old PIN when the computer changes it', async () => {
@@ -458,7 +473,7 @@ describe('a change while a secret is being compared', () => {
     await home.auth.pin.set('739150', {})
     open()
     expect((await reply).status).not.toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('mints nothing when the device is removed', async () => {
@@ -466,7 +481,7 @@ describe('a change while a secret is being compared', () => {
     await home.auth.revokeDevice(first)
     open()
     expect((await reply).status).not.toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('mints nothing when the session ends', async () => {
@@ -475,7 +490,7 @@ describe('a change while a secret is being compared', () => {
     home.auth.admitToken(token, PRIVATE)
     open()
     expect((await reply).status).not.toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 
   it('mints nothing when the listener stops being served', async () => {
@@ -483,7 +498,7 @@ describe('a change while a secret is being compared', () => {
     stopServing()
     open()
     expect((await reply).status).not.toBe(200)
-    expect(home.auth.elevationOf(first, PRIVATE)).toBeUndefined()
+    expect(running()).toBeUndefined()
   })
 })
 

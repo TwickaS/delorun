@@ -29,9 +29,14 @@ export type RpcStreamOpen = (
  * Create the browser-backed generic RPC caller.
  * @param doFetch - transport override; defaults to the page's global fetch.
  * @param openStream - optional worker-local Gateway stream carrier.
+ * @param extraHeaders - read before each request; its headers join the request's own, which win a name clash.
  * @returns caller that owns request correlation and response-envelope validation.
  */
-export function createWebConnectionRpc(doFetch?: RpcFetch, openStream?: RpcStreamOpen): ClientConnectionRpc {
+export function createWebConnectionRpc(
+  doFetch?: RpcFetch,
+  openStream?: RpcStreamOpen,
+  extraHeaders?: () => Readonly<Record<string, string>>,
+): ClientConnectionRpc {
   const send: RpcFetch = doFetch ?? ((input, init) => globalThis.fetch(input, init))
   return {
     async call(channel, endpoint, payload, signal) {
@@ -50,7 +55,7 @@ export function createWebConnectionRpc(doFetch?: RpcFetch, openStream?: RpcStrea
         route,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { ...extraHeaders?.(), 'content-type': 'application/json' },
           body: JSON.stringify(message),
           ...signal === undefined ? {} : { signal },
         },

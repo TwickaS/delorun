@@ -34,6 +34,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [Dispatch order](#dispatch-order)
   - [Pre-login allowlist](#pre-login-allowlist)
   - [Sessions](#sessions)
+  - [Page unlock](#page-unlock)
   - [Launch tokens](#launch-tokens)
   - [Rotation and revocation](#rotation-and-revocation)
   - [Response headers](#response-headers)
@@ -145,6 +146,18 @@ A listener's policy lists only the routes of this table that the home builds; in
 | Every reach listener | 12 hours since last use | 14 days since creation | Every 24 hours of use, the next admitted request receives a new token in `setCookie`. The old token stays valid for 30 seconds for requests already in flight, then its record is deleted. |
 
 A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` and its record is deleted. Rolling never extends the absolute limit. A reach session's use is an admitted HTTP request or upgrade carrying its token; traffic on a connection admitted earlier, frames a client sends on an open WebSocket included, is not use. When a reach session passes its idle or absolute limit, or a rolled token's 30-second grace ends, the provider closes every open reach connection that carried a request admitted for that token, at that time and whether or not a request arrives.
+
+<a id="page-unlock"></a>
+### Page unlock
+
+While [PIN mode](c14-oidc-passkeys.md#pin-mode) is on, a page may prove an unlock it holds in memory. Each part below is a fact of admission, not of the routes.
+
+- **Carriers.** The token travels as the `Delo-Unlock` header on `/api` requests and as the WebSocket subprotocol `delo-unlock.<token>` on the `/api/remote.mux` upgrade. A query parameter is never read as a token. A page that offers the subprotocol also offers one fixed protocol before it, so the upgrade answer names a protocol the browser accepts.
+- **Stripped.** `admit` removes both carriers from the request, in every header view, before any route, upgrade handler or plugin sees it. With PIN mode off, the token is stripped and ignored.
+- **Checked.** After the session is admitted, the token must name an unlock bound to that session's device, listener and session (a session rolled within the last 30 seconds counts as the same session). A request without a token is admitted as today, to the device's locked Peer. A token that is unknown, ended, repeated or bound to anything else is refused with `401 UNLOCK_INVALID`, and an unlock bound to another device, listener or session ends: a token that moved has leaked.
+- **Per-page Peers.** A device holds one locked Peer per listener and one Peer for each running page unlock, whose principal carries the unlock's `unlockId`. The Peer decides what its page may do, so a locked tab cannot answer a grant that a sibling tab could, and an unlock never admits another page.
+- **Ending.** When an unlock ends, its Peer is disposed and the reach connections of its session close. The device's other pages reconnect with their own tokens.
+- **Caching.** The reach index answers `Cache-Control: no-store`, so a restored page is not served from the cache.
 
 <a id="launch-tokens"></a>
 ### Launch tokens

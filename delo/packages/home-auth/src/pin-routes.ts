@@ -11,10 +11,10 @@
  *
  * @module @delo/home-auth/pin-routes
  */
-import type { IncomingMessage } from 'node:http'
 import { HomeAuthError } from './errors.ts'
 import { deviceSession, type DeviceSession } from './elevation-routes.ts'
 import type { HomeAuth } from './home-auth.ts'
+import { unlockTokenOf } from './unlock-token.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
 
 /** The PIN mode routes. */
@@ -36,19 +36,6 @@ export const PIN_PATHS = {
   /** `POST`: the computer resumes PIN unlocks after a home-wide pause. */
   resume: '/auth/pin/resume',
 } as const
-
-/** The header that names a page's unlock. */
-export const UNLOCK_HEADER = 'delo-unlock'
-
-/**
- * The unlock token a request carries.
- * @param request - the request.
- * @returns the token, or undefined without a single header value.
- */
-function unlockTokenOf(request: IncomingMessage): string | undefined {
-  const value = request.headers[UNLOCK_HEADER]
-  return typeof value === 'string' && value !== '' ? value : undefined
-}
 
 /**
  * The asker a device route's session names.

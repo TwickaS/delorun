@@ -160,7 +160,7 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
    */
   function facts(mode: boolean, unlocked: boolean, seen: unknown[]): ReachAccessFacts {
     return {
-      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere',
+      pageUnlockOf: () => undefined, admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere',
       elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
