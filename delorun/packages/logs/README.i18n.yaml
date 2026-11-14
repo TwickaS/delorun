@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/logs/README.md
+/:
+  en: 438f26a06a1f1f05
+  zh: 6d1bbb18877461d1
+/delorun-logs:
+  en: d4355de60d4b4d66
+  zh: 35e66f6d3411bc54
+/delorun-logs/summary:
+  en: 9e1706f19eb5b80e
+  zh: 2487923d47140426
+/delorun-logs/contents:
+  en: 51de0e39c5efc656
+  zh: 9c3a19d6b4bd3eea
+/delorun-logs/writing-a-surface-s-log:
+  en: 6dc60ddbd297824a
+  zh: 25ee277e9bfcb056
+/delorun-logs/records-and-keys:
+  en: 7fca61e3ce19a928
+  zh: ef9ed1ef6fc70446
+/delorun-logs/redaction:
+  en: a1b02155691eaf97
+  zh: ca3cb5f8b0747969
+/delorun-logs/captured-output:
+  en: aa3a666d6f32b4fb
+  zh: a91f3ff70215a29b
+/delorun-logs/rotation-and-retention:
+  en: cd193747308a7541
+  zh: 39f2be42a173a9c5
+/delorun-logs/reading:
+  en: f55795f369adbabc
+  zh: e122b7c070ce1aac
+/delorun-logs/the-denial-suite:
+  en: d5e02b05488e9c8f
+  zh: 49d12dfc82050416
+/delorun-logs/tests:
+  en: c9378401817fe119
+  zh: 3f114666c8975cf3

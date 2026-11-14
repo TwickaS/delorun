@@ -33,9 +33,9 @@ const LISTENER = 'reach-tailscale-private'
 const ADDRESS = 'https://home.example.ts.net'
 const HOST = 'home.example.ts.net'
 const ORIGIN = ADDRESS
-const SESSION = '__Host-delo-session=signed-in'
+const SESSION = '__Host-delorun-session=signed-in'
 /** A second session, of another device. */
-const OTHER_SESSION = '__Host-delo-session=other-device'
+const OTHER_SESSION = '__Host-delorun-session=other-device'
 
 /** Identity header names a request or upgrade carried into a route, from every view of its headers. */
 function identityHeadersSeen(req: { headers: object; headersDistinct: object; rawHeaders: string[] }): string[] {
@@ -250,7 +250,7 @@ describe('reach listener dispatch', () => {
     const port = reachPort(harness)
     const exact = await send(port, '/exact', { cookie: SESSION })
     expect(exact.body).toBe('exact')
-    expect(exact.headers['set-cookie']?.[0]).toMatch(/^__Host-delo-session=signed-in;/)
+    expect(exact.headers['set-cookie']?.[0]).toMatch(/^__Host-delorun-session=signed-in;/)
     expect((await send(port, '/peer', { cookie: SESSION })).body).toBe('admitted')
     expect(await upgrade(port, { origin: ORIGIN, cookie: SESSION })).toMatch(/^HTTP\/1\.1 101 /)
     expect(harness.ran).toEqual(['exact', 'peer', 'upgrade'])
@@ -326,8 +326,8 @@ describe('reach listener dispatch', () => {
     const parity = await start(ADDRESS)
     expect((await send(parity.loopbackPort, '/exact?token=x', { host: `127.0.0.1:${String(parity.loopbackPort)}` })).status).toBe(200)
     expect(stray).not.toHaveBeenCalled()
-    const delo = await start(ADDRESS, { oneTimeLaunchTokens: true })
-    expect((await send(delo.loopbackPort, '/exact?token=x', { host: `127.0.0.1:${String(delo.loopbackPort)}` })).status).toBe(200)
+    const delorun = await start(ADDRESS, { oneTimeLaunchTokens: true })
+    expect((await send(delorun.loopbackPort, '/exact?token=x', { host: `127.0.0.1:${String(delorun.loopbackPort)}` })).status).toBe(200)
     expect(stray).toHaveBeenCalledOnce()
     stray.mockRestore()
   })
@@ -501,7 +501,7 @@ function policyNonce(reply: Reply): string {
     "style-src-attr 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data:", "font-src 'self' data:",
     "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'", "frame-src 'self' blob:", "frame-ancestors 'none'",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'",
-    "require-trusted-types-for 'script'", 'trusted-types default delo-plugin-loader',
+    "require-trusted-types-for 'script'", 'trusted-types default delorun-plugin-loader',
   ].join('; '))
   expect(reachContentSecurityPolicy(nonce)).toBe(policy)
   return nonce

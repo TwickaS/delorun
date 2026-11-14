@@ -361,7 +361,7 @@ export interface Config {
    * Place the first-use Workspace at this fully qualified directory, in place of
    * `<Documents>/deepseek-harness/default-workspace`; no Documents lookup runs. Its last segment is the initial title,
    * which reads as the localized default name when it is `default-workspace`.
-   * Its presence is Delo's C16 switch `default_workspace_directory`, set in Delo's composition and absent in the parity one.
+   * Its presence is Delorun's C16 switch `default_workspace_directory`, set in Delorun's composition and absent in the parity one.
    */
   defaultWorkspaceDirectory?: string
   /** Maximum duration of the operating system's Documents lookup. */
@@ -3112,7 +3112,7 @@ export interface Config {
    * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
    * whose workspace root or extra root equals, lies inside or contains it is refused with `HOME_IN_WRITABLE_ROOT`.
    * Absent: no directory is protected.
-   * Its presence is Delo's C16 switch `sandbox_protected_reads`, set in Delo's composition and absent in the parity one.
+   * Its presence is Delorun's C16 switch `sandbox_protected_reads`, set in Delorun's composition and absent in the parity one.
    */
   protectedHome?: string
   /**
@@ -3216,7 +3216,7 @@ export interface Config {
    * container's read-only root, as `deniedBy: 'environment'`, whose result
    * carries the environment's marker and no escalation hint (default: off).
    * Off, consumers ignore those signatures and classify every run against
-   * `denialSignatures` alone. This is Delo's C16 switch
+   * `denialSignatures` alone. This is Delorun's C16 switch
    * `container_denial_marker`, off in the parity composition.
    */
   containerDenialMarker?: boolean

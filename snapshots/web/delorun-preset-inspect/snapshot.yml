@@ -1,0 +1,12 @@
+# C16 switch preset_inspect on. A Web scenario runs through an e2e driver under
+# apps/web/tests, which turns the switch on with launchWebScaffold's
+# presetInspect option: the row sits in the Standard preset's plugin list,
+# which a patch reaches only by replacing the whole preset row.
+version: 1
+scenario: delorun-preset-inspect
+profile: web
+composition: web-default
+recording: live
+header:
+  class: delorun-preset-inspect
+  pin: true

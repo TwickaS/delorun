@@ -1,0 +1,17 @@
+{
+  "name": "@delorun/contract-release-log",
+  "description": "Types and fixed values of Delorun contract C18: the release-log bundle, witness cosignatures and the release-log check states",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delorun/contract-release-manifest": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

@@ -6,15 +6,15 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { isEntryPoint, trackedDeloFiles } from './tracked-delo-files.ts'
+import { isEntryPoint, trackedDelorunFiles } from './tracked-delorun-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
 /** The one page that may describe future work. */
-const roadmapPage = 'delo/docs/guide/roadmap.md'
+const roadmapPage = 'delorun/docs/guide/roadmap.md'
 
-/** Directory prefixes under `delo/` that record history or plans, not the released product. */
-const excludedPrefixes = ['delo/docs/plans/', 'delo/changelog/'] as const
+/** Directory prefixes under `delorun/` that record history or plans, not the released product. */
+const excludedPrefixes = ['delorun/docs/plans/', 'delorun/changelog/'] as const
 
 /** Release-status phrases, matched case-insensitively. */
 export const RELEASE_STATUS_PHRASES: readonly RegExp[] = [
@@ -41,10 +41,10 @@ export interface ReleaseTenseViolation {
 /**
  * Whether the gate checks a file.
  * @param file - repository-relative slash path.
- * @returns true for English Markdown under `delo/` outside the plans, the changelog and the roadmap page.
+ * @returns true for English Markdown under `delorun/` outside the plans, the changelog and the roadmap page.
  */
 export function isReleaseTenseFile(file: string): boolean {
-  return file.startsWith('delo/')
+  return file.startsWith('delorun/')
     && file.endsWith('.md')
     && !file.endsWith('.zh.md')
     && file !== roadmapPage
@@ -71,12 +71,12 @@ export function findReleaseTenseViolations(file: string, source: string): Releas
 }
 
 if (isEntryPoint(import.meta.url)) {
-  const files = trackedDeloFiles(root, isReleaseTenseFile)
+  const files = trackedDelorunFiles(root, isReleaseTenseFile)
   const violations = files.flatMap(file => findReleaseTenseViolations(file, readFileSync(resolve(root, file), 'utf8')))
   if (violations.length === 0) {
     console.log(`verify-release-tense: ${String(files.length)} file(s) checked, no release-status phrases.`)
   } else {
-    console.error('verify-release-tense: release-status phrases found; describe the released product in the present tense, and move future work to delo/docs/guide/roadmap.md:')
+    console.error('verify-release-tense: release-status phrases found; describe the released product in the present tense, and move future work to delorun/docs/guide/roadmap.md:')
     for (const violation of violations) console.error(`  ${violation.file}:${String(violation.line)}: "${violation.phrase}"`)
     process.exitCode = 1
   }

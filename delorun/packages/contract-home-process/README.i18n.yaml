@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/contract-home-process/README.md
+/:
+  en: 60c0246b694928d9
+  zh: 883b8c12cc4068d3
+/delorun-contract-home-process:
+  en: 3ab6b65242d23db8
+  zh: 23bea1355e3ea486
+/delorun-contract-home-process/summary:
+  en: 846d7e1acd845500
+  zh: f4fd38854b8def43
+/delorun-contract-home-process/contents:
+  en: 764c51afdb255762
+  zh: e9d3870b783e60d1
+/delorun-contract-home-process/use-this-package:
+  en: 632231ec74bdeb79
+  zh: bb346090512acbc2
+/delorun-contract-home-process/exports:
+  en: 48d79d4af041753f
+  zh: 31c8f86c82156187

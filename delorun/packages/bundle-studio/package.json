@@ -1,0 +1,38 @@
+{
+  "name": "@delorun/bundle-studio",
+  "description": "Delorun's studio bundle: mounts the theme, the sidebar, chat states, the settings layout and onboarding, with the Delorun look on and one switch back to the stock look, and the optional cost meter, off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@delorun/plugin-chat-states": "workspace:*",
+    "@delorun/plugin-cost-meter": "workspace:*",
+    "@delorun/plugin-onboarding": "workspace:*",
+    "@delorun/plugin-settings-layout": "workspace:*",
+    "@delorun/plugin-sidebar": "workspace:*",
+    "@delorun/plugin-theme": "workspace:*",
+    "@delorun/plugin-thinking-rsvp": "workspace:*"
+  },
+  "devDependencies": {
+    "@delorun/contract-parity-composition": "workspace:*",
+    "js-yaml": "^4.3.2"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

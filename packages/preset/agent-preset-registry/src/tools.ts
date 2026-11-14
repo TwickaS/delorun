@@ -6,7 +6,7 @@
  * mounted `skills` service; it changes nothing.
  *
  * The tool is registered only when the `presetInspect` Config switch is on. The
- * switch is Delo's C16 switch `preset_inspect`, off in the parity composition.
+ * switch is Delorun's C16 switch `preset_inspect`, off in the parity composition.
  * @module @deepseek-ai/dsh-agent-preset-registry/tools
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -24,7 +24,7 @@ export const inject = ['tools', 'agentPresets']
 /** The module's switch. */
 export interface Config {
   /**
-   * Register `preset_inspect`. This is Delo's C16 switch `preset_inspect`, off in the parity composition, where the
+   * Register `preset_inspect`. This is Delorun's C16 switch `preset_inspect`, off in the parity composition, where the
    * model sees the stock tool list.
    */
   presetInspect?: boolean

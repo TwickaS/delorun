@@ -1217,21 +1217,21 @@ importers:
         specifier: 4.6.6
         version: 4.6.6
 
-  delo/apps/benchmarks:
+  delorun/apps/benchmarks:
     dependencies:
       '@deepseek-ai/dsh-benchmarks':
         specifier: workspace:*
         version: link:../../../benchmarks
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/release':
+      '@delorun/release':
         specifier: workspace:*
         version: link:../release
-      '@delo/update':
+      '@delorun/update':
         specifier: workspace:*
         version: link:../../packages/update
       zod:
@@ -1242,7 +1242,7 @@ importers:
         specifier: ^1.49.0
         version: 1.61.1
 
-  delo/apps/cli:
+  delorun/apps/cli:
     dependencies:
       '@clack/prompts':
         specifier: ^1.8.1
@@ -1304,118 +1304,118 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
-      '@delo/archive':
+      '@delorun/archive':
         specifier: workspace:*
         version: link:../../packages/archive
-      '@delo/bundle-headless':
+      '@delorun/bundle-headless':
         specifier: workspace:*
         version: link:../../packages/bundle-headless
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
-      '@delo/bundle-studio':
+      '@delorun/bundle-studio':
         specifier: workspace:*
         version: link:../../packages/bundle-studio
-      '@delo/changes':
+      '@delorun/changes':
         specifier: workspace:*
         version: link:../../packages/changes
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../../packages/contract-admission
-      '@delo/contract-archive-and-trash':
+      '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../../packages/contract-archive-and-trash
-      '@delo/contract-device-approval':
+      '@delorun/contract-device-approval':
         specifier: workspace:*
         version: link:../../packages/contract-device-approval
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
-      '@delo/contract-home-process':
+      '@delorun/contract-home-process':
         specifier: workspace:*
         version: link:../../packages/contract-home-process
-      '@delo/contract-oidc-passkeys':
+      '@delorun/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../../packages/contract-oidc-passkeys
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
-      '@delo/contract-parity-composition':
+      '@delorun/contract-parity-composition':
         specifier: workspace:*
         version: link:../../packages/contract-parity-composition
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../../packages/contract-plugin-versions
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../../packages/contract-reach-providers
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/contract-setup-answers':
+      '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../../packages/contract-setup-answers
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
-      '@delo/contract-verification-checks':
+      '@delorun/contract-verification-checks':
         specifier: workspace:*
         version: link:../../packages/contract-verification-checks
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../../packages/home
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../../packages/home-auth
-      '@delo/home-process':
+      '@delorun/home-process':
         specifier: workspace:*
         version: link:../../packages/home-process
-      '@delo/install':
+      '@delorun/install':
         specifier: workspace:*
         version: link:../install
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/npm-launcher':
+      '@delorun/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
-      '@delo/plugin-delegation-consent':
+      '@delorun/plugin-delegation-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-delegation-consent
-      '@delo/plugin-install-check':
+      '@delorun/plugin-install-check':
         specifier: workspace:*
         version: link:../../packages/plugin-install-check
-      '@delo/plugin-mcp-consent':
+      '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
-      '@delo/plugin-permission-defaults':
+      '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../../packages/plugin-permission-defaults
-      '@delo/plugin-scaffold':
+      '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
-      '@delo/profile-safety':
+      '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
-      '@delo/reach':
+      '@delorun/reach':
         specifier: workspace:*
         version: link:../../packages/reach
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
-      '@delo/release-verify':
+      '@delorun/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
-      '@delo/runtime-store':
+      '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
-      '@delo/supervisor':
+      '@delorun/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
-      '@delo/trash':
+      '@delorun/trash':
         specifier: workspace:*
         version: link:../../packages/trash
-      '@delo/update':
+      '@delorun/update':
         specifier: workspace:*
         version: link:../../packages/update
       '@earendil-works/pi-ai':
@@ -1470,40 +1470,40 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/plugin-main-chat':
+      '@delorun/plugin-main-chat':
         specifier: workspace:*
         version: link:../../packages/plugin-main-chat
-      '@delo/tools':
+      '@delorun/tools':
         specifier: workspace:*
         version: link:../tools
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/apps/install:
+  delorun/apps/install:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
-      '@delo/contract-release-log':
+      '@delorun/contract-release-log':
         specifier: workspace:*
         version: link:../../packages/contract-release-log
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../../packages/home
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
-      '@delo/release-verify':
+      '@delorun/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
-      '@delo/runtime-store':
+      '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
       semver:
@@ -1517,39 +1517,39 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/apps/npm-launcher:
+  delorun/apps/npm-launcher:
     dependencies:
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
-      '@delo/contract-verification-checks':
+      '@delorun/contract-verification-checks':
         specifier: workspace:*
         version: link:../../packages/contract-verification-checks
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../../packages/home
-      '@delo/install':
+      '@delorun/install':
         specifier: workspace:*
         version: link:../install
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
-      '@delo/release-verify':
+      '@delorun/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
-      '@delo/runtime-store':
+      '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
-      '@delo/update':
+      '@delorun/update':
         specifier: workspace:*
         version: link:../../packages/update
       semver:
@@ -1566,21 +1566,21 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/apps/relay:
+  delorun/apps/relay:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
-      '@delo/contract-relay-protocol':
+      '@delorun/contract-relay-protocol':
         specifier: workspace:*
         version: link:../../packages/contract-relay-protocol
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
       ws:
@@ -1600,33 +1600,33 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
 
-  delo/apps/release:
+  delorun/apps/release:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../../packages/contract-plugin-versions
-      '@delo/contract-release-log':
+      '@delorun/contract-release-log':
         specifier: workspace:*
         version: link:../../packages/contract-release-log
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
-      '@delo/runtime-closure':
+      '@delorun/runtime-closure':
         specifier: workspace:*
         version: link:../runtime-closure
-      '@delo/tools':
+      '@delorun/tools':
         specifier: workspace:*
         version: link:../tools
-      '@delo/update':
+      '@delorun/update':
         specifier: workspace:*
         version: link:../../packages/update
       '@noble/curves':
@@ -1657,25 +1657,25 @@ importers:
       '@deepseek-ai/dsh-llm-mock-server':
         specifier: workspace:*
         version: link:../../../packages/test-support/llm-mock-server
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/apps/release-channel:
+  delorun/apps/release-channel:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/release':
+      '@delorun/release':
         specifier: workspace:*
         version: link:../release
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
       aws4fetch:
@@ -1689,40 +1689,40 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/apps/runtime-closure:
+  delorun/apps/runtime-closure:
     dependencies:
-      '@delo/cli':
+      '@delorun/cli':
         specifier: workspace:*
         version: link:../cli
       dsh-python-runtime-closure:
         specifier: workspace:*
         version: link:../../../python/sdk-runtime
     devDependencies:
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
-      '@delo/runtime-store':
+      '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
 
-  delo/apps/tools:
+  delorun/apps/tools:
     dependencies:
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
-      '@delo/contract-oidc-passkeys':
+      '@delorun/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../../packages/contract-oidc-passkeys
-      '@delo/contract-parity-composition':
+      '@delorun/contract-parity-composition':
         specifier: workspace:*
         version: link:../../packages/contract-parity-composition
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../../packages/contract-reach-providers
-      '@delo/contract-relay-protocol':
+      '@delorun/contract-relay-protocol':
         specifier: workspace:*
         version: link:../../packages/contract-relay-protocol
       '@secretlint/node':
@@ -1760,7 +1760,7 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
 
-  delo/packages/archive:
+  delorun/packages/archive:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
@@ -1780,19 +1780,19 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
-      '@delo/contract-archive-and-trash':
+      '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
-      '@delo/contract-device-approval':
+      '@delorun/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/profile-safety':
+      '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
       semver:
@@ -1812,37 +1812,37 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/bundle-headless:
+  delorun/packages/bundle-headless:
     dependencies:
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
-      '@delo/plugin-changes':
+      '@delorun/plugin-changes':
         specifier: workspace:*
         version: link:../plugin-changes
-      '@delo/plugin-delegation-consent':
+      '@delorun/plugin-delegation-consent':
         specifier: workspace:*
         version: link:../plugin-delegation-consent
-      '@delo/plugin-fetch-guard':
+      '@delorun/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
-      '@delo/plugin-install-check':
+      '@delorun/plugin-install-check':
         specifier: workspace:*
         version: link:../plugin-install-check
-      '@delo/plugin-instruction-consent':
+      '@delorun/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
-      '@delo/plugin-mcp-consent':
+      '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../plugin-mcp-consent
-      '@delo/plugin-permission-defaults':
+      '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../plugin-permission-defaults
-      '@delo/plugin-schedule-consent':
+      '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
 
-  delo/packages/bundle-local:
+  delorun/packages/bundle-local:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
@@ -1856,52 +1856,52 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-setup-answers':
+      '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-      '@delo/plugin-changes':
+      '@delorun/plugin-changes':
         specifier: workspace:*
         version: link:../plugin-changes
-      '@delo/plugin-delegation-consent':
+      '@delorun/plugin-delegation-consent':
         specifier: workspace:*
         version: link:../plugin-delegation-consent
-      '@delo/plugin-fetch-guard':
+      '@delorun/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
-      '@delo/plugin-install-check':
+      '@delorun/plugin-install-check':
         specifier: workspace:*
         version: link:../plugin-install-check
-      '@delo/plugin-instruction-consent':
+      '@delorun/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
-      '@delo/plugin-mcp-consent':
+      '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../plugin-mcp-consent
-      '@delo/plugin-permission-defaults':
+      '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../plugin-permission-defaults
-      '@delo/plugin-schedule-consent':
+      '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
-      '@delo/plugin-trash':
+      '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
-      '@delo/profile-safety':
+      '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
-      '@delo/reach':
+      '@delorun/reach':
         specifier: workspace:*
         version: link:../reach
-      '@delo/settings-controls':
+      '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
-      '@delo/skill-plugin-authoring':
+      '@delorun/skill-plugin-authoring':
         specifier: workspace:*
         version: link:../skill-plugin-authoring
       zod:
@@ -2031,7 +2031,7 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
       '@types/react':
@@ -2047,38 +2047,38 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/bundle-studio:
+  delorun/packages/bundle-studio:
     dependencies:
-      '@delo/plugin-chat-states':
+      '@delorun/plugin-chat-states':
         specifier: workspace:*
         version: link:../plugin-chat-states
-      '@delo/plugin-cost-meter':
+      '@delorun/plugin-cost-meter':
         specifier: workspace:*
         version: link:../plugin-cost-meter
-      '@delo/plugin-onboarding':
+      '@delorun/plugin-onboarding':
         specifier: workspace:*
         version: link:../plugin-onboarding
-      '@delo/plugin-settings-layout':
+      '@delorun/plugin-settings-layout':
         specifier: workspace:*
         version: link:../plugin-settings-layout
-      '@delo/plugin-sidebar':
+      '@delorun/plugin-sidebar':
         specifier: workspace:*
         version: link:../plugin-sidebar
-      '@delo/plugin-theme':
+      '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
-      '@delo/plugin-thinking-rsvp':
+      '@delorun/plugin-thinking-rsvp':
         specifier: workspace:*
         version: link:../plugin-thinking-rsvp
     devDependencies:
-      '@delo/contract-parity-composition':
+      '@delorun/contract-parity-composition':
         specifier: workspace:*
         version: link:../contract-parity-composition
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
 
-  delo/packages/changes:
+  delorun/packages/changes:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
@@ -2092,13 +2092,13 @@ importers:
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/profile-safety':
+      '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
       diff:
@@ -2108,120 +2108,120 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
-  delo/packages/contract-admission:
+  delorun/packages/contract-admission:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-archive-and-trash: {}
+  delorun/packages/contract-archive-and-trash: {}
 
-  delo/packages/contract-catalogue-revocation:
+  delorun/packages/contract-catalogue-revocation:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
 
-  delo/packages/contract-device-approval:
+  delorun/packages/contract-device-approval:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
 
-  delo/packages/contract-home-layout:
+  delorun/packages/contract-home-layout:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-home-process:
+  delorun/packages/contract-home-process:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
 
-  delo/packages/contract-host-qualified-keys:
+  delorun/packages/contract-host-qualified-keys:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-oidc-passkeys:
+  delorun/packages/contract-oidc-passkeys:
     dependencies:
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
 
-  delo/packages/contract-operational-logs:
+  delorun/packages/contract-operational-logs:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-parity-composition: {}
+  delorun/packages/contract-parity-composition: {}
 
-  delo/packages/contract-plugin-versions:
+  delorun/packages/contract-plugin-versions:
     dependencies:
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
 
-  delo/packages/contract-reach-providers:
+  delorun/packages/contract-reach-providers:
     dependencies:
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
 
-  delo/packages/contract-relay-protocol:
+  delorun/packages/contract-relay-protocol:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-release-log:
+  delorun/packages/contract-release-log:
     dependencies:
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
 
-  delo/packages/contract-release-manifest:
+  delorun/packages/contract-release-manifest:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
-  delo/packages/contract-runtime-supervisor:
+  delorun/packages/contract-runtime-supervisor:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
 
-  delo/packages/contract-setup-answers: {}
+  delorun/packages/contract-setup-answers: {}
 
-  delo/packages/contract-update-report:
+  delorun/packages/contract-update-report:
     dependencies:
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
 
-  delo/packages/contract-verification-checks: {}
+  delorun/packages/contract-verification-checks: {}
 
-  delo/packages/home:
+  delorun/packages/home:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
@@ -2229,14 +2229,14 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
 
-  delo/packages/home-auth:
+  delorun/packages/home-auth:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2277,52 +2277,52 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
-      '@delo/contract-device-approval':
+      '@delorun/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-oidc-passkeys':
+      '@delorun/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../contract-operational-logs
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
 
-  delo/packages/home-process:
+  delorun/packages/home-process:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-home-process':
+      '@delorun/contract-home-process':
         specifier: workspace:*
         version: link:../contract-home-process
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../contract-operational-logs
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
-      '@delo/supervisor':
+      '@delorun/supervisor':
         specifier: workspace:*
         version: link:../supervisor
       zod:
@@ -2342,15 +2342,15 @@ importers:
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
 
-  delo/packages/logs:
+  delorun/packages/logs:
     dependencies:
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../contract-operational-logs
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
     devDependencies:
@@ -2378,34 +2378,34 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
-      '@delo/contract-device-approval':
+      '@delorun/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
 
-  delo/packages/plugin-changes:
+  delorun/packages/plugin-changes:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/changes':
+      '@delorun/changes':
         specifier: workspace:*
         version: link:../changes
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/plugin-scaffold':
+      '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../plugin-scaffold
-      '@delo/profile-safety':
+      '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
     devDependencies:
@@ -2506,15 +2506,15 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-chat-states:
+  delorun/packages/plugin-chat-states:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-archive-and-trash':
+      '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
-      '@delo/settings-controls':
+      '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
       zod:
@@ -2591,7 +2591,7 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-cost-meter:
+  delorun/packages/plugin-cost-meter:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
@@ -2651,7 +2651,7 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:*
         version: link:../../../packages/subagent/subagent
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
       '@testing-library/react':
@@ -2670,21 +2670,21 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-delegation-consent:
+  delorun/packages/plugin-delegation-consent:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-      '@delo/plugin-permission-defaults':
+      '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../plugin-permission-defaults
       zod:
@@ -2728,7 +2728,7 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/interaction/user-approval
 
-  delo/packages/plugin-fetch-guard:
+  delorun/packages/plugin-fetch-guard:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
@@ -2747,7 +2747,7 @@ importers:
         specifier: 8.11.2
         version: 8.11.2
 
-  delo/packages/plugin-install-check:
+  delorun/packages/plugin-install-check:
     dependencies:
       '@deepseek-ai/dsh-atomic-write':
         specifier: workspace:*
@@ -2755,13 +2755,13 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../release-formats
-      '@delo/runtime-store':
+      '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../runtime-store
       semver:
@@ -2787,15 +2787,15 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/plugin-instruction-consent:
+  delorun/packages/plugin-instruction-consent:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/changes':
+      '@delorun/changes':
         specifier: workspace:*
         version: link:../changes
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
     devDependencies:
@@ -2863,12 +2863,12 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/interaction/user-approval
 
-  delo/packages/plugin-main-chat:
+  delorun/packages/plugin-main-chat:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/plugin-workspaces':
+      '@delorun/plugin-workspaces':
         specifier: workspace:*
         version: link:../plugin-workspaces
       zod:
@@ -2957,18 +2957,18 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-mcp-consent:
+  delorun/packages/plugin-mcp-consent:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
       zod:
@@ -3003,7 +3003,7 @@ importers:
         specifier: 2.2.0
         version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
 
-  delo/packages/plugin-onboarding:
+  delorun/packages/plugin-onboarding:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
@@ -3014,19 +3014,19 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
-      '@delo/contract-setup-answers':
+      '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-      '@delo/reach':
+      '@delorun/reach':
         specifier: workspace:*
         version: link:../reach
       zod:
@@ -3117,10 +3117,10 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
-      '@delo/bundle-local':
+      '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
-      '@delo/plugin-theme':
+      '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
       '@testing-library/react':
@@ -3136,21 +3136,21 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-permission-defaults:
+  delorun/packages/plugin-permission-defaults:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-      '@delo/plugin-fetch-guard':
+      '@delorun/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
       zod:
@@ -3209,12 +3209,12 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
 
-  delo/packages/plugin-scaffold:
+  delorun/packages/plugin-scaffold:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
       semver:
@@ -3225,7 +3225,7 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/plugin-schedule-consent:
+  delorun/packages/plugin-schedule-consent:
     dependencies:
       zod:
         specifier: 4.6.6
@@ -3241,7 +3241,7 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/core/session
 
-  delo/packages/plugin-settings-layout:
+  delorun/packages/plugin-settings-layout:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3292,15 +3292,15 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-sidebar:
+  delorun/packages/plugin-sidebar:
     dependencies:
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
-      '@delo/settings-controls':
+      '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
       zod:
@@ -3367,10 +3367,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/plugin-chat-states':
+      '@delorun/plugin-chat-states':
         specifier: workspace:*
         version: link:../plugin-chat-states
-      '@delo/plugin-theme':
+      '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
       '@testing-library/react':
@@ -3386,9 +3386,9 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-theme:
+  delorun/packages/plugin-theme:
     dependencies:
-      '@delo/settings-controls':
+      '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
     devDependencies:
@@ -3456,7 +3456,7 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-thinking-rsvp:
+  delorun/packages/plugin-thinking-rsvp:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3507,15 +3507,15 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-trash:
+  delorun/packages/plugin-trash:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-archive-and-trash':
+      '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
-      '@delo/trash':
+      '@delorun/trash':
         specifier: workspace:*
         version: link:../trash
     devDependencies:
@@ -3583,15 +3583,15 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
-  delo/packages/plugin-workspaces:
+  delorun/packages/plugin-workspaces:
     dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
       zod:
@@ -3620,7 +3620,7 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
 
-  delo/packages/profile-safety:
+  delorun/packages/profile-safety:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
@@ -3637,13 +3637,13 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
       yaml:
@@ -3654,7 +3654,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
 
-  delo/packages/reach:
+  delorun/packages/reach:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3674,28 +3674,28 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-admission':
+      '@delorun/contract-admission':
         specifier: workspace:*
         version: link:../contract-admission
-      '@delo/contract-oidc-passkeys':
+      '@delorun/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys
-      '@delo/contract-reach-providers':
+      '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
-      '@delo/home-auth':
+      '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
 
-  delo/packages/release-formats:
+  delorun/packages/release-formats:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-release-log':
+      '@delorun/contract-release-log':
         specifier: workspace:*
         version: link:../contract-release-log
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
       '@noble/curves':
@@ -3712,30 +3712,30 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/release-verify:
+  delorun/packages/release-verify:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-release-log':
+      '@delorun/contract-release-log':
         specifier: workspace:*
         version: link:../contract-release-log
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-verification-checks':
+      '@delorun/contract-verification-checks':
         specifier: workspace:*
         version: link:../contract-verification-checks
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../release-formats
       '@noble/curves':
@@ -3755,27 +3755,27 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/runtime-store:
+  delorun/packages/runtime-store:
     dependencies:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-verification-checks':
+      '@delorun/contract-verification-checks':
         specifier: workspace:*
         version: link:../contract-verification-checks
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
-      '@delo/release-formats':
+      '@delorun/release-formats':
         specifier: workspace:*
         version: link:../release-formats
       semver:
@@ -3786,7 +3786,7 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
-  delo/packages/settings-controls:
+  delorun/packages/settings-controls:
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.3
@@ -3798,7 +3798,7 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
-  delo/packages/skill-plugin-authoring:
+  delorun/packages/skill-plugin-authoring:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3807,24 +3807,24 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/skill/skill
 
-  delo/packages/supervisor:
+  delorun/packages/supervisor:
     dependencies:
-      '@delo/contract-home-layout':
+      '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
-      '@delo/contract-operational-logs':
+      '@delorun/contract-operational-logs':
         specifier: workspace:*
         version: link:../contract-operational-logs
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-runtime-supervisor':
+      '@delorun/contract-runtime-supervisor':
         specifier: workspace:*
         version: link:../contract-runtime-supervisor
-      '@delo/home':
+      '@delorun/home':
         specifier: workspace:*
         version: link:../home
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
       zod:
@@ -3844,18 +3844,18 @@ importers:
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
 
-  delo/packages/trash:
+  delorun/packages/trash:
     dependencies:
       '@deepseek-ai/node-addon-system':
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
-      '@delo/contract-archive-and-trash':
+      '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
-      '@delo/contract-host-qualified-keys':
+      '@delorun/contract-host-qualified-keys':
         specifier: workspace:*
         version: link:../contract-host-qualified-keys
-      '@delo/logs':
+      '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
     devDependencies:
@@ -3872,18 +3872,18 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/session/session-persistence-jsonl
 
-  delo/packages/update:
+  delorun/packages/update:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
-      '@delo/contract-plugin-versions':
+      '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
-      '@delo/contract-release-manifest':
+      '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
-      '@delo/contract-update-report':
+      '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
       semver:

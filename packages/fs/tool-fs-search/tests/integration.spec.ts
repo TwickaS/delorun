@@ -324,7 +324,7 @@ class ProtectingProvider extends SandboxProvider {
 describe('search tools and the sandbox provider\'s protected home', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'dsh-search-protected-'))
-    const home = join(dir, '.delo')
+    const home = join(dir, '.delorun')
     await mkdir(join(home, 'secrets'), { recursive: true })
     await mkdir(join(home, 'runtimes'), { recursive: true })
     await mkdir(join(dir, 'sub'))
@@ -336,8 +336,8 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     await symlink(home, join(dir, 'home-link'), 'dir')
     const canonical = await realpath(dir)
     ProtectingProvider.reads = {
-      roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
-      readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+      roots: [join(canonical, '.delorun'), join(canonical, 'other-mount')],
+      readable: [join(canonical, '.delorun', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
     }
     ProtectingProvider.wraps = []
     ProtectingProvider.runner = []
@@ -362,7 +362,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
   it('glob and grep over a workspace that contains the home leave out protected paths and keep readable entries', async () => {
     const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
     expect(globbed).toContain(join('sub', 'work.txt'))
-    expect(globbed).toContain(join('.delo', 'runtimes', 'tool.txt'))
+    expect(globbed).toContain(join('.delorun', 'runtimes', 'tool.txt'))
     expect(globbed).not.toContain('key.txt')
     expect(globbed).not.toContain('other-mount')
     // grep skips hidden directories, so the visible stand-in for another mount of the home shows the filter.
@@ -370,10 +370,10 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     expect(grepped).toContain('needle work')
     expect(grepped).not.toContain('needle secret')
     expect(grepped).not.toContain('other-mount')
-    expect(text(await call('grep', { pattern: 'needle', path: '.delo/runtimes' }, agent()))).toContain('needle runtime')
+    expect(text(await call('grep', { pattern: 'needle', path: '.delorun/runtimes' }, agent()))).toContain('needle runtime')
   })
 
-  it.each(['.delo', '.delo/secrets', 'home-link', 'sub/../.delo', 'other-mount'])('refuses glob and grep rooted at %s', async (path) => {
+  it.each(['.delorun', '.delorun/secrets', 'home-link', 'sub/../.delorun', 'other-mount'])('refuses glob and grep rooted at %s', async (path) => {
     for (const [name, args] of [['glob', { pattern: '**/*', path }], ['grep', { pattern: 'needle', path }]] as const) {
       const result = await call(name, args, agent())
       expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
@@ -405,7 +405,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
       const handle = spawn(spec)
       void handle.done.then(() => {
         rmSync(join(dir, 'flip'), { recursive: true })
-        symlinkSync(join(dir, '.delo'), join(dir, 'flip'), 'dir')
+        symlinkSync(join(dir, '.delorun'), join(dir, 'flip'), 'dir')
       })
       return handle
     })
@@ -424,7 +424,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports the rest of a search whose runner refuses to open the protected paths', async () => {
     // A directory the operating system refuses to open stands in for Landlock's and Seatbelt's refusal of the home.
-    await chmod(join(dir, '.delo', 'secrets'), 0o000)
+    await chmod(join(dir, '.delorun', 'secrets'), 0o000)
     await chmod(join(dir, 'other-mount'), 0o000)
     try {
       const grepped = await call('grep', { pattern: 'needle', path: dir }, agent())
@@ -436,29 +436,29 @@ describe('search tools and the sandbox provider\'s protected home', () => {
       expect(failed).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_FAILED' } } })
       await chmod(join(dir, 'sub', 'locked'), 0o755)
     } finally {
-      await chmod(join(dir, '.delo', 'secrets'), 0o755)
+      await chmod(join(dir, '.delorun', 'secrets'), 0o755)
       await chmod(join(dir, 'other-mount'), 0o755)
     }
   })
 
   it('searches its own session\'s spill directory unconfined, and refuses another session\'s', async () => {
-    const own = join(dir, '.delo', 'spill', 'session-session-int')
-    const other = join(dir, '.delo', 'spill', 'session-other')
+    const own = join(dir, '.delorun', 'spill', 'session-session-int')
+    const other = join(dir, '.delorun', 'spill', 'session-other')
     await mkdir(own, { recursive: true })
     await mkdir(other, { recursive: true })
     await writeFile(join(own, 'grep.txt'), 'needle spilled\n')
     await writeFile(join(other, 'grep.txt'), 'needle other chat\n')
     const canonical = await realpath(dir)
-    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
-    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delo', 'spill', `session-${id}`) } as never)
-    expect(text(await call('grep', { pattern: 'needle', path: '.delo/spill/session-session-int' }, agent()))).toContain('needle spilled')
+    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delorun', 'spill')] }
+    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delorun', 'spill', `session-${id}`) } as never)
+    expect(text(await call('grep', { pattern: 'needle', path: '.delorun/spill/session-session-int' }, agent()))).toContain('needle spilled')
     expect(ProtectingProvider.wraps).toEqual([])
-    for (const path of ['.delo/spill/session-other', '.delo/spill']) {
+    for (const path of ['.delorun/spill/session-other', '.delorun/spill']) {
       const result = await call('grep', { pattern: 'needle', path }, agent())
       expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
       expect(text(result)).not.toContain('other chat')
     }
-    const refused = await call('grep', { pattern: 'needle', path: '.delo/secrets' }, agent())
+    const refused = await call('grep', { pattern: 'needle', path: '.delorun/secrets' }, agent())
     expect(refused).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
   })
 
@@ -471,7 +471,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
   })
 
   it('refuses a search with no path in a session whose workspace is the home', async () => {
-    const result = await call('glob', { pattern: '**/*' }, { session: { header: { id: 'session-home', cwd: join(dir, '.delo') } } })
+    const result = await call('glob', { pattern: '**/*' }, { session: { header: { id: 'session-home', cwd: join(dir, '.delorun') } } })
     expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
     expect(text(result)).toContain('cannot search "."')
   })
@@ -494,16 +494,16 @@ describe('search tools and the sandbox provider\'s protected home', () => {
 
   it('searches under the home when the provider protects nothing', async () => {
     ProtectingProvider.reads = undefined
-    expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
+    expect(text(await call('grep', { pattern: 'needle', path: '.delorun' }, agent()))).toContain('needle secret')
   })
 })
 
 describe('search tools without a sandbox provider', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'dsh-search-no-provider-'))
-    await mkdir(join(dir, '.delo', 'secrets'), { recursive: true })
+    await mkdir(join(dir, '.delorun', 'secrets'), { recursive: true })
     await mkdir(join(dir, 'sub'))
-    await writeFile(join(dir, '.delo', 'secrets', 'key.txt'), 'needle secret\n')
+    await writeFile(join(dir, '.delorun', 'secrets', 'key.txt'), 'needle secret\n')
     await writeFile(join(dir, 'sub', 'work.txt'), 'needle work\n')
     ctx = new Context()
     provideWorkingDirectoryFixture(ctx)
@@ -520,8 +520,8 @@ describe('search tools without a sandbox provider', () => {
 
   it('searches everywhere the session reaches, because no provider reports a protected home', async () => {
     await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: false })
-    expect(text(await call('glob', { pattern: '**/*.txt' }, agent()))).toContain(join('.delo', 'secrets', 'key.txt'))
-    expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
+    expect(text(await call('glob', { pattern: '**/*.txt' }, agent()))).toContain(join('.delorun', 'secrets', 'key.txt'))
+    expect(text(await call('grep', { pattern: 'needle', path: '.delorun' }, agent()))).toContain('needle secret')
     expect(text(await call('grep', { pattern: 'needle' }, agent()))).toContain('needle work')
   })
 })

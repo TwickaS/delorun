@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delorun-one-standard.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delorun-one-standard.md
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree:
+  en: 8ea273b2dd652e67
+  zh: 1dddede230744337
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/problem:
+  en: 2d812e8f24767000
+  zh: 2a3527cfbbb304bf
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/decision:
+  en: 55b54fe3ab640a3c
+  zh: 88233ea63e06f326
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/verification:
+  en: 01078c6d7def4881
+  zh: 0f33a67cb72f78cc
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/related:
+  en: b40619cc5b68a702
+  zh: fe57bc44b688411a
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/alternatives-considered:
+  en: 095582c3708fe7f2
+  zh: b172b8c5fef8183d
+/agent-note-one-agent-guide-documentation-standard-skills-folder-and-notes-tree/consequences:
+  en: a15d17e4536a6ae3
+  zh: 0bacb9f439ae94eb

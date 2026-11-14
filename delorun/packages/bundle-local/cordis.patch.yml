@@ -1,0 +1,333 @@
+# The @delorun/bundle-local patch: Delorun's layer over upstream's web template in
+# Delorun's CLI profiles (src/profile.ts lists the order). Rows here target
+# upstream rows by id, or insert Delorun's local integration rows; the profile's
+# own cordis.patch.yml and any --patch overlays still come after it, so the
+# Privacy section's writes to the profile win over the values here.
+#
+# A patch replaces the targeted row's whole `config`, so a row here restates
+# every key it keeps. Each row is listed in LOCAL_ROWS (src/profile.ts), and
+# the package's composition spec fails on a row that is not.
+
+# DeepSeek's session-log upload is off until the person turns it on (C11).
+# The base bundle's row has no config, so `enabled` is the only key.
+- id: session-log-deepseek
+  config:
+    enabled: false
+
+# DeepSeek's account and Platform sign-in (browser PKCE to platform.deepseek.com, account details, Usage and Top-up pages)
+# is removed from Delorun's CLI profiles: the first release has no DeepSeek account service. The row stays in upstream's
+# composition for parity, and llm-deepseek-account, which needs a signed-in account, stays inert without it. The
+# DeepSeek API-key provider is unaffected.
+- id: deepseek-account
+  disabled: true
+
+# Feedback goes nowhere outside the machine. Upstream's feedback telemetry exporter sends a session-log prefix to
+# DeepSeek's collector when the person sends feedback, and Delorun has no DeepSeek feedback service, so the row is disabled.
+- id: session-telemetry-otel
+  disabled: true
+
+# The /feedback command and the message feedback surface (Like, Dislike and the dialog) send through that exporter.
+# Upstream offers no row that opens an external page, so Delorun's composition hides both instead.
+- id: command-feedback
+  disabled: true
+
+- id: ui-message-feedback
+  disabled: true
+
+# The account menu, the sign-in dialog and the account section need DeepSeek's account service, which Delorun's
+# composition removes; without this row the More menu shows no Sign in entry.
+- id: ui-settings-account
+  disabled: true
+
+# The account notifications poll DeepSeek's servers for server-authored cards and show them beside the account menu,
+# which the row above removes; Delorun has no DeepSeek account service in the first release, so the row is disabled.
+- id: ui-account-notifications
+  disabled: true
+
+# Upstream's Web preview notice names DeepSeek Harness; Delorun shows its own notice from @delorun/bundle-local instead.
+# The row keeps upstream's other onboarding settings.
+- id: ui-settings-models
+  config:
+    credentialOnboarding: true
+    welcomeNotice: false
+
+# Studio sign-in links work once (C4, C16 switch `one_time_launch_tokens`): no
+# reusable launch token exists, each link `delorun open` or a start asks for
+# expires after 60 seconds and its first use consumes it, and a refused
+# request tells the person to run `delorun open`, or `--port` for a link
+# through a forwarded port. The row restates the web
+# bundle's trustedHosts expression and keeps its `inject: [webStartup]`.
+- id: connection
+  name: '@deepseek-ai/dsh-client-connection'
+  config:
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+    oneTimeLaunchTokens: true
+    reopenHint: run delorun open to open the studio, or delorun open --print --port <port> for a link through a forwarded port
+
+# C1's home protection on upstream's sandbox provider. The row is mounted bare
+# by the base bundle, and `protectedHome` defaults to unset there, so a confined
+# command reads the whole harness home — the consent stores under `secrets/`
+# included. `dshHomePath` is the harness home, which C1 sets to the Delorun home
+# for every runtime process; the readable entries are C1's read exemptions,
+# which hold no secret; `delorun start` adds the profile's approved plugin copies,
+# `changes/profiles/<profile>/active`, read and execute only, because the row
+# cannot name the profile. The provider's protected home is also what every tool
+# row refuses to read or search, the rows inside each agent preset included:
+# `read`, `read_image`, `apply_patch`, `glob` and `grep` take it from this row
+# and from no setting of their own. They may read their own session's directory
+# under the tool-readable `spill/`, which confined commands cannot. `delorun
+# start` keeps adding that profile's channel sockets as `deniedSockets` in
+# `run/<profile>/sandbox.patch.yml`.
+- id: sandbox
+  config:
+    protectedHome: !!js dshHomePath()
+    protectedHomeReadable:
+      - runtimes
+      - skills
+      - dsh-runtimes
+    # Spilled tool output; each session's tools read only its own directory.
+    protectedHomeToolReadable:
+      - spill
+
+# The studio's first-use workspace folder. `delorun start` resolves it before the
+# profile boots (`<documents>/Delorun/default-workspace`, or `<home>/Delorun/default-workspace`
+# where the platform reports no documents folder) and sets DELORUN_DEFAULT_WORKSPACE
+# (DEFAULT_WORKSPACE_ENV in src/profile.ts) in the Host's own process. A boot by
+# anything other than `delorun start` leaves the variable unset, so the key is
+# unset and upstream's own documents lookup applies. A person chooses another
+# folder by restating this row in the profile's own cordis.patch.yml, whose
+# `config` replaces this one. Upstream's web bundle mounts the row with no config.
+- id: workspace-controller
+  name: '@deepseek-ai/dsh-api-workspace-controller'
+  config:
+    defaultWorkspaceDirectory: !!js process.env.DELORUN_DEFAULT_WORKSPACE
+
+# Desktop analytics is off until the person turns it on (C11). The row keeps
+# the web bundle's `disabled` condition, so it mounts only in the desktop
+# profile; `appVersion` restates the web bundle's value.
+- id: product-analytics
+  config:
+    enabled: false
+    appVersion: !!js process.env.DSH_CLIENT_VERSION
+
+# The browser half: the Privacy section in Settings with the consent switches
+# for the two rows above, the release check's switch under General, and the
+# About section.
+- insert:
+    - id: delorun-privacy
+      name: '@delorun/bundle-local'
+
+# Delorun's consent and guard plugins, each mounted with the C16 switches its
+# Config declares on (the plugin's default is the parity value, off). This
+# bundle is the only Delorun layer a CLI profile adds, so without these rows no
+# shipped composition mounts any of them: a model-authored write to an
+# instruction layer or to an approved plugin's folder, an added stdio MCP
+# server, a full-access mode switch, a scheduled delivery into a moved
+# workspace, a fetch of a private address and an agent's plugin install or
+# removal each ran unguarded, and an external agent such as Claude Code started
+# without asking. The Loader starts rows concurrently, so row order does not
+# order their startup: an mcp-client row waits for the `delorun-mcp-consent` row,
+# which declares itself the `mcpAddConsent` provider, before it starts a stdio
+# server. `permission_defaults` alone provides the sandbox-mode guard (A135):
+# `instruction-consent` takes no part of that slot.
+- insert:
+    - id: delorun-instruction-consent
+      name: '@delorun/plugin-instruction-consent'
+      config:
+        enabled: true
+        approvedPluginWrites: true
+
+    - id: delorun-mcp-consent
+      name: '@delorun/plugin-mcp-consent'
+      config:
+        enabled: true
+
+    - id: delorun-permission-defaults
+      name: '@delorun/plugin-permission-defaults'
+      config:
+        enabled: true
+
+    - id: delorun-schedule-consent
+      name: '@delorun/plugin-schedule-consent'
+      config:
+        enabled: true
+
+    - id: delorun-fetch-guard
+      name: '@delorun/plugin-fetch-guard'
+      config:
+        enabled: true
+
+    # The skill that teaches the agent to make a plugin in the chat's workspace; turning it on stays the person's step.
+    - id: delorun-plugin-authoring
+      name: '@delorun/skill-plugin-authoring'
+
+    - id: delorun-delegation-consent
+      name: '@delorun/plugin-delegation-consent'
+      config:
+        enabled: true
+
+    - id: delorun-plugin-changes
+      name: '@delorun/plugin-changes'
+      config:
+        enabled: true
+        # Safe mode from the studio's recovery screen keeps these bundles, Delorun's profile bundle list
+        # (DELORUN_PROFILE_BUNDLES in src/profile.ts; tests/plugin-changes-row.spec.ts holds the two equal).
+        installationBundles:
+          - '@deepseek-ai/dsh-base'
+          - '@deepseek-ai/dsh-web-app'
+          - '@delorun/bundle-local'
+          - '@delorun/bundle-studio'
+
+    # The rename_workspace tool (C16 switch `rename_workspace_tool`): it renames a
+    # workspace through upstream's workspace registry, as the studio's rename
+    # does, and asks the person inside the call, so only an allowed-once answer
+    # renames. The row is not protected: it adds one tool that asks, and turning
+    # it off only removes that tool.
+    - id: delorun-workspace-rename
+      name: '@delorun/bundle-local/workspace-rename'
+      config:
+        enabled: true
+
+# The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
+# a stop waits for running chats (C19's `waiting` phase), the first step of
+# every new turn is refused with UPDATE_PENDING, so the wait ends once the
+# running turns end. `delorun` attaches its chat gate to the delorunTurnGate
+# service this row provides; without the row, a turn that starts during the
+# wait is counted and the wait lasts until it ends. `holdUntilChecked` makes
+# the first step of every turn wait until `delorun` has checked the booted
+# Host's rows and services (C19), so no turn starts before that check; a turn
+# that waits longer than `checkWaitSeconds` (60 by default) ends with
+# START_CHECK_PENDING, which says to start Delorun with `delorun start`.
+- insert:
+    - id: delorun-update-gate
+      name: '@delorun/bundle-local/update-gate'
+      config:
+        enabled: true
+        holdUntilChecked: true
+
+# The update check (C16 switch `update_check`): when the last check is an
+# interval old, at start or at an hourly wake while the Host runs, the
+# channel's newest release is fetched and verified as an update verifies it,
+# and the studio's sidebar shows a notice when it is newer. `delorun` attaches
+# the check to the delorunUpdateCheck service this row provides; Settings →
+# General → Updates turns `enabled` off in the profile's own patch, which
+# comes after this one. The other two keys keep the plugin's defaults.
+- insert:
+    - id: delorun-update-check
+      name: '@delorun/bundle-local/update-check'
+      config:
+        enabled: true
+        intervalHours: 24
+        timeoutSeconds: 15
+
+# The trust bill (C15): what this Delorun runs and how much of it was checked, which
+# the studio's sidebar badge and its panel show. `delorun` attaches the bill's
+# source to the delorunTrust service this row provides: the row serves the start
+# bill, which the launcher's start check and the stored release-log record make
+# without hashing again, to the studio and to approved devices, and runs the
+# `verify` stage when the person chooses Check now at the home's own computer.
+- insert:
+    - id: delorun-trust
+      name: '@delorun/bundle-local/trust'
+      config:
+        enabled: true
+
+# Setup versions: the profile history's versions listed, compared and saved, and
+# the switch to another version, as routes under /api/delorunVersions.*. Reading
+# answers any signed-in studio; saving and switching answer only the loopback
+# studio at the home's computer. The row keeps no store: the versions are the
+# history `delorun recover` and plugin management share.
+- insert:
+    - id: delorun-profile-versions
+      name: '@delorun/bundle-local/profile-versions'
+
+# Plugin management protects the guard rows, the update check and the trust bill above, remote
+# access and the home's sign-in (so no chat turns remote access on or points
+# its records elsewhere), the plugin install check, and the sandbox rows, as it
+# protects its own components: the `plugin_manager` tool, which runs without a
+# prompt in full access, cannot disable a protected row, change its settings, or
+# deselect or remove a bundle that carries one, this bundle included, so no chat
+# in one workspace turns a guard off, or silences the update check or the trust
+# bill, for every workspace; with the plugin changes row off, the agent's plugin
+# installs and removals would run instead of waiting for review. Settings →
+# General → Updates writes the update check's switch, and Settings → External
+# agents the external-agent consent's switch and run time limit, through the
+# settings service, which this list does not govern.
+#
+# Plugins install from the registry pnpm's configuration names, or the
+# `registry` set here, and from no mirror unless the person turns the npm mirror
+# on: `npmMirror` of the `delorun-plugin-install-check` row, which Settings →
+# Plugins and `delorun plugin mirror on|off` set. `delorun start` passes that
+# setting to the Host as DELORUN_NPM_MIRROR (NPM_MIRROR_ENV in src/profile.ts), and
+# `fallbackRegistries` reads it, so the mirror changes at the next start; any
+# other boot leaves the variable unset and asks no mirror. Upstream asks
+# npmmirror by default. `delorun` refuses to start a profile whose row drops a
+# name `protectedPlugins` lists here.
+- id: plugin-manager
+  config:
+    fallbackRegistries: !!js "process.env.DELORUN_NPM_MIRROR === 'on' ? ['https://registry.npmmirror.com/'] : []"
+    protectedPlugins:
+      - '@delorun/plugin-instruction-consent'
+      - '@delorun/plugin-mcp-consent'
+      - '@delorun/plugin-permission-defaults'
+      - '@delorun/plugin-schedule-consent'
+      - '@delorun/plugin-fetch-guard'
+      - '@delorun/plugin-delegation-consent'
+      - '@delorun/plugin-changes'
+      - '@delorun/bundle-local/update-gate'
+      - '@delorun/bundle-local/update-check'
+      - '@delorun/bundle-local/trust'
+      - '@delorun/plugin-install-check'
+      - '@delorun/reach'
+      - '@delorun/home-auth'
+      - '@deepseek-ai/dsh-sandbox-local'
+      - '@deepseek-ai/dsh-sandbox-policy'
+
+# The plugin install check: before plugin management selects, enables or
+# restores a bundle, it checks the bundle and every package its installation
+# added to the lockfile (integrity, GitHub advisories, very new versions,
+# lookalike names), shows every finding, refuses a known critical advisory
+# until the person accepts it, and records each installed file, which every
+# start compares. `delorun plugin` and `delorun verify` read this row's
+# settings too. `trustedSources` lists npm scopes and git owners whose plugins
+# show critical advisories only.
+- insert:
+    - id: delorun-plugin-install-check
+      name: '@delorun/plugin-install-check'
+      config:
+        enabled: true
+
+# Contract C8's trash: deleting a chat or a workspace in the studio moves it to
+# the trash under the home, the Trash section in Settings restores it or
+# deletes it forever, and each start deletes what is older than 30 days. The
+# paths are the home's own stores, which the purge reaches.
+- insert:
+    - id: delorun-trash
+      name: '@delorun/plugin-trash'
+      config:
+        trashRoot: !!js dshHomePath('trash')
+        sessionsRoot: !!js dshHomePath('sessions')
+        storagesRoot: !!js dshHomePath('storages')
+        attachmentsRoot: !!js dshHomePath('attachments', 'v1')
+        logsHome: !!js dshHomePath()
+
+# Remote access over the person's own tailnet (C4, C5, C7, C14). home-auth
+# provides upstream's authenticator: on the loopback listener it keeps
+# upstream's admission, and it serves the device routes and the reach sign-in.
+# The reach service mounts behind the C16 switch `reach`; each option in it
+# stays off until the person runs `delorun reach on tailscale`, which writes
+# this row's `tailscalePrivate` in the profile's own patch.
+- insert:
+    - id: delorun-home-auth
+      name: '@delorun/home-auth'
+      config:
+        secretsDirectory: !!js dshHomePath('secrets', 'home-auth')
+
+    - id: delorun-reach
+      name: '@delorun/reach'
+      config:
+        enabled: true
+        tailscalePrivate:
+          enabled: false
+          address: ''
+          servePort: 443

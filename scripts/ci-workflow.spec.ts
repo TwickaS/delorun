@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
-import { upstreamCondition, upstreamRunsOn } from './tests/delo-repository-guard.ts'
+import { upstreamCondition, upstreamRunsOn } from './tests/delorun-repository-guard.ts'
 
 function evaluateRunsOn(selector: unknown, context: Record<string, unknown>): unknown {
   if (typeof selector !== 'string') throw new TypeError('Runner selector must be a string')

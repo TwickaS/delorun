@@ -1,0 +1,14 @@
+{
+  "name": "@delorun/contract-parity-composition",
+  "description": "Types and the switch registry of Delorun's parity composition, as specified by contract C16.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

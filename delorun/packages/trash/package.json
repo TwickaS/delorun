@@ -1,0 +1,27 @@
+{
+  "name": "@delorun/trash",
+  "description": "Delorun's trash (C8): delete, restore, purge and the trash retention, with the purge effects over the session generations, the full-text index, the attachments, the spill files, the browser drafts and the process logs",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./drafts": "./src/drafts.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/node-addon-system": "workspace:~",
+    "@delorun/contract-archive-and-trash": "workspace:*",
+    "@delorun/contract-host-qualified-keys": "workspace:*",
+    "@delorun/logs": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/apps/release/README.md
+/delorun-release-tooling:
+  en: 3fd9b702c8b52d02
+  zh: 4fa1c63010d72591
+/delorun-release-tooling/modules:
+  en: ac91169ea6c9bcdd
+  zh: a47ec00b2cd2c2e6
+/delorun-release-tooling/the-gate:
+  en: 2291e5ca1bbe97c7
+  zh: 2d7664c91c232c43
+/delorun-release-tooling/assembly:
+  en: 57a0222a3f275c94
+  zh: 58bffe5e61245365
+/delorun-release-tooling/runtime-closures:
+  en: e1316bee26166743
+  zh: b9c4fc7e3487f0ba
+/delorun-release-tooling/runtime-closures/archive-format:
+  en: a50683c600975c1b
+  zh: bf76c5a17f6de190
+/delorun-release-tooling/rebuild-comparison:
+  en: 755aef7566a6439f
+  zh: ec5d3fc7f037c6a8
+/delorun-release-tooling/sbom:
+  en: b178b177467d8778
+  zh: 86b49932f0b136c9
+/delorun-release-tooling/dependency-advisory-check:
+  en: f0aff0c6b0305cf4
+  zh: 660bc46a5f1c13b1
+/delorun-release-tooling/signing:
+  en: d7282cb808557024
+  zh: b7c8f1fac6bc989f
+/delorun-release-tooling/signing/the-targets-key:
+  en: 7f3ce2e4d30c2ea4
+  zh: e379b60ddf0a540b
+/delorun-release-tooling/signing/the-rebuild-attestation-key:
+  en: 18752b9e116caf5c
+  zh: bff0105fcf8f111b
+/delorun-release-tooling/signing/root-and-timestamp-metadata:
+  en: fdf2d8ea05a1f6de
+  zh: a43e0f266f318444
+/delorun-release-tooling/verification:
+  en: a7f1e334f1ec809e
+  zh: 0ff7172c0a3d97db
+/delorun-release-tooling/images:
+  en: 2e9702e01b439a58
+  zh: 125d79b9babb5f63
+/delorun-release-tooling/release-log:
+  en: 3204de86a474de62
+  zh: f4b4d67d37782e29
+/delorun-release-tooling/open-items:
+  en: 3c8293fba3c12694
+  zh: fcfbbf3641a4649e

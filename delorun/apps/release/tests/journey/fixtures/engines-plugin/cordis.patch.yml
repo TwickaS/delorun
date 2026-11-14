@@ -1,0 +1,4 @@
+# The fixture bundle's one row.
+- insert:
+    - id: journey-engines-fixture
+      name: delorun-journey-engines-fixture

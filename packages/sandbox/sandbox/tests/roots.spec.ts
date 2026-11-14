@@ -140,53 +140,53 @@ describe('pathWithin', () => {
 
 describe('assertRootsOutsideHome', () => {
   it('refuses a root that equals, lies inside or contains the home with HOME_IN_WRITABLE_ROOT', () => {
-    for (const root of ['/u/.delo', '/u/.delo/skills', '/u', '/']) {
-      expect(() => { assertRootsOutsideHome(['/w', root], '/u/.delo') }).toThrow(SandboxProtectedRootError)
+    for (const root of ['/u/.delorun', '/u/.delorun/skills', '/u', '/']) {
+      expect(() => { assertRootsOutsideHome(['/w', root], '/u/.delorun') }).toThrow(SandboxProtectedRootError)
     }
     try {
-      assertRootsOutsideHome(['/u'], '/u/.delo')
+      assertRootsOutsideHome(['/u'], '/u/.delorun')
     } catch (error) {
       expect(error).toMatchObject({ code: 'HOME_IN_WRITABLE_ROOT', name: 'SandboxProtectedRootError' })
-      expect(String(error)).toContain('/u/.delo')
+      expect(String(error)).toContain('/u/.delorun')
     }
   })
 
   it('accepts roots beside the home', () => {
-    expect(() => { assertRootsOutsideHome(['/u/project', '/u/.delo-other', '/tmp'], '/u/.delo') }).not.toThrow()
+    expect(() => { assertRootsOutsideHome(['/u/project', '/u/.delorun-other', '/tmp'], '/u/.delorun') }).not.toThrow()
   })
 })
 
 describe('protectedReadGuard', () => {
-  const reads = { roots: ['/u/.delo', '/mnt/distro/u/.delo'], readable: ['/u/.delo/runtimes', '/mnt/distro/u/.delo/runtimes'] }
+  const reads = { roots: ['/u/.delorun', '/mnt/distro/u/.delorun'], readable: ['/u/.delorun/runtimes', '/mnt/distro/u/.delorun/runtimes'] }
 
   it('refuses paths under every root except the readable entries', () => {
     const refused = protectedReadGuard(reads, 'workspace-write')
-    expect(refused('/u/.delo')).toBe(true)
-    expect(refused('/u/.delo/secrets/key')).toBe(true)
-    expect(refused('/mnt/distro/u/.delo/run/start-token')).toBe(true)
-    expect(refused('/u/.delo/runtimes/0.1.0/node')).toBe(false)
-    expect(refused('/u/.delo-other/key')).toBe(false)
+    expect(refused('/u/.delorun')).toBe(true)
+    expect(refused('/u/.delorun/secrets/key')).toBe(true)
+    expect(refused('/mnt/distro/u/.delorun/run/start-token')).toBe(true)
+    expect(refused('/u/.delorun/runtimes/0.1.0/node')).toBe(false)
+    expect(refused('/u/.delorun-other/key')).toBe(false)
     expect(refused('/u/project/a.ts')).toBe(false)
-    expect(protectedReadGuard(reads, 'read-only')('/u/.delo/secrets/key')).toBe(true)
+    expect(protectedReadGuard(reads, 'read-only')('/u/.delorun/secrets/key')).toBe(true)
   })
 
   it('lets a read tool read its grants inside a tool-readable entry, and refuses the rest of the entry and the home', () => {
-    const withSpill = { ...reads, toolReadable: ['/u/.delo/spill', '/mnt/distro/u/.delo/spill'] }
-    const refused = protectedReadGuard(withSpill, 'workspace-write', ['/u/.delo/spill/session-1', '/u/.delo/secrets'])
-    expect(refused('/u/.delo/spill/session-1/grep.txt')).toBe(false)
-    expect(refused('/u/.delo/spill/session-2/grep.txt')).toBe(true)
-    expect(refused('/u/.delo/spill')).toBe(true)
-    expect(refused('/u/.delo/spill-other/key')).toBe(true)
+    const withSpill = { ...reads, toolReadable: ['/u/.delorun/spill', '/mnt/distro/u/.delorun/spill'] }
+    const refused = protectedReadGuard(withSpill, 'workspace-write', ['/u/.delorun/spill/session-1', '/u/.delorun/secrets'])
+    expect(refused('/u/.delorun/spill/session-1/grep.txt')).toBe(false)
+    expect(refused('/u/.delorun/spill/session-2/grep.txt')).toBe(true)
+    expect(refused('/u/.delorun/spill')).toBe(true)
+    expect(refused('/u/.delorun/spill-other/key')).toBe(true)
     // A grant outside every tool-readable entry grants nothing.
-    expect(refused('/u/.delo/secrets/key')).toBe(true)
-    expect(protectedReadGuard(withSpill, 'workspace-write')('/u/.delo/spill/session-1/grep.txt')).toBe(true)
-    expect(toolReadableOnly(withSpill, '/u/.delo/spill/session-1')).toBe(true)
-    expect(toolReadableOnly(withSpill, '/u/.delo/runtimes')).toBe(false)
-    expect(toolReadableOnly(reads, '/u/.delo/spill')).toBe(false)
+    expect(refused('/u/.delorun/secrets/key')).toBe(true)
+    expect(protectedReadGuard(withSpill, 'workspace-write')('/u/.delorun/spill/session-1/grep.txt')).toBe(true)
+    expect(toolReadableOnly(withSpill, '/u/.delorun/spill/session-1')).toBe(true)
+    expect(toolReadableOnly(withSpill, '/u/.delorun/runtimes')).toBe(false)
+    expect(toolReadableOnly(reads, '/u/.delorun/spill')).toBe(false)
   })
 
   it('refuses nothing under danger-full-access or without protected reads', () => {
-    expect(protectedReadGuard(reads, 'danger-full-access')('/u/.delo/secrets/key')).toBe(false)
-    expect(protectedReadGuard(undefined, 'read-only')('/u/.delo/secrets/key')).toBe(false)
+    expect(protectedReadGuard(reads, 'danger-full-access')('/u/.delorun/secrets/key')).toBe(false)
+    expect(protectedReadGuard(undefined, 'read-only')('/u/.delorun/secrets/key')).toBe(false)
   })
 })

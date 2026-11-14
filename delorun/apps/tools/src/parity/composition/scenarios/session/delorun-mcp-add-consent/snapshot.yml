@@ -1,0 +1,8 @@
+version: 1
+scenario: delorun-mcp-add-consent
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-mcp-add-consent
+  pin: true

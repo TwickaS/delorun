@@ -95,7 +95,7 @@ export function everyConfinedWritableRoot(ctx: Context, sessions: Iterable<Sessi
 }
 
 /**
- * Whether a path is one the Session's confined commands cannot read because the sandbox protects it, such as Delo's
+ * Whether a path is one the Session's confined commands cannot read because the sandbox protects it, such as Delorun's
  * home: the guard model-facing read tools apply, read when each path is checked. Under `danger-full-access`, or without
  * a mounted sandbox, nothing is protected.
  * @param ctx - context whose `sandbox` and `sandboxPolicy` services are read on each call.

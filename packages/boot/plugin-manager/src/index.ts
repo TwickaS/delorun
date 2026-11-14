@@ -309,8 +309,8 @@ function packageName(dir: string): string | undefined {
 
 /**
  * The package a plugin module name is loaded from: its scope and name, without a subpath.
- * @param moduleName - a row's module name, such as `@delo/bundle-local/update-gate`.
- * @returns the package name, such as `@delo/bundle-local`.
+ * @param moduleName - a row's module name, such as `@delorun/bundle-local/update-gate`.
+ * @returns the package name, such as `@delorun/bundle-local`.
  */
 function packageOf(moduleName: string): string {
   const parts = moduleName.split('/')

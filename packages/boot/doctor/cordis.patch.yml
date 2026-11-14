@@ -1,7 +1,7 @@
 # The dsh-doctor bundle patch: the doctor profile over dsh-base. It mounts the
 # check registry, the shipped checks and the run-once app, which prints one
 # line per check once startup commits and exits 0 when none failed. The app's
-# `doctor` switch (Delo's C16 switch, off by default) is on in this profile;
+# `doctor` switch (Delorun's C16 switch, off by default) is on in this profile;
 # another composition that mounts the app without it exits 1 without checks.
 
 - insert:

@@ -1,5 +1,5 @@
 /**
- * Reject US spellings in Delorun-owned English prose. Documentation under `delo/` uses British English;
+ * Reject US spellings in Delorun-owned English prose. Documentation under `delorun/` uses British English;
  * upstream's files, code, identifiers and quoted program output keep their spelling. The word list is curated:
  * only pairs with no technical ambiguity appear (`license`, `practice`, `program`, `dialog` and `artifact`
  * are absent because they are terms of art or valid in both spellings).
@@ -8,15 +8,15 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import ts from 'typescript'
-import { isEntryPoint, trackedDeloFiles } from './tracked-delo-files.ts'
+import { isEntryPoint, trackedDelorunFiles } from './tracked-delorun-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
 /** A line carrying this marker quotes program output and keeps its spelling. */
 export const US_SPELLING_MARKER = '<!-- us-spelling: quoted output -->'
 
-/** Directory prefixes under `delo/` that record dated plans, not current prose. */
-const excludedPrefixes = ['delo/docs/plans/'] as const
+/** Directory prefixes under `delorun/` that record dated plans, not current prose. */
+const excludedPrefixes = ['delorun/docs/plans/'] as const
 
 /** Path segments that mark test inputs, whose text is data and not prose. */
 const excludedSegments = ['/tests/', '/fixtures/', '/node_modules/'] as const
@@ -91,10 +91,10 @@ export interface BritishEnglishViolation {
 /**
  * Whether the gate checks a file.
  * @param file - repository-relative slash path.
- * @returns true for English Markdown under `delo/` outside the plans and test inputs.
+ * @returns true for English Markdown under `delorun/` outside the plans and test inputs.
  */
 export function isBritishEnglishFile(file: string): boolean {
-  return file.startsWith('delo/')
+  return file.startsWith('delorun/')
     && file.endsWith('.md')
     && !file.endsWith('.zh.md')
     && !excludedPrefixes.some(prefix => file.startsWith(prefix))
@@ -129,7 +129,7 @@ function isPathLike(line: string, start: number, end: number): boolean {
 }
 
 /** Source roots whose string literals are user-visible Delorun text. */
-const SOURCE_ROOT = /^delo\/(?:apps\/(?:cli|npm-launcher|install)|packages\/[^/]+)\/src\//u
+const SOURCE_ROOT = /^delorun\/(?:apps\/(?:cli|npm-launcher|install)|packages\/[^/]+)\/src\//u
 
 /**
  * Whether the gate checks a file's string literals.
@@ -234,8 +234,8 @@ export function findUsSpellings(source: string, options: { file?: string; markdo
 }
 
 if (isEntryPoint(import.meta.url)) {
-  const files = trackedDeloFiles(root, isBritishEnglishFile)
-  const sources = trackedDeloFiles(root, isBritishEnglishSourceFile)
+  const files = trackedDelorunFiles(root, isBritishEnglishFile)
+  const sources = trackedDelorunFiles(root, isBritishEnglishSourceFile)
   const violations = [
     ...files.flatMap(file => findUsSpellings(readFileSync(resolve(root, file), 'utf8'), { file })),
     ...sources.flatMap(file => findUsSpellingsInSource(readFileSync(resolve(root, file), 'utf8'), file)),

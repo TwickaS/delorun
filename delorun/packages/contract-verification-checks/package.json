@@ -1,0 +1,14 @@
+{
+  "name": "@delorun/contract-verification-checks",
+  "description": "Types and the check registry of Delorun's verification checks, results, modes and report, as specified by contract C15.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

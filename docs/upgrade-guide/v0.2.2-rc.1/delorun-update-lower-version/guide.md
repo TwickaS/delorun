@@ -1,6 +1,6 @@
 ---
 kind: upgrade-guide
-description: "delorun update and the update channel refuse a target lower than the running Delo release."
+description: "delorun update and the update channel refuse a target lower than the running Delorun release."
 ---
 
 # `delorun update` refuses a lower release

@@ -46,7 +46,7 @@ async function dueTask(test: Awaited<ReturnType<typeof setup>>, target: HarnessA
   })
 }
 
-/** The rule `@delo/plugin-schedule-consent` implements, restated because an upstream spec cannot import the fork's plugin. */
+/** The rule `@delorun/plugin-schedule-consent` implements, restated because an upstream spec cannot import the fork's plugin. */
 const presetConsent: ScheduleConsentService = {
   nameEffect: () => undefined,
   reviewDelivery: review => review.creationPreset === review.currentPreset

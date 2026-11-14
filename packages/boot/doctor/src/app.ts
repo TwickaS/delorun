@@ -17,7 +17,7 @@ export const inject = ['doctor', 'cmdlineArgs']
 /** The app's switch. */
 export interface Config {
   /**
-   * Run the checks once startup commits. This is Delo's C16 switch `doctor`, off in the parity composition. The
+   * Run the checks once startup commits. This is Delorun's C16 switch `doctor`, off in the parity composition. The
    * shipped `doctor` profile sets it on. With it off the app runs no check: it writes one line to stderr and exits 1.
    */
   doctor?: boolean

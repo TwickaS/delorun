@@ -364,10 +364,10 @@ class PlainProvider extends SandboxProvider {
 }
 
 describe('the sandbox provider\'s protected home', () => {
-  /** A workspace that contains the home, as a workspace at `~` contains `~/.delo`. */
+  /** A workspace that contains the home, as a workspace at `~` contains `~/.delorun`. */
   let home: string
   beforeEach(async () => {
-    home = join(workspace, '.delo')
+    home = join(workspace, '.delorun')
     await mkdir(join(home, 'secrets'), { recursive: true })
     await writeFile(join(home, 'secrets', 'key'), 'key\n')
   })

@@ -47,7 +47,7 @@ The Web definitions come from the `dsh-web-app` bundle. Definitions are ordinary
 
 The registry writes no declarations. The `read` Remote renders one declaration’s child list back as entry-list YAML (`!!js` conditions included) so a client can show what a preset composes; nothing accepts YAML back. A new preset or an override of a shipped one is a bundle patch: an `insert` of a `@deepseek-ai/dsh-agent-preset` row, or a patch keyed by that row’s id, installed into the profile with `plugin_manager`; Creator mode authors such bundles in conversation.
 
-The `./tools` entry registers `preset_inspect` only when its `presetInspect` Config switch is on. The switch defaults to off, which is Delo's C16 parity value, so the module registers no tool and the model sees the stock tool list. The Web bundle mounts the module in the Standard, PTC and Cordis presets.
+The `./tools` entry registers `preset_inspect` only when its `presetInspect` Config switch is on. The switch defaults to off, which is Delorun's C16 parity value, so the module registers no tool and the model sees the stock tool list. The Web bundle mounts the module in the Standard, PTC and Cordis presets.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

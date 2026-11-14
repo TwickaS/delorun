@@ -1,0 +1,17 @@
+{
+  "name": "@delorun/contract-operational-logs",
+  "description": "Delorun's operational logs contract (C20): surfaces, the log record, rotation, retention and redaction limits, as types and constants",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

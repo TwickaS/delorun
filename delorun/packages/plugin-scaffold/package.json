@@ -1,0 +1,22 @@
+{
+  "name": "@delorun/plugin-scaffold",
+  "description": "The files of a new Delorun plugin, written to a folder: the four kinds `delorun plugin new` offers, the checks on a name and a folder, and the same writer for the command line and the studio's Create a plugin",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@delorun/contract-plugin-versions": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

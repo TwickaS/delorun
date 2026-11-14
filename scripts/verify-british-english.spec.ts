@@ -5,10 +5,10 @@ describe('British English policy', () => {
   it('names the file, line, word and suggestion of a US spelling in prose', () => {
     const source = ['# Setup', '', 'The studio organizes each color of the catalog.'].join('\n')
 
-    expect(findUsSpellings(source, { file: 'delo/docs/guide/setup.md' })).toEqual([
-      { file: 'delo/docs/guide/setup.md', line: 3, word: 'organizes', suggestion: 'organises' },
-      { file: 'delo/docs/guide/setup.md', line: 3, word: 'color', suggestion: 'colour' },
-      { file: 'delo/docs/guide/setup.md', line: 3, word: 'catalog', suggestion: 'catalogue' },
+    expect(findUsSpellings(source, { file: 'delorun/docs/guide/setup.md' })).toEqual([
+      { file: 'delorun/docs/guide/setup.md', line: 3, word: 'organizes', suggestion: 'organises' },
+      { file: 'delorun/docs/guide/setup.md', line: 3, word: 'color', suggestion: 'colour' },
+      { file: 'delorun/docs/guide/setup.md', line: 3, word: 'catalog', suggestion: 'catalogue' },
     ])
   })
 
@@ -68,20 +68,20 @@ describe('British English policy', () => {
   })
 
   it.each([
-    'delo/docs/plans/v5-rc-final-plan.md',
-    'delo/docs/guide/install.zh.md',
-    'delo/apps/cli/tests/import-home/fixtures/terminal-home/.dsh/AGENTS.md',
+    'delorun/docs/plans/v5-rc-final-plan.md',
+    'delorun/docs/guide/install.zh.md',
+    'delorun/apps/cli/tests/import-home/fixtures/terminal-home/.dsh/AGENTS.md',
     'docs/guide/install.md',
     'packages/core/README.md',
-    'delo/docs/guide/meta.json',
+    'delorun/docs/guide/meta.json',
   ])('does not select %s', (file) => {
     expect(isBritishEnglishFile(file)).toBe(false)
   })
 
-  it('selects English Markdown under delo, including changelog fragments', () => {
-    expect(isBritishEnglishFile('delo/docs/contracts/c02-release-manifest.md')).toBe(true)
-    expect(isBritishEnglishFile('delo/packages/bundle-local/README.md')).toBe(true)
-    expect(isBritishEnglishFile('delo/changelog/pending/relay.md')).toBe(true)
+  it('selects English Markdown under delorun, including changelog fragments', () => {
+    expect(isBritishEnglishFile('delorun/docs/contracts/c02-release-manifest.md')).toBe(true)
+    expect(isBritishEnglishFile('delorun/packages/bundle-local/README.md')).toBe(true)
+    expect(isBritishEnglishFile('delorun/changelog/pending/relay.md')).toBe(true)
   })
 
   it('rejects a planted color and initialize in a string, template and JSX literal', () => {
@@ -91,7 +91,7 @@ describe('British English policy', () => {
       'export const c = <p>Organize this</p>',
     ].join('\n')
 
-    expect(findUsSpellingsInSource(source, 'delo/packages/x/src/a.tsx').map(({ line, word }) => [line, word]))
+    expect(findUsSpellingsInSource(source, 'delorun/packages/x/src/a.tsx').map(({ line, word }) => [line, word]))
       .toEqual([[1, 'color'], [2, 'initialize'], [3, 'Organize']])
   })
 
@@ -106,15 +106,15 @@ describe('British English policy', () => {
       "type T = 'gray' | 'center'",
     ].join('\n')
 
-    expect(findUsSpellingsInSource(source, 'delo/packages/x/src/a.ts')).toEqual([])
+    expect(findUsSpellingsInSource(source, 'delorun/packages/x/src/a.ts')).toEqual([])
   })
 
   it('selects non-test source files of the Delorun apps and packages', () => {
-    expect(isBritishEnglishSourceFile('delo/apps/cli/src/help.ts')).toBe(true)
-    expect(isBritishEnglishSourceFile('delo/packages/plugin-onboarding/src/client/locales.ts')).toBe(true)
-    expect(isBritishEnglishSourceFile('delo/apps/cli/tests/help.spec.ts')).toBe(false)
-    expect(isBritishEnglishSourceFile('delo/apps/relay/src/index.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('delorun/apps/cli/src/help.ts')).toBe(true)
+    expect(isBritishEnglishSourceFile('delorun/packages/plugin-onboarding/src/client/locales.ts')).toBe(true)
+    expect(isBritishEnglishSourceFile('delorun/apps/cli/tests/help.spec.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('delorun/apps/relay/src/index.ts')).toBe(false)
     expect(isBritishEnglishSourceFile('packages/core/src/index.ts')).toBe(false)
-    expect(isBritishEnglishSourceFile('delo/packages/x/src/types.d.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('delorun/packages/x/src/types.d.ts')).toBe(false)
   })
 })

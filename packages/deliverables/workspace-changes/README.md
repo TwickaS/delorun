@@ -82,7 +82,7 @@ The Host's file operations refuse what they did not create:
 - A captured copy is created with `O_EXCL` and `O_NOFOLLOW`. The recorder remembers the copies it wrote and reuses only those; an existing copy it did not write fails that capture instead of being treated as already captured.
 - A copy is read back with `O_NOFOLLOW`, only as a regular file, and only while its bytes still hash to its name.
 - A file a file tool names is checked with `lstat` before it is opened, so a named pipe or device is never opened; the open uses `O_NOFOLLOW` and `O_NONBLOCK` and the open file is checked again before it is read. `O_NOFOLLOW` refuses a link only as the final component; a link among the file's parent directories is followed, as the file tool that names the file follows it.
-- A file the sandbox protects from the Session's confined commands, such as one under Delo's home, is never captured.
+- A file the sandbox protects from the Session's confined commands, such as one under Delorun's home, is never captured.
 
 Windows has no `O_NOFOLLOW` or `O_NONBLOCK`; there the opens keep the exclusive creation and the regular-file checks only.
 

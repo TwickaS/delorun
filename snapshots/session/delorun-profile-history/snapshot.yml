@@ -1,0 +1,9 @@
+version: 1
+scenario: delorun-profile-history
+profile: headless
+composition: plugin-manager
+recording: live
+permission: danger-full-access
+header:
+  class: delorun-profile-history
+  pin: true

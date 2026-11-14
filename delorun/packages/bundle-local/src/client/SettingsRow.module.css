@@ -1,0 +1,59 @@
+/* A preference row of Delorun's Settings: the text column, then the control. Its bottom separator follows upstream's General rows; a grouped layout's card and a Delorun group box remove it from the last row. */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.text {
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.failed {
+  margin-top: 4px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.link {
+  color: var(--dsw-alias-link);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.consent {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.title + .link {
+  display: inline-block;
+  margin-top: 4px;
+}

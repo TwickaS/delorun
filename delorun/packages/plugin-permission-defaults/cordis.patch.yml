@@ -1,0 +1,7 @@
+# This plugin as a bundle of its own, so upstream's plugin manager can install it into a stock harness. The row has no
+# config: the switch defaults to off, and Delorun's composition mounts the plugin with `enabled: true` when the permission
+# surface of Delorun's composition lands. A composition mounts one sandbox-mode guard, so this plugin and
+# @delorun/plugin-instruction-consent's placeholder guard are not turned on together.
+- insert:
+    - id: delorun-permission-defaults
+      name: '@delorun/plugin-permission-defaults'

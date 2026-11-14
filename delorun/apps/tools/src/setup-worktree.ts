@@ -1,0 +1,105 @@
+/**
+ * One-command setup for a Delorun checkout or worktree: the local hooks file, the install and the
+ * documentation site's own install, the hooks, the divergence ledger's merge driver and the Node
+ * major check. Each step is safe to repeat. Run from the worktree's
+ * root after `git worktree add`: `node delorun/apps/tools/src/setup-worktree.ts`, or with tsx once
+ * dependencies exist. It changes only git-ignored files and this clone's git configuration.
+ *
+ * @module @delorun/tools/setup-worktree
+ */
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+/** The git-ignored file that merges Delorun's hooks over upstream's. */
+export const LEFTHOOK_LOCAL = 'lefthook-local.yml'
+
+/** The content of {@link LEFTHOOK_LOCAL}. */
+export const LEFTHOOK_LOCAL_CONTENT = 'extends:\n  - delorun/lefthook.yml\n'
+
+/** The merge driver git uses for `delorun/upstream-patches.json` (`.gitattributes` names it `delorun-ledger`). */
+export const LEDGER_DRIVER = 'node_modules/.bin/tsx delorun/apps/tools/src/ledger-merge.ts %O %A %B'
+
+/**
+ * The Node major the repository pins in `.nvmrc`.
+ * @param root - the repository root.
+ * @returns the pinned major, or undefined when `.nvmrc` is absent or not a number.
+ */
+export function pinnedNodeMajor(root: string): number | undefined {
+  const path = join(root, '.nvmrc')
+  if (!existsSync(path)) return undefined
+  const major = Number.parseInt(readFileSync(path, 'utf8').trim().replace(/^v/, ''), 10)
+  return Number.isNaN(major) ? undefined : major
+}
+
+/**
+ * A warning when the running Node major differs from the pinned one.
+ * @param version - the running version, such as `process.version`.
+ * @param pinned - the pinned major.
+ * @returns the warning, or undefined when they match or nothing is pinned.
+ */
+export function nodeWarning(version: string, pinned: number | undefined): string | undefined {
+  if (pinned === undefined) return undefined
+  const running = Number.parseInt(version.replace(/^v/, ''), 10)
+  if (running === pinned) return undefined
+  return `setup-worktree: Node ${version} is running and the repository pins Node ${String(pinned)} (.nvmrc); run \`nvm use\` before checks, or results differ from the reference host`
+}
+
+/**
+ * Run one setup step and stop the setup when it fails.
+ * @param root - the directory to run in.
+ * @param command - the program.
+ * @param args - its arguments.
+ */
+function step(root: string, command: string, args: readonly string[]): void {
+  console.log(`setup-worktree: ${command} ${args.join(' ')}`)
+  const result = spawnSync(command, args, { cwd: root, stdio: 'inherit' })
+  if (result.status !== 0) throw new Error(`setup-worktree: \`${command} ${args.join(' ')}\` exited with ${String(result.status)}`)
+}
+
+/**
+ * Write {@link LEFTHOOK_LOCAL} when it does not exist; an existing file is kept, since it may hold the person's own hooks.
+ * @param root - the worktree's root.
+ * @returns whether the file was written.
+ * @throws Error when an existing file does not extend `delorun/lefthook.yml`, so the installed pre-push hook would refuse.
+ */
+export function writeHooksFile(root: string): boolean {
+  const hooksFile = join(root, LEFTHOOK_LOCAL)
+  if (!existsSync(hooksFile)) {
+    writeFileSync(hooksFile, LEFTHOOK_LOCAL_CONTENT)
+    return true
+  }
+  if (!/^[^#\n]*delorun\/lefthook\.yml/m.test(readFileSync(hooksFile, 'utf8'))) {
+    throw new Error(`setup-worktree: ${hooksFile} does not extend delorun/lefthook.yml, so Delorun's hooks would not run and the pre-push hook refuses; add \`- delorun/lefthook.yml\` under its \`extends:\` and run the setup again`)
+  }
+  return false
+}
+
+/**
+ * Set up the worktree at `root`.
+ * @param root - the worktree's root.
+ */
+export function setupWorktree(root: string): void {
+  const warning = nodeWarning(process.version, pinnedNodeMajor(root))
+  if (warning !== undefined) console.warn(warning)
+  writeHooksFile(root)
+  step(root, 'pnpm', ['install', '--frozen-lockfile'])
+  // The documentation site is a workspace of its own with its own lockfile; the `docs-site` check refuses to run without it.
+  step(join(root, 'delorun', 'apps'), 'pnpm', ['--dir', 'docs', 'install', '--frozen-lockfile'])
+  // The product website is a workspace of its own too; the `website-site` check refuses to run without it.
+  step(join(root, 'delorun', 'apps'), 'pnpm', ['--dir', 'website', 'install', '--frozen-lockfile'])
+  step(root, 'node', ['scripts/install-lefthook.mjs'])
+  step(root, 'git', ['config', 'merge.delorun-ledger.driver', LEDGER_DRIVER])
+  console.log('setup-worktree: done: hooks file, install, documentation site and product website installs, hooks and ledger merge driver are in place; `pnpm check` runs the checks a change reaches')
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    setupWorktree(process.cwd())
+  } catch (error) {
+    // The step names the failed command; print it and fail the setup.
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
+}

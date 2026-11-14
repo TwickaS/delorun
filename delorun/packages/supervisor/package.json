@@ -1,0 +1,29 @@
+{
+  "name": "@delorun/supervisor",
+  "description": "Delorun's Docker supervisor (C9): the fixed-schema API on a socket under ~/.delorun that accepts only the current start token, the capability report built by inspection, supervisor roots, image checks against the verified release manifest, and hardened workspace containers",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-operational-logs": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/contract-runtime-supervisor": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/logs": "workspace:*",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:*",
+    "@deepseek-ai/node-addon-system": "workspace:~"
+  },
+  "delorun": {
+    "state": "experimental"
+  }
+}

@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for delorun-vs-stock.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/delorun-vs-stock.md
+/:
+  en: f00da2f0136ff8fd
+  zh: e0ecc4e4cc7f147f
+/delorun-and-stock-deepseek-harness:
+  en: c512785c718f7f94
+  zh: 03997c5b9ea1b4e7
+/delorun-and-stock-deepseek-harness/summary:
+  en: c13ffb94807fdb1e
+  zh: b77c27c1b3472377
+/delorun-and-stock-deepseek-harness/contents:
+  en: 21a038ef06586b19
+  zh: 2d7c5e6dcb67fcb6
+/delorun-and-stock-deepseek-harness/why-delorun-exists:
+  en: 35a8848445a5b736
+  zh: 3b9816c55a7aaaf0
+/delorun-and-stock-deepseek-harness/what-stays-the-same:
+  en: 5e3b44cbce76209e
+  zh: 304ad3cbebe1fbd5
+/delorun-and-stock-deepseek-harness/what-is-different:
+  en: 79fad2cf06756aae
+  zh: 7da933c7e9414da4
+/delorun-and-stock-deepseek-harness/defaults-that-differ:
+  en: 1cdb9f18e199fae6
+  zh: e7c2e0fe2d387f0b
+/delorun-and-stock-deepseek-harness/what-delorun-removes:
+  en: 660d8f9942bd94b8
+  zh: 5328b37843426f9a
+/delorun-and-stock-deepseek-harness/what-delorun-does-not-include:
+  en: 6d1207b019559e33
+  zh: f06fae2fcd56c078
+/delorun-and-stock-deepseek-harness/moving-between-dsh-and-delorun:
+  en: 13954a711c029912
+  zh: c8d343c8470dbde7
+/delorun-and-stock-deepseek-harness/roadmap-and-vision:
+  en: e43cce7ed63df0e3
+  zh: 140b1535f58b5c12
+/delorun-and-stock-deepseek-harness/for-the-technically-curious:
+  en: 187b94dab3855a74
+  zh: 90363bc612a231d6
