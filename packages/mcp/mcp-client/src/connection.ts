@@ -333,7 +333,7 @@ export function startConnection(
    * @returns the config the attempt connects with.
    */
   function withReviewedStart(resolved: Config, reviewed: Config): Config {
-    if (resolved.transport !== 'stdio' || reviewed.transport !== 'stdio' || reviewed === config) return resolved
+    if (resolved.transport !== 'stdio' || reviewed.transport !== 'stdio') return resolved
     const { argv0: _templated, ...rest } = resolved
     return { ...rest, command: reviewed.command, cwd: reviewed.cwd, ...reviewed.argv0 === undefined ? {} : { argv0: reviewed.argv0 } }
   }

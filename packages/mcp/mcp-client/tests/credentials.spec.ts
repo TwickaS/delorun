@@ -5,6 +5,7 @@ import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { Config, probeServer } from '@deepseek-ai/dsh-mcp-client'
 import { McpTemplateBinding } from '@deepseek-ai/dsh-mcp-client/src/credentials.ts'
+import { MissingTemplateValue } from '@deepseek-ai/dsh-mcp-client/src/templates.ts'
 import { TestCredentials } from './credential-fixture.ts'
 import { startHttpMcpFixture } from './http-fixture.ts'
 
@@ -52,6 +53,27 @@ describe('McpTemplateBinding', () => {
     provider.values.set(ref, 'next-token')
     expect(await binding.resolve(signal)).toMatchObject({ args: ['next-token', 'next-token'] })
     expect(resolve).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses a whole-argument template whose value starts with a dash, without naming the value', async () => {
+    const config = Config({ transport: 'stdio', serverName: 'binding', expandTemplates: true,
+      command: 'fixture-command', args: ['--ok', '${credential:MCP_TOKEN}'], env: {}, cwd: '' })
+    const binding = new McpTemplateBinding(ctx, config)
+    provider.values.set(ref, '--require /ws/evil.js')
+    const refusal = await binding.resolve(new AbortController().signal).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toBeInstanceOf(MissingTemplateValue)
+    expect((refusal as Error).message).toContain('mcp-client(binding): args[1]')
+    expect((refusal as Error).message).not.toContain('evil')
+    provider.values.set(ref, '-e')
+    await expect(binding.resolve(new AbortController().signal)).rejects.toThrow('args[1]')
+  })
+
+  it('keeps a partial argument template and a plain dash-free whole template', async () => {
+    const config = Config({ transport: 'stdio', serverName: 'binding', expandTemplates: true,
+      command: 'fixture-command', args: ['--token=${credential:MCP_TOKEN}', '${credential:MCP_TOKEN}'], env: {}, cwd: '' })
+    provider.values.set(ref, '-dash')
+    const binding = new McpTemplateBinding(ctx, { ...config, args: ['--token=${credential:MCP_TOKEN}'] })
+    expect(await binding.resolve(new AbortController().signal)).toMatchObject({ args: ['--token=-dash'] })
   })
 
   it('reports a provider unloaded after binding creation at the next resolution', async () => {

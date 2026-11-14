@@ -14,6 +14,7 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { StdioConfig } from '@deepseek-ai/dsh-mcp-client'
+import { TestCredentials } from './credential-fixture.ts'
 
 const { mockConnect, mockClose, mockListTools, MockClient, instances } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
@@ -272,5 +273,63 @@ describe('the add-time consent before a reconnect', () => {
     await disposing
     expect(errors).toEqual([])
     expect(spawns()).toHaveLength(1)
+  })
+
+  describe('credential templates in a reviewed start', () => {
+    const templated = (patch: Partial<StdioConfig>): StdioConfig => ({ ...config(), expandTemplates: true, ...patch })
+
+    it.each(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH', 'DYLD_INSERT_LIBRARIES'])(
+      'refuses a template in the run-affecting variable %s at load, before any review or spawn', async (name) => {
+        const consent = new StubConsent(ctx, [allow])
+        await expect(apply(ctx, templated({ env: { [name]: '${credential:X}' } }))).rejects.toThrow(
+          new RegExp(`srv.*env\\.${name} holds a credential template.*put the value directly or use another variable name`),
+        )
+        expect(consent.calls).toEqual([])
+        expect(spawns()).toEqual([])
+      },
+    )
+
+    it.each([['command', { command: '${credential:X}' }], ['cwd', { cwd: '${credential:X}' }]] as const)(
+      'refuses a template in %s at load, naming the server and field', async (field, patch) => {
+        const consent = new StubConsent(ctx, [allow])
+        await expect(apply(ctx, templated(patch))).rejects.toThrow(`mcp-client(srv): ${field} holds a credential template`)
+        expect(consent.calls).toEqual([])
+        expect(spawns()).toEqual([])
+      },
+    )
+
+    it('does not run a file named like a template: the reviewed path is never expanded', async () => {
+      writeFileSync(join(root, 'bin', '${credential:X}'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      const consent = new StubConsent(ctx, [allow])
+      await expect(apply(ctx, templated({ command: '${credential:X}' }))).rejects.toThrow('command holds a credential template')
+      expect(consent.calls).toEqual([])
+      expect(spawns()).toEqual([])
+    })
+
+    it('refuses a reviewed path that itself contains a template token, so the first spawn never expands it', async () => {
+      mkdirSync(join(root, '${credential:X}'))
+      writeFileSync(join(root, '${credential:X}', 'tool'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      await ctx.plugin(TestCredentials)
+      ;(ctx.credentials as TestCredentials).values.set('X', '/ws/evil')
+      new StubConsent(ctx, [allow])
+      await expect(apply(ctx, templated({ env: { PATH: join(root, '${credential:X}') } }))).rejects.toThrow('env.PATH holds a credential template')
+      await apply(ctx, templated({ failOnStartupError: false, env: { PATH: join(root, 'bin') }, cwd: join(root, '${credential:X}') })).catch(() => undefined)
+      expect(spawns()).toEqual([])
+    })
+
+    it('keeps a literal run-affecting variable when a changed credential restarts the server', async () => {
+      await ctx.plugin(TestCredentials)
+      const credentials = ctx.credentials as TestCredentials
+      credentials.values.set('TOKEN', 'first')
+      new StubConsent(ctx, [allow, allow])
+      await apply(ctx, templated({ env: { NODE_OPTIONS: '--max-old-space-size=64', TOKEN: '${credential:TOKEN}' } }))
+      credentials.values.set('TOKEN', '--require /ws/evil.js')
+      ctx.emit('credentials/reference-updated', 'TOKEN' as never)
+
+      await vi.waitFor(() => { expect(spawns()).toHaveLength(2) })
+      const envs = vi.mocked(StdioClientTransport).mock.calls.map(([params]) => params.env)
+      expect(envs.map(env => env?.NODE_OPTIONS)).toEqual(['--max-old-space-size=64', '--max-old-space-size=64'])
+      expect(envs[1]?.TOKEN).toBe('--require /ws/evil.js')
+    })
   })
 })

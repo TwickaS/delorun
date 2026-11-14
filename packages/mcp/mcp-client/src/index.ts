@@ -20,6 +20,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import { findMcpAddConsent, McpConsentRefusedError, type McpAddConsent } from './consent.ts'
 import { resolveServerStart } from './server-start.ts'
+import { assertLiteralStart } from './templates.ts'
 
 export { resolveReconnectPolicy } from './connection.ts'
 import type { ConnectionOptions, ReconnectConfig } from './connection.ts'
@@ -45,7 +46,7 @@ export { McpServerStartUnresolvedError, resolveServerStart } from './server-star
 export type { McpConnectionStatusHandle } from './status.ts'
 export type * from './types.ts'
 export { probeServer } from './probe.ts'
-export { assertTemplateSyntax } from './templates.ts'
+export { assertLiteralStart, assertTemplateSyntax, isRunAffectingEnv } from './templates.ts'
 export type { McpProbeOptions } from './probe.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -302,8 +303,9 @@ export async function apply(ctx: Context, configured: Config): Promise<void> {
   // the typed reason. With `expandTemplates`, the review sees the arguments and
   // environment as configured, so no credential value reaches it, while a
   // `command` or `cwd` that holds a template does not resolve to a file and is
-  // refused; the reviewed `command` and `cwd` replace the templated ones at
+  // refused at load; the reviewed `command` and `cwd` replace the configured ones at
   // every attempt.
+  if (config.transport === 'stdio' && config.expandTemplates) assertLiteralStart(config)
   let spawned: Config = config
   let connectionOptions: ConnectionOptions = {}
   if (config.transport === 'stdio') {
