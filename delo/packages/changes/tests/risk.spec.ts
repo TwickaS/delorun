@@ -283,3 +283,57 @@ describe('not-shown', () => {
     expect(run('not-shown', { files: [hidden('node_modules/one/index.js', 'dependency')] })[0]?.excerpt).toBe('node_modules/one: 1 file inside the folder that the diff does not show')
   })
 })
+
+describe('answers-approvals', () => {
+  it('flags a listener on the approval/request waterfall, written the way a messaging bridge or a bot host writes one', () => {
+    expect(linesFound('answers-approvals', 'src/host/approvals.js', [
+      "ctx.on('approval/request', async (req, next) => {",
+      '  if (!chats.has(req.agent)) return next()',
+      '  return await askChat(req)',
+      '})',
+    ])).toEqual(["ctx.on('approval/request', async (req, next) => {"])
+    expect(linesFound('answers-approvals', 'src/index.ts', ['ctx.effect(() => ctx.on(`approval/request`, handler), \'bridge\')'])).toHaveLength(1)
+    expect(linesFound('answers-approvals', 'src/im.ts', ["ctx.on(  'approval/request', answer, { prepend: true })"])).toHaveLength(1)
+  })
+
+  it('does not flag approval mentioned in a string, a comment or a name', () => {
+    expect(linesFound('answers-approvals', 'src/index.ts', [
+      "const label = 'Waiting for approval'",
+      '// the approval/request listener lives in the host',
+      " * ctx.on('approval/request', handler) would answer it",
+      "logger.info('approval/request answered elsewhere')",
+      'const approvalCount = 3',
+      "ctx.on('session/created', handler)",
+    ])).toEqual([])
+  })
+})
+
+describe('manages-plugins', () => {
+  it('flags a command that adds or removes plugins, as a string and as an argument list', () => {
+    expect(linesFound('manages-plugins', 'src/dsh-channel.ts', [
+      "await run(`dsh plugin --profile ${profile} add ${name}`)",
+      "spawn('dsh', ['plugin', '--profile', profile, 'add', name])",
+      "execFile('delorun', ['plugin', 'remove', name])",
+    ])).toHaveLength(3)
+  })
+
+  it('flags writing the profile composition, loading plugins and the pluginManager service', () => {
+    expect(linesFound('manages-plugins', 'src/market.ts', [
+      "await writeFile(join(profile, 'cordis.patch.yml'), yaml)",
+      "fs.writeFileSync(path.join(root, 'cordis.yml'), text)",
+      'await ctx.plugin(loaded.default, config)',
+      'const result = await ctx.pluginManager.install(name)',
+    ])).toHaveLength(4)
+  })
+
+  it('does not flag reading cordis.yml, a comment, or the word plugin in prose', () => {
+    expect(linesFound('manages-plugins', 'src/index.ts', [
+      "const text = readFileSync(join(root, 'cordis.yml'), 'utf8')",
+      "if (existsSync(join(root, 'cordis.patch.yml'))) return",
+      '// ctx.plugin(Child) loads it; pluginManager is not used',
+      "const title = 'Add a plugin to your profile'",
+      "console.log('run dsh --help')",
+      'ctx.effect(() => register(), name)',
+    ])).toEqual([])
+  })
+})

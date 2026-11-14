@@ -355,6 +355,10 @@ export interface BoundedDiff {
 export type RiskKind =
   /** Registers or replaces a consent, a guard or the sandbox policy. */
   | 'consent-guard-sandbox'
+  /** Adds a listener that answers approval prompts, which can give grants the person keeps to the computer. */
+  | 'answers-approvals'
+  /** Installs, removes, toggles, updates or loads plugins itself, outside the install check. */
+  | 'manages-plugins'
   /** Adds a tool the model can call. */
   | 'model-tool'
   /** Runs commands or child processes. */
@@ -372,7 +376,7 @@ export type RiskKind =
   | 'not-shown'
 
 /** Every {@link RiskKind}, in the order the summary lists them. */
-export const RISK_KINDS: readonly RiskKind[] = ['consent-guard-sandbox', 'model-tool', 'commands', 'network', 'home-read', 'dependency-or-build', 'not-shown']
+export const RISK_KINDS: readonly RiskKind[] = ['consent-guard-sandbox', 'answers-approvals', 'manages-plugins', 'model-tool', 'commands', 'network', 'home-read', 'dependency-or-build', 'not-shown']
 
 /** One place in a change that a check matched. */
 export interface RiskFinding {
@@ -427,7 +431,7 @@ export interface ReviewInput {
   readonly manifestAfter?: unknown
 }
 
-/** One check of a change. Built-in checks are the seven of {@link RiskKind}; a later extension point can add more. */
+/** One check of a change. Built-in checks are the nine of {@link RiskKind}; a later extension point can add more. */
 export interface RiskCheck {
   /** A stable id, recorded on each finding. */
   readonly id: string

@@ -46,7 +46,7 @@ The first start under Changes of each profile the home held when Changes began a
 
 ## Pending changes and the risk summary
 
-`pluginChange` stores the folder's content as a version and compares it with the approved one: the files added, changed and removed, a unified diff bounded at 256 KiB with files larger than 1 MiB and binary files named only, and a risk summary. The change id is derived from the plugin, its folder and both versions, so applying an id applies exactly the content that was shown. `reviewChange(input, checks)` runs the seven built-in checks, `not-shown` among them, which names each new file whose lines the diff leaves out: a binary file Node loads, a file above or past the diff's limits, and a dependency's files inside the folder; it is the one place a later extension point adds registered checks. The summary is a help to the reader and not a protection: a plugin's code can do anything Delo can.
+`pluginChange` stores the folder's content as a version and compares it with the approved one: the files added, changed and removed, a unified diff bounded at 256 KiB with files larger than 1 MiB and binary files named only, and a risk summary. The change id is derived from the plugin, its folder and both versions, so applying an id applies exactly the content that was shown. `reviewChange(input, checks)` runs the nine built-in checks, `not-shown` among them, which names each new file whose lines the diff leaves out: a binary file Node loads, a file above or past the diff's limits, and a dependency's files inside the folder; it is the one place a later extension point adds registered checks. The summary is a help to the reader and not a protection: a plugin's code can do anything Delo can.
 
 ## Records and who writes them
 

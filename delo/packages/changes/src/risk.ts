@@ -1,5 +1,5 @@
 /**
- * The seven built-in risk checks, one per {@link RiskKind}. Each is a pure function of a {@link ReviewInput}: it reads the
+ * The nine built-in risk checks, one per {@link RiskKind}. Each is a pure function of a {@link ReviewInput}: it reads the
  * lines a change adds or alters in the files it can read as text, and the plugin's `package.json` on both sides. The
  * line checks are heuristics that help a person read a change; they are not a protection, since plugin code can reach
  * what they look for in ways no line pattern sees. `not-shown` reports the new content the diff does not show, so
@@ -143,6 +143,27 @@ const consentGuardSandboxLine = anyOf([
 ])
 
 const yamlGuardRow = new RegExp(`^\\s*(?:-\\s*)?(?:id|name)\\s*:.*${GUARD_WORDS}`, 'i')
+
+/**
+ * @param text - a line.
+ * @returns whether it starts a comment, where a name is mentioned and nothing runs.
+ */
+function commentLine(text: string): boolean {
+  return /^\s*(?:\/\/|\/\*|\*|#)/.test(text)
+}
+
+/** A listener on upstream's `approval/request` waterfall, whose return value answers the prompt. */
+const answersApprovalsLine: LineMatcher = text =>
+  !commentLine(text) && /\.(?:on|once|before|prependListener)\s*\(\s*['"`]approval\/request['"`]/.test(text)
+
+/** The words that run another program's plugin management: `dsh plugin add`, `delorun plugin remove`. */
+const pluginCommand = /\b(?:dsh|delorun)\b[^\n]*\bplugins?\b/
+const pluginArguments = /['"`]plugins?['"`]\s*,[^\]\n]*['"`](?:add|remove|install|uninstall|update)['"`]/
+const configFileWrite = /\bcordis(?:\.patch)?\.ya?ml\b[^\n]*\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b|\b(?:write\w*|append\w*|rename|copyFile|outputFile|createWriteStream)\b[^\n]*\bcordis(?:\.patch)?\.ya?ml\b/
+
+const managesPluginsLine: LineMatcher = text =>
+  !commentLine(text)
+  && (pluginCommand.test(text) || pluginArguments.test(text) || configFileWrite.test(text) || /\bctx\??\.plugin\s*\(/.test(text) || /\bpluginManager\b/.test(text))
 
 const modelToolLine = anyOf([
   /\.tools\??\.(?:register|setExecutor)\s*\(/,
@@ -311,6 +332,8 @@ const notShown: RiskCheck = {
 /** The built-in checks, one per {@link RiskKind}, in `RISK_KINDS` order. */
 export const BUILT_IN_CHECKS: readonly RiskCheck[] = [
   lineCheck('consent-guard-sandbox', (text, path) => consentGuardSandboxLine(text, path) || (isYaml(path) && yamlGuardRow.test(text))),
+  lineCheck('answers-approvals', answersApprovalsLine),
+  lineCheck('manages-plugins', managesPluginsLine),
   lineCheck('model-tool', modelToolLine),
   lineCheck('commands', commandsLine),
   lineCheck('network', networkLine),

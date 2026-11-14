@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished,
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
+import { activeCopiesEntry } from '@delo/changes'
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { attestTerminal, readApproved, readChangeLog, readWorkSession, setProtection, startWork } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -373,7 +374,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     // C1's confinement on the profile's sandbox row: the home, its read exemptions and both channels' sockets.
     expect(parse(readFileSync(overlay, 'utf8'))).toEqual([{ id: 'sandbox', config: expect.objectContaining({
       protectedHome: deloHome,
-      protectedHomeReadable: [...READ_EXEMPTIONS],
+      protectedHomeReadable: [...READ_EXEMPTIONS, activeCopiesEntry('default')],
       deniedSockets: expect.arrayContaining([join(deloHome, 'run', 'default', 'update.sock'), join(deloHome, 'run', 'default', 'supervisor.sock')]),
     }) }])
     expect(lstatSync(overlay).mode & 0o777).toBe(0o600)

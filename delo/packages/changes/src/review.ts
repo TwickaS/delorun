@@ -19,6 +19,8 @@ export const LOCATIONS_PER_LINE = 3
 /** What each kind means, as the printed line begins. */
 const KIND_PHRASES: Readonly<Record<RiskKind, string>> = {
   'consent-guard-sandbox': 'Changes a consent, a guard or the sandbox policy',
+  'answers-approvals': 'Answers approval prompts itself',
+  'manages-plugins': 'Installs, removes or loads plugins itself',
   'model-tool': 'Adds a tool the model can call',
   commands: 'Runs commands or other programs',
   network: 'Opens network connections',
