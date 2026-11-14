@@ -4,10 +4,15 @@
  *
  * Upstream's `scripts/verify-translation-pairing.ts --cached` refuses any staged record whose pair has a violation.
  * About 43 pairs already drift on the train (A309, left for the translation pass), so a commit that re-records
- * them, such as the rename of `delo/` to `delorun/`, would be refused for drift it did not cause. This wrapper runs
+ * them, such as the fork directory rename (A353), would be refused for drift it did not cause. This wrapper runs
  * the upstream checker twice, as a child process, because the checker exports nothing: once on the staged records
  * (`--cached`), and once on the same pairs as `HEAD` holds them, read through a temporary index file selected with
  * `GIT_INDEX_FILE`. A pair that a staged rename moved is looked up under its old path.
+ *
+ * A stale record at `HEAD` makes the checker stop at "out of sync" before it compares structure, so `HEAD`'s
+ * structural drift (headings, tables, link anchors) would be missing from the baseline and a commit that re-records
+ * the pair, such as the rename, would be refused for drift it did not cause. The baseline therefore re-records every
+ * `HEAD` pair in the temporary index first. A pair nothing in the commit touches stays reported as it is today.
  *
  * It parses the checker's output by two stable keys: exit status 0 means no violation, 1 means violations listed on
  * standard error, one per line indented by two spaces, 2 means a usage error. Violation lines are compared after
@@ -18,17 +23,25 @@
  * @module @delo/tools/pairing-staged
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runGit } from './git.ts'
+import { applyRules, renamePath } from './rename/rules.ts'
 
 /** The upstream checker, relative to the repository root. */
 const CHECKER = 'scripts/verify-translation-pairing.ts'
 
 /** How many existing violations the report lists before it summarises the rest. */
 const LISTED_EXISTING = 10
+
+/**
+ * A quoted value of at least 60 characters. The checker cuts long values at a fixed length and ends them with an
+ * ellipsis, and the rename lengthens a value, so one value is cut after the rename and whole before it. Only its first
+ * 60 characters identify it.
+ */
+const LONG_QUOTE = /"([^"…]{60})[^"…]*[…"]/g
 
 /** One run of the upstream checker. */
 interface CheckerRun {
@@ -44,11 +57,12 @@ interface CheckerRun {
  * Run the upstream checker in index mode.
  * @param root - the repository root.
  * @param anchors - the record paths to check.
- * @param env - extra environment variables, such as `GIT_INDEX_FILE`.
+ * @param env - extra environment variables.
+ * @param cached - whether to check the index (`--cached`) or the files on disk under `root`.
  * @returns the exit status and the violation lines.
  */
-function runChecker(root: string, anchors: readonly string[], env: NodeJS.ProcessEnv): CheckerRun {
-  const result = spawnSync(join(root, 'node_modules/.bin/tsx'), [CHECKER, '--cached', ...anchors], {
+function runChecker(root: string, anchors: readonly string[], env: NodeJS.ProcessEnv, cached = true): CheckerRun {
+  const result = spawnSync(join(root, 'node_modules/.bin/tsx'), [CHECKER, ...cached ? ['--cached'] : [], ...anchors], {
     cwd: root, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
   })
   if (result.error !== undefined) throw result.error
@@ -59,11 +73,11 @@ function runChecker(root: string, anchors: readonly string[], env: NodeJS.Proces
 /**
  * Map each staged path to the path it had in `HEAD`.
  * @param root - the repository root.
- * @returns new path → old path for every staged rename.
+ * @returns new path → old path for every staged rename, found by git or by the rename rules.
  */
-function stagedRenames(root: string): Map<string, string> {
+export function stagedRenames(root: string): Map<string, string> {
   const renames = new Map<string, string>()
-  const fields = runGit(root, ['diff', '--cached', '-M', '--name-status', '-z']).stdout.split('\0')
+  const fields = runGit(root, ['diff', '--cached', '-M', '-l0', '--name-status', '-z']).stdout.split('\0')
   for (let i = 0; i < fields.length;) {
     const status = fields[i] ?? ''
     if (status === '') break
@@ -75,6 +89,15 @@ function stagedRenames(root: string): Map<string, string> {
     } else {
       i += 2
     }
+  }
+  // Git pairs a rename only when enough content survives, and the rename rewrites small files heavily, so a moved
+  // file is also found by applying the rename rules to every path `HEAD` tracks.
+  const tracked = runGit(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD']).stdout.split('\0')
+  const staged = new Set(runGit(root, ['diff', '--cached', '--name-only', '-z']).stdout.split('\0'))
+  for (const old of tracked) {
+    if (old === '') continue
+    const next = renamePath(old)
+    if (next !== old && staged.has(next) && !renames.has(next)) renames.set(next, old)
   }
   return renames
 }
@@ -106,14 +129,17 @@ export function headBase(base: string, renames: ReadonlyMap<string, string>): st
  * A violation line reduced to what identifies it across a rename and unrelated edits.
  * @param line - one violation line.
  * @param pathMap - old base → new base for renamed pairs, applied longest first.
- * @returns the comparable key.
+ * @returns the comparable key: paths mapped, line numbers removed, and the text that names renamed files, such as a
+ * link target, passed through the rename rules so that a violation `HEAD` carries under the old names matches, and
+ * with a value the checker truncated reduced to its first 60 characters.
  */
 export function violationKey(line: string, pathMap: ReadonlyMap<string, string>): string {
   let key = line
   for (const [oldBase, newBase] of [...pathMap].sort((a, b) => b[0].length - a[0].length)) {
     key = key.split(oldBase).join(newBase)
   }
-  return key.replace(/:\d+:/g, ':')
+  const path = key.trimStart().split(/[:\s]/, 1)[0] ?? ''
+  return applyRules(key, path).text.replace(/:\d+:/g, ':').replace(LONG_QUOTE, '"$1…')
 }
 
 /** The result of comparing the staged violations with `HEAD`'s. */
@@ -157,18 +183,29 @@ export function compareViolations(
 }
 
 /**
- * The upstream checker on `HEAD`'s versions of the pairs.
+ * The upstream checker on `HEAD`'s versions of the pairs, run from a checkout of `HEAD` so that `HEAD`'s own checker
+ * and scope rules judge `HEAD`'s files. Each pair is re-recorded there first, so the checker compares its structure
+ * instead of stopping at a stale record.
  * @param root - the repository root.
  * @param anchors - the `HEAD` record paths.
- * @returns the violation lines, empty when `HEAD` has no such pair, no commit, or the checker rejects the paths.
+ * @returns the violation lines of the freshly recorded pairs, empty when `HEAD` has no such pair, no commit, or the
+ * checker rejects the paths.
  */
 function headViolations(root: string, anchors: readonly string[]): readonly string[] {
   const dir = mkdtempSync(join(tmpdir(), 'delo-pairing-'))
   try {
-    const index = join(dir, 'index')
-    const read = spawnSync('git', ['-C', root, 'read-tree', 'HEAD'], { env: { ...process.env, GIT_INDEX_FILE: index } })
-    if (read.status !== 0) return []
-    const run = runChecker(root, anchors, { GIT_INDEX_FILE: index })
+    const tree = join(dir, 'tree')
+    const env = { ...process.env, GIT_INDEX_FILE: join(dir, 'index') }
+    if (spawnSync('git', ['-C', root, 'read-tree', 'HEAD'], { env }).status !== 0) return []
+    const checkout = spawnSync('git', ['-C', root, 'checkout-index', '-a', `--prefix=${tree}/`], { env })
+    if (checkout.status !== 0) throw new Error(`git checkout-index failed: ${checkout.stderr.toString()}`)
+    symlinkSync(join(root, 'node_modules'), join(tree, 'node_modules'))
+    const tsx = join(root, 'node_modules/.bin/tsx')
+    const rerecord = spawnSync(tsx, [join(import.meta.dirname, 'pairing-rerecord.ts'), tree, ...anchors], { encoding: 'utf8' })
+    if (rerecord.status !== 0) throw new Error(`pairing-rerecord failed: ${rerecord.stderr}`)
+    const present = rerecord.stdout.split('\n').filter(line => line !== '')
+    if (present.length === 0) return []
+    const run = runChecker(tree, present, {}, false)
     return run.status === 1 ? run.violations : []
   } finally {
     rmSync(dir, { recursive: true, force: true })

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { compareViolations, headBase, main, violationKey } from '../src/pairing-staged.ts'
+import { compareViolations, headBase, main, stagedRenames, violationKey } from '../src/pairing-staged.ts'
 import { REPO, scratchRepo, type Scratch } from './gates/support.ts'
 
 afterEach(() => { vi.restoreAllMocks() })
@@ -44,6 +44,9 @@ function hook(repo: Scratch, records: readonly string[]): { status: number; line
   return { status, lines }
 }
 
+/** The Chinese side with a table the English side lacks: structural drift that recording a pair accepts. */
+const TABLE_ZH = `${ZH}\n| 列 |\n| --- |\n| 值 |\n`
+
 /** Drift the Chinese side from the record by adding a section only there. */
 const DRIFTED_ZH = `${ZH}\n## 多余\n\n只在这里。\n`
 
@@ -54,10 +57,49 @@ describe('pairing keys', () => {
     expect(violationKey('delo/a.zh.md:12: link', new Map([['delo/a', 'delorun/a']]))).toBe('delorun/a.zh.md: link')
   })
 
+  it('compares a violation whose text names renamed paths with the same violation under the old names', () => {
+    const before = 'delo/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delo-plugin-interface.md" uses the wrong locale'
+    const after = 'delorun/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delorun-plugin-interface.md" uses the wrong locale'
+    const verdict = compareViolations([after], [before], new Map([['delo/apps/cli/README', 'delorun/apps/cli/README']]))
+    expect(verdict).toEqual({ added: [], existing: [after] })
+  })
+
+  it('matches a violation whose quoted value the rename lengthened so that the checker now cuts it', () => {
+    const value = 'dsh-translation-target:delo/docs/contracts/c04-admission.md#sessions'
+    const grown = value.replaceAll('delo', 'delorun')
+    const before = `delo/a.md ↔ delo/a.zh.md: link target #3 diverges between the pair: "${value}" vs "#requirements"`
+    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${grown.slice(0, 70)}… vs "#requirements"`
+    expect(compareViolations([after], [before], new Map([['delo/a', 'delorun/a']])).added).toEqual([])
+  })
+
   it('counts a repeated violation once per occurrence', () => {
     const verdict = compareViolations(['v', 'v'], ['v'], new Map())
     expect(verdict.existing).toEqual(['v'])
     expect(verdict.added).toEqual(['v'])
+  })
+})
+
+describe('staged renames', () => {
+  it('finds renames when the rename limit is lower than the number of changed files', (test) => {
+    const repo = scratchRepo(test)
+    repo.run(['config', 'diff.renameLimit', '1'])
+    const files = Object.fromEntries(['a', 'b', 'c', 'd'].map(name => [`old/${name}.md`, `# ${name}\n\n${name.repeat(40)}\n`]))
+    repo.commit(files)
+    repo.run(['mv', 'old', 'new'])
+    expect(stagedRenames(repo.root).get('new/a.md')).toBe('old/a.md')
+  })
+})
+
+describe('staged renames by name', () => {
+  it('maps a file whose content changed too much for git to see a rename back through the rename rules', (test) => {
+    const repo = scratchRepo(test)
+    repo.commit({ 'delo/docs/a.md': '# Delo\n\nOne line.\n', 'delo/docs/delo-b.md': 'x\n' })
+    repo.run(['rm', '-rq', 'delo'])
+    repo.write({ 'delorun/docs/a.md': '# Something else entirely\n\nNothing in common with the old text.\n', 'delorun/docs/delorun-b.md': 'y\n' })
+    repo.run(['add', '-A'])
+    const renames = stagedRenames(repo.root)
+    expect(renames.get('delorun/docs/a.md')).toBe('delo/docs/a.md')
+    expect(renames.get('delorun/docs/delorun-b.md')).toBe('delo/docs/delo-b.md')
   })
 })
 
@@ -98,6 +140,38 @@ describe('the staged pairing hook', () => {
     const { status, lines } = hook(repo, ['docs/moved/guide.i18n.yaml'])
     expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
     expect(status).toBe(0)
+  })
+
+  describe('a pair whose record is stale at HEAD', () => {
+    /**
+     * A repository whose Chinese side drifted at HEAD with the record left stale, so the checker stops at "out of
+     * sync" and never lists the structural drift; the staged side re-records it, which exposes that drift.
+     * @param test - the running test.
+     * @param zh - the staged Chinese text.
+     * @returns the repository with the re-recorded pair staged.
+     */
+    function staleThenRerecorded(test: Parameters<typeof scratchRepo>[0], zh: string): Scratch {
+      const repo = pairingRepo(test)
+      repo.commit({ 'docs/guide.zh.md': TABLE_ZH })
+      repo.write({ 'docs/guide.zh.md': zh })
+      execFileSync(TSX, ['scripts/verify-translation-pairing.ts', '--write', 'docs/guide.md'], { cwd: repo.root, timeout: 30_000 })
+      repo.run(['add', '-A'])
+      return repo
+    }
+
+    it('passes when re-recording exposes only the structural drift HEAD already hid', (test) => {
+      const repo = staleThenRerecorded(test, TABLE_ZH)
+      const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
+      expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
+      expect(status).toBe(0)
+    })
+
+    it('refuses a structural difference the commit adds on top of the hidden drift', (test) => {
+      const repo = staleThenRerecorded(test, `${TABLE_ZH}\n- 只在这里的项目\n`)
+      const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
+      expect(lines.join('\n')).toContain('new bilingual-pairing violation')
+      expect(status).toBe(1)
+    })
   })
 
   it('refuses a new record that has a violation', (test) => {
