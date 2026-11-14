@@ -23,7 +23,7 @@ kind: "package-bundle"
 
 ## 约定
 
-- **创建。** `create` 在 `root/<directory>` 下创建文件夹，模式为 0755 去掉 umask 之后的值，并以 `title` 注册它，`title` 默认为文件夹名。名称必须是文件夹名：首字符为字母或数字，其后最多 99 个字母、数字、点、下划线或连字符。不合格的名称应答 `invalid`，已存在的文件夹应答 `taken`。注册表拒绝新文件夹时，移除这个空文件夹，调用应答 `failed`。
+- **创建。** `create` 在 `root/<directory>` 下创建文件夹，模式为 0755 去掉 umask 之后的值，并以 `title` 注册它，`title` 默认为文件夹名。名称必须是文件夹名：首字符为字母或数字，其后最多 99 个字母、数字、点、下划线或连字符。不合格的名称应答 `invalid`，不能作为工作区的文件夹应答 `location`（[`workspaceLocationProblem`](../home/src/workspace-location.ts)）。已存在的文件夹应答 `taken`。注册表拒绝新文件夹时，移除这个空文件夹，调用应答 `failed`。
 - **导入。** `startImport` 只接受不含用户名、密码、查询或片段的 `https` URL（[`cloneUrlProblem`](src/git.ts)），其他 URL 在任何进程启动之前即以 `invalid` 拒绝。文件夹名取自请求中的名称，否则取 URL 最后一段路径去掉 `.git` 之后的部分。调用会记录一条导入记录，并立即应答其 id 与文件夹。克隆通过上游的 `subprocess` 服务在后台进行（[`cloneRepository`](src/clone.ts)），最长耗时 `importTimeoutMs`。每次克隆都在没有 askpass 程序、没有钩子、没有文件监视器且只允许 `https` 的条件下运行，不读取任何 git 配置——既不读系统的，也不读本人的全局配置——并且其环境会清除可能把它指向其他仓库、传输方式或程序的 git 变量（[`git.ts`](src/git.ts)）；因此私有仓库需要这份凭据。克隆成功时，文件夹以其名称注册为工作区，记录变为 `done` 并带上该工作区。克隆失败或超过时限时，若没有工作区持有该文件夹，则移除它，记录变为 `failed`，原因为经过脱敏的 git 原文，或 `the clone took longer than N minutes`。克隆进行期间，`list` 显示 git 最新的进度行。
 - **指令。** `instructions` 读取工作区的 `AGENTS.md`，应答其路径、文本、以文件字节计算的 SHA-256 修订值，以及字节上限。`setInstructions` 只在文件仍是所给修订值时写入文件；空文本则移除文件。`null` 表示文件不存在。修订值不符应答 `conflict`，文本超限应答 `too-large`。未知的工作区应答 `not-found`，根目录之外的工作区应答 `outside`。访问会从根目录到文件逐个名称地打开路径上的每一项，任何一项是符号链接或非目录都以 `O_NOFOLLOW` 拒绝（[`files.ts`](src/files.ts)）。在 Linux 上，它通过 `/proc/self/fd` 命名每个已打开的目录，因此被检查的名称就是被打开的名称；在其他系统上它用 `lstat` 检查每个名称，这不能关闭 proc 方式所关闭的竞态窗口——同一用户的进程可以在检查与随后打开其内部名称之间替换该名称。这一残留风险为可移植的访问方式所接受；Windows 拒绝这些调用。
 - **回收站。** `trash` 把持有某个工作区的文件夹，连同其下的全部已注册工作区，移入 `root/.delo-trash/<id>`（该文件夹模式为 0700），并注销这些工作区。移动之前，它们中每个尚未归档的对话都会以 `stopActivity` 归档，即请求停止该对话正在运行的工作。移动之前失败时不改变任何内容，并取消本次调用所归档对话的归档。回收站记录保存每个工作区的标题、路径、有序的对话以及被归档的对话，并于移入时间加 `trashDays` 时到期。
@@ -33,6 +33,7 @@ kind: "package-bundle"
   - **残留风险。** git 运行期间，令牌位于 git 的环境变量中，也位于 git 启动的进程的环境变量中。同一用户的其他进程可以在那里读取它，例如通过 `/proc/<pid>/environ`，直到克隆结束为止。
 - **根目录与主目录。** 根目录会被规范化，并在加载时创建。根目录若是 Delo 主目录、位于其内或包含它，则加载失败，因此主目录绝不会位于可写的根目录之内。主目录由 [`resolveDeloHome`](../home/src/resolve.ts) 解析。
 - **证书颁发机构。** `caFile` 替换每次克隆时 git 使用的 CA 证书包，它以 `http.sslCAInfo` 传入，因此 git 不再读取系统证书包。私有证书颁发机构因此需要一个同时包含公共根证书的文件。可将系统证书包与私有颁发机构的 PEM 拼接生成：在基于 Debian 的系统上可执行 `cat /etc/ssl/certs/ca-certificates.crt private-ca.pem > ca-bundle.pem`，也可使用操作系统导出的证书包，然后让 `caFile` 指向该结果。文件路径必须是绝对路径。未配置 `caFile` 时，克隆使用 git 的默认证书包。
+- **重命名工具。** 模型工具 `rename_workspace`（[`rename-tool.ts`](src/rename-tool.ts)）。
 - **错误。** 每一次拒绝都是 `WorkspaceRefusedError`，其代码取自 [`service.ts`](src/service.ts)。非预期的失败应答 `failed` 并附错误代码，若无代码则为 `unexpected error`；该消息不含路径也不含凭据，并且会被记录到日志中。
 
 <a id="configuration"></a>
@@ -76,4 +77,4 @@ kind: "package-bundle"
 
 ## 测试
 
-[`tests/workspaces.spec.ts`](tests/workspaces.spec.ts) 在 JSON 存储目录上挂载真实组合：存储中枢、存储域、上游的工作区注册表以及本提供方。它覆盖创建及其拒绝、通过服务读写指令、加载时拒绝的配置、来自本地 HTTPS git 夹具（[`tests/fixtures/git-server.ts`](tests/fixtures/git-server.ts)）的导入及凭据规则、重启结算、回收站、恢复顺序与清理。[`tests/files.spec.ts`](tests/files.spec.ts) 覆盖指令的文件访问：链接、FIFO、目录、大小与修订值。[`tests/clone.spec.ts`](tests/clone.spec.ts) 与 [`tests/git.spec.ts`](tests/git.spec.ts) 覆盖克隆步骤与 git 选项。夹具提供一个公开仓库、一个需要令牌的私有仓库、一个重定向到私有仓库的仓库，以及一个永不发送广告信息的仓库，因此克隆会一直等待直到被停止。规格在 Linux 上运行，并需要 `openssl` 位于路径中以生成夹具证书。
+[`tests/workspaces.integration.spec.ts`](tests/workspaces.integration.spec.ts) 在 JSON 存储目录上挂载真实组合：存储中枢、存储域、上游的工作区注册表以及本提供方。它覆盖创建及其拒绝、通过服务读写指令、加载时拒绝的配置、来自本地 HTTPS git 夹具（[`tests/fixtures/git-server.ts`](tests/fixtures/git-server.ts)）的导入及凭据规则、重启结算、回收站、恢复顺序与清理。[`tests/files.integration.spec.ts`](tests/files.integration.spec.ts) 覆盖指令的文件访问：链接、FIFO、目录、大小与修订值。[`tests/clone.integration.spec.ts`](tests/clone.integration.spec.ts) 与 [`tests/git.spec.ts`](tests/git.spec.ts) 覆盖克隆步骤与 git 选项。夹具提供一个公开仓库、一个需要令牌的私有仓库、一个重定向到私有仓库的仓库，以及一个永不发送广告信息的仓库，因此克隆会一直等待直到被停止。规格在 Linux 上运行，并需要 `openssl` 位于路径中以生成夹具证书。

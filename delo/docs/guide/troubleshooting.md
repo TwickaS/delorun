@@ -27,6 +27,7 @@ Find yours by searching this page for the exact words or the code in the message
 - [Remote access and devices](#remote-access-and-devices)
 - [What a phone shows when it cannot sign in](#what-a-phone-shows-when-it-cannot-sign-in)
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
+- [The workspace list](#the-workspace-list)
 - [When nothing here fits](#when-nothing-here-fits)
 - [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
@@ -340,6 +341,16 @@ When an unlock request fails, the phone says one of: "The code expired before yo
 - **"Delo refused the archive and changed nothing."** `delorun import` checks an archive before it writes anything; the code names the entry it refused.
 - **"Delo stopped at the stock DeepSeek Harness home import."** The import from `~/.dsh` was refused, or a start found an interrupted import it could not remove; the code and detail say which. [Switching from DeepSeek Harness](switching.md) explains the import.
 - **`TRASH_ITEM_NOT_FOUND`.** The trash holds no item with that id; `delorun trash list` shows what it holds.
+
+## The workspace list
+
+Delorun keeps your [workspaces](../reference/glossary.md#workspace) in one file, `storages/workspace.json` in your home. A damaged file never stops Delorun from starting. Delorun starts with every workspace record it can read, moves the rest to a file named `workspace.json.quarantined-<date and time>.json` next to it, writes the cleaned list, and logs a warning that names the file and each record. `delorun doctor` lists the set-aside files. Delorun never deletes a set-aside file. If the whole file cannot be read, Delorun starts with no workspaces and sets the whole file aside. Your folders and chats are not touched.
+
+Before every change to the list, Delorun keeps the previous good file as `workspace.json.previous`.
+
+- **Check it.** `delorun doctor` has a `workspaces` line. It opens the file without changing it and prints `pass` for a readable list, `warn` when records would be set aside or earlier ones were, and `fail` for a file that cannot be read, naming the broken records and the set-aside files.
+- **Bring the previous list back.** Stop Delorun (`delorun stop`), then run `delorun recover workspaces`. It shows what the current file and the previous copy hold, asks you to confirm (`--yes` answers for a script), moves the current file aside, and writes the previous copy in its place. It deletes nothing, and the copy stays. Run it at your own computer; it does not run while Delorun runs.
+- **Use the studio to rename.** The agent renames a workspace with its `rename_workspace` tool after you allow it, so it never needs to edit the file by hand. If you edit `workspace.json` yourself, stop Delorun first.
 
 ## When nothing here fits
 

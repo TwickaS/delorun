@@ -76,6 +76,7 @@ export type WorkspaceDomainState = z.infer<typeof workspaceDomainState>
 export const workspaceDomainSpec = defineDomain({
   name: 'workspace',
   version: 2,
+  recoverable: true,
   global: {
     schema: workspaceDomainState,
     initial: { initialized: false, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] },

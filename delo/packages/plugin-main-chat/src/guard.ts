@@ -27,7 +27,7 @@ import { MAIN_CHAT_SESSION_ID } from './wire.ts'
  * can change a file or state outside the session without a tool call the guard decides.
  */
 export const GUARD_FREE: ReadonlySet<string> = new Set([
-  'chat_list', 'chat_search', 'chat_read', 'workspace_list', 'workspace_instructions',
+  'chat_list', 'chat_search', 'chat_read', 'workspace_list', 'workspace_instructions', 'rename_workspace',
   'workspace_create', 'workspace_import', 'workspace_trash', 'workspace_restore', 'workspace_instructions_write', 'workspace_note', 'workspace_note_remove',
   'read', 'read_image', 'glob', 'grep', 'working_directory', 'todo_write', 'skill', 'present', 'ask_user_question', 'exit_plan_mode',
   'job_list', 'job_output', 'get_goal', 'schedule_list', 'list_agents', 'cordis_inspect_list', 'cordis_inspect_query',

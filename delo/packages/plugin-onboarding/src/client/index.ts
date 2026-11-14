@@ -20,6 +20,8 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 // Type-only: the ctx.locale merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+// Type-only: the 'tool.call.toolview' SlotMap entry.
+import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 // Type-only: the ctx.conversation merge and the 'conversation.input.dock' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the ctx.pluginNavigation merge.
@@ -40,11 +42,13 @@ import type { ThemeSettings } from '@delo/plugin-theme'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
-import { hostApi } from './host-api.ts'
+import { hostApi, readWorkspaceNotice } from './host-api.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
+import { RenameRow } from './RenameRow.tsx'
+import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
   AddOutcome, DeloOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
@@ -57,8 +61,11 @@ export type { OnboardingStepEntryProps } from './Onboarding.tsx'
 export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'
 export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
+export type { RenameModel, RenameRowProps } from './RenameRow.tsx'
+export { renameModel } from './RenameRow.tsx'
+export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
 export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
-export { hostApi, readReach, REACH_STATUS_PATH } from './host-api.ts'
+export { hostApi, readReach, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
   AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DeloOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
   OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
@@ -89,6 +96,12 @@ export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
 
 /** The no-key banner's place in the input dock: above the starter prompts. */
 export const KEY_BANNER_ENTRY = { id: 'delo-onboarding.key-banner', order: 5 } as const
+
+/** The set-aside notice's place in the input dock: beside the no-key banner, above the starter prompts. */
+export const SET_ASIDE_ENTRY = { id: 'delo-onboarding.set-aside', order: 6 } as const
+
+/** The wire name of the model tool whose row {@link RenameRow} draws; `@delo/plugin-workspaces` defines the tool. */
+export const RENAME_TOOL = 'rename_workspace'
 
 /** The starter prompts' place in the input dock: just above the message box. */
 export const STARTER_ENTRY = { id: 'delo-onboarding.starters', order: 10 } as const
@@ -333,6 +346,15 @@ export function applyStudio(ctx: Context): void {
     keyTest: () => hostApi.keyTest(),
     openModels: () => { ctx.settingsShell.openSection('models') },
   }
+  const dismissedStore = createSnapshotStore(false)
+  const setAside: SetAsideInjected = {
+    setAside: readWorkspaceNotice,
+    dismissed: dismissedStore,
+    dismiss: () => { dismissedStore.set(true) },
+  }
+  ctx.effect(() => ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
+    { name: 'tool.call.toolview', key: RENAME_TOOL, locale: NS }, RenameRow,
+  )), 'delo-onboarding: rename_workspace row')
   ctx.effect(() => ctx.configForms.whileServed([ONBOARDING_ROW_ID], () => {
     const disposers = [
       ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
@@ -344,6 +366,9 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
       }, StarterPrompts)),
+      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+        name: 'conversation.input.dock', id: SET_ASIDE_ENTRY.id, order: SET_ASIDE_ENTRY.order, locale: NS, inject: () => setAside,
+      }, SetAsideBanner)),
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: KEY_BANNER_ENTRY.id, order: KEY_BANNER_ENTRY.order, locale: NS, inject: () => keyBanner,
       }, KeyBanner)),

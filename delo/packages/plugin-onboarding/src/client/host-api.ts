@@ -5,7 +5,7 @@
  */
 import type { z } from 'zod'
 import {
-  CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, KEY_TEST_PATH, KeyTestAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer,
+  CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, KEY_TEST_PATH, KeyTestAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneRequest,
 } from '../wire.ts'
 import type { CloneStartOutcome, HostFace, ReachState } from './types.ts'
@@ -59,6 +59,14 @@ export async function readReach(): Promise<ReachState> {
     console.warn('delo onboarding: the reach status was not read', error)
     return 'absent'
   }
+}
+
+/**
+ * Read which workspace record files the registry set aside when it started.
+ * @returns the file names, oldest first; undefined when the route is absent or cannot be read.
+ */
+export async function readWorkspaceNotice(): Promise<readonly string[] | undefined> {
+  return (await ask(WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer))?.setAside
 }
 
 /** The routes, over the page's `fetch`. */

@@ -41,7 +41,7 @@ export function usableBwrap(directory: string): void {
 }
 
 /** The check names one run prints, sorted, without the import line: the `sandbox` line is printed on Linux only. */
-export const CHECK_NAMES: readonly string[] = ['docker', 'home', 'key', 'plugins', 'plugins', 'port', 'release-log', ...process.platform === 'linux' ? ['sandbox'] : [], 'update']
+export const CHECK_NAMES: readonly string[] = ['docker', 'home', 'key', 'plugins', 'plugins', 'port', 'release-log', ...process.platform === 'linux' ? ['sandbox'] : [], 'update', 'workspaces']
 
 /** A fake `docker`'s body for an installed program whose engine is not running. */
 export const FAILING_DOCKER = [

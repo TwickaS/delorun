@@ -1295,9 +1295,15 @@ importers:
       '@deepseek-ai/dsh-sandbox-local':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox-local
+      '@deepseek-ai/dsh-storage-json':
+        specifier: workspace:*
+        version: link:../../../packages/storage/storage-json
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:*
         version: link:../../../packages/bundle/web-app
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@delo/archive':
         specifier: workspace:*
         version: link:../../packages/archive
@@ -1461,9 +1467,6 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
-      '@deepseek-ai/dsh-workspace':
-        specifier: workspace:*
-        version: link:../../../packages/workspace/workspace
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -3078,6 +3081,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-theme':
         specifier: workspace:*
         version: link:../../../packages/client/ui-theme
+      '@deepseek-ai/dsh-client-ui-tool':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-tool
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:*
         version: link:../../../packages/client/ui-workspace
@@ -3592,6 +3598,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
       '@deepseek-ai/dsh-storage':
         specifier: workspace:*
         version: link:../../../packages/storage/storage
@@ -3604,6 +3613,12 @@ importers:
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:*
         version: link:../../../packages/subprocess/subprocess
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace

@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, KEY_BANNER_ENTRY, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, hostApi, inject, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 interface Registered {
-  readonly options: { readonly name: string; readonly id?: string; readonly order?: number; readonly locale?: string; readonly inject?: () => unknown }
+  readonly options: { readonly name: string; readonly id?: string; readonly key?: string; readonly order?: number; readonly locale?: string; readonly inject?: () => unknown }
   readonly component: unknown
 }
 
@@ -48,7 +48,7 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
   ctx.provide('slots', {
     inject: (_: string, register: () => () => void) => register(),
     register: (registered: Registered['options'], component: unknown) => {
-      const key = `${registered.name}#${registered.id}`
+      const key = `${registered.name}#${registered.id ?? registered.key}`
       entries.set(key, { options: registered, component })
       return () => { entries.delete(key) }
     },
@@ -93,6 +93,8 @@ const STEP_KEY = `settings.onboarding#${ONBOARDING_STEP.id}`
 const ROW_KEY = `settings.general.item#${SHOW_AGAIN_ROW.id}`
 const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
 const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
+const RENAME_KEY = `tool.call.toolview#${RENAME_TOOL}`
+const SET_ASIDE_KEY = `conversation.input.dock#${SET_ASIDE_ENTRY.id}`
 
 describe('the stock look', () => {
   it('registers nothing until the Delo look provides deloStudio, and everything leaves with it', async () => {
@@ -105,7 +107,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(4)
+    expect(entries.size).toBe(6)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('deloOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -128,16 +130,18 @@ describe('the registrations', () => {
 
   it('wait until the host serves the row, register the step before the preview notice\'s own, the General row and the starter prompts, and leave when the row goes', async () => {
     const { entries, served } = await harness()
-    expect([...entries.keys()]).toEqual([])
+    // The rename row does not wait for the row: it draws a tool call, not onboarding.
+    expect([...entries.keys()]).toEqual([RENAME_KEY])
+    expect(entries.get(RENAME_KEY)?.options).toMatchObject({ name: 'tool.call.toolview', key: 'rename_workspace', locale: NS })
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, ROW_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delo-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
     expect(entries.get(ROW_KEY)?.options).toMatchObject({ name: 'settings.general.item', id: 'delo-onboarding', locale: NS })
     expect(entries.get(DOCK_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', locale: NS })
     served.off()
-    expect(entries.size).toBe(0)
+    expect([...entries.keys()]).toEqual([RENAME_KEY])
   })
 
   it('open onboarding explicitly from the General row by the step\'s id', async () => {
@@ -582,6 +586,21 @@ describe('the no-key banner\'s services', () => {
     expect(keyTest).toHaveBeenCalledOnce()
     services.openModels()
     expect(openSection).toHaveBeenCalledExactlyOnceWith('models')
+  })
+})
+
+describe('the set-aside notice\'s services', () => {
+  it('read the Host\'s answer through the page and stay dismissed once dismissed', async () => {
+    const { entries, served } = await harness()
+    served.on()
+    expect(entries.get(SET_ASIDE_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', order: 6, locale: NS })
+    const services = face<SetAsideInjected>(entries, SET_ASIDE_KEY)
+    const listener = vi.fn()
+    services.dismissed.subscribe(listener)
+    expect(services.dismissed.getSnapshot()).toBe(false)
+    services.dismiss()
+    expect(services.dismissed.getSnapshot()).toBe(true)
+    expect(listener).toHaveBeenCalled()
   })
 })
 

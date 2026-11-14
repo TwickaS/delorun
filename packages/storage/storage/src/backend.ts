@@ -73,6 +73,12 @@ export interface KvUnitDescriptor {
    * The legacy per-record bootstrap also accepts listed versions.
    */
   readonly compatibleVersions?: readonly number[]
+  /**
+   * Opt in to damage tolerance. A backend that supports it keeps one rolling copy of the previous good
+   * unit document before each write, opens an unparsable document as an empty unit after setting the
+   * raw document aside, and offers {@link KvUnit.setAside}. A backend without support ignores the flag.
+   */
+  readonly recoverable?: boolean
 }
 
 /**
@@ -151,6 +157,21 @@ export interface KvUnit {
    * @returns the medium location the document was moved to (diagnostics).
    */
   backupRecord?(table: string, key: string): Promise<string>
+
+  /**
+   * Documents this unit set aside while opening (an unparsable unit document), as medium locations.
+   * Present only on a unit of a descriptor with `recoverable`; empty when nothing was set aside.
+   */
+  readonly quarantined?: readonly string[]
+
+  /**
+   * Preserve a damaged part of the unit under a new name next to the unit, never replacing an earlier
+   * set-aside document. The unit's current document is also no longer a good backup candidate: the
+   * next write does not rotate it into the rolling copy. Backends without recovery support omit it.
+   * @param document - JSON-serializable description of what was removed from the unit.
+   * @returns the medium location of the set-aside document.
+   */
+  setAside?(document: unknown): Promise<string>
 
   /**
    * Write the global singleton durably. Only valid when the descriptor
