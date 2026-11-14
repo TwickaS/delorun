@@ -241,7 +241,8 @@ describe('a work session ends at its bound', () => {
     expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
     expect(Date.now()).toBeGreaterThanOrEqual(endsAt.getTime())
     expect(watcherHost.calls()).toBe(2)
-    expect(messages('info')).toContain(`Your work session on plug ended at its time limit, ${endsAt.toISOString()}. Nothing was approved: plug keeps the version it had when the session started (${from.slice(0, 7)}), and what its folder holds waits for your review: delorun changes list`)
+    // The ending is logged after the session record is removed, so it is awaited too.
+    await vi.waitFor(() => { expect(messages('info')).toContain(`Your work session on plug ended at its time limit, ${endsAt.toISOString()}. Nothing was approved: plug keeps the version it had when the session started (${from.slice(0, 7)}), and what its folder holds waits for your review: delorun changes list`) }, { timeout: 60_000, interval: 50 })
     await end()
     expect(messages('error')).toEqual([])
   })
