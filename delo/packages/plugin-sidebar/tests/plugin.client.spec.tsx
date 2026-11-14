@@ -365,11 +365,13 @@ describe('the update notice in the studio', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('asks for the notice on a page whose release check row is not exposed to it, such as a remote one', async () => {
+  it('does not ask for the notice while the release check row is not exposed, as when the check is off', async () => {
     const fetch = serve()
     const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, releaseCheck: 'unavailable' })
     await h.fiber.await()
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
+    h.ctx.emit('connection/reset')
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('hides the notice for the dismissed release on this computer, and keeps the dismissal in the browser', async () => {

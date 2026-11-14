@@ -271,13 +271,14 @@ export function applyStudio(ctx: Context): void {
   const undoLine = createUndoLine()
   const updates = new UpdateNoticeStore(fetchUpdateNotice, preference)
   const refreshMinutes: HostObservable<number> = { getSnapshot: () => settings.getSnapshot().updateNoticeRefreshMinutes, subscribe: settings.subscribe }
-  // The notice route exists only while the release check is on; reading it with the check off or unread answers 404 on every page load.
+  // The notice route exists only while the release check is on. A disabled row is not exposed to the client (status `unavailable`), so
+  // only a ready, enabled row reads; reading otherwise answers 404 on every page load.
   const releaseCheck = ctx.configForms.get<{ readonly enabled?: boolean }>(UPDATE_CHECK_ROW_ID)
   ctx.effect(() => {
     let stop: (() => void) | undefined
     const follow = (): void => {
       const { status, value } = releaseCheck.getSnapshot()
-      const reads = status === 'unavailable' || (status === 'ready' && value?.enabled === true)
+      const reads = status === 'ready' && value?.enabled === true
       if (reads && stop === undefined) stop = updates.start(refreshMinutes, listener => ctx.on('connection/reset', listener))
       if (!reads && stop !== undefined) {
         stop()
