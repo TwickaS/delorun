@@ -516,6 +516,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'authenticator',
+    summary: 'Admission provider.',
+    description: 'Admission provider. Subclass it and load the subclass as a plugin; it registers as `ctx.authenticator`, one provider per context. Connection\'s loopback admission calls admit after its `Host` and `Origin` fence, and each reach listener\'s dispatcher calls it after the reach checks.\n\nProviders must keep these rules:\n\n- admit is synchronous and reads only in-memory state; a provider whose state is not loaded yet refuses.\n- policy returns a policy only for listeners the provider serves. A reach listener opens only while its provider returns a policy for it, and closes when that provider is removed or replaced.\n- Each change to a returned policy is announced with `authenticator/policy`.\n- A `setCookie` on an upgrade request is never sent, because the upgrade handler writes the response; a provider rolls a session only on a request without an `Upgrade` header.',
+    methods: [
+      {
+        signature: 'abstract admit(request: ConnectionIndexRequest, listener: string): Admission',
+        description: 'Admit one request on one listener.',
+        parameters: [{ name: 'request', description: 'the request\'s headers, method and target.' }, { name: 'listener', description: 'the listener that received it.' }],
+        returns: 'the admission.',
+      },
+      {
+        signature: 'abstract policy(listener: string): ListenerPolicy | undefined',
+        description: 'The policy of one listener.',
+        parameters: [{ name: 'listener', description: 'a listener id.' }],
+        returns: 'the policy, or `undefined` when this provider does not serve the listener.',
+      },
+    ],
+  },
+  {
     key: 'authorization',
     summary: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
     description: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
@@ -737,78 +756,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>, ): Promise<void>',
-        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules.',
+        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules. A `config-editor/before-save` listener may refuse the edit before anything is written. A saved edit is announced as `config-editor/edited`.',
         parameters: [{ name: 'entry', description: 'Current Loader entry, also used to detect replacement during the write.' }, { name: 'change', description: 'Derive a raw config from the current entry and its inherited layer.' }],
         returns: 'Fulfillment after Loader reconciliation completes.',
+        throws: ['{ConfigEditRefusedError} when a `config-editor/before-save` listener refuses the edit.'],
       },
     ],
   },
   {
     key: 'connection',
-    summary: 'Host `ctx.connection` members consumed by transport-independent adapters.',
-    description: 'Host `ctx.connection` members consumed by transport-independent adapters.',
+    summary: 'Host `ctx.connection`: the transport handle with the members for admission providers and reach listeners.',
+    description: 'Host `ctx.connection`: the transport handle with the members for admission providers and reach listeners.',
     methods: [
       {
-        signature: 'readonly rpc: HostConnectionRpc',
-        description: 'Generic RPC channel registry.',
-        parameters: [],
+        signature: 'builtinAdmission(request: ConnectionTrustRequest): Admission',
+        description: 'Connection\'s built-in loopback admission, which applies while no `authenticator` provider is loaded and which a provider may delegate its loopback decisions to: a valid signed browser cookie admits the shared owner Peer, a valid API cookie admits its live API Peer, and anything else is refused 401. It applies no Host or Origin fence; Connection applies the fence before it calls the provider.',
+        parameters: [{ name: 'request', description: 'the loopback request\'s headers.' }],
+        returns: 'the admission.',
       },
       {
-        signature: 'readonly fetch: HostConnectionFetch',
-        description: 'Exact Fetch routes for streaming or browser-native responses.',
-        parameters: [],
+        signature: 'closeReachConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number',
+        description: 'Destroy every open reach connection that carried a request the provider admitted for this session or device, streams and upgraded sockets included, as a session\'s revocation or a device\'s removal requires.',
+        parameters: [{ name: 'match', description: 'a session id, a device id, or both.' }],
+        returns: 'how many connections were destroyed.',
       },
       {
-        signature: 'readonly browserPeer: PeerScope',
-        description: 'The owner Peer every authenticated browser connection shares.',
-        parameters: [],
-      },
-      {
-        signature: 'readonly allowsRemoteAuthorities: boolean',
-        description: 'Whether this deployment accepts authorities beyond loopback: true only when a validated `trustedHosts` entry names a non-loopback hostname.',
-        parameters: [],
-      },
-      {
-        signature: 'createSharedFetchHandler(channel: \'/api\'): ConnectionFetchHandler',
-        description: 'Compose exact Fetch routes and the shared-channel RPC interceptor.',
-        parameters: [{ name: 'channel', description: 'shared channel mounted by Connection.' }],
-        returns: 'Fetch handler for trusted, authenticated requests.',
-      },
-      {
-        signature: 'requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection',
-        description: 'Apply Connection\'s Host/Origin checks and browser authentication to another Web route.',
-        parameters: [{ name: 'request', description: 'request headers from the HTTP or upgrade request.' }],
-        returns: 'rejection status, or undefined when the route may accept the request.',
-      },
-      {
-        signature: 'admit(request: ConnectionTrustRequest): PeerAdmission',
-        description: 'Admit an HTTP request against its signed browser or API credential and live Peer.',
-        parameters: [{ name: 'request', description: 'request headers from the HTTP or upgrade request.' }],
-        returns: 'the credential\'s Peer, or the rejection status.',
-      },
-      {
-        signature: 'createPeer(options: { readonly principal: Principal; readonly interactions?: \'answer\' | \'none\' }): PeerScope',
-        description: 'Create an independent in-process Peer, disposed with the Context that read `ctx.connection`.',
-        parameters: [{ name: 'options', description: 'fixed principal and optional interaction participation (default `answer`).' }],
-        returns: 'a new Peer distinct from every other Peer.',
-      },
-      {
-        signature: 'admitConnection(request: ConnectionTrustRequest): ConnectionAdmission',
-        description: 'Claim a physical socket for an API Peer; browser sockets share their owner Peer.',
-        parameters: [{ name: 'request', description: 'authenticated upgrade request headers.' }],
-        returns: 'the Peer and idempotent release, or 409 for duplicate API ownership. The carrier releases on socket termination or failed upgrade; release removes API admission synchronously without cancelling independent HTTP calls.',
-      },
-      {
-        signature: 'authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean',
-        description: 'Authenticate one frontend index request, owning a token redirect or 401. The cookie this mints is `Secure` when the mounted Web carrier serves TLS, which only that listener\'s protocol decides.',
-        parameters: [{ name: 'request', description: 'root or configured-index HTTP request.' }, { name: 'response', description: 'response owned when the result is false.' }],
-        returns: 'true only when the frontend may serve index.html.',
-      },
-      {
-        signature: 'authenticatedUrl(baseUrl: string): string',
-        description: 'Add the fresh process token to an ordinary Web application URL.',
-        parameters: [{ name: 'baseUrl', description: 'clean application URL whose authority and mount are preserved.' }],
-        returns: 'tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.',
+        signature: 'openReachListener(options: ReachListenerOptions): Promise<ReachListener>',
+        description: 'Open one reach listener, owned by the Context that read `ctx.connection`. It needs a loaded `authenticator` provider that serves the listener, and stops when that provider is removed or replaced.',
+        parameters: [{ name: 'options', description: 'the reach listener id and its binding.' }],
+        returns: 'the open listener.',
       },
     ],
   },
@@ -1119,6 +1095,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'delegationConsent',
+    summary: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`.',
+    description: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools\' own wording. A provider\'s plugin module exports DELEGATION_CONSENT_PROVIDER_EXPORT as `true`, so a start refuses while that row is not running.',
+    methods: [
+      {
+        signature: 'describe?(provider: string): string | undefined',
+        description: 'The model-facing description of a delegation tool whose provider is external, replacing the tool\'s generic opening sentences.',
+        parameters: [{ name: 'provider', description: 'the registered provider name.' }],
+        returns: 'the description, or undefined to keep the tool\'s own.',
+      },
+      {
+        signature: 'review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict>',
+        description: 'Review one external start. The runtime starts the provider only on `allow`; a refusal, any other answer and a throw start nothing.',
+        parameters: [{ name: 'review', description: 'the facts of the start.' }],
+        returns: 'the verdict.',
+      },
+    ],
+  },
+  {
     key: 'directoryPicker',
     summary: 'Abstract directory-picking service.',
     description: 'Abstract directory-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.directoryPicker` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The capability object must be stable for the service lifetime: consumers may capture it across calls.',
@@ -1153,6 +1148,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create one child directory for a Remote caller\'s in-app browser.',
         parameters: [{ name: 'path', description: 'absolute existing parent directory.' }, { name: 'name', description: 'single non-blank path segment.' }],
         returns: 'the created directory\'s absolute path.',
+      },
+    ],
+  },
+  {
+    key: 'doctor',
+    summary: 'Registers checks and runs them.',
+    description: 'Registers checks and runs them.',
+    methods: [
+      {
+        signature: 'register(check: DoctorCheck): () => void',
+        description: 'Add a check for the calling plugin\'s lifetime.',
+        parameters: [{ name: 'check', description: 'the check; its id must be unused.' }],
+        returns: 'the disposer that removes it.',
+        throws: ['when another check already has the id.'],
+      },
+      {
+        signature: 'async run(signal: AbortSignal): Promise<DoctorResult[]>',
+        description: 'Run every registered check concurrently, each under the configured deadline.',
+        parameters: [{ name: 'signal', description: 'cancels every check still running.' }],
+        returns: 'one result per check, in registration order.',
       },
     ],
   },
@@ -1903,10 +1918,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReconciliation>',
-        description: 'Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the profile directory or its linked package targets changed on disk, and publishing its runtime resolution. Changed modules are evicted and the Loader entries running them stop; app-boot\'s recomposeProfile then publishes the resolution, applies the generation, starts the stopped entries with the current files and configuration, imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the recomposition dropped are evicted, so a removed or deselected package is imported afresh when it returns. Callers run inside runExclusive.',
+        description: 'Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the profile directory or its linked package targets changed on disk, and publishing its runtime resolution. The distribution\'s ProfileReconcileCheck, when one is provided, runs first and refuses the recomposition by throwing before anything stops. Changed modules are evicted and the Loader entries running them stop; app-boot\'s recomposeProfile then publishes the resolution, applies the generation, starts the stopped entries with the current files and configuration, imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the recomposition dropped are evicted, so a removed or deselected package is imported afresh when it returns. Callers run inside runExclusive.',
         parameters: [{ name: 'requiredIds', description: 'Entry ids whose inactive state is reported as a failure even when it predates this call.' }],
         returns: 'Inactive-entry diagnostics, the changed modules that load after a restart, and a profile-wide restart reason.',
-        throws: ['The patch read, publication, preparation, apply, or activation failure of the recomposition, including a replacement plugin that fails to load or start, whose previous code no longer runs.'],
+        throws: ['The patch read, publication, preparation, apply, or activation failure of the recomposition, including a replacement plugin that fails to load or start, whose previous code no longer runs; the distribution check\'s refusal, with everything still running.'],
       },
     ],
   },
@@ -2226,6 +2241,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpAddConsent',
+    summary: 'Abstract add-time consent service.',
+    description: 'Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The plugin module that mounts it exports MCP_ADD_CONSENT_PROVIDER_EXPORT as `true`.',
+    methods: [
+      {
+        signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
+        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, and again before every reconnect spawns the server after its connection dropped, where a refusal ends the reconnect loop and leaves the server stopped until its row starts again. The provider can therefore compare what the start names, such as the contents of its executable, with what it accepted each time, and let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        parameters: [{ name: 'command', description: 'the server start under review.' }],
+        returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
+      },
+    ],
+  },
+  {
     key: 'mcpManager',
     summary: 'The manager service.',
     description: 'The manager service. Reconciliation and `restart` serialize instance replacement. Probes run independently and are cancelled before replacement or disposal waits for their cleanup.',
@@ -2408,6 +2436,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the effective preset name, or `custom` when nothing matches.',
       },
       {
+        signature: 'unset(session: Session): boolean',
+        description: 'Whether a session holds no permission choice yet: no preset, sandbox mode or approval policy recorded, and never seeded. A distribution that seeds its own defaults reads this before the session\'s first choice is pinned.',
+        parameters: [{ name: 'session', description: 'the session whose knob state is read.' }],
+        returns: 'whether nothing has been chosen or seeded.',
+      },
+      {
         signature: 'resolve(name: string): PresetSpec',
         description: 'Resolve an available preset\'s knob bundle.',
         parameters: [{ name: 'name', description: 'the preset name to resolve.' }],
@@ -2423,8 +2457,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'set(session: Session, name: string): void',
-        description: 'Record a changed preset, then update each changed knob through its own setter. Selecting the effective preset again appends nothing.',
+        description: 'Update each changed knob through its own setter, then record the changed preset. Selecting the effective preset again appends nothing. A mounted mode guard runs before anything is appended, so a refused switch appends nothing either and the session keeps the knobs it had.',
         parameters: [{ name: 'session', description: 'the session the switch belongs to.' }, { name: 'name', description: 'the preset to switch to; unknown names throw.' }],
+        throws: ['{SandboxModeRefusedError} when the mounted mode guard refuses the preset\'s sandbox mode.'],
       },
     ],
   },
@@ -2444,6 +2479,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Select whether plan mode should be active. Between turns the method appends the change immediately because no in-turn pre-step will run until another prompt starts a turn. The open-turn fold is the idle signal: agent status stays `running` through post-turn checkpointing, when no further in-turn pre-step runs. During an open turn the selection remains pending until the next accepted in-turn pre-step. Repeated selection of the current or already-pending state is a no-op.',
         parameters: [{ name: 'agent', description: 'The agent to switch.' }, { name: 'active', description: 'Whether plan mode should be active.' }],
         returns: 'what happened: `committed` (logged now), `queued` (awaiting the next accepted in-turn pre-step), `cancelled` (an opposite pending selection was cleared; the logged state already matches), or `noop` (already in that state).',
+      },
+    ],
+  },
+  {
+    key: 'pluginAudit',
+    summary: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`.',
+    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited and an installation is a single `pnpm add`.',
+    methods: [
+      {
+        signature: 'audit(target: PluginAuditTarget): Promise<PluginAuditResult>',
+        description: 'Audit a package.',
+        parameters: [{ name: 'target', description: 'The package, its directory and the digests the user accepted for it.' }],
+        returns: 'The findings, their digest and the decision.',
       },
     ],
   },
@@ -2470,6 +2518,42 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Grant or revoke one exact plugin/runtime exemption and reevaluate live plugins.',
         parameters: [{ name: 'packageVersion', description: 'Exact manifest package name followed by @ and its version; never an installation spec or alias.' }, { name: 'runtimeVersion', description: 'Exact current DSH version for grants; revocation may name a previous runtime.' }, { name: 'enabled', description: 'Whether to grant rather than revoke the exemption.' }, { name: 'acceptRisk', description: 'Required true for grants after the user accepts possible crashes and data loss.' }],
         returns: 'Saved and runtime outcomes. Startup-only profiles require restart.',
+      },
+      {
+        signature: '@Remote undo(): Promise<ChangeResult>',
+        description: 'Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit made outside plugin management since the last change is saved as a version first, so it is that edit undo takes back; when the `plugin-manager/before-record` check refuses to save that edit, undo takes it back by restoring the latest version instead. It installs and audits what it brings back as restore does. The undo is itself a version, so undoing it is another undo.',
+        parameters: [],
+        returns: 'Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored` when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
+      },
+      {
+        signature: '@Remote restore(version: ProfileVersionId): Promise<ChangeResult>',
+        description: 'Put the profile back as one version held it, and apply it: a restored dependency set is installed from the restored lockfile first, and every package the version brings back is audited before any of its code runs. An edit made outside plugin management is saved as a version first. The restore is itself a version.',
+        parameters: [{ name: 'version', description: 'the version to restore, as {@link history} lists it.' }],
+        returns: 'Saved and runtime outcomes, naming the version as `restored` and listing what changed in `changes`. Fails with `unknown-version` when the history holds no such version, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
+      },
+      {
+        signature: '@Remote history(limit: number): Promise<ProfileHistoryInfo>',
+        description: 'The profile\'s versions, newest first, after saving an edit made outside plugin management as a version.',
+        parameters: [{ name: 'limit', description: 'the most to read, from 1 to 500.' }],
+        returns: 'the versions, with `unsaved` naming why the edit was not saved when `plugin-manager/before-record` refused it, or why the profile has no history.',
+      },
+      {
+        signature: 'async listHistory(limit: number): Promise<ProfileHistoryInfo>',
+        description: 'The profile\'s versions, newest first, as the history holds them. Unlike history, it saves no version for an edit made outside plugin management and never starts the history, so it writes nothing and runs only git reads.',
+        parameters: [{ name: 'limit', description: 'the most to read, from 1 to 500.' }],
+        returns: 'the versions, empty before the history starts, or why git cannot read it.',
+      },
+      {
+        signature: 'async previewUndo(): Promise<ProfileVersionPreview>',
+        description: 'What undo would put back if it ran now, read without saving a version or starting the history: the version before the latest, or the latest itself when the managed files differ from it, since undo first saves that outside edit and then takes it back.',
+        parameters: [],
+        returns: 'the version undo restores and what it changes, or the refusal undo would end with.',
+      },
+      {
+        signature: 'async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview>',
+        description: 'What restore would put back if it ran now, read without saving a version or starting the history.',
+        parameters: [{ name: 'version', description: 'the version to restore, as {@link history} lists it.' }],
+        returns: 'the version and what it changes, or the refusal restore would end with.',
       },
       {
         signature: '@Remote async listPlugins(): Promise<PluginInfo[]>',
@@ -2521,7 +2605,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote installBundle(spec: string, options?: InstallBundleOptions): Promise<ChangeResult>',
-        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
+        description: 'Install a package using the same pnpm implementation as dsh plugin. GitHub repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts; only network failures or timeouts stop installation, and a stop streams the check\'s diagnostic as the installation\'s install-log run under its request id, while pnpm owns authentication and transport fallback. An HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into the lockfile, the audit answers with `pending: \'install\'`, and only then pnpm installs the lockfile; without one the installation is a single `pnpm add`. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
         parameters: [{ name: 'spec', description: 'One package spec, including local paths relative to the invocation directory.' }, { name: 'options', description: 'Whether to activate the installed bundle (defaults to true), the request id a cancellation names, the pending build scripts to allow, whether to save an exact dependency, and the registry asked first.' }],
         returns: 'Package-manager diagnostics, the registries asked, and the observed activation outcome.',
       },
@@ -2677,6 +2761,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'profileReconcileCheck',
+    summary: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service.',
+    description: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service. It runs inside Hmr.runExclusive, before any running plugin stops or any module is evicted, so it may rewrite the profile\'s files the recomposition reads; a caller such as the plugin manager may hold the profile\'s `package.json` file lock at that moment, so the check must not wait for that lock while its own process holds it.',
+    methods: [
+      {
+        signature: 'check(profile: ProfileContext): Promise<void>',
+        description: 'Check, and prepare, the profile\'s files before HMR recomposes the profile from them.',
+        parameters: [{ name: 'profile', description: 'The profile about to be recomposed.' }],
+        throws: ['Any error to refuse the recomposition: nothing stops, nothing loads, and {@link Hmr.reconcileProfile} rejects with that error.'],
+      },
+    ],
+  },
+  {
     key: 'ptcRuntime',
     summary: 'Registers one `ctx.ptcRuntime` implementation.',
     description: 'Registers one `ctx.ptcRuntime` implementation. Program, budget, abort, and substrate failures resolve in PtcRunResult; only Service Definition contract misuse rejects. Implementations bridge structured-cloneable bindings, materialize each declared namespace rejection class, treat programs as hostile peers, isolate distinct state owners, and terminate and await in-flight runs during disposal.',
@@ -2757,6 +2854,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'remoteAnswerGuard',
+    summary: 'Decides whether one Peer\'s answer to a forwarded Remote event may apply.',
+    description: 'Decides whether one Peer\'s answer to a forwarded Remote event may apply. Without a provider every answer the Gateway accepts applies: an owner Peer\'s, or another Peer\'s whose access policy allows the event. The provider throws a `RemoteError` to refuse: the answer is then not applied, the event stays pending for the other Clients it was delivered to, and the answering Client receives the failure with its code and details. The Client reports a `LOOPBACK_REQUIRED` refusal as its `remote/answer-refused` event and keeps its event stream; any other failure ends that Client\'s event generation. A non-owner access policy that allows answering a forwarded waterfall, such as `event:approval/request`, needs a provider: without one, that Peer\'s answer applies as an owner\'s would, a granting answer included.',
+    methods: [
+      {
+        signature: 'check(answer: RemoteEventAnswer): void',
+        description: 'Refuse an answer by throwing.',
+        parameters: [{ name: 'answer', description: 'the answer and the Peer that gave it.' }],
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -2768,6 +2877,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the argv to spawn instead, plus the enforcement completeness the selected backend achieves for it.',
       },
     ],
+  },
+  {
+    key: 'sandboxModeGuard',
+    summary: 'The optional mode-switch guard a consent layer mounts on the context: it runs before a `sandbox/mode` event is appended and returns the refusal reason when the switch must not happen, or undefined to allow it.',
+    description: 'The optional mode-switch guard a consent layer mounts on the context: it runs before a `sandbox/mode` event is appended and returns the refusal reason when the switch must not happen, or undefined to allow it.',
+    methods: [],
+  },
+  {
+    key: 'sandboxNetwork',
+    summary: 'Decides the network of one call\'s policy.',
+    description: 'Decides the network of one call\'s policy. It answers synchronously, because policy resolution is synchronous, and must not throw: a resolver that cannot decide answers the most restrictive network it supports.',
+    methods: [],
   },
   {
     key: 'sandboxPolicy',
@@ -2790,10 +2911,21 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'readonly containerDenialMarker: boolean',
+        description: 'Whether consumers classify environment-only denials apart from policy denials (Config.containerDenialMarker).',
+        parameters: [],
+      },
+      {
+        signature: 'environmentDenialSignatures(confined: Pick<ConfinedArgv, \'environmentDenialSignatures\'>): readonly string[]',
+        description: 'The environment denial signatures a consumer classifies a confined run against: the wrap\'s own with containerDenialMarker on, none with it off.',
+        parameters: [{ name: 'confined', description: 'the wrap\'s `environmentDenialSignatures`, absent when the environment adds none.' }],
+        returns: 'the signatures to pass to `denialOf`.',
+      },
+      {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd. Configured extra roots and this Session\'s active registrations are snapshotted together; existing operations and processes keep their policy.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd. Configured extra roots and this Session\'s active registrations are snapshotted together; existing operations and processes keep their policy. A mounted `ctx.sandboxNetwork` resolver decides the call\'s network; without one the policy carries none, and runners share the host\'s network.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.',
         throws: ['`SandboxInvalidRootError` (`SANDBOX_INVALID_ROOT`) when the session\'s recorded cwd is relative or contains a NUL byte.'],
       },
       {
@@ -2829,9 +2961,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The stored task. Cancellation does not roll back an in-flight write.',
       },
       {
-        signature: 'async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleCatalogEntry>',
+        signature: 'async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleCatalogEntry>',
         description: 'Create one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nThe record is built from the clock reading taken before the request joins the serialized queue. A `session` target must exist and must not belong to a delegated child; a `new_once` target reserves its Session identity.',
-        parameters: [{ name: 'request', description: 'Title, prompt, recurrence, and delivery destination.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
+        parameters: [{ name: 'request', description: 'Title, prompt, recurrence, and delivery destination.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }, { name: 'approval', description: 'The person\'s answer to the composed consent\'s ask for this call, whose named preset becomes the delivery baseline; omitted, the baseline is read from the target.' }],
         returns: 'The stored task. Cancellation does not roll back an in-flight write.',
       },
       {
@@ -2884,15 +3016,40 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'edit\') async remoteEdit(request: ScheduleEditRequest, signal?: AbortSignal): Promise<ScheduleEditResult>',
-        description: 'Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.',
+        description: 'Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.\n\nA Remote edit carries no consent approval, so it changes the task exactly as the caller asked and leaves the delivery baseline and any recorded refusal alone: re-approving a delivery is the consent\'s answer to name, not a side effect of a form submission.',
         parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
       },
       {
-        signature: 'async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleEditResult>',
+        signature: 'async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleEditResult>',
         description: 'Update or delete one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nAn update applies every patch field in one write and recomputes the next occurrence when the rule changes or the task resumes. A supplied `expectedUpdatedAt` that differs from the stored value returns `schedule_conflict`.',
-        parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
+        parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }, { name: 'approval', description: 'The person\'s answer to the composed consent\'s ask for this edit; only an approved edit re-captures the delivery baseline and settles a refusal the consent recorded.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
+      },
+    ],
+  },
+  {
+    key: 'scheduleConsent',
+    summary: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer.',
+    description: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer. `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.',
+    methods: [
+      {
+        signature: 'nameEffect(schedule: ScheduleEffect): string | undefined',
+        description: 'Name what one `schedule_create` or `schedule_edit` approval would create. The returned text joins the approval, and `undefined` adds nothing.',
+        parameters: [{ name: 'schedule', description: 'the effect the approved call would create.' }],
+        returns: 'the text the approval states, or undefined to add nothing.',
+      },
+      {
+        signature: 'presetFor?(create: ScheduleSessionCreateSpec): string | undefined',
+        description: 'The permission preset a chat opened with these creation values runs under, when the consent knows it better than the deployment default, such as a Workspace\'s own preset. Undefined, or an absent member, leaves the deployment default. The approval names this preset, the task stores it as its baseline, and a delivery that opens the chat is reviewed under it before the chat exists.',
+        parameters: [{ name: 'create', description: 'the creation values of the chat a delivery would open.' }],
+        returns: 'the preset that chat runs under, or undefined to keep the deployment default.',
+      },
+      {
+        signature: 'reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict',
+        description: 'Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it. Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers nothing and leaves the task armed, and a manual run reports it as `schedule/consent-failed`.',
+        parameters: [{ name: 'review', description: 'the facts of the due delivery.' }],
+        returns: '`allow` to deliver, or `refuse` with the reason the refusal surfaces.',
       },
     ],
   },
@@ -3175,6 +3332,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'resolution after durability and event emission.',
       },
       {
+        signature: 'async forget(id: SessionId): Promise<boolean>',
+        description: 'Forget one session\'s checkpoint: remove its record from the domain\'s memory and its document from the medium, and drop the session\'s write-behind bookkeeping so a pending throttled flush cannot write the forgotten values back. This is the cache\'s only delete entry point; a caller uses it when the session\'s content must not stay on disk (a session purge), because a checkpoint row is the cache\'s copy of what the chat displayed.',
+        parameters: [{ name: 'id', description: 'the session whose record goes.' }],
+        returns: 'whether a stored record was removed.',
+      },
+      {
         signature: 'coldSnapshot( meta: SessionHeader, inheritedEventCount: SessionLogOffset, events: readonly SessionEvent[], ): ProjectionSnapshot',
         description: 'Cold-read one session\'s projections from its complete log. Each unit is seeded from the identity-checked cached rows — the registry skips `apply` for the already-folded prefix (events at or below the row\'s `seq`) — and the refreshed checkpoint is written back (fail-soft, fire-and-forget), so the first cold read creates the cache row and later ones seed from it. The caller supplies the complete log in seq order: this service never consults the persistence layer.',
         parameters: [{ name: 'meta', description: 'the stored session header (identity witness).' }, { name: 'inheritedEventCount', description: 'exact inherited prefix length for projection initialization and identity.' }, { name: 'events', description: 'the session\'s complete log, in seq order.' }],
@@ -3209,6 +3372,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'onEventChanged(listener: ProjectionEventChangeListener): () => void',
         description: 'Subscribe to the event-level change feed. The registration is an effect on the calling context\'s fiber. The listener runs synchronously inside the committed event\'s `session/event` handling, once after every unit has been driven and after every onChanged call for that event. If a unit or an onChanged listener throws during that drive, the listener still receives the changes made before the throw.',
         parameters: [{ name: 'listener', description: 'called once per committed event that changed at least one client-visible unit\'s raw view by `Object.is`.' }],
+        returns: 'the exact disposer that unsubscribes.',
+      },
+      {
+        signature: 'onRegistered(listener: ProjectionRegistrationListener): () => void',
+        description: 'Subscribe to client-visible keys becoming live: a key that becomes live after clients read their baselines has no client value until its next change, so a carrier sends each live Session\'s value when its key arrives. A key becomes live when its first registrant registers it, and again when it is registered after its last release; a registration that shares a live key does not call the listener. The listener runs after the unit is in place, so `snapshot` already includes it, and before `register` resolves. A listener throw rejects that `register` call; the calling fiber still holds the unit and releases it when it disposes. The subscription is an effect on the calling context\'s fiber.',
+        parameters: [{ name: 'listener', description: 'called with each client-visible key that becomes live.' }],
         returns: 'the exact disposer that unsubscribes.',
       },
       {
@@ -3685,6 +3854,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'sorted summaries plus discovery-completeness state.',
       },
       {
+        signature: 'configuredRoots(): string[]',
+        description: 'The skill directories the registered providers read without a workspace. A consent over the writes that change a skill classifies a target against them, so the roots a deployment configures for its providers are the roots the consent reviews; a provider that names no roots contributes none.',
+        parameters: [],
+        returns: 'the configured root paths of every provider that names them, deduplicated, in registration order.',
+      },
+      {
         signature: 'async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined>',
         description: 'Load and validate the winning candidate, passing its opaque discovery locator back to the provider. Cancellation is rechecked after selection, including cache hits, and raced against loading so an uncooperative provider cannot hang the caller.',
         parameters: [{ name: 'name', description: 'kebab-case skill name.' }, { name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects workspace-sensitive skills, and `signal` cancels work.' }],
@@ -3804,6 +3979,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Persist `input.content` to a session-scoped spill artifact.',
         parameters: [{ name: 'input', description: 'the owner, caller-supplied source fields, suggested name, and full text to save.' }],
         returns: 'the saved artifact\'s {@link SpillRef}; rejects on a storage failure.',
+      },
+      {
+        signature: 'sessionDirectory(sessionId: string): string | undefined',
+        description: 'The local directory that holds every artifact this store saves for one session, which that session\'s read tools may read where a sandbox provider otherwise protects it. A store without such a directory, the default, returns `undefined`, and no read is granted.',
+        parameters: [{ name: 'sessionId', description: 'the owning session\'s header id.' }],
+        returns: 'the canonical directory, or `undefined`.',
       },
     ],
   },
@@ -4672,6 +4853,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the disposer removing the transform.',
       },
       {
+        signature: 'async openListener(options: WebListenerOptions): Promise<WebListener>',
+        description: 'Open an additional listener beside the configured one. It serves the same routes, upgrade routes and fallback, and its gate decides every request and upgrade request before any of them runs. A `loopback` listener has bound its port when the promise settles. The listener closes with this service; the caller owns closing it earlier, as an effect of its own Context.',
+        parameters: [{ name: 'options', description: 'the listener\'s id, binding and gate.' }],
+        returns: 'the open listener.',
+        throws: ['when another open additional listener has the same id, or the `streams` TLS material is unusable.'],
+      },
+      {
         signature: 'applyIndexTaps(html: string): string',
         description: 'Run an index.html body through the registered taps in registration order — called by the fallback owner on every index response it renders.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }],
@@ -4685,7 +4873,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'renderIndex(html: string, peer: PeerScope): string',
-        description: 'Render one index.html body for one Peer: the structured injection table first, then the raw `tapIndex` transforms over the result.',
+        description: 'Render one index.html body for one Peer: the structured injection table first, then the raw `tapIndex` transforms over the result. While answering a request a listener gate passed with a nonce, every inline element the table renders carries that nonce.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }, { name: 'peer', description: 'the Peer the page speaks for.' }],
         returns: 'the transformed body.',
       },
@@ -4972,6 +5160,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
     ],
   },
+  {
+    key: 'writeConsent',
+    summary: 'The optional consent service the mutating tools consult before a mutation.',
+    description: 'The optional consent service the mutating tools consult before a mutation.',
+    methods: [
+      {
+        signature: 'review(request: WriteConsentRequest): WriteConsentReview | undefined',
+        description: 'Classify one pending mutation.',
+        parameters: [{ name: 'request', description: 'the tool, the target path and the tool\'s diff.' }],
+        returns: '`{ required: true, note }` when the mutation needs consent (the note names the instruction-layer effect and carries the diff), or `{ required: false }`/undefined to let it proceed without asking.',
+      },
+    ],
+  },
 ]
 
 /** Every harness event, sorted by name. */
@@ -5137,6 +5338,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'req', description: 'pending approval request.' }],
   },
   {
+    name: 'authenticator/minted',
+    mode: 'emit',
+    signature: '\'authenticator/minted\'(credential: MintedCredential): void',
+    summary: 'Connection minted a loopback credential.',
+    description: 'Connection minted a loopback credential. Emitted synchronously, before the response that carries the credential is written, so a provider can record it before the browser can present it.',
+    parameters: [{ name: 'credential', description: 'what identifies the credential; never its value.' }],
+  },
+  {
+    name: 'authenticator/policy',
+    mode: 'emit',
+    signature: '\'authenticator/policy\'(listener: string): void',
+    summary: 'The provider changed the policy of one listener.',
+    description: 'The provider changed the policy of one listener. An open reach listener reads the policy again, and stops when the provider no longer serves it.',
+    parameters: [{ name: 'listener', description: 'id of the listener whose policy changed.' }],
+  },
+  {
     name: 'authorization/settled',
     mode: 'emit',
     signature: '\'authorization/settled\'(key: CredentialKey, settlement: AuthorizationSettlement): void',
@@ -5159,6 +5376,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Recover a failed summary request by synchronously recording a durable change to its selected input.',
     description: 'Recover a failed summary request by synchronously recording a durable change to its selected input. Return true only after making progress; the provider re-derives and re-prices the selection before retrying. Call next() when the failure cannot be recovered. Decisions survive a later summary failure or cancellation.',
     parameters: [{ name: 'payload', description: '.signal - optional compaction cancellation signal.' }, { name: 'next', description: 'delegate to the next recovery listener.' }],
+  },
+  {
+    name: 'config-editor/before-save',
+    mode: 'bail',
+    signature: '\'config-editor/before-save\'(save: ConfigSave): string | undefined',
+    summary: 'Admit an edit before it is saved: called under the profile\'s lock, after the candidate config passed the plugin\'s schema and before the profile patch is written.',
+    description: 'Admit an edit before it is saved: called under the profile\'s lock, after the candidate config passed the plugin\'s schema and before the profile patch is written. A returned reason refuses the edit, which then throws ConfigEditRefusedError with that reason and leaves the file unchanged.',
+    parameters: [{ name: 'save', description: 'the entry and the complete config the profile patch would hold for it.' }],
+  },
+  {
+    name: 'config-editor/edited',
+    mode: 'emit',
+    signature: '\'config-editor/edited\'(edit: ConfigEdit): void',
+    summary: 'An edit was saved to the profile patch and applied: emitted after the profile\'s lock is released, in the caller\'s asynchronous context, so a listener can name who made it.',
+    description: 'An edit was saved to the profile patch and applied: emitted after the profile\'s lock is released, in the caller\'s asynchronous context, so a listener can name who made it.',
+    parameters: [{ name: 'edit', description: 'the profile patch id of the entry whose configuration changed.' }],
   },
   {
     name: 'connection/request',
@@ -5391,6 +5624,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'The selectable process catalog changed.',
     description: 'The selectable process catalog changed. Payload-free by design: consumers subscribe first, then re-read the complete catalog.',
     parameters: [],
+  },
+  {
+    name: 'plugin-manager/before-record',
+    mode: 'bail',
+    signature: '\'plugin-manager/before-record\'(files: ReadonlyMap<string, string | undefined>): string | undefined',
+    summary: 'Admit a version of the profile before the history saves it, from the managed files as they are about to be saved.',
+    description: 'Admit a version of the profile before the history saves it, from the managed files as they are about to be saved. A returned reason refuses the version: nothing is saved, and the change, undo, restore or history read that asked for it reports the history as unavailable with that reason.',
+    parameters: [{ name: 'files', description: 'each managed file\'s text, by name relative to the profile, or undefined for an absent file.' }],
   },
   {
     name: 'plugin-manager/changed',
@@ -5633,6 +5874,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'table', description: 'Mutable row table; listeners append in activation order.' }, { name: 'peer', description: 'The Peer the rendered page speaks for.' }],
   },
   {
+    name: 'webserver/request',
+    mode: 'emit',
+    signature: '\'webserver/request\'(request: IncomingMessage): void',
+    summary: 'Observe one request or upgrade request the main listener received, before any route sees it.',
+    description: 'Observe one request or upgrade request the main listener received, before any route sees it. Listeners must not write a response; one that throws is logged and the request is routed regardless. An additional listener\'s gate decides its own requests.',
+    parameters: [{ name: 'request', description: 'The incoming request.' }],
+  },
+  {
     name: 'workflow/agent-end',
     mode: 'emit',
     signature: '\'workflow/agent-end\'(info: WorkflowRunInfo, agent: WorkflowAgentEndInfo): void',
@@ -5825,6 +6074,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AddShareSessionsRequest {\n    readonly shareId: string;\n    readonly sessionIds: readonly string[];\n}',
   },
   {
+    name: 'Admission',
+    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n    readonly location?: string;\n};',
+  },
+  {
     name: 'AdmittedPromptContentPart',
     declaration: 'export type AdmittedPromptContentPart = {\n    readonly type: \'text\';\n    readonly text: string;\n} | {\n    readonly type: \'image\';\n    readonly attachment: ImageAttachmentRef;\n} | {\n    readonly type: \'file\';\n    readonly attachment: FileAttachmentRef;\n};',
   },
@@ -5942,7 +6195,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApprovalRequestEvent',
-    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly grants?: ApprovalGrant;\n    readonly escalatesTo?: ApprovalEscalation;\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'ArchiveSessionOptions',
@@ -6178,7 +6431,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ChangeResult',
-    declaration: 'export interface ChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'overridden\' | \'failed\' | \'cancelled\';\n    restartReason?: RestartReason;\n    stage: \'install\' | \'enable\' | \'remove\';\n    target: string;\n    enabled?: boolean;\n    error?: ManagementError;\n    warnings?: string[];\n    packageResult?: PackageResult;\n    bundle?: string;\n    version?: string;\n    pendingBuilds?: string[];\n    approvedBuilds?: string[];\n    registries?: Registry[];\n    failedAt?: \'registry\' | \'spec-host\';\n}',
+    declaration: 'export interface ChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'overridden\' | \'failed\' | \'cancelled\';\n    restartReason?: RestartReason;\n    stage: \'install\' | \'enable\' | \'remove\' | \'undo\' | \'restore\';\n    target: string;\n    enabled?: boolean;\n    error?: ManagementError;\n    warnings?: string[];\n    packageResult?: PackageResult;\n    undone?: ProfileVersionSummary;\n    restored?: ProfileVersionSummary;\n    changes?: ProfileVersionChanges;\n    bundle?: string;\n    version?: string;\n    pendingBuilds?: string[];\n    approvedBuilds?: string[];\n    audit?: PluginAuditResult;\n    registries?: Registry[];\n    failedAt?: \'registry\' | \'spec-host\';\n}',
   },
   {
     name: 'ChecksRollup',
@@ -6281,68 +6534,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ComputerUseProviderName = Branded<\'ComputerUseProviderName\'>;',
   },
   {
+    name: 'ConfigEdit',
+    declaration: 'export interface ConfigEdit {\n    readonly entryId: string;\n}',
+  },
+  {
+    name: 'ConfigSave',
+    declaration: 'export interface ConfigSave {\n    readonly entry: Entry;\n    readonly config: Readonly<Record<string, unknown>>;\n}',
+  },
+  {
     name: 'ConfigureCall',
     declaration: 'export type ConfigureCall = (controls: Readonly<LlmCallControls>, model: Readonly<LlmResolvedModelInfo>) => LlmCallControls;',
   },
   {
     name: 'ConfinedArgv',
-    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
+    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    environmentDenialSignatures?: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
   },
   {
     name: 'ConfinedSandboxMode',
     declaration: 'export type ConfinedSandboxMode = Exclude<SandboxMode, \'danger-full-access\'>;',
   },
   {
-    name: 'ConnectionAdmission',
-    declaration: 'export type ConnectionAdmission = {\n    readonly peer: PeerScope;\n    readonly release: () => Promise<void>;\n} | {\n    readonly rejection: 401 | 403 | 409;\n};',
-  },
-  {
-    name: 'ConnectionFetchHandler',
-    declaration: 'export interface ConnectionFetchHandler {\n    requestBodyMode(request: {\n        readonly method: string;\n        readonly url: URL;\n    }): ConnectionRequestBodyMode;\n    fetch(request: Request, peer: PeerScope): Promise<Response>;\n}',
-  },
-  {
-    name: 'ConnectionFetchMethod',
-    declaration: 'export type ConnectionFetchMethod = \'GET\' | \'HEAD\' | \'POST\';',
-  },
-  {
-    name: 'ConnectionFetchRoute',
-    declaration: 'export interface ConnectionFetchRoute {\n    readonly path: string;\n    readonly methods: readonly ConnectionFetchMethod[];\n    readonly requestBody: ConnectionRequestBodyMode;\n    readonly fetch: (request: Request) => Promise<Response>;\n}',
-  },
-  {
     name: 'ConnectionIndexRequest',
-    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
-  },
-  {
-    name: 'ConnectionIndexResponse',
-    declaration: 'export interface ConnectionIndexResponse {\n    writeHead(status: number, headers?: Readonly<Record<string, string>>): unknown;\n    end(body?: string): unknown;\n}',
-  },
-  {
-    name: 'ConnectionRequestBodyMode',
-    declaration: 'export type ConnectionRequestBodyMode = \'buffered\' | \'streaming\';',
-  },
-  {
-    name: 'ConnectionRequestRejection',
-    declaration: 'export type ConnectionRequestRejection = 401 | 403 | undefined;',
-  },
-  {
-    name: 'ConnectionRpcAttachment',
-    declaration: 'export interface ConnectionRpcAttachment {\n    readonly path: readonly (string | number)[];\n    readonly bytes: Uint8Array;\n}',
-  },
-  {
-    name: 'ConnectionRpcEndpointMatcher',
-    declaration: 'export type ConnectionRpcEndpointMatcher = (endpoint: string) => boolean;',
+    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n}',
   },
   {
     name: 'ConnectionRpcFailure',
     declaration: 'export interface ConnectionRpcFailure {\n    readonly code: string;\n    readonly message: string;\n    readonly details: object;\n}',
-  },
-  {
-    name: 'ConnectionRpcHandler',
-    declaration: 'export type ConnectionRpcHandler = (endpoint: string, payload: unknown, signal: AbortSignal, peer: PeerScope) => Promise<ConnectionRpcHandlerResult>;',
-  },
-  {
-    name: 'ConnectionRpcHandlerResult',
-    declaration: 'export type ConnectionRpcHandlerResult = {\n    readonly ok: true;\n    readonly value: unknown;\n    readonly attachments?: readonly ConnectionRpcAttachment[];\n} | {\n    readonly ok: false;\n    readonly error: ConnectionRpcFailure;\n};',
   },
   {
     name: 'ConnectionRpcResult',
@@ -6350,7 +6567,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConnectionTrustRequest',
-    declaration: 'export interface ConnectionTrustRequest {\n    readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>;\n}',
+    declaration: 'export interface ConnectionTrustRequest {\n    readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>;\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
   },
   {
     name: 'ContentBlockMap',
@@ -6553,6 +6770,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
   },
   {
+    name: 'DeclaredScheme',
+    declaration: 'export type DeclaredScheme = \'http\' | \'https\';',
+  },
+  {
     name: 'DeepSeekLlmApiExtensionMap',
     declaration: 'export interface DeepSeekLlmApiExtensionMap {\n}',
   },
@@ -6611,6 +6832,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DirectoryRegistrationHandle',
     declaration: 'export interface DirectoryRegistrationHandle {\n    (): void;\n    replace(entries: readonly LlmConfigurableProvider[]): void;\n}',
+  },
+  {
+    name: 'DoctorCheck',
+    declaration: 'export interface DoctorCheck {\n    readonly id: string;\n    readonly title: string;\n    run(signal: AbortSignal): Promise<DoctorOutcome>;\n}',
+  },
+  {
+    name: 'DoctorOutcome',
+    declaration: 'export interface DoctorOutcome {\n    readonly status: DoctorStatus;\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'DoctorResult',
+    declaration: 'export interface DoctorResult extends DoctorOutcome {\n    readonly id: string;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'DoctorStatus',
+    declaration: 'export type DoctorStatus = \'pass\' | \'warn\' | \'fail\';',
   },
   {
     name: 'Domain',
@@ -6711,6 +6948,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'EveryScheduleRecord',
     declaration: 'export interface EveryScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'every\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly everySeconds: number;\n    readonly scheduledAt: string;\n}',
+  },
+  {
+    name: 'ExternalDelegationReview',
+    declaration: 'export interface ExternalDelegationReview {\n    readonly provider: string;\n    readonly parent: Agent;\n    readonly cwd: string;\n    readonly label?: string | undefined;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ExternalDelegationVerdict',
+    declaration: 'export type ExternalDelegationVerdict = {\n    readonly kind: \'allow\';\n    readonly timeoutMs?: number | undefined;\n} | {\n    readonly kind: \'refuse\';\n    readonly reason: string;\n};',
   },
   {
     name: 'FeedbackCategory',
@@ -7137,12 +7382,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface HookRegistration {\n    catch(handler: AnyHook): void;\n}',
   },
   {
-    name: 'HostConnectionFetch',
-    declaration: 'export interface HostConnectionFetch {\n    register(route: ConnectionFetchRoute): () => Promise<void>;\n}',
-  },
-  {
-    name: 'HostConnectionRpc',
-    declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
+    name: 'HostRule',
+    declaration: 'export type HostRule = {\n    readonly kind: \'upstream-fence\';\n} | {\n    readonly kind: \'equals-address\';\n    readonly address: string;\n} | {\n    readonly kind: \'equals-bound-name-and-sni\';\n    readonly address: string;\n};',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -7206,7 +7447,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'InstallBundleOptions',
-    declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    saveExact?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n    expected?: {\n        readonly name: string;\n        readonly version: string;\n    };\n}',
+    declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    saveExact?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n    acceptedAudit?: string;\n    expected?: {\n        readonly name: string;\n        readonly version: string;\n    };\n}',
   },
   {
     name: 'InstallSpecKind',
@@ -7377,6 +7618,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n    readonly layout?: \'single\' | \'per-record\';\n    readonly compatibleVersions?: readonly number[];\n}',
   },
   {
+    name: 'ListenerPolicy',
+    declaration: 'export interface ListenerPolicy {\n    readonly listener: string;\n    readonly scheme: DeclaredScheme;\n    readonly hostRule: HostRule;\n    readonly acceptsLaunchToken: boolean;\n    readonly preLogin: readonly PreLoginRoute[];\n}',
+  },
+  {
     name: 'ListVersionsOptions',
     declaration: 'export interface ListVersionsOptions {\n    readonly registry?: Registry;\n}',
   },
@@ -7526,7 +7771,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ManagementError',
-    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'unsupported-platform\' | \'unexpected-package\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
+    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'unsupported-platform\' | \'unexpected-package\' | \'audit-findings\' | \'audit-refused\' | \'nothing-to-undo\' | \'unknown-version\' | \'history-unavailable\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n    audit?: PluginAuditResult;\n}',
   },
   {
     name: 'ManualCompactAgentContext',
@@ -7621,6 +7866,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type McpConnectionStatus = {\n    state: \'closed\';\n    result: McpCloseResult;\n} | {\n    state: \'waiting-credentials\';\n    lastError: string;\n} | {\n    state: \'connecting\';\n    attempt: number;\n} | {\n    state: \'connected\';\n    toolCount: number;\n    connectedAt: number;\n} | {\n    state: \'reconnecting\';\n    attempt: number;\n    maxAttempts: number;\n    nextRetryAtMs: number;\n    lastError: string;\n} | {\n    state: \'failed\';\n    reason: \'gave-up\' | \'reconnect-disabled\' | \'unclosed-generation\';\n    lastError?: string;\n};',
   },
   {
+    name: 'McpConsentDecision',
+    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n    readonly spawnCommand?: string;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
+  },
+  {
     name: 'McpManagedServerStatus',
     declaration: 'export type McpManagedServerStatus = McpConnectionStatus | {\n    state: \'disabled\';\n} | {\n    state: \'failed\';\n    reason: \'load\';\n    lastError: string;\n} | {\n    state: \'failed\';\n    reason: \'cleanup\';\n    result: McpCloseResult;\n};',
   },
@@ -7655,6 +7904,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'McpResourceRequest',
     declaration: 'export type McpResourceRequest = {\n    method: \'resources/list\' | \'resources/templates/list\';\n    cursor?: string;\n} | {\n    method: \'resources/read\';\n    uri: string;\n};',
+  },
+  {
+    name: 'McpServerCommand',
+    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n    readonly cwd: string;\n    readonly resolvedCommand: string;\n    readonly resolvedCwd: string;\n    readonly resolvedShell?: string;\n}',
   },
   {
     name: 'McpServerRegistration',
@@ -7763,6 +8016,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageSourceMap',
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
+  },
+  {
+    name: 'MintedCredential',
+    declaration: 'export interface MintedCredential {\n    readonly kind: \'browser\' | \'api\';\n    readonly hash: string;\n    readonly authority: string;\n    readonly issuedAt: number;\n    readonly expiresAt: number;\n    readonly peer?: PeerId;\n}',
   },
   {
     name: 'ModDefinition',
@@ -7989,10 +8246,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PatchHunk {\n    lineNumber: number;\n    context?: string;\n    oldLines: string[];\n    newLines: string[];\n    isEndOfFile: boolean;\n}',
   },
   {
-    name: 'PeerAdmission',
-    declaration: 'export type PeerAdmission = {\n    readonly peer: PeerScope;\n} | {\n    readonly rejection: 401 | 403;\n};',
-  },
-  {
     name: 'PeerId',
     declaration: 'export type PeerId = Branded<\'PeerId\'>;',
   },
@@ -8021,8 +8274,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PlatformSession {\n    readonly origin: string;\n    readonly token: string;\n    readonly userId: AccountUserId | null;\n    readonly embeddedPageDist?: string;\n    readonly requestHeaders?: Readonly<Record<string, string>>;\n}',
   },
   {
+    name: 'PluginAuditDecision',
+    declaration: 'export type PluginAuditDecision = \'clear\' | \'accepted\' | \'needs-acceptance\' | \'refused\';',
+  },
+  {
+    name: 'PluginAuditFinding',
+    declaration: 'export interface PluginAuditFinding {\n    rule: string;\n    title: string;\n    severity: \'critical\' | \'warning\' | \'notice\';\n    path: string;\n    line: number;\n    excerpt: string;\n}',
+  },
+  {
+    name: 'PluginAuditResult',
+    declaration: 'export interface PluginAuditResult {\n    decision: PluginAuditDecision;\n    digest: string;\n    findings: PluginAuditFinding[];\n    truncated: boolean;\n}',
+  },
+  {
+    name: 'PluginAuditTarget',
+    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n    pending?: \'install\' | \'scripts\';\n    registries?: Registry[];\n}',
+  },
+  {
     name: 'PluginChange',
-    declaration: 'export interface PluginChange {\n    readonly reason: \'plugin\' | \'bundle\' | \'install\' | \'remove\';\n}',
+    declaration: 'export interface PluginChange {\n    readonly reason: \'plugin\' | \'bundle\' | \'install\' | \'remove\' | \'undo\' | \'restore\' | \'config\';\n}',
   },
   {
     name: 'PluginDetail',
@@ -8129,6 +8398,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    info?: ToolErrorInfo;\n    additionalContexts?: UserMessage[];\n};',
   },
   {
+    name: 'PreLoginRoute',
+    declaration: 'export interface PreLoginRoute {\n    readonly method: \'GET\' | \'POST\';\n    readonly path: string;\n}',
+  },
+  {
     name: 'PreparedAdapterCall',
     declaration: 'export interface PreparedAdapterCall {\n    readonly model: LlmResolvedModelInfo;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
@@ -8170,7 +8443,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PreToolDecision',
-    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n    info?: ToolErrorInfo;\n} | {\n    kind: \'cancel\';\n} | {\n    kind: \'ask\';\n    reason?: string;\n    displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n};',
+    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n    info?: ToolErrorInfo;\n} | {\n    kind: \'cancel\';\n} | {\n    kind: \'ask\';\n    reason?: string;\n    displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    grants?: ApprovalGrant;\n};',
   },
   {
     name: 'Principal',
@@ -8193,12 +8466,60 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ProductTelemetryRecord = OTelEventRecord;',
   },
   {
+    name: 'ProfileBuildChange',
+    declaration: 'export interface ProfileBuildChange {\n    readonly name: string;\n    readonly from?: ProfileBuildDecision;\n    readonly to?: ProfileBuildDecision;\n}',
+  },
+  {
+    name: 'ProfileBuildDecision',
+    declaration: 'export type ProfileBuildDecision = \'allowed\' | \'denied\' | \'pending\';',
+  },
+  {
+    name: 'ProfileChangedBy',
+    declaration: 'export type ProfileChangedBy = {\n    readonly kind: \'person\';\n} | {\n    readonly kind: \'agent\';\n    readonly sessionId: string;\n} | {\n    readonly kind: \'outside\';\n};',
+  },
+  {
+    name: 'ProfileContext',
+    declaration: 'export interface ProfileContext {\n    readonly name: string;\n    readonly packageManager?: ProfilePnpmInvocation;\n    readonly dir: string;\n    readonly patchPath: string;\n    readonly installAnchor: string;\n    readonly cwd: string;\n    readonly home: string;\n    readonly startedBundles: readonly string[];\n    readonly overlays: readonly PatchOptions[];\n    readonly telemetryDisabledEnv: string | undefined;\n}',
+  },
+  {
+    name: 'ProfileExemptionChange',
+    declaration: 'export interface ProfileExemptionChange {\n    readonly packageVersion: string;\n    readonly runtimeVersion: string;\n    readonly change: \'added\' | \'removed\';\n}',
+  },
+  {
+    name: 'ProfileHistoryInfo',
+    declaration: 'export type ProfileHistoryInfo = {\n    readonly available: true;\n    readonly versions: readonly ProfileVersion[];\n    readonly unsaved?: string;\n} | {\n    readonly available: false;\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'ProfilePluginChange',
+    declaration: 'export type ProfilePluginChange = {\n    readonly name: string;\n    readonly change: \'added\';\n    readonly to: string;\n} | {\n    readonly name: string;\n    readonly change: \'removed\';\n    readonly from: string;\n} | {\n    readonly name: string;\n    readonly change: \'version\';\n    readonly from: string;\n    readonly to: string;\n};',
+  },
+  {
     name: 'ProfilePnpmInvocation',
     declaration: 'export interface ProfilePnpmInvocation {\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'ProfileReconciliation',
     declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
+  },
+  {
+    name: 'ProfileVersion',
+    declaration: 'export interface ProfileVersion {\n    readonly id: ProfileVersionId;\n    readonly at: number;\n    readonly summary: string;\n    readonly changedBy: ProfileChangedBy;\n}',
+  },
+  {
+    name: 'ProfileVersionChanges',
+    declaration: 'export interface ProfileVersionChanges {\n    readonly plugins: readonly ProfilePluginChange[];\n    readonly bundles: ReadonlyArray<{\n        readonly name: string;\n        readonly selected: boolean;\n    }>;\n    readonly builds: readonly ProfileBuildChange[];\n    readonly exemptions: readonly ProfileExemptionChange[];\n    readonly patchChanged: boolean;\n    readonly unreadable: readonly string[];\n}',
+  },
+  {
+    name: 'ProfileVersionId',
+    declaration: 'export type ProfileVersionId = Branded<\'ProfileVersionId\'>;',
+  },
+  {
+    name: 'ProfileVersionPreview',
+    declaration: 'export type ProfileVersionPreview = {\n    readonly ok: true;\n    readonly version: ProfileVersionSummary;\n    readonly changes: ProfileVersionChanges;\n} | {\n    readonly ok: false;\n    readonly error: ManagementError;\n};',
+  },
+  {
+    name: 'ProfileVersionSummary',
+    declaration: 'export interface ProfileVersionSummary {\n    readonly version: ProfileVersionId;\n    readonly summary: string;\n}',
   },
   {
     name: 'ProjectionChangeListener',
@@ -8227,6 +8548,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionKeySelection',
     declaration: 'export type ProjectionKeySelection = readonly Extract<keyof SessionProjectionMap, string>[] | ReadonlySet<Extract<keyof SessionProjectionMap, string>>;',
+  },
+  {
+    name: 'ProjectionRegistrationListener',
+    declaration: 'export type ProjectionRegistrationListener = (key: Extract<keyof SessionProjectionMap, string>) => void;',
   },
   {
     name: 'ProjectionSnapshot',
@@ -8322,7 +8647,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PtcRunSandbox',
-    declaration: 'export interface PtcRunSandbox {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n}',
+    declaration: 'export interface PtcRunSandbox {\n    mode: SandboxMode;\n    denied: boolean;\n    deniedBy?: \'environment\';\n    enforcement?: SandboxEnforcement;\n}',
   },
   {
     name: 'PtcRunSpec',
@@ -8331,6 +8656,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'QueueAction',
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+  },
+  {
+    name: 'ReachListener',
+    declaration: 'export interface ReachListener {\n    readonly listener: string;\n    readonly address: WebListener[\'address\'];\n    accept(stream: Duplex): void;\n    readonly closed: Promise<void>;\n    close(): Promise<void>;\n}',
+  },
+  {
+    name: 'ReachListenerOptions',
+    declaration: 'export interface ReachListenerOptions {\n    readonly listener: string;\n    readonly bind: WebListenerBind;\n}',
   },
   {
     name: 'ReadFileLine',
@@ -8457,6 +8790,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RemoteEventAgentId = Branded<\'RemoteEventAgentId\'>;',
   },
   {
+    name: 'RemoteEventAnswer',
+    declaration: 'export interface RemoteEventAnswer {\n    readonly peer: PeerScope;\n    readonly event: string;\n    readonly request: object;\n    readonly value: unknown;\n}',
+  },
+  {
     name: 'RemoteEventHostInfo',
     declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
   },
@@ -8578,11 +8915,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    network?: SandboxNetwork;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
     declaration: 'export type SandboxMode = \'read-only\' | \'workspace-write\' | \'danger-full-access\';',
+  },
+  {
+    name: 'SandboxNetwork',
+    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork;',
   },
   {
     name: 'SandboxPolicy',
@@ -8591,6 +8932,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxProxyNetwork',
+    declaration: 'export interface SandboxProxyNetwork {\n    readonly mode: \'proxy\';\n    readonly socket: string;\n}',
   },
   {
     name: 'SaveFileAttachment',
@@ -8610,11 +8955,19 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ScheduleCatalogEntry',
-    declaration: 'export type ScheduleCatalogEntry = ScheduleRecord & {\n    readonly target: ScheduleTarget;\n    readonly involvedSessionIds: SessionId[];\n    readonly status: \'active\' | \'paused\' | \'ended\';\n    readonly createdAt?: string;\n    readonly updatedAt?: string;\n    readonly executionActive?: true;\n    readonly deliveryFloorEndsAt?: string;\n    readonly lastDelivery?: ScheduleDeliveryReceipt;\n};',
+    declaration: 'export type ScheduleCatalogEntry = ScheduleRecord & {\n    readonly target: ScheduleTarget;\n    readonly involvedSessionIds: SessionId[];\n    readonly status: \'active\' | \'paused\' | \'ended\';\n    readonly createdAt?: string;\n    readonly updatedAt?: string;\n    readonly executionActive?: true;\n    readonly deliveryFloorEndsAt?: string;\n    readonly lastDelivery?: ScheduleDeliveryReceipt;\n    readonly consentRefusal?: ScheduleConsentRefusal;\n};',
   },
   {
     name: 'ScheduleConflictResult',
     declaration: 'export interface ScheduleConflictResult {\n    readonly id: ScheduleId;\n    readonly code: \'schedule_conflict\';\n}',
+  },
+  {
+    name: 'ScheduleConsentApproval',
+    declaration: 'export interface ScheduleConsentApproval {\n    readonly preset: string | undefined;\n}',
+  },
+  {
+    name: 'ScheduleConsentRefusal',
+    declaration: 'export interface ScheduleConsentRefusal {\n    readonly reason: string;\n    readonly refusedAt: string;\n}',
   },
   {
     name: 'ScheduleCreateRequest',
@@ -8653,12 +9006,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ScheduleDeliveryRecord extends ScheduleDeliveryReceipt {\n    readonly prompt?: string;\n}',
   },
   {
+    name: 'ScheduleDeliveryReview',
+    declaration: 'export interface ScheduleDeliveryReview {\n    readonly creationPreset: string | undefined;\n    readonly currentPreset: string | undefined;\n    readonly targetSessionId: string;\n}',
+  },
+  {
+    name: 'ScheduleDeliveryVerdict',
+    declaration: 'export type ScheduleDeliveryVerdict = {\n    readonly kind: \'allow\';\n} | {\n    readonly kind: \'refuse\';\n    readonly reason: string;\n};',
+  },
+  {
     name: 'ScheduleEditRequest',
     declaration: 'export type ScheduleEditRequest = {\n    readonly id: ScheduleId;\n    readonly action: \'update\';\n    readonly patch: SchedulePatch;\n    readonly expectedUpdatedAt?: string | null;\n} | {\n    readonly id: ScheduleId;\n    readonly action: \'delete\';\n    readonly expectedUpdatedAt?: string | null;\n};',
   },
   {
     name: 'ScheduleEditResult',
     declaration: 'export type ScheduleEditResult = ScheduleCatalogEntry | Extract<ScheduleDeleteResult, {\n    readonly deleted: true;\n}> | ScheduleNotFoundResult | ScheduleConflictResult;',
+  },
+  {
+    name: 'ScheduleEffect',
+    declaration: 'export interface ScheduleEffect {\n    readonly tool: \'schedule_create\' | \'schedule_edit\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly recurrence: string;\n    readonly targetSessionId: string | undefined;\n    readonly targetTitle: string | undefined;\n    readonly targetCwd: string | undefined;\n    readonly targetPreset: string | undefined;\n}',
   },
   {
     name: 'ScheduleExecutionPendingResult',
@@ -9306,7 +9671,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionSummary',
-    declaration: 'export interface SessionSummary {\n    readonly agentAvailable: boolean;\n    readonly formatStatus?: \'current\' | \'migration-required\';\n    readonly sessionId: SessionId;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly blank: boolean;\n    readonly parentSessionId?: SessionId;\n    readonly origin?: \'subagent\';\n    readonly cwd?: string;\n    readonly projections?: SessionProjectionHints;\n}',
+    declaration: 'export interface SessionSummary {\n    readonly agentAvailable: boolean;\n    readonly formatStatus?: \'current\' | \'migration-required\';\n    readonly sessionId: SessionId;\n    readonly updatedAt: number;\n    readonly createdAt?: number;\n    readonly running: boolean;\n    readonly blank: boolean;\n    readonly parentSessionId?: SessionId;\n    readonly origin?: \'subagent\';\n    readonly cwd?: string;\n    readonly projections?: SessionProjectionHints;\n}',
   },
   {
     name: 'SessionSurface',
@@ -9522,7 +9887,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ShellSandboxInfo',
-    declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
+    declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    deniedBy?: \'environment\';\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
   },
   {
     name: 'SignInAttemptId',
@@ -9570,7 +9935,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillProvider',
-    declaration: 'export interface SkillProvider {\n    readonly name: string;\n    readonly list: (options: SkillLookupOptions) => Promise<readonly SkillCandidate[] | SkillProviderObservation>;\n    readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>;\n}',
+    declaration: 'export interface SkillProvider {\n    readonly name: string;\n    readonly list: (options: SkillLookupOptions) => Promise<readonly SkillCandidate[] | SkillProviderObservation>;\n    readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>;\n    readonly configuredRoots?: () => readonly string[];\n}',
   },
   {
     name: 'SkillProviderControl',
@@ -10537,6 +10902,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
   },
   {
+    name: 'WebGateDecision',
+    declaration: 'export type WebGateDecision = {\n    readonly kind: \'pass\';\n    readonly peer?: PeerScope;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly nonce?: string;\n    readonly only?: {\n        readonly route: {\n            readonly kind: WebRouteKind;\n            readonly path: string;\n        };\n        readonly refusal: WebGateRefusal;\n    };\n} | ({\n    readonly kind: \'refuse\';\n} & WebGateRefusal);',
+  },
+  {
+    name: 'WebGateRefusal',
+    declaration: 'export interface WebGateRefusal {\n    readonly status: number;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly body: string;\n}',
+  },
+  {
     name: 'WebhookDeliveryId',
     declaration: 'export type WebhookDeliveryId = Branded<\'WebhookDeliveryId\'>;',
   },
@@ -10567,6 +10940,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebhookSourceId',
     declaration: 'export type WebhookSourceId = Branded<\'WebhookSourceId\'>;',
+  },
+  {
+    name: 'WebListener',
+    declaration: 'export interface WebListener {\n    readonly id: string;\n    readonly address: {\n        readonly host: \'127.0.0.1\';\n        readonly port: number;\n    } | undefined;\n    accept(stream: Duplex): void;\n    close(): Promise<void>;\n}',
+  },
+  {
+    name: 'WebListenerBind',
+    declaration: 'export type WebListenerBind = {\n    readonly kind: \'loopback\';\n} | {\n    readonly kind: \'streams\';\n    readonly tls: {\n        readonly cert: string;\n        readonly key: string;\n    };\n};',
+  },
+  {
+    name: 'WebListenerGate',
+    declaration: 'export type WebListenerGate = (request: IncomingMessage, kind: \'request\' | \'upgrade\') => WebGateDecision;',
+  },
+  {
+    name: 'WebListenerOptions',
+    declaration: 'export interface WebListenerOptions {\n    readonly id: string;\n    readonly bind: WebListenerBind;\n    readonly gate: WebListenerGate;\n}',
   },
   {
     name: 'WebProviderInfo',
@@ -10843,6 +11232,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorktreeCleanup',
     declaration: 'export interface WorktreeCleanup {\n    readonly revision: number;\n    readonly status: \'scheduled\' | \'retained\' | \'removed\' | \'failed\';\n}',
+  },
+  {
+    name: 'WriteConsentDiff',
+    declaration: 'export type WriteConsentDiff = string | {\n    old: string | null;\n    new: string;\n};',
+  },
+  {
+    name: 'WriteConsentRequest',
+    declaration: 'export interface WriteConsentRequest {\n    tool: WriteConsentTool;\n    path: string;\n    diff?: WriteConsentDiff;\n}',
+  },
+  {
+    name: 'WriteConsentReview',
+    declaration: 'export type WriteConsentReview = {\n    required: false;\n} | {\n    required: true;\n    note: string;\n    grants?: ApprovalGrant;\n};',
+  },
+  {
+    name: 'WriteConsentTool',
+    declaration: 'export type WriteConsentTool = string;',
   },
 ]
 
