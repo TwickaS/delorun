@@ -3,10 +3,10 @@
  * cost anything, opening an anchored dialog with the breakdown. Costs come finished from the harness's `costMeter`
  * projection: the open chat's live value, and each agent's from its Session summary or loaded projections.
  */
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
-import { useAnchoredPosition, useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UseSessions } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: the subagentCatalog projection merge.
@@ -39,12 +39,6 @@ export interface CostPillProps extends CostPillInjected {
   readonly t: Translate
 }
 
-/** The distance between the pill and the dialog, and the dialog's least distance from the viewport's edge, in CSS pixels. */
-const PANEL = { gap: 8, margin: 12 } as const
-
-/** Laid out but hidden, so the anchored position measures the dialog before it shows. */
-const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
-
 /** A coin, drawn at the stock pills' icon size. */
 function CoinIcon() {
   return (
@@ -71,7 +65,7 @@ export function CostPill({ sessionId, useProjection, useSessions, t, loadCosts }
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const titleId = useId()
-  const pos = useAnchoredPosition({ open, anchorRef: rootRef, panelRef, side: 'top', gap: PANEL.gap, margin: PANEL.margin })
+  const anchorName = `--delo-cost-${useId().replaceAll(':', '')}`
   useDismissOnOutsidePointer(rootRef, open, setOpen, panelRef)
 
   useEffect(() => {
@@ -112,7 +106,7 @@ export function CostPill({ sessionId, useProjection, useSessions, t, loadCosts }
   }
 
   return (
-    <span ref={rootRef} className={css.anchor} data-composer-stat="cost">
+    <span ref={rootRef} style={{ anchorName }} className={css.anchor} data-composer-stat="cost">
       <button
         ref={buttonRef}
         type="button"
@@ -131,7 +125,7 @@ export function CostPill({ sessionId, useProjection, useSessions, t, loadCosts }
         </span>
       </button>
       {open && createPortal(
-        <div ref={panelRef} className={css.panel} role="dialog" aria-labelledby={titleId} tabIndex={-1} style={pos ?? MEASURE_STYLE}>
+        <div ref={panelRef} className={css.panel} role="dialog" aria-labelledby={titleId} tabIndex={-1} style={{ positionAnchor: anchorName }}>
           <div className={css.title}>
             <span id={titleId}>{title}</span>
             <span className={css.titleValue}>{totalText}</span>
