@@ -24,7 +24,7 @@ function pairingRepo(test: Parameters<typeof scratchRepo>[0]): Scratch {
   symlinkSync(join(REPO, 'node_modules'), join(repo.root, 'node_modules'))
   writeFileSync(join(repo.root, '.gitignore'), 'node_modules\n')
   repo.write({ 'docs/guide.md': EN, 'docs/guide.zh.md': ZH })
-  execFileSync(TSX, ['scripts/verify-translation-pairing.ts', '--write', 'docs/guide.md'], { cwd: repo.root })
+  execFileSync(TSX, ['scripts/verify-translation-pairing.ts', '--write', 'docs/guide.md'], { cwd: repo.root, timeout: 30_000 })
   repo.commit({})
   return repo
 }
