@@ -1,9 +1,9 @@
 /**
  * Cuts the next release candidate in one command: checks the tree, assembles the changelog, builds the runtime closure,
  * signs and logs the release into the local channel with `local-release.ts`, and verifies the channel as a client does.
- * See "Cutting a release candidate" in `delo/apps/release/README.md`.
+ * See "Cutting a release candidate" in `delorun/apps/release/README.md`.
  *
- * `tsx delo/apps/release/scripts/cut-rc.ts --version <0.1.0-rc.N> --channel <dir> --state <signer state file> --keys <dir>
+ * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-rc.N> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
  * [--log-poll-seconds <n>] [--dry-run]`
@@ -27,9 +27,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { checkFileRef, trustRootChain, verifyChannelManifest, verifySignedManifest, verifyTimestamp } from '@delo/release-formats/sign/verify'
-import { repositoryRoot } from '@delo/tools/src/git.ts'
+import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delorun/contract-release-manifest'
+import { checkFileRef, trustRootChain, verifyChannelManifest, verifySignedManifest, verifyTimestamp } from '@delorun/release-formats/sign/verify'
+import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { parseData } from '../src/changelog/data.ts'
 import { DATA_PATH } from '../src/changelog/paths.ts'
 import { BUILD_ROOT_MARKER } from '../src/closure/build-root.ts'
@@ -174,7 +174,7 @@ function closureDirectory(request: CutRequest): string {
  */
 export function localReleaseArgs(request: CutRequest): string[] {
   return [
-    'delo/apps/release/src/local-release.ts', '--version', request.version, '--commit', request.commit, '--summary', request.summary,
+    'delorun/apps/release/src/local-release.ts', '--version', request.version, '--commit', request.commit, '--summary', request.summary,
     '--out', request.channel, '--root', request.root, '--targets-key', join(request.keys, 'targets.pem'), '--timestamp-key', join(request.keys, 'timestamp.pem'),
     '--state', request.state, '--closures-from', closureDirectory(request),
     ...request.platforms.flatMap(platform => ['--platform', platform]),
@@ -190,11 +190,11 @@ export function localReleaseArgs(request: CutRequest): string[] {
  */
 export function planSteps(request: CutRequest): PlannedStep[] {
   const tsx = 'node_modules/.bin/tsx'
-  const buildArgs = ['delo/apps/release/src/build-closure.ts', '--version', request.version, '--commit', request.commit, '--out', closureDirectory(request), '--cache', join(request.work, 'cache'), '--artifacts', request.artifacts, ...request.platforms.flatMap(platform => ['--platform', platform])]
+  const buildArgs = ['delorun/apps/release/src/build-closure.ts', '--version', request.version, '--commit', request.commit, '--out', closureDirectory(request), '--cache', join(request.work, 'cache'), '--artifacts', request.artifacts, ...request.platforms.flatMap(platform => ['--platform', platform])]
   return [
     { id: 'tree', title: `check a clean tracked tree at ${request.commit}`, commands: [`git rev-parse --verify ${request.commit}^{commit}`, 'git rev-parse HEAD', 'git status --porcelain --untracked-files=no'] },
-    { id: 'changelog', title: `assemble the changelog for ${request.version} when it has no entry`, commands: [`${tsx} delo/apps/release/src/changelog/assemble.ts --version ${request.version}`] },
-    ...signsNotes(request) ? [{ id: 'highlights', title: `write the release notes to ${request.highlights}`, commands: [`${tsx} delo/apps/release/src/changelog/assemble.ts --version ${request.version} --highlights ${request.highlights}`] } as const] : [],
+    { id: 'changelog', title: `assemble the changelog for ${request.version} when it has no entry`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version}`] },
+    ...signsNotes(request) ? [{ id: 'highlights', title: `write the release notes to ${request.highlights}`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version} --highlights ${request.highlights}`] } as const] : [],
     ...request.closuresFrom === undefined
       ? [
           { id: 'clear-stages', title: 'clear stale closure build stages', commands: [`remove <build root>-* directories that carry ${BUILD_ROOT_MARKER}, and a build-root lock whose process no longer runs`] } as const,
@@ -391,15 +391,15 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   if (deps.hasChangelogEntry(request.version)) {
     done(started, ' (the entry exists)')
   } else {
-    const assembled = await command(tsx, ['delo/apps/release/src/changelog/assemble.ts', '--version', request.version])
+    const assembled = await command(tsx, ['delorun/apps/release/src/changelog/assemble.ts', '--version', request.version])
     if (assembled.status !== 0) return failed('assembling the changelog was refused', `read ${logFile}, fix the fragments, commit, and run again with the new --commit`)
     const changed = (await command('git', ['status', '--porcelain', '--untracked-files=no'])).stdout.trim()
-    return failed(`the assembly changed:\n${changed}`, 'review and commit these files (git add delo/changelog CHANGELOG.md), then run again with --commit <new sha>', 3)
+    return failed(`the assembly changed:\n${changed}`, 'review and commit these files (git add delorun/changelog CHANGELOG.md), then run again with --commit <new sha>', 3)
   }
 
   if (signsNotes(request)) {
     started = begin('highlights')
-    const written = await command(tsx, ['delo/apps/release/src/changelog/assemble.ts', '--version', request.version, '--highlights', request.highlights])
+    const written = await command(tsx, ['delorun/apps/release/src/changelog/assemble.ts', '--version', request.version, '--highlights', request.highlights])
     if (written.status !== 0) return failed('the release notes were not written', `read ${logFile}`)
     done(started)
   }
@@ -413,7 +413,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
       return failed((error as Error).message, 'wait for that build or stop it yourself, then run again')
     }
     started = begin('closure')
-    const built = await command(tsx, ['delo/apps/release/src/build-closure.ts', '--version', request.version, '--commit', request.commit, '--out', closureDirectory(request), '--cache', join(request.work, 'cache'), '--artifacts', request.artifacts, ...request.platforms.flatMap(platform => ['--platform', platform])])
+    const built = await command(tsx, ['delorun/apps/release/src/build-closure.ts', '--version', request.version, '--commit', request.commit, '--out', closureDirectory(request), '--cache', join(request.work, 'cache'), '--artifacts', request.artifacts, ...request.platforms.flatMap(platform => ['--platform', platform])])
     if (built.status !== 0) return failed('the closure build failed', `read ${logFile}; after a fix run again (the build starts clean)`)
     done(started)
   }
