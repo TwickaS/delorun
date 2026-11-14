@@ -825,10 +825,22 @@
       "reason": "Renders the General card rows, so a grouped layout can show the rows it names."
     },
     {
+      "path": "packages/client/ui-settings-general/src/client/SettingsDocumentAction.module.css",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/SettingsDocumentAction.tsx",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size."
+    },
+    {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
@@ -864,7 +876,7 @@
       "path": "packages/client/ui-settings-models/src/client/ModelsSection.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections."
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections. Under a coarse primary pointer its text fields are 44px tall with a 16px font, so API key fields meet the touch target size."
     },
     {
       "path": "packages/client/ui-settings-models/src/client/index.ts",

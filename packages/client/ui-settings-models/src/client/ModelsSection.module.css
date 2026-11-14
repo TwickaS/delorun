@@ -827,6 +827,14 @@ select.input {
   cursor: pointer;
 }
 
+/* Touch targets: 44px fields, and the 16px floor that stops iOS focus zoom. */
+@media (pointer: coarse) {
+  .input {
+    height: 44px;
+    font-size: 16px;
+  }
+}
+
 .input:focus {
   outline: none;
   border-color: var(--dsw-alias-state-business-primary);

@@ -41,6 +41,7 @@ export function SettingsDocumentAction({ controller, useSnapshot, t }: SettingsD
       <Button
         variant="outline"
         size="sm"
+        className={css.button}
         disabled={state.opening}
         onClick={() => { void controller.open() }}
       >
