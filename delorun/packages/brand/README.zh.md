@@ -81,8 +81,6 @@ kind: "package-library"
 
 [`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) 在每个 Delorun 包以及网站和文档的源码中（本包除外）拒绝品牌色字面量（`#E5734A`、`#B84A1B`）、`font-family` 中的具名字体，以及第二份标志路径。保留字面量的文件须连同理由列入 [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json)；这个清单只会变短。
 
-社交卡的源页 `apps/website/scripts/og.html` 由 `scripts/render-og.ts` 从本包生成（`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`）；`tests/og.spec.ts` 在提交的页面与 `src/og.ts` 不一致时失败。`public/og.png` 是该页 1200×630 的截图，由 `scripts/render-og-png.ts` 生成（从仓库根目录运行 `node_modules/.bin/tsx delorun/packages/brand/scripts/render-og-png.ts`）：它通过 127.0.0.1 上的 browse 会话加载页面，等待品牌字体加载，然后写入 PNG。`tests/og.spec.ts` 还检查 PNG 的尺寸。
-
 <a id="the-desktop-icon"></a>
 ## 桌面图标
 
