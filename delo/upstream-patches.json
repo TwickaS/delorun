@@ -504,7 +504,7 @@
       "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Reads the grouped Settings page section properties with fallbacks, so the agent preset section title aligns with the other sections."
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the agent preset section title aligns with the other sections. The Built-in and Custom group captions read the `--dsh-settings-card-heading-*` properties too, falling back to upstream's small uppercase caption, so a layout draws them as sentence-case headings like its cards."
     },
     {
       "path": "packages/client/ui-chat/src/chat-settings.ts",
@@ -648,7 +648,7 @@
       "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "The Send circle reads `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`, falling back to upstream's info fill, hover and white arrow, so a theme can restyle the circle and the default is unchanged."
+      "reason": "The Send circle reads `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`, falling back to upstream's info fill, hover and white arrow, so a theme can restyle the circle and the default is unchanged. At phone widths the attach and send circles carry a 44px hit area (a pseudo-element) without changing their size or place. Offer upstream."
     },
     {
       "path": "packages/client/ui-conversation/src/client/stores.ts",
@@ -828,7 +828,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",

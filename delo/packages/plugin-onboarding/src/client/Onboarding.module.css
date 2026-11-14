@@ -533,6 +533,10 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
+  /* The footer's Continue is the screen's one primary button, so the embedded editor's commit button draws neutral. */
+  --dsw-alias-button-primary-fill: var(--dsw-alias-interactive-bg-hover-solid);
+  --dsw-alias-button-primary-hover: var(--dsw-alias-border-l2);
+  --dsw-alias-label-primary-foreground: var(--dsw-alias-label-primary);
 }
 
 /* Look: the choices beside a small chat drawn with the studio's own tokens, which follow each choice at once. */

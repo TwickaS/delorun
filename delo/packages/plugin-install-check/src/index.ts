@@ -72,7 +72,7 @@ export interface Config {
   readonly trustedSources: string[]
   /**
    * Ask the npmmirror registry when the first registry fails, as upstream does by default. `delorun` passes it to the
-   * plugin manager's `fallbackRegistries` at each start; Settings → Privacy and `delorun plugin mirror on|off` set it.
+   * plugin manager's `fallbackRegistries` at each start; Settings → Plugins and `delorun plugin mirror on|off` set it.
    */
   readonly npmMirror: boolean
 }

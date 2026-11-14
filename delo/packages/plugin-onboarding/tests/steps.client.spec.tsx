@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, REACH_COMMAND, ReachStep, ReadyStep, RemoteReachStep, WelcomeStep } from '../src/client/steps.tsx'
+import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, readableName, REACH_COMMAND, ReachStep, ReadyStep, RemoteReachStep, WelcomeStep } from '../src/client/steps.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
@@ -366,7 +366,7 @@ describe('the recommended plugins step', () => {
     expect(screen.getByText(en['plugins.reading'])).toBeTruthy()
     await settle()
     expect(host.recommend).toHaveBeenCalledExactlyOnceWith(false)
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['@scope/codex-quota', 'Any', '@scope/unread'])
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Unread'])
     expect(screen.getByText('Fits Codex, DeepSeek')).toBeTruthy()
     expect(screen.getByText('Fits any setup.')).toBeTruthy()
     expect(fake.refresh).toHaveBeenLastCalledWith(['@scope/codex-quota', '@scope/any', '@scope/unread'])
@@ -406,7 +406,7 @@ describe('the recommended plugins step', () => {
     render(<PluginsStep services={stepServices({ plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
     expect(screen.getByText(en['plugins.unread'])).toBeTruthy()
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(plugins)
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Claude only', 'Unread'])
   })
 
   it('names a connection as the person knows it', () => {
@@ -414,6 +414,10 @@ describe('the recommended plugins step', () => {
     const providers = new Map([['deepseek-official', 'DeepSeek']])
     expect(['agent:claude-code', 'agent:codex', 'tool:tailscale', 'provider:deepseek-official', 'provider:other', 'tool:other'].map(id => connectionName(id, t, providers)))
       .toEqual(['Claude Code', 'Codex', 'Tailscale', 'DeepSeek', 'other', 'other'])
+  })
+
+  it('names a plugin whose title is not known yet in words, never by its package id', () => {
+    expect(['@scope/codex-quota', '@deepseek-ai/dsh-session-search', 'plain'].map(readableName)).toEqual(['Codex quota', 'Dsh session search', 'Plain'])
   })
 })
 
@@ -487,11 +491,11 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', 'DeepSeek', 'done'],
-      ['Look', 'Soft · Peach', 'done'],
+      ['Look', 'Soft · Peach', undefined],
       ['Agents', 'Claude Code', 'done'],
       ['Plugins', '1 added', 'done'],
       ['Phone access', 'On', 'done'],
-      ['Workspace', '/home/person/app', 'done'],
+      ['Workspace', '/home/person/app', undefined],
     ])
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
   })
@@ -504,7 +508,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', en['ready.model.none'], 'attention'],
-      ['Look', 'Grove', 'done'],
+      ['Look', 'Grove', undefined],
       ['Agents', en['ready.none'], undefined],
       ['Plugins', en['ready.none'], undefined],
       ['Workspace', en['ready.workspace.none'], 'attention'],
@@ -522,7 +526,7 @@ describe('the ready step', () => {
   it('names the default look while the theme settings are still loading', async () => {
     ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
     await settle()
-    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', 'done'])
+    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', undefined])
   })
 
   it('shows the default workspace once the dialog chose it', async () => {
@@ -530,7 +534,7 @@ describe('the ready step', () => {
     guide.chooseWorkspace({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
     ready(guide, { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, 'done'])
+    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, undefined])
     expect(KEYS.providers).toHaveLength(1)
   })
 })

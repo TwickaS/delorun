@@ -257,7 +257,7 @@
 # Plugins install from the registry pnpm's configuration names, or the
 # `registry` set here, and from no mirror unless the person turns the npm mirror
 # on: `npmMirror` of the `delo-plugin-install-check` row, which Settings →
-# Privacy and `delorun plugin mirror on|off` set. `delorun start` passes that
+# Plugins and `delorun plugin mirror on|off` set. `delorun start` passes that
 # setting to the Host as DELO_NPM_MIRROR (NPM_MIRROR_ENV in src/profile.ts), and
 # `fallbackRegistries` reads it, so the mirror changes at the next start; any
 # other boot leaves the variable unset and asks no mirror. Upstream asks

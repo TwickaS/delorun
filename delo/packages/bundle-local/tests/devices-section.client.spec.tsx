@@ -17,7 +17,7 @@ import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
   MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
-  PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -482,6 +482,7 @@ describe('the plugin', () => {
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
       expect(sections).toMatchObject([
+        { id: PLUGIN_INSTALLS_SECTION_ID, order: PLUGIN_INSTALLS_SECTION_ORDER },
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
         { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
         { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
@@ -489,7 +490,7 @@ describe('the plugin', () => {
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
       expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
-        .toEqual(['Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
+        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
@@ -504,14 +505,14 @@ describe('the plugin', () => {
       expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
-      const devicesEntry = slots.entries('settings.section')[1]
+      const devicesEntry = slots.entries('settings.section')[2]
       const face = devicesEntry?.inject?.() as { fetch: HostFetch }
       // A stable request function: the section's requests restart when it changes.
       expect((devicesEntry?.inject?.() as { fetch: HostFetch }).fetch).toBe(face.fetch)
       expect(await readReachStatus(face.fetch)).toEqual(READY.body)
       expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
       // The External agents section's settings read and write the consent row's Host form.
-      const agentsInject = slots.entries('settings.section')[3]?.inject as (() => ExternalAgentsSectionInjected) | undefined
+      const agentsInject = slots.entries('settings.section')[4]?.inject as (() => ExternalAgentsSectionInjected) | undefined
       const agents = agentsInject?.()
       if (agents === undefined) throw new Error('no External agents section face')
       expect(agents.hooks.agentSettings).toBe(ctx.get('configForms')?.get(DELEGATION_CONSENT_ROW))
