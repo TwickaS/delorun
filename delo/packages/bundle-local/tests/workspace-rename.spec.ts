@@ -6,7 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, Config, renameWorkspaceTool, RenameToolError } from '../src/workspace-rename.ts'
+import * as plugin from '../src/workspace-rename.ts'
+import { renameWorkspaceTool, RenameToolError } from '../src/workspace-rename.ts'
 
 /** One stand-in workspace. */
 interface Stand { id: string, title: string, setTitle: ReturnType<typeof vi.fn> }
@@ -152,21 +153,21 @@ describe('the rename_workspace_tool switch', () => {
    * @param config - the plugin's config.
    * @returns the names of the tools it registered.
    */
-  function registered(config: unknown): string[] {
+  async function registered(config: Partial<plugin.Config>): Promise<string[]> {
     const ctx = new Context()
     const names: string[] = []
     ctx.provide('tools', { register: (tool: { name: string }) => { names.push(tool.name); return () => {} } } as never)
     ctx.provide('workspaceRegistry', { list: () => [] } as never)
-    apply(ctx, Config(config))
+    await ctx.plugin(plugin, plugin.Config(config as plugin.Config))
     return names
   }
 
-  it('registers the tool with the switch on', () => {
-    expect(registered({ enabled: true })).toEqual(['rename_workspace'])
+  it('registers the tool with the switch on', async () => {
+    expect(await registered({ enabled: true })).toEqual(['rename_workspace'])
   })
 
-  it('registers nothing with the switch off, which is its default', () => {
-    expect(registered({ enabled: false })).toEqual([])
-    expect(registered({})).toEqual([])
+  it('registers nothing with the switch off, which is its default', async () => {
+    expect(await registered({ enabled: false })).toEqual([])
+    expect(await registered({})).toEqual([])
   })
 })
