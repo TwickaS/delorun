@@ -13,13 +13,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type {} from '../src/index.ts'
 import { apply } from '../src/host/share-host.ts'
 
 const START = Date.parse('2026-10-15T00:00:00.000Z')
 const PAST = new Date(START).toISOString()
 const LIVE = new Date(START + 30 * 24 * 60 * 60_000).toISOString()
+/** The test clock: a day after `PAST` and a month before `LIVE`, whatever the date the suite runs on. */
+const NOW = START + 24 * 60 * 60_000
 const STORED_TOKEN = 'stored-payload.stored-signature'
 
 /**
@@ -96,6 +98,9 @@ async function host(options: {
   readonly expiresAt: string
   readonly shares: boolean
 }): Promise<HostFixture> {
+  // Only the clock is fake; timers and polling stay real.
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
+  onTestFinished(() => { vi.useRealTimers() })
   const directory = mkdtempSync(join(tmpdir(), 'liveshare-owner-horizon-'))
   onTestFinished(() => { rmSync(directory, { recursive: true, force: true }) })
   const ownerStateFile = join(directory, 'owner-shares.json')

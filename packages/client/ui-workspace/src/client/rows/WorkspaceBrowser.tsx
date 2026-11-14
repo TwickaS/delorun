@@ -676,10 +676,10 @@ function SessionTree({
   )
 }
 
-/** The colours a Workspace's dot takes in the one-list view, from the theme's static ramps, leaving out the accent's own. */
+/** The colours a Workspace's dot takes in the one-list view, from the theme's Workspace dot aliases, leaving out the accent's own. */
 const WORKSPACE_COLORS = [
-  '--dsw-static-blue-450', '--dsw-static-green-500', '--dsw-static-amber-500',
-  '--dsw-static-violet-400', '--dsw-static-red-400',
+  '--dsw-alias-workspace-dot-1', '--dsw-alias-workspace-dot-2', '--dsw-alias-workspace-dot-3',
+  '--dsw-alias-workspace-dot-4', '--dsw-alias-workspace-dot-5',
 ] as const
 
 /**

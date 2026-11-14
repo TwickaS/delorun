@@ -9,6 +9,7 @@ import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { allowAllAccess } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
@@ -78,7 +79,7 @@ function mountRail(options: MountOptions = {}) {
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook} renderFactorySlot={() => null}
       {...allowAllAccess}
       startSession={startSession} toggleSidebar={toggleSidebar} trackEntryClick={vi.fn()} t={t}
-      renderSlot={((key: string, owner: SidebarSectionOwnerProps) => {
+      renderSlot={((key: string, owner: SidebarSectionOwnerProps, options?: { children?: ReactNode }) => {
         if (key === 'sidebar.brand.mark') return <span data-testid="brand-mark">M</span>
         if (key === 'sidebar.brand.name') return <span data-testid="brand-name">Brand</span>
         if (key === 'sidebar.backdrop') return null
@@ -86,6 +87,7 @@ function mountRail(options: MountOptions = {}) {
         if (key === 'sidebar.brand.badge') return null
         if (key === 'sidebar.settings') return <div data-testid="settings-seat" data-wide={owner.wide} />
         if (key === 'sidebar.footer.action') return null
+        if (key === 'sidebar.session.action') return options?.children ?? null
         regionOwner = owner as SidebarSectionOwnerProps
         return <div data-testid="region" data-wide={owner.wide}><PeekControl /></div>
       }) as SidebarRootComponentProps['renderSlot']}
