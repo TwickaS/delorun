@@ -2335,6 +2335,18 @@
       "class": "security",
       "reason": "LiveShare share catalogue: an endpoint is offered to a share only when `VIEWER_ENDPOINT_CLASSES` gives it a class other than `owner-only`; an `owner-only` or unclassified endpoint is never offered, so plugin access `all` cannot reach `commands/execute`, `mcpManager/restart`, `agentTeams/setEnabled`, `speech/configure` or `pluginManager/history|undo|restore`. Stricter than upstream, whose namespace exclusion list alone decided the offer.",
       "sha256": "78d13e27174e73420d3584ce3eed5175e346879160f6689374324b694dcc5dab"
+    },
+    {
+      "path": "scripts/translation-links.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "A Chinese page links the English page while that page has no Chinese twin, and a `.zh.md` link to a missing twin is refused, so Delorun's partly translated guide can be paired page by page."
+    },
+    {
+      "path": "scripts/verify-translation-pairing.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Names the missing Chinese twin in the wrong-locale link message, so the fix (link the English page) is clear."
     }
   ],
   "retired": []
