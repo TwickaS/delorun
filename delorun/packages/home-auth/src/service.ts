@@ -29,7 +29,7 @@ import {
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
 import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
-import { DangerousSettingsLedger, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
+import { DangerousSettingsLedger, type LiftField, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
 import type { ElevationState } from '@delorun/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -63,6 +63,8 @@ export interface ConfigInput {
   readonly secretsDirectory?: string
   /** The pairing choices, each optional; see {@link Config.pairing}. */
   readonly pairing?: PairingConfig
+  /** Seconds between retries of a PIN page's set-back that failed; see {@link Config.pinSetBackRetrySeconds}. */
+  readonly pinSetBackRetrySeconds?: number
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -76,7 +78,15 @@ export interface Config {
    * cannot write this section.
    */
   readonly pairing: Volatile<PairingConfig>
+  /**
+   * Seconds between retries of a setting a PIN page loosened whose set-back failed after PIN mode went off, from 1 to
+   * 3600; 30 by default. The timer runs only while such a lift waits.
+   */
+  readonly pinSetBackRetrySeconds: number
 }
+
+/** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
+const PIN_RETRY_SECONDS = { min: 1, max: 3600, fallback: 30 } as const
 
 const MINUTE_MS = 60 * 1000
 
@@ -104,6 +114,8 @@ export const Config: schema<ConfigInput, Config> = schema.object({
     requestExpiryMinutes: pairingMinutes('requestExpiryMinutes', PAIRING_DEFAULTS.requestExpiryMs / MINUTE_MS).description('How long a request waits before it expires, from 1 to 10 minutes; 5 by default.'),
     pendingPerIdentity: pairingMinutes('pendingPerIdentity', PAIRING_DEFAULTS.pendingPerIdentity).description('How many requests one Tailscale user may have waiting without a window, from 1 to 5; 1 by default.'),
   }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
+  pinSetBackRetrySeconds: schema.number().step(1).min(PIN_RETRY_SECONDS.min).max(PIN_RETRY_SECONDS.max).default(PIN_RETRY_SECONDS.fallback)
+    .description('Seconds between retries of a setting a PIN page loosened whose set-back failed after PIN mode went off, from 1 to 3600; 30 by default.'),
 })
 
 /** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
@@ -135,6 +147,8 @@ export class HomeAuthService extends Service {
   private lifts: DangerousSettingsLedger | undefined
   /** The settings an unlocked PIN page loosened, set back when PIN mode turns off. */
   private pinLifts: DangerousSettingsLedger | undefined
+  /** Retries the PIN set-back while a lift waits; absent otherwise. */
+  private pinRetry: NodeJS.Timeout | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -188,6 +202,7 @@ export class HomeAuthService extends Service {
     // provider the mode cannot be read yet, and the first read of it ends the lift.
     if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    this.ctx.effect(() => () => { this.stopPinRetry() }, 'home-auth PIN set-back retry')
     // A mode that ends sets back at once what a device loosened under it, without waiting for a device call or a restart.
     this.ctx.inject(['reachFullAccessGrants'], (grants) => {
       grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { this.setBackLogged() }), 'home-auth: dangerous-mode settings set back')
@@ -239,7 +254,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PIN_PATHS.unlock, handler: pinUnlockHandler(core) }),
         server.register({ kind: 'exact', path: PIN_PATHS.touch, handler: pinTouchHandler(core) }),
         server.register({ kind: 'exact', path: PIN_PATHS.lock, handler: pinLockHandler(core) }),
-        server.register({ kind: 'exact', path: PIN_PATHS.mode, handler: pinModeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.mode, handler: pinModeHandler(core, credential, () => this.pinSetBackWaiting()) }),
         server.register({ kind: 'exact', path: PIN_PATHS.set, handler: pinSetHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
@@ -346,9 +361,33 @@ export class HomeAuthService extends Service {
    */
   pinEnabled(): boolean {
     const on = this.core?.pin.enabled() ?? false
-    // A lift whose settings row was not described, or whose write failed, is retried by the next read after PIN mode is off.
-    if (!on && this.pinLifts?.pending() === true) this.endPinSettingsLogged()
     return on
+  }
+
+  /**
+   * The settings an unlocked PIN page loosened whose set-back failed and is being retried.
+   * @returns their namespaces and fields, never their values.
+   */
+  pinSetBackWaiting(): readonly LiftField[] {
+    return this.pinLifts?.waiting() ?? []
+  }
+
+  /** Start the retry timer while a PIN lift waits after PIN mode is off, and stop it when none does. */
+  private armPinRetry(): void {
+    const waiting = this.pinLifts?.pending() === true && this.core?.pin.enabled() !== true
+    if (!waiting) {
+      this.stopPinRetry()
+      return
+    }
+    if (this.pinRetry !== undefined) return
+    this.pinRetry = setInterval(() => { this.endPinSettingsLogged() }, this.config.pinSetBackRetrySeconds * 1000)
+    this.pinRetry.unref()
+  }
+
+  private stopPinRetry(): void {
+    if (this.pinRetry === undefined) return
+    clearInterval(this.pinRetry)
+    this.pinRetry = undefined
   }
 
   private endPinSettingsLogged(): void {
@@ -435,7 +474,13 @@ export class HomeAuthService extends Service {
    * @returns when the pass is done; a failed write is retried at the next call.
    */
   async endPinSettings(): Promise<void> {
-    await this.pinLifts?.revert(this.settingsFields(), () => this.core?.pin.enabled() ?? false)
+    try {
+      await this.pinLifts?.revert(this.settingsFields(), () => this.core?.pin.enabled() ?? false, ({ ns, field }) => {
+        this.ctx.logger.warn(`home-auth: the PIN mode setting ${ns}.${field} could not be set back; it is retried every ${String(this.config.pinSetBackRetrySeconds)} seconds`)
+      })
+    } finally {
+      this.armPinRetry()
+    }
   }
 
   /**

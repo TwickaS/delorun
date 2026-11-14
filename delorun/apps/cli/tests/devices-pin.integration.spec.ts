@@ -69,7 +69,7 @@ function pinOnlyApproval(): LocalDeviceApproval {
  * @param overrides - the dependency values to replace.
  * @returns the command.
  */
-function command(overrides: { readonly typed?: (string | undefined)[]; readonly line?: string | undefined; readonly interactive?: boolean } = {}): ReturnType<typeof createDevicesCommand> {
+function command(overrides: { readonly typed?: (string | undefined)[]; readonly line?: string | undefined; readonly interactive?: boolean; readonly stdinIsTerminal?: boolean } = {}): ReturnType<typeof createDevicesCommand> {
   const typed = [...(overrides.typed ?? [])]
   const dependencies: DevicesDependencies = {
     running: homeRuns,
@@ -80,6 +80,7 @@ function command(overrides: { readonly typed?: (string | undefined)[]; readonly 
       secret: () => Promise.resolve(typed.shift()),
       stdinLine: () => Promise.resolve(overrides.line),
       interactive: overrides.interactive ?? true,
+      stdinIsTerminal: overrides.stdinIsTerminal ?? false,
       now: Date.now,
     },
   }
@@ -110,6 +111,14 @@ describe('delorun devices pin', () => {
     await command().run(['pin', 'status'], context)
     expect(out.stdout).toBe('PIN mode is off. Turn it on with delorun devices pin set.\n')
   }, 60_000)
+
+  it('status names a setting that waits to be set back once the mode is off, by field and without its value', async () => {
+    mkdirSync(secrets(), { recursive: true, mode: 0o700 })
+    writeFileSync(join(secrets(), 'reach-pin-settings.json'), JSON.stringify({ v: 1, lifts: [{ ns: 'delorun-delegation-consent', field: 'enabled', previous: true, set: SECRET }] }), { mode: 0o600 })
+    await command().run(['pin', 'status'], context)
+    expect(out.stdout).toContain('delorun-delegation-consent.enabled')
+    expect(out.stdout).not.toContain(SECRET)
+  })
 
   it('changes the idle minutes and lock-when-hidden with no secret, and keeps the PIN', async () => {
     running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
@@ -149,6 +158,23 @@ describe('delorun devices pin', () => {
     expect(out.stdout).toContain('PIN mode is on, with a passcode.')
     expect(out.stdout + out.stderr).not.toContain('correct horse')
   }, 60_000)
+
+  it('refuses --stdin when standard input is a terminal, which would echo the secret, and reads nothing', async () => {
+    // Pins the TTY check: a typed line on a terminal shows on screen and in scrollback.
+    await expect(command({ line: SECRET, interactive: true, stdinIsTerminal: true }).run(['pin', 'set', '--stdin'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('standard input is a terminal')
+    expect(out.stderr).not.toContain(SECRET)
+    expect(sent).toEqual([])
+  })
+
+  it('never echoes a stray argument of options, off or resume, which may be a secret', async () => {
+    for (const action of ['options', 'off', 'resume']) {
+      const failure = await command().run(['pin', action, SECRET], context).catch((error: unknown) => error)
+      expect(failure, action).toMatchObject({ exit: EXIT.usage })
+      expect(String((failure as Error).message), action).not.toContain(SECRET)
+    }
+    expect(sent).toEqual([])
+  })
 
   it('refuses without a terminal unless --stdin reads a line, and sends nothing', async () => {
     await expect(command({ interactive: false }).run(['pin', 'set'], context)).resolves.toBe(EXIT.failed)

@@ -173,7 +173,7 @@ describe('remote access from a second device', () => {
       send: async (_home, _profile, request) => (request.op === 'devices.remove' ? [{ ok: true, ...await removeDevice({ v: 1, token: newStartToken(), ...request }, 'person', devices) }] : []),
       ask: () => Promise.resolve(undefined),
       terminal: false,
-      pin: { secret: () => Promise.resolve(undefined), stdinLine: () => Promise.resolve(undefined), interactive: false, now: () => 0 },
+      pin: { secret: () => Promise.resolve(undefined), stdinLine: () => Promise.resolve(undefined), interactive: false, stdinIsTerminal: false, now: () => 0 },
     })
     await expect(removed.run(['remove', deviceId], context)).resolves.toBe(EXIT.ok)
     expect(output.stdout).toContain('1 session(s) ended')

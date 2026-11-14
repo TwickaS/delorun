@@ -11,6 +11,7 @@
  *
  * @module @delorun/home-auth/pin-routes
  */
+import type { LiftField } from './dangerous-settings.ts'
 import { HomeAuthError } from './errors.ts'
 import { deviceSession, type DeviceSession } from './elevation-routes.ts'
 import type { HomeAuth } from './home-auth.ts'
@@ -124,16 +125,17 @@ export function pinLockHandler(auth: HomeAuth): RouteHandler {
  * Build the route the computer reads PIN mode from.
  * @param auth - the home-auth instance.
  * @param credential - the loopback credential check.
+ * @param setBackWaiting - the settings whose set-back failed and is being retried, by namespace and field.
  * @returns the handler.
  */
-export function pinModeHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
+export function pinModeHandler(auth: HomeAuth, credential: LoopbackCredential, setBackWaiting: () => readonly LiftField[]): RouteHandler {
   return async (request, response) => {
     if (!personAtComputer(auth, credential, request, response, 'PIN mode', false)) return
     if (request.method !== 'GET') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'this route takes GET'))
       return
     }
-    sendJson(response, 200, auth.pin.summary())
+    sendJson(response, 200, { ...auth.pin.summary(), setBackWaiting: setBackWaiting() })
   }
 }
 

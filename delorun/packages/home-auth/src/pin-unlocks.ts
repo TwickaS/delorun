@@ -244,13 +244,19 @@ export class PinUnlocks {
   }
 
   /**
-   * Change the idle minutes and lock-when-hidden at the computer without the secret. Unlocks stay: no secret changed.
+   * Change the idle minutes and lock-when-hidden at the computer without the secret. Unlocks stay: no secret changed, but a shorter idle time ends their idling within it.
    * @param options - the new values; a missing one stays.
    * @returns the settings now in force.
    * @throws {HomeAuthError} as {@link PinModeStore.setOptions}.
    */
   async setOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
     const now = await this.options.store.setOptions(options)
+    // A shorter idle time applies to the unlocks running now: none idles past it.
+    const idleEnd = this.options.now() + now.idleMinutes * 60_000
+    for (const { id } of this.tokens.values()) {
+      const record = this.options.elevations.get(id)
+      if (record !== undefined && record.endsAt > idleEnd) this.options.elevations.moveEnd(id, idleEnd)
+    }
     this.options.report({ kind: 'options', ...now })
     return now
   }

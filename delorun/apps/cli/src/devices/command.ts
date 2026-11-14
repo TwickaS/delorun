@@ -61,7 +61,7 @@ export interface DevicesDependencies {
   /** Whether standard output is a terminal, which an owner code is printed to only. */
   readonly terminal: boolean
   /** What `devices pin` needs besides the home socket and the running check above. */
-  readonly pin: Pick<PinDependencies, 'secret' | 'stdinLine' | 'interactive' | 'now'>
+  readonly pin: Pick<PinDependencies, 'secret' | 'stdinLine' | 'interactive' | 'stdinIsTerminal' | 'now'>
 }
 
 /** The usage line. */
@@ -152,7 +152,7 @@ export const devicesCommand: CliCommand = createDevicesCommand({
   send: sendHomeRequest,
   ask: askInTerminal,
   terminal: process.stdout.isTTY,
-  pin: { secret: askSecretInTerminal, stdinLine: readStdinLine, interactive: process.stdin.isTTY === true && process.stdout.isTTY === true, now: Date.now },
+  pin: { secret: askSecretInTerminal, stdinLine: readStdinLine, interactive: process.stdin.isTTY === true && process.stdout.isTTY === true, stdinIsTerminal: process.stdin.isTTY === true, now: Date.now },
 })
 
 /** One invocation's home, profile, output and dependencies. */

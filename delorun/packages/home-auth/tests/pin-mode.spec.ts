@@ -21,7 +21,7 @@ import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 import { PIN_MODE_LIMITS } from '@delorun/contract-oidc-passkeys'
 import { stampListener } from '@delorun/home'
 import { DeviceStore } from '../src/devices.ts'
-import type { ElevationChange } from '../src/elevation.ts'
+import type { ElevationChange, ElevationRecord } from '../src/elevation.ts'
 import { PinModeStore } from '../src/pin-mode.ts'
 import type { PinEvent } from '../src/pin-unlocks.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from '../src/pin-routes.ts'
@@ -48,6 +48,7 @@ let first: DeviceId
 let token = ''
 let close: () => Promise<void> = () => Promise.resolve()
 let stopServing: () => void = () => undefined
+let waiting: readonly { ns: string; field: string }[] = []
 let events: PinEvent[]
 let changes: ElevationChange[]
 const texts: string[] = []
@@ -76,6 +77,7 @@ async function addDevice(fill: number): Promise<{ readonly deviceId: DeviceId; r
 beforeEach(async () => {
   home = await homeFixture()
   events = []
+  waiting = []
   changes = []
   texts.length = 0
   home.auth.onPinEvent((event) => { events.push(event) })
@@ -90,7 +92,7 @@ beforeEach(async () => {
     [PIN_PATHS.unlock]: pinUnlockHandler(home.auth),
     [PIN_PATHS.touch]: pinTouchHandler(home.auth),
     [PIN_PATHS.lock]: pinLockHandler(home.auth),
-    [PIN_PATHS.mode]: pinModeHandler(home.auth, testCredential),
+    [PIN_PATHS.mode]: pinModeHandler(home.auth, testCredential, () => waiting),
     [PIN_PATHS.set]: pinSetHandler(home.auth, testCredential),
     [PIN_PATHS.off]: pinOffHandler(home.auth, testCredential),
     [PIN_PATHS.options]: pinOptionsHandler(home.auth, testCredential),
@@ -158,7 +160,7 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
  * @param listener - the listener.
  * @returns the unlock, or undefined.
  */
-function running(listener: ReachListenerId = PRIVATE): { readonly id: string; readonly sessionId: string } | undefined {
+function running(listener: ReachListenerId = PRIVATE): ElevationRecord | undefined {
   return home.auth.elevationsAtComputer().running.find(record => record.deviceId === first && record.listener === listener)
 }
 
@@ -222,6 +224,19 @@ describe('changing the options without the secret', () => {
     expect((await unlock()).status).toBe(200)
   })
 
+  it('ends the idling of a running unlock within a shorter idle time, and leaves a shorter one alone', async () => {
+    await turnOn()
+    await send('POST', PIN_PATHS.options, { idleMinutes: 60 })
+    expect((await unlock()).status).toBe(200)
+    expect(running()?.endsAt).toBe(home.clock.now + 60 * MINUTE)
+    await send('POST', PIN_PATHS.options, { idleMinutes: 1 })
+    // Pins the clamp: cutting 60 to 1 ends an idle page within a minute, not within the hour.
+    expect(running()?.endsAt).toBe(home.clock.now + MINUTE)
+    // A longer period does not stretch an unlock that already ends sooner.
+    await send('POST', PIN_PATHS.options, { idleMinutes: 30 })
+    expect(running()?.endsAt).toBe(home.clock.now + MINUTE)
+  })
+
   it('is the computer\'s alone', async () => {
     await turnOn()
     const before = JSON.stringify(home.auth.pin.summary())
@@ -243,6 +258,16 @@ describe('changing the options without the secret', () => {
       expect((await send('POST', PIN_PATHS.options, body)).status, JSON.stringify(body)).toBe(400)
     }
     expect(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')).toBe(before)
+  })
+})
+
+describe('the computer\'s view of the mode', () => {
+  it('names the settings whose set-back waits, by namespace and field only', async () => {
+    expect((await send('GET', PIN_PATHS.mode)).body).toMatchObject({ enabled: false, setBackWaiting: [] })
+    waiting = [{ ns: 'delorun-delegation-consent', field: 'enabled' }]
+    // Pins the field: the computer sees a loosened setting that has not been set back.
+    expect((await send('GET', PIN_PATHS.mode)).body).toMatchObject({ setBackWaiting: [{ ns: 'delorun-delegation-consent', field: 'enabled' }] })
+    waiting = []
   })
 })
 

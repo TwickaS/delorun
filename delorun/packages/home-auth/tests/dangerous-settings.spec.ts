@@ -132,6 +132,58 @@ describe('the dangerous-mode settings record', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ v: 1, lifts: [] })
   })
 
+  it('reports each failed set-back by namespace and field, never by value, and lists what still waits', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write', 'delorun-delegation-consent.enabled': true }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    values['delorun-delegation-consent.enabled'] = false
+    settings.failing = true
+    const failed: unknown[] = []
+    await ledger.revert(settings, () => false, lift => failed.push(lift))
+    // Pins the report: one entry per failed lift, naming the field only.
+    expect(failed).toEqual([PRESET, CONSENT])
+    expect(ledger.waiting()).toEqual([PRESET, CONSENT])
+    settings.failing = false
+    await ledger.revert(settings, () => false, lift => failed.push(lift))
+    expect(failed).toHaveLength(2)
+    expect(ledger.waiting()).toEqual([])
+  })
+
+  it('does not revert on a retry while the mode holds again, and keeps the lift', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    settings.failing = true
+    await ledger.revert(settings, () => false)
+    settings.failing = false
+    // Pins the re-check on every pass: the person turned the mode back on before the retry.
+    await ledger.revert(settings, () => true)
+    expect(settings.writes).toEqual([])
+    expect(values['permission.defaultPreset']).toBe('danger-full-access')
+    expect(ledger.pending()).toBe(true)
+  })
+
+  it('keeps what the person set after a failed set-back when the retry runs', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    settings.failing = true
+    await ledger.revert(settings, () => false)
+    values['permission.defaultPreset'] = 'read-only'
+    settings.failing = false
+    await ledger.revert(settings, () => false)
+    // Pins the override rule on a retry: the person's later choice is not written over.
+    expect(settings.writes).toEqual([])
+    expect(values['permission.defaultPreset']).toBe('read-only')
+    expect(ledger.pending()).toBe(false)
+  })
+
   it('keeps a value the person set after a device unset the field, and unsets a field still left unset', async () => {
     const values: Record<string, unknown> = { 'delorun-delegation-consent.enabled': true }
     const settings = fakeSettings(values)

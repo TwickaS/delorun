@@ -331,7 +331,7 @@ describe('the homeAuth service', () => {
   })
 
   it('keeps a PIN lift whose settings row is not described, and sets it back when the row appears', async () => {
-    const { ctx, fiber, directory } = await mount()
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 1 } })
     try {
       const values: Record<string, unknown> = { enabled: true }
       let rows: { ns: string; value: unknown }[] = [{ ns: 'delorun-delegation-consent', value: values }]
@@ -348,17 +348,18 @@ describe('the homeAuth service', () => {
       // Pins the kept lift: an absent row cannot show the person's change, so the lift is not dropped unwritten.
       expect(values.enabled).toBe(false)
       rows = [{ ns: 'delorun-delegation-consent', value: values }]
-      // Pins the retry: the next read of PIN mode after the row mounts writes the value back.
-      expect(ctx.homeAuth.pinEnabled()).toBe(false)
-      await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+      // Pins the timer: once the row is described, the next tick writes the value back with no request to read the mode.
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) }, { timeout: 5000 })
     } finally {
       await fiber.dispose()
       await rm(directory, { recursive: true, force: true })
     }
   })
 
-  it('retries a PIN revert that failed, and one left by a run that started before the settings service', async () => {
-    const { ctx, fiber, directory } = await mount()
+  it('retries a failed PIN set-back on a timer, warns per failed lift without the value, and reports it as waiting', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 1 } })
+    const warnings: string[] = []
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation((...args: unknown[]) => { warnings.push(args.map(String).join(' ')) })
     try {
       const values: Record<string, unknown> = { enabled: true }
       let failing = true
@@ -375,14 +376,69 @@ describe('the homeAuth service', () => {
       expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
       values.enabled = false
       await ctx.homeAuth.turnPinOff()
-      await vi.waitFor(() => { expect(ctx.homeAuth.pinEnabled()).toBe(false) })
-      expect(values.enabled).toBe(false)
       await ctx.homeAuth.endPinSettings()
+      expect(values.enabled).toBe(false)
+      // Pins the report: the computer sees what waits, by field, and the log names the field and no value.
+      expect(ctx.homeAuth.pinSetBackWaiting()).toEqual([{ ns: 'delorun-delegation-consent', field: 'enabled' }])
+      expect(warnings.some(line => line.includes('delorun-delegation-consent.enabled'))).toBe(true)
+      expect(warnings.join('\n')).not.toContain('plugin reloading')
       failing = false
-      // Pins the retry on a later read: the failed write keeps its lift, and nothing else would try again.
-      await vi.waitFor(() => { expect(ctx.homeAuth.pinEnabled()).toBe(false); expect(values.enabled).toBe(true) })
+      // Pins the timer: no request reads the mode, and the failed write still retries.
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) }, { timeout: 5000 })
+      await vi.waitFor(() => { expect(ctx.homeAuth.pinSetBackWaiting()).toEqual([]) })
+    } finally {
+      warn.mockRestore()
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('does not describe the settings on a read of the mode while a PIN lift waits', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 3600 } })
+    try {
+      const values = { enabled: true }
+      const describe = vi.fn(() => [{ ns: 'delorun-delegation-consent', value: values }])
+      ctx.provide('settings', { describe, update: () => Promise.reject(new Error('down')) } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      const before = describe.mock.calls.length
+      // Pins P3: a reach request's read of the mode starts no settings pass.
+      for (let i = 0; i < 5; i++) ctx.homeAuth.pinEnabled()
+      await new Promise<void>((resolve) => { setTimeout(resolve, 50) })
+      expect(describe.mock.calls.length).toBe(before)
     } finally {
       await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('arms one unref\'d retry timer while a PIN lift waits and clears it on dispose', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 3600 } })
+    const set = vi.spyOn(globalThis, 'setInterval')
+    const cleared = vi.spyOn(globalThis, 'clearInterval')
+    try {
+      const values = { enabled: true }
+      ctx.provide('settings', { describe: () => [{ ns: 'delorun-delegation-consent', value: values }], update: () => Promise.reject(new Error('down')) } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      await ctx.homeAuth.endPinSettings()
+      // Pins the single timer, its period from the config and that it never keeps the process alive.
+      expect(set).toHaveBeenCalledTimes(1)
+      expect(set.mock.calls[0]![1]).toBe(3_600_000)
+      expect(set.mock.results[0]!.value.hasRef()).toBe(false)
+      expect(cleared).not.toHaveBeenCalled()
+      await fiber.dispose()
+      // Pins the disposer: the timer does not outlive the plugin.
+      expect(cleared).toHaveBeenCalledTimes(1)
+    } finally {
+      set.mockRestore()
+      cleared.mockRestore()
       await rm(directory, { recursive: true, force: true })
     }
   })

@@ -156,6 +156,8 @@ export interface PinMode {
   readonly lockWhenHidden: boolean
   /** Whether PIN unlocks are paused home-wide after too many wrong tries. */
   readonly paused: boolean
+  /** The settings a page loosened whose set-back failed and is retried, by namespace and field. */
+  readonly setBackWaiting?: readonly { readonly ns: string; readonly field: string }[]
 }
 
 const isPinMode: Check = value => fields({ enabled: isBoolean, idleMinutes: isTime, lockWhenHidden: isBoolean, paused: isBoolean })(value)
