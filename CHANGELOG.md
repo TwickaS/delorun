@@ -37,6 +37,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** `delorun update --from` with a folder that does not exist now says the folder does not exist and that nothing was installed, instead of reporting a failed download.
 - **Fixed:** An update that fails its health check rolls back on its own even when the new release was stopped while it wrote a profile lock file.
 - **Fixed:** An update now lists every row the new release switches off through its own settings, and asks you before it applies them. Before, such a row was left out of the list, so the health check refused the switched-off row after the update started and rolled the update back. A row switched off without being listed still fails the check.
+- **Fixed:** The trust badge now reads what was checked at start after `delorun update` and `delorun recover rollback`, not "Unknown". The new release checks its own signed manifest and files when it starts after the switch, and records the result; a release that fails that check does not start, so the update rolls back as a failed health check does.
 - **Security:** Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships.
 - **Security:** An installed runtime is made read-only before its files are hashed, so nothing can change a file between its check and the mode that protects it.
 - **Security:** The runtime starts without the `NODE_OPTIONS`, `NODE_PATH`, `LD_*`, `DYLD_*`, `NODE_EXTRA_CA_CERTS` and `NODE_TLS_REJECT_UNAUTHORIZED` variables that the shell passed in, so the shell that started `delorun` cannot stand between the runtime and the connections it verifies. A profile name that would leave the Delorun home is refused before anything is read.
@@ -113,6 +114,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - The sidebar lists chats as cards with their status, sorted with pinned chats first, with search, a workspace filter, Alt and a digit to jump to one of the first nine chats, and an undo for each change you make from the list. Each workspace can have its own icon (letters, a glyph, an emoji or a generated pattern, in its own colour and shape), and the top of the sidebar can show header art, drawn in full behind the white name and sidebar button, which a thin dark edge keeps readable on any scene; both are chosen under Settings → Sidebar. Plugins, Automation tasks and More sit as icon buttons in the sidebar's bottom row, beside Settings.
 - The sidebar's Plugins page offers a Thinking tab, under Components on the Delorun studio page: turn it on and the right sidebar can show the model's reasoning and reply one word at a time as it writes them, at a pace you choose, with a delay behind the model if you like.
 - The studio's sidebar foot shows how much of this Delorun was checked: a small badge reads verified only when every runtime file was hashed by a full check and the release log, the plugins and your changes all check out, reads "Checked at start" after an ordinary start, which hashes only part of the runtime, turns red for a failed check and amber for an unknown release, an unchecked release log, a plugin changed after its install or a critical advisory, and shows your own changes, including those waiting for your review, as a plain count. It opens a panel with the four rows, their details, and Check now, which runs `delorun verify` through the launcher, so every runtime file is hashed before the check runs, and shows how long it has run. A phone or laptop you approved for remote access sees the panel read-only; Check now runs only on the computer Delorun runs on. The panel says that these checks run with your access, so a program running as you can change them.
+- Report a problem. A button at the foot of the sidebar and a row in Settings → About open a short review of a GitHub issue that is already filled in with your Delorun version, system and recent errors, with secrets removed. You read it, then open it in your browser or copy it; Delorun sends nothing itself. Help me report this, a new skill, has the assistant ask what went wrong and draft the issue for you to send.
 - Settings opens as one larger panel with its pages grouped by topic and a search field that finds pages and settings by name, in English and Chinese. A section from a plugin that the grouping does not name appears under More.
 - The Ready step of onboarding shows the look and the workspace in the normal text colour, so green marks only what is working. On a phone the starter prompts in a new chat sit under their label at the width of the message box.
 - Settings is arranged in five groups. General holds a General page (language, look, updates with the release check and the current versions, keyboard shortcuts, getting started and the coding view), Appearance (colours, then text and density), Sidebar, a Conversation page for how chats are displayed, and Chat (composer, links and usage). Agent holds Models, Modes, Tools and Plugins; Safety holds Permissions (new chats, full access and MCP servers), External agents (the switch that asks before an external agent runs, its run time limit and the agents you allowed), Network and Privacy; then come Devices, and Data with Trash and About, which now lists the licences and project links.
@@ -139,6 +141,14 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface.
 - **Fixed:** The trust badge in the sidebar no longer reads "Unknown" for a release that verifies. The studio now reads your plugins and your changes when it starts, as `delorun verify` does, so the badge shows what was checked at start until you choose Check now.
 - **Fixed:** The sidebar shows the update notice when a newer release exists, and the Check for new releases switch in Settings works, instead of both staying idle.
+- **Fixed:** Importing a DeepSeek chat export uploads the archive again; the web server's media-type check had refused it.
+- **Fixed:** The browser preview opens the files in its workspace again: the Markdown guide beside the chat no longer reports "Read failed".
+- **Fixed:** Searching the sidebar now finds words inside chats. Before, the search showed "Messages could not be searched." because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk.
+- **Fixed:** The Add plugin dialog and Settings → Privacy now speak of Delorun, not DeepSeek Harness. The Desktop analytics row says Delorun sends no analytics instead of describing DeepSeek's collector with no switch.
+- **Fixed:** On a phone, Settings no longer offers "Edit shortcuts" or "Open configuration file", and the sidebar's trust badge is a shield rather than a word cut to "Unkno…".
+- **Fixed:** On a phone, the sidebar, composer and chat-row buttons, including Send, Settle, Snooze and More, take taps over a 44-pixel area instead of 28 to 34 pixels.
+- **Fixed:** Settings → Plugins names the built-in tools in plain words, such as "Bash tool" and "File tools", instead of showing package ids such as `tool-bash`.
+- **Fixed:** Settings → General and About no longer show "Delorun 0.0.0" when Delorun runs from a source checkout; they say "source build". A release still shows its own version.
 - **Removed:** Delorun's setup no longer offers DeepSeek account sign-in, the account entry in the menu is gone, and so are the account's Usage and Top-up pages. Use your own DeepSeek API key, which Delorun's model settings still accept. The account pages stay in upstream's code and are not reachable from Delorun's default setup.
 
 ### Chats and workspaces
@@ -158,6 +168,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** A damaged workspace list no longer leaves the studio empty. Delorun starts with every workspace record it can read, sets the rest aside in a dated file next to the list (it never deletes one), and logs where it is. It also keeps the previous good copy of the list, `delorun doctor` checks the list, and `delorun recover workspaces` brings the previous copy back after asking you. See [The workspace list](../../docs/guide/troubleshooting.md#the-workspace-list).
 - **Fixed:** The agent can rename a workspace with the new `rename_workspace` tool, after you allow it, instead of editing files by hand.
 - **Fixed:** When some workspace records were set aside, the studio says so above the message box, names the file and points to `delorun doctor`; you can dismiss it. A `rename_workspace` call in a chat shows the old and new name, or why it was refused.
+- **Fixed:** The agent now knows that a file it writes to `/tmp` while a command runs in the sandbox does not persist: each sandboxed command can have its own `/tmp`, discarded when the command ends. Before, it could report a file in `/tmp` as saved when no later command could see it. The agent is told to keep files it needs under the workspace.
 
 ### Safety and privacy
 - With changes protection on, before the agent first writes to the folder of a plugin you approved, the chat asks you, names the plugin and shows the diff, because the agent is changing what your harness runs; once you allow it, the rest of that chat's writes to the plugin go ahead, and what it wrote still waits for your review in `delorun changes`. A link or a `..` in the path asks the same way.
@@ -259,6 +270,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - `delorun start --background` starts Delorun detached from the terminal whatever setup answered, and a start that stays in the terminal says how to run it in the background next time.
 - `delorun reach on tailscale` asks "This changes Tailscale on this computer … Continue? (y/N)" in a terminal before it changes anything. `--yes` skips the question. Without a terminal and without `--yes` it changes nothing and says to add `--yes`.
 - Opening your remote address, or a page of it, on a device that is not signed in takes you to the sign-in page instead of showing an error, and back to that page once you sign in.
+- The sign-in and pairing pages show the Delorun logo.
 - **Security:** A device reads only the files whose real location lies inside its chat's workspace: a link inside the workspace that leads elsewhere, and Delorun's own folder, are refused.
 
 ### Plugins
@@ -317,6 +329,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A chat turn that starts before Delorun's start check has finished no longer waits without a message: after 60 seconds the turn ends and says that the start check did not finish, that the message was not sent, and to start Delorun with `delorun start` and send it again; `delorun status` and `delorun logs` show what the start is doing. This only happens when Delorun was booted without `delorun`'s own start, or when the start's check never completes.
 - `delorun verify` lists the plugin changes you approved, by name and folder, then apart from them the changes that loaded without review, with protection off or while it was off, then everything present that you did not approve: changes waiting for your review and anything Changes does not find as it keeps it. Its summary line then never reads as a plain pass, and it exits 1 only when something is not as Changes keeps it. A run from a source checkout or a development build says there is no signed release to compare its files with.
 - `delorun doctor` reports your changes: the protection setting, any plugin you are working on, and for each plugin you link from a folder whether it loaded at the last start, whether it runs the content you approved or content that loaded without review, the dsh and Delorun versions it requires and whether it changes a consent, a guard or the sandbox policy. When a plugin did not load or the start failed, it names the plugin and the change to undo.
+- `delorun devices --help` now lists the `pin` actions, and `delorun update --help` lists `--from`. A failed `delorun start` in a source checkout with a missing built file now says to run `pnpm run build:artifacts`. Messages that point to the studio's settings now name the right pages: Settings → Agent → Models, Settings → Safety → Privacy and Settings → Safety → Permissions.
 - **Fixed:** A write lock left behind by a process that was killed while taking over a dead writer's lock no longer blocks later writers: the leftover claim is removed after ten seconds.
 - **Fixed:** `delorun update` names why an automatic rollback did not finish. It blames the missing chat-data copy only when that is the reason, and otherwise says that going back stopped and where to look.
 - **Security:** The release an update starts no longer inherits variables that load code into Node, its loader or OpenSSL, such as `NODE_OPTIONS` or `LD_PRELOAD`, even when a `.env` file set them for the running release; the launcher already dropped them from every start.
@@ -332,6 +345,34 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A script that changes something through a Host's HTTP API over plain HTTP at an address other than this computer's, such as a name in `trustedHosts` or the address the Host listens on, must send an `Origin` header naming that address, such as `Origin: http://192.0.2.5:3080`; without one the Host answers "forbidden", because a web page could send the same request. Requests on this computer, over HTTPS and from the studio itself are unaffected.
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-rc.5 (2026-11-15)
+
+### Install and update
+- **Fixed:** The trust badge now reads what was checked at start after `delorun update` and `delorun recover rollback`, not "Unknown". The new release checks its own signed manifest and files when it starts after the switch, and records the result; a release that fails that check does not start, so the update rolls back as a failed health check does.
+
+### Studio
+- Report a problem. A button at the foot of the sidebar and a row in Settings → About open a short review of a GitHub issue that is already filled in with your Delorun version, system and recent errors, with secrets removed. You read it, then open it in your browser or copy it; Delorun sends nothing itself. Help me report this, a new skill, has the assistant ask what went wrong and draft the issue for you to send.
+- **Fixed:** Importing a DeepSeek chat export uploads the archive again; the web server's media-type check had refused it.
+- **Fixed:** The browser preview opens the files in its workspace again: the Markdown guide beside the chat no longer reports "Read failed".
+- **Fixed:** Searching the sidebar now finds words inside chats. Before, the search showed "Messages could not be searched." because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk.
+- **Fixed:** The Add plugin dialog and Settings → Privacy now speak of Delorun, not DeepSeek Harness. The Desktop analytics row says Delorun sends no analytics instead of describing DeepSeek's collector with no switch.
+- **Fixed:** On a phone, Settings no longer offers "Edit shortcuts" or "Open configuration file", and the sidebar's trust badge is a shield rather than a word cut to "Unkno…".
+- **Fixed:** On a phone, the sidebar, composer and chat-row buttons, including Send, Settle, Snooze and More, take taps over a 44-pixel area instead of 28 to 34 pixels.
+- **Fixed:** Settings → Plugins names the built-in tools in plain words, such as "Bash tool" and "File tools", instead of showing package ids such as `tool-bash`.
+- **Fixed:** Settings → General and About no longer show "Delorun 0.0.0" when Delorun runs from a source checkout; they say "source build". A release still shows its own version.
+
+### Chats and workspaces
+- **Fixed:** The agent now knows that a file it writes to `/tmp` while a command runs in the sandbox does not persist: each sandboxed command can have its own `/tmp`, discarded when the command ends. Before, it could report a file in `/tmp` as saved when no later command could see it. The agent is told to keep files it needs under the workspace.
+
+### Reach
+- The sign-in and pairing pages show the Delorun logo.
+
+### Commands
+- `delorun devices --help` now lists the `pin` actions, and `delorun update --help` lists `--from`. A failed `delorun start` in a source checkout with a missing built file now says to run `pnpm run build:artifacts`. Messages that point to the studio's settings now name the right pages: Settings → Agent → Models, Settings → Safety → Privacy and Settings → Safety → Permissions.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-rc.4 (2026-11-15)
 

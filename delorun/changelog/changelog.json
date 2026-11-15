@@ -167,6 +167,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "The trust badge now reads what was checked at start after `delorun update` and `delorun recover rollback`, not \"Unknown\". The new release checks its own signed manifest and files when it starts after the switch, and records the result; a release that fails that check does not start, so the update rolls back as a failed health check does."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -527,6 +532,11 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "Report a problem. A button at the foot of the sidebar and a row in Settings → About open a short review of a GitHub issue that is already filled in with your Delorun version, system and recent errors, with secrets removed. You read it, then open it in your browser or copy it; Delorun sends nothing itself. Help me report this, a new skill, has the assistant ask what went wrong and draft the issue for you to send."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "Settings opens as one larger panel with its pages grouped by topic and a search field that finds pages and settings by name, in English and Chinese. A section from a plugin that the grouping does not name appears under More."
     },
@@ -657,6 +667,46 @@
     },
     {
       "area": "Studio",
+      "section": "Fixed",
+      "text": "Importing a DeepSeek chat export uploads the archive again; the web server's media-type check had refused it."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The browser preview opens the files in its workspace again: the Markdown guide beside the chat no longer reports \"Read failed\"."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The Add plugin dialog and Settings → Privacy now speak of Delorun, not DeepSeek Harness. The Desktop analytics row says Delorun sends no analytics instead of describing DeepSeek's collector with no switch."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "On a phone, Settings no longer offers \"Edit shortcuts\" or \"Open configuration file\", and the sidebar's trust badge is a shield rather than a word cut to \"Unkno…\"."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "On a phone, the sidebar, composer and chat-row buttons, including Send, Settle, Snooze and More, take taps over a 44-pixel area instead of 28 to 34 pixels."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Settings → Plugins names the built-in tools in plain words, such as \"Bash tool\" and \"File tools\", instead of showing package ids such as `tool-bash`."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Settings → General and About no longer show \"Delorun 0.0.0\" when Delorun runs from a source checkout; they say \"source build\". A release still shows its own version."
+    },
+    {
+      "area": "Studio",
       "section": "Removed",
       "text": "Delorun's setup no longer offers DeepSeek account sign-in, the account entry in the menu is gone, and so are the account's Usage and Top-up pages. Use your own DeepSeek API key, which Delorun's model settings still accept. The account pages stay in upstream's code and are not reachable from Delorun's default setup."
     },
@@ -739,6 +789,11 @@
       "area": "Chats and workspaces",
       "section": "Fixed",
       "text": "When some workspace records were set aside, the studio says so above the message box, names the file and points to `delorun doctor`; you can dismiss it. A `rename_workspace` call in a chat shows the old and new name, or why it was refused."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Fixed",
+      "text": "The agent now knows that a file it writes to `/tmp` while a command runs in the sandbox does not persist: each sandboxed command can have its own `/tmp`, discarded when the command ends. Before, it could report a file in `/tmp` as saved when no later command could see it. The agent is told to keep files it needs under the workspace."
     },
     {
       "area": "Safety and privacy",
@@ -1227,6 +1282,11 @@
     },
     {
       "area": "Reach",
+      "section": "Changed",
+      "text": "The sign-in and pairing pages show the Delorun logo."
+    },
+    {
+      "area": "Reach",
       "section": "Security",
       "text": "A device reads only the files whose real location lies inside its chat's workspace: a link inside the workspace that leads elsewhere, and Delorun's own folder, are refused."
     },
@@ -1497,6 +1557,11 @@
     },
     {
       "area": "Commands",
+      "section": "Changed",
+      "text": "`delorun devices --help` now lists the `pin` actions, and `delorun update --help` lists `--from`. A failed `delorun start` in a source checkout with a missing built file now says to run `pnpm run build:artifacts`. Messages that point to the studio's settings now name the right pages: Settings → Agent → Models, Settings → Safety → Privacy and Settings → Safety → Permissions."
+    },
+    {
+      "area": "Commands",
       "section": "Fixed",
       "text": "A write lock left behind by a process that was killed while taking over a dead writer's lock no longer blocks later writers: the leftover claim is removed after ten seconds."
     },
@@ -1562,6 +1627,95 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-rc.5",
+      "date": "2026-11-15",
+      "preview": false,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The trust badge now reads what was checked at start after `delorun update` and `delorun recover rollback`, not \"Unknown\". The new release checks its own signed manifest and files when it starts after the switch, and records the result; a release that fails that check does not start, so the update rolls back as a failed health check does."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "Report a problem. A button at the foot of the sidebar and a row in Settings → About open a short review of a GitHub issue that is already filled in with your Delorun version, system and recent errors, with secrets removed. You read it, then open it in your browser or copy it; Delorun sends nothing itself. Help me report this, a new skill, has the assistant ask what went wrong and draft the issue for you to send."
+            },
+            {
+              "section": "Fixed",
+              "text": "Importing a DeepSeek chat export uploads the archive again; the web server's media-type check had refused it."
+            },
+            {
+              "section": "Fixed",
+              "text": "The browser preview opens the files in its workspace again: the Markdown guide beside the chat no longer reports \"Read failed\"."
+            },
+            {
+              "section": "Fixed",
+              "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
+            },
+            {
+              "section": "Fixed",
+              "text": "The Add plugin dialog and Settings → Privacy now speak of Delorun, not DeepSeek Harness. The Desktop analytics row says Delorun sends no analytics instead of describing DeepSeek's collector with no switch."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a phone, Settings no longer offers \"Edit shortcuts\" or \"Open configuration file\", and the sidebar's trust badge is a shield rather than a word cut to \"Unkno…\"."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a phone, the sidebar, composer and chat-row buttons, including Send, Settle, Snooze and More, take taps over a 44-pixel area instead of 28 to 34 pixels."
+            },
+            {
+              "section": "Fixed",
+              "text": "Settings → Plugins names the built-in tools in plain words, such as \"Bash tool\" and \"File tools\", instead of showing package ids such as `tool-bash`."
+            },
+            {
+              "section": "Fixed",
+              "text": "Settings → General and About no longer show \"Delorun 0.0.0\" when Delorun runs from a source checkout; they say \"source build\". A release still shows its own version."
+            }
+          ]
+        },
+        {
+          "area": "Chats and workspaces",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The agent now knows that a file it writes to `/tmp` while a command runs in the sandbox does not persist: each sandboxed command can have its own `/tmp`, discarded when the command ends. Before, it could report a file in `/tmp` as saved when no later command could see it. The agent is told to keep files it needs under the workspace."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The sign-in and pairing pages show the Delorun logo."
+            }
+          ]
+        },
+        {
+          "area": "Commands",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "`delorun devices --help` now lists the `pin` actions, and `delorun update --help` lists `--from`. A failed `delorun start` in a source checkout with a missing built file now says to run `pnpm run build:artifacts`. Messages that point to the studio's settings now name the right pages: Settings → Agent → Models, Settings → Safety → Privacy and Settings → Safety → Permissions."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-rc.4",
       "date": "2026-11-15",
