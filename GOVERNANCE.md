@@ -26,7 +26,7 @@ While versions are 0.x, security fixes go to the latest release only ([SECURITY.
 
 ## If the maintainer cannot act
 
-Only the maintainer can sign and publish a release, so releases stop if he cannot act. Nothing else stops. The releases you have installed keep running and keep passing `delorun verify`, because their signatures and the public release log do not expire with the maintainer. The update check finds no newer release. The code is MIT-licensed, so anyone may fork it and publish releases under their own name and keys. The signing keys and the account recovery codes are backed up offline in two places so that the maintainer can recover them, and the project names no other person who may sign.
+Only the maintainer can sign and publish a release, so releases stop if he cannot act. Nothing else stops. The releases you have installed keep running and keep passing `delorun verify`, because their signatures and the public release log do not expire with the maintainer. The update check finds no newer release. The code is MIT-licensed, so anyone may fork it and publish releases under their own name and keys. The project names no other person who may sign.
 
 ## Before 1.0
 
