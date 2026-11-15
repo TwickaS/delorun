@@ -47,6 +47,12 @@ export interface Store<T> {
   subscribe(listener: () => void): () => void
 }
 
+/**
+ * A hold on Continue that a step registers while it has something unfinished: it returns true to let the flow go on
+ * and false (or a promise of it) to stay on the step, having shown the person why.
+ */
+export type ContinueGate = () => boolean | Promise<boolean>
+
 /** The guide's shared state. */
 export interface Guide {
   /** This computer's readiness. */
@@ -67,6 +73,17 @@ export interface Guide {
    * @param phase - where the providers step stands now.
    */
   setProvidersPhase(phase: ProvidersPhase): void
+  /**
+   * Hold Continue while a step has something unfinished.
+   * @param key - the step's own name for the hold.
+   * @param gate - the hold, or undefined to release it.
+   */
+  setGate(key: string, gate: ContinueGate | undefined): void
+  /**
+   * Ask every hold, in the order set, whether Continue may go on.
+   * @returns whether the flow may go on; false as soon as one hold refuses.
+   */
+  passGates(): Promise<boolean>
   /** Test the keys again, as after the person changed a provider. */
   testKeys(): void
   /**
@@ -117,6 +134,7 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   const mode = createSnapshotStore<WorkspaceMode>('default')
   const clone = createSnapshotStore<CloneView>({ state: 'idle' })
   const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
+  const gates = new Map<string, ContinueGate>()
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
   const poll = (job: string): void => {
@@ -150,6 +168,13 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   return {
     readiness, keys, recommendations, workspace, mode, clone, providersPhase,
     setProvidersPhase: (phase) => { providersPhase.set(phase) },
+    setGate: (key, gate) => { if (gate === undefined) gates.delete(key); else gates.set(key, gate) },
+    passGates: async () => {
+      for (const gate of [...gates.values()]) {
+        if (!await gate()) return false
+      }
+      return true
+    },
     testKeys: () => { fill(keys, host.keyTest) },
     recommend: (registry) => { fill(recommendations, () => host.recommend(registry)) },
     chooseWorkspace: (choice) => { workspace.set(choice) },

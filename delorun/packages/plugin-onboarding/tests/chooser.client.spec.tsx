@@ -76,6 +76,21 @@ describe('the Start step\'s own folder chooser', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('holds Continue while a folder is highlighted: the hold adds that folder, and a refusal stays here', async () => {
+    const start = startFace({ kind: 'none' }, { kind: 'in-step' }, { kind: 'refused', problem: 'contains-delorun-home' })
+    const onHold = vi.fn()
+    render(<FolderChooser services={stepServices({ start: { ...start.face, browse: browseFake(LISTINGS).browse } })} onHold={onHold} />)
+    await settle()
+    expect(onHold).not.toHaveBeenCalled()
+    await click(option('notes'))
+    const gate = onHold.mock.lastCall?.[0] as () => Promise<boolean>
+    let went = true
+    await act(async () => { went = await gate() })
+    expect(went).toBe(false)
+    expect(start.addFolder).toHaveBeenCalledExactlyOnceWith(`${HOME}/notes`)
+    expect(screen.getByRole('alert').textContent).toBe(en['problem.contains-delorun-home'])
+  })
+
   it('disables its button while the folder is being added', async () => {
     const { start } = await mountChooser()
     let finish: (outcome: AddOutcome) => void = () => {}

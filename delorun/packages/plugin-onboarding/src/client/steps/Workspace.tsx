@@ -4,7 +4,7 @@
  * person, never asks for a sign-in, and shows its progress and, when it fails, why.
  */
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useCallback, useId, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { isCloneAddress, isFolderName, suggestedName } from '../../clone-address.ts'
 import type { CloneProblem } from '../../wire.ts'
@@ -43,25 +43,30 @@ export function cloneProblemText(t: StepServices['t'], problem: CloneProblem): s
  * @param props - the services and the guide.
  * @returns the line, or nothing.
  */
-function Chosen({ services, guide }: StepProps): ReactNode {
+function Chosen({ services, guide, focus = false }: StepProps & { readonly focus?: boolean }): ReactNode {
   const { t } = services
   const workspace = useStore(guide.workspace)
   if (workspace?.kind !== 'added') return null
-  return <FolderCard path={workspace.path} note={t(`workspace.kind.${workspace.folder}`)} t={t} />
+  return <FolderCard path={workspace.path} note={t(`workspace.kind.${workspace.folder}`)} t={t} focus={focus} />
 }
 
 /**
- * The chosen folder as a card: its name, its path and what it holds. It names no state; the choice is the state.
- * @param props - the path, an optional note and this plugin's copy.
+ * The chosen folder as a card: its name once, then its path, then a plain description of what it holds. It names no
+ * state; the choice is the state.
+ * @param props - the path, the description, an optional name for a folder without one, whether the card takes focus when it appears and this plugin's copy.
  * @returns the card.
  */
-function FolderCard({ path, note, t }: { readonly path: string; readonly note?: string; readonly t: StepServices['t'] }): ReactNode {
-  const name = path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
+function FolderCard({ path, note, name: given, focus = false, t }: { readonly path: string; readonly note?: string; readonly name?: string; readonly focus?: boolean; readonly t: StepServices['t'] }): ReactNode {
+  const name = given ?? path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (focus) box.current?.focus({ preventScroll: true }) }, [focus])
   return (
-    <Card title={name} labels={{ more: t('more'), less: t('less') }}>
-      <span className={css.path}>{path}</span>
-      {note !== undefined && <span className={css.hint}>{note}</span>}
-    </Card>
+    <div ref={box} tabIndex={-1} className={css.focusable}>
+      <Card title={name} labels={{ more: t('more'), less: t('less') }}>
+        <span className={css.path}>{path}</span>
+        {note !== undefined && <span className={css.hint}>{note}</span>}
+      </Card>
+    </div>
   )
 }
 
@@ -77,11 +82,14 @@ function FolderMode({ services, guide }: StepProps): ReactNode {
   const { t, start } = services
   const [view, setView] = useState<FolderView>({ kind: 'idle' })
   const [choosing, setChoosing] = useState(false)
+  // Set once the person adds a folder, so the chosen-folder card takes focus when it appears.
+  const [added, setAdded] = useState(false)
   const settle = (choice: FolderChoice): void => {
     switch (choice.kind) {
       case 'cancelled': return
       case 'chosen':
         setView({ kind: 'idle' })
+        setAdded(true)
         guide.chooseWorkspace({ kind: 'added', workspaceId: choice.workspaceId, path: choice.path, folder: choice.folder })
         return
       case 'in-step': setView({ kind: 'browse' }); return
@@ -101,16 +109,17 @@ function FolderMode({ services, guide }: StepProps): ReactNode {
   }
   return (
     <div className={css.stack}>
-      <Chosen services={services} guide={guide} />
+      <Chosen services={services} guide={guide} focus={added} />
       {view.kind !== 'browse' && (
         <Button variant="outline" size="sm" className={css.alignStart} disabled={choosing} onClick={choose}>{t('workspace.folder.choose')}</Button>
       )}
       {view.kind === 'problem' && <StateLine tone="error">{problemText(t, view.problem)}</StateLine>}
       {view.kind === 'unavailable' && <p className={css.hint}>{t('workspace.folder.unavailable')}</p>}
       {view.kind === 'browse' && (
-        <FolderChooser services={services} onAdded={(added) => {
+        <FolderChooser services={services} onHold={(gate) => { guide.setGate('folder', gate) }} onAdded={(folder) => {
           setView({ kind: 'idle' })
-          guide.chooseWorkspace({ kind: 'added', workspaceId: added.workspaceId, path: added.path, folder: added.folder })
+          setAdded(true)
+          guide.chooseWorkspace({ kind: 'added', workspaceId: folder.workspaceId, path: folder.path, folder: folder.folder })
         }} />
       )}
     </div>
@@ -205,7 +214,7 @@ function CloneMode({ services, guide }: StepProps): ReactNode {
  * @param props - the services, the guide and where the chat opens without a choice.
  * @returns the step body.
  */
-export function WorkspaceStep({ services, guide, target }: StepProps & { readonly target: StartTarget }): ReactNode {
+export function WorkspaceStep({ services, guide, target, keepCurrent }: StepProps & { readonly target: StartTarget; readonly keepCurrent: boolean }): ReactNode {
   const { t } = services
   const mode = useStore(guide.mode)
   const workspace = useStore(guide.workspace)
@@ -225,7 +234,16 @@ export function WorkspaceStep({ services, guide, target }: StepProps & { readonl
         { value: 'clone' as WorkspaceMode, label: t('workspace.mode.clone') },
       ]} />
       {shown === 'default' && target.kind === 'default' && (
-        <FolderCard path={target.path} note={t('workspace.default')} t={t} />
+        <>
+          <FolderCard path={target.path} name={t('workspace.default')} note={t('workspace.default.note')} t={t} />
+          {keepCurrent && workspace === undefined && (
+            <>
+              <p className={css.hint}>{t('workspace.keep')}</p>
+              <Button variant="outline" size="sm" className={css.alignStart}
+                onClick={() => { guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path }) }}>{t('workspace.useDefault')}</Button>
+            </>
+          )}
+        </>
       )}
       {shown === 'folder' && <FolderMode services={services} guide={guide} />}
       {shown === 'clone' && <CloneMode services={services} guide={guide} />}

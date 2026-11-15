@@ -1,7 +1,7 @@
 /**
  * Look: colour scheme, theme and accent, with a chat that shows the choice, and a quiet line for the stock look.
  */
-import { useCallback, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { ACCENT_PRESETS, ACCENT_PREVIEWS, PALETTE_CHOICES, PALETTE_PREVIEWS } from '../previews.ts'
 import type { SchemePreference, StepServices } from '../types.ts'
@@ -40,6 +40,9 @@ function ChatPreview({ t }: { readonly t: StepServices['t'] }): ReactNode {
  */
 function StockLookLine({ t, appearance, disabled, onConfirm }: { readonly t: StepServices['t']; readonly appearance: StepServices['appearance']; readonly disabled: boolean; readonly onConfirm: () => void }): ReactNode {
   const [asking, setAsking] = useState(false)
+  const yes = useRef<HTMLButtonElement>(null)
+  // The question replaces the button that was pressed, so focus moves to its first answer.
+  useEffect(() => { if (asking) yes.current?.focus() }, [asking])
   if (!asking) {
     return (
       <p className={css.hint}>
@@ -52,7 +55,7 @@ function StockLookLine({ t, appearance, disabled, onConfirm }: { readonly t: Ste
     <div className={css.stack} role="group" aria-label={t('look.studio')}>
       <p className={css.hint}>{t('look.stock.confirm')}</p>
       <div className={css.actions}>
-        <Button variant="outline" size="sm" onClick={onConfirm}>{t('look.stock.yes')}</Button>
+        <Button ref={yes} variant="outline" size="sm" onClick={onConfirm}>{t('look.stock.yes')}</Button>
         <Button variant="ghost" size="sm" onClick={() => { setAsking(false) }}>{t('look.stock.no')}</Button>
       </div>
     </div>

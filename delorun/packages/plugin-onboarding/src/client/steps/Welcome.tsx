@@ -20,8 +20,10 @@ export function WelcomeStep({ services, notice }: StepProps & { readonly notice:
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('welcome.lead')}</p>
-      <ChipGroup label={t('welcome.language')} value={locale.active} onChange={(id) => { language.setLocale(id) }}
-        options={locale.locales.map(each => ({ value: each.id, label: each.label }))} />
+      <div className={css.chipGrid}>
+        <ChipGroup label={t('welcome.language')} value={locale.active} onChange={(id) => { language.setLocale(id) }}
+          options={locale.locales.map(each => ({ value: each.id, label: each.label }))} />
+      </div>
       {first !== undefined && (
         <Notice title={notice?.title() ?? ''} moreLabel={t('readMore')}
           more={rest.length === 0 ? undefined : rest.map(paragraph => <p key={paragraph}>{paragraph}</p>)}>

@@ -30,6 +30,8 @@ export interface FlowStep {
    * @returns the body.
    */
   readonly render: (next: () => void, back: () => void) => ReactNode
+  /** Skip's label where "Skip" does not say what happens; absent means "Skip". */
+  readonly skipLabel?: () => string
   /** Runs when the person presses Continue, before the flow moves on. */
   readonly onContinue?: () => void
 }
@@ -62,6 +64,8 @@ export interface FlowInput {
   readonly target: StartTarget
   /** The preview notice when it is owed: it exists, this browser has not acknowledged it and onboarding was not reopened. Continuing from Welcome acknowledges it. */
   readonly notice: NoticeFace | undefined
+  /** Whether the guide was opened again: the workspace the chat is in stays unless the person chooses another. */
+  readonly keepCurrent: boolean
 }
 
 /**
@@ -69,7 +73,7 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, guide, record, extra, reach, target, notice }: FlowInput): FlowStep[] {
+export function buildSteps({ services, guide, record, extra, reach, target, notice, keepCurrent }: FlowInput): FlowStep[] {
   const { t, plugins, optionalRows } = services
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
@@ -79,10 +83,10 @@ export function buildSteps({ services, guide, record, extra, reach, target, noti
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
   // A studio opened from a phone is already on one, so it has no Phone access step.
-  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep {...props} /> })
+  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), render: () => <ReachStep {...props} /> })
   built.push(
-    { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} /> },
-    { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} /> },
+    { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} keepCurrent={keepCurrent} /> },
+    { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} keepCurrent={keepCurrent} /> },
   )
   const added = extra.map((step): FlowStep => ({ id: step.id, order: step.order, title: step.title, render: next => { const Body = step.component; return <Body next={next} /> } }))
   return [...built, ...added].sort((a, b) => a.order - b.order)

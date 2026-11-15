@@ -3,7 +3,7 @@
  * one means and confirms.
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
@@ -29,10 +29,24 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
   const { t, bundles } = services
   const readiness = useStore(guide.readiness)
   const [confirming, setConfirming] = useState(false)
+  // Set when Continue is pressed with the confirmation open: the card asks before the flow goes on.
+  const [asking, setAsking] = useState(false)
+  const question = useRef<HTMLDivElement>(null)
   const title = t(`agents.${agent.key}.title`)
   const signIn = readiness.status === 'ready' ? readiness.value.agents[agent.agent] : undefined
   const loading = readiness.status === 'loading'
   // A sign-in beside "Not included in this installation" would read as a contradiction, so an agent that cannot be added shows no sign-in line.
+  useEffect(() => {
+    if (!confirming) return undefined
+    guide.setGate(agent.name, () => { setAsking(true); return false })
+    return () => { guide.setGate(agent.name, undefined) }
+  }, [confirming, guide, agent.name])
+  useEffect(() => { if (asking) question.current?.focus() }, [asking])
+  const settle = (add: boolean): void => {
+    setConfirming(false)
+    setAsking(false)
+    if (add) void bundles.install(agent.name)
+  }
   const included = useBundle(services, agent.name)?.state !== 'unavailable'
   return (
     <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services} onAdd={() => { setConfirming(true) }}>
@@ -41,7 +55,16 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
           {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
         </StateLine>
       )}
-      {confirming && (
+      {asking && (
+        <div ref={question} tabIndex={-1} className={css.confirm} role="alertdialog" aria-label={t('agents.ask', { name: title })}>
+          <p className={css.lead}>{t('agents.ask', { name: title })}</p>
+          <div className={css.actions}>
+            <Button variant="primary" size="sm" className={css.target} onClick={() => { settle(true) }}>{t('agents.ask.add')}</Button>
+            <Button variant="ghost" size="sm" className={css.target} onClick={() => { settle(false) }}>{t('agents.ask.skip')}</Button>
+          </div>
+        </div>
+      )}
+      {confirming && !asking && (
         <div className={css.confirm} role="group" aria-label={t('agents.confirm.label', { name: title })}>
           <ul className={css.facts}>
             <li>{t('agents.confirm.handoff')}</li>

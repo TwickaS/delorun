@@ -2,7 +2,7 @@
  * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the step's name and
  * progress pinned at its top, the current step scrolling beneath with Finish later beside it, and Skip, Back and Continue pinned under it. It shows on a
  * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing is kept
- * on the profile. Skip leaves one step and goes on; Finish later closes the guide and keeps the place. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
+ * on the profile. Skip leaves one step and goes on; Finish later, which Escape also does, closes the guide and keeps the place, and the Finish setup chip near the message box brings it back for the rest of the visit. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
  * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
  * upstream's steps do.
  */
@@ -25,16 +25,13 @@ export type OnboardingStepEntryProps = Pick<PropsRuntime<'settings.onboarding'>,
 /** Upstream's DeepSeek key step, which Welcome's Models section covers once the first chat starts. */
 export const UPSTREAM_KEY_STEP = 'deepseek-official'
 
-/** The dialog is closed by its buttons only, so Escape and the mask do nothing. */
-const ignoreImplicitDismiss = (): void => {}
-
 /**
  * Show the dialog while onboarding is unfinished or was opened explicitly, and complete upstream's step otherwise.
  * @param props - upstream's owner props, this plugin's copy and the services.
  * @returns the dialog, or nothing.
  */
 export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode {
-  const { progress, complete, explicit = false } = props
+  const { progress, complete, explicit = false, aside } = props
   const snapshot = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
   const settings = snapshot.status === 'ready' ? snapshot.value : undefined
   const show = settings !== undefined && (!settings.done || explicit)
@@ -42,8 +39,8 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   // A finished profile, or one whose progress cannot be read, lets upstream's flow go on at once.
   useEffect(() => { if (decided && !show) complete() }, [decided, show, complete])
   // "Finish later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
-  const [later, setLater] = useState(false)
-  const leave = useCallback((): void => { setLater(true); complete() }, [complete])
+  const later = useSyncExternalStore(aside.subscribe, aside.getSnapshot)
+  const leave = useCallback((): void => { aside.set(true); complete() }, [aside, complete])
   return show && !later ? <Dialog {...props} settings={settings} explicit={explicit} later={leave} /> : null
 }
 
@@ -119,9 +116,10 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
   useEffect(() => {
-    if (target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
+    // A re-run keeps the workspace the chat is in until the person chooses another.
+    if (!explicit && target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
     if (target.kind === 'none') told.current = true
-  }, [target, guide, told])
+  }, [target, guide, told, explicit])
   const { plugins, optionalRows } = settings
   const services = useMemo<StepServices>(() => ({ ...fixed, t, remote: reach === 'remote', plugins, optionalRows, renderSection }), [fixed, t, reach, plugins, optionalRows, renderSection])
 
@@ -137,8 +135,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice }),
-    [services, guide, record, addedSteps, reach, target, notice],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice, keepCurrent: explicit }),
+    [services, guide, record, addedSteps, reach, target, notice, explicit],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
@@ -156,8 +154,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   }
   const last = current === steps.length - 1
   // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step.
-  const needsFolder = last && workspace === undefined && target.kind !== 'other'
-  const next = (): void => {
+  const needsFolder = last && workspace === undefined && target.kind !== 'other' && !(explicit && target.kind === 'default')
+  const advance = (): void => {
     step.onContinue?.()
     if (!last) {
       go(current + 1)
@@ -169,7 +167,11 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     }
     finish()
     completeStep(UPSTREAM_KEY_STEP)
-    void startChat(workspace?.workspaceId, folderOf(workspace))
+    void startChat(workspace?.workspaceId, folderOf(workspace), explicit)
+  }
+  // A step with something unfinished (a highlighted folder, an open Add question) holds Continue until it is settled.
+  const next = (): void => {
+    void guide.passGates().then((open) => { if (open) advance() })
   }
   const title = step.title()
   // The last step has nothing left to skip, and Welcome offers no Skip while the preview notice is owed.
@@ -178,14 +180,14 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     ? null
     : (
       <StepFooter
-        {...showSkip ? { skip: { label: t('skip'), onClick: () => { go(current + 1) } } } : {}}
+        {...showSkip ? { skip: { label: step.skipLabel?.() ?? t('skip'), onClick: () => { go(current + 1) } } } : {}}
         {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
         next={{ label: t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue'), onClick: next }} />
     )
   return (
-    <Modal open title={title} onClose={ignoreImplicitDismiss} headless className={DIALOG_CLASS}>
+    <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} later={{ label: t('later'), onClick: later }} footer={footer}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last ? {} : { later: { label: t('later'), onClick: later } }} footer={footer}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>

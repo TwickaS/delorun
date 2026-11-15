@@ -9,6 +9,7 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import type { LocationProblem } from '../wire.ts'
+import type { ContinueGate } from './guide.ts'
 import type { AddedFolder, StepServices } from './types.ts'
 import css from './steps/steps.module.css'
 
@@ -39,6 +40,12 @@ export interface FolderChooserProps {
    * selected folder, or the folder shown when none is selected, to `onPick`. The clone choice picks where to clone into.
    */
   readonly pick?: { readonly label: string; readonly onPick: (path: string) => void }
+  /**
+   * Called with a hold on the dialog's Continue while a folder is highlighted, and with undefined when none is: Continue
+   * then adds the highlighted folder before it goes on. A chooser with `pick` sets no hold.
+   * @param gate - the hold, or undefined to release it.
+   */
+  readonly onHold?: (gate: ContinueGate | undefined) => void
 }
 
 /** One folder of a listing. */
@@ -52,7 +59,7 @@ const LIST_KEYS: Readonly<Record<string, -1 | 1 | 'first' | 'last'>> = { ArrowDo
  * @param props - the services and what follows an added folder.
  * @returns the chooser.
  */
-export function FolderChooser({ services, onAdded, pick }: FolderChooserProps): ReactNode {
+export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooserProps): ReactNode {
   const { t, start } = services
   const nameId = useId()
   const [listing, setListing] = useState<DirectoryListing | undefined>()
@@ -145,15 +152,27 @@ export function FolderChooser({ services, onAdded, pick }: FolderChooserProps): 
     }
   }
 
-  const add = (path: string): void => {
+  const add = (path: string): Promise<boolean> => {
     setAdding(true)
     setProblem(undefined)
-    void start.addFolder(path).then((outcome) => {
+    return start.addFolder(path).then((outcome) => {
       setAdding(false)
-      if (outcome.kind === 'chosen') onAdded?.(outcome)
-      else setProblem(outcome.kind === 'refused' ? outcome.problem : 'failed')
+      if (outcome.kind === 'chosen') {
+        onAdded?.(outcome)
+        return true
+      }
+      setProblem(outcome.kind === 'refused' ? outcome.problem : 'failed')
+      return false
     })
   }
+  const latestAdd = useRef(add)
+  latestAdd.current = add
+  // While a folder is highlighted, Continue adds it first; a refusal stays in the chooser.
+  useEffect(() => {
+    if (onHold === undefined || pick !== undefined || selected === undefined) return undefined
+    onHold(() => latestAdd.current(selected))
+    return () => { onHold(undefined) }
+  }, [onHold, pick, selected])
 
   const create = (event: FormEvent<HTMLFormElement>, parentPath: string): void => {
     event.preventDefault()
@@ -215,7 +234,7 @@ export function FolderChooser({ services, onAdded, pick }: FolderChooserProps): 
         <Button variant="outline" size="sm" disabled={selected === undefined} onClick={() => { open(selected, { focusList: true }) }}>{t('chooser.open')}</Button>
         {pick === undefined
           ? (
-            <Button variant="primary" disabled={selected === undefined || adding} onClick={selected === undefined ? undefined : () => { add(selected) }}>
+            <Button variant="outline" disabled={selected === undefined || adding} onClick={selected === undefined ? undefined : () => { void add(selected) }}>
               {t('chooser.add')}
             </Button>
           )

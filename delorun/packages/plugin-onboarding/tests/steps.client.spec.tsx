@@ -206,6 +206,28 @@ describe('the agents step', () => {
     for (const line of lines) expect(screen.getAllByText(line).length).toBeGreaterThan(0)
   })
 
+  it('asks before Continue drops an open Add confirmation: Add installs it, Don\'t add leaves it', async () => {
+    const [claude, codex] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
+    const guide = guideOf()
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
+    expect(await guide.passGates()).toBe(true)
+    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
+    let go = true
+    await act(async () => { go = await guide.passGates() })
+    expect(go).toBe(false)
+    const ask = screen.getByRole('alertdialog', { name: 'Add Claude Code first?' })
+    expect(document.activeElement).toBe(ask)
+    await click(within(ask).getByRole('button', { name: en['agents.ask.skip'] }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(fake.install).not.toHaveBeenCalled()
+    expect(await guide.passGates()).toBe(true)
+    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
+    await act(async () => { await guide.passGates() })
+    await click(within(screen.getByRole('alertdialog')).getByRole('button', { name: en['agents.ask.add'] }))
+    expect(fake.install).toHaveBeenCalledExactlyOnceWith(claude.name)
+  })
+
   it('shows what adding an agent means after Add, and installs only on the confirming press', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
@@ -304,7 +326,7 @@ describe('the recommended plugins step offers bundled rows', () => {
     ['is not part of this profile', 'unavailable', en['bundle.unavailable']],
     ['cannot be changed', 'failed', en['bundle.failed']],
   ])('shows a row that %s and no Add button', (_, state, text) => {
-    const fake = installerFake({}, { 'delorun-cost-meter': { state } })
+    const fake = installerFake({}, { 'delorun-cost-meter': { state, title: 'Cost meter' } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows: ['delorun-cost-meter'] })} guide={guideOf()} />)
     expect(screen.getByText(text)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Add / })).toBeNull()
@@ -315,7 +337,11 @@ describe('the recommended plugins step', () => {
   const plugins = ['@scope/codex-quota', '@scope/any', '@scope/claude-only', '@scope/unread']
 
   it('reads the connections once, lists the plugins that fit first with what they fit, and leaves out one for a connection the person lacks', async () => {
-    const fake = installerFake({ '@scope/any': { state: 'available', title: { en: 'Any', zh: '任意' }, description: 'Fits any setup.' } })
+    const fake = installerFake({
+      '@scope/any': { state: 'available', title: { en: 'Any', zh: '任意' }, description: 'Fits any setup.' },
+      '@scope/codex-quota': { state: 'available' },
+      '@scope/unread': { state: 'available' },
+    })
     const host = hostFake({
       readiness: { ...READY, agents: { 'claude-code': 'missing', 'codex': 'found' } },
       recommend: { plugins: [
@@ -367,7 +393,8 @@ describe('the recommended plugins step', () => {
   })
 
   it('shows every configured plugin in order when their connections cannot be read', async () => {
-    render(<PluginsStep services={stepServices({ plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    const fake = installerFake(Object.fromEntries(plugins.map(name => [name, { state: 'available' as const }])))
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
     expect(screen.getByText(en['plugins.unread'])).toBeTruthy()
     expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Claude only', 'Unread'])
@@ -378,6 +405,15 @@ describe('the recommended plugins step', () => {
     const providers = new Map([['deepseek-official', 'DeepSeek']])
     expect(['agent:claude-code', 'agent:codex', 'tool:tailscale', 'provider:deepseek-official', 'provider:other', 'tool:other'].map(id => connectionName(id, t, providers)))
       .toEqual(['Claude Code', 'Codex', 'Tailscale', 'DeepSeek', 'other', 'other'])
+  })
+
+  it('shows placeholder rows, never a package id, until a plugin\'s title is read', async () => {
+    const fake = installerFake({ '@scope/codex-quota': { state: 'checking' } }, { 'delorun-cost-meter': { state: 'checking' } })
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: ['@scope/codex-quota', '@scope/any'], optionalRows: ['delorun-cost-meter'] })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    await settle()
+    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+    expect(screen.queryByText(/codex|delorun-cost-meter|Codex quota/i)).toBeNull()
+    expect(document.querySelectorAll('[aria-hidden="true"]:empty, li[aria-hidden="true"]').length).toBeGreaterThanOrEqual(3)
   })
 
   it('names a plugin whose title is not known yet in words, never by its package id', () => {
@@ -471,7 +507,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', 'DeepSeek', undefined],
-      ['Look', 'Soft · Peach', undefined],
+      ['Look', 'Soft · Peach · System', undefined],
       ['Agents', 'Claude Code', undefined],
       ['Plugins', '1 added', undefined],
       ['Phone access', 'On', undefined],
@@ -488,7 +524,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', en['ready.model.none'], 'attention'],
-      ['Look', 'Grove', undefined],
+      ['Look', 'Grove · System', undefined],
       ['Agents', en['ready.none'], undefined],
       ['Plugins', en['ready.none'], undefined],
       ['Workspace', en['ready.workspace.none'], 'attention'],
@@ -506,7 +542,7 @@ describe('the ready step', () => {
   it('names the default look while the theme settings are still loading', async () => {
     ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
     await settle()
-    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', undefined])
+    expect(rows()[1]).toEqual(['Look', 'Soft · Peach · System', undefined])
   })
 
   it('shows the default workspace once the dialog chose it', async () => {

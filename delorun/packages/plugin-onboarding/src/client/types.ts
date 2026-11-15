@@ -314,6 +314,24 @@ export interface OnboardingInjected {
    * resolved, else through the workspace UI's own New Session.
    * @param workspaceId - a workspace the person chose.
    * @param folder - what that workspace's folder holds, which picks the starting prompts.
+   * @param keepCurrent - when no workspace was chosen, leave the chat in the workspace it is in (the workspace UI's own New Session) instead of the default workspace.
    */
-  readonly startChat: (workspaceId?: WorkspaceId, folder?: FolderKind) => Promise<void>
+  readonly startChat: (workspaceId?: WorkspaceId, folder?: FolderKind, keepCurrent?: boolean) => Promise<void>
+  /** Whether the person chose Finish later in this visit; the Finish setup chip reads it and the dialog sets it. */
+  readonly aside: LaterStore
+}
+
+/** The flag that the guide was set aside in this visit. */
+export interface LaterStore {
+  /** @returns whether the guide was set aside. */
+  getSnapshot(): boolean
+  /**
+   * @param listener - called after each change.
+   * @returns the unsubscriber.
+   */
+  subscribe(listener: () => void): () => void
+  /**
+   * @param value - whether the guide is set aside.
+   */
+  set(value: boolean): void
 }

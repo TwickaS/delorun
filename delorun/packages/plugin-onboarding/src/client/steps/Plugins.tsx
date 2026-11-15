@@ -11,7 +11,7 @@ import type { StepServices } from '../types.ts'
 import { Notice } from '../ui/Notice.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { BundleCard, RowCard } from './BundleCard.tsx'
-import { useRefresh, useStore, type StepProps } from './shared.ts'
+import { readableName, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
 
 /**
@@ -28,16 +28,7 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
   return providers.get(id.slice('provider:'.length)) ?? id.slice(id.indexOf(':') + 1)
 }
 
-/**
- * A readable stand-in for a plugin's title while its registered title is unknown: the package name without its scope,
- * with dashes as spaces and a capital first letter, so a package id never shows.
- * @param name - the package name.
- * @returns the words, such as `Codex quota` for `@scope/codex-quota`.
- */
-export function readableName(name: string): string {
-  const words = name.slice(name.lastIndexOf('/') + 1).replaceAll('-', ' ').trim()
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
+export { readableName }
 
 /**
  * @param props - the services and the guide.
@@ -72,7 +63,7 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
           const view = views[name]
           return (
             <BundleCard key={name} name={name} services={services}
-              title={view?.title === undefined ? readableName(name) : resolveText(view.title)}
+              title={view?.title !== undefined ? resolveText(view.title) : view === undefined || view.state === 'checking' ? undefined : readableName(name)}
               description={view?.description === undefined ? undefined : resolveText(view.description)}>
               {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
             </BundleCard>

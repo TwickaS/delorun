@@ -23,8 +23,9 @@ interface CheckLine {
  * @param props - the services, the guide, the reach state and where the chat opens without a choice.
  * @returns the step body.
  */
-export function ReadyStep({ services, guide, reach, target }: StepProps & { readonly reach: ReachState; readonly target: StartTarget }): ReactNode {
-  const { t, appearance, look, plugins, optionalRows, bundles } = services
+export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepProps & { readonly reach: ReachState; readonly target: StartTarget; readonly keepCurrent: boolean }): ReactNode {
+  const { t, appearance, look, scheme, plugins, optionalRows, bundles } = services
+  const mode = useSyncExternalStore(useCallback(listener => scheme.subscribe(listener), [scheme]), () => scheme.get())
   const keys = useStore(guide.keys)
   const workspace = useStore(guide.workspace)
   const settings = useSyncExternalStore(useCallback(listener => look.settings.subscribe(listener), [look]), () => look.settings.getSnapshot())
@@ -39,15 +40,15 @@ export function ReadyStep({ services, guide, reach, target }: StepProps & { read
     working.length > 0
       ? { key: 'model', label: t('ready.model'), value: working.map(each => each.name).join(', '), tone: undefined }
       : { key: 'model', label: t('ready.model'), value: t('ready.model.none'), tone: 'attention' },
-    { key: 'look', label: t('ready.look'), value: palette === 'soft' ? `${appearance('palette.soft')} · ${appearance(`accent.${settings.value?.accent ?? 'peach'}`)}` : appearance(`palette.${palette}`), tone: undefined },
+    { key: 'look', label: t('ready.look'), value: [palette === 'soft' ? `${appearance('palette.soft')} · ${appearance(`accent.${settings.value?.accent ?? 'peach'}`)}` : appearance(`palette.${palette}`), appearance(`mode.${mode}`)].join(' · '), tone: undefined },
     { key: 'agents', label: t('ready.agents'), value: agents.length === 0 ? t('ready.none') : agents.join(', '), tone: undefined },
     { key: 'plugins', label: t('ready.plugins'), value: extra === 0 ? t('ready.none') : t('ready.plugins.count', { count: String(extra) }), tone: undefined },
     ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' ? 'ready.reach.on' : 'ready.reach.off'), tone: undefined }],
     workspace !== undefined
       ? { key: 'workspace', label: t('ready.workspace'), value: workspace.path, tone: undefined }
-      : target.kind === 'default'
+      : target.kind === 'default' && !keepCurrent
         ? { key: 'workspace', label: t('ready.workspace'), value: target.path, tone: undefined }
-        : target.kind === 'other'
+        : target.kind === 'other' || keepCurrent
           ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
           : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },
   ]
@@ -62,7 +63,7 @@ export function ReadyStep({ services, guide, reach, target }: StepProps & { read
           </div>
         ))}
       </dl>
-      {(workspace !== undefined || target.kind === 'other') && (
+      {(workspace !== undefined || target.kind === 'other' || keepCurrent) && (
         <div className={css.field}>
           <span className={css.label}>{t('ready.starters')}</span>
           <ul className={css.starterPreview}>

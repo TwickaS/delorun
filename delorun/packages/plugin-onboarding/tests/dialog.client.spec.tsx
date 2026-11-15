@@ -45,21 +45,22 @@ async function mountEntry(options: Options = {}) {
     status: options.status ?? 'ready', ...options.writeResult === undefined ? {} : { result: options.writeResult },
   })
   const extra = createSnapshotStore<readonly OnboardingStep[]>(options.extra ?? [])
+  const aside = createSnapshotStore(false)
   const complete = vi.fn()
   const completeStep = vi.fn((_id: string) => {})
-  const startChat = vi.fn((_workspaceId?: string, _folder?: string) => Promise.resolve())
+  const startChat = vi.fn((_workspaceId?: string, _folder?: string, _keepCurrent?: boolean) => Promise.resolve())
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
   const host = hostFake({ reach: options.reach ?? 'absent' })
   const start = options.start ?? startFace()
   const services = stepServices({ notice: options.notice?.face, host: host.host, start: start.face })
   const props = {
     t, complete, completeStep, renderSection: (id: string) => `section ${id}`, ...options.explicit === undefined ? {} : { explicit: options.explicit },
-    progress: progress.form, extra, loadRecord, services, startChat,
+    progress: progress.form, extra, loadRecord, services, startChat, aside,
   } satisfies OnboardingStepEntryProps
   const view = render(<OnboardingStepEntry {...props} />)
   await settle()
   await settle()
-  return { ...view, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start }
+  return { ...view, aside, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start }
 }
 
 /** The steps a first run shows with nothing configured. */
@@ -172,14 +173,12 @@ describe('the first run', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('is closed by its buttons only: Escape and a click on the mask change nothing', async () => {
+  it('treats Escape as Finish later: the place is kept and the guide sets aside for this visit', async () => {
     const { progress, complete } = await mountEntry({ notice: noticeFace() })
     await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
-    const mask = screen.getByRole('dialog').previousElementSibling as HTMLElement
-    await click(mask)
-    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(progress.set).not.toHaveBeenCalled()
-    expect(complete).not.toHaveBeenCalled()
+    expect(complete).toHaveBeenCalled()
   })
 
   it('goes forward and back, saving the step reached, and starts the chat in the default workspace from Ready', async () => {
@@ -200,7 +199,7 @@ describe('the first run', () => {
     expect(complete).toHaveBeenCalled()
     expect(completeStep).toHaveBeenCalledExactlyOnceWith(UPSTREAM_KEY_STEP)
     expect(UPSTREAM_KEY_STEP).toBe('deepseek-official')
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
   })
 
   it('lists the steps with the current one marked and the earlier ones done', async () => {
@@ -253,7 +252,8 @@ describe('which steps apply', () => {
     await forward(4)
     expect(heading().textContent).toBe(en['step.plugins'])
     await settle()
-    expect(screen.getByRole('heading', { level: 4 }).textContent).toBe('P')
+    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+    expect(screen.queryByText('P')).toBeNull()
   })
 
   it.each<readonly [string, ReachState, SetupRecord, boolean]>([
@@ -335,14 +335,14 @@ describe('the workspace and the last button', () => {
     await forward(1)
     expect(screen.getByText('/home/person/app')).toBeTruthy()
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'code')
+    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'code', false)
   })
 
   it('starts the chat through the workspace UI where other workspaces exist but no default', async () => {
     const { startChat } = await mountEntry({ start: startFace({ kind: 'other' }) })
     await forward(5)
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined, false)
   })
 
   it('sends the person back to Workspace from Ready while no folder is chosen and there is no default', async () => {
@@ -357,7 +357,7 @@ describe('the workspace and the last button', () => {
     await settle()
     await forward(1)
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'empty')
+    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'empty', false)
   })
 
   it.each<readonly [string, FolderChoice, string]>([
@@ -444,5 +444,36 @@ describe('Skip', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(complete).not.toHaveBeenCalled()
     expect(progress.value()).not.toMatchObject({ done: true })
+  })
+})
+
+describe('finishing later and the last step', () => {
+  it('sets the guide aside for the visit on Finish later, for the Finish setup chip to bring back', async () => {
+    const { aside, progress } = await mountEntry()
+    expect(aside.getSnapshot()).toBe(false)
+    await click(button(en.later))
+    expect(aside.getSnapshot()).toBe(true)
+    expect(progress.value()).not.toMatchObject({ done: true })
+    await act(async () => { aside.set(false) })
+    await settle()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('offers no Finish later on Ready', async () => {
+    await mountEntry({ start: startFace({ kind: 'other' }) })
+    expect(screen.getByRole('button', { name: en.later })).toBeTruthy()
+    await forward(5)
+    expect(heading().textContent).toBe(en['step.ready'])
+    expect(screen.queryByRole('button', { name: en.later })).toBeNull()
+  })
+
+  it('keeps the workspace the chat is in when the guide was opened again and Workspace is skipped', async () => {
+    const { startChat } = await mountEntry({ explicit: true })
+    await forward(4)
+    expect(heading().textContent).toBe(en['step.workspace'])
+    await click(button(en.skip))
+    expect(screen.getByText(en['ready.workspace.last'])).toBeTruthy()
+    await click(button(en.start))
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined, true)
   })
 })

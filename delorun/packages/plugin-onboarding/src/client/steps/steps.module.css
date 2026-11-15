@@ -70,6 +70,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--delorun-space-5);
+  /* A fixed height keeps the list's scroll inside the chooser and its actions in view, not nested in the dialog's scroll. */
+  height: min(30rem, 64dvh);
   min-width: 0;
 }
 
@@ -104,9 +106,10 @@
 
 .folders {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--delorun-space-1);
-  max-height: 240px;
+  min-height: 0;
   margin: 0;
   padding: var(--delorun-space-2);
   overflow-y: auto;
@@ -159,6 +162,7 @@
 }
 
 .chooserActions {
+  flex: none;
   justify-content: flex-end;
 }
 
@@ -467,4 +471,83 @@
   font: inherit;
   font-size: var(--onb-small-size);
   cursor: pointer;
+}
+
+/* A card the step moves focus to, so a keyboard user lands on the folder just chosen. */
+.focusable:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+  border-radius: var(--dsw-radius-lg);
+}
+
+/* Language chips in a grid of equal cells, so no chip sits alone on a row. */
+.chipGrid [role='radiogroup'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+}
+
+.chipGrid [role='radio'] {
+  justify-content: center;
+}
+
+/* The Look preview stays in view while the choices scroll, where the two columns sit side by side. */
+@media (min-width: 768px) {
+  .lookGrid > :last-child {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* A card shaped placeholder while a recommended plugin's title is read. */
+.skeleton {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-5);
+  min-height: 72px;
+  padding: var(--delorun-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+}
+
+.skeletonIcon,
+.skeletonLines > span {
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--dsw-radius-sm);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonIcon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+
+.skeletonLines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+}
+
+.skeletonLines > span {
+  height: 12px;
+}
+
+.skeletonLines > span:first-child {
+  width: 45%;
+}
+
+.skeletonLines > span:last-child {
+  width: 80%;
+}
+
+@keyframes skeleton-pulse {
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonIcon,
+  .skeletonLines > span {
+    animation: none;
+  }
 }

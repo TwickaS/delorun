@@ -52,6 +52,7 @@ import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
+import { FinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
@@ -103,6 +104,9 @@ export const KEY_BANNER_ENTRY = { id: 'delorun-onboarding.key-banner', order: 5 
 
 /** The set-aside notice's place in the input dock: beside the no-key banner, above the starter prompts. */
 export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } as const
+
+/** The Finish setup chip's place in the input dock: just above the message box, below the notices. */
+export const FINISH_SETUP_ENTRY = { id: 'delorun-onboarding.finish-setup', order: 8 } as const
 
 /** The wire name of the model tool whose row {@link RenameRow} draws; `@delorun/plugin-workspaces` defines the tool. */
 export const RENAME_TOOL = 'rename_workspace'
@@ -302,11 +306,11 @@ export function applyStudio(ctx: Context): void {
    * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
    * chose or a default one, the workspace UI's own New Session choice applies and no prompts follow.
    */
-  const startChat = async (chosen?: WorkspaceId, folder?: FolderKind): Promise<void> => {
+  const startChat = async (chosen?: WorkspaceId, folder?: FolderKind, keepCurrent = false): Promise<void> => {
     const workspace = ctx.get('uiWorkspace')
     if (workspace === undefined) return
     let target = chosen
-    if (target === undefined) {
+    if (target === undefined && !keepCurrent) {
       const resolved = await (resolution ?? resolve())
       target = resolved.kind === 'default' ? resolved.workspaceId : undefined
     }
@@ -323,7 +327,17 @@ export function applyStudio(ctx: Context): void {
     }
   }
 
-  const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat })
+  const laterStore = createSnapshotStore(false)
+  const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore })
+  const finishSetup: FinishSetupInjected = {
+    later: laterStore,
+    progress,
+    reopen: () => {
+      laterStore.set(false)
+      // Where the seat was released after Finish later, Settings opens the guide again at the saved step.
+      ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
+    },
+  }
   const showAgain: ShowAgainInjected = {
     show: () => {
       // Unfinished from its first screen, so a reload shows the guide again, as the explicit opening does now.
@@ -374,6 +388,9 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
       }, StarterPrompts)),
+      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+        name: 'conversation.input.dock', id: FINISH_SETUP_ENTRY.id, order: FINISH_SETUP_ENTRY.order, locale: NS, inject: () => finishSetup,
+      }, FinishSetupChip)),
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: SET_ASIDE_ENTRY.id, order: SET_ASIDE_ENTRY.order, locale: NS, inject: () => setAside,
       }, SetAsideBanner)),

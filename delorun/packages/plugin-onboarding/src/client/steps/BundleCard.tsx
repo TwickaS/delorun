@@ -9,7 +9,7 @@ import type { BundleState } from '../bundles.ts'
 import type { StepServices } from '../types.ts'
 import { Card } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
-import { useBundle } from './shared.ts'
+import { readableName, useBundle } from './shared.ts'
 import css from './steps.module.css'
 
 /**
@@ -90,21 +90,36 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
 }
 
 /**
+ * A placeholder for a card whose title has not arrived, so a package id never shows.
+ * @returns the placeholder row, hidden from assistive technology.
+ */
+export function SkeletonCard(): ReactNode {
+  return (
+    <li className={css.skeleton} aria-hidden="true">
+      <span className={css.skeletonIcon} />
+      <span className={css.skeletonLines}><span /><span /></span>
+    </li>
+  )
+}
+
+/**
  * A card for a package.
  * @param props - the package, its text and Add handler.
  * @returns the card.
  */
 export function BundleCard({ name, title, description, services, onAdd, children }: {
   readonly name: string
-  readonly title: string
+  /** The title; undefined while it is unknown, which shows a placeholder. */
+  readonly title: string | undefined
   readonly description: string | undefined
   readonly services: StepServices
   readonly onAdd?: () => void
   readonly children?: ReactNode
 }): ReactNode {
   const view = useBundle(services, name)
+  if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} title={title} description={description}
+    <AddableCard services={services} state={view?.state ?? 'checking'} title={title ?? ''} description={description}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>
@@ -120,8 +135,9 @@ export function BundleCard({ name, title, description, services, onAdd, children
 export function RowCard({ id, services }: { readonly id: string; readonly services: StepServices }): ReactNode {
   const { bundles, resolveText } = services
   const view = useSyncExternalStore(useCallback(listener => bundles.rows.subscribe(listener), [bundles]), () => bundles.rows.getSnapshot()[id])
+  if (view?.title === undefined && (view === undefined || view.state === 'checking')) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} title={view?.title === undefined ? id : resolveText(view.title)}
+    <AddableCard services={services} state={view?.state ?? 'checking'} title={view?.title === undefined ? readableName(id) : resolveText(view.title)}
       icon={view?.icon} description={view?.description === undefined ? undefined : resolveText(view.description)}
       onAdd={() => { void bundles.enableRow(id) }} />
   )
