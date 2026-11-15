@@ -85,7 +85,7 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
         <button type="button" className={css.notch} disabled={disabled} aria-pressed={value === CONTRAST.default}
           style={{ left: `${String(((CONTRAST.default - CONTRAST.min) / (CONTRAST.max - CONTRAST.min)) * 100)}%` }}
           onClick={() => { if (value !== CONTRAST.default) onCommit(CONTRAST.default) }}>
-          {String(CONTRAST.default)}
+          {`${String(CONTRAST.default)}%`}
         </button>
       </div>
     </div>
@@ -138,6 +138,7 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
       <section className={cardCss.block} data-muted={current.palette !== 'soft'}>
         <SettingHeading id="delorun-appearance-accent" title={t('accent')} lead={t(current.palette === 'soft' ? 'accent.lead' : 'accent.byTheme')} />
         <AccentPicker label={t('accent')} hideLabel value={current.accent} disabled={disabled || current.palette !== 'soft'} onChange={(value) => { save('accent', value) }}
+          {...current.palette === 'soft' ? {} : { themeAccent: { label: t('accent.theme'), light: paletteColours[current.palette].light.accent, dark: paletteColours[current.palette].dark.accent } }}
           accents={ACCENT_CHOICES.map(choice => ({
             value: choice,
             label: t(`accent.${choice}`),

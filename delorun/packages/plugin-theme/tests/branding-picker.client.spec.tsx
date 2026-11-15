@@ -19,7 +19,7 @@ describe('the Branding section without the sidebar', () => {
     render(<BrandingSection {...props} />)
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['icon.pick'] })) })
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByText(pickerEn['icon.title'])).toBeTruthy()
+    expect(screen.getByText(en['picker.title'])).toBeTruthy()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: pickerEn['icon.save'] })) })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(form.scope.getSnapshot().value?.branding.icon).toBe('picked')

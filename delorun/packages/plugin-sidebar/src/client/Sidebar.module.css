@@ -648,4 +648,10 @@
     --list-control: 44px;
     --list-icon-button: 44px;
   }
+
+  /* Three 44px buttons leave a 256px drawer less than the search field's usual minimum, so the field gives way before the New chat button is cut off. */
+  .search,
+  .searchInput {
+    min-width: 0;
+  }
 }

@@ -19,6 +19,8 @@ export interface SettingRowProps {
   readonly failure?: string | undefined
   /** Put the control below the text, across the row, as tiles need. */
   readonly stacked?: boolean | undefined
+  /** Put the control below the text on a phone only, for a control too wide to sit beside the description. */
+  readonly stackOnPhone?: boolean | undefined
   /** The control. */
   readonly children: ReactNode
 }
@@ -28,9 +30,9 @@ export interface SettingRowProps {
  * @param props - see {@link SettingRowProps}.
  * @returns the row.
  */
-export function SettingRow({ title, titleId, description, failure, stacked, children }: SettingRowProps) {
+export function SettingRow({ title, titleId, description, failure, stacked, stackOnPhone, children }: SettingRowProps) {
   return (
-    <div className={stacked === true ? `${css.row} ${css.stacked}` : css.row}>
+    <div className={stacked === true ? `${css.row} ${css.stacked}` : stackOnPhone === true ? `${css.row} ${css.phoneStacked}` : css.row}>
       <div className={css.text}>
         <div id={titleId} className={css.title}>{title}</div>
         <div className={css.description}>{description}</div>

@@ -4,7 +4,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { SettingsLayoutRegistry } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { projectLayout, searchNav, type SettingsNav } from '@deepseek-ai/dsh-client-ui-settings-general/src/client/layout.ts'
 import { describe, expect, it } from 'vitest'
-import { apply, delorunSettingsLayout, HIDDEN_ITEMS, inject, ITEMS, PANEL_STYLE, PLUGIN_ID, SECTIONS } from '../src/client/index.ts'
+import { apply, delorunSettingsLayout, HIDDEN_ITEMS, inject, ITEMS, PANEL_STYLE, PHONE_NAV_STYLE, PLUGIN_ID, SECTIONS } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 /** The General rows the studio composition registers, by registration id. */
@@ -188,7 +188,7 @@ describe('the client plugin', () => {
     expect(Object.keys([...sections][0]?.inject?.() ?? {}).toSorted()).toEqual(['open', 'tools'])
     expect(registry.getSnapshot()?.groups.map(group => group.id)).toEqual(['general', 'agent', 'safety', 'devices', 'data'])
     expect(dictionaries.has('settings.delorunLayout')).toBe(true)
-    expect(style()?.textContent).toBe(PANEL_STYLE)
+    expect(style()?.textContent).toBe(`${PANEL_STYLE}\n${PHONE_NAV_STYLE}`)
 
     await studio.dispose()
     expect(registry.getSnapshot()).toBeUndefined()
@@ -206,7 +206,7 @@ describe('the client plugin', () => {
     const shell = ctx.plugin({ apply: (scope: Context) => { scope.provide('settingsLayout', registry) } })
     await shell.await()
     expect(registry.getSnapshot()?.groups.map(group => group.id)).toEqual(['general', 'agent', 'safety', 'devices', 'data'])
-    expect([dictionaries.size, sections.size, style()?.textContent]).toEqual([1, 1, PANEL_STYLE])
+    expect([dictionaries.size, sections.size, style()?.textContent]).toEqual([1, 1, `${PANEL_STYLE}\n${PHONE_NAV_STYLE}`])
 
     await shell.dispose()
     expect(registry.getSnapshot()).toBeUndefined()

@@ -5,6 +5,10 @@
  * accent is mixed with. `StageArt.module.css` maps a palette's names onto the `--stage-*` colours the scenes draw with.
  */
 :root {
+  /* The light-mode scrim under the brand row, which keeps its white name above 4.5:1 on the lightest art */
+  --delorun-art-scrim-top: rgb(8 16 36 / 56%);
+  --delorun-art-scrim-bottom: rgb(8 16 36 / 40%);
+
   /* Blueprint, the default, with the night sky's base colours and the blueprint's glows */
   --delorun-art-blueprint-top: light-dark(oklch(0.782169 0.123386 240.226), oklch(0.581473 0.149124 256.9));
   --delorun-art-blueprint-mid: light-dark(oklch(0.616111 0.195824 259.735), oklch(0.456509 0.159377 261.945));

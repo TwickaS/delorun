@@ -73,6 +73,15 @@ describe('the Appearance section', () => {
     expect(screen.getByText(en['accent.byTheme'])).toBeTruthy()
   })
 
+  it('marks the theme\'s own accent as the chosen one under a theme and leaves every preset chip unchosen and disabled', async () => {
+    open(themeForm({ ...STUDIO_ON, palette: 'ocean', accent: 'moss' }))
+    const chips = within(group(en.accent)).getAllByRole('radio')
+    expect(chips.map(chip => [chip.textContent, chip.getAttribute('aria-checked'), (chip as HTMLButtonElement).disabled])
+      .filter(([, checked]) => checked === 'true')).toEqual([[en['accent.theme'], 'true', true]])
+    expect(chips.filter(chip => chip.getAttribute('aria-checked') === 'true')).toHaveLength(1)
+    expect(screen.getByRole('radio', { name: 'Moss' }).getAttribute('aria-checked')).toBe('false')
+  })
+
   it('holds mode, theme, accent and contrast under one Colours heading that names the section', () => {
     open(themeForm(STUDIO_ON))
     const heading = screen.getByRole('heading', { level: 3, name: en.colours })
@@ -100,9 +109,9 @@ describe('the Appearance section', () => {
     await act(async () => { fireEvent.blur(slider) })
     await act(async () => { fireEvent.blur(slider) })
     expect(form.writes).toEqual([['contrast', 150], ['contrast', 60]])
-    await click(screen.getByRole('button', { name: '100' }))
+    await click(screen.getByRole('button', { name: '100%' }))
     expect(form.writes.at(-1)).toEqual(['contrast', 100])
-    await click(screen.getByRole('button', { name: '100' }))
+    await click(screen.getByRole('button', { name: '100%' }))
     expect(form.writes).toHaveLength(3)
   })
 

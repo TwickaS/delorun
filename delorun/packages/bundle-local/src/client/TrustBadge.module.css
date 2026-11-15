@@ -24,8 +24,8 @@
 }
 
 .badge {
-  /* Shrinks, with its label's ellipsis, before the foot's other actions overlap the panel icons. */
-  flex: 0 1 auto;
+  /* Keeps its label's full width; a long label such as "Verified · 3 of your changes" still ends in an ellipsis at the limit. */
+  flex: 0 0 auto;
   gap: 6px;
   min-width: 0;
   overflow: hidden;

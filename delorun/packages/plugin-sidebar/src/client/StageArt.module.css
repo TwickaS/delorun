@@ -5,6 +5,7 @@
  */
 .backdrop {
   --stage-fade: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
+  --stage-scrim-height: 64px;
 
   position: absolute;
   inset: 0;
@@ -277,4 +278,14 @@
   width: 0;
   height: 0;
   overflow: hidden;
+}
+
+/* Light mode: the brand row's white name sits on the art's lightest part, so a dark scrim under the row lifts its contrast above 4.5:1. */
+:global(body:not([data-ds-dark-theme])) .backdrop::before {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: var(--stage-scrim-height);
+  background: linear-gradient(to bottom, var(--delorun-art-scrim-top), var(--delorun-art-scrim-bottom) 70%, transparent);
+  content: '';
 }

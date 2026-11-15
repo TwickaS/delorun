@@ -65,8 +65,8 @@ describe('the Typeface row', () => {
     expect(within(group(en.typeface)).getByRole('radio', { name: /Schibsted/ }).getAttribute('aria-checked')).toBe('true')
   })
 
-  it('points at More font settings in its own card', () => {
-    expect(en['typeface.lead']).toContain('More font settings')
+  it('does not point at a setting the page does not show', () => {
+    expect(en['typeface.lead']).not.toContain('More font settings')
   })
 })
 

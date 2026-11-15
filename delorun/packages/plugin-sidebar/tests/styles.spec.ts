@@ -73,7 +73,7 @@ describe('the stylesheets of the sidebar', () => {
     expect(STYLED.filter(declaration => literal.test(declaration.value)).map(describeAt)).toEqual([])
     const names = BY_FILE('art-palettes.css').map(declaration => declaration.property)
     expect(names.length).toBeGreaterThan(70)
-    expect(names.filter(name => !/^--delorun-art-(blueprint|rose|grove|ocean|ember|iris|accent|night)-[a-z-]+$/.test(name))).toEqual([])
+    expect(names.filter(name => !/^--delorun-art-(blueprint|rose|grove|ocean|ember|iris|accent|night|scrim)-[a-z-]+$/.test(name))).toEqual([])
     expect(BY_FILE('badge-colors.css').map(declaration => declaration.property).filter(name => !/^--delorun-badge-[a-z]+$/.test(name))).toEqual([])
     expect(new Set(names).size).toBe(names.length)
   })

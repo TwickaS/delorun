@@ -9,7 +9,7 @@ import { Button, Notice, TextField } from '@delorun/brand'
 import { IconPicker } from '@delorun/brand/icon-picker'
 import type { IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
 import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_UPLOAD_PATH, ICON_TYPE_HEADER, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
-import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-controls'
+import { cardCss, ChoiceGroup, RadioList, SettingHeading, SettingsCard } from '@delorun/settings-controls'
 import { useState, type ChangeEvent } from 'react'
 import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
 import { BrandIcon, readPicked } from './BrandIcon.tsx'
@@ -118,6 +118,7 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
         <SettingHeading id="delorun-branding-name" title={t('name')} lead={t('name.lead')} />
         <TextField
           label={t('name')}
+          hideLabel
           defaultValue={stored.name}
           placeholder={t('name.placeholder')}
           maxLength={80}
@@ -133,6 +134,7 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
           <span className={css.preview}><BrandIcon branding={{ ...view, showMark: true }} size={PICKER_PREVIEW} /></span>
           <ChoiceGroup<IconChoice>
             label={t('icon')}
+            wrap
             value={stored.icon}
             disabled={disabled}
             options={[{ value: 'mark', label: t('icon.mark') }, { value: 'picked', label: t('icon.picked') }, { value: 'upload', label: t('icon.upload') }]}
@@ -153,11 +155,30 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
       </section>
       <section className={cardCss.block} aria-labelledby="delorun-branding-greeting">
         <SettingHeading id="delorun-branding-greeting" title={t('greeting')} lead={t('greeting.lead')} />
-        <ChoiceGroup<string>
+        <RadioList<string>
           label={t('greeting')}
           value={showCustom ? 'custom' : view.greeting}
           disabled={disabled}
-          options={[...GREETING_PRESETS.map(text => ({ value: text, label: text })), { value: 'custom', label: t('greeting.custom') }]}
+          rows={[
+            ...GREETING_PRESETS.map(text => ({ value: text, label: text })),
+            {
+              value: 'custom',
+              label: t('greeting.custom'),
+              detail: (
+                <TextField
+                  label={t('greeting.custom')}
+                  hideLabel
+                  defaultValue={stored.greeting}
+                  placeholder={t('greeting.placeholder')}
+                  maxLength={200}
+                  disabled={disabled}
+                  error={problem?.field === 'greeting' ? problem.text : undefined}
+                  onBlur={(event) => { saveGreeting(event.target.value) }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') saveGreeting(event.currentTarget.value) }}
+                />
+              ),
+            },
+          ]}
           onChange={(next) => {
             if (next === 'custom') { setCustomGreeting(true); return }
             setCustomGreeting(false)
@@ -165,18 +186,6 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
             write({ greeting: next === DEFAULT_GREETING ? '' : next })
           }}
         />
-        {showCustom && (
-          <TextField
-            label={t('greeting.custom')}
-            defaultValue={stored.greeting}
-            placeholder={t('greeting.placeholder')}
-            maxLength={200}
-            disabled={disabled}
-            error={problem?.field === 'greeting' ? problem.text : undefined}
-            onBlur={(event) => { saveGreeting(event.target.value) }}
-            onKeyDown={(event) => { if (event.key === 'Enter') saveGreeting(event.currentTarget.value) }}
-          />
-        )}
       </section>
       <section className={cardCss.block} aria-labelledby="delorun-branding-signin">
         <SettingHeading id="delorun-branding-signin" title={t('signin')} lead={t('signin.lead')} />
@@ -186,6 +195,8 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
       {picking && (
         <IconPicker
           t={pickerT}
+          title={t('picker.title')}
+          subtitle={t('picker.lead')}
           target={{ workspaceId: 'branding', title: pickedName, color: 'blue', icon: readPicked(stored.pickedIcon) }}
           onSave={(icon) => { setPicking(false); if (icon !== null) write({ icon: 'picked', pickedIcon: JSON.stringify(icon) }) }}
           onClose={() => { setPicking(false) }}

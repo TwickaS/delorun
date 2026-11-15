@@ -56,7 +56,7 @@ function useTheme(settings: ConfigForm<ThemeSettings>, t: AppearanceRowProps['t'
 export function StudioLookRow({ t, settings, useStockLook }: AppearanceRowProps) {
   const { disabled, failure, track } = useTheme(settings, t)
   return (
-    <SettingRow title={t('look')} description={t('look.lead')} failure={failure}>
+    <SettingRow stackOnPhone title={t('look')} description={t('look.lead')} failure={failure}>
       <StudioLookSwitch label={t('look')} value="delorun" delorunLabel={t('look.delorun')} stockLabel={t('look.stock')} disabled={disabled}
         onChange={() => { track(useStockLook()) }} />
     </SettingRow>

@@ -55,17 +55,23 @@ export type IconPickerProps = {
   /** Save the icon, or null to return to the monogram. */
   readonly onSave: (icon: WorkspaceIcon | null) => void
   readonly onClose: () => void
+  /** The dialog's title; the workspace wording when absent. */
+  readonly title?: string
+  /** The dialog's description line; the workspace wording when absent. */
+  readonly subtitle?: string
 }
 
 /**
  * Render the picker for one Workspace. It opens on the Workspace's stored icon, or on the default icon when it has none.
  * @param props.target - the Workspace to edit.
  * @param props.onSave - called with the edited icon on Save, or with null on Use initials, which saves without a confirmation.
+ * @param props.title - the title to show instead of the workspace one.
+ * @param props.subtitle - the description to show instead of the workspace one.
  * @param props.onClose - called on Cancel, the close button, Escape and a click outside the dialog.
  * @param props.t - the host dictionary's translate function, bound to a dictionary holding the picker's keys.
  * @returns the dialog.
  */
-export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
+export function IconPicker({ target, onSave, onClose, t, title, subtitle }: IconPickerProps) {
   const [icon, setIcon] = useState<WorkspaceIcon>(target.icon ?? DEFAULT_WORKSPACE_ICON)
   const [patternBase, setPatternBase] = useState(icon.seed)
   const change = (fields: Partial<WorkspaceIcon>): void => { setIcon(previous => ({ ...previous, ...fields })) }
@@ -81,8 +87,8 @@ export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
       open
       onClose={onClose}
       closeLabel={t('icon.close')}
-      title={t('icon.title')}
-      description={t('icon.lead', { workspace: target.title })}
+      title={title ?? t('icon.title')}
+      description={subtitle ?? t('icon.lead', { workspace: target.title })}
       className={DIALOG_CLASS}
       contentClassName={SCROLL_CLASS}
       footer={(

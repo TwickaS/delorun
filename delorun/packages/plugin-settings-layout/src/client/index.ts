@@ -76,6 +76,21 @@ export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-setting
   + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)}'
 
 /**
+ * The phone Settings strip. Upstream's shell has no slot that replaces its narrow layout, so the strip is restyled from
+ * outside: each group's label shows ahead of its pages (upstream hides it below 768px), the scroll-fade ends are 24px wide, and
+ * the pages hold a 44px touch height. The selectors use the dialog's `data-shortcut-modal` marker and the groups'
+ * `role="group"`, and lead with `html` to outrank upstream's `html:not(...)` rules.
+ */
+export const PHONE_NAV_STYLE = '@keyframes dlo-nav-edges{0%{--dsh-nav-fade-start:0px;--dsh-nav-fade-end:24px}4%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}'
+  + '96%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}100%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:0px}}'
+  + '@media (max-width:767px){'
+  + 'html [data-shortcut-modal="settings"] [role="group"]>[aria-hidden="true"]:first-child{display:flex;align-items:center;flex:none;padding:0 4px 0 12px;'
+  + 'font-size:12px;font-weight:600;line-height:16px;letter-spacing:.02em;white-space:nowrap;color:var(--dsw-alias-label-secondary)}'
+  + 'html [data-shortcut-modal="settings"] [role="group"]+[role="group"]{margin-inline-start:8px;padding-inline-start:4px;border-inline-start:1px solid var(--dsw-alias-border-l2)}'
+  + '@supports (animation-timeline:scroll()){html [data-shortcut-modal="settings"] div:has(>[role="group"]){animation:dlo-nav-edges linear both;animation-timeline:scroll(self inline)}}'
+  + '}'
+
+/**
  * While the Delorun look provides `delorunStudio` and upstream's Settings shell provides `settingsLayout`, register the
  * layout, the panel size and the Tool settings section.
  * @param ctx - the client context.
@@ -110,7 +125,7 @@ export function applyStudio(ctx: Context): void {
   ctx.effect(() => {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID
-    tag.textContent = PANEL_STYLE
+    tag.textContent = `${PANEL_STYLE}\n${PHONE_NAV_STYLE}`
     document.head.appendChild(tag)
     return () => { tag.remove() }
   }, 'delorun-settings-layout: panel size')

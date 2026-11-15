@@ -111,10 +111,10 @@ const CASES: readonly { readonly name: string, readonly bill: TrustBill | null, 
     tone: 'amber',
     state: 'unchecked',
   },
-  { name: 'an unknown release', bill: billWith(bill => ({ ...bill, release: { ...bill.release, files: 'unknown' } })), label: 'Unknown', tone: 'amber', state: 'unknown' },
-  { name: 'an unknown plugin install check', bill: billWith(bill => ({ ...bill, plugins: { status: 'unknown', reason: 'no install records', entries: [] } })), label: 'Unknown', tone: 'neutral', state: 'unknown' },
-  { name: 'unknown Changes', bill: billWith(bill => ({ ...bill, changes: { ...bill.changes, status: 'unknown', reason: 'Changes is not available' } })), label: 'Unknown', tone: 'neutral', state: 'unknown' },
-  { name: 'no bill', bill: null, label: 'Unknown', tone: 'amber', state: 'unknown' },
+  { name: 'an unknown release', bill: billWith(bill => ({ ...bill, release: { ...bill.release, files: 'unknown' } })), label: 'Not checked', tone: 'amber', state: 'unknown' },
+  { name: 'an unknown plugin install check', bill: billWith(bill => ({ ...bill, plugins: { status: 'unknown', reason: 'no install records', entries: [] } })), label: 'Not checked', tone: 'neutral', state: 'unknown' },
+  { name: 'unknown Changes', bill: billWith(bill => ({ ...bill, changes: { ...bill.changes, status: 'unknown', reason: 'Changes is not available' } })), label: 'Not checked', tone: 'neutral', state: 'unknown' },
+  { name: 'no bill', bill: null, label: 'Not checked', tone: 'amber', state: 'unknown' },
 ]
 
 /**
@@ -387,7 +387,7 @@ describe('the wire', () => {
     const stop = store.start((listener) => { reset = listener; return () => {} })
     renderBadge(store)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Trust: Unknown' }).getAttribute('data-tone')).toBe('amber')
+    expect(screen.getByRole('button', { name: 'Trust: Not checked' }).getAttribute('data-tone')).toBe('amber')
     expect(calls.read).toBe(1)
     await act(async () => { reset() })
     await act(async () => { window.dispatchEvent(new Event('focus')) })

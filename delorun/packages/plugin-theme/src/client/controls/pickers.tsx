@@ -78,6 +78,16 @@ export interface AccentPickerProps<Value extends string> {
   readonly disabled?: boolean
   /** Whether the label only names the group for assistive technology. */
   readonly hideLabel?: boolean
+  /** The accent a theme brings, shown as the one chosen chip while the preset accents are disabled. */
+  readonly themeAccent?: Omit<AccentChoice<string>, 'value'>
+}
+
+/** The value of the chip that stands for the theme's own accent. */
+const THEME_ACCENT = 'theme-accent'
+
+/** One accent dot. */
+function AccentDot({ light, dark }: { readonly light: string; readonly dark: string }) {
+  return <span className={css.accentDot} style={{ '--accent-light': light, '--accent-dark': dark } as CSSProperties} />
 }
 
 /**
@@ -85,13 +95,23 @@ export interface AccentPickerProps<Value extends string> {
  * @param props - see {@link AccentPickerProps}.
  * @returns the group.
  */
-export function AccentPicker<Value extends string>({ label, value, accents, onChange, disabled, hideLabel }: AccentPickerProps<Value>) {
+export function AccentPicker<Value extends string>({ label, value, accents, onChange, disabled, hideLabel, themeAccent }: AccentPickerProps<Value>) {
+  if (themeAccent !== undefined) {
+    // The theme's accent is the chosen chip; the preset chips stay visible, disabled and unchosen.
+    return (
+      <ChipGroup<string> label={label} value={THEME_ACCENT} onChange={() => undefined} disabled hideLabel={hideLabel === true}
+        options={[
+          { value: THEME_ACCENT, label: themeAccent.label, mark: <AccentDot light={themeAccent.light} dark={themeAccent.dark} /> },
+          ...accents.map(accent => ({ value: accent.value, label: accent.label, mark: <AccentDot light={accent.light} dark={accent.dark} /> })),
+        ]} />
+    )
+  }
   return (
     <ChipGroup label={label} value={value} onChange={onChange} disabled={disabled === true} hideLabel={hideLabel === true}
       options={accents.map(accent => ({
         value: accent.value,
         label: accent.label,
-        mark: <span className={css.accentDot} style={{ '--accent-light': accent.light, '--accent-dark': accent.dark } as CSSProperties} />,
+        mark: <AccentDot light={accent.light} dark={accent.dark} />,
       }))} />
   )
 }

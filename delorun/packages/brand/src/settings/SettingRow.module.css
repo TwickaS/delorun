@@ -46,3 +46,11 @@
   line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-state-error-primary);
 }
+
+@media (max-width: 560px) {
+  .phoneStacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--setting-row-stack-gap);
+  }
+}

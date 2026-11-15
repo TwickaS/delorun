@@ -1,0 +1,70 @@
+/* A vertical radio list: 44px rows with a ring that fills with the accent when chosen. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-1);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--delorun-space-2) var(--delorun-space-3);
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
+  text-align: start;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .row:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.row:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.row:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.row[aria-checked='true'] .radio {
+  border: 5px solid var(--dsw-alias-brand-primary);
+}
+
+.text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The field of the chosen row lines up with the row's text. */
+.detail {
+  padding: var(--delorun-space-1) var(--delorun-space-3) var(--delorun-space-3) calc(var(--delorun-space-3) + 18px + var(--delorun-space-4));
+}

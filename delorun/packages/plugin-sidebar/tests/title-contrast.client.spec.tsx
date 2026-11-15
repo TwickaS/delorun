@@ -57,6 +57,8 @@ function namedArtColours(): Record<Scheme, Map<string, Rgb>> {
   const text = stylesheet('art-palettes.css')
   const found = { light: new Map<string, Rgb>(), dark: new Map<string, Rgb>() }
   for (const [, name = '', value = ''] of text.matchAll(/(--delorun-art-[\w-]+):\s*([^;]+);/g)) {
+    // The scrim is a translucent shade the check does not count, like the ink edge's shade.
+    if (name.startsWith('--delorun-art-scrim-')) continue
     const pair = /light-dark\((oklch\([^)]*\)),\s*(oklch\([^)]*\))\)/.exec(value)
     found.light.set(name, oklch(pair?.[1] ?? value))
     found.dark.set(name, oklch(pair?.[2] ?? value))

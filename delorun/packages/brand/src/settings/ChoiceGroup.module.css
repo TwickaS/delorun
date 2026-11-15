@@ -82,3 +82,26 @@
     padding: 0 var(--delorun-space-5);
   }
 }
+
+/* A wrapping group lines its segments up like chips: no sliding indicator, the chosen segment is filled. */
+.group[data-wrap='true'] {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.group[data-wrap='true'] .indicator {
+  display: none;
+}
+
+.group[data-wrap='true'] .segment[aria-checked='true'] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-elevation-soft);
+}
+
+/* A coarse pointer needs 44px hit areas. */
+@media (pointer: coarse) {
+  .segment {
+    min-height: 44px;
+  }
+}

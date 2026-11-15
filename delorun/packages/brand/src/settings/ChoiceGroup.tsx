@@ -27,6 +27,8 @@ export interface ChoiceGroupProps<Value extends string> {
   readonly onChange: (next: Value) => void
   /** Whether every segment refuses a choice. */
   readonly disabled: boolean
+  /** Whether the segments wrap onto further lines instead of sharing one row; the chosen one is filled in place. */
+  readonly wrap?: boolean
 }
 
 /** Index offsets of the keys that move the choice, wrapping at the ends. */
@@ -37,7 +39,7 @@ const STEP: Readonly<Record<string, 1 | -1>> = { ArrowRight: 1, ArrowDown: 1, Ar
  * @param props - see {@link ChoiceGroupProps}.
  * @returns the group; the chosen segment is the one tab stop, and an arrow key moves the focus and the choice.
  */
-export function ChoiceGroup<Value extends string>({ label, value, options, onChange, disabled }: ChoiceGroupProps<Value>) {
+export function ChoiceGroup<Value extends string>({ label, value, options, onChange, disabled, wrap = false }: ChoiceGroupProps<Value>) {
   const chosen = options.findIndex(option => option.value === value)
   const choose = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
     const step = STEP[event.key]
@@ -53,7 +55,7 @@ export function ChoiceGroup<Value extends string>({ label, value, options, onCha
   }
   const track = { '--choice-count': String(options.length), '--choice-index': String(chosen) } as CSSProperties
   return (
-    <div role="radiogroup" aria-label={label} className={css.group} style={track}>
+    <div role="radiogroup" aria-label={label} className={css.group} data-wrap={wrap ? 'true' : undefined} style={track}>
       <span aria-hidden="true" className={css.indicator} />
       {options.map((option, index) => (
         <button

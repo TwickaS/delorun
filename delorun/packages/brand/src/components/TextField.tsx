@@ -11,6 +11,8 @@ import css from './TextField.module.css'
 export type TextFieldProps = {
   /** The localized label, always visible. */
   readonly label: string
+  /** Whether the label only names the field for assistive technology, because a heading beside it already shows it. */
+  readonly hideLabel?: boolean | undefined
   /** One short localized sentence under the field. */
   readonly help?: string | undefined
   /** A localized error; when set, the field is invalid and the sentence replaces the help. */
@@ -23,13 +25,13 @@ export type TextFieldProps = {
  * @param ref - the native input.
  * @returns the field.
  */
-export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ label, help, error, className, ...rest }, ref) {
+export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ label, hideLabel, help, error, className, ...rest }, ref) {
   const id = useId()
   const noteId = `${id}-note`
   const note = error ?? help
   return (
     <div className={`${css.field} ${className ?? ''}`.trim()}>
-      <label htmlFor={id} className={css.label}>{label}</label>
+      <label htmlFor={id} className={hideLabel === true ? css.srOnly : css.label}>{label}</label>
       <Input ref={ref} id={id} aria-invalid={error === undefined ? undefined : true} aria-describedby={note === undefined ? undefined : noteId} {...rest} />
       {note === undefined ? null : <p id={noteId} className={error === undefined ? css.help : css.error} role={error === undefined ? undefined : 'alert'}>{note}</p>}
     </div>
