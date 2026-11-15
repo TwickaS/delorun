@@ -59,3 +59,13 @@
 .action {
   white-space: nowrap;
 }
+
+.include {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}

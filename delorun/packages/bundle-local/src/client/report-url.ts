@@ -58,17 +58,20 @@ export const TRUNCATION_NOTE = '[Earlier lines cut to fit the link; the full exc
  * lines are kept) and the Logs field says so.
  * @param details - what the home reported.
  * @param surface - where the studio runs.
+ * @param includeErrors - whether the recent errors go into the link and the copied text; false leaves them out of both.
  * @returns the report.
  * @throws {TypeError} when `details.issueUrl` is not an absolute URL.
  */
-export function buildReport(details: ReportDetails, surface: StudioSurface): Report {
+export function buildReport(details: ReportDetails, surface: StudioSurface, includeErrors = true): Report {
   const version = versionLine(details, surface)
-  const text = [`Version: ${version}`, '', 'Recent errors:', details.excerpt === '' ? 'None recorded.' : details.excerpt].join('\n')
-  const whole = link(details, version, details.excerpt)
-  if (whole.length <= MAX_REPORT_URL_LENGTH) return { details: text, version, logs: details.excerpt, url: whole, truncated: false }
-  const cut = (kept: number): string => `${TRUNCATION_NOTE}\n${details.excerpt.slice(details.excerpt.length - kept)}`
+  const excerpt = includeErrors ? details.excerpt : ''
+  const shown = includeErrors ? (excerpt === '' ? 'None recorded.' : excerpt) : 'Left out.'
+  const text = [`Version: ${version}`, '', 'Recent errors:', shown].join('\n')
+  const whole = link(details, version, excerpt)
+  if (whole.length <= MAX_REPORT_URL_LENGTH) return { details: text, version, logs: excerpt, url: whole, truncated: false }
+  const cut = (kept: number): string => `${TRUNCATION_NOTE}\n${excerpt.slice(excerpt.length - kept)}`
   let low = 0
-  let high = details.excerpt.length
+  let high = excerpt.length
   // The largest tail of the excerpt whose link fits; the note alone always fits, as the version line is short.
   while (low < high) {
     const middle = Math.ceil((low + high) / 2)

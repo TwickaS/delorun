@@ -42,6 +42,11 @@ it('drafts the issue in the bug form\'s sections and never posts it', async () =
   expect(content).toContain('nothing has been sent')
 })
 
+it('pins the sentence that forbids posting by any route', async () => {
+  const { content } = await load(await registered())
+  expect(content).toContain('Do not run `gh issue create`, open a browser to submit, call a GitHub API or send the text anywhere.')
+})
+
 it('refuses a skill file with no frontmatter or no description', () => {
   expect(() => plugin.parseSkill('# no frontmatter', 'x')).toThrow('no frontmatter')
   expect(() => plugin.parseSkill('---\nname: a\n---\nbody', 'x')).toThrow('no description')

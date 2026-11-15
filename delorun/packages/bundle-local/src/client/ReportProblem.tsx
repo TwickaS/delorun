@@ -5,11 +5,12 @@
  * and Copy details copies the text.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { readVersions } from './versions.ts'
 import { IconWarningOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Button, Dialog, Notice } from '@delorun/brand'
 import { hostFailureOf, type HostFetch } from './host-api.ts'
 import type { PrivacyLocaleKey } from './locales.ts'
-import { loadReportDetails, type ReportDetails } from './report-api.ts'
+import { loadReportDetails, REPORT_DEFAULTS, type ReportDetails } from './report-api.ts'
 import { buildReport, type StudioSurface } from './report-url.ts'
 import css from './ReportProblem.module.css'
 
@@ -41,12 +42,22 @@ type Load = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly de
 export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDialogProps): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')
+  const [includeErrors, setIncludeErrors] = useState(true)
   const request = useRef(0)
   useEffect(() => {
     if (!open) return
     const mine = ++request.current
-    setLoad({ kind: 'loading' })
     setCopied('idle')
+    if (surface === 'approved device') {
+      // The home's details route answers the computer only, so a device reports the versions the page carries.
+      const versions = readVersions()
+      setLoad({ kind: 'ready', details: {
+        ...versions === undefined ? {} : { delorun: versions.delorun, dsh: versions.dsh },
+        os: 'unknown (reported from an approved device)', platform: 'unknown', excerpt: '', ...REPORT_DEFAULTS,
+      } })
+      return
+    }
+    setLoad({ kind: 'loading' })
     loadReportDetails(fetchImpl).then(
       (details) => { if (mine === request.current) setLoad({ kind: 'ready', details }) },
       (error: unknown) => {
@@ -54,8 +65,8 @@ export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDia
         if (mine === request.current) setLoad({ kind: 'failed' })
       },
     )
-  }, [open, fetchImpl])
-  const report = load.kind === 'ready' ? buildReport(load.details, surface) : undefined
+  }, [open, fetchImpl, surface])
+  const report = load.kind === 'ready' ? buildReport(load.details, surface, includeErrors) : undefined
   const copy = (): void => {
     if (report === undefined) return
     navigator.clipboard.writeText(report.details).then(() => { setCopied('done') }, (error: unknown) => {
@@ -75,6 +86,9 @@ export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDia
     {load.kind === 'failed' && <Notice tone="warning" role="alert" title={t('report.failedTitle')}>{t('report.failed')}</Notice>}
     {report !== undefined && <>
       <pre className={css.details} tabIndex={0} aria-label={t('report.details')}>{report.details}</pre>
+      {surface === 'approved device'
+        ? <p className={css.status}>{t('report.deviceNote')}</p>
+        : <label className={css.include}><input type="checkbox" checked={includeErrors} onChange={(event) => { setIncludeErrors(event.target.checked) }} />{t('report.includeErrors')}</label>}
       {report.truncated && <p className={css.status}>{t('report.truncated')}</p>}
       {copied === 'done' && <p className={css.status} role="status">{t('report.copied')}</p>}
       {copied === 'failed' && <p className={css.status} role="status">{t('report.copyFailed')}</p>}

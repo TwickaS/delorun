@@ -48,14 +48,14 @@ describe('the report dialog', () => {
 
   it('opens the issue form in a new tab without opener access, and makes no request of its own', async () => {
     const home = fakeHome()
-    render(<ReportDialog open onClose={() => {}} t={t} surface="approved device" fetchImpl={home} />)
+    render(<ReportDialog open onClose={() => {}} t={t} surface="computer" fetchImpl={home} />)
     const button = await screen.findByRole('button', { name: en['report.open'] })
     await waitFor(() => { expect((button as HTMLButtonElement).disabled).toBe(false) })
     fireEvent.click(button)
     expect(open).toHaveBeenCalledTimes(1)
     const [url, target, features] = open.mock.calls[0] as [string, string, string]
     expect(new URL(url).origin + new URL(url).pathname).toBe('https://github.com/Delo-Run/delo/issues/new')
-    expect(new URL(url).searchParams.get('version')).toContain('studio on approved device')
+    expect(new URL(url).searchParams.get('version')).toContain('studio on computer')
     expect([target, features]).toEqual(['_blank', 'noopener,noreferrer'])
     // The one request was the read of the home's own route, made before the click.
     expect(home).toHaveBeenCalledTimes(1)
@@ -84,6 +84,30 @@ describe('the report dialog', () => {
     render(<ReportDialog open onClose={onClose} t={t} surface="computer" fetchImpl={fakeHome()} />)
     fireEvent.click(await screen.findByRole('button', { name: en['report.cancel'] }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('what the link carries', () => {
+  it('says plainly that Open sends the text to github.com, and a checkbox keeps the recent errors out of the link', async () => {
+    render(<ReportDialog open onClose={() => {}} t={t} surface="computer" fetchImpl={fakeHome()} />)
+    await screen.findByText(en['report.description'])
+    expect(en['report.description']).toContain('sends the text below to github.com')
+    const box = await screen.findByRole('checkbox', { name: en['report.includeErrors'] }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    expect(screen.getByLabelText(en['report.details']).textContent).not.toContain(DETAILS.excerpt)
+    fireEvent.click(screen.getByRole('button', { name: en['report.open'] }))
+    expect(new URL(open.mock.calls[0]![0] as string).searchParams.has('logs')).toBe(false)
+  })
+
+  it('reports an approved device\'s versions without asking the home, and says errors come from the computer', async () => {
+    const home = fakeHome()
+    render(<ReportDialog open onClose={() => {}} t={t} surface="approved device" fetchImpl={home} />)
+    await screen.findByText(en['report.deviceNote'])
+    expect(home).not.toHaveBeenCalled()
+    expect(browserFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.getByLabelText(en['report.details']).textContent).toContain('studio on approved device')
   })
 })
 

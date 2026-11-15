@@ -48,4 +48,11 @@ describe('buildReport', () => {
   it('refuses an issue address that is not a URL', () => {
     expect(() => buildReport({ ...DETAILS, issueUrl: 'not a url' }, 'computer')).toThrow(TypeError)
   })
+
+  it('leaves the recent errors out of the link and the copy when they are not included', () => {
+    const report = buildReport(DETAILS, 'computer', false)
+    expect(new URL(report.url).searchParams.has('logs')).toBe(false)
+    expect(report.details).not.toContain(DETAILS.excerpt)
+    expect(report.details).toContain('Left out.')
+  })
 })
