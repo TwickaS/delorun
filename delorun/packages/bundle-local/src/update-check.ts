@@ -62,7 +62,7 @@ export interface Config {
 
 /** Validated configuration. The default of `enabled` is the parity value. */
 export const Config = z.object({
-  enabled: z.boolean().default(false).volatile(),
+  enabled: z.boolean().volatile().default(false),
   intervalHours: z.natural().min(1).max(MAX_INTERVAL_HOURS).default(UPDATE_CHECK_DEFAULTS.intervalHours),
   timeoutSeconds: z.natural().min(1).max(120).default(UPDATE_CHECK_DEFAULTS.timeoutSeconds),
 })
