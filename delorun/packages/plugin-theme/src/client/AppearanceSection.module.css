@@ -60,7 +60,7 @@
   appearance: none;
   background: transparent;
   --range-fill: 50%;
-  --range-track: var(--dsw-alias-border-l3);
+  --range-track: color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent);
   --range-accent: var(--dsw-alias-brand-primary);
   --range-bar: 4px;
   --range-thumb: 16px;
