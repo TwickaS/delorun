@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
 import { apply, Config, DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS } from '../src/index.ts'
-import { DEFAULT_WORKSPACE_ICON } from '../src/workspace-icon.ts'
+import { DEFAULT_WORKSPACE_ICON, readWorkspaceIcons } from '../src/workspace-icon.ts'
 
 describe('the host half', () => {
   it('defaults every setting, keeps each live-editable, and refuses an unknown choice, a width off the slider or an update notice interval out of range', () => {
@@ -19,13 +19,15 @@ describe('the host half', () => {
     }
   })
 
-  it('refuses a workspace icon that is markup, a bare string, an unknown glyph or an unknown kind', () => {
-    const valid = { kind: 'glyph', glyph: 'folder' }
-    expect(Config['~standard'].validate({ workspaceIcons: { 'workspace-1': valid } })).not.toHaveProperty('issues')
-    for (const wrong of ['<img src=x onerror=alert(1)>', 'folder', { kind: 'glyph', glyph: 'rocket' }, { kind: 'script', glyph: 'folder' },
-      { kind: 'letters', letters: '<b>x', color: 'javascript:alert(1)' }]) {
-      expect(Config['~standard'].validate({ workspaceIcons: { 'workspace-1': wrong } }), JSON.stringify(wrong)).toHaveProperty('issues')
-    }
+  it('stores a malformed icon as it is, so one bad icon never keeps the row from loading', () => {
+    const stored = { 'workspace-1': { kind: 'glyph', glyph: 'rocket' }, 'workspace-2': 'folder', 'workspace-3': '<img src=x onerror=alert(1)>' }
+    expect(Config({ workspaceIcons: stored }).workspaceIcons.get()).toEqual(stored)
+  })
+
+  it('loads a row with a stored markup icon, and reads none of it', () => {
+    const stored = { 'workspace-1': '<img src=x onerror=alert(1)>', 'workspace-2': { kind: 'glyph', glyph: 'folder' } }
+    expect(() => { apply(new Context(), Config({ workspaceIcons: stored })) }).not.toThrow()
+    expect(Object.keys(readWorkspaceIcons(Config({ workspaceIcons: stored }).workspaceIcons.get()))).toEqual(['workspace-2'])
   })
 
   it('loads with at most the bound of Workspace icons and refuses a stored value above it', () => {

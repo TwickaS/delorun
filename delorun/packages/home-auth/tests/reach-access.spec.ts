@@ -725,6 +725,20 @@ describe('the everyday settings and shipped plugin toggles of an approved device
     expect(createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-onboarding', patch: { plugins: [] } } })).toEqual(ALLOW)
   })
 
+  it('admits only valid workspace icons to the sidebar row without an unlock', () => {
+    const icon = { kind: 'glyph', glyph: 'folder', color: '#aabbcc', seed: 3, letters: 'ab', emoji: '✨' }
+    const update = (workspaceIcons: unknown) => approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-sidebar', patch: { workspaceIcons } } })
+    expect(update({ w1: icon })).toEqual(ALLOW)
+    for (const bad of ['<img src=x onerror=alert(1)>', { w1: '<img src=x onerror=alert(1)>' }, { w1: { kind: 'letters', letters: '<b>' } }, { w1: { kind: 'glyph', color: 'javascript:alert(1)' } }, { w1: { kind: 'glyph', extra: 'x' } }, [icon]]) {
+      expect(update(bad), JSON.stringify(bad)).toEqual(DENY('settings/update'))
+    }
+    const mutate = (op: unknown) => approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns: 'delorun-sidebar', ops: [op] } })
+    expect(mutate({ op: 'set', path: ['workspaceIcons', 'w1'], value: icon })).toEqual(ALLOW)
+    expect(mutate({ op: 'set', path: ['workspaceIcons', 'w1'], value: '<svg onload=x>' })).toEqual(DENY('settings/mutate'))
+    expect(mutate({ op: 'unset', path: ['workspaceIcons', 'w1'] })).toEqual(ALLOW)
+    expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-sidebar', section: { workspaceIcons: { w1: '<x>' } } } })).toEqual(DENY('settings/replace'))
+  })
+
   it('admits a replace of an everyday namespace whose every field is everyday, by the same field rules as a mutate', () => {
     const replace = (ns: string, section: unknown) => approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns, section } })
     expect(replace('delorun-theme', { palette: 'soft' })).toEqual(ALLOW)

@@ -325,6 +325,48 @@ function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string,
   return fields
 }
 
+/** An icon field that names a choice: a short word, a named colour or a `#RRGGBB` value, never markup. */
+const ICON_CHOICE = /^[A-Za-z0-9#_-]{1,32}$/
+const ICON_KEYS: ReadonlySet<string> = new Set(['kind', 'letters', 'glyph', 'emoji', 'seed', 'color', 'shape', 'style'])
+const ICON_TEXT_KEYS: ReadonlySet<string> = new Set(['letters', 'emoji'])
+
+/**
+ * Whether a value is a workspace icon the sidebar's picker can write: an object of the picker's fields only, its choices
+ * short words, its text free of markup characters, its seed a number. The sidebar validates each icon it reads with
+ * `WorkspaceIconSchema`; this check keeps a device from storing anything else.
+ * @param icon - the value.
+ * @returns whether it is.
+ */
+function isWorkspaceIcon(icon: unknown): boolean {
+  if (!isObject(icon) || typeof icon.kind !== 'string') return false
+  return Object.entries(icon).every(([key, value]) => {
+    if (!ICON_KEYS.has(key)) return false
+    if (key === 'seed') return typeof value === 'number'
+    if (typeof value !== 'string') return false
+    return ICON_TEXT_KEYS.has(key) ? value.length <= 16 && !/[<>&"'`\\]/.test(value) : ICON_CHOICE.test(value)
+  })
+}
+
+/**
+ * Whether a settings write to the sidebar row sets `workspaceIcons` only to valid icons: a whole map, one entry, or an
+ * unset. A write that leaves the field alone passes.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns whether every icon the write sets is valid.
+ */
+function writesOnlyValidIcons(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  const isMap = (value: unknown): boolean => isObject(value) && Object.values(value).every(isWorkspaceIcon)
+  if (action === 'settings/update') return !isObject(args.patch) || !('workspaceIcons' in args.patch) || isMap(args.patch.workspaceIcons)
+  if (action === 'settings/replace') return !isObject(args.section) || !('workspaceIcons' in args.section) || isMap(args.section.workspaceIcons)
+  if (!Array.isArray(args.ops)) return false
+  return (args.ops as unknown[]).every((op) => {
+    if (!isObject(op) || !Array.isArray(op.path) || op.path[0] !== 'workspaceIcons') return true
+    if (op.op === 'unset') return true
+    if (op.path.length === 1) return isMap(op.value)
+    return op.path.length === 2 && isWorkspaceIcon(op.value)
+  })
+}
+
 /**
  * Whether a settings write stays inside the fields an approved device writes without an unlock.
  * @param action - the settings write.
@@ -332,6 +374,7 @@ function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string,
  * @returns whether every field it touches is everyday.
  */
 function touchesOnlyEverydayFields(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  if (args.ns === 'delorun-sidebar' && !writesOnlyValidIcons(action, args)) return false
   const allowed = REACH_EVERYDAY_FIELDS[String(args.ns)]
   if (allowed === undefined) return true
   const touched = fieldsTouched(action, args)
