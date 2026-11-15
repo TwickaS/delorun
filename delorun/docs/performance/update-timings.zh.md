@@ -69,7 +69,7 @@ home 进程从已安装运行时自己的模块运行 `delorun start --foregroun
 
 ## 2026-11-11 的记录
 
-每个场景三次重复（`changed-format-large` 为两次，它的第三次如下所述失败），2026-11-11 的 03:48 至 04:35 UTC，在主干的提交 5fb7c934ed 加上本分支的基准代码上：22 个 CPU（Intel Core Ultra 9 185H）、21.5 GiB、WSL2 内核 6.6、Node 24.22.0、没有克隆功能的 ext4、与其他通道共享的机器（负载平均值 9 至 16，存储压力最高 16%）。闭包是主干配方的输出，没有本地改动。中位数以秒计；小型 chat 集为 20 个 chat，大型为 400 个（125 MiB）：
+每个场景三次重复（`changed-format-large` 为两次，它的第三次如下所述失败），2026-11-11 的 03:48 至 04:35 UTC，在第一个预览版之前的主干加上本分支的基准代码上：22 个 CPU（Intel Core Ultra 9 185H）、21.5 GiB、WSL2 内核 6.6、Node 24.22.0、没有克隆功能的 ext4、与其他通道共享的机器（负载平均值 9 至 16，存储压力最高 16%）。闭包是主干配方的输出，没有本地改动。中位数以秒计；小型 chat 集为 20 个 chat，大型为 400 个（125 MiB）：
 
 | 项目 | `same-format` | `changed-format` | `changed-format-large` | `many-plugins`（20） | `warm-store` |
 | --- | --- | --- | --- | --- | --- |
