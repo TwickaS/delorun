@@ -103,6 +103,13 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* An open confirmation inside the step carries the one primary action; Continue steps back until it is answered. */
+.frame:has([role='alertdialog']) .next {
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
 @media (max-width: 767px) {
   .dialog {
     width: calc(100% + 48px);

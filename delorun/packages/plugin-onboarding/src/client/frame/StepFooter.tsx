@@ -37,7 +37,7 @@ export function StepFooter({ skip, back, next }: StepFooterProps): ReactNode {
       {skip !== undefined && <Button variant="ghost" className={`${css.button} ${css.skip}`} disabled={skip.disabled} onClick={skip.onClick}>{skip.label}</Button>}
       <span className={css.spacer} />
       {back !== undefined && <Button variant="ghost" className={css.button} disabled={back.disabled} onClick={back.onClick}>{back.label}</Button>}
-      <Button variant="primary" className={css.button} disabled={next.disabled} onClick={next.onClick}>{next.label}</Button>
+      <Button variant="primary" className={`${css.button} ${css.next}`} disabled={next.disabled} onClick={next.onClick}>{next.label}</Button>
     </div>
   )
 }

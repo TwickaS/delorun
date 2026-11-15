@@ -1,0 +1,5 @@
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(1500)
+await shot('a-now')
+const txt = await page.evaluate(() => document.body.innerText.slice(0, 600))
+console.log(txt)

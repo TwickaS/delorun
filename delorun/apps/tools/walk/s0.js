@@ -1,0 +1,6 @@
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(1200)
+await page.getByRole('button', { name: 'Add Claude Code' }).click()
+await page.waitForTimeout(800)
+await shot('e-agents-add-confirm', 22)
+console.log(await page.evaluate(() => [...document.querySelectorAll('button')].map(b => (b.getAttribute('aria-label') || b.innerText || '').trim().slice(0, 30)).filter(Boolean).slice(-8).join(' | ')))

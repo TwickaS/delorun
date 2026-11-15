@@ -1,0 +1,7 @@
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(800)
+const dlg = page.getByRole('dialog')
+await dlg.getByRole('button', { name: 'A folder on this computer' }).click({ timeout: 3000 })
+await page.waitForTimeout(1500)
+await shot('i-workspace-chooser', 22)
+console.log(await dlg.evaluate(d => [...d.querySelectorAll('button')].map(b => (b.getAttribute('aria-label') || b.innerText || '').trim().slice(0, 30)).filter(Boolean).join(' | ')))
