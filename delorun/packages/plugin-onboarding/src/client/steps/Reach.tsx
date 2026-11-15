@@ -1,6 +1,5 @@
 /**
- * Phone access: how far Tailscale is from serving the studio and the commands that turn reach on, or one line when the
- * studio is already opened through reach.
+ * Phone access: what it does and the command that turns it on, with the Tailscale checks and the PIN option under More.
  */
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import type { ReactNode } from 'react'
@@ -8,6 +7,7 @@ import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
 import { CommandRow } from '../ui/CommandRow.tsx'
 import { useStore, type StepProps } from './shared.ts'
+import more from './reach.module.css'
 import css from './steps.module.css'
 
 /** The command that turns reach on at the computer. */
@@ -56,8 +56,8 @@ function TailscaleChecks({ tailscale, t }: { readonly tailscale: TailscaleReadin
 }
 
 /**
- * Phone access, while reach is not set up: how far Tailscale is from serving the studio, with the command for the first
- * thing missing, then the commands that turn reach on and approve the phone, all run at this computer.
+ * Phone access, while reach is not set up: one sentence on what it does and the command that turns it on; the Tailscale
+ * checks, the approval command and the PIN option sit under More. A studio opened from a phone has no such step.
  * @param props - the services and the guide.
  * @returns the step body.
  */
@@ -68,29 +68,22 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('reach.lead')}</p>
-      <div aria-live="polite">
-        {readiness.status === 'loading' && <p className={css.status}>{t('reach.checking')}</p>}
-        {(readiness.status === 'failed' || tailscale?.state === 'unknown') && <p className={css.status} data-tone="attention">{t('reach.unread')}</p>}
-      </div>
-      {tailscale !== undefined && tailscale.state !== 'unknown' && <TailscaleChecks tailscale={tailscale} t={t} />}
-      <div className={css.field}>
-        <span className={css.label}>{t('reach.then')}</span>
-        <CommandRow command={REACH_COMMAND} t={t} />
-        <CommandRow command={APPROVE_COMMAND} t={t} />
-        {tailscale?.state === 'ready' && <p className={css.hint}>{t('reach.address', { address: `https://${tailscale.dnsName}` })}</p>}
-      </div>
-      <p className={css.hint}>{t('reach.limits')}</p>
-      <p className={css.hint}>{t('reach.pin')}</p>
+      <CommandRow command={REACH_COMMAND} t={t} />
+      <details className={more.details}>
+        <summary className={more.summary}>{t('reach.more')}</summary>
+        <div className={more.more}>
+          <div aria-live="polite">
+            {readiness.status === 'loading' && <p className={css.status}>{t('reach.checking')}</p>}
+            {(readiness.status === 'failed' || tailscale?.state === 'unknown') && <p className={css.status} data-tone="attention">{t('reach.unread')}</p>}
+          </div>
+          {tailscale !== undefined && tailscale.state !== 'unknown' && <TailscaleChecks tailscale={tailscale} t={t} />}
+          <span>{t('reach.then')}</span>
+          <CommandRow command={APPROVE_COMMAND} t={t} />
+          {tailscale?.state === 'ready' && <span>{t('reach.address', { address: `https://${tailscale.dnsName}` })}</span>}
+          <span>{t('reach.limits')}</span>
+          <span>{t('reach.pin')}</span>
+        </div>
+      </details>
     </div>
   )
-}
-
-/**
- * Phone access, for a studio opened through reach: one line saying that the phone is connected and that approvals and
- * full access are decided at the computer.
- * @param props - the services.
- * @returns the step body.
- */
-export function RemoteReachStep({ services }: StepProps): ReactNode {
-  return <p className={css.lead}>{services.t('reach.remote')}</p>
 }

@@ -211,10 +211,10 @@ describe('the first run', () => {
     expect(items.map(each => each.getAttribute('aria-current'))).toEqual([null, 'step', null, null, null, null])
   })
 
-  it('skips without opening a chat, leaving upstream\'s key step to show', async () => {
+  it('finishes later without opening a chat or marking the guide done, leaving upstream\'s key step to show', async () => {
     const { progress, complete, startChat, completeStep } = await mountEntry()
-    await click(button(en.skip))
-    expect(progress.value()).toMatchObject({ done: true, step: '' })
+    await click(button(en.later))
+    expect(progress.value()).toMatchObject({ done: false })
     expect(complete).toHaveBeenCalled()
     expect(startChat).not.toHaveBeenCalled()
     expect(completeStep).not.toHaveBeenCalled()
@@ -270,14 +270,9 @@ describe('which steps apply', () => {
     expect(heading().textContent).toBe(en['step.reach'])
   })
 
-  it('swaps the computer\'s phone access step for a one-line note in a studio opened from a phone', async () => {
+  it('leaves out the phone access step in a studio opened from a phone', async () => {
     await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    await forward(titles().indexOf(en['step.reach']))
-    expect(heading().textContent).toBe(en['step.reach'])
-    expect(screen.getByText(en['reach.remote'])).toBeTruthy()
-    expect(screen.queryByText(en['reach.then'])).toBeNull()
-    await forward(1)
-    expect(heading().textContent).toBe(en['step.workspace'])
+    expect(titles().includes(en['step.reach'])).toBe(false)
   })
 
   it('counts phone access as on in Ready when the terminal setup set it up', async () => {
@@ -373,7 +368,7 @@ describe('the workspace and the last button', () => {
     await mountEntry({ start })
     expect(start.holdNotice).toHaveBeenCalledOnce()
     expect(start.release).not.toHaveBeenCalled()
-    await click(button(en.skip))
+    await click(button(en.later))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(start.release).toHaveBeenCalledExactlyOnceWith(true)
   })
@@ -384,7 +379,7 @@ describe('the workspace and the last button', () => {
   ])('lets the held notice show when the dialog closes and %s', async (_, target) => {
     const start = startFace(target)
     await mountEntry({ start })
-    await click(button(en.skip))
+    await click(button(en.later))
     expect(start.release).toHaveBeenCalledExactlyOnceWith(false)
   })
 })
@@ -400,11 +395,11 @@ describe('closing the dialog', () => {
     return box
   }
 
-  it('puts focus in the message box after Skip for now, instead of leaving it on the page body', async () => {
+  it('puts focus in the message box after Finish later, instead of leaving it on the page body', async () => {
     const box = composer()
     await mountEntry()
     expect((document.getElementById('root') as HTMLElement).inert).toBe(true)
-    await click(button(en.skip))
+    await click(button(en.later))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect((document.getElementById('root') as HTMLElement).inert).toBe(false)
     expect(document.activeElement).toBe(box)
@@ -414,7 +409,7 @@ describe('closing the dialog', () => {
     const control = document.createElement('button')
     document.getElementById('root')?.append(control)
     await mountEntry()
-    await click(button(en.skip))
+    await click(button(en.later))
     expect(document.activeElement).toBe(control)
   })
 
@@ -424,7 +419,20 @@ describe('closing the dialog', () => {
     document.getElementById('root')?.append(opener)
     opener.focus()
     await mountEntry()
-    await click(button(en.skip))
+    await click(button(en.later))
     expect(document.activeElement).toBe(opener)
+  })
+})
+
+describe('Skip', () => {
+  it('leaves only the step it is on and keeps the guide open', async () => {
+    const { progress, complete } = await mountEntry()
+    await forward(2)
+    const before = heading().textContent
+    await click(button(en.skip))
+    expect(heading().textContent).not.toBe(before)
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(complete).not.toHaveBeenCalled()
+    expect(progress.value()).not.toMatchObject({ done: true })
   })
 })

@@ -9,7 +9,7 @@ import { AgentsStep } from './steps/Agents.tsx'
 import { LookStep } from './steps/Look.tsx'
 import { ModelsStep } from './steps/Models.tsx'
 import { PluginsStep } from './steps/Plugins.tsx'
-import { ReachStep, RemoteReachStep } from './steps/Reach.tsx'
+import { ReachStep } from './steps/Reach.tsx'
 import { ReadyStep } from './steps/Ready.tsx'
 import { WelcomeStep } from './steps/Welcome.tsx'
 import { WorkspaceStep } from './steps/Workspace.tsx'
@@ -78,8 +78,8 @@ export function buildSteps({ services, guide, record, extra, reach, target, noti
   if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: () => <LookStep {...props} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
-  if (reach === 'remote') built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <RemoteReachStep {...props} /> })
-  else if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep {...props} /> })
+  // A studio opened from a phone is already on one, so it has no Phone access step.
+  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep {...props} /> })
   built.push(
     { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} /> },
     { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} /> },

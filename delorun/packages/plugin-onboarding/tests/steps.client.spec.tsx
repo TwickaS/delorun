@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { AGENT_BUNDLES, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
-import { APPROVE_COMMAND, REACH_COMMAND, ReachStep, RemoteReachStep } from '../src/client/steps/Reach.tsx'
+import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
 import { ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
@@ -380,14 +380,6 @@ describe('the recommended plugins step', () => {
   })
 })
 
-describe('the phone access step on a phone', () => {
-  it('says the phone is connected and shows no terminal command', () => {
-    render(<RemoteReachStep services={stepServices()} guide={guideOf()} />)
-    expect(screen.getByText(en['reach.remote'])).toBeTruthy()
-    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
-  })
-})
-
 describe('the phone access step', () => {
   const reachWith = (tailscale: TailscaleReadiness | undefined) => hostFake({ readiness: tailscale === undefined ? undefined : { ...READY, tailscale } }).host
   const states = () => screen.getAllByRole('listitem').map(each => each.getAttribute('data-state'))
@@ -406,6 +398,16 @@ describe('the phone access step', () => {
     expect(todo.textContent).toContain(en['reach.state.todo'])
     if (fix !== undefined) expect(within(todo).getByText(fix).tagName).toBe('CODE')
     expect(screen.queryByText(/Your phone opens/)).toBeNull()
+  })
+
+  it('reads as one sentence and one command, with the details under More', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
+    await settle()
+    const more = document.querySelector('details') as HTMLDetailsElement
+    expect(more.open).toBe(false)
+    expect(more.querySelector('summary')?.textContent).toBe(en['reach.more'])
+    expect(screen.getByText(REACH_COMMAND).closest('details')).toBeNull()
+    expect(en['reach.lead']).not.toMatch(/\b(reach|tailnet|serve|PIN mode)\b/i)
   })
 
   it('recommends PIN mode and says where to turn it on', async () => {
