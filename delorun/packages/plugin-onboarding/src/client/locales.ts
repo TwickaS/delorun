@@ -168,7 +168,7 @@ export const en = {
   'workspace.lead': 'Choose the folder your first chat works in. You can add other folders as workspaces later.',
   'workspace.how': 'Where to work',
   'workspace.mode.default': 'Default workspace',
-  'workspace.mode.folder': 'A folder on this computer',
+  'workspace.mode.folder': 'Another folder',
   'workspace.mode.clone': 'Clone from Git',
   'workspace.default': 'Default workspace',
   'workspace.default.note': 'Where chats open unless you choose a folder',
