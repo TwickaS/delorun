@@ -10,7 +10,6 @@ import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors } from '../palette/layers.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
-import type { BrandingLocaleKey } from './branding-locales.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
 import { cardCss, SettingHeading, SettingsCard } from '@delorun/settings-controls'
@@ -25,7 +24,7 @@ export interface AppearanceInjected {
   /** The theme settings, stored by the host half. */
   readonly settings: ConfigForm<ThemeSettings>
   /** The Branding block's translate function. */
-  readonly brandingT: (key: BrandingLocaleKey) => string
+  readonly brandingT: PropsLocale<'settings.delorunBranding'>['t']
   /** The icon picker's translate function. */
   readonly pickerT: BrandingInjected['pickerT']
   /** Upstream's colour-scheme preference. */
