@@ -176,6 +176,7 @@ export const PARITY_SWITCHES = [
     sources: [
       'delorun/packages/plugin-permission-defaults/src/index.ts',
       'delorun/packages/plugin-permission-defaults/src/command-network.ts',
+      'delorun/packages/plugin-permission-defaults/src/sandbox-tmp.ts',
     ],
   },
   {
