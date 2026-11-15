@@ -17,6 +17,7 @@ English | [中文](README.zh.md)
 - [Rows](#rows)
 - [The Privacy section](#the-privacy-section)
 - [The PIN lock screen](#the-pin-lock-screen)
+- [The PIN mode section](#the-pin-mode-section)
 - [The consent surfaces](#the-consent-surfaces)
 - [Tests](#tests)
 - [Limits](#limits)
@@ -102,7 +103,7 @@ When the home has PIN mode on, a phone or other device shows a full-page lock un
 - **Staying unlocked.** Pointer, key and touch input sends `POST /auth/pin/touch` at most once a minute (or every half idle period when that is shorter); polls and reads never touch. A local timer locks the page at the unlock's idle end. Any `401 UNLOCK_INVALID` locks the page.
 - **Locking.** Lock now in the unlock banner ends the page's PIN unlock (`POST /auth/pin/lock`, then the token is dropped, whatever the home answers). When the state says `lockWhenHidden`, a hidden page locks; a page restored from the back-forward cache drops its token; a closing page sends a `keepalive` lock.
 
-Known debt: the Chinese README does not describe this section yet, so the bilingual pairing record for this file is out of date until the pairing is brought along. The state does not yet carry `lockWhenHidden`, and the home's `PIN_INVALID` answer carries tries left and the removal only in its sentence, which the page reads in [`pinMissOf`](src/client/pin-api.ts); a structured field on the home's side replaces both.
+Known debt: the state does not yet carry `lockWhenHidden`, and the home's `PIN_INVALID` answer carries tries left and the removal only in its sentence, which the page reads in [`pinMissOf`](src/client/pin-api.ts); a structured field on the home's side replaces both.
 
 ## The PIN mode section
 

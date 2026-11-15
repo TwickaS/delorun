@@ -17,6 +17,7 @@ kind: "package-bundle"
 - [行](#rows)
 - [“隐私”分区](#the-privacy-section)
 - [PIN 锁屏](#the-pin-lock-screen)
+- [PIN 模式分区](#the-pin-mode-section)
 - [同意界面](#the-consent-surfaces)
 - [测试](#tests)
 - [限制](#limits)
@@ -106,7 +107,9 @@ home 打开 PIN 模式时，手机或其他设备会显示整页锁屏，直到�
 - **保持解锁。**指针、按键和触摸输入每分钟最多发送一次 `POST /auth/pin/touch`（若空闲时间的一半更短，则按该间隔）；轮询和读取从不触发它。本地计时器在解锁的空闲结束时锁定页面。任何 `401 UNLOCK_INVALID` 都会锁定页面。
 - **锁定。**解锁横幅中的“立即锁定”结束页面的 PIN 解锁（`POST /auth/pin/lock`，随后无论 home 如何回答，都丢弃令牌）。状态为 `lockWhenHidden` 时，隐藏的页面会锁定；从前进后退缓存恢复的页面会丢弃它的令牌；正在关闭的页面会发送 `keepalive` 锁定。
 
-已知缺口：中文 README 尚未描述这一分区，因此在配对补齐之前，本文件的双语配对记录是过期的。状态尚未带有 `lockWhenHidden`，home 的 `PIN_INVALID` 回答只在其句子里带有剩余次数和移除信息，页面在 [`pinMissOf`](src/client/pin-api.ts) 中读取；home 侧的结构化字段将取代这两者。
+已知缺口：状态尚未带有 `lockWhenHidden`，home 的 `PIN_INVALID` 回答只在其句子里带有剩余次数和移除信息，页面在 [`pinMissOf`](src/client/pin-api.ts) 中读取；home 侧的结构化字段将取代这两者。
+
+<a id="the-pin-mode-section"></a>
 
 ## PIN 模式分区
 
