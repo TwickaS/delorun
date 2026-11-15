@@ -2251,7 +2251,7 @@ it('saves no version for an edit of an entry the configuration lists as unversio
   writeFileSync(join(dir, 'cordis.patch.yml'), `${readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')}- id: quiet-row\n  config:\n    step: 2\n`)
   ctx.emit('config-editor/edited', { entryId: 'quiet-row' })
   await new Promise(resolve => setTimeout(resolve, 200))
-  expect((await manager.history(10) as { versions: { summary: string }[] }).versions.map(entry => entry.summary)).not.toContain('Changed the settings of quiet-row')
+  expect(JSON.stringify(await manager.history(10))).not.toContain('Changed the settings of quiet-row')
 })
 
 it('leaves a settings edit saved when git cannot keep the history', async () => {
