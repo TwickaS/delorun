@@ -14,6 +14,30 @@ import { UPDATE_REPORT_SCHEMA } from '@delorun/contract-update-report'
 import { readJournal, writeJournal } from '@delorun/home-process'
 import { SAFE_MODE_SCHEMA, SAFETY_RECORD_SCHEMA } from '@delorun/profile-safety'
 import { COPY_RECORD_SCHEMA, DELORUN_RECORDS, RESTORE_JOURNAL_SCHEMA } from '@delorun/update'
+import { z } from 'zod'
+
+/**
+ * rc.3's update journal schema, copied from `packages/home-process/src/journal.ts` at 905b01c33c. An earlier release
+ * parses the journal with it and rejects any unknown key, so the current journal must pass it.
+ */
+const RC3_JOURNAL_SCHEMA = z.strictObject({
+  v: z.literal(1),
+  from: z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/u),
+  to: z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/u),
+  previous: z.string().optional(),
+  phase: z.enum(['checking', 'installing', 'reporting', 'snapshot', 'waiting', 'switching', 'health-check', 'committed', 'rolling-back']),
+  startedAt: z.string().datetime(),
+  dataDiffers: z.boolean(),
+  copy: z.boolean(),
+  targetStarted: z.boolean(),
+  snapshot: z.string().min(1).optional(),
+  refused: z.literal(true).optional(),
+  health: z.strictObject({
+    disabledPlugins: z.array(z.string()),
+    namedRows: z.array(z.string()),
+    bundles: z.array(z.string()).optional(),
+  }).optional(),
+})
 
 /**
  * The version a `delorun.<name>/<n>` schema names.
@@ -163,6 +187,20 @@ describe('c03-previous-release-reads-delorun-records', () => {
       await writeJournal(path, { from: version('1.0.0'), to: version('1.1.0'), previous: undefined, startedAt: '2026-11-10T12:00:00.000Z', dataDiffers: true, copy: true, targetStarted: true }, 'committed')
       expect((JSON.parse(readFileSync(path, 'utf8')) as { readonly v: number }).v).toBe(DELORUN_RECORDS['update-record'])
       expect(await readJournal(path)).toMatchObject({ from: '1.0.0', to: '1.1.0', phase: 'committed', dataDiffers: true, copy: true, targetStarted: true })
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a journal that rc.3 parses, and resumes it without bundleRows', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'delorun-records-'))
+    try {
+      const path = join(home, 'update.json')
+      const version = (text: string): RuntimeVersion => brandString<RuntimeVersion>(text)
+      const health = { disabledPlugins: ['plugin-a'], namedRows: ['row-b'], bundleRows: ['plugin-shared'], bundles: ['bundle-c'] }
+      await writeJournal(path, { from: version('1.0.0'), to: version('1.1.0'), previous: undefined, startedAt: '2026-11-10T12:00:00.000Z', dataDiffers: false, copy: false, targetStarted: false, health }, 'health-check')
+      expect(RC3_JOURNAL_SCHEMA.safeParse(JSON.parse(readFileSync(path, 'utf8'))).success).toBe(true)
+      expect((await readJournal(path))?.health).toEqual({ disabledPlugins: ['plugin-a'], namedRows: ['row-b'], bundles: ['bundle-c'] })
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

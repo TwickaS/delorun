@@ -565,8 +565,8 @@ export interface UpdateJournal {
    * the person rolls back the profile alone or starts in safe mode.
    */
   readonly refused?: true
-  /** What the health check holds `to` to, so a start that finishes an interrupted update runs H1 to H5. */
-  readonly health?: UpdateHealth
+  /** What the health check holds `to` to, so a start that finishes an interrupted update runs H1 to H5; `bundleRows` is never persisted. */
+  readonly health?: Omit<UpdateHealth, 'bundleRows'>
 }
 
 /**
