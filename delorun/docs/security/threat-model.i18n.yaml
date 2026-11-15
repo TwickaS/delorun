@@ -3,110 +3,116 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/security/threat-model.md
 /:
-  en: a8c3f89cfc0ece7e
-  zh: be11eb2234e602cd
+  en: ac7197e103e5c518
+  zh: fbe9a15f5e448572
 /delorun-threat-model:
-  en: 94808aec7ef01112
-  zh: 0adddfe448e41f16
+  en: b857459b93b90ada
+  zh: 97f4608b576e2dca
 /delorun-threat-model/summary:
-  en: 01969c78cf631013
-  zh: d75e99fc9da83cb9
+  en: c2a635757fd1495d
+  zh: 3ff4c4e5280c1b57
 /delorun-threat-model/contents:
-  en: 7836ffd3e3ac3bc2
-  zh: 9a5e9c9123f57331
+  en: 9f4840a6d4c1d6ff
+  zh: f92e6b1327f75fe0
 /delorun-threat-model/goal:
-  en: 95fb6809c4f9519c
-  zh: cfdaf504a17f95fc
+  en: 78af2c201262f7ad
+  zh: 20d92add1b1001c9
+/delorun-threat-model/where-delorun-s-protections-apply:
+  en: 23541ee6f04a9a08
+  zh: 100de51c58d69517
 /delorun-threat-model/assets:
-  en: 001c95fb2ca3217d
-  zh: 9cf37e4f3b0594bf
+  en: be367ebea3938bd9
+  zh: 35fbb8c9793c2343
 /delorun-threat-model/parties-and-trust:
   en: c261a17929625605
   zh: cd8592b6b91f7d1c
 /delorun-threat-model/parties-and-trust/the-person:
-  en: 738ffe53222685a6
-  zh: 37c2aba5c8e1b704
+  en: 1275ec1cf9691c64
+  zh: 7bd737b8fb284204
 /delorun-threat-model/parties-and-trust/the-model-and-its-tool-calls:
-  en: 77b28c555b9e386c
-  zh: 44e9950f5f6eb4c5
+  en: c2f6618394a16dfb
+  zh: addcb43a418304a2
 /delorun-threat-model/parties-and-trust/plugins:
-  en: 9548735e839f02bf
-  zh: 0a00b4449e470bd4
+  en: e0a7af0d5989e1c0
+  zh: 9edec4d10c3e241a
 /delorun-threat-model/parties-and-trust/other-local-processes-under-the-same-user:
-  en: 7bef8df07155f6ad
-  zh: e6a5ea584c6eb9fe
+  en: 3f63493a79249a1c
+  zh: 266a391aa1037444
 /delorun-threat-model/parties-and-trust/other-users-on-the-machine:
-  en: 6f332de6f40f81ad
-  zh: a190b463f39a2bb2
+  en: 55b30d4903ce4224
+  zh: 6e3d51b499825364
 /delorun-threat-model/parties-and-trust/the-network:
-  en: c3a5f46ea12ed8f0
-  zh: 698cc684c9123679
-/delorun-threat-model/parties-and-trust/tailscale-the-person-s-own-relay-and-oidc-provider:
-  en: 446f25364f5b11bd
-  zh: a222f979f48e81c7
+  en: eca5d49ad0175a0b
+  zh: 05bd1bc52c8457ca
+/delorun-threat-model/parties-and-trust/tailscale-a-self-hosted-relay-and-an-oidc-provider:
+  en: 877918f977be16fe
+  zh: d84154749ecb9ccd
 /delorun-threat-model/parties-and-trust/delo-run-the-project:
-  en: 19759d6f947d0bfd
-  zh: 5ceecb650b24a863
+  en: bb6e9bb19a05d26b
+  zh: 84b951a497b478e5
 /delorun-threat-model/parties-and-trust/upstream-and-dependency-authors:
-  en: 62af24c8edcedb46
-  zh: 2432156aac871ddd
+  en: 419be2a0d0fd3ec1
+  zh: 1e2d098b0ef15ed8
 /delorun-threat-model/parties-and-trust/a-party-holding-a-stolen-device:
-  en: 95c5fef0bac9c6cc
-  zh: 19f73f61114ace17
+  en: 300d62fcdd01bb71
+  zh: ce516a67ce6e209d
 /delorun-threat-model/boundaries-and-their-defences:
-  en: 59868d4e1d99c745
-  zh: e387884da7e262b7
+  en: 48b5e578bba0381b
+  zh: 58b49d245690f953
 /delorun-threat-model/boundaries-and-their-defences/confinement-of-native-commands:
-  en: cf8172ded78e60f1
-  zh: 6aa91f4e90246e34
+  en: 4d872d345f2457a1
+  zh: 1088d4fa74796d53
 /delorun-threat-model/boundaries-and-their-defences/the-home-s-control-channels:
-  en: c2ff3f98496438ce
-  zh: 6a1789c05bb38953
+  en: de80cef4a0694ac5
+  zh: 3a5015571f22112c
 /delorun-threat-model/boundaries-and-their-defences/container-isolation:
-  en: 9869b012c5e09696
-  zh: b0d62743564a0993
+  en: 83a5e1a163de7714
+  zh: fcede09955394c43
 /delorun-threat-model/boundaries-and-their-defences/admission-and-listeners:
-  en: eb87fcd0e2e00de7
-  zh: 4862fdda5c57afd4
+  en: eb599d3f7d7177a5
+  zh: 202def4c5c41025f
 /delorun-threat-model/boundaries-and-their-defences/device-approval:
-  en: 409ebbe31b3745d6
-  zh: b5c2baa3e1f8c300
+  en: aacdd8bf6e4ab41e
+  zh: 83147b3f5b0c096b
 /delorun-threat-model/boundaries-and-their-defences/reach-providers:
-  en: a9657662d771b439
-  zh: 6285b12db5e2c8df
+  en: 57d80bb93f00c977
+  zh: bf3882aca8f85eba
 /delorun-threat-model/boundaries-and-their-defences/sign-in:
-  en: 11396e1768a7eb37
-  zh: f8472fa01c7a95dc
+  en: 8a54cea338f21850
+  zh: 0ca38c8613f39b68
 /delorun-threat-model/boundaries-and-their-defences/releases-the-log-and-the-rebuild:
-  en: cd37be137f75d4bf
-  zh: 7e39c28aedaddd21
+  en: be3c236f8f8dd5d5
+  zh: 2b9716e9a8f87b62
 /delorun-threat-model/boundaries-and-their-defences/the-catalogue-and-revocation:
-  en: 9a7dffe43389f699
-  zh: b6e02f407833a556
+  en: 31a63bd78844747d
+  zh: b9ce9ad030542d2b
 /delorun-threat-model/boundaries-and-their-defences/updates-and-rollback:
-  en: 68949ba851d1496e
-  zh: 74904aa2d88993dd
+  en: 9f860686adfe519b
+  zh: 9fa1fb3bc160cc1a
 /delorun-threat-model/boundaries-and-their-defences/archives-and-untrusted-chats:
-  en: 45566f83da954136
-  zh: bf35c6e92483bd22
+  en: 41080a799cdf6228
+  zh: e06e3d5601c96998
 /delorun-threat-model/boundaries-and-their-defences/logs-and-redaction:
-  en: f23c84a3561edc58
-  zh: 3b1772e23bdb7ed6
+  en: 602f0d2f7b955498
+  zh: 982607f163572853
 /delorun-threat-model/boundaries-and-their-defences/verification:
-  en: a66f409a8d74d485
-  zh: 4a753540711eedef
+  en: 2c12fbd1d698dbc7
+  zh: bfbf7bae9cbf21cc
 /delorun-threat-model/boundaries-and-their-defences/parity:
-  en: 886660e2f490ff48
-  zh: a542b853bea3b277
+  en: 9948456008235638
+  zh: 1b2fcd02f63ebe7c
 /delorun-threat-model/boundaries-and-their-defences/the-web-fetch-guard:
-  en: 79a81db7be945814
-  zh: 9d2b2e865b3d3b9f
+  en: ad4ff772ba478437
+  zh: 717b62f1761c1f97
 /delorun-threat-model/boundaries-and-their-defences/data-sharing:
-  en: ff3f8cdfea974ac6
-  zh: 29724d8892709ec9
+  en: b4c38569927d7b83
+  zh: 9af0f46b620066ef
 /delorun-threat-model/what-delorun-does-not-protect-against:
-  en: 2036a5e225e19775
-  zh: 5913b8af0a3e7f41
+  en: 2deb7dc06bba40e4
+  zh: fbbf1051004a8e99
 /delorun-threat-model/how-changes-keep-this-true:
-  en: 4edd79ec3e798d0b
-  zh: d40d983b10bb3db5
+  en: 746e0c0b67faf9bd
+  zh: 6c7364b848cef403
+/delorun-threat-model/consent-and-network-seams-when-their-service-fails:
+  en: fdd552273e49c806
+  zh: 46547ed8ea487a7f

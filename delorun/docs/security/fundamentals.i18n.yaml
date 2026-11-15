@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for fundamentals.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/security/fundamentals.md
+/:
+  en: 13d40c6cb07870eb
+  zh: dc5d701f217b60f4
+/security-fundamentals:
+  en: 06af493b14f5110e
+  zh: 6a8be2cae96f12eb
+/security-fundamentals/summary:
+  en: 7a7d574083ca0162
+  zh: 716ad75274461189
+/security-fundamentals/contents:
+  en: 2be47bdc2d197945
+  zh: 451dc9d07cc2cad5
+/security-fundamentals/the-fundamentals:
+  en: 3036af726c713322
+  zh: da6c6db47a1448cb
+/security-fundamentals/how-the-list-is-checked:
+  en: 2b0970fd66394ef3
+  zh: 3d952139c99ca7fe
+/security-fundamentals/changing-a-fundamental:
+  en: 30570ff35fbeb4ad
+  zh: 716e180f8569885f

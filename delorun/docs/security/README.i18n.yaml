@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/security/README.md
 /:
   en: ba6169fd74bb2c3d
-  zh: 1d2bfc5e9822d6a0
+  zh: 993e09e83acc0694
 /delorun-security:
   en: bd2acae4ea83c673
-  zh: 85a731bccae1c72d
+  zh: fcdfeeaa5cff1bcf
