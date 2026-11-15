@@ -592,7 +592,7 @@ it.each([[true, 0], [false, 1]])('on a phone (%s) shows %i Edit shortcuts button
   }))
   const catalog = createSnapshotStore<readonly ShortcutCatalogEntry[]>([])
   const props = { actions: createShortcutsStore().create().actions, useCatalog: bindSnapshotSelector(catalog),
-    t: makeTranslate(en) } as never
+    t: makeTranslate(en) } as Parameters<typeof ShortcutsRow>[0]
   render(<ShortcutsRow {...props} />)
   expect(screen.queryAllByRole('button', { name: en.view })).toHaveLength(count)
   vi.unstubAllGlobals()
