@@ -5,10 +5,15 @@
 import type { ReactNode } from 'react'
 import type { SetupRecord } from '../wire.ts'
 import type { Guide } from './guide.ts'
-import { ProvidersStep } from './ProvidersStep.tsx'
-import { AgentsStep, LookStep, PluginsStep, ReachStep, RemoteReachStep, ReadyStep, WelcomeStep } from './steps.tsx'
+import { AgentsStep } from './steps/Agents.tsx'
+import { LookStep } from './steps/Look.tsx'
+import { ModelsStep } from './steps/Models.tsx'
+import { PluginsStep } from './steps/Plugins.tsx'
+import { ReachStep, RemoteReachStep } from './steps/Reach.tsx'
+import { ReadyStep } from './steps/Ready.tsx'
+import { WelcomeStep } from './steps/Welcome.tsx'
+import { WorkspaceStep } from './steps/Workspace.tsx'
 import type { NoticeFace, OnboardingStep, ReachState, StartTarget, StepServices } from './types.ts'
-import { WorkspaceStep } from './WorkspaceStep.tsx'
 
 /** One step of the flow, built-in or added by a plugin. */
 export interface FlowStep {
@@ -21,9 +26,10 @@ export interface FlowStep {
   /**
    * Draw its body.
    * @param next - go on to the next step, or finish after the last.
+   * @param back - go back to the previous step.
    * @returns the body.
    */
-  readonly render: (next: () => void) => ReactNode
+  readonly render: (next: () => void, back: () => void) => ReactNode
   /** Runs when the person presses Continue, before the flow moves on. */
   readonly onContinue?: () => void
 }
@@ -68,7 +74,7 @@ export function buildSteps({ services, guide, record, extra, reach, target, noti
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
   const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
-  built.push({ ...STEPS.providers, title: () => t('step.providers'), render: next => <ProvidersStep {...props} next={next} /> })
+  built.push({ ...STEPS.providers, title: () => t('step.providers'), render: (next, back) => <ModelsStep {...props} next={next} back={back} /> })
   if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: () => <LookStep {...props} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })

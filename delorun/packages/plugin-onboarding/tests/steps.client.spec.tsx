@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, readableName, REACH_COMMAND, ReachStep, ReadyStep, RemoteReachStep, WelcomeStep } from '../src/client/steps.tsx'
+import { AGENT_BUNDLES, AgentsStep } from '../src/client/steps/Agents.tsx'
+import { LookStep } from '../src/client/steps/Look.tsx'
+import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
+import { APPROVE_COMMAND, REACH_COMMAND, ReachStep, RemoteReachStep } from '../src/client/steps/Reach.tsx'
+import { ReadyStep } from '../src/client/steps/Ready.tsx'
+import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
+import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
@@ -204,7 +210,7 @@ describe('the agents step', () => {
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const adds = screen.getAllByRole('button', { name: /^Add / })
-    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.addConfirm']], ['Add Codex', en['bundle.addConfirm']]])
+    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.add']], ['Add Codex', en['bundle.add']]])
     await click(screen.getByRole('button', { name: 'Add Codex' }))
     expect(fake.install).not.toHaveBeenCalled()
     const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
@@ -240,21 +246,22 @@ describe('the agents step', () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
-    expect(screen.getAllByText('Not included in this installation')).toHaveLength(2)
-    expect(document.querySelector('[data-tone="failed"]')).toBeNull()
+    expect(screen.getAllByText(en['bundle.unavailable'])).toHaveLength(2)
+    expect(screen.queryByRole('alert')).toBeNull()
     const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
     expect(opens).toHaveLength(2)
     await click(opens[0] as HTMLElement)
     expect(fake.openPlugins).toHaveBeenCalledOnce()
   })
 
-  it('shows a bundle that failed to be added as an error that Plugins can finish', async () => {
+  it('shows a bundle that failed to be added as an error under the card with a retry', async () => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'failed' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
-    expect(document.querySelector('[data-tone="failed"]')?.textContent).toBe(en['bundle.failed'])
-    await click(screen.getByRole('button', { name: 'Open Plugins' }))
-    expect(fake.openPlugins).toHaveBeenCalledOnce()
+    expect(within(screen.getByRole('alert')).getByText(en['bundle.failed'])).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['bundle.retry'] }))
+    expect(screen.getByRole('group', { name: 'What adding Claude Code means' })).toBeTruthy()
+    expect(fake.install).not.toHaveBeenCalled()
   })
 })
 
@@ -271,7 +278,7 @@ describe('the recommended plugins step offers bundled rows', () => {
     await settle()
     expect(fake.refreshRows).toHaveBeenCalledExactlyOnceWith(optionalRows)
     expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Thinking tab', 'Cost meter'])
-    expect(screen.getAllByRole('button', { name: /^Turn on / }).map(each => each.getAttribute('aria-label'))).toEqual(['Turn on Thinking tab', 'Turn on Cost meter'])
+    expect(screen.getAllByRole('button', { name: /^Add / }).map(each => each.getAttribute('aria-label'))).toEqual(['Add Thinking tab', 'Add Cost meter'])
     expect(screen.queryByText(en['plugins.none'])).toBeNull()
     expect(fake.enableRow).not.toHaveBeenCalled()
   })
@@ -279,23 +286,23 @@ describe('the recommended plugins step offers bundled rows', () => {
   it('turns on the row whose button is pressed, and no other', async () => {
     const fake = installerFake({}, views)
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows })} guide={guideOf()} />)
-    await click(screen.getByRole('button', { name: 'Turn on Cost meter' }))
+    await click(screen.getByRole('button', { name: 'Add Cost meter' }))
     expect(fake.enableRow).toHaveBeenCalledExactlyOnceWith('delorun-cost-meter')
     expect(fake.install).not.toHaveBeenCalled()
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
     ['is being checked', 'checking', en['bundle.checking']],
-    ['is being turned on', 'installing', en['optional.turningOn']],
-    ['is on', 'installed', en['optional.on']],
-    ['is on but waits for a restart', 'restart', en['optional.restart']],
+    ['is being turned on', 'installing', en['bundle.adding']],
+    ['is on', 'installed', en['bundle.added']],
+    ['is on but waits for a restart', 'restart', en['bundle.restart']],
     ['is not part of this profile', 'unavailable', en['bundle.unavailable']],
     ['cannot be changed', 'failed', en['bundle.failed']],
-  ])('shows a row that %s and no Turn on button', (_, state, text) => {
+  ])('shows a row that %s and no Add button', (_, state, text) => {
     const fake = installerFake({}, { 'delorun-cost-meter': { state } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows: ['delorun-cost-meter'] })} guide={guideOf()} />)
     expect(screen.getByText(text)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /^Turn on / })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Add / })).toBeNull()
   })
 })
 

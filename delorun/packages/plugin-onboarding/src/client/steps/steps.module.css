@@ -1,0 +1,470 @@
+/* Shared styles of the step bodies not yet moved to their own component: stacks, text, the Look preview, the Phone access
+   checks, the Ready list and the Workspace folder chooser. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-2);
+}
+
+.lead {
+  margin: 0;
+}
+
+.lead {
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.text,
+.hint,
+.failure {
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.text {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.hint {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.failure {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+}
+
+.label {
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.status {
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status[data-tone='done'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.status[data-tone='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.status[data-tone='attention'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+/* The Workspace step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
+.chooser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5);
+  min-width: 0;
+}
+
+.chooserBar,
+.newFolder,
+.chooserFailure,
+.chooserActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-4);
+}
+
+.location {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.path {
+  overflow-wrap: anywhere;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.nameInput {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-1);
+  max-height: 240px;
+  margin: 0;
+  padding: var(--delorun-space-2);
+  overflow-y: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  list-style: none;
+}
+
+.folders:empty {
+  display: none;
+}
+
+.folder {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--delorun-space-5);
+  border-radius: var(--dsw-radius-sm);
+  overflow-wrap: anywhere;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .folder:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+
+@media (pointer: coarse) {
+  .folder {
+    min-height: 44px;
+  }
+}
+
+
+.folder[aria-selected='true'] {
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.folder:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.chooserActions {
+  justify-content: flex-end;
+}
+
+/* The command to run in a terminal. */
+.command {
+  padding: var(--delorun-space-1) var(--delorun-space-3);
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xs-13-font-size);
+  user-select: all;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--delorun-space-2) var(--delorun-space-5);
+  padding: var(--delorun-space-4) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.alignStart {
+  align-self: flex-start;
+}
+
+/* A Settings section drawn inside the step, framed so it reads as part of the step. */
+.embedded {
+  padding: var(--delorun-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  /* The footer's Continue is the screen's one primary button, so the embedded editor's commit button draws neutral. */
+  --dsw-alias-button-primary-fill: var(--dsw-alias-interactive-bg-hover-solid);
+  --dsw-alias-button-primary-hover: var(--dsw-alias-border-l2);
+  --dsw-alias-label-primary-foreground: var(--dsw-alias-label-primary);
+}
+
+/* Look: the choices beside a small chat drawn with the studio's own tokens, which follow each choice at once. */
+.lookGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+  align-items: start;
+  gap: var(--delorun-space-8);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5);
+  padding: var(--delorun-space-6);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-base);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bubbleMine {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: var(--delorun-space-3) var(--delorun-space-5);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.bubbleAgent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+}
+
+.toolLine {
+  align-self: flex-start;
+  padding: var(--delorun-space-1) var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--delorun-space-4);
+  padding: var(--delorun-space-3) var(--delorun-space-3) var(--delorun-space-3) var(--delorun-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.send {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+}
+
+/* Agents: what adding one means, confirmed in place. */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5);
+  padding-top: var(--delorun-space-5);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  margin: 0;
+  padding-left: var(--delorun-space-7);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A command with its Copy button. */
+.commandRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-3) var(--delorun-space-4);
+  min-width: 0;
+}
+
+.commandRow > .command {
+  overflow-wrap: anywhere;
+}
+
+/* Phone access: Tailscale's checks in order, each done, to do or waiting. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--delorun-space-4);
+  padding: var(--delorun-space-4) 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.check[data-state='waiting'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.checkMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: 1;
+}
+
+.check[data-state='done'] .checkMark {
+  border-color: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.check[data-state='todo'] .checkMark {
+  border-color: var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  min-width: 0;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Workspace: the chosen folder and a clone's progress. */
+.chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--delorun-space-2) var(--delorun-space-4);
+}
+
+.cloneProgress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+}
+
+.meter {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+/* Ready: what the guide set, as label and value rows, and the starting prompts the chat will offer. */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.checkRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  gap: var(--delorun-space-5);
+  padding: var(--delorun-space-4) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.checkRow > dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.starterPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.starterPreview > li {
+  padding: var(--delorun-space-2) var(--delorun-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+@media (max-width: 767px) {
+  .lookGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
+  .folder {
+    min-height: 44px;
+  }
+}
+
+
+/* Cards in a list. */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--onb-gap-1);
+}
+
+.target {
+  min-height: var(--onb-target);
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+}
+
+/* A row that reads as a link and opens another page of the studio. */
+.linkRow {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: var(--onb-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-brand-primary);
+  font: inherit;
+  font-size: var(--onb-small-size);
+  cursor: pointer;
+}

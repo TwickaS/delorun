@@ -1,0 +1,25 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--onb-gap-1);
+}
+
+.command {
+  flex: 1 1 14rem;
+  min-width: 0;
+  padding: var(--delorun-space-1) var(--delorun-space-3);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: var(--onb-small-size);
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  min-height: var(--onb-target);
+}
+
+.status {
+  font-size: var(--onb-small-size);
+  color: var(--dsw-alias-label-secondary);
+}

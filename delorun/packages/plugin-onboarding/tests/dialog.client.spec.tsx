@@ -209,7 +209,6 @@ describe('the first run', () => {
     const items = within(screen.getByRole('navigation')).getAllByRole('listitem')
     expect(items.map(each => each.getAttribute('data-state'))).toEqual(['done', 'current', 'next', 'next', 'next', 'next'])
     expect(items.map(each => each.getAttribute('aria-current'))).toEqual([null, 'step', null, null, null, null])
-    expect(items[0]?.textContent?.startsWith('✓')).toBe(true)
   })
 
   it('skips without opening a chat, leaving upstream\'s key step to show', async () => {

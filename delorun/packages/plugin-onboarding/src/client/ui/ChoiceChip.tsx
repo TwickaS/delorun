@@ -3,8 +3,8 @@
  */
 import { useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
-import type { SchemeColours } from './previews.ts'
-import css from './Onboarding.module.css'
+import type { SchemeColours } from '../previews.ts'
+import css from './ChoiceChip.module.css'
 
 /** One choice of a set of chips. */
 export interface ChipOption {
@@ -50,7 +50,7 @@ export function Choices({ label, options, manual = false }: { readonly label: st
     if (!manual && radio.getAttribute('aria-checked') !== 'true') radio.click()
   }
   return (
-    <div className={css.field}>
+    <div className={css.group}>
       <span id={id} className={css.label}>{label}</span>
       <div className={css.chips} role="radiogroup" aria-labelledby={id} onKeyDown={onKeyDown}>
         {options.map(option => (

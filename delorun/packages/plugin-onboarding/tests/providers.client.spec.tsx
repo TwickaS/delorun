@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ProvidersStep } from '../src/client/ProvidersStep.tsx'
+import { ModelsStep as ProvidersStep } from '../src/client/steps/Models.tsx'
+import { StepFrame } from '../src/client/frame/StepFrame.tsx'
 import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { TEST_DELAY_MS } from '../src/client/providers.ts'
@@ -26,18 +27,24 @@ const type = async (field: HTMLElement, value: string) => { await act(async () =
 async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS) {
   const providers = providersFake(change)
   const next = vi.fn()
+  const back = vi.fn()
   const guide = createGuide(hostFake({ keys }).host)
-  render(<ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} />)
+  render(
+    <StepFrame title="Models" headingRef={null} count="Step 2 of 7" place={2} total={7} steps={['Welcome', 'Models']} stepsLabel="Steps" stepKey="models">
+      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} />
+    </StepFrame>,
+  )
   await flush()
-  return { ...providers, next, guide }
+  return { ...providers, next, back, guide }
 }
 
 describe('the providers landing', () => {
   it('lists the cards, ticks the ones with a key found and counts them on the button', async () => {
     await mount()
-    expect(screen.getAllByRole('checkbox').map(box => [box.parentElement?.textContent, (box as HTMLInputElement).checked])).toEqual([
-      [`DeepSeek${en['providers.found']}`, true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false],
+    expect(screen.getAllByRole('checkbox').map(box => [box.closest('li')?.querySelector('h4')?.textContent, (box as HTMLInputElement).checked])).toEqual([
+      ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false],
     ])
+    expect(screen.getByText(en['providers.found'])).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Connect 1 →' })).toBeTruthy()
     await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
     expect(screen.getByRole('button', { name: 'Connect 2 →' })).toBeTruthy()
@@ -108,7 +115,7 @@ describe('the walk', () => {
     await flush(200)
     expect(probe).toHaveBeenCalledOnce()
     expect(probe.mock.calls[0]?.slice(1)).toEqual(['sk-abc', undefined])
-    expect(screen.getByText('✓ Key works · 12 models')).toBeTruthy()
+    expect(screen.getByText('Key works · 12 models')).toBeTruthy()
     expect(screen.getByText('Default model: deepseek-chat')).toBeTruthy()
   })
 
@@ -164,7 +171,7 @@ describe('the summary', () => {
     await flush(TEST_DELAY_MS)
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('summary')
-    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual([`DeepSeek${en['providers.outcome.connected']}`, `OpenAI${en['providers.outcome.connected']}`])
+    expect(within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem').map(item => item.textContent)).toEqual([`DeepSeek✓ ${en['providers.outcome.connected']}`, `OpenAI✓ ${en['providers.outcome.connected']}`])
     await click(screen.getByRole('button', { name: en['providers.change'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('landing')
   })

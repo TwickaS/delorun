@@ -10,7 +10,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import type { LocationProblem } from '../wire.ts'
 import type { AddedFolder, StepServices } from './types.ts'
-import css from './Onboarding.module.css'
+import css from './steps/steps.module.css'
 
 /** Why a folder was not added: a location Delorun never adds, or a failure to add it. */
 export type FolderProblem = LocationProblem | 'failed'

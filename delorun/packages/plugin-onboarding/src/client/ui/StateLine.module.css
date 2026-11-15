@@ -1,0 +1,41 @@
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--onb-gap-1);
+  width: 100%;
+  box-sizing: border-box;
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.mark {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.text {
+  flex: 1 1 12rem;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.action {
+  min-height: var(--onb-target);
+}
+
+.line[data-tone='success'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.line[data-tone='warning'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.line[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}

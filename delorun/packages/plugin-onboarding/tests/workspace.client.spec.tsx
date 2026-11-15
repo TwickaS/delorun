@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import type { CloneStartOutcome, FolderChoice, HostFace, StartTarget } from '../src/client/types.ts'
-import { cloneProblemText, WorkspaceStep } from '../src/client/WorkspaceStep.tsx'
+import { cloneProblemText, WorkspaceStep } from '../src/client/steps/Workspace.tsx'
 import { CLONE_FAILURES, CLONE_PROBLEMS, type CloneStatus } from '../src/wire.ts'
 import { DEFAULT_PATH, DEFAULT_WORKSPACE, HOME, hostFake, startFace, stepServices } from './fixtures.client.ts'
 

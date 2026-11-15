@@ -6,14 +6,14 @@
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useId, useState, useSyncExternalStore } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { isCloneAddress, isFolderName, suggestedName } from '../clone-address.ts'
-import type { CloneProblem } from '../wire.ts'
-import { Choices } from './choices.tsx'
-import { FolderChooser, problemText, type FolderProblem } from './FolderChooser.tsx'
-import type { CloneView, Store, WorkspaceMode } from './guide.ts'
-import type { StepProps } from './steps.tsx'
-import type { FolderChoice, StartTarget, StepServices } from './types.ts'
-import css from './Onboarding.module.css'
+import { isCloneAddress, isFolderName, suggestedName } from '../../clone-address.ts'
+import type { CloneProblem } from '../../wire.ts'
+import { Choices } from '../ui/ChoiceChip.tsx'
+import { FolderChooser, problemText, type FolderProblem } from '../FolderChooser.tsx'
+import type { CloneView, Store, WorkspaceMode } from '../guide.ts'
+import type { StepProps } from './shared.ts'
+import type { FolderChoice, StartTarget, StepServices } from '../types.ts'
+import css from './steps.module.css'
 
 /**
  * @param store - a store.

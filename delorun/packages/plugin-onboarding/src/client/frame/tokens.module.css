@@ -1,0 +1,14 @@
+/* The guide's spacing and type scale. Applied to the dialog's frame, so every component inside reads the same values.
+   Spacing is three gaps on the brand's 8px grid; type is the studio's 20/14/13 sizes. */
+.scale {
+  --onb-gap-1: var(--delorun-space-4);
+  --onb-gap-2: var(--delorun-space-6);
+  --onb-gap-3: var(--delorun-space-8);
+  --onb-title-size: var(--dsw-font-l-20-font-size);
+  --onb-title-line: var(--dsw-font-l-20-line-height);
+  --onb-body-size: var(--dsw-font-s-14-font-size);
+  --onb-body-line: var(--dsw-font-s-14-line-height);
+  --onb-small-size: var(--dsw-font-xs-13-font-size);
+  --onb-small-line: var(--dsw-font-xs-13-line-height);
+  --onb-target: 44px;
+}
