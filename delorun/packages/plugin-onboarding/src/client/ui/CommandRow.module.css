@@ -1,11 +1,13 @@
 .row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: var(--onb-gap-1);
 }
 
 .command {
+  display: flex;
+  align-items: center;
   flex: 1 1 14rem;
   min-width: 0;
   box-sizing: border-box;
@@ -23,6 +25,7 @@
 }
 
 .status {
+  align-self: center;
   font-size: var(--onb-small-size);
   color: var(--dsw-alias-label-secondary);
 }
@@ -32,4 +35,9 @@
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* The empty live region takes no room beside the Copy button. */
+.status:empty {
+  margin-inline-start: calc(-1 * var(--onb-gap-1));
 }

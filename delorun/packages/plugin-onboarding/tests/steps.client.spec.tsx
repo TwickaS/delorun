@@ -258,6 +258,8 @@ describe('the agents step', () => {
       en['agents.confirm.handoff'], en['agents.confirm.limits'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
     ])
     expect(confirm.textContent).toContain('Delorun asks here on this computer first')
+    // The frame's CSS demotes Continue while an element marked data-confirming is open.
+    expect(confirm.hasAttribute('data-confirming')).toBe(true)
     await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
     expect(screen.queryByRole('group')).toBeNull()
     expect(fake.install).not.toHaveBeenCalled()
