@@ -32,7 +32,7 @@ kind: "package-reference"
 | Field | Values | Default | Effect |
 | --- | --- | --- | --- |
 | `studioAdditions` | boolean | `false` | C16 switch `studio_additions`: on, Delorun's look and every Delorun studio plugin; off, upstream's stock look. |
-| `palette` | `soft`, `t3-code`, `t3-chat`, `grove`, `ocean`, `ember`, `iris` | `soft` | The palette. A T3 Code theme brings its own accent. |
+| `palette` | `soft`, `t3-code`, `t3-chat`, `grove`, `ocean`, `ember`, `iris` | `soft` | The palette. A theme other than Soft brings its own accent: Slate (`t3-code`), Berry (`t3-chat`), Grove, Ocean, Ember or Iris. The two ids keep the names a saved choice was stored under. |
 | `accent` | `peach`, `cobalt`, `moss`, `mono`, `custom` | `peach` | The accent of primary buttons, links, switches and focus, on the Soft palette. |
 | `customAccent` | `#RRGGBB` | `#E5734A` | The colour used when `accent` is `custom`. |
 | `typeface` | `delorun`, `system` | `delorun` | Schibsted Grotesk and JetBrains Mono, or upstream's stacks. |
@@ -93,3 +93,7 @@ Soft is Delorun's. T3 Code's six themes are seeded from [`src/palette/t3-themes.
 - This plugin registers no sidebar brand.
 - Turning the switch off does not reload the page; the first-paint style element is removed and `data-delorun-stock` on `<html>` keeps any copy from applying.
 - The boot page shows the wordmark only on a page served after the host printed `dshBootWordmark`.
+
+## Shared controls and Safari edges
+
+[`src/client/controls`](src/client/controls) holds the chip controls (`ChipGroup`, `ThemePicker`, `AccentPicker`, `StudioLookSwitch`) that Settings → Appearance and onboarding's Look step share; `@delorun/plugin-theme/controls` exports them as source for a browser bundle to inline. [`src/client/edges.ts`](src/client/edges.ts) paints two fixed, `aria-hidden` edge strips, the `html` and `body` backgrounds and one `theme-color` tag from the active theme's tokens, so mobile Safari's status bar and toolbar continue the studio. It adds `viewport-fit=cover` to the page's viewport tag and restores every change on dispose.

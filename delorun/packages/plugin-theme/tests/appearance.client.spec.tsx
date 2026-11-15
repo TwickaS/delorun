@@ -110,6 +110,23 @@ describe('the Appearance section', () => {
     expect(within(group('Mode')).getByRole('radio', { name: /System/ }).getAttribute('aria-checked')).toBe('true')
   })
 
+  it('locks the accent while a theme brings its own, because a saved accent would change nothing on screen', async () => {
+    const form = themeForm({ ...STUDIO_ON, palette: 'ocean' })
+    open(form)
+    expect(screen.getByText(en['accent.byTheme'])).toBeTruthy()
+    for (const radio of within(group('Accent')).getAllByRole('radio')) expect((radio as HTMLButtonElement).disabled).toBe(true)
+    await click(screen.getByRole('radio', { name: 'Moss' }))
+    expect(form.writes).toEqual([])
+  })
+
+  it('shows the theme chosen in Settings as selected and saves a theme change that applies a different look', async () => {
+    const form = themeForm(STUDIO_ON)
+    open(form)
+    await click(screen.getByRole('radio', { name: en['palette.t3-code'] }))
+    expect(form.writes).toEqual([['palette', 't3-code']])
+    expect(screen.getByRole('radio', { name: en['palette.t3-code'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('reports a write the Host refused or could not carry, and clears the report on the next save', async () => {
     const form = themeForm(STUDIO_ON)
     open(form)
