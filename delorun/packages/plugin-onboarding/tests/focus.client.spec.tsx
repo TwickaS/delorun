@@ -7,7 +7,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async original => ({
   isMobileDevice: () => mobile.value,
 }))
 
-const { landFocus } = await import('../src/client/focus.ts')
+const { closeSidebarDrawer, landFocus } = await import('../src/client/focus.ts')
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -52,5 +52,24 @@ describe('where focus lands when the guide closes', () => {
     ;(root.querySelector('button') as HTMLButtonElement).focus()
     landFocus(root)
     expect(document.activeElement?.textContent).toBe('Kept')
+  })
+})
+
+describe('the sidebar drawer when the guide opens', () => {
+  it('closes a drawer that is open over the page', () => {
+    page('<div data-sidebar-drawer><div data-shell-bottom inert=""></div></div>')
+    const layout = { toggleSidebar: vi.fn() }
+    closeSidebarDrawer(document, layout)
+    expect(layout.toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('leaves a closed drawer and a docked sidebar as they are', () => {
+    const layout = { toggleSidebar: vi.fn() }
+    page('<div data-sidebar-drawer><div data-shell-bottom></div></div>')
+    closeSidebarDrawer(document, layout)
+    document.body.replaceChildren()
+    page('<div><div data-shell-bottom inert=""></div></div>')
+    closeSidebarDrawer(document, layout)
+    expect(layout.toggleSidebar).not.toHaveBeenCalled()
   })
 })

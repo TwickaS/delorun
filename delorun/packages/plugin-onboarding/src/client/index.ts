@@ -24,6 +24,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 // Type-only: the ctx.conversation merge and the 'conversation.input.dock' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: the ctx.layout merge.
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: the ctx.pluginNavigation merge.
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 // Type-only: the ctx.slots merge.
@@ -42,6 +44,7 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
+import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, readWorkspaceNotice } from './host-api.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
@@ -328,6 +331,9 @@ export function applyStudio(ctx: Context): void {
       writeProgress('step', '')
       // Without upstream's Settings shell the guide shows at the next reload, because the progress is now unfinished.
       ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
+      // On a phone Settings opens from the sidebar drawer, which would stay open beneath the guide.
+      const layout = ctx.get('layout')
+      if (layout !== undefined) closeSidebarDrawer(document, layout)
     },
   }
   const starters: StarterInjected = {

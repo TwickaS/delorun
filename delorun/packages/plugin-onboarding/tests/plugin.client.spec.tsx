@@ -153,6 +153,16 @@ describe('the registrations', () => {
     face<ShowAgainInjected>(entries, ROW_KEY).show()
     expect(openOnboarding).toHaveBeenCalledExactlyOnceWith('delorun-onboarding')
   })
+
+  it('close the phone sidebar drawer when it opens onboarding from Settings', async () => {
+    const toggleSidebar = vi.fn()
+    const { entries, served } = await harness({ provide: { layout: { toggleSidebar } } })
+    served.on()
+    document.body.innerHTML = '<div data-sidebar-drawer><div data-shell-bottom inert=""></div></div>'
+    face<ShowAgainInjected>(entries, ROW_KEY).show()
+    document.body.replaceChildren()
+    expect(toggleSidebar).toHaveBeenCalledOnce()
+  })
 })
 
 describe('the steps other plugins add', () => {

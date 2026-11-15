@@ -23,3 +23,14 @@ export function landFocus(root: HTMLElement): void {
   const target = composer ?? [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].find(each => each.closest('[inert], [hidden]') === null)
   if (target !== undefined) focusWithoutRing(target, { preventScroll: true })
 }
+
+/**
+ * Close the sidebar when it is open as a drawer over the page, the phone layout; a sidebar docked beside the page stays
+ * as it is. The layout service only toggles, so the frame's marks say whether the drawer is open: the frame is in
+ * drawer mode and its bottom row is inert, which the frame sets exactly while the drawer is open.
+ * @param doc - the page.
+ * @param layout - the layout service that toggles the sidebar.
+ */
+export function closeSidebarDrawer(doc: Document, layout: { toggleSidebar(): void }): void {
+  if (doc.querySelector('[data-sidebar-drawer] > [data-shell-bottom][inert]') !== null) layout.toggleSidebar()
+}
