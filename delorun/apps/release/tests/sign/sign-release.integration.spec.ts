@@ -193,8 +193,8 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
   it('refuses a draft whose source names the private archive repository', async (test) => {
     const fixture = await releaseFixture(test)
     expect(fixture.record().status).toBe(0)
-    editDraft(fixture, (draft) => {
-      draft.source.repository = 'https://github.com/Delo-Run/delo'
+    editDraftFields(fixture, (draft) => {
+      draft.source = { repository: 'https://github.com/Delo-Run/delo', tag: `v${VERSION}`, commit: 'c'.repeat(40) }
     })
     refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft's source must be https://github.com/Delo-Run/delorun at tag v${VERSION}`)
   })
