@@ -222,7 +222,7 @@ The signing command, `node_modules/.bin/tsx delorun/apps/release/src/sign-releas
 
 It also refuses, before it writes anything, when:
 
-- the release commit is not an ancestor of the release branch, `origin/v5` unless `--release-branch` names another;
+- the release commit is not an ancestor of the release branch, `origin/main` unless `--release-branch` names another;
 - the targets key is not listed in `delorun/release/production-keys.json` as the release branch commits it; the registry lists no key until the owner records the keys of the key ceremony, so signing stops until then;
 - the release tag is not an annotated tag whose `tag` header names it, carrying an SSH signature that `git verify-tag` verifies with a key listed in `delorun/release/allowed-signers` as the release branch commits it, never the working tree's copy; the committed file lists no key until the owner adds the release signers' keys, so every tag is refused until then;
 - the draft's `install.sh` or `install.ps1` is not a zero-length placeholder, because the rebuild comparison does not cover the install scripts;

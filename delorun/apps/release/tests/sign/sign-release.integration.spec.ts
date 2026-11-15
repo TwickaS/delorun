@@ -330,11 +330,11 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     expect(stated.status).toBe(1)
   })
 
-  it('reads the release branch origin/v5 by default from the command line, and takes no --allowed-signers', async (test) => {
+  it('reads the release branch origin/main by default from the command line, and takes no --allowed-signers', async (test) => {
     const fixture = await releaseFixture(test)
     const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath]
     const branch = fixture.run('sign-release.ts', args)
-    expect(branch.stderr).toContain('signing refuses: the release branch origin/v5 names no commit')
+    expect(branch.stderr).toContain('signing refuses: the release branch origin/main names no commit')
     expect(branch.status).toBe(1)
     const override = fixture.run('sign-release.ts', [...args, '--allowed-signers', join(fixture.repo, 'signers')])
     expect(override.stderr).toContain('--allowed-signers')

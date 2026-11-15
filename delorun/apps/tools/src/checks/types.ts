@@ -21,7 +21,7 @@ export interface GateCheck {
   /** True when the runner appends the staged paths to `command` at pre-commit, so the command accepts paths. */
   readonly staged?: boolean
   /**
-   * True when the verdict reads commits beyond the tree, such as the range gates' commits from `origin/v5` to HEAD.
+   * True when the verdict reads commits beyond the tree, such as the range gates' commits from `origin/main` to HEAD.
    * A tree pass covers such a gate only at the same HEAD commit and range base (`checks/tree-pass.ts`).
    */
   readonly history?: boolean

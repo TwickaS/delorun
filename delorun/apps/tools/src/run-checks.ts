@@ -12,7 +12,7 @@
  * runs them too, and only its pass lets a commit reach the trunk; the lane tier, a branch push's default, runs the
  * mechanical rules, the changed packages' typecheck and their own specs (`laneKeeps` in `checks/plan.ts`).
  * `--tier lane|agent|merge` chooses it. A push
- * takes the merge tier when a pushed ref is `refs/heads/v5` whatever else is set, or when `DELORUN_TIER=merge` is set, and
+ * takes the merge tier when a pushed ref is `refs/heads/main` whatever else is set, or when `DELORUN_TIER=merge` is set, and
  * the agent tier with `DELORUN_TIER=agent`. `--preflight` is the lane tier without the test lanes.
  *
  * Heavy runs share the machine's CPU slots, memory and disk-heavy places, first come, first served (`checks/slots.ts`);
@@ -25,10 +25,10 @@
  *   paths, and `git diff --cached --check`, within a budget of five seconds
  *   (`budgets.json`).
  * - `--pre-push` runs what changed since the older of the remote branch's tip and
- *   its merge base with `origin/v5` (or, for a new branch without `origin/v5`, its
- *   merge base with `v5`); the full gate when a pushed ref is
+ *   its merge base with `origin/main` (or, for a new branch without `origin/main`, its
+ *   merge base with `main`); the full gate when a pushed ref is
  *   not `HEAD` or `DELORUN_FULL_GATE=1` is set.
- * - `--changed` (`pnpm check`, and `pnpm check:merge` with `--tier merge`) runs what changed since `--base` (default `v5`).
+ * - `--changed` (`pnpm check`, and `pnpm check:merge` with `--tier merge`) runs what changed since `--base` (default `main`).
  * - No argument runs the full gate (`pnpm check:full` adds `--no-cache`).
  *
  * Paths narrow a run to the checks of the packages they lie in and of the
@@ -82,7 +82,7 @@ const CACHE_DIR = 'node_modules/.cache/delorun-checks'
 const IN_SCOPE = 'DELORUN_CHECKS_SCOPE'
 const GIB = 1024 ** 3
 /** The ref a change is measured from when no `--base` names one: the integration branch. */
-const DEFAULT_BASE = 'v5'
+const DEFAULT_BASE = 'main'
 /** The remote ref of the trunk, `DEFAULT_BASE`: a push of it needs the merge tier. */
 export const TRUNK_REF = `refs/heads/${DEFAULT_BASE}`
 const REPORT = `${CACHE_DIR}/report.json`
@@ -188,11 +188,11 @@ const ZERO = /^0+$/
 
 /**
  * The commit a push's checks start from, from the lines git's pre-push hook reads (`<local ref> <local sha> <remote ref> <remote sha>`).
- * A push of `v5` starts from the remote `v5` tip. A push of any other branch starts from the older of its remote tip and its
- * merge base with `origin/v5`, so the record it leaves covers the later fast-forward of `v5` to the same tree.
+ * A push of `main` starts from the remote `main` tip. A push of any other branch starts from the older of its remote tip and its
+ * merge base with `origin/main`, so the record it leaves covers the later fast-forward of `main` to the same tree.
  * @param root - the repository root.
  * @param input - the hook's standard input.
- * @param base - the integration branch a new branch is measured from when `origin/v5` is absent.
+ * @param base - the integration branch a new branch is measured from when `origin/main` is absent.
  * @param fullGate - whether the environment asks for the full gate.
  * @returns the start commit; undefined for the full gate.
  */
@@ -204,11 +204,11 @@ export function prePushBase(root: string, input: string, base: string, fullGate:
   const [, , remoteRef = '', remote = ''] = pushes[0]
   // A remote tip this clone lacks, such as one pushed from elsewhere, cannot be diffed against.
   const tip = ZERO.test(remote) || !commitExists(root, remote) ? undefined : remote
-  const v5Base = remoteRef === TRUNK_REF ? undefined : mergeBase(root, 'origin/v5')
-  if (v5Base === undefined) return tip ?? (ZERO.test(remote) ? mergeBase(root, base) : undefined)
-  // The older of the two starts the wider range, which the later fast-forward of v5 needs.
-  if (tip !== undefined && runGit(root, ['merge-base', '--is-ancestor', tip, v5Base]).status === 0) return tip
-  return v5Base
+  const trunkBase = remoteRef === TRUNK_REF ? undefined : mergeBase(root, 'origin/main')
+  if (trunkBase === undefined) return tip ?? (ZERO.test(remote) ? mergeBase(root, base) : undefined)
+  // The older of the two starts the wider range, which the later fast-forward of main needs.
+  if (tip !== undefined && runGit(root, ['merge-base', '--is-ancestor', tip, trunkBase]).status === 0) return tip
+  return trunkBase
 }
 
 /**

@@ -246,7 +246,7 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 
 在写入任何内容之前，它在下列情况下同样拒绝：
 
-- 发布提交不是发布分支（`origin/v5`，除非 `--release-branch` 指定其他分支）的祖先；
+- 发布提交不是发布分支（`origin/main`，除非 `--release-branch` 指定其他分支）的祖先；
 - targets 密钥未列在发布分支所提交的 `delorun/release/production-keys.json` 中；在所有者记录密钥仪式的密钥之前，该登记册不列出任何密钥，因此在此之前签名会停止；
 - 发布标签不是其 `tag` 头指明自身的附注标签，或不带可由 `git verify-tag` 用发布分支所提交的 `delorun/release/allowed-signers`（而非工作树中的副本）中所列密钥验证的 SSH 签名；在所有者添加发布签名者的密钥之前，已提交的该文件不列出任何密钥，因此在此之前每个标签都会被拒绝；
 - 草稿的 `install.sh` 或 `install.ps1` 不是零长度的占位文件，因为重建比较尚未覆盖安装脚本；

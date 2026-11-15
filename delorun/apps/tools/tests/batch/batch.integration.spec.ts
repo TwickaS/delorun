@@ -82,11 +82,11 @@ describe('a batch that lands', () => {
     const { code, fake } = runIn(sandbox, start(['lane/one', 'lane/two']), [passing, forkRule])
     expect(code).toBe(0)
     expect(fake.pushes).toBe(1)
-    const log = git(sandbox.remote, ['log', '--format=%an|%aI|%s|%b', 'v5'])
+    const log = git(sandbox.remote, ['log', '--format=%an|%aI|%s|%b', 'main'])
     expect(log).toContain('Ada|2026-01-02T03:04:05+00:00|feat: one|Signed-off-by: Lane Author <lane@example.com>')
     expect(log).toContain('Lane Author|2026-01-02T03:04:05+00:00|fix: two again|')
     expect(sandbox.trunk()).toBe(git(sandbox.root, ['rev-parse', `batch/${ID}`]).trim())
-    expect(report(sandbox, 'summary.md')).toContain(`landed: origin/v5 moved from`)
+    expect(report(sandbox, 'summary.md')).toContain(`landed: origin/main moved from`)
     expect(report(sandbox, 'summary.md')).toContain('## Landed\n\n- lane/one\n- lane/two')
     expect(parseState(report(sandbox, 'state.json'), 'state.json').outcome).toEqual({ kind: 'landed', commit: sandbox.trunk() })
   })
@@ -112,7 +112,7 @@ describe('attribution', () => {
     const { code, fake, said } = runIn(sandbox, start(['lane/good', 'lane/bad']), [passing, forkRule])
     expect(code).toBe(0)
     expect(fake.pushes).toBe(1)
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: good\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: good\nchore: the trunk\n')
     const bad = report(sandbox, 'lane/bad.md')
     expect(bad).toContain('removing this lane alone from the candidate made every failing check pass')
     expect(bad).toContain('AssertionError: expected 1 to be 2')
@@ -130,7 +130,7 @@ describe('attribution', () => {
     const both: Rule = { check: 'gates:dco', fails: read => text(read, A).includes('P') && text(read, B).includes('Q') }
     const { code } = runIn(sandbox, start(['lane/p', 'lane/q', 'lane/r']), [both])
     expect(code).toBe(0)
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: r\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: r\nchore: the trunk\n')
     expect(report(sandbox, 'lane/p.md')).toContain('Fails together with: lane/q.')
     expect(report(sandbox, 'lane/q.md')).toContain('Fails together with: lane/p.')
     expect(report(sandbox, 'summary.md')).toContain('- lane/p, lane/q: gates:dco (together)')
@@ -146,7 +146,7 @@ describe('attribution', () => {
     expect(code).toBe(0)
     expect(report(sandbox, 'lane/m.md')).toContain('fail on the trunk with this lane alone')
     expect(report(sandbox, 'lane/n.md')).toContain('fail on the trunk with this lane alone')
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: r\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: r\nchore: the trunk\n')
   })
 
   it('reports suspects that fail together when no single removal fixes it and none fails alone', { timeout: TIMEOUT }, () => {
@@ -176,7 +176,7 @@ describe('attribution', () => {
     expect(code).toBe(0)
     expect(report(sandbox, 'lane/m.md')).toContain('fail on the trunk with this lane alone')
     expect(report(sandbox, 'lane/n.md')).toContain('removing this lane alone')
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: k\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: k\nchore: the trunk\n')
   })
 
   it('maps a range gate\'s named commit to the lane that contributed it', { timeout: TIMEOUT }, () => {
@@ -203,7 +203,7 @@ describe('attribution', () => {
     const state = parseState(report(sandbox, 'state.json'), 'state.json')
     expect(state.steps['round:0:trial:lane/y']).toEqual({ kind: 'trial', lanes: ['lane/y'], result: 'unbuildable', failing: [] })
     expect(report(sandbox, 'lane/y.md')).toContain('removing this lane alone')
-    expect(git(sandbox.remote, ['log', '-1', '--format=%s', 'v5'])).toBe('fix: x restores the line\n')
+    expect(git(sandbox.remote, ['log', '-1', '--format=%s', 'main'])).toBe('fix: x restores the line\n')
   })
 
   it('lands nothing when the failure persists with every suspect removed', { timeout: TIMEOUT }, () => {
@@ -262,15 +262,15 @@ describe('lanes set aside', () => {
     sandbox.lane('lane/merged', [{ files: { [B]: 'merged\n' }, message: 'feat: merged' }])
     git(sandbox.root, ['checkout', '-q', 'lane/merged'])
     git(sandbox.root, ['merge', '-q', '--no-ff', '-m', 'merge side', 'lane/side'])
-    git(sandbox.root, ['checkout', '-q', 'v5'])
-    git(sandbox.root, ['branch', 'lane/empty', 'origin/v5'])
+    git(sandbox.root, ['checkout', '-q', 'main'])
+    git(sandbox.root, ['branch', 'lane/empty', 'origin/main'])
     const { code } = runIn(sandbox, start(['lane/first', 'lane/clash', 'lane/merged', 'lane/empty']), [passing])
     expect(code).toBe(0)
     expect(report(sandbox, 'lane/clash.md')).toMatch(/conflicts with the candidate in shared\.txt/)
-    expect(report(sandbox, 'lane/clash.md')).toContain('git fetch origin && git rebase origin/v5')
+    expect(report(sandbox, 'lane/clash.md')).toContain('git fetch origin && git rebase origin/main')
     expect(report(sandbox, 'lane/merged.md')).toContain('holds merge commits')
     expect(report(sandbox, 'lane/empty.md')).toContain('no commit beyond the trunk')
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: first\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: first\nchore: the trunk\n')
   })
 
   it('drops a commit the candidate already holds, and still attributes the lane by its own commits', { timeout: TIMEOUT }, () => {
@@ -280,7 +280,7 @@ describe('lanes set aside', () => {
     const stackedFails: Rule = { check: 'gates:dco', fails: read => text(read, B).includes('stacked') }
     const { code } = runIn(sandbox, start(['lane/base', 'lane/stacked']), [stackedFails])
     expect(code).toBe(0)
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: base\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: base\nchore: the trunk\n')
     expect(report(sandbox, 'lane/stacked.md')).toContain('removing this lane alone')
     const state = parseState(report(sandbox, 'state.json'), 'state.json')
     const stacked = state.steps['lane:lane/stacked']
@@ -319,7 +319,7 @@ describe('gate failures that stop the batch', () => {
     sandbox.lane('lane/one', [{ files: { [A]: 'a2\n' }, message: 'feat: one' }])
     expect(runIn(sandbox, start(['lane/one'], ['--no-land']), [passing], { declined: [{ check: 'tests:docker', reason: 'no Docker engine answers' }, { check: 'tests:web-changed', reason: null }] }).code).toBe(1)
     expect(report(sandbox, 'summary.md')).toContain('tests:docker declined: no Docker engine answers; tests:web-changed declined: no reason given; the merge tier exited 1')
-    git(sandbox.root, ['checkout', '-q', 'v5'])
+    git(sandbox.root, ['checkout', '-q', 'main'])
     expect(runIn(sandbox, start(['lane/one'], ['--no-land']), [passing], { declined: [{ check: 'tests:docker', reason: null }], noReport: true }, 1).code).toBe(1)
     expect(readFileSync(join(batchDirOf(sandbox.root, '20261110-120001'), 'summary.md'), 'utf8')).toContain('(the merge tier exited 1)')
   })
@@ -349,11 +349,11 @@ describe('resumption', () => {
     expect(() => runIn(sandbox, start(['lane/good', 'lane/bad']), [passing, forkRule], { interruptAt: 2 })).toThrow('interrupted')
     const recorded = parseState(report(sandbox, 'state.json'), 'state.json')
     expect(Object.keys(recorded.steps)).toEqual(['lane:lane/good', 'lane:lane/bad', 'round:0:gate'])
-    git(sandbox.root, ['checkout', '-q', 'v5'])
+    git(sandbox.root, ['checkout', '-q', 'main'])
     const resumed = runIn(sandbox, parseOptions(['--resume', ID]), [passing, forkRule])
     expect(resumed.code).toBe(0)
     expect(resumed.fake.pushes).toBe(1)
-    expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: good\nchore: the trunk\n')
+    expect(git(sandbox.remote, ['log', '--format=%s', 'main'])).toBe('feat: good\nchore: the trunk\n')
     const again = runIn(sandbox, parseOptions(['--resume', ID]), [passing, forkRule])
     expect(again.code).toBe(0)
     expect(again.fake.pushes + again.fake.runs.length).toBe(0)
@@ -401,7 +401,7 @@ describe('resumption', () => {
     writeFileSync(path, original)
     sandbox.write({ 'stray.txt': 'x\n' })
     expect(() => runIn(sandbox, parseOptions(['--resume', ID]), [passing])).toThrow(/untracked files remain/)
-    git(sandbox.root, ['checkout', '-q', 'v5'])
+    git(sandbox.root, ['checkout', '-q', 'main'])
     expect(() => runIn(sandbox, parseOptions(['--resume', ID]), [passing])).toThrow(/uncommitted or untracked/)
     writeFileSync(join(sandbox.root, 'stray.txt'), '')
     git(sandbox.root, ['add', 'stray.txt'])
@@ -433,7 +433,7 @@ describe('refusals before anything changes', () => {
     git(sandbox.root, ['checkout', '-q', '--detach'])
     expect(refusal(start(['lane/one'])).code).toBe('detached')
     expect(refusal(start(['lane/one'], ['--trunk', 'missing', '--plan'])).code).toBe('git')
-    expect(git(sandbox.remote, ['branch', '--list']).trim()).toBe('* v5')
+    expect(git(sandbox.remote, ['branch', '--list']).trim()).toBe('* main')
   })
 })
 
@@ -446,7 +446,7 @@ describe('--plan', () => {
     const { code, said, fake } = runIn(sandbox, start(['lane/one', 'lane/shared'], ['--plan']), [])
     expect(code).toBe(0)
     expect(said.join('\n')).toBe([
-      `delorun batch (plan): 2 lane(s) onto origin/v5 at ${sandbox.trunk().slice(0, 12)}`,
+      `delorun batch (plan): 2 lane(s) onto origin/main at ${sandbox.trunk().slice(0, 12)}`,
       '  1. lane/one: 2 commit(s); packages: delorun/apps/a, delorun/apps/b',
       '  2. lane/shared: 1 commit(s); packages: none',
       'suspects by check (merge tier, each lane\'s own changed paths):',
@@ -484,7 +484,7 @@ describe('the invariant: nothing reaches the trunk without the batch\'s own merg
       expect(Object.keys(call.env).filter(name => name.startsWith('LEFTHOOK') || name.startsWith('GIT_CONFIG'))).toEqual([])
     }
     const pushes = fake.calls.filter(call => call.args[0] === 'push')
-    expect(pushes.map(call => call.args)).toEqual([['push', 'origin', `batch/${ID}:refs/heads/v5`]])
+    expect(pushes.map(call => call.args)).toEqual([['push', 'origin', `batch/${ID}:refs/heads/main`]])
     expect(pushes.every(call => call.env['DELORUN_TIER'] === 'merge')).toBe(true)
     expect(fake.runs.every(args => args.includes('--tier') && args[args.indexOf('--tier') + 1] === 'merge')).toBe(true)
   })
@@ -496,7 +496,7 @@ describe('the invariant: nothing reaches the trunk without the batch\'s own merg
     const noLand = runIn(sandbox, start(['lane/bad'], ['--no-land']), [forkRule])
     expect(noLand.code).toBe(1)
     expect(noLand.fake.pushes).toBe(0)
-    git(sandbox.root, ['checkout', '-q', 'v5'])
+    git(sandbox.root, ['checkout', '-q', 'main'])
     const land = runIn(sandbox, start(['lane/bad']), [forkRule], {}, 1)
     expect(land.code).toBe(1)
     expect(land.fake.pushes).toBe(0)
@@ -548,7 +548,7 @@ describe('the gate does not trust the push', () => {
     const record = { tree, base: null, head: commit, rangeBase: null, passedAt: 'now', tier: 'merge', checks: [], scopes: {}, lockfile: 'l', node: process.version, pnpm: 'p', env: {} }
     writeFileSync(treePassPath(dir, tree, process.version), JSON.stringify(record))
     expect(read(commit)).toMatchObject({ tier: 'merge', head: commit })
-    expect(read('v5')).toBeUndefined()
+    expect(read('main')).toBeUndefined()
   })
 })
 
@@ -570,10 +570,10 @@ describe('a batch refuses to start or resume with the hook bypassed', () => {
 
 describe('the command line', () => {
   it('parses lanes, defaults and refuses conflicting or malformed options', () => {
-    expect(parseOptions(['--lanes', 'lane/a, lane/b'])).toEqual({ kind: 'start', lanes: ['lane/a', 'lane/b'], trunk: 'v5', remote: 'origin', land: true, plan: false })
+    expect(parseOptions(['--lanes', 'lane/a, lane/b'])).toEqual({ kind: 'start', lanes: ['lane/a', 'lane/b'], trunk: 'main', remote: 'origin', land: true, plan: false })
     expect(parseOptions(['--lanes', 'x', '--trunk', 'main', '--remote', 'up', '--no-land', '--plan'])).toEqual({ kind: 'start', lanes: ['x'], trunk: 'main', remote: 'up', land: false, plan: true })
     expect(parseOptions(['--resume', ID])).toEqual({ kind: 'resume', id: ID })
-    for (const argv of [['--resume', ID, '--lanes', 'x'], ['--resume', ID, '--trunk', 'v5'], ['--resume', ID, '--remote', 'o'], ['--resume', ID, '--plan'], ['--resume', ID, '--no-land'], ['--resume', 'latest'], [], ['--lanes', ','], ['--lanes', 'x,x'], ['--lanes', 'x', '--trunk=-x'], ['--lanes', 'x', '--remote', '+o'], ['--bogus'], ['positional']]) {
+    for (const argv of [['--resume', ID, '--lanes', 'x'], ['--resume', ID, '--trunk', 'main'], ['--resume', ID, '--remote', 'o'], ['--resume', ID, '--plan'], ['--resume', ID, '--no-land'], ['--resume', 'latest'], [], ['--lanes', ','], ['--lanes', 'x,x'], ['--lanes', 'x', '--trunk=-x'], ['--lanes', 'x', '--remote', '+o'], ['--bogus'], ['positional']]) {
       expect(() => parseOptions(argv)).toThrow(BatchError)
     }
   })

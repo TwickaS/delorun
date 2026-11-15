@@ -54,7 +54,7 @@ A template is a record of how someone uses the harness: the plugins they run, pi
 - Chats, workspaces and attachments are home-wide and shared by every profile.
 - The profile history is upstream's git-backed history over a fixed list of profile files, which Delorun extends with its own records and a copy of the home patch (`delorun/packages/profile-safety/src/files.ts:52-58`).
 - `delorun export` writes chats and workspaces with an empty customisation document, and `delorun import` lists customisation rows and applies none ([C8](../contracts/c08-archive-and-trash.md#customisation-schema)). `delorun import-home` imports a stock DeepSeek Harness home and writes its allow-listed rows into the profile patch.
-- On branches not merged into `v5`: Changes ([design](changes.md)) keeps approved plugins in the profile's `package.json`, but the approved harness files in one home-wide record per runtime; the plugin install check writes one install record per plugin.
+- On branches not merged into `main`: Changes ([design](changes.md)) keeps approved plugins in the profile's `package.json`, but the approved harness files in one home-wide record per runtime; the plugin install check writes one install record per plugin.
 - There is no template file, library or command.
 
 ## The rules

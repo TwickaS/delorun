@@ -157,7 +157,7 @@ export function briefErrors(briefs: readonly Brief[], context: BriefContext): st
 
 /**
  * The issue body that a GitHub issue form submission would produce for a brief: each field under a `###` heading, in
- * the template's order, with the field's tracked references linked to the `v5` branch.
+ * the template's order, with the field's tracked references linked to the `main` branch.
  * @param brief - a parsed brief.
  * @param context - the tree's files and directories.
  * @returns the Markdown body, ending with one newline.

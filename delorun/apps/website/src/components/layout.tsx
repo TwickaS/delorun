@@ -56,7 +56,7 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
           </nav>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <p>
-              {COPY.footer.owner} &middot; <TextLink href={`${GITHUB_URL}/blob/v5/LICENSE`}>{COPY.footer.licence}</TextLink>
+              {COPY.footer.owner} &middot; <TextLink href={`${GITHUB_URL}/blob/main/LICENSE`}>{COPY.footer.licence}</TextLink>
             </p>
             <p className="self-end text-xs opacity-75 sm:self-auto">
               <TextLink href={UPSTREAM_URL}>{COPY.footer.upstream}</TextLink>

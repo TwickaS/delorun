@@ -182,7 +182,7 @@ function issues(repo: Scratch, args: readonly string[], gh: FakeGh): { status: n
 }
 
 describe('issues.ts --dry-run', () => {
-  it('prints each body with its fields under headings in the template order, linked to v5, and exits 0', (test) => {
+  it('prints each body with its fields under headings in the template order, linked to main, and exits 0', (test) => {
     const repo = briefRepo(test)
     const gh = fakeGh(test)
     const result = issues(repo, ['--input', join(repo.root, FIXTURE_PATH), '--dry-run'], gh)
@@ -190,7 +190,7 @@ describe('issues.ts --dry-run', () => {
     const headings = result.output.split('\n').filter(line => line.startsWith('### ')).map(line => line.slice(4))
     expect(headings).toEqual([...BRIEF_FIELDS])
     expect(result.output).toContain('== Fixture: a brief that passes the generator ==')
-    expect(result.output).toContain('[`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md)')
+    expect(result.output).toContain('[`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)')
   })
 
   it('exits 1 and prints no body when a brief has a problem', (test) => {

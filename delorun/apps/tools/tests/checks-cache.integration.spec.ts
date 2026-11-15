@@ -57,12 +57,12 @@ function git(cwd: string, args: readonly string[]): string {
 }
 
 /**
- * A repository on branch `v5` with two tracked input trees and a lockfile, committed once.
+ * A repository on branch `main` with two tracked input trees and a lockfile, committed once.
  * @returns its root.
  */
 function makeRepo(): string {
   const root = tempDir('delorun-cache-repo-')
-  git(root, ['init', '-q', '-b', 'v5'])
+  git(root, ['init', '-q', '-b', 'main'])
   mkdirSync(join(root, 'src'))
   mkdirSync(join(root, 'lib'))
   writeFileSync(join(root, 'src', 'a.txt'), 'a\n')
@@ -281,17 +281,17 @@ describe('how a run uses the cache', () => {
 })
 
 describe('the pre-push base', () => {
-  it('measures a new branch from its merge base with v5, and a pushed branch from its remote tip, and runs the full gate when asked', () => {
+  it('measures a new branch from its merge base with main, and a pushed branch from its remote tip, and runs the full gate when asked', () => {
     const root = makeRepo()
     git(root, ['checkout', '-q', '-b', 'feature'])
     writeFileSync(join(root, 'src', 'a.txt'), 'feature\n')
     git(root, ['commit', '-q', '-am', 'feature'])
     const head = git(root, ['rev-parse', 'HEAD']).trim()
-    const base = git(root, ['rev-parse', 'v5']).trim()
-    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${ZERO}\n`, 'v5', false)).toBe(base)
-    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${base}\n`, 'v5', false)).toBe(base)
-    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${ZERO}\n`, 'v5', true)).toBeUndefined()
-    expect(prePushBase(root, `refs/heads/other ${base} refs/heads/other ${ZERO}\n`, 'v5', false)).toBeUndefined()
+    const base = git(root, ['rev-parse', 'main']).trim()
+    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${ZERO}\n`, 'main', false)).toBe(base)
+    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${base}\n`, 'main', false)).toBe(base)
+    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${ZERO}\n`, 'main', true)).toBeUndefined()
+    expect(prePushBase(root, `refs/heads/other ${base} refs/heads/other ${ZERO}\n`, 'main', false)).toBeUndefined()
   })
 })
 
@@ -329,7 +329,7 @@ describe('the gate tier of a run', () => {
   const push = (remoteRef: string, local = sha): string => `refs/heads/x ${local} ${remoteRef} ${zero}\n`
 
   it('is the merge tier for a push of the trunk, alone or with another ref, and the lane tier for any other branch', () => {
-    expect(TRUNK_REF).toBe('refs/heads/v5')
+    expect(TRUNK_REF).toBe('refs/heads/main')
     expect(pushTier(push('refs/heads/lane'), {})).toBe('lane')
     expect(pushTier(push(TRUNK_REF), {})).toBe('merge')
     expect(pushTier(push('refs/heads/lane') + push(TRUNK_REF), {})).toBe('merge')

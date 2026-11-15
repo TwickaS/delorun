@@ -23,7 +23,7 @@ export const ALLOWED_SIGNERS_PATH = 'delorun/release/allowed-signers'
 export const PRODUCTION_KEYS_REPOSITORY_PATH = 'delorun/release/production-keys.json'
 
 /** The release branch a release commit must be on, unless the signer names another. */
-export const DEFAULT_RELEASE_BRANCH = 'origin/v5'
+export const DEFAULT_RELEASE_BRANCH = 'origin/main'
 
 /** How long one git invocation may run. */
 const GIT_TIMEOUT_MS = 30_000

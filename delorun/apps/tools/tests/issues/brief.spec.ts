@@ -171,13 +171,13 @@ describe('the rendered issue body', () => {
     expect(body.endsWith('\n')).toBe(true)
   })
 
-  it('links each tracked path of a field to its place on the v5 branch', () => {
+  it('links each tracked path of a field to its place on the main branch', () => {
     const [brief] = parseBriefs(FIXTURE_TEXT).briefs
     expect(brief).toBeDefined()
     if (brief === undefined) return
     const body = renderBody(brief, CONTEXT)
-    expect(body).toContain('The root [`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md)')
-    expect(body).toContain('[`delorun/apps/tools/tests/issues/fixtures/`](https://github.com/Delo-Run/delorun/tree/v5/delorun/apps/tools/tests/issues/fixtures)')
+    expect(body).toContain('The root [`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)')
+    expect(body).toContain('[`delorun/apps/tools/tests/issues/fixtures/`](https://github.com/Delo-Run/delorun/tree/main/delorun/apps/tools/tests/issues/fixtures)')
     expect(body).toContain('`node_modules/.bin/tsx delorun/apps/tools/src/issues/issues.ts --input')
   })
 })

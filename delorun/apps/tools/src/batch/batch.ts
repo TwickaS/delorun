@@ -4,7 +4,7 @@
  * integrator worktree:
  *
  * ```sh
- * node_modules/.bin/tsx delorun/apps/tools/src/batch/batch.ts --lanes <branch>[,<branch>...] [--trunk v5] [--remote origin] [--no-land]
+ * node_modules/.bin/tsx delorun/apps/tools/src/batch/batch.ts --lanes <branch>[,<branch>...] [--trunk main] [--remote origin] [--no-land]
  * node_modules/.bin/tsx delorun/apps/tools/src/batch/batch.ts --lanes <branch>[,<branch>...] --plan
  * node_modules/.bin/tsx delorun/apps/tools/src/batch/batch.ts --resume <batch id>
  * ```
@@ -116,7 +116,7 @@ export function parseOptions(argv: readonly string[]): BatchOptions {
   const lanes = (values.lanes ?? '').split(',').map(lane => lane.trim()).filter(lane => lane.length > 0)
   if (lanes.length === 0) throw new BatchError('usage', '--lanes names at least one lane branch, or --resume names a batch')
   if (new Set(lanes).size !== lanes.length) throw new BatchError('usage', `--lanes names a lane twice: ${lanes.join(',')}`)
-  const trunk = values.trunk ?? 'v5'
+  const trunk = values.trunk ?? 'main'
   const remote = values.remote ?? 'origin'
   for (const name of [trunk, remote]) if (!REF_NAME.test(name)) throw new BatchError('usage', `--trunk and --remote take plain names, got ${name}`)
   return { kind: 'start', lanes, trunk, remote, land: !values['no-land'], plan: values.plan }

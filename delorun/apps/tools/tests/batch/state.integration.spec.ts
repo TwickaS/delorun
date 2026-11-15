@@ -15,7 +15,7 @@ const SHA = 'a'.repeat(40)
 const state: BatchState = {
   version: STATE_VERSION,
   id: '20261110-120000',
-  trunk: 'v5',
+  trunk: 'main',
   remote: 'origin',
   land: true,
   start: SHA,

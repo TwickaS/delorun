@@ -33,8 +33,8 @@ describe('a commit message', () => {
   })
 
   it('ignores git\'s comment lines and exempts merges and reverts from the subject rule', () => {
-    expect(messageErrors(`# Please enter the commit message\ndocs: a page\n\n${SIGNED}\n# On branch v5`)).toEqual([])
-    expect(messageErrors(`Merge branch 'v5'\n\n${SIGNED}`)).toEqual([])
+    expect(messageErrors(`# Please enter the commit message\ndocs: a page\n\n${SIGNED}\n# On branch main`)).toEqual([])
+    expect(messageErrors(`Merge branch 'main'\n\n${SIGNED}`)).toEqual([])
     expect(messageErrors(`Revert "feat: a thing"\n\n${SIGNED}`)).toEqual([])
   })
 })

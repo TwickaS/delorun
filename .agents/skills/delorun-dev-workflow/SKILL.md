@@ -19,7 +19,7 @@ Choose the evidence with `dsh-pre-push-checks`, then run it through Delorun's ch
 
 | Situation | Command |
 | --- | --- |
-| Before a commit or push, in seconds | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --preflight`: the commit standard, the changelog fragment, whitespace (`gates/whitespace.ts --base origin/v5 --fix` repairs it), secrets and identifiers, the JSDoc rules, and the changed packages' typecheck |
+| Before a commit or push, in seconds | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --preflight`: the commit standard, the changelog fragment, whitespace (`gates/whitespace.ts --base origin/main --fix` repairs it), secrets and identifiers, the JSDoc rules, and the changed packages' typecheck |
 | While working | `pnpm check`: the agent tier, which leaves out the replays, the web lane and the Docker lane |
 | The selection and its reasons, without running it | `pnpm check -- --plan` |
 | One package or file | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts <path>…` |

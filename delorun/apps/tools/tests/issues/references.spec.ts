@@ -19,7 +19,7 @@ describe('public URLs', () => {
   it('accepts https URLs on the public repository and the documentation host', () => {
     expect(referenceErrors('See https://github.com/Delo-Run/delorun/issues/12 and https://github.com/Delo-Run/delorun.', context)).toEqual([])
     expect(referenceErrors('[guide](https://docs.delorun.com/guide/trust)', context)).toEqual([])
-    expect(urlProblem('https://github.com/Delo-Run/delorun/blob/v5/delorun/docs/contracts/README.md#c16')).toBeUndefined()
+    expect(urlProblem('https://github.com/Delo-Run/delorun/blob/main/delorun/docs/contracts/README.md#c16')).toBeUndefined()
   })
 
   it('refuses plain http, another repository, a look-alike repository, credentials and a port', () => {
@@ -105,7 +105,7 @@ describe('backticked paths', () => {
 
   it('does not treat branch names, commands, labels, scoped package names and identifiers as paths', () => {
     expect(referenceErrors('`node_modules/.bin/tsx`', context)).toEqual([])
-    expect(referenceErrors('`origin/v5` and `wave0/issues` and `kind/feature` and `area/tools`', context)).toEqual([])
+    expect(referenceErrors('`origin/main` and `wave0/issues` and `kind/feature` and `area/tools`', context)).toEqual([])
     expect(referenceErrors('`pnpm --filter @delorun/tools check` and `@delorun/tools/src/x.ts`', context)).toEqual([])
     expect(referenceErrors('`ctx.effect()` and `Branded<B>`', context)).toEqual([])
   })
@@ -170,35 +170,35 @@ describe('machine paths', () => {
   })
 
   it('leaves plain slash-separated words alone', () => {
-    expect(referenceErrors('Use and/or here, and v5/main as a label.', context)).toEqual([])
+    expect(referenceErrors('Use and/or here, and left/right as a label.', context)).toEqual([])
   })
 })
 
 describe('linking a rendered brief', () => {
-  it('links a tracked file to its blob and a tracked directory to its tree on the v5 branch', () => {
-    expect(LINK_BRANCH).toBe('v5')
+  it('links a tracked file to its blob and a tracked directory to its tree on the main branch', () => {
+    expect(LINK_BRANCH).toBe('main')
     expect(linkReferences('See `AGENTS.md` and `delorun/apps/tools/src/issues/`.', context)).toBe(
-      'See [`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md) and [`delorun/apps/tools/src/issues/`](https://github.com/Delo-Run/delorun/tree/v5/delorun/apps/tools/src/issues).',
+      'See [`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md) and [`delorun/apps/tools/src/issues/`](https://github.com/Delo-Run/delorun/tree/main/delorun/apps/tools/src/issues).',
     )
   })
 
   it('links a code span of a tracked path with a leading ./ to the path without it', () => {
-    expect(linkReferences('`./AGENTS.md`', context)).toBe('[`./AGENTS.md`](https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md)')
+    expect(linkReferences('`./AGENTS.md`', context)).toBe('[`./AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)')
   })
 
   it('rewrites a relative link target and keeps its fragment, and does the same for reference definitions and attributes', () => {
     expect(linkReferences('[brief](delorun/apps/tools/src/issues/brief.ts#L1)', context)).toBe(
-      '[brief](https://github.com/Delo-Run/delorun/blob/v5/delorun/apps/tools/src/issues/brief.ts#L1)',
+      '[brief](https://github.com/Delo-Run/delorun/blob/main/delorun/apps/tools/src/issues/brief.ts#L1)',
     )
-    expect(linkReferences('[ref]: AGENTS.md', context)).toBe('[ref]: https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md')
+    expect(linkReferences('[ref]: AGENTS.md', context)).toBe('[ref]: https://github.com/Delo-Run/delorun/blob/main/AGENTS.md')
     expect(linkReferences('<img src="delorun/docs/contracts/">', context)).toBe(
-      '<img src="https://github.com/Delo-Run/delorun/tree/v5/delorun/docs/contracts">',
+      '<img src="https://github.com/Delo-Run/delorun/tree/main/delorun/docs/contracts">',
     )
   })
 
   it('rewrites the target of a link whose label holds a code span, without wrapping the label again', () => {
     expect(linkReferences('[`AGENTS.md`](AGENTS.md)', context)).toBe(
-      '[`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/v5/AGENTS.md)',
+      '[`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)',
     )
   })
 

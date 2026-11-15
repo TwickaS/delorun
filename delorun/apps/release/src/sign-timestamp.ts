@@ -24,7 +24,7 @@
  * re-signed manifest of the same release replaces it after a targets-key rotation. The private key is read from the
  * environment variable `DELORUN_TIMESTAMP_KEY` as PKCS #8 PEM, the workflow environment's secret; it is never a file or
  * an argument. It must be a production key: the command refuses a key that `delorun/release/production-keys.json`, as
- * `--release-branch` (`origin/v5` by default) of the repository it runs in commits it, does not list, so an empty
+ * `--release-branch` (`origin/main` by default) of the repository it runs in commits it, does not list, so an empty
  * registry stops every signing. The command writes the new state and then the timestamp, each through a temporary file renamed into
  * place, so no timestamp exists that the state does not record.
  *

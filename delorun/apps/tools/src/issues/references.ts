@@ -11,7 +11,7 @@
  *   directory.
  *
  * Other tokens, such as branch names, commands and identifiers, are not paths and pass. A rendered brief links each
- * tracked path it names to its place on the `v5` branch of the public repository.
+ * tracked path it names to its place on the `main` branch of the public repository.
  *
  * @module @delorun/tools/issues/references
  */
@@ -23,7 +23,7 @@ export const GITHUB_REPOSITORY_PATH = '/Delo-Run/delorun'
 export const DOCS_HOST = 'docs.delorun.com'
 
 /** The branch whose files a rendered brief links to. */
-export const LINK_BRANCH = 'v5'
+export const LINK_BRANCH = 'main'
 
 /** The private plan directory; no brief names it anywhere. */
 const PRIVATE_PLANS = 'delorun/docs/plans'

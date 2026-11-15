@@ -88,7 +88,7 @@ function treeOf(webSpecs: readonly WebSpec[]): ForkTree {
  */
 function planFor(paths: readonly string[], webSpecs: readonly WebSpec[]): Planned | undefined {
   const tree = treeOf(webSpecs)
-  return select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths }, only: [], skip: [] }).find(check => check.id === WEB_CHECK_ID)
+  return select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'main', paths }, only: [], skip: [] }).find(check => check.id === WEB_CHECK_ID)
 }
 
 describe('the web lane inventory', () => {
@@ -121,7 +121,7 @@ describe('the web lane inventory', () => {
 describe('the web lane selection', () => {
   it('is left to the merge tier: the agent tier omits it, and the merge tier plans it', () => {
     const tree = treeOf(capped(1))
-    const plan = (tier: 'agent' | 'merge') => select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: ['packages/client/ui-cap/src/index.ts'] }, tier, only: [], skip: [] }).map(check => check.id)
+    const plan = (tier: 'agent' | 'merge') => select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'main', paths: ['packages/client/ui-cap/src/index.ts'] }, tier, only: [], skip: [] }).map(check => check.id)
     expect(plan('merge')).toContain(WEB_CHECK_ID)
     expect(plan('agent')).not.toContain(WEB_CHECK_ID)
   })
@@ -265,11 +265,11 @@ describe('the web lane in the merge tier', () => {
 
   it('plans the bounded selection as the lane command in the merge tier, and says what it left out', () => {
     const tree = treeOf(wide())
-    const planned = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: WIDE_CHANGE }, tier: 'merge', only: [], skip: [] }).find(check => check.id === WEB_CHECK_ID)
+    const planned = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'main', paths: WIDE_CHANGE }, tier: 'merge', only: [], skip: [] }).find(check => check.id === WEB_CHECK_ID)
     expect(planned?.declined).toBeUndefined()
     expect(planned?.command.slice(2)).toHaveLength(WEB_SPEC_CAP)
     expect(planned?.bounded).toContain('left out')
-    const agent = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: WIDE_CHANGE }, tier: 'agent', only: [WEB_CHECK_ID], skip: [] }).find(check => check.id === WEB_CHECK_ID)
+    const agent = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'main', paths: WIDE_CHANGE }, tier: 'agent', only: [WEB_CHECK_ID], skip: [] }).find(check => check.id === WEB_CHECK_ID)
     expect(agent?.declined).toContain('above the cap')
   })
 })

@@ -94,7 +94,7 @@ export interface SigningRequest {
   /** Whether the holder states that the release, a patch version, is the first of its major and minor; see `PatchRuleRequest.firstOfLine` in `patch-rule.ts`. */
   readonly firstOfLine: boolean
   /**
-   * The branch the release commit must be on, as a revision of {@link SigningRequest.repository}, such as `origin/v5`;
+   * The branch the release commit must be on, as a revision of {@link SigningRequest.repository}, such as `origin/main`;
    * its commits of `delorun/release/allowed-signers` and `delorun/release/production-keys.json` list the tag signers and the
    * production keys.
    */

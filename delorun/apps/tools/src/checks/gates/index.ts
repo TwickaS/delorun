@@ -1,7 +1,7 @@
 /**
  * The gates of the check runner, one entry per gate. Each command runs from the repository root and exits 0 when the
  * gate passes. A staged gate accepts paths as trailing arguments, which the runner appends at pre-commit. A range gate
- * compares the commits from `origin/v5` to HEAD; a CI run that checks another range passes its own `--base`.
+ * compares the commits from `origin/main` to HEAD; a CI run that checks another range passes its own `--base`.
  *
  * @module @delorun/tools/checks/gates
  */
@@ -80,7 +80,7 @@ export const FUNDAMENTALS_INPUTS: readonly string[] = [
 ]
 
 /** The integration branch that pull requests merge into; the range gates compare against it by default. */
-export const RANGE_BASE = 'origin/v5'
+export const RANGE_BASE = 'origin/main'
 
 /**
  * The repository gates the runner schedules, in catalogue order: Delorun's own, then upstream's ({@link UPSTREAM_GATES}). A
@@ -190,7 +190,7 @@ export const GATES: readonly GateCheck[] = withDebt([
   },
   {
     id: 'gates:whitespace',
-    title: 'No whitespace error, and exactly one final newline, in the files that differ from the merge base with origin/v5',
+    title: 'No whitespace error, and exactly one final newline, in the files that differ from the merge base with origin/main',
     command: [TSX, `${GATE_DIR}/whitespace.ts`, '--base', RANGE_BASE],
     history: true,
   },

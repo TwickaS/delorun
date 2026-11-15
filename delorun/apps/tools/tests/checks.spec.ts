@@ -162,10 +162,10 @@ describe('selection', () => {
     const checks = catalog(tree, HOST)
     const docker = checks.find(check => check.id === 'tests:docker')
     expect(docker?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.docker.config.ts', '--passWithNoTests'])
-    const reached = select(checks, tree, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] } }).find(check => check.id === 'tests:docker')
+    const reached = select(checks, tree, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] } }).find(check => check.id === 'tests:docker')
     expect(reached?.reason).toBe('Docker specs of a package a change reaches (delorun/packages/providers)')
     expect(reached?.scope).toEqual(['delorun/apps/control/', 'delorun/packages/providers/', 'delorun/packages/client-status/'])
-    expect(ids(select(checks, tree, { ...NONE, changed: { base: 'v5', paths: ['delorun/apps/cell/src/index.ts'] } }))).not.toContain('tests:docker')
+    expect(ids(select(checks, tree, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/cell/src/index.ts'] } }))).not.toContain('tests:docker')
   })
 
   it('passes spec paths to the fork suite as they are', () => {
@@ -176,7 +176,7 @@ describe('selection', () => {
   })
 
   it('runs the fork suite on the packages a change reaches, by directory, dependents included, and never with vitest\'s related-file selection', () => {
-    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] } })
+    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] } })
     const fork = plan.find(check => check.id === 'tests:fork')
     expect(fork?.command.slice(-3)).toEqual(['delorun/apps/control/', 'delorun/packages/providers/', 'delorun/packages/client-status/'])
     expect(fork?.command).not.toContain('--changed')
@@ -186,23 +186,23 @@ describe('selection', () => {
   })
 
   it('runs every fork spec for a fork-wide change, such as the checks runner\'s own sources', () => {
-    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/apps/tools/src/checks/plan.ts'] } })
+    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/tools/src/checks/plan.ts'] } })
     expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--maxWorkers=12', '--passWithNoTests'])
     expect(plan.find(check => check.id === 'tests:fork:integration')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork-integration', `--maxWorkers=${String(FORK_INTEGRATION_WORKERS)}`, '--passWithNoTests'])
   })
 
   it('checks every program when code outside every package changes, such as a build script', () => {
-    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['scripts/build.ts'] } })
+    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['scripts/build.ts'] } })
     expect(ids(plan)).toEqual(expect.arrayContaining(['typecheck:delorun:control', 'typecheck:delorun:cell', 'typecheck:delorun:providers', 'typecheck:delorun:client-status']))
     expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-2)).toEqual(['--maxWorkers=12', '--passWithNoTests'])
   })
 
   it('reaches only the fork packages that depend on a changed upstream package, directly or through upstream dependents', () => {
     const tree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delorun/providers' ? { ...pkg, upstreamDependencies: ['@deepseek-ai/dsh-agent-loop'] } : pkg) }
-    const plan = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: ['packages/core/session/src/index.ts'] } })
+    const plan = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'main', paths: ['packages/core/session/src/index.ts'] } })
     expect(ids(plan)).toEqual(expect.arrayContaining(['typecheck:upstream', 'typecheck:delorun:providers', 'typecheck:delorun:control', 'typecheck:delorun:client-status-tests', 'tests:fork', 'tests:upstream-changed']))
     expect(ids(plan)).not.toContain('typecheck:delorun:cell')
-    const leaf = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: ['packages/shell/shell/src/index.ts'] } })
+    const leaf = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'main', paths: ['packages/shell/shell/src/index.ts'] } })
     expect(ids(leaf)).toEqual(expect.arrayContaining(['typecheck:upstream', 'tests:upstream-changed']))
     expect(ids(leaf).filter(id => id.startsWith('typecheck:delorun'))).toEqual([])
     expect(ids(leaf)).not.toContain('tests:fork')
@@ -225,7 +225,7 @@ describe('selection', () => {
     expect(check).toMatchObject({ group: 'tests', tiers: [], needs: ['generate:native'], cpus: 8, command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/checks/moved-clock.ts', '--workers=8'], budget: { memoryGiB: 0.5, perWorker: true } })
     expect(catalog(TREE, { ...HOST, workers: { ...HOST.workers, fork: 3 } }).find(candidate => candidate.id === 'tests:moved-clock')?.command.at(-1)).toBe('--workers=3')
     expect(ids(select(CHECKS, TREE, NONE))).not.toContain('tests:moved-clock')
-    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/update/tests/rollback.spec.ts'] } }))).not.toContain('tests:moved-clock')
+    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/update/tests/rollback.spec.ts'] } }))).not.toContain('tests:moved-clock')
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['tests:moved-clock'] }))).toEqual(['generate:native', 'tests:moved-clock'])
   })
 
@@ -249,7 +249,7 @@ describe('selection', () => {
 describe('the gate tiers', () => {
   const MERGE_ONLY = ['tests:closure', 'tests:snapshots', 'parity-replay', 'parity-replay:control']
   const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delorun/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
-  const upstreamChange = { base: 'v5', paths: ['packages/core/session/src/index.ts'] }
+  const upstreamChange = { base: 'main', paths: ['packages/core/session/src/index.ts'] }
 
   it('marks the replays, the web lane, the closure lane and the Docker lane merge-only, and no other check', () => {
     const marked = catalog(dockerTree, HOST).filter(check => check.mergeOnly === true).map(check => check.id)
@@ -258,7 +258,7 @@ describe('the gate tiers', () => {
 
   it('leaves each merge-only check out of the agent tier and names it, and the merge tier selects it', () => {
     const checks = catalog(dockerTree, HOST)
-    const changed = { base: 'v5', paths: ['packages/core/session/src/index.ts', 'delorun/packages/providers/src/index.ts'] }
+    const changed = { base: 'main', paths: ['packages/core/session/src/index.ts', 'delorun/packages/providers/src/index.ts'] }
     const agent = ids(select(checks, dockerTree, { ...NONE, changed, tier: 'agent' }))
     const merge = ids(select(checks, dockerTree, { ...NONE, changed, tier: 'merge' }))
     for (const id of [...MERGE_ONLY, 'tests:docker']) {
@@ -279,23 +279,23 @@ describe('the gate tiers', () => {
 
   it('keeps the mechanical rules, the changed packages\' typecheck and their own specs in the lane tier, and names the rest', () => {
     const checks = catalog(dockerTree, { ...HOST, gates: [gate('gates:commits', { history: true }), gate('gates:docs', { tier: 'agent' })] })
-    const changed = { base: 'v5', paths: ['delorun/packages/providers/src/index.ts', 'packages/core/session/src/index.ts'] }
+    const changed = { base: 'main', paths: ['delorun/packages/providers/src/index.ts', 'packages/core/session/src/index.ts'] }
     const lane = select(checks, dockerTree, { ...NONE, changed, tier: 'lane' })
     expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'jsdoc', 'typecheck:upstream', 'typecheck:delorun:providers', 'generate:native', 'tests:fork', 'tests:fork:integration'])
     for (const id of ['tests:fork', 'tests:fork:integration']) expect(lane.find(check => check.id === id)?.scope).toEqual(['delorun/packages/providers/'])
     expect(lane.find(check => check.id === 'typecheck:upstream')?.reason).toBe('needed by typecheck:delorun:providers')
     expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'typecheck:delorun:control', 'typecheck:delorun:control-tests', 'typecheck:delorun:client-status', 'typecheck:delorun:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:closure', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
     // Without a changed package the lane tier runs no typecheck of Delorun's programs and no specs.
-    expect(ids(select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['README.md'] }, tier: 'lane' }))).toEqual(['boundary', 'gates:commits'])
+    expect(ids(select(checks, dockerTree, { ...NONE, changed: { base: 'main', paths: ['README.md'] }, tier: 'lane' }))).toEqual(['boundary', 'gates:commits'])
     const program = CHECKS.find(check => check.id === 'typecheck:delorun:control')
     expect(program === undefined ? undefined : laneKeeps({ ...program, command: ['tsc'] }, new Set(['delorun/apps/control']))).toBe(false)
   })
 
   it('selects no fork spec for documentation outside the packages, and still selects a package\'s specs for any file in it', () => {
     for (const tier of ['lane', 'agent', 'merge'] as const) {
-      const docs = ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/docs/guide/a.md', 'delorun/changelog/unreleased/a.md'] }, tier }))
+      const docs = ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/docs/guide/a.md', 'delorun/changelog/unreleased/a.md'] }, tier }))
       expect(docs.filter(id => id.startsWith('tests:'))).toEqual([])
-      const readme = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/providers/README.md'] }, tier })
+      const readme = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/providers/README.md'] }, tier })
       expect(readme.find(check => check.id === 'tests:fork')?.scope).toContain('delorun/packages/providers/')
     }
   })
@@ -308,7 +308,7 @@ describe('the gate tiers', () => {
   it('runs a gate in the tiers its own tier allows, and has a gate that reads built output wait for a stale build', () => {
     const gates = [gate('gates:quick'), gate('gates:slow', { tier: 'agent' }), gate('gates:heavy', { tier: 'merge', builtArtifacts: true })]
     const checks = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'], gates })
-    const changed = { base: 'v5', paths: ['README.md'] }
+    const changed = { base: 'main', paths: ['README.md'] }
     const tiers = Object.fromEntries((['lane', 'agent', 'merge'] as const).map(tier => [tier, ids(select(checks, TREE, { ...NONE, changed, tier })).filter(id => id.startsWith('gates:'))]))
     expect(tiers).toEqual({ lane: ['gates:quick'], agent: ['gates:quick', 'gates:slow'], merge: ['gates:quick', 'gates:slow', 'gates:heavy'] })
     expect(checks.find(check => check.id === 'gates:heavy')).toMatchObject({ mergeOnly: true, needs: ['build:artifacts'] })
@@ -357,7 +357,7 @@ describe('the pre-commit tier', () => {
   })
 
   it('leaves the whitespace check out of every other tier', () => {
-    expect(ids(select(GATED, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] } }))).not.toContain('whitespace:staged')
+    expect(ids(select(GATED, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] } }))).not.toContain('whitespace:staged')
     expect(ids(select(GATED, TREE, NONE))).toEqual(expect.arrayContaining(['gates:secrets', 'gates:docs']))
   })
 })
@@ -445,7 +445,7 @@ describe('the documentation website check', () => {
 })
 
 describe('the closure lane', () => {
-  const merge = (paths: readonly string[]): Planned[] => select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths }, tier: 'merge' })
+  const merge = (paths: readonly string[]): Planned[] => select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths }, tier: 'merge' })
 
   it('builds and boots the closure through its own module, after the builds it reads', () => {
     const lane = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }).find(check => check.id === 'tests:closure')
@@ -458,7 +458,7 @@ describe('the closure lane', () => {
     expect(ids(merge(['delorun/apps/cli/src/main.ts']))).toContain('tests:closure')
     expect(ids(merge(['pnpm-lock.yaml']))).toContain('tests:closure')
     expect(ids(merge(['delorun/docs/contracts/c19-home-process.md']))).not.toContain('tests:closure')
-    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delorun/apps/cli/src/main.ts'] }, tier: 'agent' }))).not.toContain('tests:closure')
+    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/cli/src/main.ts'] }, tier: 'agent' }))).not.toContain('tests:closure')
   })
 
   it('declines the lane on a host other than linux-x64 as a host limit, naming it, and keeps it on linux-x64', () => {
@@ -488,7 +488,7 @@ describe('the closure lane', () => {
 describe('the Docker lane', () => {
   const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delorun/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
   const checks = catalog(dockerTree, HOST)
-  const changed = { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] }
+  const changed = { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] }
   const planned = (): Planned[] => select(checks, dockerTree, { ...NONE, changed, tier: 'merge' })
 
   it('requires the Docker specs of the lane through the environment its command runs under', () => {
@@ -504,7 +504,7 @@ describe('the Docker lane', () => {
     const up = declineUnansweredDocker(planned(), () => undefined).find(check => check.id === 'tests:docker')
     expect(up?.declined).toBeUndefined()
     asked = 0
-    const without = select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['delorun/apps/cell/src/index.ts'] }, tier: 'merge' })
+    const without = select(checks, dockerTree, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/cell/src/index.ts'] }, tier: 'merge' })
     expect(declineUnansweredDocker(without, down)).toEqual(without)
     expect(asked).toBe(0)
   })
@@ -566,7 +566,7 @@ async function runDeclined(plan: Planned[]): Promise<{ results: Result[] }> {
 describe('the journey', () => {
   const journeyTree: ForkTree = { ...TREE, journey: true }
   const checks = catalog(journeyTree, HOST)
-  const merge = (paths: readonly string[]): Planned[] => select(checks, journeyTree, { ...NONE, changed: { base: 'v5', paths }, tier: 'merge' })
+  const merge = (paths: readonly string[]): Planned[] => select(checks, journeyTree, { ...NONE, changed: { base: 'main', paths }, tier: 'merge' })
 
   it('is offered only in a tree that holds its spec, as a merge-only check that runs the spec alone under the Docker configuration', () => {
     expect(CHECKS.some(check => check.id === 'journey')).toBe(false)
@@ -587,7 +587,7 @@ describe('the journey', () => {
     expect(merge(['delorun/packages/providers/src/index.ts']).find(check => check.id === 'journey')?.reason).toBe('Delorun code the installed release runs changed (delorun/packages/providers/src/index.ts)')
     expect(merge(['packages/core/session/src/index.ts']).find(check => check.id === 'journey')?.reason).toBe('upstream-owned code the installed release runs changed (packages/core/session/src/index.ts)')
     expect(ids(merge(['delorun/docs/contracts/c03-update-report.md', 'docs/architecture.md']))).not.toContain('journey')
-    const changed = { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] }
+    const changed = { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] }
     expect(ids(select(checks, journeyTree, { ...NONE, changed, tier: 'agent' }))).not.toContain('journey')
     expect(leftForMerge(checks, journeyTree, { ...NONE, changed, tier: 'agent' })).toContain('journey')
     expect(ids(select(checks, journeyTree, { ...NONE, only: ['journey'], tier: 'agent' }))).toEqual(['journey'])
@@ -595,7 +595,7 @@ describe('the journey', () => {
 
   it('is declined for a limit of this host while no engine answers, with the Docker lane on one probe', async () => {
     const tree: ForkTree = { ...journeyTree, packages: journeyTree.packages.map(pkg => pkg.name === '@delorun/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
-    const plan = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: ['delorun/packages/providers/src/index.ts'] }, tier: 'merge' })
+    const plan = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'main', paths: ['delorun/packages/providers/src/index.ts'] }, tier: 'merge' })
     let asked = 0
     const declined = declineUnansweredDocker(plan, () => { asked += 1; return 'no engine' })
     expect(asked).toBe(1)
@@ -694,17 +694,17 @@ describe('the changed-upstream lane', () => {
     it('leaves the dependents over the budget to the merge tier in the agent tier, and names them', () => {
       expect(upstreamSpecDirs(wide, change, 'agent')).toEqual({ dirs: ['packages/client/connection/'], dependents: false, left: ['@deepseek-ai/dsh-api-gateway', '@deepseek-ai/dsh-web-app'] })
       const tree: ForkTree = { ...TREE, upstream: wide }
-      const selection: Selection = { ...NONE, changed: { base: 'v5', paths: change }, tier: 'agent' }
+      const selection: Selection = { ...NONE, changed: { base: 'main', paths: change }, tier: 'agent' }
       expect(dependentsLeftForMerge(tree, selection)).toEqual(['specs of the direct dependents of a security-ledger package (@deepseek-ai/dsh-api-gateway, @deepseek-ai/dsh-web-app)'])
       expect(dependentsLeftForMerge(tree, { ...selection, tier: 'merge' })).toEqual([])
-      expect(dependentsLeftForMerge(tree, { ...selection, changed: { base: 'v5', paths: ['packages/client/connection/README.md', 'delorun/apps/control/src/index.ts'] } })).toEqual([])
+      expect(dependentsLeftForMerge(tree, { ...selection, changed: { base: 'main', paths: ['packages/client/connection/README.md', 'delorun/apps/control/src/index.ts'] } })).toEqual([])
       expect(dependentsLeftForMerge(tree, { ...NONE, tier: 'agent' })).toEqual([])
     })
 
     it('says in the plan why the lane runs the dependents or leaves them', () => {
       const tree: ForkTree = { ...TREE, upstream: wide }
       const checks = catalog(tree, HOST)
-      const lane = (tier: 'agent' | 'merge'): Planned | undefined => select(checks, tree, { ...NONE, changed: { base: 'v5', paths: change }, tier }).find(check => check.id === 'tests:upstream-changed')
+      const lane = (tier: 'agent' | 'merge'): Planned | undefined => select(checks, tree, { ...NONE, changed: { base: 'main', paths: change }, tier }).find(check => check.id === 'tests:upstream-changed')
       expect(lane('merge')?.scope).toEqual(['packages/client/connection/', 'packages/api/gateway/', 'packages/bundle/web-app/'])
       expect(lane('merge')?.reason).toBe('3 upstream package(s): the changed ones and the direct dependents of a security-ledger package, whatever their spec count')
       expect(lane('agent')?.scope).toEqual(['packages/client/connection/'])
@@ -717,7 +717,7 @@ describe('the changed-upstream lane', () => {
       const small = wide.map(pkg => pkg.name === '@deepseek-ai/dsh-api-gateway' ? { ...pkg, specs: 20 } : pkg.name === '@deepseek-ai/dsh-web-app' ? { ...pkg, specs: 20 } : pkg)
       expect(upstreamSpecDirs(small, change, 'agent')).toEqual({ dirs: ['packages/client/connection/', 'packages/api/gateway/', 'packages/bundle/web-app/'], dependents: true })
       const tree: ForkTree = { ...TREE, upstream: plain }
-      const lane = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: change }, tier: 'merge' }).find(check => check.id === 'tests:upstream-changed')
+      const lane = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'main', paths: change }, tier: 'merge' }).find(check => check.id === 'tests:upstream-changed')
       expect(lane?.reason).toBe('the changed upstream package(s) only; their direct dependents exceed 150 spec files and run in upstream\'s full suite')
     })
 

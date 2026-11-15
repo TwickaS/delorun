@@ -21,7 +21,7 @@
  * changelog refuses unless `--first-of-line` states that it is the first release of that line.
  * Before reading the rebuild it refuses a targets key that `delorun/release/production-keys.json` does not list, and a
  * release tag that is not an annotated tag for its own name, signed with an SSH key that `delorun/release/allowed-signers`
- * lists, each file read as `--release-branch` (`origin/v5` by default; fetch it first) commits it, never from the
+ * lists, each file read as `--release-branch` (`origin/main` by default; fetch it first) commits it, never from the
  * working tree: both files list nothing until the owner adds the keys, so signing refuses until then. It also refuses
  * a tagged commit that is not on the release branch, and a draft whose `install.sh` or `install.ps1` is not a zero-length
  * placeholder, because the install scripts are not in the rebuild comparison yet. After checking the draft's files it

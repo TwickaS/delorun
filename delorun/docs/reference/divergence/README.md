@@ -43,7 +43,7 @@ Tooling writes entries and digests, not people or agents. `node_modules/.bin/tsx
 
 A file whose change moves a gate is a `security` entry, whether it is source, a spec or a page; no path rule replaces a security entry, and a path rule that also matches one leaves it an entry. A `security` entry records `sha256`, the SHA-256 digest of its file, which binds the lead's verdict to the content reviewed; it names no feature. Only a `security` entry may list `nonModelVisibleHunks`, the digests of diff hunks the lead reviewed as not model-visible inside a statement that registers a model-visible contribution, which `ledger-record.ts --non-model-visible-hunk` writes and the [`parity-switches` check](../../../apps/tools/README.md#what-parity-switches-detects) passes one hunk per record. A `delorun-feature` or `generic-fix` entry names the `feature` it serves and records no digest. A non-security entry that a path rule also covers is refused as listed and ruled.
 
-Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case id. The table lists the ids, what each covers and the Delorun package, command or lane on `v5` that uses it. Features that serve only parked packages are the first candidates to cut when an upstream merge costs more than the owner accepts; `host-qualified-keys` is the one such feature.
+Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case id. The table lists the ids, what each covers and the Delorun package, command or lane on `main` that uses it. Features that serve only parked packages are the first candidates to cut when an upstream merge costs more than the owner accepts; `host-qualified-keys` is the one such feature.
 
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case
 | `home-process-signals` | `runProfile`'s `signals` and `failLoud` options, which leave the termination-signal handlers and the last-resort error listeners to a caller that owns them, and its `prepare` option, which registers a caller's listeners before the first row mounts | shipped `cli` (the home process, and its secret-field refusals) |
 | `host-qualified-keys` | Browser storage keys qualified by the host (C10) | parked `contract-host-qualified-keys` only |
 | `instruction-consent` | Instruction files and skill roots named for the consent check | shipped `plugin-instruction-consent` |
-| `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delorun consumer on `v5` |
+| `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delorun consumer on `main` |
 | `parity-replay` | The snapshot harness applies the parity overlay (C16) | the parity replay lane of `tools` |
 | `permission-defaults` | Whether a Session holds no permission preset | shipped `plugin-permission-defaults` |
 | `plugin-manager-improvements` | Plugin-manager diagnostic reasons, opening a plugin's page, and the build-script approval steps `operations` exports for a launcher's command line | shipped `cli` (`delorun plugin`) |

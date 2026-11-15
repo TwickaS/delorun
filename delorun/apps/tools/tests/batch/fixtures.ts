@@ -59,7 +59,7 @@ export interface CommitSpec {
   readonly author?: string
 }
 
-/** A bare remote and an integrator clone on `v5`. */
+/** A bare remote and an integrator clone on `main`. */
 export interface Sandbox {
   readonly remote: string
   readonly root: string
@@ -99,7 +99,7 @@ function cloneConfig(hooks: string): string[] {
 }
 
 /**
- * A bare remote whose `v5` holds two Delorun apps and a shared file, and an integrator clone on `v5`.
+ * A bare remote whose `main` holds two Delorun apps and a shared file, and an integrator clone on `main`.
  * @returns the sandbox.
  */
 export function makeSandbox(): Sandbox {
@@ -108,9 +108,9 @@ export function makeSandbox(): Sandbox {
   const root = join(base, 'integrator')
   const hooks = join(base, 'hooks')
   mkdirSync(hooks)
-  git(base, ['init', '-q', '--bare', '-b', 'v5', remote])
+  git(base, ['init', '-q', '--bare', '-b', 'main', remote])
   git(base, ['clone', '-q', ...cloneConfig(hooks), remote, root])
-  git(root, ['checkout', '-q', '-b', 'v5'])
+  git(root, ['checkout', '-q', '-b', 'main'])
   // The installer's hooks directory, which the batch requires core.hooksPath to name.
   mkdirSync(join(root, '.git', 'dsh-hooks'))
   git(root, ['config', 'core.hooksPath', join(root, '.git', 'dsh-hooks')])
@@ -123,13 +123,13 @@ export function makeSandbox(): Sandbox {
   write(root, { '.gitignore': 'node_modules/\n', 'delorun/apps/a/src/a.ts': 'a\n', 'delorun/apps/b/src/b.ts': 'b\n', 'shared.txt': 'one\ntwo\nthree\n' })
   git(root, ['add', '-A'])
   git(root, ['commit', '-q', '-m', 'chore: the trunk'])
-  git(root, ['push', '-q', 'origin', 'v5'])
+  git(root, ['push', '-q', 'origin', 'main'])
   let others = 0
   return {
     remote,
     root,
     write: files => { write(root, files) },
-    lane: (name, commits, from = 'origin/v5') => {
+    lane: (name, commits, from = 'origin/main') => {
       git(root, ['checkout', '-q', '-b', name, from])
       for (const commit of commits) {
         write(root, commit.files)
@@ -138,20 +138,20 @@ export function makeSandbox(): Sandbox {
         git(root, ['commit', '-q', '-m', commit.message], { GIT_AUTHOR_NAME: author, GIT_AUTHOR_EMAIL: 'lane@example.com', GIT_AUTHOR_DATE: '2026-01-02T03:04:05Z' })
       }
       const tip = git(root, ['rev-parse', 'HEAD']).trim()
-      git(root, ['checkout', '-q', 'v5'])
+      git(root, ['checkout', '-q', 'main'])
       return tip
     },
     moveTrunk: files => {
       others += 1
       const other = join(base, `other-${String(others)}`)
-      git(base, ['clone', '-q', ...cloneConfig(hooks), '-b', 'v5', remote, other])
+      git(base, ['clone', '-q', ...cloneConfig(hooks), '-b', 'main', remote, other])
       write(other, files)
       git(other, ['add', '-A'])
       git(other, ['commit', '-q', '-m', 'chore: elsewhere'])
-      git(other, ['push', '-q', 'origin', 'v5'])
+      git(other, ['push', '-q', 'origin', 'main'])
       return git(other, ['rev-parse', 'HEAD']).trim()
     },
-    trunk: () => git(remote, ['rev-parse', 'v5']).trim(),
+    trunk: () => git(remote, ['rev-parse', 'main']).trim(),
   }
 }
 

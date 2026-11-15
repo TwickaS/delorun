@@ -51,7 +51,7 @@ function ids(plan: readonly Planned[]): string[] {
  * @returns the plan's check ids, in plan order.
  */
 function selected(paths: readonly string[]): string[] {
-  return ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths } }))
+  return ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths } }))
 }
 
 describe('the native system addon in the check graph', () => {

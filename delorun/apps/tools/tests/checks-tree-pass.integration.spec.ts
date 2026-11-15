@@ -51,20 +51,20 @@ function git(cwd: string, args: readonly string[]): string {
 }
 
 /**
- * A repository on branch `v5` with a lockfile and an ignored `node_modules`, committed once. Its `origin/v5` ref names
+ * A repository on branch `main` with a lockfile and an ignored `node_modules`, committed once. Its `origin/main` ref names
  * that commit, as a clone has after a fetch, which the range gates compare HEAD with.
  * @returns its root.
  */
 function makeRepo(): string {
   const root = tempDir('delorun-tree-repo-')
-  git(root, ['init', '-q', '-b', 'v5'])
+  git(root, ['init', '-q', '-b', 'main'])
   mkdirSync(join(root, 'src'))
   writeFileSync(join(root, '.gitignore'), 'node_modules/\n')
   writeFileSync(join(root, 'src', 'a.txt'), 'a\n')
   writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
   git(root, ['add', '-A'])
   git(root, ['commit', '-q', '-m', 'init'])
-  git(root, ['update-ref', 'refs/remotes/origin/v5', 'HEAD'])
+  git(root, ['update-ref', 'refs/remotes/origin/main', 'HEAD'])
   return root
 }
 
@@ -110,7 +110,7 @@ const PASS = 'process.exit(0)'
 async function runAndRecord(root: string, plan: Planned[], facts: RunFacts): Promise<TreePassWrite> {
   const before = treeState(root)
   const results = await runPlan(plan, { root, env: process.env, logDir: tempDir('delorun-tree-logs-'), cpus: 4, memoryBytes: 1024 ** 3, bail: false, report: () => undefined })
-  return recordTreePass(treesOf(root), { before, after: treeState(root), base: treeOfRef(root, 'origin/v5'), plan, results }, facts, new Date('2026-11-06T07:00:00.000Z'))
+  return recordTreePass(treesOf(root), { before, after: treeState(root), base: treeOfRef(root, 'origin/main'), plan, results }, facts, new Date('2026-11-06T07:00:00.000Z'))
 }
 
 /**
@@ -187,7 +187,7 @@ describe('the tree pass record', () => {
     expect(written.recorded).toBe(true)
     expect(readTreePass(treesOf(root), treeOf(root), 'v24.9.0')).toEqual({
       tree: treeOf(root),
-      base: treeOfRef(root, 'origin/v5'),
+      base: treeOfRef(root, 'origin/main'),
       head: headOf(root),
       rangeBase: headOf(root),
       passedAt: '2026-11-06T07:00:00.000Z',
@@ -203,7 +203,7 @@ describe('the tree pass record', () => {
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
   })
 
-  it('covers a fast-forward of v5 to the commit that passed on its branch, whatever the branch was called', async () => {
+  it('covers a fast-forward of main to the commit that passed on its branch, whatever the branch was called', async () => {
     const root = makeRepo()
     git(root, ['checkout', '-q', '-b', 'wave0/feature'])
     writeFileSync(join(root, 'src', 'a.txt'), 'feature\n')
@@ -211,7 +211,7 @@ describe('the tree pass record', () => {
     const plan = [check('a', PASS), check('boundary', PASS, { history: true })]
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
-    git(root, ['checkout', '-q', 'v5'])
+    git(root, ['checkout', '-q', 'main'])
     git(root, ['merge', '-q', '--ff-only', 'wave0/feature'])
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
   })
@@ -222,7 +222,7 @@ describe('the tree pass record', () => {
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
     git(root, ['commit', '-q', '--allow-empty', '-m', 'the same tree with other history'])
-    expect(lookup(root, plan, facts)).toEqual({ hit: false, reason: 'boundary reads commits, and HEAD or origin/v5 differs from the record' })
+    expect(lookup(root, plan, facts)).toEqual({ hit: false, reason: 'boundary reads commits, and HEAD or origin/main differs from the record' })
     expect(lookup(root, [check('a', PASS)], facts)).toMatchObject({ hit: true })
   })
 
@@ -232,7 +232,7 @@ describe('the tree pass record', () => {
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
     git(root, ['commit', '-q', '--allow-empty', '-m', 'the range base moves'])
-    git(root, ['update-ref', 'refs/remotes/origin/v5', 'HEAD'])
+    git(root, ['update-ref', 'refs/remotes/origin/main', 'HEAD'])
     git(root, ['reset', '-q', '--hard', 'HEAD~1'])
     expect(lookup(root, plan, facts)).toMatchObject({ hit: false, reason: expect.stringContaining('boundary reads commits') })
     expect(lookup(root, [check('a', PASS)], facts)).toMatchObject({ hit: true })
@@ -349,8 +349,8 @@ describe('the tree pass record', () => {
   })
 })
 
-describe('the v5 fast-forward after a branch push', () => {
-  it('is covered by the record a branch push left for the same tree, measured from the merge base with origin/v5', async () => {
+describe('the main fast-forward after a branch push', () => {
+  it('is covered by the record a branch push left for the same tree, measured from the merge base with origin/main', async () => {
     const root = makeRepo()
     const base = headOf(root)
     git(root, ['checkout', '-q', '-b', 'feature'])
@@ -360,15 +360,15 @@ describe('the v5 fast-forward after a branch push', () => {
     writeFileSync(join(root, 'src', 'a.txt'), 'second\n')
     git(root, ['commit', '-q', '-am', 'second'])
     const head = headOf(root)
-    // The branch was pushed once at `previousTip`; the gate measures from the v5 merge base, not that tip.
-    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${previousTip}\n`, 'v5', false)).toBe(base)
+    // The branch was pushed once at `previousTip`; the gate measures from the main merge base, not that tip.
+    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${previousTip}\n`, 'main', false)).toBe(base)
     const plan = [check('a', PASS), check('boundary', PASS, { history: true })]
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
 
-    git(root, ['checkout', '-q', 'v5'])
+    git(root, ['checkout', '-q', 'main'])
     git(root, ['merge', '-q', '--ff-only', 'feature'])
-    expect(prePushBase(root, `refs/heads/v5 ${head} refs/heads/v5 ${base}\n`, 'v5', false)).toBe(base)
+    expect(prePushBase(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, 'main', false)).toBe(base)
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
     expect(lookup(root, [...plan, check('extra', PASS)], facts)).toEqual({ hit: false, reason: 'the record has no extra' })
   })

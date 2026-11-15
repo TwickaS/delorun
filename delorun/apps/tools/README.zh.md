@@ -74,7 +74,7 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --tag <tag>
 
 ## 门禁
 
-[`src/checks/gates/index.ts`](src/checks/gates/index.ts) 将每个门禁列为检查运行器从仓库根目录执行的一条命令。命令以 0 退出时，该门禁通过。暂存门禁在末尾接受路径参数，运行器在 pre-commit 时追加暂存的路径。范围门禁比较 `origin/v5` 至 HEAD 之间的提交，除非传入 `--base <rev>`。
+[`src/checks/gates/index.ts`](src/checks/gates/index.ts) 将每个门禁列为检查运行器从仓库根目录执行的一条命令。命令以 0 退出时，该门禁通过。暂存门禁在末尾接受路径参数，运行器在 pre-commit 时追加暂存的路径。范围门禁比较 `origin/main` 至 HEAD 之间的提交，除非传入 `--base <rev>`。
 
 | 门禁 | 暂存 | 拒绝或检查的内容 |
 |---|---|---|
@@ -88,7 +88,7 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --tag <tag>
 | `gates:doc-times` | 否 | 范围新增的 `delorun/` 下 Markdown 文件中，任何一行都不得含有截止日期、季度、排期估计或时间承诺。 |
 | `gates:docs` | 否 | 对 `delorun/docs/` 执行上游的双语配对、字数预算、硬换行、相对链接与 TypeScript 代码块检查。 |
 
-[门禁工作流](../../../.github/workflows/gates.yml)在拉取请求以及向 `v5` 和 `main` 的推送上运行每个门禁，并以每个拉取请求的基准或每次推送的前一个顶端作为范围。其个人数据步骤仅依据已提交的哈希，比对范围新增的行与提交元数据。
+[门禁工作流](../../../.github/workflows/gates.yml)在拉取请求以及向 `main` 的推送上运行每个门禁，并以每个拉取请求的基准或每次推送的前一个顶端作为范围。其个人数据步骤仅依据已提交的哈希，比对范围新增的行与提交元数据。
 
 ## 工作流
 
@@ -162,7 +162,7 @@ brief 存在问题的情形如下：
 
 除 `You own` 之外，路径依据 `git ls-files` 检查，因此 brief 引用某个文件之前，该文件必须已加入 git 索引（暂存区）。
 `You own` 中的新路径，若其在工作树中最近的已存在父目录未被跟踪，同样会被拒绝。
-渲染后的正文会把每个已跟踪路径链接到公开仓库 `v5` 分支上的对应位置：文件链接到 `blob`，目录链接到 `tree`。
+渲染后的正文会把每个已跟踪路径链接到公开仓库 `main` 分支上的对应位置：文件链接到 `blob`，目录链接到 `tree`。
 brief 中原有的链接也按同样方式改写。
 运行命令的代码片段与围栏代码块保持原样。
 在 `--create` 之前，先在仓库中创建标签与里程碑，因为 `gh issue create` 遇到仓库中未定义的标签或里程碑会失败。
@@ -170,7 +170,7 @@ brief 中原有的链接也按同样方式改写。
 已知限制：
 
 - `gh` 2.45 没有设置 GitHub 内置 Issue Type 的参数，因此 `--create` 创建的 Issue 不带 Issue Type。
-- 链接指向 `v5` 分支，因此只存在于 brief 自身分支上的路径，要等该分支合并后才能解析。
+- 链接指向 `main` 分支，因此只存在于 brief 自身分支上的路径，要等该分支合并后才能解析。
 - 标题检查最多读取 1000 个 Issue，列表达到该数量时会拒绝运行。
 
 `tests/issues/` 下的测试规范在临时仓库中运行该工具，并将假的 `gh` 置于 `PATH` 之首；没有任何规范会访问 GitHub。
@@ -205,12 +205,12 @@ brief 中原有的链接也按同样方式改写。
 
 `pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。网页通道（`tests:web-changed`，[`src/checks/web.ts`](src/checks/web.ts)）运行变更所涉及的、`apps/web/tests` 下的 Chromium 端到端规范。当非文档路径位于 `packages/client` 或 `apps/web` 之下，或位于清单中某个规范所导入的包之下时，变更便涉及该通道。规范自身的文件有变更，或它映射到有变更的包，则该规范被选中；变更的规范文件只选中它自己，不会使其所在的包视为有变更。规范映射到其导入所触及的包：包名导入映射到该包，相对导入映射到其解析路径所在的包，因此每个规范都通过其辅助导入映射到 `apps/web`。若某个规范的导入都不映射任何包，则按文件名映射到目录名是该文件名主干中以连字符分隔的连续片段的包。没有规范命名能映射到某个包的路由或客户端界面，因此不映射页面目标。选中的规范超过 12 个时，检查被拒绝而不是部分运行：检查报告数量，并由 CI 的网页快照门禁运行整个清单。既未指定变更也未指定目标的运行会选中整个清单，因此同一上限会拒绝它。该通道先以 `DSH_BUILD_CLIENT_PROFILE=official` 运行 `pnpm run build:artifacts`，然后在上游的 `vitest.web.config.ts` 下逐一运行选中的规范，设置 `DSH_SNAPSHOT=replay`，且不带 `DEEPSEEK_API_KEY`。其预算为 5 GiB、8 个 CPU、独占，以及 1200 秒的挂钟时间，运行超出时命令会报告。该通道只运行 Chromium。有十一个规范在内部启动 WebKit，且没有能单独运行其 Chromium 部分的开关，因此在本机具备 WebKit 的系统库之前，该通道会排除这十一个文件；CI 会以 WebKit 运行它们。该通道不声明输入，因此只要变更涉及它便会运行。fork 通道将 `*.docker.spec.ts` 文件留给 Docker 通道。构建后包的规范、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
 
-每个检查都继承运行器的环境，但不含 git 的仓库变量；在 WSL 上，还不含 `PATH` 中的 Windows 目录与 Windows 侧的变量，其中包括 `NoDefaultCurrentDirectoryInExePath`（[`src/checks/machine.ts`](src/checks/machine.ts)）。若某次运行所规划的检查会运行 pnpm，或规划了 `tests:upstream-changed`（其规范自行启动 pnpm），则该次运行会为每个检查提供 `pnpm run` 为脚本提供的环境：固定版本的 pnpm 置于 `PATH` 首位并作为 `npm_execpath`，且设定 `pnpm_config_verify_deps_before_run=false`。上游的整个单元测试套件不属于任何通道；绿色基线按[对等基线](../../docs/reference/parity-baseline.zh.md#green-base-on-v5)中的运行步骤与前置条件运行它。
+每个检查都继承运行器的环境，但不含 git 的仓库变量；在 WSL 上，还不含 `PATH` 中的 Windows 目录与 Windows 侧的变量，其中包括 `NoDefaultCurrentDirectoryInExePath`（[`src/checks/machine.ts`](src/checks/machine.ts)）。若某次运行所规划的检查会运行 pnpm，或规划了 `tests:upstream-changed`（其规范自行启动 pnpm），则该次运行会为每个检查提供 `pnpm run` 为脚本提供的环境：固定版本的 pnpm 置于 `PATH` 首位并作为 `npm_execpath`，且设定 `pnpm_config_verify_deps_before_run=false`。上游的整个单元测试套件不属于任何通道；绿色基线按[对等基线](../../docs/reference/parity-baseline.zh.md#green-base-on-main)中的运行步骤与前置条件运行它。
 
 在仓库根目录运行的命令：
 
 ```sh
-pnpm check                       # --changed: what changed since v5, and the checks it needs
+pnpm check                       # --changed: what changed since main, and the checks it needs
 pnpm check:full                  # the full gate, with no pass cache
 pnpm check -- --plan             # the selection with each reason, cache state, expected time and budget; runs nothing
 node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --list        # the whole catalogue
@@ -219,13 +219,13 @@ node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts delorun/apps/tools   
 node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --only tests:web-changed apps/web/tests/forge-panel.e2e.ts    # the web lane for named specs, after the official client build
 ```
 
-选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `v5`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`、`parity`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
+选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `main`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`、`parity`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
 
 声明了输入的检查，每个键只通过一次。键由以下内容构成：其输入文件的 git blob id 排序列表的 sha256（已跟踪且未修改的文件取其 blob id；已修改、已删除或未跟踪的文件取其内容哈希）、锁文件的 blob id、Node 与 pnpm 版本、命令、其预算条目，以及其列出的环境变量的取值。键相同的已存储通过结果会报告为 `cached pass (<键前缀>)`，该检查不再运行。以下情况下缓存关闭：`--no-cache`、`pnpm check:full`、带 `DELORUN_FULL_GATE=1` 的推送，以及设置了 `CI` 时。未声明输入的检查总是运行：两项回放、产物构建、原生插件与暂存的空白检查。
 
-推送前运行若通过了它所选的每个检查，便以 HEAD 的树与 Node 主版本为键写入一份树通过记录 `<git 公共目录>/delorun-checks/trees/<tree>-node<major>.json`（见 [`src/checks/tree-pass.ts`](src/checks/tree-pass.ts)）。克隆的每个工作树共享该目录，因此一个工作树中的通过记录可服务于另一工作树中的同一棵树，而一个 Node 主版本上的通过记录绝不服务于另一个主版本。之后对同一棵树的运行，若该记录覆盖了它所选的每个检查，便报告该通过且不启动任何检查：记录须包含该检查，该检查的范围须落在记录的范围之内（收窄套件所运行的包或规范），且锁文件、Node 与 pnpm 版本以及检查所列的环境变量全部一致。`boundary` 检查与范围门禁读取 HEAD 的历史以及从 `origin/v5` 到 HEAD 的提交，这些内容不由树决定，因此它们只在相同的 HEAD 提交与 `origin/v5` 下才被覆盖。分支推送从其远程提交与其和 `origin/v5` 的合并基二者中较早者开始度量，所以把 `v5` 快进到它所检查过的提交，只要 `origin/v5` 未移动，便不启动任何检查；树相同而历史不同的另一个提交，则会重新运行读取历史的检查。工作树不干净、`--no-cache`、`CI` 与 `DELORUN_FULL_GATE=1` 既不读取也不写入记录。被记录覆盖的运行在机器范围的锁之前即作答，因此不会等待本机上正在运行的门禁。
+推送前运行若通过了它所选的每个检查，便以 HEAD 的树与 Node 主版本为键写入一份树通过记录 `<git 公共目录>/delorun-checks/trees/<tree>-node<major>.json`（见 [`src/checks/tree-pass.ts`](src/checks/tree-pass.ts)）。克隆的每个工作树共享该目录，因此一个工作树中的通过记录可服务于另一工作树中的同一棵树，而一个 Node 主版本上的通过记录绝不服务于另一个主版本。之后对同一棵树的运行，若该记录覆盖了它所选的每个检查，便报告该通过且不启动任何检查：记录须包含该检查，该检查的范围须落在记录的范围之内（收窄套件所运行的包或规范），且锁文件、Node 与 pnpm 版本以及检查所列的环境变量全部一致。`boundary` 检查与范围门禁读取 HEAD 的历史以及从 `origin/main` 到 HEAD 的提交，这些内容不由树决定，因此它们只在相同的 HEAD 提交与 `origin/main` 下才被覆盖。分支推送从其远程提交与其和 `origin/main` 的合并基二者中较早者开始度量，所以把 `main` 快进到它所检查过的提交，只要 `origin/main` 未移动，便不启动任何检查；树相同而历史不同的另一个提交，则会重新运行读取历史的检查。工作树不干净、`--no-cache`、`CI` 与 `DELORUN_FULL_GATE=1` 既不读取也不写入记录。被记录覆盖的运行在机器范围的锁之前即作答，因此不会等待本机上正在运行的门禁。
 
-安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delorun/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交与其和 `origin/v5` 的合并基二者中较早者以来的改动（新分支在没有 `origin/v5` 时，则是自其与 `v5` 的合并基以来的改动）。`DELORUN_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELORUN_FULL_GATE=1 git push` 运行完整门禁。在分支推送之后以快进方式合并，不会重新运行门禁。`commit-msg` 钩子对每条提交消息运行 `check-commits.ts --message <file>`。
+安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delorun/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交与其和 `origin/main` 的合并基二者中较早者以来的改动（新分支在没有 `origin/main` 时，则是自其与 `main` 的合并基以来的改动）。`DELORUN_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELORUN_FULL_GATE=1 git push` 运行完整门禁。在分支推送之后以快进方式合并，不会重新运行门禁。`commit-msg` 钩子对每条提交消息运行 `check-commits.ts --message <file>`。
 
 报告与日志位于 `node_modules/.cache/delorun-checks/` 下：`report.json` 记录每个检查的状态、是否由通过缓存提供、原因、日志、耗时与内存峰值；`logs/<check>.log` 保存完整输出；`pass/` 为通过缓存，树通过记录位于 git 公共目录中，由各工作树共享；`durations.json` 记录每个检查最近一次的耗时，用于安排下一次运行的顺序；`tsbuildinfo/` 保存增量类型检查的状态。机器范围的锁使第二次运行等待第一次结束。
 

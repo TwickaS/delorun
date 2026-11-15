@@ -3,7 +3,7 @@
 # Actions does not run on this repository, so the hooks are the checks a
 # change gets: the commit runs the staged gates, the commit message is checked
 # against the commit standard, and the push runs what changed since the remote
-# branch's tip, or a new branch's merge base with v5, which already passed the
+# branch's tip, or a new branch's merge base with main, which already passed the
 # gate. DELORUN_FULL_GATE=1 runs the whole gate. DELORUN_PUSH_SKIP names checks or
 # groups the push leaves out, such as tests:snapshots.
 pre-commit:

@@ -9,7 +9,7 @@ const SHA = '0123456789abcdef0123456789abcdef01234567'
 const summary: BatchSummary = {
   id: '20261110-120000',
   remote: 'origin',
-  trunk: 'v5',
+  trunk: 'main',
   start: SHA,
   included: [],
   setAside: [],
@@ -22,7 +22,7 @@ describe('setAsideReport', () => {
   it('names each reason and the rebase that reproduces it', () => {
     expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'conflict', commit: SHA, paths: ['a', 'b'] }, round: 0 })).toContain('Set aside: commit 0123456789ab conflicts with the candidate in a, b.')
     expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'conflict', commit: SHA, paths: ['a'] }, round: 1 })).toContain('when the candidate was rebuilt without the faulted lanes in a')
-    expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'merge-commits', commits: [SHA] }, round: 0 })).toContain('git fetch origin && git rebase origin/v5')
+    expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'merge-commits', commits: [SHA] }, round: 0 })).toContain('git fetch origin && git rebase origin/main')
     expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'no-commits' }, round: 0 })).not.toContain('git rebase')
     expect(setAsideReport(summary, { lane: 'l', reason: { kind: 'pick-failed', commit: SHA, detail: 'error: x' }, round: 0 })).toContain('git cherry-pick failed on 0123456789ab: error: x.')
   })
@@ -54,7 +54,7 @@ describe('faultReport', () => {
 
 describe('outcomeLine and summaryText', () => {
   const outcomes: [Outcome, string][] = [
-    [{ kind: 'landed', commit: SHA }, 'landed: origin/v5 moved from 0123456789ab to 0123456789ab'],
+    [{ kind: 'landed', commit: SHA }, 'landed: origin/main moved from 0123456789ab to 0123456789ab'],
     [{ kind: 'passed', commit: SHA }, 'nothing was pushed (--no-land)'],
     [{ kind: 'trunk-moved', detail: 'rejected' }, 'moved while the batch ran'],
     [{ kind: 'gate-error', detail: 'boom' }, 'rerun with --resume 20261110-120000'],
@@ -77,11 +77,11 @@ describe('outcomeLine and summaryText', () => {
 
 describe('planText', () => {
   it('prints none for a plan without suspects', () => {
-    expect(planText('origin', 'v5', SHA, [])).toBe('delorun batch (plan): 0 lane(s) onto origin/v5 at 0123456789ab\nsuspects by check (merge tier, each lane\'s own changed paths):\n  none\n')
+    expect(planText('origin', 'main', SHA, [])).toBe('delorun batch (plan): 0 lane(s) onto origin/main at 0123456789ab\nsuspects by check (merge tier, each lane\'s own changed paths):\n  none\n')
   })
 
   it('marks a lane with merge commits as refused', () => {
     const lane = { name: 'm', tip: SHA, base: SHA, commits: [SHA, SHA], merges: [SHA] }
-    expect(planText('origin', 'v5', SHA, [{ lane, packages: [], checks: ['x'] }])).toContain('  1. m: 2 commit(s); packages: none; refused: it holds merge commits\n')
+    expect(planText('origin', 'main', SHA, [{ lane, packages: [], checks: ['x'] }])).toContain('  1. m: 2 commit(s); packages: none; refused: it holds merge commits\n')
   })
 })

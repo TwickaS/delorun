@@ -11,10 +11,10 @@ describe('assertGated', () => {
     [['push', '--force', 'origin', 'x']],
     [['push', '-f', 'origin', 'x']],
     [['push', '--force-with-lease', 'origin', 'x']],
-    [['push', '--force-with-lease=v5:abc', 'origin', 'x']],
+    [['push', '--force-with-lease=main:abc', 'origin', 'x']],
     [['push', '--force-if-includes', 'origin', 'x']],
     [['push', '--no-verify', 'origin', 'x']],
-    [['push', 'origin', '+batch/1:refs/heads/v5']],
+    [['push', 'origin', '+batch/1:refs/heads/main']],
     [['--changed', '--tier', 'agent']],
     [['--changed', '--tier=agent']],
     [['--changed', '--tier', 'lane']],
@@ -52,7 +52,7 @@ describe('assertGated', () => {
 
   it('lets the merge tier and ordinary git through', () => {
     expect(() => { assertGated(['--changed', '--tier', 'merge'], { DELORUN_TIER: 'merge' }) }).not.toThrow()
-    expect(() => { assertGated(['push', 'origin', 'batch/1:refs/heads/v5'], {}) }).not.toThrow()
+    expect(() => { assertGated(['push', 'origin', 'batch/1:refs/heads/main'], {}) }).not.toThrow()
     expect(() => { assertGated(['--tier'], {}) }).not.toThrow()
     expect(() => { assertGated(['-c', 'user.name=x', 'commit'], { LEFTHOOK: '1', GIT_DIR: '.git' }) }).not.toThrow()
     expect(() => { assertGated(['commit'], { LEFTHOOK: 'true' }) }).not.toThrow()
@@ -69,10 +69,10 @@ describe('processPorts', () => {
     expect(exec).toHaveBeenLastCalledWith('git', ['status'], { cwd: '/repo', env: { PATH: '/bin' }, output: 'capture' })
     expect(ports.checks(['--changed'])).toBe(0)
     expect(exec).toHaveBeenLastCalledWith(TSX, [RUN_CHECKS, '--changed'], { cwd: '/repo', env: { PATH: '/bin' }, output: 'show' })
-    ports.push('origin', 'batch/1:refs/heads/v5')
-    expect(exec).toHaveBeenLastCalledWith('git', ['push', 'origin', 'batch/1:refs/heads/v5'], { cwd: '/repo', env: { PATH: '/bin', DELORUN_TIER: 'merge' }, output: 'show' })
+    ports.push('origin', 'batch/1:refs/heads/main')
+    expect(exec).toHaveBeenLastCalledWith('git', ['push', 'origin', 'batch/1:refs/heads/main'], { cwd: '/repo', env: { PATH: '/bin', DELORUN_TIER: 'merge' }, output: 'show' })
     exec.mockClear()
-    expect(() => ports.push('origin', '+batch/1:refs/heads/v5')).toThrow(BatchError)
+    expect(() => ports.push('origin', '+batch/1:refs/heads/main')).toThrow(BatchError)
     expect(() => ports.git(['push', '--force'])).toThrow(BatchError)
     expect(() => ports.checks(['--tier', 'agent'])).toThrow(BatchError)
     expect(exec).not.toHaveBeenCalled()

@@ -117,7 +117,7 @@ describe('a run of a unitised suite', { timeout: 30_000 }, () => {
    */
   function makeRepo(): { root: string, fake: string, log: string } {
     const root = tempDir('delorun-units-repo-')
-    git(root, ['init', '-q', '-b', 'v5'])
+    git(root, ['init', '-q', '-b', 'main'])
     for (const dir of [...SPEC_DIRS, 'packages/x/u', 'packages/x/v', 'delorun/docs']) {
       mkdirSync(join(root, dir), { recursive: true })
       writeFileSync(join(root, dir, 'index.ts'), `export const at = '${dir}'\n`)
