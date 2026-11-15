@@ -48,6 +48,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
   const [seeded, setSeeded] = useState(false)
   const [index, setIndex] = useState(0)
+  // A provider whose key failed and is tried again on its own; the walk then returns to the summary.
+  const [only, setOnly] = useState<string | undefined>()
   const [outcomes, setOutcomes] = useState<Readonly<Record<string, Outcome>>>({})
   // Coming back to the step starts from the cards, whatever phase it was left in.
   useEffect(() => { guide.setProvidersPhase('landing') }, [guide])
@@ -64,6 +66,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     setSeeded(true)
   }, [cards, seeded])
   const walk = cards?.filter(card => ticked.has(card.provider)) ?? []
+  const queue = only === undefined ? walk : walk.filter(card => card.provider === only)
 
   const finishWalk = (): void => {
     guide.testKeys()
@@ -71,8 +74,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
   const settle = (card: ProviderCard, outcome: Outcome): void => {
     setOutcomes(held => ({ ...held, [card.provider]: outcome }))
-    if (index + 1 < walk.length) setIndex(index + 1)
-    else finishWalk()
+    if (index + 1 < queue.length) setIndex(index + 1)
+    else { setOnly(undefined); finishWalk() }
   }
 
   const labels = { more: t('more'), less: t('less') }
@@ -95,13 +98,21 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
   if (phase === 'summary') {
     const rows = walk.map(card => ({ card, outcome: outcomes[card.provider] ?? 'skipped' }))
+    const anyWorks = rows.some(({ outcome }) => outcome === 'connected')
     return (
       <div className={shared.stack}>
-        <p className={shared.lead}>{t('providers.summary.lead')}</p>
+        <p className={shared.lead}>{t(anyWorks ? 'providers.summary.lead' : 'providers.summary.none')}</p>
         <ul className={shared.cards} aria-label={t('providers.summary.label')}>
           {rows.map(({ card, outcome }) => (
             <li key={card.provider}>
-              <Card title={card.name} labels={labels} action={<span className={outcome === 'connected' ? shared.added : css.skipped}>{outcome === 'connected' ? <span aria-hidden="true">✓ </span> : null}{t(`providers.outcome.${outcome}`)}</span>} />
+              <Card title={card.name} labels={labels} action={<span className={outcome === 'connected' ? shared.added : css.skipped}>{outcome === 'connected' ? <span aria-hidden="true">✓ </span> : null}{t(`providers.outcome.${outcome}`)}</span>}>
+                {outcome === 'failed' && (
+                  <StateLine tone="error" action={{ label: t('providers.tryAgain'), onClick: () => { setOnly(card.provider); setIndex(0); guide.setProvidersPhase('walk') } }}>
+                    {t('providers.failedHelp', { name: card.name })}
+                    {card.keyPage !== undefined && <> <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a></>}
+                  </StateLine>
+                )}
+              </Card>
             </li>
           ))}
         </ul>
@@ -109,11 +120,11 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       </div>
     )
   }
-  if (phase === 'walk' && walk[index] !== undefined) {
-    const card = walk[index]
+  if (phase === 'walk' && queue[index] !== undefined) {
+    const card = queue[index]
     return (
-      <WalkScreen key={card.provider} card={card} services={services} place={{ k: index + 1, n: walk.length }}
-        onBack={() => { if (index > 0) setIndex(index - 1); else guide.setProvidersPhase('landing') }}
+      <WalkScreen key={card.provider} card={card} services={services} place={{ k: index + 1, n: queue.length }}
+        onBack={() => { if (index > 0) setIndex(index - 1); else if (only !== undefined) { setOnly(undefined); guide.setProvidersPhase('summary') } else guide.setProvidersPhase('landing') }}
         onSkip={() => { settle(card, 'skipped') }} onDone={(outcome) => { settle(card, outcome) }} />
     )
   }

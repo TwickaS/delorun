@@ -160,6 +160,20 @@ describe('the walk', () => {
     expect(row?.textContent).toContain(en[`providers.outcome.${verdict}` as keyof typeof en])
   })
 
+  it('says no key works yet when every provider is skipped or failed, and Try again returns to that provider\'s key screen', async () => {
+    await start({ probe: { kind: 'failed' } })
+    await click(screen.getByRole('button', { name: en['providers.skipOne'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await flush(TEST_DELAY_MS)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(screen.getByText(en['providers.summary.none'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.summary.lead'])).toBeNull()
+    expect(screen.getByRole('alert').textContent).toContain(en['providers.failedHelp'].replace('{name}', 'OpenAI').slice(0, 20))
+    await click(screen.getByRole('button', { name: en['providers.tryAgain'] }))
+    expect(screen.getByRole('heading', { level: 3, name: 'OpenAI' })).toBeTruthy()
+    expect(screen.getByText('1 of 1')).toBeTruthy()
+  })
+
   it('offers a base URL under More settings for a declared route only', async () => {
     const mounted = await mount()
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
