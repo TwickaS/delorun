@@ -159,7 +159,8 @@ describe('an unlocked device and the protected plugin rows', () => {
     // The home-auth and reach rows are refused as a whole, so a reach row without live fields (it is not described) is still decided.
     const found = namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))
     expect(found.filter(ns => !decided.includes(ns))).toEqual([])
-    expect([...decided].sort()).toEqual([DELEGATION_CONSENT_ROW, HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns].sort())
+    // The release check's row (`UPDATE_CHECK_SWITCH` in bundle-local) is decided too: a device cannot turn the check off.
+    expect([...decided].sort()).toEqual([DELEGATION_CONSENT_ROW, HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns, 'delorun-update-check'].sort())
     // Every computer-only switch names a protected row.
     expect(decided.filter(ns => !protectedRows().some(row => row.rowId === ns))).toEqual([])
   })
