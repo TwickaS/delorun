@@ -694,6 +694,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @param ctx - the browser plugin context.
  * @param fetch - the request function.
  * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
+ * @param pin - PIN mode's source; when it holds an unlock, Lock ends that instead of the device's elevation.
  * @returns the store, which the Devices section reads too.
  */
 export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
