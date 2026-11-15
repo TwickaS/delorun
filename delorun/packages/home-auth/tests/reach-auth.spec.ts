@@ -360,6 +360,32 @@ describe('admitting a session token', () => {
     }
   })
 
+  it('a revoked session stays revoked across a roll that was already in flight', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      const hour = 60 * 60 * 1000
+      for (const hours of [11, 11, 2]) {
+        home.clock.advance(hours * hour)
+        if (hours === 11) expect(home.auth.admitToken(session.token, 'reach-tailscale-private').kind).toBe('admitted')
+      }
+      // The revocation is queued first and removes the session record before the roll's write runs.
+      const revoked = home.auth.revokeDevice(phone.id)
+      const rolled = home.auth.admitToken(session.token, 'reach-tailscale-private', { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      await revoked
+      await home.auth.stop()
+      // Pins the old-record check: without it the roll writes the new token back and the device is signed in again.
+      const file = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }
+      expect(Object.keys(file.sessions)).toEqual([])
+      expect(home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    } finally {
+      await home.dispose()
+    }
+  })
+
   it('a rotation needs a fresh device-key proof', async () => {
     const home = await served()
     try {
@@ -555,7 +581,7 @@ describe('rolling a session', () => {
     }
   })
 
-  it('rolls and ends a grace in memory when the store cannot be written, and rolls a session whose record left the file', async () => {
+  it('rolls and ends a grace in memory when the store cannot be written', async () => {
     const home = await served()
     try {
       const phone = device()
@@ -566,13 +592,12 @@ describe('rolling a session', () => {
         home.clock.advance(by)
         expect(home.auth.admitToken(first.token, 'reach-tailscale-private').kind).toBe('admitted')
       }
-      await rm(join(home.directory, SESSIONS_FILE))
       const rolled = home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })
       if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
       await home.auth.stop()
       const file = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }
-      // The old record was gone from the file, so only the new token's record is written.
-      expect(Object.keys(file.sessions)).toHaveLength(1)
+      // The old record in its grace and the new token's record are written.
+      expect(Object.keys(file.sessions)).toHaveLength(2)
       await writeFile(join(home.directory, SESSIONS_FILE), 'broken', { mode: 0o600 })
       for (const by of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step]) {
         home.clock.advance(by)
