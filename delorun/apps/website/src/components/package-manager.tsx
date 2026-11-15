@@ -68,7 +68,7 @@ export function PackageManagerPicker({ value, onChange }: { value: PackageManage
     buttons.current[target]?.focus()
   }
   return (
-    <div role="radiogroup" aria-label={COPY.packageManagerLabel} className="mt-2 inline-flex rounded-lg border border-fd-border bg-fd-card p-0.5">
+    <div role="radiogroup" aria-label={COPY.packageManagerLabel} className="flex rounded-lg border border-fd-border bg-fd-card p-0.5">
       {PACKAGE_MANAGERS.map((manager, index) => {
         const selected = manager === value
         return (
@@ -81,7 +81,7 @@ export function PackageManagerPicker({ value, onChange }: { value: PackageManage
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(manager)}
             onKeyDown={event => move(event, index)}
-            className={`min-w-16 rounded-md px-3.5 py-1.5 font-mono text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-[4.5rem] ${selected ? 'bg-fd-foreground text-fd-background' : 'text-fd-muted-foreground hover:bg-fd-accent hover:text-fd-foreground'}`}
+            className={`min-w-16 flex-1 rounded-md px-3.5 py-1.5 font-mono text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-[4.5rem] ${selected ? 'bg-fd-foreground text-fd-background' : 'text-fd-muted-foreground hover:bg-fd-accent hover:text-fd-foreground'}`}
           >
             {manager}
           </button>

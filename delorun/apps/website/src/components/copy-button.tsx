@@ -54,7 +54,7 @@ export function CopyButton({ text }: { text: string }) {
     timer.current = setTimeout(() => setCopied(false), COPIED_MS)
   }
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-fd-foreground py-1 pl-4 pr-1 text-fd-background">
+    <span className="flex max-w-full items-center justify-between gap-1 rounded-lg bg-fd-foreground py-1 pl-4 pr-1 text-fd-background">
       <code className="min-w-0 break-words font-mono text-base">{text}</code>
       <Button
         variant="primary"

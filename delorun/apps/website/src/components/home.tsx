@@ -60,8 +60,10 @@ export function Home() {
             <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
             <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
-            <PackageManagerPicker value={manager} onChange={setManager} />
-            <p className="mt-2"><CopyButton text={command} /></p>
+            <div className="mt-2 grid w-fit max-w-full gap-2">
+              <PackageManagerPicker value={manager} onChange={setManager} />
+              <CopyButton text={command} />
+            </div>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
             <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
             <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
