@@ -1,9 +1,10 @@
 /**
- * The package-manager choice above the install command: a radio group that remembers the visitor's pick.
+ * The package-manager choice above the install command: a segmented radio group that remembers the visitor's pick.
  *
  * @module @delorun/website/package-manager
  */
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
+import { ChoiceGroup } from '@brand'
 import { COPY, DEFAULT_PACKAGE_MANAGER, PACKAGE_MANAGERS, type PackageManager } from '../site/copy.ts'
 
 /** The `localStorage` key that holds the chosen package manager. */
@@ -47,46 +48,22 @@ export function usePackageManager(): readonly [PackageManager, (manager: Package
 }
 
 /**
- * A segmented radio group of package managers. Arrow keys move and select, Home and End jump, and only the selected
- * button is in the tab order.
+ * The package managers as brand's segmented radio group, filling the width of the install box below it: arrow keys move
+ * and select, Home and End jump, and only the selected segment is in the tab order.
  * @param props.value - the selected manager.
  * @param props.onChange - called with the manager the visitor picks.
  * @returns the group.
  */
 export function PackageManagerPicker({ value, onChange }: { value: PackageManager, onChange: (manager: PackageManager) => void }) {
-  const buttons = useRef<Array<HTMLButtonElement | null>>([])
-  const move = (event: KeyboardEvent, index: number) => {
-    const last = PACKAGE_MANAGERS.length - 1
-    const target = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (index === last ? 0 : index + 1)
-      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (index === 0 ? last : index - 1)
-        : event.key === 'Home' ? 0
-          : event.key === 'End' ? last
-            : undefined
-    if (target === undefined) return
-    event.preventDefault()
-    onChange(PACKAGE_MANAGERS[target]!)
-    buttons.current[target]?.focus()
-  }
   return (
-    <div role="radiogroup" aria-label={COPY.packageManagerLabel} className="flex rounded-lg border border-fd-border bg-fd-card p-0.5">
-      {PACKAGE_MANAGERS.map((manager, index) => {
-        const selected = manager === value
-        return (
-          <button
-            key={manager}
-            ref={element => { buttons.current[index] = element }}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(manager)}
-            onKeyDown={event => move(event, index)}
-            className={`min-w-16 flex-1 rounded-md px-3.5 py-1.5 font-mono text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-[4.5rem] ${selected ? 'bg-fd-foreground text-fd-background' : 'text-fd-muted-foreground hover:bg-fd-accent hover:text-fd-foreground'}`}
-          >
-            {manager}
-          </button>
-        )
-      })}
-    </div>
+    <ChoiceGroup
+      label={COPY.packageManagerLabel}
+      value={value}
+      options={PACKAGE_MANAGERS.map(manager => ({ value: manager, label: manager }))}
+      onChange={onChange}
+      disabled={false}
+      fill
+      mono
+    />
   )
 }

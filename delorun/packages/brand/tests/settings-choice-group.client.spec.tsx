@@ -48,6 +48,15 @@ describe('the choice group', () => {
     expect(onChange.mock.calls).toEqual([['b'], ['c'], ['b'], ['c']])
   })
 
+  it('jumps to the last and first choice with End and Home', () => {
+    const onChange = open('b')
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Beta' }), { key: 'End' })
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Gamma' }))
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Beta' }), { key: 'Home' })
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Alpha' }))
+    expect(onChange.mock.calls).toEqual([['c'], ['a']])
+  })
+
   it('does not choose the value it already has when a key lands on it', () => {
     const onChange = open('b')
     fireEvent.keyDown(screen.getByRole('radio', { name: 'Alpha' }), { key: 'ArrowRight' })

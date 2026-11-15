@@ -29,6 +29,10 @@ export interface ChoiceGroupProps<Value extends string> {
   readonly disabled: boolean
   /** Whether the segments wrap onto further lines instead of sharing one row; the chosen one is filled in place. */
   readonly wrap?: boolean
+  /** Whether the group fills its container's width instead of the width of its segments; the segments share it equally. */
+  readonly fill?: boolean
+  /** Whether the segment text is set in the brand's monospace face, for commands and identifiers. */
+  readonly mono?: boolean
 }
 
 /** Index offsets of the keys that move the choice, wrapping at the ends. */
@@ -39,13 +43,14 @@ const STEP: Readonly<Record<string, 1 | -1>> = { ArrowRight: 1, ArrowDown: 1, Ar
  * @param props - see {@link ChoiceGroupProps}.
  * @returns the group; the chosen segment is the one tab stop, and an arrow key moves the focus and the choice.
  */
-export function ChoiceGroup<Value extends string>({ label, value, options, onChange, disabled, wrap = false }: ChoiceGroupProps<Value>) {
+export function ChoiceGroup<Value extends string>({ label, value, options, onChange, disabled, wrap = false, fill = false, mono = false }: ChoiceGroupProps<Value>) {
   const chosen = options.findIndex(option => option.value === value)
   const choose = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
     const step = STEP[event.key]
-    if (step === undefined) return
+    const jump = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : undefined
+    if (step === undefined && jump === undefined) return
     event.preventDefault()
-    const next = (index + step + options.length) % options.length
+    const next = jump ?? (index + (step as 1 | -1) + options.length) % options.length
     // The radios are the group's children, and `next` indexes them as it indexes the options.
     const radios = (event.currentTarget.parentElement as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="radio"]')
     const radio = radios[next] as HTMLButtonElement
@@ -55,7 +60,7 @@ export function ChoiceGroup<Value extends string>({ label, value, options, onCha
   }
   const track = { '--choice-count': String(options.length), '--choice-index': String(chosen) } as CSSProperties
   return (
-    <div role="radiogroup" aria-label={label} className={css.group} data-wrap={wrap ? 'true' : undefined} style={track}>
+    <div role="radiogroup" aria-label={label} className={css.group} data-wrap={wrap ? 'true' : undefined} data-fill={fill ? 'true' : undefined} data-mono={mono ? 'true' : undefined} style={track}>
       <span aria-hidden="true" className={css.indicator} />
       {options.map((option, index) => (
         <button

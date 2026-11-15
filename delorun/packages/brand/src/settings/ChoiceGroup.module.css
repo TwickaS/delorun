@@ -3,16 +3,16 @@
    from them without measuring. */
 .group {
   --segment-height: 28px;
-  --segment-gap: var(--delorun-space-1);
-  --group-padding: var(--delorun-space-2);
+  --segment-gap: var(--delorun-space-1, 2px);
+  --group-padding: var(--delorun-space-2, 4px);
   position: relative;
   display: inline-grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   gap: var(--segment-gap);
   padding: var(--group-padding);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: var(--dsw-radius-md, var(--dl-radius-md));
+  background: var(--dsw-alias-interactive-bg-hover, var(--dl-surface-sunken));
 }
 
 .indicator {
@@ -21,9 +21,9 @@
   left: var(--group-padding);
   width: calc((100% - 2 * var(--group-padding) - var(--segment-gap) * (var(--choice-count) - 1)) / var(--choice-count));
   height: calc(100% - 2 * var(--group-padding));
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-elevation-soft);
+  border-radius: var(--dsw-radius-sm, var(--dl-radius-sm));
+  background: var(--dsw-alias-bg-layer-1, var(--dl-surface-raised));
+  box-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 8%));
   transform: translateX(calc(var(--choice-index) * (100% + var(--segment-gap))));
   pointer-events: none;
 }
@@ -33,26 +33,26 @@
   position: relative;
   z-index: 1;
   height: var(--segment-height);
-  padding: 0 var(--delorun-space-6);
+  padding: 0 var(--delorun-space-6, 16px);
   border: 0;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: var(--dsw-radius-sm, var(--dl-radius-sm));
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-secondary, var(--dl-text-muted));
   font: inherit;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
+  font-size: var(--dsw-font-xs-13-font-size, 13px);
+  line-height: var(--dsw-font-xs-13-line-height, 20px);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .segment[aria-checked='true'] {
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-label-primary, var(--dl-text));
 }
 
 @media (hover: hover) {
   .segment:hover:not(:disabled) {
-    color: var(--dsw-alias-label-primary);
+    color: var(--dsw-alias-label-primary, var(--dl-text));
   }
 }
 
@@ -62,7 +62,7 @@
 }
 
 .segment:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, var(--dl-info)));
   outline-offset: -2px;
 }
 
@@ -79,8 +79,19 @@
 /* A phone keeps the segments side by side and shrinks their padding. */
 @media (max-width: 560px) {
   .segment {
-    padding: 0 var(--delorun-space-5);
+    padding: 0 var(--delorun-space-5, 12px);
   }
+}
+
+/* A filling group takes its container's width; the segments share it equally. */
+.group[data-fill='true'] {
+  display: grid;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.group[data-mono='true'] .segment {
+  font-family: var(--dl-font-mono);
 }
 
 /* A wrapping group lines its segments up like chips: no sliding indicator, the chosen segment is filled. */
@@ -95,8 +106,8 @@
 }
 
 .group[data-wrap='true'] .segment[aria-checked='true'] {
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-elevation-soft);
+  background: var(--dsw-alias-bg-layer-1, var(--dl-surface-raised));
+  box-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 8%));
 }
 
 /* A coarse pointer needs 44px hit areas. */
