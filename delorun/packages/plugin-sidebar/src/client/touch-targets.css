@@ -46,9 +46,23 @@
   }
 }
 
-/* Settings pages: the buttons, tabs, switches and disclosures inside a section are 44px tall on a touch screen. */
+/* Settings pages: buttons, tabs, disclosures and sliders inside a section are 44px tall on a touch screen; a switch keeps its look and gains a 44px hit area. */
 @media (pointer: coarse) {
-  [data-settings-anchor] :is(button, [role='tab'], [role='switch'], summary) {
+  [data-settings-anchor] :is(button:not([role='switch']), [role='tab'], summary, input[type='range']) {
     min-height: var(--delorun-touch-target);
+  }
+
+  [data-settings-anchor] [role='switch'] {
+    position: relative;
+  }
+
+  [data-settings-anchor] [role='switch']::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--delorun-touch-target));
+    height: max(100%, var(--delorun-touch-target));
+    transform: translate(-50%, -50%);
   }
 }

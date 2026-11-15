@@ -76,13 +76,6 @@
   }
 }
 
-/* A phone keeps the segments side by side and shrinks their padding. */
-@media (max-width: 560px) {
-  .segment {
-    padding: 0 var(--delorun-space-5, 12px);
-  }
-}
-
 /* A filling group takes its container's width; the segments share it equally. */
 .group[data-fill='true'] {
   display: grid;
@@ -94,7 +87,7 @@
   font-family: var(--dl-font-mono);
 }
 
-/* A wrapping group lines its segments up like chips: no sliding indicator, the chosen segment is filled. */
+/* A wrapping group lines its segments up like chips: no sliding indicator, the chosen segment is filled. A phone wraps every group except a filling one, so long labels never run past the edge. */
 .group[data-wrap='true'] {
   display: flex;
   flex-wrap: wrap;
@@ -108,6 +101,27 @@
 .group[data-wrap='true'] .segment[aria-checked='true'] {
   background: var(--dsw-alias-bg-layer-1, var(--dl-surface-raised));
   box-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 8%));
+}
+
+@media (max-width: 560px) {
+  .segment {
+    padding: 0 var(--delorun-space-5, 12px);
+  }
+
+  .group:not([data-fill='true']) {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .group:not([data-fill='true']) .indicator {
+    display: none;
+  }
+
+  .group:not([data-fill='true']) .segment[aria-checked='true'] {
+    background: var(--dsw-alias-bg-layer-1, var(--dl-surface-raised));
+    box-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 8%));
+  }
 }
 
 /* A coarse pointer needs 44px hit areas. */
