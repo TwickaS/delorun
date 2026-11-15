@@ -28,7 +28,7 @@ export interface StepFrameProps {
   readonly title: string
   /** The heading's ref, which takes focus when the step changes. */
   readonly headingRef: Ref<HTMLHeadingElement>
-  /** The progress text, such as `Step 2 of 7`. */
+  /** The progress text, such as `Step 2 of 8`. */
   readonly count: string
   /** The step's place in the flow, 1-based. */
   readonly place: number

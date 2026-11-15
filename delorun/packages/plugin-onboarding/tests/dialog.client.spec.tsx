@@ -275,6 +275,16 @@ describe('which steps apply', () => {
     expect(titles().includes(en['step.reach'])).toBe(false)
   })
 
+  it('counts only the steps the person will see: one fewer on a phone and where the terminal covered some', async () => {
+    const { unmount } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+    const withPhone = titles().length
+    expect(screen.getByText(`Step 1 of ${String(withPhone)}`)).toBeTruthy()
+    unmount()
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    expect(screen.getByText(`Step 1 of ${String(withPhone - 1)}`)).toBeTruthy()
+    expect(titles()).toHaveLength(withPhone - 1)
+  })
+
   it('counts phone access as on in Ready when the terminal setup set it up', async () => {
     await mountEntry({ reach: 'off', record: { reachSetUp: true } })
     await forward(titles().length - 1)
