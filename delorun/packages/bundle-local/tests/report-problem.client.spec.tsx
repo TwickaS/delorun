@@ -154,7 +154,7 @@ describe('the entries', () => {
   })
 
   it('the About section offers the same action in its own group', async () => {
-    const props = { t, close: () => {}, fetchImpl: fakeHome() } as unknown as AboutSectionProps
+    const props = { t, close: () => {}, fetchImpl: fakeHome() } as AboutSectionProps
     render(<AboutSection {...props} />)
     const group = screen.getByRole('region', { name: en['about.report.heading'] })
     fireEvent.click(within(group).getByRole('button', { name: en['about.report.button'] }))
