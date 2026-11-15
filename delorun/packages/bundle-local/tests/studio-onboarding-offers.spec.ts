@@ -5,7 +5,7 @@ import yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 
 const CHAT_IMPORT = '@deepseek-ai/dsh-deepseek-chat-import'
-const patch = yaml.load(readFileSync(fileURLToPath(new URL('../../bundle-studio/cordis.patch.yml', import.meta.url)), 'utf8')) as Array<{ insert?: Array<{ id: string; name: string; config?: { plugins?: string[]; optionalRows?: string[] } }> }>
+const patch = yaml.load(readFileSync(fileURLToPath(new URL('../../bundle-studio/cordis.patch.yml', import.meta.url)), 'utf8')) as Array<{ insert?: Array<{ id: string; name: string; config?: { plugins?: string[]; optionalRows?: string[]; hiddenProviders?: string[] } }> }>
 const rows = patch.flatMap(entry => entry.insert ?? [])
 
 describe('the studio bundle offers the DeepSeek website chat import', () => {
@@ -16,5 +16,11 @@ describe('the studio bundle offers the DeepSeek website chat import', () => {
   it('does not insert a row for it, which would mount it twice once the plugin manager turns it on', () => {
     expect(rows.some(row => row.name === CHAT_IMPORT)).toBe(false)
     expect(rows.find(row => row.id === 'delorun-onboarding')?.config?.optionalRows).not.toContain('deepseek-chat-import')
+  })
+})
+
+describe('the studio bundle keeps the DeepSeek account route out of the guide', () => {
+  it('hides the account model route from the guide\'s provider list instead of disabling its row', () => {
+    expect(rows.find(row => row.id === 'delorun-onboarding')?.config?.hiddenProviders).toEqual(['deepseek-account'])
   })
 })

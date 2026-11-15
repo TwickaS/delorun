@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
+import { bundleRowItems } from '@delorun/update'
 import { BundleReadError, bundleAnchors, readBundleLayers, type BundleLayerOptions } from '../../src/update/bundle-layers.ts'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'dbl-')))
@@ -109,7 +110,7 @@ describe('readBundleLayers', () => {
       })
 
       expect(await readBundleLayers(['@a/bundle'], OPTIONS)).toEqual({
-        layers: [{ layer: '@a/bundle', rows: [
+        layers: [{ layer: '@a/bundle', disabledRows: ['off'], rows: [
           { id: 'first', name: 'plugin-first', plugins: ['plugin-first'] },
           { name: 'plugin-nameless', plugins: ['plugin-nameless'] },
           { id: 'maybe', name: 'plugin-maybe', plugins: ['plugin-maybe'] },
@@ -119,13 +120,45 @@ describe('readBundleLayers', () => {
       })
     })
 
+    it('reads the rows a patch disables, by entry or as a disabled inserted row, and not an expression', async () => {
+      writeBundle('target', 'off', bundle('off', { dsh: { bundle: { patch: './cordis.patch.yml' } } }), {
+        'cordis.patch.yml': [
+          '- id: llm-deepseek-account',
+          '  disabled: true',
+          '- id: by-expression',
+          '  disabled: !!js false',
+          '- id: no-disable',
+          '  config: {}',
+          '- insert:',
+          '    - id: inserted-off',
+          '      name: plugin-off',
+          '      disabled: true',
+          '',
+        ].join('\n'),
+      })
+
+      expect((await readBundleLayers(['off'], OPTIONS)).layers).toEqual([{ layer: 'off', rows: [], disabledRows: ['llm-deepseek-account', 'inserted-off'] }])
+    })
+
+    it('lets the report name nothing for a row the running and the target release both disable through their patches', async () => {
+      const patch = '- id: llm-deepseek-account\n  disabled: true\n'
+      writeBundle('target', 'shared', bundle('shared'), { 'cordis.patch.yml': patch })
+      writeBundle('profile', 'shared', bundle('shared'), { 'cordis.patch.yml': patch })
+      const target = (await readBundleLayers(['shared'], OPTIONS)).layers
+      const running = (await readBundleLayers(['shared'], { ...OPTIONS, anchors: bundleAnchors(join(base, 'no-runtime'), profileDir) })).layers
+
+      expect(target[0]?.disabledRows).toEqual(['llm-deepseek-account'])
+      expect(running[0]?.disabledRows).toEqual(['llm-deepseek-account'])
+      expect(bundleRowItems(target, running, v('1.1.0'))).toEqual([])
+    })
+
     it('reads every patch file a list declares, in order', async () => {
       writeBundle('target', 'two-files', bundle('two-files', { dsh: { bundle: { patch: ['./a.yml', './b.yml'] } } }), {
         'a.yml': '- insert:\n    - name: plugin-a\n',
         'b.yml': '- insert:\n    - name: plugin-b\n',
       })
 
-      expect((await readBundleLayers(['two-files'], OPTIONS)).layers).toEqual([{ layer: 'two-files', rows: [{ name: 'plugin-a', plugins: ['plugin-a'] }, { name: 'plugin-b', plugins: ['plugin-b'] }] }])
+      expect((await readBundleLayers(['two-files'], OPTIONS)).layers).toEqual([{ layer: 'two-files', disabledRows: [], rows: [{ name: 'plugin-a', plugins: ['plugin-a'] }, { name: 'plugin-b', plugins: ['plugin-b'] }] }])
     })
 
     it('resolves a bundle from the target before the profile, and from the profile when the target does not carry it', async () => {
@@ -134,8 +167,8 @@ describe('readBundleLayers', () => {
       writeBundle('profile', 'own', bundle('own'), { 'cordis.patch.yml': '- insert:\n    - name: own-row\n' })
 
       expect((await readBundleLayers(['shared', 'own'], OPTIONS)).layers).toEqual([
-        { layer: 'shared', rows: [{ name: 'from-target', plugins: ['from-target'] }] },
-        { layer: 'own', rows: [{ name: 'own-row', plugins: ['own-row'] }] },
+        { layer: 'shared', disabledRows: [], rows: [{ name: 'from-target', plugins: ['from-target'] }] },
+        { layer: 'own', disabledRows: [], rows: [{ name: 'own-row', plugins: ['own-row'] }] },
       ])
     })
 

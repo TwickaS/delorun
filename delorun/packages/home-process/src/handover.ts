@@ -60,6 +60,7 @@ const handoverSchema = z.object({
   health: z.object({
     disabledPlugins: z.array(z.string()),
     namedRows: z.array(z.string()),
+    bundleRows: z.array(z.string()).optional(),
     bundles: z.array(z.string()).optional(),
     previousFailures: z.array(bootRow),
     previousRows: z.array(bootRow),
@@ -261,10 +262,10 @@ export function parseHandoverLine(text: string): HandoverLine {
   if (!parsed.success) throw new Error(`the handover line is not valid at ${parsed.error.issues[0]?.path.join('.') ?? 'its root'}`)
   // The schema checked the versions' and start id's form; the brands are the contracts' own types.
   const data = parsed.data
-  const { bundles, previousProtection, ...health } = data.health
+  const { bundles, bundleRows, previousProtection, ...health } = data.health
   return {
     ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
-    health: { ...health, ...bundles === undefined ? {} : { bundles }, ...previousProtection === undefined ? {} : { previousProtection } },
+    health: { ...health, ...bundles === undefined ? {} : { bundles }, ...bundleRows === undefined ? {} : { bundleRows }, ...previousProtection === undefined ? {} : { previousProtection } },
   }
 }
 

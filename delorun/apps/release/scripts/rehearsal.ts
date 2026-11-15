@@ -5,7 +5,10 @@
  * never inherits `NODE_EXTRA_CA_CERTS`, so a self-signed HTTPS channel cannot be updated from), packs `delorun/apps/npm-launcher` with those origins and the run's root,
  * and drives the packed launcher with `npx`. See "The rehearsal" in `delorun/apps/release/README.md`.
  *
- * `tsx delorun/apps/release/scripts/rehearsal.ts [--work <dir>] [--closure <dir>] [--only <id>,...] [--keep]`
+ * `tsx delorun/apps/release/scripts/rehearsal.ts [--work <dir>] [--closure <dir>] [--candidate <dir>] [--only <id>,...] [--keep]`
+ *
+ * `--candidate` names a directory with another build's release-1 archive and file list: release 2 is that build, so the
+ * update scenario runs from `--closure`'s release to the candidate and expects `--yes` to take it.
  *
  * `--windows` runs the Windows probe instead, from WSL: the packed launcher runs under the Windows `node.exe` in a folder
  * under the Windows temporary directory, which nothing outside is touched by, and must refuse before it downloads.
@@ -40,7 +43,7 @@ interface Finished {
   readonly stderr: string
 }
 
-const { values: options } = parseArgs({ options: { 'work': { type: 'string' }, 'closure': { type: 'string' }, 'only': { type: 'string' }, 'keep': { type: 'boolean' }, 'windows': { type: 'boolean' } } })
+const { values: options } = parseArgs({ options: { 'work': { type: 'string' }, 'closure': { type: 'string' }, 'candidate': { type: 'string' }, 'only': { type: 'string' }, 'keep': { type: 'boolean' }, 'windows': { type: 'boolean' } } })
 const only = options.only?.split(',')
 const work = resolve(options.work ?? mkdtempSync(join(tmpdir(), 'delorun-rehearsal-')))
 mkdirSync(work, { recursive: true })
@@ -295,8 +298,9 @@ if (options.windows === true) {
 
 try {
   const base = await buildBaseClosure(work, R1, options.closure)
+  const candidate = options.candidate === undefined ? undefined : await buildBaseClosure(work, R1, options.candidate)
   const derived = Promise.all([
-    deriveInChild(base, work, R2, 'none'),
+    candidate === undefined ? deriveInChild(base, work, R2, 'bundle-row-disabled') : deriveInChild(candidate, work, R2, 'none'),
     deriveInChild(base, work, R3, 'studio-without-index'),
     deriveInChild(base, work, R4, 'tampered'),
     deriveInChild(base, work, R5, 'none'),
@@ -358,12 +362,22 @@ try {
     await publishRelease(R2)
     const checked = await run('delorun', ['update', '--check'])
     expect(checked.stdout.includes(R2) || checked.stderr.includes(R2), `update --check does not name ${R2}: ${excerpt(checked)}`)
-    const updated = await run('delorun', ['update', '--yes'])
-    expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
+    if (candidate !== undefined) {
+      const taken = await run('delorun', ['update', '--yes'])
+      expect(taken.status === 0, `update to the candidate failed: [${String(taken.status)}] ${excerpt(taken)}`)
+      const reached = await running()
+      expect(reached === R2 && existsSync(MARKER), `the home process runs ${String(reached)}, not ${R2}, or the person's file is gone`)
+      return `candidate taken with --yes, running ${reached}`
+    }
+    // Release 2's own bundle patch switches off a row, so the report names it and `--yes` does not confirm it.
+    const refused = await run('delorun', ['update', '--yes'])
+    expect(refused.status !== 0 && await running() === R1, `--yes confirmed a report that disables a row: [${String(refused.status)}] ${excerpt(refused)}`)
+    const updated = await terminal('delorun', ['update'], [{ when: /Applytheupdateto/u, send: 'y' }])
+    expect(updated.status === 0 && /session-turn-outline/u.test(updated.stdout), `update failed or did not name the row: [${String(updated.status)}] ${excerpt(updated)}`)
     const version = await running()
     expect(version === R2, `the home process runs ${String(version)}, not ${R2}`)
     expect(existsSync(MARKER), 'the person\'s file is gone')
-    return `update exit 0, running ${version}`
+    return `report named the row; update exit 0, running ${version}`
   })
 
   await scenario('rollback-auto', 'a release whose Host never becomes ready rolls back on its own', async () => {

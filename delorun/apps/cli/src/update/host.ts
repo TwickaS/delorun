@@ -296,7 +296,9 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
   // The report names a row by its patch id, or by its plugin when the patch gives it none; it disables plugins by name.
   const named = new Set(expect.namedRows)
   const disabledPlugins = new Set(expect.disabledPlugins)
-  const reported = (row: { readonly id: string, readonly name: string }): boolean => named.has(row.id) || named.has(row.name) || disabledPlugins.has(row.name)
+  // A bundle-patch item names its row by id alone: its id may equal a plugin name that other rows load.
+  const bundleRows = new Set(expect.bundleRows ?? [])
+  const reported = (row: { readonly id: string, readonly name: string }): boolean => named.has(row.id) || named.has(row.name) || bundleRows.has(row.id) || disabledPlugins.has(row.name)
   const target = bootRowsOf(facts.rows())
   const failedBefore = new Set(expect.previousFailures.map(row => row.id))
   // A row the Loader gave a new id is matched by its plugin, one previous row for one target row; no other row is.

@@ -98,6 +98,7 @@ The row `delorun-onboarding` has these fields ([`src/config.ts`](src/config.ts))
 | `registry` | `https://registry.npmjs.org` | The `https://` npm registry a package that is not installed is read from, only when the person asks. |
 | `registryTimeoutMs` | `10000` | The most time the registry requests may take together, 1000 to 60000. |
 | `keyTestTimeoutMs` | `15000` | The most time one provider's key test may take, 1000 to 60000. |
+| `hiddenProviders` | `[]` | Model provider route ids the key test and the guide's provider list leave out. The routes stay mounted. |
 | `cloneTimeoutMs` | `600000` | The most time a clone may take, 10000 to 3600000. |
 
 [`@delorun/bundle-studio`](../bundle-studio/README.md) sets `plugins` to five experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool, session titles and the DeepSeek website chat import (an optional bundle, off until turned on), and `optionalRows` to the Thinking tab (`delorun-thinking-rsvp`) and the cost meter (`delorun-cost-meter`).

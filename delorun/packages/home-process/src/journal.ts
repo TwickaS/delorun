@@ -83,7 +83,7 @@ export interface JournalledUpdate {
   /** Present when C3's table refused the automatic rollback. */
   readonly refused?: true | undefined
   /** What the health check holds the target to; `bundles` may be present as `undefined`. */
-  readonly health?: (Omit<UpdateHealth, 'bundles'> & { readonly bundles?: readonly string[] | undefined }) | undefined
+  readonly health?: (Omit<UpdateHealth, 'bundles' | 'bundleRows'> & { readonly bundles?: readonly string[] | undefined }) | undefined
 }
 
 /**
@@ -150,6 +150,7 @@ export async function readJournal(path: string): Promise<UpdateJournal | undefin
   if (!parsed.success) throw new Error(`${path} is not an update journal; remove it once no delorun process runs for this profile`)
   // The schema checked the versions' form; the brands are the contract's own types.
   const data = parsed.data
+  // `bundleRows` is not persisted: released readers reject unknown journal keys, so a resumed update's health has none and H3 refuses a bundle-disabled row.
   return journalRecord({
     ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to),
     previous: data.previous === undefined ? undefined : brandString<RuntimeVersion>(data.previous),

@@ -105,11 +105,13 @@ function rowName(subject: RowSubject): string {
 /**
  * The sentence of a row item.
  * @param item - the item, whose subject is a row.
+ * @param versions - the running and target releases.
  * @returns the sentence.
  */
-function rowSentence(item: ReportItem & { readonly kind: 'row' }): string {
+function rowSentence(item: ReportItem & { readonly kind: 'row' }, versions: MessageVersions): string {
   const subject = item.subject
   const plugin = item.detail.plugin?.name ?? ''
+  if (item.detail.bundlePatch) return `Delorun ${versions.to.delorun} switches off row ${rowName(subject)} through its bundle ${subject.layer}; the row stays in your profile but does not run.`
   if (item.reason === 'row-include-blocked') return `Include ${subject.name} reaches ${plugin}, which the update disables, so the whole Include is disabled.`
   return `Row ${rowName(subject)} in ${subject.layer} loads ${plugin}, which the update disables.`
 }
@@ -196,7 +198,7 @@ export function reasonMessage(item: ReportItem, versions: MessageVersions): stri
     case 'bundle':
       return bundleMessage(item, versions)
     case 'row':
-      return rowSentence(item)
+      return rowSentence(item, versions)
     case 'data':
       return dataMessage(item, versions)
     case 'harness':

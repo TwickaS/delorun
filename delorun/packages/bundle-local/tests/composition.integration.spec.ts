@@ -232,9 +232,9 @@ describe('a Delorun CLI profile', () => {
     expect([...hosts].filter(entry => !entry.endsWith(' api.deepseek.com'))).toEqual([])
   })
 
-  it('mounts no DeepSeek account model route, so setup lists no account provider', () => {
+  it('leaves the DeepSeek account model route mounted, because an update refuses a row a release switches off that the running release left on', () => {
     const rows = home.rows(DELORUN_PROFILE)
-    expect(rows.filter(row => row.id === 'llm-deepseek-account').map(row => row.disabled)).toEqual([true])
+    expect(rows.filter(row => row.id === 'llm-deepseek-account').map(row => row.disabled === true)).toEqual([false])
   })
 
   it('mounts no enabled row that requires the account service the disabled account row no longer provides', () => {

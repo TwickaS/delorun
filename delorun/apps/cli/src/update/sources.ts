@@ -276,11 +276,20 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
         exemptions: await readExemptions(profileDir, 'dsh'),
         platform: process.platform,
       })
+      // The running release's composition is the baseline: only a row the target newly disables is a change.
+      const runningRuntime = await verified(options.running)
+      const runningDirectory = store.paths.version(runningRuntime.version)
+      const runningBundles = await bundleLayers(bundles, {
+        anchors: bundleAnchors(runningDirectory, profileDir),
+        versions: { dsh: runningRuntime.manifest.dsh, delorun: runningRuntime.manifest.version },
+        exemptions: await readExemptions(profileDir, 'dsh'),
+        platform: process.platform,
+      })
       return {
         versions,
         // The store verified the signature now; the install verified freshness and recorded the log check's state.
         release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: await recordedLogCheck(home, runtime.version) },
-        bundles: { ...listed, skipped: loaded.skipped, layers: loaded.layers },
+        bundles: { ...listed, skipped: loaded.skipped, layers: loaded.layers, runningLayers: runningBundles.layers },
         revocations: [],
         notChecked: ['revocations'],
       }

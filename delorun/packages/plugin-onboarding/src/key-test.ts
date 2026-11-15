@@ -49,6 +49,8 @@ export interface KeyTestDeps {
    * @returns the result.
    */
   readonly deepseek: (signal: AbortSignal) => Promise<KeyResult>
+  /** Route ids the test leaves out of its answer, from the row's `hiddenProviders`. */
+  readonly hidden: readonly string[]
   /** The most time one route's test may take, in milliseconds. */
   readonly timeoutMs: number
 }
@@ -120,12 +122,12 @@ async function testRoute(deps: KeyTestDeps, provider: string): Promise<KeyResult
 }
 
 /**
- * Test every usable route, at most {@link MAX_PROVIDERS}, all at once.
+ * Test every usable route that is not hidden, at most {@link MAX_PROVIDERS}, all at once.
  * @param deps - the harness's parts.
  * @returns each route with its name and result.
  */
 export async function testKeys(deps: KeyTestDeps): Promise<KeyTestAnswer> {
-  const routes = deps.providers().slice(0, MAX_PROVIDERS)
+  const routes = deps.providers().filter(route => !deps.hidden.includes(route.id)).slice(0, MAX_PROVIDERS)
   const results = await Promise.all(routes.map(route => testRoute(deps, route.id).catch((): KeyResult => 'failed')))
   return { providers: routes.map((route, index) => ({ provider: route.id, name: route.name, result: results[index] as KeyResult })) }
 }

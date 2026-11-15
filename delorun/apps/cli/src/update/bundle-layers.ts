@@ -221,6 +221,27 @@ function unmetRequirements(bundle: string, manifest: Record<string, unknown>, op
   return [...dshUnmet, ...delorunUnmet]
 }
 
+/** What one patch file contributes to a layer. */
+interface PatchRows {
+  /** The rows it inserts that load. */
+  readonly rows: readonly RowFact[]
+  /** The ids of the rows it disables. */
+  readonly disabled: readonly string[]
+}
+
+/**
+ * The ids of the rows one patch entry's inserted rows disable, a group's children included.
+ * @param rows - the entry's `insert` list, or a group's children.
+ * @returns the ids of disabled rows that have one.
+ */
+function disabledInserted(rows: readonly unknown[]): readonly string[] {
+  return rows.flatMap((row): readonly string[] => {
+    if (!isRecord(row)) return []
+    if (row['group'] === true && Array.isArray(row['config'])) return disabledInserted(row['config'])
+    return row['disabled'] === true && typeof row['id'] === 'string' ? [row['id']] : []
+  })
+}
+
 /**
  * The rows one patch entry inserts, a group's children included; a row the patch disables loads nothing.
  * @param bundle - the bundle's package name.
@@ -245,11 +266,11 @@ function insertedRows(bundle: string, file: string, rows: readonly unknown[]): r
  * @param bundle - the bundle's package name.
  * @param directory - its package directory.
  * @param file - the package-relative file, as `dsh.bundle.patch` writes it.
- * @returns the rows, in order.
+ * @returns the rows it inserts, in order, and the ids of the rows it disables: an entry `{ id, disabled: true }` or a disabled inserted row.
  * @throws {BundleReadError} `BUNDLE_PATCH_UNREADABLE` when the file cannot be read, is not YAML, or is not a list of
  *   patch entries with named rows.
  */
-async function readPatch(bundle: string, directory: string, file: string): Promise<readonly RowFact[]> {
+async function readPatch(bundle: string, directory: string, file: string): Promise<PatchRows> {
   let parsed: unknown
   try {
     // `!!js` values stay unevaluated text: a row disabled by an expression counts as loading.
@@ -258,13 +279,19 @@ async function readPatch(bundle: string, directory: string, file: string): Promi
     throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `Delorun could not read its patch ${file}: ${firstLine(error)}`, { cause: error })
   }
   if (!Array.isArray(parsed)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} is not a list of patch entries`)
-  return parsed.flatMap((entry): readonly RowFact[] => {
+  const rows: RowFact[] = []
+  const disabled: string[] = []
+  for (const entry of parsed) {
     if (!isRecord(entry)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} holds an entry that is not a mapping`)
+    // A literal `disabled: true` only; a `!!js` expression stays text and counts as not disabled, as it does for inserted rows.
+    if (entry['disabled'] === true && typeof entry['id'] === 'string') disabled.push(entry['id'])
     const inserted = entry['insert']
-    if (inserted === undefined) return []
+    if (inserted === undefined) continue
     if (!Array.isArray(inserted)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} holds an insert that is not a list`)
-    return insertedRows(bundle, file, inserted)
-  })
+    rows.push(...insertedRows(bundle, file, inserted))
+    disabled.push(...disabledInserted(inserted))
+  }
+  return { rows, disabled }
 }
 
 /**
@@ -287,8 +314,13 @@ async function readBundle(bundle: string, options: BundleLayerOptions): Promise<
   if (unmet.length > 0) return unmet.join('; ')
   const files = typeof declaration.patch === 'string' ? [declaration.patch] : declaration.patch
   const rows: RowFact[] = []
-  for (const file of files) rows.push(...await readPatch(bundle, directory, file))
-  return { layer: bundle, rows }
+  const disabledRows: string[] = []
+  for (const file of files) {
+    const patch = await readPatch(bundle, directory, file)
+    rows.push(...patch.rows)
+    disabledRows.push(...patch.disabled)
+  }
+  return { layer: bundle, rows, disabledRows }
 }
 
 /**

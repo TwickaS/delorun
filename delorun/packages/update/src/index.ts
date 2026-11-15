@@ -39,7 +39,7 @@ export {
 export { decideRollback, ROLLING_BACK_PHASE, rollbackUpdate, type RollbackDecision, type RollbackRequest, type RollbackResult, type UpdateRecordFacts } from './rollback.ts'
 export { harnessItems, type HarnessFact } from './harness-items.ts'
 export { type BundleFacts, type IncludeFact, type InstallationStatusFacts, type LayerFact, type ProfileFacts, type ReleaseChecks, type ReportInput, type RevokedPluginVersion, type RowFact, type SkippedBundleFact, type TargetFacts } from './facts.ts'
-export { bundleItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
+export { bundleItems, bundleRowItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
 export { readInstalledPlugin, type InstalledPluginFact } from './manifest.ts'
 export { dataCopyNote, exemptionNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
 export { buildUpdateReport, countItems, disabledPluginNames, sortItems } from './report.ts'

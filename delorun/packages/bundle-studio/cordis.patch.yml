@@ -45,6 +45,11 @@
         optionalRows:
           - delorun-thinking-rsvp
           - delorun-cost-meter
+        # The DeepSeek account has no sign-in in this release (@delorun/bundle-local disables `deepseek-account`), but its
+        # model route `llm-deepseek-account` stays mounted, because an update refuses a row a release switches off that
+        # the running release did not. The guide's provider list leaves the route out.
+        hiddenProviders:
+          - deepseek-account
 
 # Upstream's first-run "Add an API key" dialog is off: the studio's no-key banner above the message box (in
 # @delorun/plugin-onboarding) is the only nudge. A patch replaces the row's whole config, so this restates

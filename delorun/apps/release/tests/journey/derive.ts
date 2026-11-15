@@ -35,6 +35,8 @@ async function raiseChatStates(stage: string): Promise<void> {
  * - `none`: the same closure under another version (release 2).
  * - `studio-without-index`: the studio's index removed, so the Host never answers the health check's request for it
  *   (release 2b).
+ * - `bundle-row-disabled`: the release's own bundle patch switches off one more row, `session-turn-outline`, as rc.3
+ *   switched off `llm-deepseek-account`; the pre-update report must name it and the health check must accept it.
  * - `chat-states-v2`: {@link raiseChatStates} (release 3).
  * - `tampered`: an honest closure whose archive then gets one byte of `data-formats.json` changed, while its signed file
  *   list describes the file before the change.
@@ -42,6 +44,10 @@ async function raiseChatStates(stage: string): Promise<void> {
 export const CHANGES: Readonly<Record<string, ClosureChange | undefined>> = {
   'none': undefined,
   'studio-without-index': stage => rm(join(stage, 'app/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html')),
+  'bundle-row-disabled': async (stage) => {
+    const patch = join(stage, 'app/node_modules/@delorun/bundle-local/cordis.patch.yml')
+    await writeFile(patch, `${await readFile(patch, 'utf8')}\n- id: session-turn-outline\n  disabled: true\n`)
+  },
   'chat-states-v2': raiseChatStates,
   'tampered': undefined,
 }
