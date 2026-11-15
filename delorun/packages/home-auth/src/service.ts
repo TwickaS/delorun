@@ -21,7 +21,7 @@ import type { DeviceId, ReachListenerId } from '@delorun/contract-admission'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
-import { PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type PairingConfig, type PairingView } from './pairing.ts'
+import { CHALLENGE_LIMIT_BOUNDS, CHALLENGE_LIMIT_DEFAULTS, PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type ChallengeLimits, type PairingConfig, type PairingView } from './pairing.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
   HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
@@ -67,6 +67,8 @@ export interface ConfigInput {
   readonly pairing?: PairingConfig
   /** Seconds between retries of a PIN page's set-back that failed; see {@link Config.pinSetBackRetrySeconds}. */
   readonly pinSetBackRetrySeconds?: number
+  /** The sign-in challenge limits, each optional; see {@link Config.challenges}. */
+  readonly challenges?: Partial<ChallengeLimits>
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -85,6 +87,11 @@ export interface Config {
    * 3600; 30 by default. The timer runs only while such a lift waits.
    */
   readonly pinSetBackRetrySeconds: number
+  /**
+   * How many sign-in challenges one source and one device may be issued a minute; Delorun's defaults are 60 and 10.
+   * Every reach request reaches the home from one source, so the source limit bounds the home as a whole.
+   */
+  readonly challenges: ChallengeLimits
 }
 
 /** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
@@ -103,6 +110,16 @@ function pairingMinutes(field: keyof typeof PAIRING_BOUNDS, fallback: number): s
   return schema.number().step(1).min(min).max(max).default(fallback)
 }
 
+/**
+ * A whole-number challenge limit with its bounds.
+ * @param field - the limit, whose bounds {@link CHALLENGE_LIMIT_BOUNDS} holds.
+ * @returns the schema, defaulting to Delorun's value.
+ */
+function challengeLimit(field: keyof ChallengeLimits): schema<number> {
+  const { min, max } = CHALLENGE_LIMIT_BOUNDS[field]
+  return schema.number().step(1).min(min).max(max).default(CHALLENGE_LIMIT_DEFAULTS[field])
+}
+
 /** The plugin's configuration schema. */
 export const Config: schema<ConfigInput, Config> = schema.object({
   // The path check belongs to `[Service.init]`, which refuses a relative directory with a sentence naming the problem;
@@ -118,6 +135,10 @@ export const Config: schema<ConfigInput, Config> = schema.object({
   }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
   pinSetBackRetrySeconds: schema.number().step(1).min(PIN_RETRY_SECONDS.min).max(PIN_RETRY_SECONDS.max).default(PIN_RETRY_SECONDS.fallback)
     .description('Seconds between retries of a setting a PIN page loosened whose set-back failed after PIN mode went off, from 1 to 3600; 30 by default.'),
+  challenges: schema.object({
+    perSourcePerMinute: challengeLimit('perSourcePerMinute').description('How many sign-in challenges one source may be issued a minute, from 1 to 600; 60 by default.'),
+    perDevicePerMinute: challengeLimit('perDevicePerMinute').description('How many sign-in challenges one trusted device may be issued a minute, from 1 to 600; 10 by default.'),
+  }).default({}).description('The sign-in challenge limits. Out-of-bounds values fail the load.'),
 })
 
 /** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
@@ -186,6 +207,7 @@ export class HomeAuthService extends Service {
     const core = new HomeAuth({
       pairing: () => resolvePairing(this.config.pairing.get()),
       directory: this.secretsDirectory,
+      challengeLimits: this.config.challenges,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),

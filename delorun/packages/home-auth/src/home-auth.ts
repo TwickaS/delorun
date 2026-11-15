@@ -36,7 +36,7 @@ import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delorun/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
-import { PAIRING_DEFAULTS, tailnetIdentityOf, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
+import { CHALLENGE_LIMIT_DEFAULTS, PAIRING_DEFAULTS, tailnetIdentityOf, type ChallengeLimits, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
 import { DeviceStore } from './devices.ts'
 import { HomeAuthError } from './errors.ts'
@@ -214,6 +214,8 @@ export interface HomeAuthOptions {
   readonly loopbackPort?: LoopbackPort
   /** The resolved pairing choices ({@link resolvePairing}), read at each use; {@link PAIRING_DEFAULTS} when absent. */
   readonly pairing?: () => PairingSpec
+  /** How many sign-in challenges one source and one device may be issued a minute; {@link CHALLENGE_LIMIT_DEFAULTS} when absent. */
+  readonly challengeLimits?: ChallengeLimits
 }
 
 /**
@@ -229,6 +231,8 @@ export class HomeAuth {
   private readonly deviceStore: DeviceStore
   private readonly sessions: SessionStore
   private readonly claims: AttemptLimiter
+  private readonly challengeSources: AttemptLimiter
+  private readonly challengeDevices: AttemptLimiter
   private readonly now: () => number
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
@@ -319,6 +323,9 @@ export class HomeAuth {
       windowMs: CLAIM_WINDOW_MS,
       ...(options.now === undefined ? {} : { now: options.now }),
     })
+    const challengeLimits = options.challengeLimits ?? CHALLENGE_LIMIT_DEFAULTS
+    this.challengeSources = new AttemptLimiter({ limit: challengeLimits.perSourcePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
+    this.challengeDevices = new AttemptLimiter({ limit: challengeLimits.perDevicePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
   }
 
   /**
@@ -793,13 +800,18 @@ export class HomeAuth {
    * Issue a sign-in challenge to a device trusted on a served listener's address.
    * @param deviceId - the device.
    * @param listener - the listener the request was admitted on.
+   * @param source - the source the request's arrival names, which the source limit counts.
    * @returns the challenge.
-   * @throws {HomeAuthError} `DEVICE_NOT_TRUSTED` when no record names the device at the listener's address.
+   * @throws {HomeAuthError} `CHALLENGE_RATE_LIMITED` past the source's or the device's limit;
+   *   `DEVICE_NOT_TRUSTED` when no record names the device at the listener's address.
    */
-  async challenge(deviceId: DeviceId, listener: ReachListenerId): Promise<string> {
+  async challenge(deviceId: DeviceId, listener: ReachListenerId, source: string): Promise<string> {
     const served = this.servedOrRefuse(listener)
+    if (!this.challengeSources.take(source)) throw new HomeAuthError('CHALLENGE_RATE_LIMITED', 'Too many sign-in challenges were asked for from this address in the last minute. Wait a minute, then try again')
     const device = await this.deviceStore.find(deviceId)
     if (device?.address !== served.address) throw this.notTrusted(deviceId, served.address)
+    // Only a trusted device's id keys a counter, so asking with made-up ids cannot grow the limiter without bound.
+    if (!this.challengeDevices.take(deviceId)) throw new HomeAuthError('CHALLENGE_RATE_LIMITED', 'Too many sign-in challenges were asked for this device in the last minute. Wait a minute, then try again')
     await this.assertOwner()
     return this.challenges.issue(deviceId)
   }

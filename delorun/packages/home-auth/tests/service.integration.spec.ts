@@ -530,6 +530,13 @@ describe('the homeAuth service', () => {
     await ctx.fiber.dispose()
   })
 
+  it('validates the sign-in challenge limits at load and fills Delorun\'s defaults', () => {
+    // Pins the bounds: a limit of 0 would refuse every sign-in, one above 600 is no limit.
+    expect(() => Config({ secretsDirectory: '/nowhere', challenges: { perDevicePerMinute: 0 } })).toThrow()
+    expect(() => Config({ secretsDirectory: '/nowhere', challenges: { perSourcePerMinute: 601 } })).toThrow()
+    expect(Config({ secretsDirectory: '/nowhere' }).challenges).toEqual({ perSourcePerMinute: 60, perDevicePerMinute: 10 })
+  })
+
   it('refuses a secrets directory outside a Delorun home, and names the home it lies in', async () => {
     const ctx = new Context()
     ctx.provide('webServer', { register: () => () => {} } as never)

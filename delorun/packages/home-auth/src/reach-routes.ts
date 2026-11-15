@@ -291,7 +291,7 @@ export function challengeHandler(auth: HomeAuth): RouteHandler {
     try {
       const message = await readMessage(request, response)
       if (message === undefined) return
-      const challenge = await auth.challenge(deviceIdField(message.deviceId), listener)
+      const challenge = await auth.challenge(deviceIdField(message.deviceId), listener, auth.arrivalOf(request).source)
       sendJson(response, 200, { challenge })
     } catch (error) {
       sendThrown(response, error)

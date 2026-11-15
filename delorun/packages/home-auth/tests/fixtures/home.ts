@@ -12,7 +12,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ListenerId, StudioAddress } from '@delorun/contract-admission'
 import { DEVICE_APPROVAL_VERSION, type Base64Url, type DevicePublicKeyJwk } from '@delorun/contract-device-approval'
 import { HomeAuth, type ClaimRequest } from '../../src/home-auth.ts'
-import type { PairingSpec } from '../../src/pairing.ts'
+import type { ChallengeLimits, PairingSpec } from '../../src/pairing.ts'
 import { deviceIdOf, type DeviceRecord } from '../../src/records.ts'
 
 /** The secret a fixture key is filled with, so two fixtures differ without any randomness. */
@@ -73,7 +73,7 @@ const START = Date.UTC(2026, 0, 1)
  *   as the fake `Date` of a spec whose timers must fire at the time the home reads.
  * @returns the fixture.
  */
-export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number; readonly pairing?: PairingSpec } = {}): Promise<Home> {
+export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number; readonly pairing?: PairingSpec; readonly challengeLimits?: ChallengeLimits } = {}): Promise<Home> {
   const directory = await mkdtemp(join(tmpdir(), 'delorun-home-auth-'))
   const clock = {
     now: START,
@@ -92,6 +92,7 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
   const auth = new HomeAuth({
     loopbackPort: () => loopback.port,
     ...(pairing === undefined ? {} : { pairing: (): PairingSpec => pairing }),
+    ...(options.challengeLimits === undefined ? {} : { challengeLimits: options.challengeLimits }),
     directory,
     now: options.now ?? clock.read,
     random,

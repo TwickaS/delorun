@@ -130,3 +130,21 @@ export function mayAskWithoutWindow(mode: WindowlessMode, identity: TailnetIdent
 function assertNever(value: never): never {
   throw new Error(`home-auth: unhandled pairing mode ${String(value)}`)
 }
+
+/** How many sign-in challenges one source, and one device, may be issued in a minute. */
+export interface ChallengeLimits {
+  readonly perSourcePerMinute: number
+  readonly perDevicePerMinute: number
+}
+
+/** The bounds of each {@link ChallengeLimits} field, which the plugin's schema enforces. */
+export const CHALLENGE_LIMIT_BOUNDS = {
+  perSourcePerMinute: { min: 1, max: 600 },
+  perDevicePerMinute: { min: 1, max: 600 },
+} as const
+
+/**
+ * Delorun's challenge limits. Every reach request reaches the home from one address, so the source limit bounds the
+ * home as a whole; an honest device asks once per sign-in, so the device limit leaves room for retries.
+ */
+export const CHALLENGE_LIMIT_DEFAULTS: ChallengeLimits = { perSourcePerMinute: 60, perDevicePerMinute: 10 }

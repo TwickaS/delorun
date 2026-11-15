@@ -5,7 +5,8 @@
  * A refusal is a value of a contract's code set, so a caller can branch on it without reading a message. This package's
  * own codes cover what no contract names: `BAD_REQUEST` for a malformed message or a wrong method, `STORE_INVALID` for a
  * store file that cannot be read as this package's JSON, and the two resource limits of a home's own records,
- * `DEVICE_LIMIT_REACHED` and `SESSION_LIMIT_REACHED`, which are answered with `429` as C5's limits are.
+ * `DEVICE_LIMIT_REACHED` and `SESSION_LIMIT_REACHED`, which are answered with `429` as C5's limits are, and
+ * `CHALLENGE_RATE_LIMITED` for a source or device that asks for sign-in challenges faster than the configured rate.
  *
  * @module @delorun/home-auth/errors
  */
@@ -20,6 +21,7 @@ export const HOME_AUTH_LOCAL_CODES = [
   'STORE_INVALID',
   'DEVICE_LIMIT_REACHED',
   'SESSION_LIMIT_REACHED',
+  'CHALLENGE_RATE_LIMITED',
 ] as const
 
 /** One code of {@link HOME_AUTH_LOCAL_CODES}. */
@@ -73,6 +75,7 @@ export const HOME_AUTH_HTTP_STATUS = {
   STORE_INVALID: 500,
   DEVICE_LIMIT_REACHED: 429,
   SESSION_LIMIT_REACHED: 429,
+  CHALLENGE_RATE_LIMITED: 429,
 } as const satisfies Partial<Record<HomeAuthErrorCode, number>>
 
 /** {@link HOME_AUTH_HTTP_STATUS} as a lookup over every code, so a code with no status reads as `undefined`. */

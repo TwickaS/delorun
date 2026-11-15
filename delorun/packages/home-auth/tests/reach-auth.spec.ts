@@ -15,6 +15,7 @@ import { SESSION_LIMITS, SESSION_STORE_PERSIST_MS, type DeviceId, type StudioAdd
 import { DEVICE_APPROVAL_LIMITS, type Base64Url, type DevicePublicKeyJwk } from '@delorun/contract-device-approval'
 import { formatMatchCode, matchCode, typedCodeMatches } from '../src/match-code.ts'
 import { loadHomeKey } from '../src/home-key.ts'
+import { CHALLENGE_LIMIT_DEFAULTS } from '../src/pairing.ts'
 import { Challenges, signInMessage, signInVerifies } from '../src/sign-in.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { SESSIONS_FILE } from '../src/sessions.ts'
@@ -24,6 +25,7 @@ import { homeFixture, type Home } from './fixtures/home.ts'
 import { deviceIdOf as browserDeviceIdOf, fromBase64Url, matchCodeOf, signInMessage as browserSignInMessage, toBase64Url } from '../assets/sign-in.js'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
+const SOURCE = '127.0.0.1'
 const SERVED = { listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' } as const
 
 /** A real P-256 device key, as a browser makes one. */
@@ -49,7 +51,7 @@ async function approve(auth: HomeAuth, phone: ReturnType<typeof device>): Promis
 
 /** Sign a phone in. */
 async function signIn(auth: HomeAuth, phone: ReturnType<typeof device>, rotate?: string): Promise<SignedIn> {
-  const challenge = await auth.challenge(phone.id, 'reach-tailscale-private')
+  const challenge = await auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
   return auth.signIn({ deviceId: phone.id, challenge, signature: phone.sign(ADDRESS, challenge), listener: 'reach-tailscale-private', ...(rotate === undefined ? {} : { rotate }) })
 }
 
@@ -204,9 +206,9 @@ describe('sign-in', () => {
       await home.auth.openApprovalWindow()
       const phone = device()
       // Pins the device check: without it any key signs in.
-      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private')).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
       await expect(home.auth.signIn({ deviceId: phone.id, challenge: 'x', signature: 'y', listener: 'reach-tailscale-private' })).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
-      await expect(home.auth.challenge(phone.id, 'reach-tailscale-funnel')).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-funnel', SOURCE)).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
     } finally {
       await home.dispose()
     }
@@ -217,15 +219,53 @@ describe('sign-in', () => {
     try {
       const phone = device()
       await approve(home.auth, phone)
-      const challenge = await home.auth.challenge(phone.id, 'reach-tailscale-private')
+      const challenge = await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
       const signature = phone.sign(ADDRESS, challenge)
       // Pins the signature check: a challenge signed by another key.
       await expect(home.auth.signIn({ deviceId: phone.id, challenge, signature: device().sign(ADDRESS, challenge), listener: 'reach-tailscale-private' })).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' })
       // Pins single use: the failed attempt used the challenge up.
       await expect(home.auth.signIn({ deviceId: phone.id, challenge, signature, listener: 'reach-tailscale-private' })).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' })
-      const late = await home.auth.challenge(phone.id, 'reach-tailscale-private')
+      const late = await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
       home.clock.advance(DEVICE_APPROVAL_LIMITS.challengeExpiryMs)
       await expect(home.auth.signIn({ deviceId: phone.id, challenge: late, signature: phone.sign(ADDRESS, late), listener: 'reach-tailscale-private' })).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' })
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('limits the challenges issued to one trusted device a minute, and lets the honest sign-in through', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      const other = device()
+      await approve(home.auth, phone)
+      await approve(home.auth, other)
+      for (let issued = 0; issued < CHALLENGE_LIMIT_DEFAULTS.perDevicePerMinute; issued += 1) await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
+      // Pins the device limit: without it a tailnet member who knows a device id evicts its unused challenges at will.
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).rejects.toMatchObject({ code: 'CHALLENGE_RATE_LIMITED' })
+      // Another device is not held back by it, and a made-up id is refused as untrusted, not counted.
+      await expect(home.auth.challenge(other.id, 'reach-tailscale-private', SOURCE)).resolves.toEqual(expect.any(String))
+      await expect(home.auth.challenge(device().id, 'reach-tailscale-private', SOURCE)).rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
+      home.clock.advance(60_000 + 1)
+      const challenge = await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
+      await expect(home.auth.signIn({ deviceId: phone.id, challenge, signature: phone.sign(ADDRESS, challenge), listener: 'reach-tailscale-private' })).resolves.toMatchObject({ token: expect.any(String) })
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('limits the challenges one source asks for a minute, from the configured value', async () => {
+    const home = await homeFixture({ challengeLimits: { perSourcePerMinute: 3, perDevicePerMinute: 100 } })
+    try {
+      home.auth.serve(SERVED)
+      const phone = device()
+      await approve(home.auth, phone)
+      for (let issued = 0; issued < 3; issued += 1) await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
+      // Pins the source limit and that it reads the configured value, not the default.
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).rejects.toMatchObject({ code: 'CHALLENGE_RATE_LIMITED' })
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', '10.0.0.9')).resolves.toEqual(expect.any(String))
+      home.clock.advance(60_000 + 1)
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).resolves.toEqual(expect.any(String))
     } finally {
       await home.dispose()
     }

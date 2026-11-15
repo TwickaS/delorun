@@ -32,7 +32,7 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 - **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。所有者记录与设备列表会相互核对，因此被复制过来、指名本 home 未记录的第一台设备的 `owner.json` 会以 `STORE_INVALID` 失败而不是成为所有者，任何列表、会话或移除都不会替它行事。
 - **会话**（`sessions.json`）。令牌只下发一次，并以作为记录键的 SHA-256 摘要保存，因此复制该文件无法让任何人登录。会话只会为已记录、且记录地址与请求一致的设备签发：没有所有者的 home 以 `NO_OWNER` 拒绝，无法读取的所有者记录以 `STORE_INVALID` 拒绝，本 home 未记录的密钥——另一个 home 的设备、位于其他地址的设备，或刚被撤销的设备——以 `DEVICE_NOT_TRUSTED` 拒绝。只有当设备仍按其会话地址被记录时，会话才被视为在线，因此设备记录已消失的令牌不会再应答任何内容，即使它自己的记录仍然存在。
 - **移除**。删除设备记录、使其令牌的每个在线会话失效、轮换其他每个会话、释放该设备的 Peer，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。
-- **限制**。一个 home 最多信任 32 台设备（`DEVICE_LIMIT_REACHED`，`429`），一台设备最多持有 16 个在线会话（`SESSION_LIMIT_REACHED`，`429`）；在统计上限之前会先丢弃已过期的会话记录，因此在会话过期后再次登录的设备永远不会被它们拒绝。
+- **限制**。一个 home 最多信任 32 台设备（`DEVICE_LIMIT_REACHED`，`429`），一台设备最多持有 16 个在线会话（`SESSION_LIMIT_REACHED`，`429`）；在统计上限之前会先丢弃已过期的会话记录，因此在会话过期后再次登录的设备永远不会被它们拒绝。登录质询路由每分钟最多向一个来源签发 `challenges.perSourcePerMinute`（默认 60）个质询，向一台受信任设备签发 `challenges.perDevicePerMinute`（默认 10）个，超出后以 `CHALLENGE_RATE_LIMITED`（`429`）拒绝；两个字段的范围都是 1 到 600，超出范围时加载失败。
 - **记录**。每个文件都经 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的受保护文件检查读取，因此其他用户可以读取的文件，或不是本包 JSON 的文件，会以 `STORE_INVALID` 拒绝，而不是被当作空内容读取并让一次认领覆盖它。
 
 <a id="reach-sign-in"></a>
