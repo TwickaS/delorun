@@ -116,6 +116,24 @@ describe('an elevation in the home', () => {
     expect(ended()).toEqual(['locked-from-device', 'revoked-at-computer'])
   })
 
+  it('follows a session that rolled while the request was in flight: the request carries the new id', async () => {
+    const device = await signedIn(72 * 60 * MINUTE)
+    // Idle time stays short of the session's limit, so the session is still admitted when it is due to roll.
+    for (const hours of [11, 11, 2]) {
+      home.clock.advance(hours * 60 * MINUTE)
+      if (hours === 11) home.auth.admitToken(device.token, LISTENER)
+    }
+    const rolled = home.auth.admitToken(device.token, LISTENER, { roll: true })
+    if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+    // The page's request still presents the old id when it asks, inside the grace.
+    const id = elevate(device.sessionId, device.session)
+    // Pins the successor lookup: the elevation would sit on the old id and end when its grace does.
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toMatchObject({ id, sessionId: rolled.sessionId })
+    home.clock.advance(SESSION_LIMITS.reach.rollGraceMs + 1)
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeDefined()
+    expect(rolled.sessionId).not.toBe(device.sessionId)
+  })
+
   it('admits nothing on another listener', async () => {
     const device = await signedIn()
     elevate(device.sessionId, device.session)

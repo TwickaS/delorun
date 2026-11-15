@@ -600,7 +600,8 @@ export class HomeAuth {
    * @throws {HomeAuthError} `APPROVAL_PENDING_LIMIT` when the home holds its limit of requests.
    */
   requestElevation(sessionId: string, session: SessionRecord): ElevationState {
-    this.elevations.request({ deviceId: session.deviceId, listener: session.listener, sessionId })
+    // A request that rolled its session in flight still presents the old id; the elevation follows the current one.
+    this.elevations.request({ deviceId: session.deviceId, listener: session.listener, sessionId: this.successors.get(sessionId) ?? sessionId })
     return this.elevations.stateOf(session.deviceId, session.listener)
   }
 
