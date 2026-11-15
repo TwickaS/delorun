@@ -67,7 +67,7 @@ describe('the look step', () => {
     expect(radio('Dark').getAttribute('aria-checked')).toBe('true')
   })
 
-  it('offers the accent presets with the Soft palette, writes the one chosen, and replaces them with a note for a theme that brings its own', async () => {
+  it('offers the accent presets with the Soft palette, writes the one chosen, and locks them with a note for a theme that brings its own', async () => {
     const services = stepServices()
     look(services)
     const group = screen.getByRole('radiogroup', { name: 'Accent' })
@@ -77,7 +77,7 @@ describe('the look step', () => {
     await click(radio('Cobalt'))
     expect(services.look.settings.getSnapshot().value?.accent).toBe('cobalt')
     await click(radio('Grove'))
-    expect(screen.queryByRole('radiogroup', { name: 'Accent' })).toBeNull()
+    expect((radio('Cobalt') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Set by the theme/)).toBeTruthy()
   })
 
@@ -86,22 +86,22 @@ describe('the look step', () => {
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
     expect(radio('Soft').getAttribute('aria-checked')).toBe('true')
     expect(radio('Peach').getAttribute('aria-checked')).toBe('true')
-    expect([radio('Iris'), radio('Cobalt'), radio('Stock')].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
+    expect([radio('Iris'), radio('Cobalt'), screen.getByRole('button', { name: 'Stock' })].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
     expect((radio('Dark') as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('says, before the choice, that the stock look turns Delorun\'s additions and this guide off, and switches only when it is chosen', async () => {
+  it('offers the stock look as a quiet line, and switches only after the confirmation that says it closes the guide', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
-    const group = screen.getByRole('radiogroup', { name: en['look.studio'] })
-    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['Delorun', 'true'], ['Stock', 'false']])
+    expect(screen.queryByRole('radiogroup', { name: en['look.studio'] })).toBeNull()
+    expect(screen.getByText(en['look.stock.ask'], { exact: false })).toBeTruthy()
+    await click(screen.getByRole('button', { name: 'Stock' }))
     expect(screen.getByText(/turns Delorun's studio additions off and closes this guide/)).toBeTruthy()
-    expect(en['look.studio.lead']).toContain('Settings → General → Look switches between the two')
-    expect(en['look.studio.lead']).toContain('with the stock look on, the Delorun look row in Settings → General')
     expect(useStockLook).not.toHaveBeenCalled()
-    await click(radio('Delorun'))
+    await click(screen.getByRole('button', { name: en['look.stock.no'] }))
     expect(useStockLook).not.toHaveBeenCalled()
-    await click(radio('Stock'))
+    await click(screen.getByRole('button', { name: 'Stock' }))
+    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
     expect(useStockLook).toHaveBeenCalledOnce()
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -119,7 +119,8 @@ describe('the look step', () => {
     ['cannot be reached', () => Promise.reject(new Error('transport'))],
   ])('shows a failure and keeps the choice open when the host %s', async (_, write) => {
     look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: write } }))
-    await click(radio('Stock'))
+    await click(screen.getByRole('button', { name: 'Stock' }))
+    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
 
@@ -515,7 +516,7 @@ describe('a set of chips', () => {
 
   it('is one tab stop, on the chosen chip', () => {
     look(stepServices())
-    for (const name of ['Mode', 'Theme', 'Accent', en['look.studio']]) {
+    for (const name of ['Mode', 'Theme', 'Accent']) {
       const stops = radios(name).filter(each => each.tabIndex === 0)
       expect(stops).toHaveLength(1)
       expect(stops[0]?.getAttribute('aria-checked')).toBe('true')
@@ -564,22 +565,10 @@ describe('a set of chips', () => {
     expect(set).not.toHaveBeenCalled()
   })
 
-  it('only moves focus in the studio look set, so an arrow key never leaves Delorun\'s look', async () => {
-    const useStockLook = vi.fn(() => Promise.resolve(true))
-    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
-    const [delorun, stock] = radios(en['look.studio']) as [HTMLElement, HTMLElement]
-    delorun.focus()
-    await key(delorun, 'ArrowRight')
-    expect(document.activeElement).toBe(stock)
-    expect(useStockLook).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(stock) })
-    expect(useStockLook).toHaveBeenCalledOnce()
-  })
-
-  it('gives a set whose chips cannot be chosen no tab stop', () => {
+  it('disables a set whose chips cannot be chosen', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
-    for (const name of ['Theme', 'Accent', en['look.studio']]) expect(radios(name).every(each => each.tabIndex === -1)).toBe(true)
+    for (const name of ['Theme', 'Accent']) expect(radios(name).every(each => (each as HTMLButtonElement).disabled)).toBe(true)
     expect(radios('Mode').map(each => each.tabIndex)).toEqual([-1, -1, 0])
   })
 
