@@ -13,7 +13,9 @@
  *   display hint: a local process can send it too, and gains only a waiting request that needs the code from its own
  *   screen.
  * - **The request.** Bound to the listener's studio address, it expires after the configured minutes (5 by default); a
- *   home holds at most 5 pending, and a source makes at most 10 a minute. Its state is read with its request secret at
+ *   home holds at most 5 pending, and a source makes at most 10 a minute. A request that names a Tailscale login is
+ *   counted per login instead, in a window too: at most 10 a minute and the configured number waiting for each login,
+ *   and 50 a minute over all logins. Its state is read with its request secret at
  *   most once every 2 seconds.
  * - **The local approval.** The person chooses one pending request and types the match code its device shows. A wrong
  *   code is refused with `APPROVAL_CODE_MISMATCH` and the third cancels that request only. The person may also cancel
@@ -121,6 +123,10 @@ export class Approvals {
   private readonly held = new Map<string, readonly (() => void)[]>()
   private readonly sources: AttemptLimiter
   private readonly windowlessSources: AttemptLimiter
+  /** The window's budget per Tailscale login, for a request that names one. */
+  private readonly windowIdentities: AttemptLimiter
+  /** The window's budget over every identity together, so many logins cannot raise the total without bound. */
+  private readonly windowCeiling: AttemptLimiter
   /** The clock, the random source and the home key. */
   private readonly options: ApprovalsOptions
 
@@ -132,6 +138,8 @@ export class Approvals {
     const budget = { limit: DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource, windowMs: MINUTE_MS, now: options.now }
     this.sources = new AttemptLimiter(budget)
     this.windowlessSources = new AttemptLimiter(budget)
+    this.windowIdentities = new AttemptLimiter(budget)
+    this.windowCeiling = new AttemptLimiter({ ...budget, limit: budget.limit * DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome })
   }
 
   /**
@@ -186,9 +194,12 @@ export class Approvals {
     const pending = [...this.requests.values()].filter(record => record.state === 'pending')
     // The per-identity limit comes first, so a request it refuses spends none of the source's budget and one
     // identity's repeated asks cannot make the home refuse every other request (a person's open window included).
-    if (windowless && where.identity !== undefined) {
+    // While a window is open the same per-identity cap applies to every request that names a login: all requests reach
+    // the home from 127.0.0.1, so without it one tailnet member could fill the slots a person's window is open for.
+    if (where.identity !== undefined) {
       const login = where.identity.login
-      if (pending.filter(record => record.windowless && record.identity?.login === login).length >= this.options.pairing().pendingPerIdentity) {
+      const mine = pending.filter(record => (record.windowless || !windowless) && record.identity?.login === login)
+      if (mine.length >= this.options.pairing().pendingPerIdentity) {
         throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This account already has a device request waiting at the home\'s computer. Finish or decline it there, then try again')
       }
     }
@@ -196,8 +207,10 @@ export class Approvals {
     if (windowless && pending.filter(record => record.windowless).length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome - 1) {
       throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'Too many devices are asking to pair without an approval window. At the home\'s computer, run delorun devices approve to approve or cancel one, then try again')
     }
-    // Window-less requests have their own budget per source: every reach request arrives from one address.
-    if (!(windowless ? this.windowlessSources : this.sources).take(where.source)) {
+    // Window-less requests have their own budget per source: every reach request arrives from one address. Inside a
+    // window a request that names a login draws on that login's budget and then on the ceiling over all logins; one
+    // that names none draws on its source's.
+    if (!this.takeBudget(windowless, where)) {
       throw new HomeAuthError('APPROVAL_RATE_LIMITED', 'Too many device requests from this address in the last minute')
     }
     if (pending.length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome) {
@@ -232,6 +245,18 @@ export class Approvals {
       lastReadAt: undefined,
     })
     return { requestId: id, requestSecret: secret, homePublicKey: key.publicKeyText, homeNonce, expiresAt }
+  }
+
+  /**
+   * Spend one request from the budget that applies to it.
+   * @param windowless - whether the request arrived outside an approval window.
+   * @param where - where the request arrived and who it names.
+   * @returns whether the request is within its budget.
+   */
+  private takeBudget(windowless: boolean, where: RequestOrigin): boolean {
+    if (windowless) return this.windowlessSources.take(where.source)
+    if (where.identity === undefined) return this.sources.take(where.source)
+    return this.windowIdentities.take(where.identity.login) && this.windowCeiling.take('home')
   }
 
   /**

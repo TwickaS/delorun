@@ -206,6 +206,40 @@ describe('the waiting requests of one identity', () => {
     await expect(ask(51, SOMEONE)).resolves.toMatchObject({ requestId: expect.any(String) })
   })
 
+  it('keeps one Tailscale identity from filling the slots of an open window, and lets another identity through', async () => {
+    await start(resolvePairing({ mayAskWithoutWindow: 'window-only', pendingPerIdentity: 2 }))
+    await home.auth.openApprovalWindow()
+    await ask(1, SOMEONE)
+    await ask(2, SOMEONE)
+    // Pins the per-identity pending cap inside a window: without it these requests fill all of the home's slots.
+    for (let fill = 3; fill <= 8; fill += 1) {
+      await expect(ask(fill, SOMEONE)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT' })
+    }
+    await expect(ask(9, ME)).resolves.toMatchObject({ requestId: expect.any(String) })
+  })
+
+  it('counts a window\'s request budget per identity, so one identity\'s asks do not stop another\'s', async () => {
+    await start(resolvePairing({ mayAskWithoutWindow: 'window-only', pendingPerIdentity: 5 }))
+    await home.auth.openApprovalWindow()
+    for (let fill = 1; fill <= DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource; fill += 1) {
+      home.auth.approvals.cancel((await ask(fill, SOMEONE)).requestId)
+    }
+    // Pins the per-identity key: the shared source budget would be spent and this identity's ask refused too.
+    await expect(ask(50, SOMEONE)).rejects.toMatchObject({ code: 'APPROVAL_RATE_LIMITED' })
+    await expect(ask(51, ME)).resolves.toMatchObject({ requestId: expect.any(String) })
+  })
+
+  it('keeps a ceiling over every identity in a window, so many logins cannot raise the total without bound', async () => {
+    await start(resolvePairing({ mayAskWithoutWindow: 'window-only', pendingPerIdentity: 5 }))
+    await home.auth.openApprovalWindow()
+    const ceiling = DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource * DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome
+    for (let fill = 1; fill <= ceiling; fill += 1) {
+      home.auth.approvals.cancel((await ask(fill, { login: `person${String(fill)}@example.com`, name: 'Person' })).requestId)
+    }
+    // Pins the ceiling: each login is within its own budget, but the total is spent.
+    await expect(ask(500, { login: 'one-more@example.com', name: 'One more' })).rejects.toMatchObject({ code: 'APPROVAL_RATE_LIMITED' })
+  })
+
   it('shows the identity, the window-less mark and the wrong codes of a waiting request', async () => {
     await start()
     await ask(1, ME)
