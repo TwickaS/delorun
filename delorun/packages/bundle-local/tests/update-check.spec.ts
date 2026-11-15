@@ -214,6 +214,43 @@ describe('switching the check off in a running Host', () => {
   })
 })
 
+describe('switching the check off and on again', () => {
+  /** Mount with a late attach that gives each service its own source, whose notice names the attach number. */
+  async function mountAttaching() {
+    const mounted = await mount({ enabled: true, intervalHours: 1 })
+    let attaches = 0
+    mounted.ctx.inject(['delorunUpdateCheck'], (scope) => {
+      attaches++
+      const state: UpdateCheckState = { checked: Date.now(), notice: { ...NOTICE, disables: attaches } }
+      scope.effect(() => scope.delorunUpdateCheck.attach(source(state).source))
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    return { ...mounted, attaches: () => attaches }
+  }
+
+  it('replaces the service: the old one is gone, a new one is provided and a late attach reaches it', async () => {
+    const { ctx, fiber, attaches } = await mountAttaching()
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBe(1)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeUndefined()
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeDefined()
+    expect(attaches()).toBe(2)
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBe(2)
+  })
+
+  it('off then on in the same tick still ends with a live service that holds an attached check', async () => {
+    const { ctx, fiber } = await mountAttaching()
+    void fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeDefined()
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBeGreaterThanOrEqual(1)
+  })
+})
+
 describe('the notice route', () => {
   it('serves the attached check\'s notice uncached, and null without one', async () => {
     const { ctx, routes } = await mount({ enabled: true })
