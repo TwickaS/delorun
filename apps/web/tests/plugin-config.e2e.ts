@@ -183,7 +183,7 @@ describe('web e2e: plugin configuration pages', () => {
       .toBe('https://api-docs.deepseek.com/zh-cn/guides/search')
     // Each section shows the description its selected provider registered with the Host, in the active language.
     expect(await searchSection.getByText('会产生费用，由「计费方式」选定的账号或 API Key 支付。', { exact: true }).count()).toBe(1)
-    expect(await fetchSection.getByText('免费，可访问内网和本机。不支持需要 JavaScript 或登录的页面，也不支持 PDF。', { exact: true }).count()).toBe(1)
+    expect(await fetchSection.getByText('免费。抓取防护开启时，本机和私有网络地址会被拒绝。不支持需要 JavaScript 或登录的页面，也不支持 PDF。', { exact: true }).count()).toBe(1)
     // The Fetch API suggestion is text, not an action.
     expect(await fetchSection.getByRole('button').count()).toBe(1)
     expect(await save.isDisabled()).toBe(true)
