@@ -23,6 +23,14 @@ const ZSTD_MAGIC = 0xFD2FB528
  */
 export const MAX_FRAME_PLAINTEXT_BYTES = 64 * 1024 * 1024
 
+/**
+ * The most plaintext one log's frames may expand to together, across every frame a decoder yields. It is a protocol
+ * limit, not a setting: the decoder has no configuration, and the 64 MiB frame bound alone lets a crafted imported log
+ * of many small, highly compressed frames cost the reader unbounded memory. A log of this size holds far more events
+ * than a session reaches in practice.
+ */
+export const MAX_LOG_PLAINTEXT_BYTES = 1024 * 1024 * 1024
+
 const zstdCompressAsync = promisify(zstdCompress)
 const zstdDecompressAsync = promisify(zstdDecompress)
 const CHECKSUM_OPTIONS: ZstdOptions = {
@@ -160,13 +168,49 @@ export interface ZstdFrameDecoder {
   close(): void
 }
 
+/** A decoder that refuses a log whose frames expand past a total, however many frames carry it. */
+class AggregateBoundedZstdFrameDecoder implements ZstdFrameDecoder {
+  /** The decoder that produces the frames. */
+  private readonly inner: ZstdFrameDecoder
+  /** The most plaintext the frames may expand to together, in bytes. */
+  private readonly maxTotalBytes: number
+
+  /**
+   * @param inner - the decoder that produces the frames.
+   * @param maxTotalBytes - the most plaintext the frames may expand to together.
+   */
+  constructor(inner: ZstdFrameDecoder, maxTotalBytes: number) {
+    this.inner = inner
+    this.maxTotalBytes = maxTotalBytes
+  }
+
+  /** @inheritdoc */
+  public *decode(source: Buffer, frames: readonly ZstdFrameRange[]): Generator<Buffer, void, void> {
+    let total = 0
+    for (const plaintext of this.inner.decode(source, frames)) {
+      total += plaintext.length
+      if (total > this.maxTotalBytes) {
+        throw new Error(`corrupt Zstandard session log: its frames expand past ${this.maxTotalBytes} bytes of plaintext together`)
+      }
+      yield plaintext
+    }
+  }
+
+  /** @inheritdoc */
+  close(): void {
+    this.inner.close()
+  }
+}
+
 /**
  * Select the shared private decoder when the running Node 24/26 shape is
  * compatible, otherwise preserve correctness with the public one-shot API.
+ * Whichever decoder runs, the frames it yields together stay within `maxTotalBytes`.
+ * @param maxTotalBytes - the most plaintext all frames may expand to together; {@link MAX_LOG_PLAINTEXT_BYTES} by default.
  * @returns a synchronous decoder with an implementation-independent lifecycle.
  */
-export function createZstdFrameDecoder(): ZstdFrameDecoder {
-  return NodePrivateZstdFrameDecoder.create() ?? new PublicZstdFrameDecoder()
+export function createZstdFrameDecoder(maxTotalBytes: number = MAX_LOG_PLAINTEXT_BYTES): ZstdFrameDecoder {
+  return new AggregateBoundedZstdFrameDecoder(NodePrivateZstdFrameDecoder.create() ?? new PublicZstdFrameDecoder(), maxTotalBytes)
 }
 
 /**

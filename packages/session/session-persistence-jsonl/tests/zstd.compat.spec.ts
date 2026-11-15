@@ -21,7 +21,10 @@ describe('JSONL Zstandard compatibility', () => {
     expect(Buffer.concat(decoded).toString()).toContain('"type":"turn/start"')
 
     const preferred = createZstdFrameDecoder()
-    expect(preferred).toBeInstanceOf(NodePrivateZstdFrameDecoder)
+    // The selected decoder wraps the Node-private one when this runtime offers it.
+    const probe = NodePrivateZstdFrameDecoder.create()
+    expect(probe).toBeInstanceOf(NodePrivateZstdFrameDecoder)
+    probe?.close()
     for (const decoder of [preferred, new PublicZstdFrameDecoder()]) {
       try {
         const plaintext = Array.from(decoder.decode(encoded, frames), chunk => Buffer.from(chunk))

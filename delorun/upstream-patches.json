@@ -1374,7 +1374,7 @@
       "path": "packages/session/session-persistence-jsonl/src/zstd.ts",
       "class": "security",
       "reason": "Session-log Zstandard bound (security review R5): declares `MAX_FRAME_PLAINTEXT_BYTES` (64 MiB) and applies it to one-shot frame decompression and to torn-final-frame prefix recovery, so no decode path expands a crafted frame without a limit. Upstream's frame scanning, compression options and decoder factory are unchanged. Lead verdict: the independent audit's R5 finding authorizes the change.",
-      "sha256": "8a08dee4f5813ab48c97b437b175c7a7dbefca4d62ba061059d4768d5c2cc846"
+      "sha256": "62b246434adafcf078e35ec7862bad7b9cc48add8878c55ac4311ec7fe32bbed"
     },
     {
       "path": "packages/session/session-persistence-jsonl/tests/generation.spec.ts",
@@ -1386,7 +1386,7 @@
       "path": "packages/session/session-persistence-jsonl/tests/zstd.spec.ts",
       "class": "security",
       "reason": "Session-log Zstandard bound (security review R5): covers a 2 KiB frame that expands past the plaintext bound, refused by the one-shot decompressor and by both synchronous decoders. Lead verdict: the independent audit's R5 finding authorizes the change.",
-      "sha256": "c61fad78799dcff2aaa4e3bdeb26b7ac9dc282bd7e20f06c0f29d8c24091d885"
+      "sha256": "68adcc40a26c1079c7d4448ed40a357ccb497bca49ebdcda74ac716abd87a77d"
     },
     {
       "path": "packages/session/session-projection-cache/src/index.ts",

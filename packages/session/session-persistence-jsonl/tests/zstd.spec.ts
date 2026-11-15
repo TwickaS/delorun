@@ -227,11 +227,32 @@ describe('Zstandard frame structure', () => {
     }
   })
 
-  it('falls back to the public decoder when the private Node contract is unavailable', () => {
+  it('falls back to the public decoder when the private Node contract is unavailable', async () => {
     vi.spyOn(NodePrivateZstdFrameDecoder, 'create').mockReturnValue(undefined)
+    const publicDecode = vi.spyOn(PublicZstdFrameDecoder.prototype, 'decode')
+    const stream = await compressZstdFrame('only\n')
     const decoder = createZstdFrameDecoder()
-    expect(decoder).toBeInstanceOf(PublicZstdFrameDecoder)
-    decoder.close()
+    try {
+      expect(Array.from(decoder.decode(stream, scanZstdFrames(stream).frames), chunk => Buffer.from(chunk).toString())).toEqual(['only\n'])
+      expect(publicDecode).toHaveBeenCalledOnce()
+    } finally {
+      decoder.close()
+    }
+  })
+
+  it('refuses a log whose frames expand past the aggregate bound together, though each frame is within its own', async () => {
+    const texts = ['0123456789\n', '0123456789\n', '0123456789\n']
+    const stream = Buffer.concat(await Promise.all(texts.map(text => compressZstdFrame(text))))
+    const ranges = scanZstdFrames(stream).frames
+    // Pins the running total: three 11-byte frames pass a 33-byte bound and fail a 32-byte one, whichever decoder runs.
+    for (const publicOnly of [false, true]) {
+      if (publicOnly) vi.spyOn(NodePrivateZstdFrameDecoder, 'create').mockReturnValue(undefined)
+      const within = createZstdFrameDecoder(33)
+      expect(Array.from(within.decode(stream, ranges), chunk => chunk.length)).toEqual([11, 11, 11])
+      const over = createZstdFrameDecoder(32)
+      const drain = (): Buffer[] => Array.from(over.decode(stream, ranges), chunk => Buffer.from(chunk))
+      expect(drain).toThrow(/expand past 32 bytes of plaintext together/)
+    }
   })
 
   it('refuses a frame whose plaintext passes the session-log bound, whichever decoder decodes it', async () => {
