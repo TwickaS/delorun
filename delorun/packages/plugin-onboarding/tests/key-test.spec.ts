@@ -62,6 +62,7 @@ describe('the key test', () => {
     })
     expect((await testKeys(parts)).providers.map(each => each.provider)).toEqual(['custom'])
     expect(discover).toHaveBeenCalledExactlyOnceWith('llm.custom', 'custom', expect.any(AbortSignal))
+    expect((await testKeys({ ...parts, hidden: [] })).providers.map(each => each.provider)).toEqual(['deepseek-account', 'custom'])
   })
 
   it('answers no-key for a route with no configured credential, without asking its discovery, and untested for a configured one with no listing', async () => {
