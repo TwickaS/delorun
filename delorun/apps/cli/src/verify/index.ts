@@ -36,7 +36,7 @@ import { signedRuntimeOf } from '../update/signed-runtime.ts'
 import { runtimeOfFile } from '../update/runtime.ts'
 import { delorunVersion } from '../version.ts'
 import { checkInstalledPlugins } from '../plugin-install-check.ts'
-import { installedPluginsCheck } from './plugin-bill.ts'
+import { processPluginsCheck } from './plugin-bill.ts'
 import { runVerifyStage, type ChangesReader, type PluginInstallCheck } from './bill.ts'
 import { ACCESS_LINE, billLines, billSuffix } from './bill-text.ts'
 import { changesExit, changesLines, changesSuffix, processChangesReader, readVerifyChanges, type VerifyChanges } from './changes.ts'
@@ -124,14 +124,6 @@ async function checkEveryProfile(home: string, output: CommandOutput): Promise<v
  */
 export function runsFromStore(home: string): boolean {
   return runtimeOfFile(home, fileURLToPath(import.meta.url)).store
-}
-
-/** The bill's plugin install check over this installation's profile boot; the boot module loads when the check runs. */
-const processPluginsCheck: PluginInstallCheck = {
-  async check(home, profile) {
-    const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
-    return installedPluginsCheck(INSTALL_ANCHOR).check(home, profile)
-  },
 }
 
 /** This process's fetch, clock, platform and version. */

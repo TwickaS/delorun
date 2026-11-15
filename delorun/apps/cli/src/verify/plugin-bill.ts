@@ -59,3 +59,11 @@ export function installedPluginsCheck(installAnchor: string): PluginInstallCheck
     },
   }
 }
+
+/** The bill's plugin install check over this installation's profile boot; the boot module loads when the check runs. */
+export const processPluginsCheck: PluginInstallCheck = {
+  async check(home, profile) {
+    const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+    return installedPluginsCheck(INSTALL_ANCHOR).check(home, profile)
+  },
+}

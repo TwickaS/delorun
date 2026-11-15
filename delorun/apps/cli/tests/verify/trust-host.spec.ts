@@ -16,7 +16,7 @@ import { TRUST_BILL_SCHEMA, type TrustBill } from '@delorun/bundle-local/trust-b
 import type { DelorunLogger } from '@delorun/logs'
 import type { BillContext } from '../../src/verify/bill.ts'
 import type { ReleaseCheckOutcome } from '../../src/verify/checks.ts'
-import { billOfVerifyOutput, childRunner, launcherVerifyCommand, runChild, trustSource, watchTrust, type ChildRun, type RunChild, type TrustStages, type TrustWatchOptions } from '../../src/verify/trust-host.ts'
+import { billOfVerifyOutput, childRunner, hostTrustOptions, launcherVerifyCommand, runChild, trustSource, watchTrust, type ChildRun, type RunChild, type TrustStages, type TrustWatchOptions } from '../../src/verify/trust-host.ts'
 
 /**
  * A bill of one stage.
@@ -96,6 +96,14 @@ describe('the trust source', () => {
     expect((await source.read()).stage).toBe('start')
     expect((await source.read()).stage).toBe('start')
     expect(contexts).toEqual([{ stage: 'start', context: { home: '/home/person/.delorun', profile: 'default', platform: 'linux-x64', running: '0.1.0', env: { DELORUN_START_CHECK: 'x' }, now: 1_800_000_000 } }])
+  })
+
+  it('gives the running Host\'s start bill the plugin install check and Changes, so its badge is not unknown for want of a reader', async () => {
+    const { stages: value, contexts } = stages()
+    await trustSource(hostTrustOptions(options(logger())), value).read()
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]?.context.plugins).toBeDefined()
+    expect(contexts[0]?.context.changes).toBeDefined()
   })
 
   it('produces the start bill again after a failed one', async () => {

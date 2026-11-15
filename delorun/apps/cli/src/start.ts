@@ -89,7 +89,7 @@ import { attachHomeLogs, registerEnvironment } from './log-secrets.ts'
 import { registerFatalRelease } from './last-resort.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { startNoticeLine, watchUpdates, type UpdateWatchOptions } from './update/notice-host.ts'
-import { PROCESS_FETCH, TRUST_STAGES, watchTrust, type TrustWatchOptions } from './verify/trust-host.ts'
+import { hostTrustOptions, PROCESS_FETCH, TRUST_STAGES, watchTrust, type TrustWatchOptions } from './verify/trust-host.ts'
 
 /**
  * Adds `@delorun/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
@@ -755,7 +755,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   booted.releaseTurns()
   if (stored !== undefined) {
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored.version, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
-    booted.watchTrust?.({ home: request.home, profile: request.profile, platform: `${process.platform}-${process.arch}`, running: stored.version, env: request.env, logger, node: process.execPath, fetch: PROCESS_FETCH, now: () => Math.floor(Date.now() / 1000), elapsed: () => performance.now() })
+    booted.watchTrust?.(hostTrustOptions({ home: request.home, profile: request.profile, platform: `${process.platform}-${process.arch}`, running: stored.version, env: request.env, logger, node: process.execPath, fetch: PROCESS_FETCH, now: () => Math.floor(Date.now() / 1000), elapsed: () => performance.now() }))
   }
   return runningHost(booted, request, composed.startOnlySockets, async () => {
     if (stored !== undefined) await dependencies.checkRuntime(request.home, stored.version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), stored.composed)
