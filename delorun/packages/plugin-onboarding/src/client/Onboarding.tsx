@@ -123,7 +123,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     if (target.kind === 'none') told.current = true
   }, [target, guide, told])
   const { plugins, optionalRows } = settings
-  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins, optionalRows, renderSection }), [fixed, t, plugins, optionalRows, renderSection])
+  const services = useMemo<StepServices>(() => ({ ...fixed, t, remote: reach === 'remote', plugins, optionalRows, renderSection }), [fixed, t, reach, plugins, optionalRows, renderSection])
 
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delorun onboarding: progress was not saved', error) })

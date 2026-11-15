@@ -198,7 +198,7 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
   const bundles = installerFake()
   const theme = liveForm<ThemeSettings>(THEME)
   return {
-    t, appearance, plugins: [], optionalRows: [],
+    t, appearance, remote: false, plugins: [], optionalRows: [],
     notice: undefined,
     language: languageFace().face,
     scheme: schemeFace().face,

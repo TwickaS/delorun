@@ -276,6 +276,8 @@ export interface StaticServices {
 export interface StepServices extends StaticServices {
   /** This plugin's copy. */
   readonly t: TranslateNS<'delorunOnboarding'>
+  /** Whether the studio is opened from a phone through reach, which cannot install or turn on packages. */
+  readonly remote: boolean
   /** The packages the recommended-plugins step offers. */
   readonly plugins: readonly string[]
   /** The bundled rows, by row id, that the recommended-plugins step offers to turn on. */

@@ -123,6 +123,7 @@ export const en = {
   'bundle.restart': 'Restart Delorun to use it.',
   'bundle.unavailable': 'Not included in this installation. Look for it in Plugins.',
   'bundle.failed': 'Could not add it. Try again, or add it from Plugins.',
+  'bundle.atComputer': 'Add this at your computer',
   'bundle.open': 'Open Plugins',
 
   'reach.lead': 'Use Delorun from your phone over your own Tailscale network. Turn it on from a terminal on this computer:',
@@ -391,6 +392,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'bundle.restart': '请重启 Delorun 后使用。',
   'bundle.unavailable': '当前安装未包含。请在“插件”中查找。',
   'bundle.failed': '无法添加。请重试，或在“插件”中添加。',
+  'bundle.atComputer': '请在你的电脑上添加',
   'bundle.open': '打开插件',
 
   'reach.lead': '通过你自己的 Tailscale 网络，在手机上使用 Delorun。请在这台电脑的终端中打开它：',
