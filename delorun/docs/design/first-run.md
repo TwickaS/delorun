@@ -16,7 +16,7 @@ One command, `npx delorun`, takes a person from nothing to a first chat. The lau
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -55,6 +55,6 @@ The rules above change what is asked and when; the protections they rely on keep
 - `setup asks no question whose answer it does not apply`
 - `the import changes nothing before the person confirms the preview`
 
-## What is built so far
+## Implementation status
 
 The launcher's progress and its Node check, Setup by use case with its seven sections (`privacy`, `import`, `key` and `prompts` in the main flow, `reach` for the phone use case, `background`, `reach` and `profile` under More settings), the way back, the review screen, setup's ending (next steps only) and its record of sections are built. Onboarding in the studio, with its starter prompts, its folder chooser and the reopening from Settings, is built, and so is the default workspace that `delorun start` resolves. The bare command starts in the background when setup's answer says so, which is the default, and in the terminal otherwise. Rule 3 is built for a start in the background, which prints the message; a start in the terminal does not print it. The stock-home import is built, as setup's `import` section and `delorun import-home` ([C8](../contracts/c08-archive-and-trash.md#the-stock-home-import)). The reach section is built for Tailscale on the person's own tailnet, with the checks and the trust statement of `delorun reach on tailscale`; the Docker section and onboarding's reach step are not built.

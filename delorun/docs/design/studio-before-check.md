@@ -16,7 +16,7 @@ A Host that `delorun start` boots must pass [C19](../contracts/c19-home-process.
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -46,6 +46,6 @@ A Host that `delorun start` boots must pass [C19](../contracts/c19-home-process.
 - `a studio reconnect before the post-boot check opens no chat`
 - `no title generation request reaches the model before the post-boot check`
 
-## What is built so far
+## Implementation status
 
 The studio opens only through the one-time link, and the link is issued only after the post-boot check on a normal start. Rules 1 to 3 are not built.

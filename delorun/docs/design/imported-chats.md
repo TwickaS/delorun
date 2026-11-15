@@ -16,7 +16,7 @@ English
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -63,6 +63,6 @@ English
 | `no row applies before its diff is shown` | No customisation row is written before the diff screen has shown it and the person has accepted. |
 | `a stock home is never modified` | After a stock-home import, every file of the fixture stock home is byte-identical. |
 
-## What is built so far
+## Implementation status
 
 The archive format, the validation, the signature check, the refusal of `!!js` expressions, `insert` rows and denied row kinds, and the publication under `archive/imported/` are built and [C8](../contracts/c08-archive-and-trash.md) describes them. None of the rules above is built.

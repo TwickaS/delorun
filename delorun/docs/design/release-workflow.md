@@ -16,7 +16,7 @@ English
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -55,6 +55,6 @@ English
 | `the scheduled timestamp never lowers a channel` | A scheduled run whose input names a lower version for a channel refuses to sign. |
 | `two of N rebuilds are required once maintainers sign` | Signing with one rebuild record under a two-of-N root refuses. |
 
-## What is built so far
+## Implementation status
 
 The signing, timestamp, log, advisory and rebuild-comparison commands and their refusals are built, and C2 and C18 describe them. None of the rules above is built.

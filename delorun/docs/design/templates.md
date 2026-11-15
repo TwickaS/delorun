@@ -33,7 +33,7 @@ A template is a record of how someone uses the harness: the plugins they run, pi
 - [Constraints for current work](#constraints-for-current-work)
 - [Current code that conflicts](#current-code-that-conflicts)
 - [Open questions](#open-questions)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## Terms
 
@@ -211,6 +211,6 @@ Delorun does not include templates ([roadmap](../guide/roadmap.md)). Homes creat
 
 Decided defaults, recorded here for review: a backup covers every saved template, the home's `skills/` and `AGENTS.md` and the home patch (rule 38); the stock-home import writes into the active template (rule 37); harness edits in a shared template are shown file by file with their diffs before anything applies (rules 23 and 35); switching is within one profile (rule 33).
 
-## What is built so far
+## Implementation status
 
 Nothing on this page is built. The profile files and their history with its restore, safe mode's overlay and C8's archive reader that the rules reuse are built and described by their own contracts.

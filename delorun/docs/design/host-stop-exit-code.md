@@ -16,7 +16,7 @@ When the home process stops, it closes its Host through upstream's bounded shutd
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -45,6 +45,6 @@ When the home process stops, it closes its Host through upstream's bounded shutd
 - `an interrupted stop whose teardown fails ends with the failure code, not 130`
 - `a clean stop ends with the code it asked for`
 
-## What is built so far
+## Implementation status
 
 Nothing; the normal stop path is as described under "What exists today".

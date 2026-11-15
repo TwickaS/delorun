@@ -16,7 +16,7 @@ English
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -84,6 +84,6 @@ English
 | `docker-desktop-control-sockets-denied` | Under Seatbelt, a confined command cannot connect to a fixture socket in a denied Docker Desktop control directory, including one created after the command starts. |
 | `a shell write to AGENTS.md asks` | A confined shell command's write to a workspace `AGENTS.md` under `workspace-write` waits for the instruction consent, and a refused ask leaves the file unchanged. |
 
-## What is built so far
+## Implementation status
 
 The write and read rules on bwrap, Landlock and Seatbelt, the socket rules on bwrap and Seatbelt, the refusal of a writable root that equals, lies inside or contains the home, the refusal of a lax home, `secrets/` or `run/<profile>/` directory and of a lax protected file on Linux and macOS, the provider's support for denied socket directories, and the hiding of Docker Desktop's control directories under WSL and on Linux are built, and [C1](../contracts/c01-home-layout.md) describes them. Rule 1 is built: `delorun headless` composes `@delorun/bundle-headless` under the sandbox overlay or refuses to start, as `delorun` and `delorun start` compose the CLI profile's layer, and `delorun plugin` boots no Host. Rules 2 to 12 are not built.

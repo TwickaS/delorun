@@ -16,7 +16,7 @@ The journey check runs a person's whole path through Delorun in a clean containe
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -62,6 +62,6 @@ The journey check does not cover the npm registry and its attestation, the insta
 
 The check is itself the denial test of steps 2, 7, 8 and 9: a log contradiction that installs, a rollback that does not restore, a rollback without a copy that does not refuse, and a tampered release that installs each fail it.
 
-## What is built so far
+## Implementation status
 
 Nothing of this design is built. Steps 4 to 8 also need the [update and rollback design](update-and-rollback.md).

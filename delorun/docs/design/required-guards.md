@@ -16,7 +16,7 @@ Delorun's guards reach upstream through optional service lookups: upstream asks 
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -62,6 +62,6 @@ Delorun's guards reach upstream through optional service lookups: upstream asks 
 - `a headless model write to an instruction file is refused`
 - `a headless full-access selection without a recorded grant is refused`
 
-## What is built so far
+## Implementation status
 
 The headless rules 5 to 7 are built as `@delorun/bundle-headless`, a bundle linked into the `headless` profile, not as an overlay; the `requiredGuards` marker and the rules before them are not built.

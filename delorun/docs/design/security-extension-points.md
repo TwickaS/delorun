@@ -16,7 +16,7 @@ Security in Delorun can grow without editing its core: a plugin may add a check 
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -74,6 +74,6 @@ These are examples of what the points make possible. Delorun includes none of th
 - `a plugin with a pending change cannot register a check`
 - `a registered check receives no way to change its subject`
 
-## What is built so far
+## Implementation status
 
 Nothing of this design is built.

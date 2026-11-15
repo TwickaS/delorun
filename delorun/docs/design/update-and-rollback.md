@@ -16,7 +16,7 @@ Before an update changes anything, Delorun shows a report of what the new releas
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -104,6 +104,6 @@ Before an update changes anything, Delorun shows a report of what the new releas
 | `c02-desktop-rollback-signed-logged` | A requested rollback to a signed, logged earlier release applies and restores the profile from history. |
 | `c02-desktop-rollback-refuses-unsigned-or-unlogged` | A requested rollback to a release without a verifying manifest, or without a verified log entry, is refused. |
 
-## What is built so far
+## Implementation status
 
 Rules 1 to 14 and rule 16 are built for the CLI home, and C3, C19, C1 and C2 describe them: the runtime store refuses an update target lower than `current` with `TARGET_LOWER` before anything installs, and `delorun update` refuses a report whose target is lower than the running release. Rule 15's single lock for the CLI home and the desktop app, and the desktop app's rules 17, 18 and 20, are not built. Rule 19 holds through upstream's updater, which refuses a downgrade (`allowDowngrade` false).

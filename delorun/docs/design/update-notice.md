@@ -16,7 +16,7 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -102,6 +102,6 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 | `plugin-check-refuses-special-files` | A manifest that is a FIFO or a symbolic link is refused without waiting or following it. |
 | `plugin-check-escapes-manifest-text` | The manifest's name and ranges print with terminal control characters escaped. |
 
-## What is built so far
+## Implementation status
 
 The rules above are built. The contract pages state them as built facts: the check, its record and the notice in [C3](../contracts/c03-update-report.md#update-check), the signed fields in [C2](../contracts/c02-release-manifest.md), the switch in [C16](../contracts/c16-parity-composition.md), the record's path in [C1](../contracts/c01-home-layout.md), and the promise, the patch rule and `delorun plugin check` in [C22](../contracts/c22-delorun-plugin-interface.md) and [C17](../contracts/c17-plugin-versions.md). This page keeps the reasons the rules are as they are.

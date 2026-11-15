@@ -18,7 +18,7 @@ Before this change, every `delorun` command read and hashed every file of the in
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Measurements](#measurements)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What the per-start hash protects
 
@@ -103,6 +103,6 @@ The specs are `delorun/packages/runtime-store/tests/identity.integration.spec.ts
 
 No confined command can write the record on any dialect: it lies under the home, which C1's `home-write-denied` covers for every file, and outside the read exemptions, which C1's `home-read-denied` covers where the dialect enforces reads.
 
-## What is built so far
+## Implementation status
 
 Everything on this page is built for the CLI launcher, `delorun verify`, an update's prepare, the check before a successor starts and the H1 health check. Not built: macOS keeps the full hash until a test on APFS runs; the interval is an environment variable until the launcher reads a setting, which it does not.

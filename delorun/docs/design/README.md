@@ -10,11 +10,11 @@ English
 
 A design page states the rules Delorun has adopted for a feature that is not built, or only partly built: what it does, what it refuses, what it does not protect against, and the denial tests that prove it. The [contract pages](../contracts/README.md) describe only what is built. A design page lets a contributor read the adopted rules of an unbuilt feature without a contract claiming what the code does not do.
 
-Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it has; and what is built so far. Statements under "What exists today" and "What is built so far" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
+Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it has; and implementation status. Statements under "What exists today" and "Implementation status" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
 
 ## How a design becomes a contract
 
-The change that builds a design moves its rules into the contract page that owns them, or into a new contract page, together with the denial tests, and in the same pull request shortens the design page to a pointer to that contract. A partly built design keeps the rules that are not built and names what is built under "What is built so far". A design that states a [security fundamental](../security/fundamentals.md) moves that fundamental's row from `designed` to `enforced` in the same change, with the code and the test that prove it.
+The change that builds a design moves its rules into the contract page that owns them, or into a new contract page, together with the denial tests, and in the same pull request shortens the design page to a pointer to that contract. A partly built design keeps the rules that are not built and names what is built under "Implementation status". A design that states a [security fundamental](../security/fundamentals.md) moves that fundamental's row from `designed` to `enforced` in the same change, with the code and the test that prove it.
 
 A design changes through a pull request like any other document. A change to a design that weakens a security fundamental needs the decision that [the fundamentals page](../security/fundamentals.md#changing-a-fundamental) describes.
 

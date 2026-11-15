@@ -18,7 +18,7 @@ A person has full control over their own harness, through plugins, which are pre
 - [When a change breaks something](#when-a-change-breaks-something)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What stock does today
 
@@ -81,6 +81,6 @@ Delorun runs upstream's plugin loading unchanged, so this is also what Delorun d
 - `a remote session cannot use the recovery actions`
 - `a failed reload leaves the previous version running`
 
-## What is built so far
+## Implementation status
 
 Rules 1 to 6, 9 and 14 for plugins, and `delorun changes off` and `on` of rule 15, are built ([C21](../contracts/c21-changes.md)); F15 and F16 stay designed and apply when protection is on ([fundamentals](../security/fundamentals.md)). Whole-profile safe mode and the profile rollback and restore of `delorun recover` are built.

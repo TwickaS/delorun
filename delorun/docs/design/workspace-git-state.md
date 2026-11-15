@@ -16,7 +16,7 @@ Under `workspace-write` a confined command can write a repository's `.git/config
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
-- [What is built so far](#what-is-built-so-far)
+- [Implementation status](#implementation-status)
 
 ## What exists today
 
@@ -42,6 +42,6 @@ The cost: a model can no longer set a repository's user name, add a remote, inst
 - `git-config-readonly`: on each dialect, a confined command under `workspace-write` cannot change `.git/config`, a file it includes from the workspace, `.git/hooks/*` or `.git/info/attributes`, and can still create a commit.
 - `gitfile-readonly`: the same holds for a git directory named by a `.git` file.
 
-## What is built so far
+## Implementation status
 
 Nothing. The threat model states the limit ([threat model](../security/threat-model.md#confinement-of-native-commands)).
