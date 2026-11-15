@@ -855,7 +855,9 @@ describe('web e2e: macOS window drag coverage', () => {
       await connectFreshWorkspace(page, scaffold.workspaceCwd, workspace)
       const row = page.locator('[data-row-key^="workspace:"]').filter({ hasText: workspace })
       // Keep the shipped HoverCard and its portal; move only its anchor so the card crosses window chrome.
+      // The row leaves the sidebar for `body`: the sidebar's own stacking context would otherwise keep it under the page header.
       await row.locator('..').evaluate((element) => {
+        document.body.append(element)
         Object.assign((element as HTMLElement).style, { position: 'fixed', left: '320px', top: '12px', width: '260px', zIndex: '2000' })
       })
       await settled(page)

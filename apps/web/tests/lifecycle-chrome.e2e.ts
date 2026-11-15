@@ -507,17 +507,15 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       await recoveryPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       await expect.poll(() => sockets.length).toBe(1)
       rejectConnections = true
+      // A loopback page ignores the browser's offline state: its Host needs no network, so it stays connected.
       await recoveryPage.context().setOffline(true)
       await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(false)
-      const offline = recoveryPage.getByRole('button', {
-        name: 'Disconnected, reconnect now', exact: true,
-      })
-      await offline.waitFor({ timeout: 2_000 })
       await recoveryPage.clock.fastForward(60_000)
       expect(sockets).toHaveLength(1)
-
+      expect(await recoveryPage.getByRole('button', { name: 'Disconnected, reconnect now', exact: true }).count()).toBe(0)
       await recoveryPage.context().setOffline(false)
       await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(true)
+      await sockets[0]!.close({ code: 4001, reason: 'connection recovery test' })
       const connecting = recoveryPage.getByRole('button', {
         name: 'Reconnecting, reconnect now', exact: true,
       })
