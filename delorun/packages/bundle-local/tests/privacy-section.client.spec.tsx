@@ -208,7 +208,7 @@ describe('the release check\'s General row', () => {
   })
 
   it('names the host of another release channel in the row and its consent dialog, in place of the production hosts', async () => {
-    const fetched = vi.fn(async () => new Response(JSON.stringify({ host: '127.0.0.1:18080' })))
+    const fetched = vi.fn(async (_path: string) => new Response(JSON.stringify({ host: '127.0.0.1:18080' })))
     vi.stubGlobal('fetch', fetched)
     onTestFinished(() => { vi.unstubAllGlobals() })
     renderUpdateCheck('ready', false)
