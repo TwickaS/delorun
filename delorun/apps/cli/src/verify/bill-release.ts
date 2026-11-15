@@ -144,7 +144,7 @@ export function utcMillisText(milliseconds: number): string {
  */
 function startCheckOf(handoff: StartCheckHandoff | undefined): TrustStartCheck | null {
   if (handoff === undefined) return null
-  return { at: utcMillisText(handoff.at), full: handoff.full, hashed: handoff.hashed, files: handoff.files }
+  return { at: utcMillisText(handoff.at), full: handoff.full, hashed: handoff.hashed, files: handoff.files, ...handoff.checkedBy === undefined ? {} : { checkedBy: handoff.checkedBy } }
 }
 
 /** How the release section's signature and files results were reached. */
@@ -157,6 +157,9 @@ export interface ReleaseResults {
   readonly lastFullHashAt: string | null
 }
 
+/** What the Trust panel says of a release whose runtime checked its own files at start, after an update or a rollback. */
+const RUNTIME_CHECKED_DETAIL = 'the updated release checked its own files at start; Check now runs the launcher\'s check'
+
 /**
  * The start stage's results: the launcher's start check verified the manifest and file list signatures under the
  * anchored root and the files, so a handoff naming the release is `pass` for both; without one both are `unknown`. A
@@ -168,10 +171,10 @@ export interface ReleaseResults {
 export function startResults(identity: ReleaseIdentity, handoff: StartCheckHandoff | undefined): ReleaseResults {
   const started: Part = handoff === undefined
     ? { result: 'unknown', detail: 'no start check of this release was handed over by the launcher' }
-    : { result: 'pass', detail: 'the launcher\'s start check passed' }
+    : { result: 'pass', detail: handoff.checkedBy === 'runtime' ? RUNTIME_CHECKED_DETAIL : 'the launcher\'s start check passed' }
   const signature = combineParts([started, identity.part])
   const lastFullHashAt = handoff?.fullCheckAt === null || handoff === undefined ? null : utcMillisText(handoff.fullCheckAt)
-  const detail = signature.result === 'pass' && started.result === 'pass' ? undefined : boundedDetail(signature.result === 'pass' ? started.detail : signature.detail)
+  const detail = signature.result === 'pass' && started.result === 'pass' ? (handoff?.checkedBy === 'runtime' ? RUNTIME_CHECKED_DETAIL : undefined) : boundedDetail(signature.result === 'pass' ? started.detail : signature.detail)
   return { signature: signature.result, files: started.result, ...detail === undefined ? {} : { detail }, lastFullHashAt }
 }
 

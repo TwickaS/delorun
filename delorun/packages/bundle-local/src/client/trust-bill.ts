@@ -45,6 +45,8 @@ export interface TrustStartCheck {
   readonly hashed: number
   /** How many files the signed file list names. */
   readonly files: number
+  /** `runtime` when the runtime checked its own files at start because its predecessor handed over no check; absent for the launcher's. */
+  readonly checkedBy?: 'runtime'
 }
 
 /** The release that runs, its signature and its files. */

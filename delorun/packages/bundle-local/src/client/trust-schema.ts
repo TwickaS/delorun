@@ -22,7 +22,7 @@ const ReleaseSchema: z.ZodType<TrustRelease> = z.object({
   root: z.object({ version: count, keyIds: z.array(z.string()), anchored: z.enum(['shipped', 'stored']) }).nullable(),
   launcher: z.object({ version: nullableString, path: nullableString }),
   lastFullHashAt: nullableString,
-  startCheck: z.object({ at: z.string(), full: z.boolean(), hashed: count, files: count }).nullable(),
+  startCheck: z.object({ at: z.string(), full: z.boolean(), hashed: count, files: count, checkedBy: z.literal('runtime').exactOptional() }).nullable(),
   signature: result,
   files: result,
   detail: z.string().exactOptional(),

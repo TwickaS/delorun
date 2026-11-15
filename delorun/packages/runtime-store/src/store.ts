@@ -108,6 +108,12 @@ export interface VerifiedRuntime extends VerifiedRelease {
   readonly version: RuntimeVersion
 }
 
+/** A runtime that passed a file check on request, with what that check did. */
+export interface CheckedRuntime extends VerifiedRuntime {
+  /** What the check that passed did: the summary a start-check record carries. */
+  readonly check: StartCheckSummary
+}
+
 /** What {@link RuntimeStore.prepareLaunch} needs. */
 export interface LaunchRequest {
   /** The store layouts and launch protocols the launcher supports. */
@@ -239,10 +245,10 @@ export class RuntimeStore {
    * @throws {RuntimeStoreError} `RUNTIME_CHANGED`, naming the files that differ and offering reinstall and, when
    *   another installed version is kept as `previous`, rollback.
    */
-  async checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<VerifiedRuntime> {
+  async checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<CheckedRuntime> {
     const release = await this.storedRelease(version, root)
-    await this.sharedCheck(version, release, true, () => this.fullCheck(version, release, 'changed'))
-    return { version, ...release }
+    const check = await this.sharedCheck(version, release, true, () => this.fullCheck(version, release, 'changed'))
+    return { version, ...release, check }
   }
 
   /**
@@ -259,10 +265,10 @@ export class RuntimeStore {
    * @throws {RuntimeStoreError} `RUNTIME_CHANGED`, naming the files that differ and offering reinstall and, when
    *   another installed version is kept as `previous`, rollback.
    */
-  async startCheckRuntime(version: RuntimeVersion, root: RootMetadata, fullCheckDays: number): Promise<VerifiedRuntime> {
+  async startCheckRuntime(version: RuntimeVersion, root: RootMetadata, fullCheckDays: number): Promise<CheckedRuntime> {
     const release = await this.storedRelease(version, root)
-    await this.sharedCheck(version, release, false, () => this.startCheck(version, release, fullCheckDays))
-    return { version, ...release }
+    const check = await this.sharedCheck(version, release, false, () => this.startCheck(version, release, fullCheckDays))
+    return { version, ...release, check }
   }
 
   /**
