@@ -147,7 +147,6 @@ export const en = {
   'workspace.mode.clone': 'Clone from Git',
   'workspace.default': 'Default workspace',
   'workspace.other': 'Without a choice, the chat opens in the workspace you used last.',
-  'workspace.chosen': 'Chosen',
   'workspace.kind.empty': 'An empty folder',
   'workspace.kind.code': 'A code project',
   'workspace.kind.files': 'A folder of files',
@@ -221,7 +220,7 @@ export const en = {
   'ready.workspace': 'Workspace',
   'ready.workspace.none': 'None chosen yet',
   'ready.workspace.last': 'The workspace you used last',
-  'ready.starters': 'The chat offers these starting prompts; one only writes into the message box:',
+  'ready.starters': 'Try a first message:',
   'start.later': 'Settings → General → Getting started shows this guide again.',
 
   'keyBanner.text': 'Add a model key to start chatting',
@@ -411,7 +410,6 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'workspace.mode.clone': '从 Git 克隆',
   'workspace.default': '默认工作区',
   'workspace.other': '如果不选择，对话会在你上次使用的工作区中打开。',
-  'workspace.chosen': '已选择',
   'workspace.kind.empty': '空文件夹',
   'workspace.kind.code': '代码项目',
   'workspace.kind.files': '文件夹',
@@ -485,7 +483,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'ready.workspace': '工作区',
   'ready.workspace.none': '尚未选择',
   'ready.workspace.last': '你上次使用的工作区',
-  'ready.starters': '对话会提供这些起始提示；选择一条只会写入消息框：',
+  'ready.starters': '试试第一条消息：',
   'start.later': '“设置 → 通用 → 开始使用”中可以再次打开本引导。',
 
   'keyBanner.text': '添加模型密钥后即可开始对话',

@@ -61,7 +61,8 @@ describe('the workspace step', () => {
     await click(button(en['workspace.folder.choose']))
     expect(start.chooseFolder).toHaveBeenCalledOnce()
     expect(guide.workspace.getSnapshot()).toEqual({ kind: 'added', workspaceId: 'workspace-2', path: `${HOME}/app`, folder: 'code' })
-    expect(screen.getByRole('status').textContent).toBe(`${en['workspace.chosen']}${HOME}/app${en['workspace.kind.code']}`)
+    expect(screen.getByRole('heading', { name: 'app' })).toBeTruthy()
+    expect(document.body.textContent).toContain(`${HOME}/app${en['workspace.kind.code']}`)
   })
 
   it('shows its own chooser where the host has none, and chooses the folder it adds', async () => {
@@ -152,7 +153,7 @@ describe('cloning from the workspace step', () => {
     expect(screen.getByText(en['clone.running'])).toBeTruthy()
     await wait(150)
     expect(guide.workspace.getSnapshot()).toEqual({ kind: 'added', workspaceId: 'workspace-3', path: `${HOME}/site`, folder: 'code' })
-    expect(screen.getByRole('status').textContent).toContain(`${HOME}/site`)
+    expect(document.body.textContent).toContain(`${HOME}/site`)
     expect(button(en['clone.start']).disabled).toBe(false)
   })
 
@@ -181,14 +182,14 @@ describe('cloning from the workspace step', () => {
     await cloneForm({ cloneStatus: [{ state: 'failed', failure }] })
     await click(button(en['clone.start']))
     await wait(5)
-    expect(screen.getByRole('alert').textContent).toBe(en[`clone.failure.${failure}`])
+    expect(screen.getByRole('alert').textContent).toBe('✕' + en[`clone.failure.${failure}`])
     expect(button(en['clone.start']).disabled).toBe(false)
   })
 
   it.each(CLONE_PROBLEMS.map(problem => [problem] as const))('says why a clone refused as %s did not start', async (problem) => {
     await cloneForm({ cloneStart: { kind: 'refused', problem } })
     await click(button(en['clone.start']))
-    expect(screen.getByRole('alert').textContent).toBe(cloneProblemText(stepServices().t, problem))
+    expect(screen.getByRole('alert').textContent).toBe('✕' + cloneProblemText(stepServices().t, problem))
   })
 
   it('words the clone-only refusals itself and the location refusals as adding a folder does', () => {

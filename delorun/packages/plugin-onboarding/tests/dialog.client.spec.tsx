@@ -359,7 +359,7 @@ describe('the workspace and the last button', () => {
     await forward(4)
     await click(button(en['workspace.folder.choose']))
     await settle()
-    expect(screen.getByRole('alert').textContent).toBe(text)
+    expect(screen.getByRole('alert').textContent).toBe(`✕${text}`)
     expect([startChat.mock.calls.length, complete.mock.calls.length]).toEqual([0, 0])
   })
 

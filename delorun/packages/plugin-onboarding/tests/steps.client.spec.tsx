@@ -459,11 +459,11 @@ describe('the ready step', () => {
     ready(guide, { reach: 'set-up', services: stepServices({ bundles: fake.installer, plugins: ['@scope/a', '@scope/b'] }) })
     await settle()
     expect(rows()).toEqual([
-      ['Model', 'DeepSeek', 'done'],
+      ['Model', 'DeepSeek', undefined],
       ['Look', 'Soft · Peach', undefined],
-      ['Agents', 'Claude Code', 'done'],
-      ['Plugins', '1 added', 'done'],
-      ['Phone access', 'On', 'done'],
+      ['Agents', 'Claude Code', undefined],
+      ['Plugins', '1 added', undefined],
+      ['Phone access', 'On', undefined],
       ['Workspace', '/home/person/app', undefined],
     ])
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
