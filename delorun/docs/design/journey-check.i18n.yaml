@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for journey-check.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/journey-check.md
+/:
+  en: f140bc36e73c9158
+  zh: 188086c96c905d44
+/the-journey-check:
+  en: 8137d59a7e639eb8
+  zh: 53a16bbbf7f9a38e
+/the-journey-check/summary:
+  en: d3fba5e51e6a6e00
+  zh: 6338a44b4afcb05f
+/the-journey-check/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/the-journey-check/what-exists-today:
+  en: e5ca3c8454cf7ae8
+  zh: beb83fae9b3a48ac
+/the-journey-check/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/the-journey-check/the-rules/where-it-runs:
+  en: 79f36c84d2ac2f84
+  zh: c2c92d3cccdb51b0
+/the-journey-check/the-rules/its-parts:
+  en: 7ee5af63cb4a1a18
+  zh: ff641c09959e5468
+/the-journey-check/the-rules/the-steps-and-what-each-asserts:
+  en: e32148a895b8fe73
+  zh: 8ca6360c3dcd61e9
+/the-journey-check/what-this-does-not-protect-against:
+  en: b4c1f057c42f83b8
+  zh: cafb4b0031783fdb
+/the-journey-check/denial-tests:
+  en: dd442a89e53cfabf
+  zh: c72d09528d4d92bd
+/the-journey-check/implementation-status:
+  en: c1f037142039deb4
+  zh: 2f1ac9c3a762448d

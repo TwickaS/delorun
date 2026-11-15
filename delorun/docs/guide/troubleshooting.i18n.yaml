@@ -1,0 +1,70 @@
+# Bilingual-pair consistency record for troubleshooting.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/troubleshooting.md
+/:
+  en: 69b2365178b06978
+  zh: 585084b238b2cd16
+/troubleshooting:
+  en: fb0bbfc53afaae10
+  zh: 122145cd55c3bfcf
+/troubleshooting/summary:
+  en: d1b0ef0a27d5f9d6
+  zh: 73fec8331f5a29cc
+/troubleshooting/contents:
+  en: 4b9372cd9db44c25
+  zh: fc8304ad61a10251
+/troubleshooting/reading-a-refusal:
+  en: 127017ba5eeb1ad7
+  zh: cb6b3d66e97325a9
+/troubleshooting/the-home-and-its-files:
+  en: e3a3242669d1dfc9
+  zh: 69073ae7b2bda36b
+/troubleshooting/starting-and-stopping:
+  en: a9d1e76cc5cbe2c5
+  zh: 3b71b5c8372b52a2
+/troubleshooting/starting-and-stopping/the-studio-port-is-busy:
+  en: 285eceb9ff1ef63e
+  zh: 29e8d34ad897a386
+/troubleshooting/setup-and-the-model-key:
+  en: 00846b95b5176ec4
+  zh: 8f95aa2bd86e26a4
+/troubleshooting/installs-and-release-checks:
+  en: 3122084ff528422e
+  zh: 231ad2c2b8873897
+/troubleshooting/updates-and-rollback:
+  en: 49b250a46512e688
+  zh: 5bb703dc42722076
+/troubleshooting/repair-the-program-and-keep-your-data:
+  en: d116b0abb900ebb5
+  zh: 7fa7a9ea42e37dec
+/troubleshooting/last-resort-by-hand:
+  en: 8e39a3b2325f3ddf
+  zh: 60205c2a909b7426
+/troubleshooting/protections-and-plugins:
+  en: 8015cd523574168d
+  zh: 706258bc16ebf18a
+/troubleshooting/protections-and-plugins/letting-bubblewrap-run-under-ubuntu-s-apparmor-restriction:
+  en: 9c3d720781ca9a4f
+  zh: 423ff55e8c4452f0
+/troubleshooting/remote-access-and-devices:
+  en: 5beca18226c4a693
+  zh: 918ba8d7ab910f8c
+/troubleshooting/remote-access-and-devices/what-a-phone-shows-when-it-cannot-sign-in:
+  en: a1f9bb73ceb7e82d
+  zh: 1306752a56995936
+/troubleshooting/archives-imports-and-the-trash:
+  en: 7bf6fe8bd02588fd
+  zh: 15ddb058e73fc7be
+/troubleshooting/the-workspace-list:
+  en: a77546dd899edac9
+  zh: e24db8508473163c
+/troubleshooting/when-nothing-here-fits:
+  en: c908a92315b66f24
+  zh: 83d7de1a0a26a66c
+/troubleshooting/next:
+  en: 7e98cf4cb6a67b7f
+  zh: 04c34ed3c2440ffd
+/troubleshooting/for-the-technically-curious:
+  en: e67b5aaa959045c8
+  zh: 29d25e1a78611371

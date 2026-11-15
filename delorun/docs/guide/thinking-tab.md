@@ -4,7 +4,7 @@ description: "Read the model's thinking word by word: turning on the Thinking ta
 
 # Read the model's thinking word by word
 
-English
+English | [中文](thinking-tab.zh.md)
 
 ## Summary
 

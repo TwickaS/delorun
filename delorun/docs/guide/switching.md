@@ -4,7 +4,7 @@ description: "Switching from stock DeepSeek Harness to Delorun: what delorun imp
 
 # Switching from DeepSeek Harness
 
-English
+English | [中文](switching.zh.md)
 
 ## Summary
 

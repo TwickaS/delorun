@@ -4,7 +4,7 @@ description: "Design option, open for decision: keep a repository's `.git/config
 
 # Repository settings inside a writable workspace
 
-English
+English | [中文](workspace-git-state.zh.md)
 
 ## Summary
 

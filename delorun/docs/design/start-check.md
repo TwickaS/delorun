@@ -4,7 +4,7 @@ description: "Why the launcher's start check compares each runtime file's record
 
 # The start check and the identity record
 
-English
+English | [中文](start-check.zh.md)
 
 ## Summary
 

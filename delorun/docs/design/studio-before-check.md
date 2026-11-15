@@ -4,7 +4,7 @@ description: "Design of the studio before the post-boot check: the studio link i
 
 # The studio before the post-boot check
 
-English
+English | [中文](studio-before-check.zh.md)
 
 ## Summary
 

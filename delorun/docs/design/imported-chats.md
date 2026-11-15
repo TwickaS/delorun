@@ -4,7 +4,7 @@ description: "Design of opening imported chats and applying an archive's customi
 
 # Imported chats and customisation
 
-English
+English | [中文](imported-chats.zh.md)
 
 ## Summary
 

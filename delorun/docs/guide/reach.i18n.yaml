@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for reach.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/reach.md
+/:
+  en: 414a1251ba51a322
+  zh: 05f954069c506f1b
+/reach-the-studio-from-your-phone:
+  en: 227986754ccf6f3c
+  zh: 91a2489d92812c96
+/reach-the-studio-from-your-phone/summary:
+  en: 6aa8c5994ad870ae
+  zh: 0140fa230691fd75
+/reach-the-studio-from-your-phone/contents:
+  en: e8e12f225e1e6e25
+  zh: 9f0a59b8a8218fb8
+/reach-the-studio-from-your-phone/what-you-need:
+  en: aa43e85d943b46de
+  zh: 10a4545fe49950b3
+/reach-the-studio-from-your-phone/turn-remote-access-on:
+  en: 303a303337a5c564
+  zh: 409175d31491ea44
+/reach-the-studio-from-your-phone/approve-a-device:
+  en: 4457957ae4935bf2
+  zh: d0c977441b316d91
+/reach-the-studio-from-your-phone/keep-approval-yours:
+  en: 1cae63146d1f72d8
+  zh: 717ad7e41c860089
+/reach-the-studio-from-your-phone/what-an-approved-phone-can-and-cannot-do:
+  en: fc5471875dadc015
+  zh: 4d4489e9e25158a4
+/reach-the-studio-from-your-phone/unlock-sensitive-actions-for-a-while:
+  en: 7ae4242bff3d3603
+  zh: 56eeeee3c3399012
+/reach-the-studio-from-your-phone/unlock-with-a-pin:
+  en: 5b0e5614adb2634c
+  zh: 8ac6858930d744c0
+/reach-the-studio-from-your-phone/remove-a-device:
+  en: b5403ab0c8172581
+  zh: 6963563feeb0e8c9
+/reach-the-studio-from-your-phone/turn-remote-access-off:
+  en: 12c1653216d43a86
+  zh: f467bbd53ff957ac
+/reach-the-studio-from-your-phone/get-a-one-time-owner-code:
+  en: 606bb48ac13be824
+  zh: fea85a6497708d9c
+/reach-the-studio-from-your-phone/what-tailscale-sees:
+  en: b16f2b3b1e077098
+  zh: 656b33600ef49ca9
+/reach-the-studio-from-your-phone/next:
+  en: 9fc8a26594b22dfc
+  zh: 8d6f4ab0a2c77ffd
+/reach-the-studio-from-your-phone/for-the-technically-curious:
+  en: 282b0f02a0588a86
+  zh: 2ced41da41cad771

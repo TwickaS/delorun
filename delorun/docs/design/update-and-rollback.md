@@ -4,7 +4,7 @@ description: "Design of Delorun's update and rollback: the update report's data 
 
 # Update and rollback
 
-English
+English | [中文](update-and-rollback.zh.md)
 
 ## Summary
 

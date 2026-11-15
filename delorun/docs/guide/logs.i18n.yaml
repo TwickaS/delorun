@@ -3,29 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/logs.md
 /:
-  en: 118e954bc6263a73
-  zh: e1f9766da3ebe827
+  en: 6c618cd9a908a76a
+  zh: 08571bdd749409cf
 /where-delorun-keeps-its-logs:
-  en: 75bd67c378bc718c
-  zh: a8596eee02400d13
+  en: f79b119bf4717d4f
+  zh: 0ab834c2d52da863
 /where-delorun-keeps-its-logs/summary:
-  en: 17a2f3c7c5859416
-  zh: 50bbb73f015aa13a
+  en: 53a2a3ca3d39db9c
+  zh: 68743f8ca06340d2
 /where-delorun-keeps-its-logs/contents:
-  en: 0976f6a9fd36b283
-  zh: f1b66fef20d08b0f
+  en: 5dfa08a93a03f19b
+  zh: 41955e6937190f1b
 /where-delorun-keeps-its-logs/log-locations:
-  en: 21117353d8689a37
-  zh: 3d5f4ff9643c0d4f
+  en: d757472bd2bb7d1b
+  zh: d5f98ce4d6e9ffbb
 /where-delorun-keeps-its-logs/what-a-log-holds:
-  en: f3ef891cbd88c3a1
-  zh: 8e40ae55a5fdfa4f
+  en: 92d489b94229f9c9
+  zh: 0fd8f6709f03e9d7
 /where-delorun-keeps-its-logs/how-long-logs-are-kept:
-  en: ad442287341a95e9
-  zh: 051df31298ff5f2b
+  en: dab0fb77169b1609
+  zh: 1ef65f08aaea9460
 /where-delorun-keeps-its-logs/reading-logs-with-delorun-logs:
-  en: 6323490f778efc23
-  zh: 02c1790ad0d9f840
+  en: b6e809f7bba75460
+  zh: 3a6b73eac90b8e92
 /where-delorun-keeps-its-logs/clearing-logs:
-  en: 46cfdbb44affb8c3
-  zh: 08aa6ab4a6a32a4c
+  en: a2e37b85650e7189
+  zh: 81049d5ee2e9f08a
+/where-delorun-keeps-its-logs/next:
+  en: 202c5f1987458508
+  zh: 2cfa95462f47f2be
+/where-delorun-keeps-its-logs/for-the-technically-curious:
+  en: 9fdaf455b8b65bc8
+  zh: 2de286d7c8719fb3

@@ -3,32 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/prompt-injection.md
 /:
-  en: fa0c6a2886a0472f
-  zh: 5732eebe581b3ac3
+  en: 00f1eb3fee176f3f
+  zh: 8db5f304f312f684
 /prompt-injection-and-data-exfiltration:
-  en: 97283f68ec6742b3
-  zh: 3f400a72c99225fd
+  en: df35c23ac2202743
+  zh: 4d6f1cfd1708e9ee
 /prompt-injection-and-data-exfiltration/summary:
-  en: d31af083e5dd103f
-  zh: 57b14a19510b0b1c
+  en: 819088feb4d6b410
+  zh: 5b40b7c4f9c5f899
 /prompt-injection-and-data-exfiltration/contents:
-  en: 0bc61044036eed3e
-  zh: 4f656e6dd8843115
+  en: ab4c1ee57ba7ca8a
+  zh: 7b6a970e9b27ad47
 /prompt-injection-and-data-exfiltration/the-three-ingredients:
-  en: b512ee88ea526eec
-  zh: 3a46330d601dc803
+  en: 48121b742bac77de
+  zh: 8bdf75d601f7de66
 /prompt-injection-and-data-exfiltration/the-network-setting:
-  en: ed967aa610ac520c
-  zh: 90921d859883d017
+  en: bff70c6ac1920cbc
+  zh: a31d1550251aee32
 /prompt-injection-and-data-exfiltration/what-each-setting-closes:
-  en: 1d4c5cd8b2e5031e
-  zh: 8adadbd7b32dbcbd
+  en: 0d3056dbdcdc1dd7
+  zh: da2bc2ae5659b29e
 /prompt-injection-and-data-exfiltration/what-no-setting-closes:
-  en: 2708dec6d14e4d53
-  zh: 83466464e5dd8ad2
+  en: 098f8e300082e0bd
+  zh: 3402621724ca5033
 /prompt-injection-and-data-exfiltration/practical-advice:
-  en: 22f25b76e46e1003
-  zh: b5f1b594d9de26b6
+  en: 772ece9d14e2c320
+  zh: 58e8804d67f36c01
 /prompt-injection-and-data-exfiltration/changing-the-setting:
-  en: fce21c72f7a32066
-  zh: 9650210035a3de9a
+  en: e007e92188a4cd45
+  zh: f9a6d669abb30b05
+/prompt-injection-and-data-exfiltration/for-the-technically-curious:
+  en: 8717a90017544d8a
+  zh: b7965ce074f075b0

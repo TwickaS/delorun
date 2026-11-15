@@ -4,7 +4,7 @@ description: "Bring the chats you had on chat.deepseek.com into Delorun: exporti
 
 # Import your DeepSeek website chats
 
-English
+English | [中文](import-deepseek-chats.zh.md)
 
 ## Summary
 

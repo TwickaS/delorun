@@ -29,7 +29,7 @@ Delorun 是一个按你自己的工作方式来塑造的 harness（智能体框�
 四个理念指引着构建的方向：
 
 - **由你来改。** Delorun 在你的电脑上运行，不需要账号。它的设置、插件、预设、skill 和外观都由你来改，你所做的改动在更新后依然保留。
-- **放心地改。** 更新前会先保存你的配置，失败的更新会自动回退，一条命令就能让你回到上一个版本（[更新](updates.md#going-back)）。
+- **放心地改。** 更新前会先保存你的配置，失败的更新会自动回退，一条命令就能让你回到上一个版本（[更新](updates.zh.md#going-back)）。
 - **对安全保持坦诚。** 只有测试证明了的保护才称为已强制执行，Delorun 缺少的功能会明确说明缺少。
 - **可以访问，又不交出控制权。** 你可以用手机打开你的 studio，每台新设备都需要你在电脑上批准。
 
@@ -51,7 +51,7 @@ DeepSeek Harness 的插件和聊天保持兼容。一个人看到的一切，也
 随后的内容，按顺序排列。前一阶段就绪后，下一阶段才开始。
 
 1. **桌面应用。** macOS 和 Windows 覆盖了大多数开发者。它在 Windows 上管理 WSL2，与命令行共用一个 profile，并增加 macOS 的发布版本。
-2. **带账号的免费中继。** 无需 Tailscale 即可访问：`your-name.delo.run` 形式的 studio 地址、一个 Delo Run 账号，以及通过 Delorun 进行的设备批准。[Delorun 中继](../reference/glossary.zh.md#delorun-relay)转交它无法读取的加密流量，公布它的页面会准确说明 Delorun 能看到什么。它是免费的，每个账号在设备和流量上有合理使用上限。在此之前，[远程访问](../reference/glossary.zh.md#reach)是你自己的 tailnet 上的 Tailscale（[用手机访问 studio](reach.md)）。
+2. **带账号的免费中继。** 无需 Tailscale 即可访问：`your-name.delo.run` 形式的 studio 地址、一个 Delo Run 账号，以及通过 Delorun 进行的设备批准。[Delorun 中继](../reference/glossary.zh.md#delorun-relay)转交它无法读取的加密流量，公布它的页面会准确说明 Delorun 能看到什么。它是免费的，每个账号在设备和流量上有合理使用上限。在此之前，[远程访问](../reference/glossary.zh.md#reach)是你自己的 tailnet 上的 Tailscale（[用手机访问 studio](reach.zh.md)）。
 3. **额外的机器。** 在一个 studio 中，让聊天运行在笔记本、服务器或家用实验室的机器上。如果已有的 DeepSeek Harness 插件能胜任，Delorun 就采用它。
 4. **`1.0.0`，可供企业使用。** 桌面应用、中继和额外的机器都能工作，签名密钥在离线机器上的密钥仪式中生成，外部安全评审已经完成并公布了报告。
 
@@ -99,4 +99,4 @@ Delorun 不计划把其他 harness 当作产品来管理，不计划把一个聊
 <a id="what-to-read-next"></a>
 ## 接下来读什么
 
-要了解 Delorun 今天能做什么，请阅读 [Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md)。要安装它，请阅读[安装与首次运行](install.md)。
+要了解 Delorun 今天能做什么，请阅读 [Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md)。要安装它，请阅读[安装与首次运行](install.zh.md)。

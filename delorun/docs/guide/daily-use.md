@@ -4,7 +4,7 @@ description: "Using Delorun day to day: starting, opening and stopping the studi
 
 # Daily use
 
-English
+English | [中文](daily-use.zh.md)
 
 ## Summary
 

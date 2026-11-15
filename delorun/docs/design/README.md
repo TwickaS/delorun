@@ -4,7 +4,7 @@ description: "Delorun's design pages: the rules of features that are not built o
 
 # Designs
 
-English
+English | [中文](README.zh.md)
 
 ## Summary
 

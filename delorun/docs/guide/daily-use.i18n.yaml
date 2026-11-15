@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for daily-use.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/daily-use.md
+/:
+  en: 3a88aa7d72a8c0e6
+  zh: 5421b06a8e0e29b5
+/daily-use:
+  en: f13488883c2a2a10
+  zh: 2f7cf5b03aff7b3d
+/daily-use/summary:
+  en: ea949eb105d89bdd
+  zh: ca648d66ac95f9e8
+/daily-use/contents:
+  en: 67b236688d3cd08a
+  zh: 09f9b5a2aca5efa8
+/daily-use/start-open-and-stop:
+  en: 7136e8d0d037c385
+  zh: 10ae26bb1a0e6328
+/daily-use/check-the-release-and-your-setup:
+  en: 0e114e93d3181e71
+  zh: 25c28b575ebb048a
+/daily-use/workspaces-and-what-the-model-may-change:
+  en: 8844668d81111870
+  zh: 838df0a8991100f1
+/daily-use/make-delorun-yours:
+  en: 2e501a9616b68bf7
+  zh: 2dfbbe3ea5b06eba
+/daily-use/safe-mode-and-recovery:
+  en: c153b3947d544ec5
+  zh: 79c05853309bb121
+/daily-use/trash-export-and-import:
+  en: 0abdb51bfa9da6b9
+  zh: d56f532b4125caac
+/daily-use/the-plugin-and-headless-commands:
+  en: 61f32ad0739e9612
+  zh: 19fde53732eb9b6c
+/daily-use/next:
+  en: 4d13f1adecc2afa7
+  zh: 7a658f9d622bffbc
+/daily-use/for-the-technically-curious:
+  en: 08132615c5406e38
+  zh: 9ae9a6ed2b18a8ed

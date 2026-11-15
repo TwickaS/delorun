@@ -4,7 +4,7 @@ description: "Design of Delorun's security extension points: where a plugin may 
 
 # Security extension points
 
-English
+English | [中文](security-extension-points.zh.md)
 
 ## Summary
 

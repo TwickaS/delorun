@@ -4,6 +4,8 @@ description: "Open your Delorun studio from your phone over your own Tailscale n
 
 # Reach the studio from your phone
 
+English | [中文](reach.zh.md)
+
 ## Summary
 
 This page helps you open your studio from your phone and keep control of who can. You need Delorun running on your computer ([Install and first run](install.md)) and [Tailscale](https://tailscale.com) on both devices ([What you need](#what-you-need)).

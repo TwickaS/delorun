@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for updating-with-plugins.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/updating-with-plugins.md
+/:
+  en: e8fc6487db3b5276
+  zh: bd8dd33eb16c4b9b
+/update-delorun-with-many-plugins:
+  en: 7d3fd865851196db
+  zh: 4a45098f35b3064c
+/update-delorun-with-many-plugins/summary:
+  en: e81f6285c43cd418
+  zh: d39c82a31dcf2167
+/update-delorun-with-many-plugins/contents:
+  en: a8baefb1d2da2d02
+  zh: 458fed75733d78cd
+/update-delorun-with-many-plugins/before-what-is-saved:
+  en: c8c4cd958d11cc4b
+  zh: 1190f0148b47cf12
+/update-delorun-with-many-plugins/check-read-the-report:
+  en: d3c0da7781214402
+  zh: cbc179fc990619f3
+/update-delorun-with-many-plugins/update-the-health-check:
+  en: c2a7bd984f804956
+  zh: f5e2ecae287fded2
+/update-delorun-with-many-plugins/after-verify-and-go-back:
+  en: 01c62ebba949384b
+  zh: a1ef010dcb9e357c
+/update-delorun-with-many-plugins/next:
+  en: 8ecbdc69bd0a8b3d
+  zh: f2d92229f5a2ee5f

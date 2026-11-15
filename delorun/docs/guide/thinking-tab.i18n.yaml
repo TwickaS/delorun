@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for thinking-tab.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/thinking-tab.md
+/:
+  en: 13c15165fca4c0fb
+  zh: 74cf579c78527d27
+/read-the-model-s-thinking-word-by-word:
+  en: 853d063f8a1baad3
+  zh: 2888a5508b617e2c
+/read-the-model-s-thinking-word-by-word/summary:
+  en: 967b1782297ffc1a
+  zh: eaf7528b3418e50f
+/read-the-model-s-thinking-word-by-word/contents:
+  en: fecabd3feaf541e5
+  zh: fb25353179f0da2b
+/read-the-model-s-thinking-word-by-word/turn-it-on:
+  en: f2d43fc1bbedcb1a
+  zh: ffac269cfc951550
+/read-the-model-s-thinking-word-by-word/the-band-and-the-page:
+  en: e169dc490bf66ad2
+  zh: 2ff6547ebbe3eb48
+/read-the-model-s-thinking-word-by-word/choose-what-and-how-fast:
+  en: 689537159a703eda
+  zh: 8ed3e06cbf985fa2
+/read-the-model-s-thinking-word-by-word/next:
+  en: 689ca6ef2d981e70
+  zh: 2c6b5aa391f5ce37

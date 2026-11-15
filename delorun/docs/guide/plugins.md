@@ -4,7 +4,7 @@ description: "Writing a Delorun plugin from nothing to running: delorun plugin n
 
 # Write a plugin for Delorun
 
-English
+English | [中文](plugins.zh.md)
 
 This page describes how Delorun works today.
 

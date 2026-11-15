@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for workspace-git-state.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/workspace-git-state.md
+/:
+  en: 3aefd6bcc9178993
+  zh: 6aa0e113d7d4078c
+/repository-settings-inside-a-writable-workspace:
+  en: 1362a46aea27325f
+  zh: ceba7da2ccd06662
+/repository-settings-inside-a-writable-workspace/summary:
+  en: 00ef8135019ef796
+  zh: 4077974aafeda736
+/repository-settings-inside-a-writable-workspace/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/repository-settings-inside-a-writable-workspace/what-exists-today:
+  en: 8fc8e513de508929
+  zh: 4137c6104a728204
+/repository-settings-inside-a-writable-workspace/the-rules:
+  en: bb7e9469953c92ef
+  zh: 0cfdc692b600b853
+/repository-settings-inside-a-writable-workspace/what-this-does-not-protect-against:
+  en: 70beadad7f7c778b
+  zh: c48cd4ebace4f466
+/repository-settings-inside-a-writable-workspace/denial-tests:
+  en: e91b2d098ee46e93
+  zh: 88db5c9a447ee4cb
+/repository-settings-inside-a-writable-workspace/implementation-status:
+  en: 9585e69694711f71
+  zh: 90217d36b270f487

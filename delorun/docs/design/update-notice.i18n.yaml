@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for update-notice.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/update-notice.md
+/:
+  en: 180161557411fd29
+  zh: 21cdf7ea7059e63b
+/the-update-notice:
+  en: e710908879279b28
+  zh: eaac2f88dfd7b8ea
+/the-update-notice/summary:
+  en: aa2d8815aff19a82
+  zh: 81f37143e7987294
+/the-update-notice/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/the-update-notice/what-exists-today:
+  en: 28d9ec88bb13b783
+  zh: 8c15227651e40693
+/the-update-notice/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/the-update-notice/the-rules/the-check:
+  en: f7e3d6b6daf358b2
+  zh: fa200a1744463a6b
+/the-update-notice/the-rules/the-signed-fields:
+  en: a5d5ec63675a9985
+  zh: 1f2c3b28abcc612d
+/the-update-notice/the-rules/when-it-runs:
+  en: 967b5e44c57be392
+  zh: 84113a8301d581aa
+/the-update-notice/the-rules/where-it-shows:
+  en: 7f230682be67c0cd
+  zh: bb426a82751effd5
+/the-update-notice/the-rules/consent-and-control:
+  en: 69ceabf49eb34d7b
+  zh: 096feac3180fc045
+/the-update-notice/the-rules/the-patch-rule:
+  en: 05b9a70af9d653f2
+  zh: 6a1d24a2de990f69
+/the-update-notice/the-rules/targeting-delorun:
+  en: bdabbeb616719c45
+  zh: b3be2e94648c8614
+/the-update-notice/what-this-does-not-protect-against:
+  en: 97775b96cac74ef8
+  zh: eceae74b3e7997ee
+/the-update-notice/denial-tests:
+  en: dcc1b208a9a9c9d1
+  zh: 43e6b35e9612e590
+/the-update-notice/implementation-status:
+  en: dd8968d4deeef16d
+  zh: b076f15ccdeca6a2

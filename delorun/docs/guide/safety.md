@@ -4,7 +4,7 @@ description: "What Delorun protects and what it does not, in plain language: whe
 
 # What Delorun protects
 
-English
+English | [中文](safety.zh.md)
 
 ## Summary
 

@@ -4,7 +4,7 @@ description: "Design of Delorun's first run: one command from install to a first
 
 # The first run
 
-English
+English | [中文](first-run.zh.md)
 
 ## Summary
 

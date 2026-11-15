@@ -4,7 +4,7 @@ description: "See what a chat costs: turning on the cost meter, reading the figu
 
 # See what a chat costs
 
-English
+English | [中文](cost-meter.zh.md)
 
 ## Summary
 

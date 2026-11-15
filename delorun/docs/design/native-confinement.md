@@ -4,7 +4,7 @@ description: "Design of native confinement on every command and platform: Deloru
 
 # Native confinement on every command and platform
 
-English
+English | [中文](native-confinement.zh.md)
 
 ## Summary
 

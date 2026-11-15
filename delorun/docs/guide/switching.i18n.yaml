@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for switching.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/switching.md
+/:
+  en: 6ba3831e286082b9
+  zh: b6e3f75d37b2a8a8
+/switching-from-deepseek-harness:
+  en: d8a4438b028df25d
+  zh: a449959a9a1416c8
+/switching-from-deepseek-harness/summary:
+  en: 5f41347df1f4c99d
+  zh: f0cc2a905ffd2b78
+/switching-from-deepseek-harness/contents:
+  en: 2af1afa1d4899eb1
+  zh: 750a785f31fa631c
+/switching-from-deepseek-harness/import-your-home:
+  en: 9d45009681dfd182
+  zh: 82ffedf285e063d1
+/switching-from-deepseek-harness/what-carries-over:
+  en: 19a6fe34810e5d1d
+  zh: 5104e1a2605d4703
+/switching-from-deepseek-harness/what-is-held-back:
+  en: de54ee3b0a109779
+  zh: 83e24f9dde1627ec
+/switching-from-deepseek-harness/workspaces-and-chats-that-stay-behind:
+  en: a947376889cf2029
+  zh: 527e5532a9013aaf
+/switching-from-deepseek-harness/what-stays-behind:
+  en: 76560704b90498c3
+  zh: 050b8775bd88abe9
+/switching-from-deepseek-harness/chats-from-the-deepseek-website:
+  en: 1d5885b95330b856
+  zh: d1e970a6e7b3644a
+/switching-from-deepseek-harness/plugins-after-the-import:
+  en: d36160415a2bb3e3
+  zh: 0db9a70f7dba4df5
+/switching-from-deepseek-harness/a-home-that-already-has-chats:
+  en: c2f52d574902f38f
+  zh: a8a4a9882390d42e
+/switching-from-deepseek-harness/what-changes-when-you-switch:
+  en: c0a5023e80a8f75e
+  zh: 606ac9e5afc03297
+/switching-from-deepseek-harness/ask-less-like-deepseek-harness:
+  en: 912ac2374f135e05
+  zh: 0474c650539c1cb7
+/switching-from-deepseek-harness/going-back:
+  en: c79c1d19dd69312a
+  zh: 3282a339b160899f
+/switching-from-deepseek-harness/next:
+  en: 52aaa289c670251a
+  zh: 1f5dea3b1e3c2248
+/switching-from-deepseek-harness/for-the-technically-curious:
+  en: 992b658aed88d4de
+  zh: a7149c1ef2d040d2

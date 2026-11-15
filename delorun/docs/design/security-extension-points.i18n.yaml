@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for security-extension-points.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/security-extension-points.md
+/:
+  en: 18d8fdb1d7e32233
+  zh: 107abeda0a12fba6
+/security-extension-points:
+  en: 621faa82961785ca
+  zh: de66a7f77ee69ff4
+/security-extension-points/summary:
+  en: 55632dd031c64d4e
+  zh: cdb6ccba3a9a308a
+/security-extension-points/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/security-extension-points/what-exists-today:
+  en: 57dc595ae330585d
+  zh: 054ce4c77092fe68
+/security-extension-points/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/security-extension-points/the-rules/the-points:
+  en: 0de0d1facead7669
+  zh: 0ad5406aa012b601
+/security-extension-points/the-rules/what-a-registrant-may-add:
+  en: 44b6800b95bcd8a8
+  zh: b44908b93f0ed894
+/security-extension-points/the-rules/the-monotonic-rule:
+  en: 51371a818110daad
+  zh: cf1a0e67443dc838
+/security-extension-points/the-rules/who-may-register:
+  en: 6d9f0e3b7b8c4fb9
+  zh: 43187ee51bbdbdf3
+/security-extension-points/the-rules/how-the-rule-is-enforced-and-tested:
+  en: e1b6d13202f4e68e
+  zh: 0bfc2bed25cf3963
+/security-extension-points/the-rules/what-the-points-make-possible:
+  en: 4f8f8b42db1ccded
+  zh: 74b9eff4e0e49e62
+/security-extension-points/what-this-does-not-protect-against:
+  en: 9a8978aca53bc1a8
+  zh: f5f449a2a8ecf2f3
+/security-extension-points/denial-tests:
+  en: 6925830801740370
+  zh: bf7cb283976e1e59
+/security-extension-points/implementation-status:
+  en: 0c99fda0e59cbf9e
+  zh: 935179294f503aeb

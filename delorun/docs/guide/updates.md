@@ -4,7 +4,7 @@ description: "Updating Delorun: the update notice and how to turn it off, deloru
 
 # Updates
 
-English
+English | [中文](updates.zh.md)
 
 ## Summary
 

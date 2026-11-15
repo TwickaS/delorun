@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for safety.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/safety.md
+/:
+  en: 30a7080b34c01118
+  zh: 455ed2e0646ad256
+/what-delorun-protects:
+  en: a7384d7d2f78edf5
+  zh: cb3c4e7209609161
+/what-delorun-protects/summary:
+  en: 542b4354310f1359
+  zh: 37a073dd8a4c8dba
+/what-delorun-protects/contents:
+  en: 61f7e1cda134adef
+  zh: 60df79ebb5a785fb
+/what-delorun-protects/where-the-protections-apply:
+  en: 89ba92363d2c1516
+  zh: 7ad2304e5cf21a95
+/what-delorun-protects/the-sandbox:
+  en: 4cde411bf4a6a110
+  zh: 83b9c4b29834d952
+/what-delorun-protects/full-access:
+  en: 20e37966e01deb43
+  zh: b48fba7ef6760c78
+/what-delorun-protects/consents:
+  en: ad81aa787dabf309
+  zh: 41f1de6b0bfaccfa
+/what-delorun-protects/consents/mcp-servers:
+  en: 03039051b97dc358
+  zh: 2ba4159dc901798c
+/what-delorun-protects/consents/external-agents:
+  en: 4eac1787a726e4cb
+  zh: 75777974c7693277
+/what-delorun-protects/the-network-setting:
+  en: 5d92ed03b9d4be2b
+  zh: d5cffc27f9d678e7
+/what-delorun-protects/the-web-fetch-guard:
+  en: 4739dbe50de40156
+  zh: 39adb453c738a32f
+/what-delorun-protects/release-checks:
+  en: 57a0c543e73e9fa3
+  zh: ec22bbc5014552bc
+/what-delorun-protects/what-delorun-does-not-protect-against:
+  en: a2dd3eb754573e46
+  zh: a422965213e800c8
+/what-delorun-protects/next:
+  en: 884e11687afe13d0
+  zh: 07b375dbec21c382
+/what-delorun-protects/for-the-technically-curious:
+  en: 3285e0b764dd4983
+  zh: 2d9c20e06cf6d46b

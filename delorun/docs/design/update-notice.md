@@ -4,7 +4,7 @@ description: "Design of the update notice: the check that verifies the channel's
 
 # The update notice
 
-English
+English | [中文](update-notice.zh.md)
 
 ## Summary
 

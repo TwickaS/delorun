@@ -4,7 +4,7 @@ description: "Design of reach on the person's own tailnet: device approval only 
 
 # Reach on your own tailnet
 
-English
+English | [中文](reach.zh.md)
 
 ## Summary
 

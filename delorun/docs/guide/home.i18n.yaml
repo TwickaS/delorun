@@ -3,29 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/home.md
 /:
-  en: 63614307c394026d
-  zh: 3f1d4090babfb00e
+  en: a3c27b666a97297f
+  zh: 0f09c7376b28a6f9
 /your-delorun-home:
-  en: 668a0d20a9a707c2
-  zh: 86117f4d74ff98ca
+  en: 9315dd9268144ec6
+  zh: 8f353c0781109bc4
 /your-delorun-home/summary:
-  en: a4a21790f420051d
-  zh: ac7f318689fc8bc7
+  en: c221b5764140e750
+  zh: fe6dfe3ae58b5335
 /your-delorun-home/contents:
-  en: d1d8e3adbc3bbe45
-  zh: befb295615f8330c
+  en: 1b8e25b716fc4b5a
+  zh: ecb476aba70385cf
 /your-delorun-home/where-the-home-is:
-  en: 86bba52e28b7e43e
-  zh: d09eddbadb84404e
+  en: 629e091d28fbab41
+  zh: 22d20887c8e6b029
 /your-delorun-home/the-first-run:
-  en: d68eff6abaf4334e
-  zh: 30cbb879d722eee0
+  en: bbd14313666dbebb
+  zh: 44f77857ace7f5a9
 /your-delorun-home/profiles:
-  en: 8618b668d532fb29
-  zh: 9b84393750c276da
+  en: acb537b0ff7740ea
+  zh: 8ceb083f76a0b6d6
 /your-delorun-home/your-deepseek-harness-home:
-  en: 462547e19a2ddce1
-  zh: 32c0f065d29401c2
+  en: 4a419f7f1b277d3a
+  zh: e3b6b5cec6991d7d
 /your-delorun-home/fixing-permissions:
-  en: 6fb5ca84275fe9f2
-  zh: 5a103b094fd7c352
+  en: fa33010f82f9f6d1
+  zh: 39e6326662de0c64
+/your-delorun-home/next:
+  en: 7134c11389cbd10b
+  zh: e04e2887683113ee
+/your-delorun-home/for-the-technically-curious:
+  en: dbc737d18546663d
+  zh: 721ebba24f554420

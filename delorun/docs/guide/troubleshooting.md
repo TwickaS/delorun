@@ -4,7 +4,7 @@ description: "Troubleshooting Delorun: how to read a refusal, the exit codes, an
 
 # Troubleshooting
 
-English
+English | [中文](troubleshooting.zh.md)
 
 ## Summary
 

@@ -52,7 +52,7 @@ description: "对 Delorun 那些难回答的问题的直接回答：为什么它
 
 比什么保护都没有就运行 agent 更安全，但还不足以让你运行一个你本来就不信任的 agent。默认情况下，聊天在做任何有风险的事之前会先询问。命令在沙箱中运行，沙箱限制文件写入，并且在你的系统支持的情况下，阻止命令读取 Delorun 的密钥。发布版本在运行之前会经过签名并被检查。
 
-局限同样重要。命令以你自己的访问权限运行，沙箱不限制网络，除非你把它设为限制，而发布密钥是位于 agent 运行机器上的预览密钥。[Delorun 保护什么](safety.md)和[使用 Delorun 时你要信任什么](trust.zh.md)对每一点都有准确说明。运行之前，请先阅读[安全说明](../../../SAFETY.zh.md)。
+局限同样重要。命令以你自己的访问权限运行，沙箱不限制网络，除非你把它设为限制，而发布密钥是位于 agent 运行机器上的预览密钥。[Delorun 保护什么](safety.zh.md)和[使用 Delorun 时你要信任什么](trust.zh.md)对每一点都有准确说明。运行之前，请先阅读[安全说明](../../../SAFETY.zh.md)。
 
 <a id="what-does-undo-everything-cover"></a>
 ## “撤销一切”涵盖什么？
@@ -72,4 +72,4 @@ description: "对 Delorun 那些难回答的问题的直接回答：为什么它
 <a id="where-do-i-go-next"></a>
 ## 接下来去哪里？
 
-想试用 Delorun，请阅读[安装与首次运行](install.md)。关于信任的细节，请阅读[使用 Delorun 时你要信任什么](trust.zh.md)。想指出本页有什么问题，请在项目的 GitHub Discussions 中开一个帖子，或写信到 support@delorun.com。
+想试用 Delorun，请阅读[安装与首次运行](install.zh.md)。关于信任的细节，请阅读[使用 Delorun 时你要信任什么](trust.zh.md)。想指出本页有什么问题，请在项目的 GitHub Discussions 中开一个帖子，或写信到 support@delorun.com。

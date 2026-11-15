@@ -4,7 +4,7 @@ description: "Updating Delorun when you run many third-party plugins: what Delor
 
 # Update Delorun with many plugins
 
-English
+English | [中文](updating-with-plugins.zh.md)
 
 This page describes how Delorun works today.
 

@@ -4,6 +4,8 @@ description: "Changing what Delorun runs: why a plugin you link from a folder ru
 
 # Changing your harness
 
+English | [中文](changing-your-harness.zh.md)
+
 This page describes how Delorun works today.
 
 ## Summary

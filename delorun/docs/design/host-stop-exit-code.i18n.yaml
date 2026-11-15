@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for host-stop-exit-code.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/host-stop-exit-code.md
+/:
+  en: dd79b84e189d1560
+  zh: a0ae82ad35e31082
+/the-exit-code-of-a-failed-host-stop:
+  en: 66005b7e057d0ad7
+  zh: 5807335ac1fb074c
+/the-exit-code-of-a-failed-host-stop/summary:
+  en: ec409834112a27fd
+  zh: adeaf6a9a5121003
+/the-exit-code-of-a-failed-host-stop/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/the-exit-code-of-a-failed-host-stop/what-exists-today:
+  en: ecc3f5f788b083f6
+  zh: 6a4fcecb3583fd21
+/the-exit-code-of-a-failed-host-stop/the-rules:
+  en: 8f5892011fbb01cd
+  zh: 73fc6f576b67353b
+/the-exit-code-of-a-failed-host-stop/what-this-does-not-protect-against:
+  en: 43225bb2db6912c5
+  zh: 93d51523a93b9cbd
+/the-exit-code-of-a-failed-host-stop/denial-tests:
+  en: 799c8679595cd586
+  zh: 12971d3d7d87f21a
+/the-exit-code-of-a-failed-host-stop/implementation-status:
+  en: 5f64b24d465f90c3
+  zh: 5da784994ac0fcf8

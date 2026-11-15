@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for required-guards.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/required-guards.md
+/:
+  en: 94819d8f98e8620b
+  zh: 03fe200768692468
+/required-guards:
+  en: a4658778ed759163
+  zh: 253f338ec9d12bba
+/required-guards/summary:
+  en: 613ff96078a73cd7
+  zh: a05c265fb0a53a92
+/required-guards/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/required-guards/what-exists-today:
+  en: 241ede151ce5c7a9
+  zh: b09bc5a8c15e824b
+/required-guards/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/required-guards/the-rules/the-marker:
+  en: e5834ef6d546f924
+  zh: 9953530574f123cf
+/required-guards/the-rules/headless:
+  en: 7c1c22e28eea002e
+  zh: fe9afa2ef09053bc
+/required-guards/the-rules/files-the-change-touches:
+  en: f74b3ef4f07d7106
+  zh: 121cbb2bc6e2c7cf
+/required-guards/what-this-does-not-protect-against:
+  en: 14479b199693c636
+  zh: 335f058c4fa9c81c
+/required-guards/denial-tests:
+  en: 6be1e5735b1ec8da
+  zh: aafac5c84eee4ca1
+/required-guards/implementation-status:
+  en: b0f79b885d82f676
+  zh: c1bedfac940f6ec2

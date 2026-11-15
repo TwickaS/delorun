@@ -4,7 +4,7 @@ description: "Design of changes to a person's harness: the signed release plus t
 
 # Changes to your harness
 
-English
+English | [中文](changes.zh.md)
 
 ## Summary
 

@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for install.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/install.md
+/:
+  en: 2b359b2d522d0402
+  zh: ebb159c8b469170e
+/install-and-first-run:
+  en: 61719ab77619ca4c
+  zh: 510a0cafa751267c
+/install-and-first-run/summary:
+  en: 80c03f61a1fa553d
+  zh: 6684674972a112e2
+/install-and-first-run/contents:
+  en: 776582009e5ac8ef
+  zh: edc151ca3c2eba43
+/install-and-first-run/before-you-start:
+  en: f00aa7ab3cb4be3a
+  zh: 757d6bfcf58b3984
+/install-and-first-run/install:
+  en: a07f8f10d870b192
+  zh: 2da9bc5f0082ce62
+/install-and-first-run/windows-through-wsl2:
+  en: b96c1855b7bdc586
+  zh: 88aaa11030357737
+/install-and-first-run/what-the-launcher-verifies:
+  en: 2200e1e295fc4b84
+  zh: af1d80a29f1a796c
+/install-and-first-run/setup-how-you-will-use-delorun:
+  en: fa72e8456724c569
+  zh: 4179c35e7bf3c378
+/install-and-first-run/the-studio-and-your-first-chat:
+  en: 19d88cf677dcda66
+  zh: 9118b0eb73eae067
+/install-and-first-run/the-default-workspace:
+  en: 8892236b498b12ae
+  zh: b246c837138a0946
+/install-and-first-run/a-computer-without-a-browser:
+  en: 23ade51fc41e5ed7
+  zh: 967d19a2395ba870
+/install-and-first-run/next:
+  en: f878ea3e80c41235
+  zh: 1de1c2931972ef1c
+/install-and-first-run/for-the-technically-curious:
+  en: 81411889d553cdf5
+  zh: 610906d4386e448f

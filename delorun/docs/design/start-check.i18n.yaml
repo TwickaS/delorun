@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for start-check.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/start-check.md
+/:
+  en: 120cad8256fc00b1
+  zh: 858a35b668c7ad9e
+/the-start-check-and-the-identity-record:
+  en: 8193e01b3a42c0ce
+  zh: 3f00e94ecc58372f
+/the-start-check-and-the-identity-record/summary:
+  en: 3e38cd4412bba555
+  zh: 5e6f0f5857eb869e
+/the-start-check-and-the-identity-record/contents:
+  en: 646a1e3550d846e0
+  zh: a15c3799699ee944
+/the-start-check-and-the-identity-record/what-the-per-start-hash-protects:
+  en: 975154bd19d0314d
+  zh: a1febcf9c63701ed
+/the-start-check-and-the-identity-record/decisions:
+  en: 65611d009bedb04e
+  zh: 5f0523f7b209000d
+/the-start-check-and-the-identity-record/what-the-identity-check-detects:
+  en: 823b88197c7f7485
+  zh: 0a2feff2c3ac8e81
+/the-start-check-and-the-identity-record/what-this-does-not-protect-against:
+  en: 9ac3eb0509e53e00
+  zh: 8bbc7e6944f5f108
+/the-start-check-and-the-identity-record/measurements:
+  en: d89f17771cb98e8f
+  zh: 8803848cca98cbcf
+/the-start-check-and-the-identity-record/denial-tests:
+  en: c21412c596cb98fc
+  zh: 1561ad25f38a3ea4
+/the-start-check-and-the-identity-record/implementation-status:
+  en: cd156e747021b719
+  zh: 873c3b90ec8041f8

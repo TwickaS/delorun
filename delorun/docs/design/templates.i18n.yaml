@@ -1,0 +1,82 @@
+# Bilingual-pair consistency record for templates.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/templates.md
+/:
+  en: fa07fa25d3acce93
+  zh: 553852a9e86fcce1
+/templates:
+  en: d1d9e06e996f4009
+  zh: 1ff29bdf09552226
+/templates/summary:
+  en: 369f3430e4e484ca
+  zh: 998a835d9d9e1dc5
+/templates/contents:
+  en: 29cd4c7620927860
+  zh: 536563784f5eea77
+/templates/terms:
+  en: 4f0473426540bb16
+  zh: 2b387fd77ee51271
+/templates/what-exists-today:
+  en: 98706434168bd37c
+  zh: c41387970e87586f
+/templates/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/templates/the-rules/the-template-file:
+  en: 4e3d0fa3c7b753e9
+  zh: 7b09d636c1b5b5ef
+/templates/the-rules/the-active-template-is-the-person-s-configuration:
+  en: 0a05b248f136e6c8
+  zh: a8eccabb5c18da4b
+/templates/the-rules/what-stays-with-the-home-and-the-machine:
+  en: b2c8f33fea8836f3
+  zh: 6f0cef03d388da07
+/templates/the-rules/the-library:
+  en: 3246269a4b7ee7a7
+  zh: cf03816505fa014e
+/templates/the-rules/save-and-switch:
+  en: aaa2499ae5b15fbf
+  zh: 56c0d2ffdada9cbb
+/templates/the-rules/chats-and-presets-across-a-switch:
+  en: aa78f2dab7ad9627
+  zh: 01ae8cb303194bf4
+/templates/the-rules/templates-presets-and-profiles:
+  en: 0886005507e9c52c
+  zh: c4a27282e1c3dcf6
+/templates/the-rules/import-and-export:
+  en: 4d07972d075dbc30
+  zh: 3c47f8e824bf5cfb
+/templates/the-rules/backup-and-restore:
+  en: f98504e99a67d36f
+  zh: 99256c1c5df14576
+/templates/the-rules/updates:
+  en: 6513db5d19d273e5
+  zh: f1b44d785554c428
+/templates/the-rules/changes-protection-and-the-install-check:
+  en: 7c0ad61bb02ef22b
+  zh: a56e5d37cf8a394e
+/templates/the-rules/secrets-and-credentials:
+  en: de6a04eed60a7dd9
+  zh: 46c3c9b988a31078
+/templates/the-rules/commands-and-the-studio:
+  en: 529ed6ac1440f8b4
+  zh: 98882f63b545175b
+/templates/what-this-does-not-protect-against:
+  en: f4821add4f9b8135
+  zh: 542f257fdb972a70
+/templates/denial-tests:
+  en: 6ba991f791335abb
+  zh: 4a6d805c70e4643e
+/templates/constraints-for-current-work:
+  en: 6b6a1991b35ea149
+  zh: 9388b2f538ef9a8c
+/templates/current-code-that-conflicts:
+  en: 04289b427375c805
+  zh: df48045dc1cf592c
+/templates/open-questions:
+  en: 12399db300b268c7
+  zh: cf78ab1b377b79f0
+/templates/implementation-status:
+  en: 45d0fa83e0702c7c
+  zh: 8fa83f74e2d70fe8

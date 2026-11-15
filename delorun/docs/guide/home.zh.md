@@ -1,14 +1,14 @@
 ---
-description: "你的 Delo home：delorun 在哪里保存你的数据，如何用 DELORUN_HOME 迁移它，CLI profile，为何 ~/.dsh 保持不动，以及如何修复其他用户可以读取的 home 或密钥文件。"
+description: "你的 Delorun home：delorun 把你的数据保存在哪里，如何用 DELORUN_HOME 移动它，profile，为何 ~/.dsh 保持不动，以及如何修复其他用户可以读取的 home 或密钥文件。"
 ---
 
-# 你的 Delo home
+# 你的 Delorun home
 
 [English](home.md) | 中文
 
 ## 摘要
 
-Delo 把它所知道的关于你的一切都保存在一个目录中，即你的 home：`~/.delorun`，Windows 上为 `%USERPROFILE%\.delorun`。你的 profile、会话、工作区、凭据，以及 Delo 自己的密钥与记录，都保存在其中。`delorun` 命令在首次运行时创建 home，并将其设置为只有你能打开。
+本页告诉你 Delorun 把你的数据保存在哪里、如何移动它、profile 如何运作，以及当 Delorun 因为其他用户可以读取某个文件而拒绝使用它时该怎么办。你不需要任何前置准备；`delorun` 首次运行时会创建这个文件夹（见[安装与首次运行](install.zh.md)）。Delorun 把一切都放在一个文件夹里，即你的 [Delorun home](../reference/glossary.zh.md#home)：`~/.delorun`，在 Windows 上为 `%USERPROFILE%\.delorun`。你的 chat、工作区、profile、密钥和 Delorun 自己的记录都保存在其中。`delorun` 首次运行时创建它，并把它设为只有你能读取。备份这个文件夹，就等于备份了 Delorun。
 
 ## 目录
 
@@ -17,39 +17,83 @@ Delo 把它所知道的关于你的一切都保存在一个目录中，即你的
 - [Profile](#profiles)
 - [你的 DeepSeek Harness home](#your-deepseek-harness-home)
 - [修复权限](#fixing-permissions)
-
-<a id="where-the-home-is"></a>
+- [接下来](#next)
+- [给想深入了解的人](#for-the-technically-curious)
 
 ## home 的位置
 
-设置 `DELORUN_HOME` 可将 home 保存到别处，例如 `DELORUN_HOME=~/work/delorun delorun`。路径必须是绝对路径，或以 `~` 开头。`delorun` 会拒绝你的用户主目录本身、文件系统根目录，以及 DeepSeek Harness 自己的 home `~/.dsh` 或其中的任何目录。`delorun status` 会打印它所使用的 home。
+想把 home 放到别处，请设置 `DELORUN_HOME`：
 
-<a id="the-first-run"></a>
+```sh
+DELORUN_HOME=~/work/delorun delorun
+```
+
+路径必须是绝对路径，或以 `~` 开头。`delorun` 会拒绝你的用户主目录本身、文件系统根目录，以及 DeepSeek Harness 的 home `~/.dsh` 或其中的任何文件夹，因为这些位置都存放着 Delorun 不能与自己的数据混在一起的东西。`delorun status` 会打印正在使用的 home。
 
 ## 首次运行
 
-在新 home 上首次运行 `delorun` 会运行 setup，它创建 CLI profile。此后，`delorun` 会在你的终端中启动 Delo，并在浏览器中打开 studio；按 Ctrl-C 即可停止。`delorun start` 会在后台启动 Delo，因此你可以关闭终端；`delorun start --foreground` 则在你的终端中运行它。两者都不打开浏览器。`delorun status` 显示 Delo 是否在运行、其进程与运行时版本；`delorun stop` 会在运行中的 chat 结束后停止它，使用 `delorun stop --now` 则立即停止。每个 profile 只运行一个 Delo：第二次启动会提示已有一个 Delo 在运行。
-
-<a id="profiles"></a>
+在新的 home 上首次运行 `delorun` 会执行 setup（见[安装与首次运行](install.zh.md)）。此后，`delorun` 会在后台启动 Delorun，并在浏览器中打开 studio；如果你在 setup 中选择了在终端中运行，则不会这样。`delorun status` 显示它是否在运行，`delorun stop` 会在正在运行的 chat 结束后停止它，使用 `delorun stop --now` 则立即停止。每个 profile 只运行一个 Delorun：第二次启动会告诉你它已经在运行。[日常使用](daily-use.zh.md)列出了每一条命令。
 
 ## Profile
 
-命令行使用 profile `default`。设置 `DELORUN_PROFILE`，或传入 `--profile <name>`，即可使用其他 profile。桌面应用保有自己的 profile `desktop`，`delorun` 拒绝运行或修改它。两者共享你的会话、工作区与凭据。
+[Profile](../reference/glossary.zh.md#profile) 是 Delorun 的一套设置：它的插件、插件的设置和它的 studio 端口。大多数人只需要 setup 创建的那一个，即 `default`。想使用另一个，请传入 `--profile <name>` 或设置 `DELORUN_PROFILE`：
 
-<a id="your-deepseek-harness-home"></a>
+```sh
+delorun --profile work          # sets up the profile the first time, then starts it
+delorun status --profile work   # other commands take --profile after their name
+```
+
+Profile 名称由 1 到 32 个小写字母、数字、`-` 或 `_` 组成。Delorun 会拒绝 `desktop`（留给桌面应用自己的 profile）、`headless`（`delorun headless` 使用它），以及 `con` 这类 Windows 设备名。所有 profile 共享你的 chat、工作区和密钥。
 
 ## 你的 DeepSeek Harness home
 
-Delo 从不读取、修改或移动 `~/.dsh`。如果你为 DeepSeek Harness 设置了 `DSH_HOME`，`delorun` 会忽略它并使用你的 Delo home，`delorun status` 会告诉你这一点。`delorun plugin` 与 `delorun headless` 的行为与 `dsh plugin` 和 `dsh headless` 相同，只是在你的 Delo home 内运行。
+Delorun 从不更改或移动 `~/.dsh`。只有当你从中导入时才会读取它（见[从 DeepSeek Harness 切换](switching.zh.md)）。如果你为 DeepSeek Harness 设置了 `DSH_HOME`，`delorun` 会忽略它并使用你的 Delorun home，`delorun status` 会告诉你这一点。
 
-<a id="fixing-permissions"></a>
+`delorun plugin` 的行为与 `dsh plugin` 相同，只是在你的 Delorun home 内运行；`delorun headless` 像 `dsh headless` 一样回答单个任务，但带有 Delorun 的沙箱保护和防护措施（见[日常使用](daily-use.zh.md#the-plugin-and-headless-commands)）。
 
 ## 修复权限
 
-你的 home 及其中 Delo 的目录只有你能读取（模式 700），Delo 的密钥文件也只有你能读取（模式 600）。如果其他用户能够读取其中之一，Delo 会拒绝使用它，并打印修复它的命令，例如：
+在 Linux 上，你的 home 及其中 Delorun 的文件夹必须只有你能读取（模式 700），其中的密钥文件也一样（模式 600）。如果其他用户能够读取其中之一，Delorun 会拒绝使用它，并打印修复它的命令：
 
 ```text
-delorun: SECRET_FILE_MODE: /home/you/.delorun/secrets/home-auth/device.key has mode 0640, which other users can read; it must be 0600; fix it with: chmod 600 /home/you/.delorun/secrets/home-auth/device.key
+Delorun stopped before using /home/you/.delorun/secrets/home-auth/home-key.pem.
+Why: SECRET_FILE_MODE: /home/you/.delorun/secrets/home-auth/home-key.pem has mode 0640, which other users can read; it must be 0600
+What you can do:
+  Fix it with: chmod 600 /home/you/.delorun/secrets/home-auth/home-key.pem
 ```
 
-运行打印出的 `chmod 700` 或 `chmod 600` 命令，然后再次运行 `delorun`。Delo 从不替你更改这些权限。在 Windows 上，Delo 目前尚不检查它们。
+运行打印出的 `chmod` 命令，然后再次运行 `delorun`。Delorun 从不替你更改这些权限，所以错误会保持可见。如果 home、文件夹或密钥文件是符号链接，或属于其他用户，也会被拒绝，并且不会给出修复命令：请把它移走，让 `delorun` 重新创建。在 Windows 上，Delorun 目前尚不检查这些权限。
+
+<details>
+<summary>边界情况</summary>
+
+- 如果 `DELORUN_HOME` 不是绝对路径且不以 `~` 开头，那么 `delorun` 会拒绝它。
+- 如果 `DELORUN_HOME` 指向你的用户主目录、文件系统根目录，或 `~/.dsh` 及其中的文件夹，那么 `delorun` 会拒绝它。
+- 如果你设置了 `DSH_HOME`，那么 `delorun` 会忽略它，并且 `delorun status` 会说明这一点。
+- 如果 profile 名称含有大写字母、空格或超过 32 个字符，或者是 `desktop`、`headless` 或 `con` 这类 Windows 设备名，那么 `delorun` 会拒绝它。
+- 如果其他用户能读取你的 home 或某个密钥文件，那么 Delorun 会拒绝使用它，并打印修复它的 `chmod` 命令（见[修复权限](#fixing-permissions)）。
+- 如果 home 中的某个文件或文件夹是符号链接或属于其他用户，那么 Delorun 会拒绝它，且不给出修复命令。请把它移走，让 `delorun` 重新创建。
+- 如果你在 Windows 上运行 Delorun，那么它不检查这些权限。
+- 如果两条命令同时修改 home，那么第二条会以 `another process … holds the home lock` 拒绝。请等待后再运行（见[启动与停止](troubleshooting.zh.md#starting-and-stopping)）。
+
+</details>
+
+<details>
+<summary>进一步了解</summary>
+
+- 把工作用的设置与个人用的设置分开：`delorun --profile work`。各 profile 共享 chat、工作区和密钥，但各自保有自己的插件、设置和端口。
+- 把整个 home 放到别处，例如更大的磁盘：`DELORUN_HOME=~/work/delorun delorun`。
+- 在 Delorun 停止（`delorun stop`）时复制 home 文件夹，即可备份 Delorun。
+- 用 `delorun export` 和 `delorun import` 在不同 home 之间移动单个 chat 或工作区（见[日常使用](daily-use.zh.md#trash-export-and-import)）。
+
+</details>
+
+## 接下来
+
+- 启动与停止 Delorun：[日常使用](daily-use.zh.md)。
+- 了解日志存放位置：[Delorun 的日志存放在哪里](logs.zh.md)。
+- 如果某个文件被拒绝：[home 及其文件](troubleshooting.zh.md#the-home-and-its-files)。
+
+## 给想深入了解的人
+
+[home 布局约定](../contracts/c01-home-layout.zh.md)列出了 home 中的每个文件夹和文件、所需的模式以及错误代码；[故障排查](troubleshooting.zh.md#the-home-and-its-files)解释了每个代码。

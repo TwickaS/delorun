@@ -4,7 +4,7 @@ description: "Design of the exit code of a Host stop: a stop whose Host teardown
 
 # The exit code of a failed Host stop
 
-English
+English | [中文](host-stop-exit-code.zh.md)
 
 ## Summary
 

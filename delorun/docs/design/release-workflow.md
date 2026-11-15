@@ -4,7 +4,7 @@ description: "Design of Delorun's release workflow: the CI workflow that builds 
 
 # The release workflow
 
-English
+English | [中文](release-workflow.zh.md)
 
 ## Summary
 

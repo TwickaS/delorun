@@ -4,7 +4,7 @@ description: "Where to customise Delorun: settings, the profile patch, agent pre
 
 # Where to customise what
 
-English
+English | [中文](customise.zh.md)
 
 This page describes how Delorun works today.
 

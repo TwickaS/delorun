@@ -4,7 +4,7 @@ description: "Design of the journey check: one end-to-end check in a clean conta
 
 # The journey check
 
-English
+English | [中文](journey-check.zh.md)
 
 ## Summary
 

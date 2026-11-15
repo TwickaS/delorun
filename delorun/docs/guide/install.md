@@ -4,7 +4,7 @@ description: "Install Delorun with npx delorun and take it from nothing to a fir
 
 # Install and first run
 
-English
+English | [中文](install.zh.md)
 
 ## Summary
 

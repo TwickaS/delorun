@@ -8,7 +8,7 @@ description: "你使用 Delorun 时信任什么：什么在你的电脑上运行
 
 ## 摘要
 
-本页帮助你判断自己能接受什么。它逐方说明你使用 Delorun 时每一方能看到什么、能做什么，以及如何自行核查。你不需要任何前置知识，但在读过[安装与首次运行](install.md)之后读起来最顺。
+本页帮助你判断自己能接受什么。它逐方说明你使用 Delorun 时每一方能看到什么、能做什么，以及如何自行核查。你不需要任何前置知识，但在读过[安装与首次运行](install.zh.md)之后读起来最顺。
 
 Delorun 是预览版。它的发布版本使用预览密钥签名，尚未经过外部安全评审；[签名](#how-releases-are-signed-in-the-preview)和[评审](#outside-security-review)两节说明这意味着什么，以及何时会改变。Delorun 在你的电脑上、以你自己的身份运行。没有别人替你运行它，发布它的项目 Delo Run 也无法进入你的 [studio](../reference/glossary.zh.md#studio)。Delorun 没有遥测：它不发送任何关于你的信息。有两项让你的安装保持可信的小检查默认会访问互联网。其他一切只有在你开启时才会离开你的电脑。
 
@@ -28,7 +28,7 @@ Delorun 是预览版。它的发布版本使用预览密钥签名，尚未经过
 ## 什么在你的电脑上运行
 
 - **Delorun 本身。** studio 及其[插件](../reference/glossary.zh.md#plugin)以你的用户身份运行，拥有该用户的访问权限。你以自己身份运行的任何其他程序都能读取你的 [home](../reference/glossary.zh.md#home)（即文件夹 `~/.delorun`）中的全部内容，Delorun 无法阻止这一点。
-- **模型运行的命令。** 它们同样以你的访问权限运行，但处在[沙箱](../reference/glossary.zh.md#sandbox)之内：沙箱是一组操作系统规则，限制命令能触及的范围。沙箱阻止命令写入 Delorun 的 home。在你的系统支持的情况下，它还阻止命令读取 Delorun 的密钥或访问 Docker。除已安装的版本、skill 和运行时之外，命令唯一能读取的 Delorun home 内容是你的 profile 中插件的已批准副本；它们无法修改这些副本。命令仍然可以使用其他本地服务和网络，除非你把工作区的[网络设置](../reference/glossary.zh.md#network-setting)设为白名单或关闭（[提示词注入与数据外泄](prompt-injection.zh.md)）。[Delorun 保护什么](safety.md#the-sandbox)列出了各系统上的规则；在 Linux 上，`delorun doctor` 会显示沙箱能否运行。
+- **模型运行的命令。** 它们同样以你的访问权限运行，但处在[沙箱](../reference/glossary.zh.md#sandbox)之内：沙箱是一组操作系统规则，限制命令能触及的范围。沙箱阻止命令写入 Delorun 的 home。在你的系统支持的情况下，它还阻止命令读取 Delorun 的密钥或访问 Docker。除已安装的版本、skill 和运行时之外，命令唯一能读取的 Delorun home 内容是你的 profile 中插件的已批准副本；它们无法修改这些副本。命令仍然可以使用其他本地服务和网络，除非你把工作区的[网络设置](../reference/glossary.zh.md#network-setting)设为白名单或关闭（[提示词注入与数据外泄](prompt-injection.zh.md)）。[Delorun 保护什么](safety.zh.md#the-sandbox)列出了各系统上的规则；在 Linux 上，`delorun doctor` 会显示沙箱能否运行。
 - **每个工作区**都直接在你的电脑上运行。Delorun 没有 Docker 工作区，也就是在容器中运行工作区命令的工作区（[路线图](roadmap.zh.md)）。
 - **插件**拥有与 Delorun 相同的完全访问权限。安装插件时，以及每次 Delorun 启动时，它都会检查该插件是否声明与你的版本兼容。安装之后，它不会再次检查插件的文件：如果你从 npm、git 或压缩包安装的插件在磁盘上发生变化，变化后的版本会在下次启动时加载。
 
@@ -77,12 +77,12 @@ Delo Run 不能：
 <a id="outside-security-review"></a>
 ## 外部安全评审
 
-Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护就会失败的拒绝测试，以及回放录制会话的检查都是真实的，但它们是维护者及其 agent 自己的工作。外部评审是指不参与 Delorun 的人或机构阅读其对安全至关重要的代码，并报告发现。它随 `1.0.0` 一起到来，与密钥仪式同时进行，评审报告会公开发布。在那之前，请把 Delorun 当作预览版：不要依赖它去约束一个你原本就不信任的 agent（[Delorun 保护什么](safety.md)）。
+Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护就会失败的拒绝测试，以及回放录制会话的检查都是真实的，但它们是维护者及其 agent 自己的工作。外部评审是指不参与 Delorun 的人或机构阅读其对安全至关重要的代码，并报告发现。它随 `1.0.0` 一起到来，与密钥仪式同时进行，评审报告会公开发布。在那之前，请把 Delorun 当作预览版：不要依赖它去约束一个你原本就不信任的 agent（[Delorun 保护什么](safety.zh.md)）。
 
 <a id="what-each-reach-option-shows-its-provider"></a>
 ## 每个远程访问选项向其提供方展示什么
 
-[远程访问](../reference/glossary.zh.md#reach)是指从另一台设备（例如你的手机）打开你的 studio。它在你开启前处于关闭状态，并且不使用 Delo Run 的任何东西。Delorun 提供一个选项：你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 上的 Tailscale（[用手机访问 studio](reach.md)）。当 Tailscale Funnel（会把你的地址发布到互联网上）开启时，`delorun reach on tailscale` 会拒绝执行。
+[远程访问](../reference/glossary.zh.md#reach)是指从另一台设备（例如你的手机）打开你的 studio。它在你开启前处于关闭状态，并且不使用 Delo Run 的任何东西。Delorun 提供一个选项：你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 上的 Tailscale（[用手机访问 studio](reach.zh.md)）。当 Tailscale Funnel（会把你的地址发布到互联网上）开启时，`delorun reach on tailscale` 会拒绝执行。
 
 下表还描述了 Delorun 不提供的两个选项，方便你比较（[路线图](roadmap.zh.md)）。
 
@@ -110,7 +110,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 默认会运行两项检查。它们不携带任何关于你的信息，但它们所访问的每个服务器都会看到你的 IP 地址和请求时间。
 
 - **发布日志检查**，每次启动时进行。它向 Sigstore 的公开发布日志以及发布其状态的服务询问，你运行的版本是否就是 Delo Run 公开记录的那个版本。没有任何设置能关闭它。当无法访问日志时，Delorun 仍会启动，并向你发出警告。
-- **更新检查**，每天一次。它从 releases.delorun.com 或备用主机获取 Delorun 已签名的发布文件，以查看是否有更新的版本（[更新](updates.md#the-update-notice)）。可在设置 → 通用 → 更新中关闭，或使用 `delorun setup privacy`。
+- **更新检查**，每天一次。它从 releases.delorun.com 或备用主机获取 Delorun 已签名的发布文件，以查看是否有更新的版本（[更新](updates.zh.md#the-update-notice)）。可在设置 → 通用 → 更新中关闭，或使用 `delorun setup privacy`。
 
 这些检查下载的每个文件都经签名验证，因此提供被篡改文件的服务器会导致检查失败。Delorun 不下载被撤销插件的列表，因为 Delo Run 不发布这样的列表。
 
@@ -152,7 +152,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 
 请按 [SECURITY.md](../../../SECURITY.md) 所述私下报告疑似漏洞，不要公开提交 issue。其他问题请发送至 support@delorun.com。
 
-**下一步。** 要了解保护措施本身，请阅读 [Delorun 保护什么](safety.md)。要用手机访问你的 studio，请阅读[用手机访问 studio](reach.md)。如果出了问题，请在[故障排查](troubleshooting.md)中找到对应的信息。
+**下一步。** 要了解保护措施本身，请阅读 [Delorun 保护什么](safety.zh.md)。要用手机访问你的 studio，请阅读[用手机访问 studio](reach.zh.md)。如果出了问题，请在[故障排查](troubleshooting.zh.md)中找到对应的信息。
 
 <a id="for-the-technically-curious"></a>
 ## 给想深入了解的人

@@ -4,7 +4,7 @@ description: "Design of templates: a saved, content-addressed record of how some
 
 # Templates
 
-English
+English | [中文](templates.zh.md)
 
 ## Summary
 

@@ -4,7 +4,7 @@ description: "The model providers Delorun sets up: DeepSeek, Anthropic, Google G
 
 # Model providers
 
-English
+English | [中文](providers.zh.md)
 
 ## Summary
 

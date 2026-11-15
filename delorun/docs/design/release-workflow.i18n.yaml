@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for release-workflow.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/release-workflow.md
+/:
+  en: 846053317e58d0d7
+  zh: 1b022d24792172d1
+/the-release-workflow:
+  en: 923da8dd24c0602d
+  zh: ee97bc14bf6dbd28
+/the-release-workflow/summary:
+  en: f0068a8003704ef2
+  zh: df532b9d4552099f
+/the-release-workflow/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/the-release-workflow/what-exists-today:
+  en: c31e1efd025fca70
+  zh: 6f47516e1744db33
+/the-release-workflow/the-rules:
+  en: 3bac0798b8caed28
+  zh: f67d08c7ec7fd3a4
+/the-release-workflow/what-this-does-not-protect-against:
+  en: ff88c727a6ccbe99
+  zh: 553741f102024a22
+/the-release-workflow/denial-tests:
+  en: a0a66df6e26c218e
+  zh: cdb8d57ba57f92ba
+/the-release-workflow/implementation-status:
+  en: f5052507e7be3b75
+  zh: 11f6e0e28ad491fe

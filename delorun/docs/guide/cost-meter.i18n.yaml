@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for cost-meter.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/cost-meter.md
+/:
+  en: 4ad8aa34a3ce5fba
+  zh: 8799ad5e1aa5f372
+/see-what-a-chat-costs:
+  en: deef720901ca9d50
+  zh: 06e42e13ed24e0c2
+/see-what-a-chat-costs/summary:
+  en: 346a65135ca0a4b9
+  zh: 348937788d885db4
+/see-what-a-chat-costs/contents:
+  en: f0f150d7393cb0f2
+  zh: e750400410cefee5
+/see-what-a-chat-costs/turn-it-on:
+  en: 20c8d936f4af3dd5
+  zh: 33e1ab5f17c3bba3
+/see-what-a-chat-costs/what-it-shows:
+  en: a1d61ad0604af988
+  zh: b6934feb6bb091fa
+/see-what-a-chat-costs/prices:
+  en: 4c34007df7c3f484
+  zh: 1c9b9ab84994fda9
+/see-what-a-chat-costs/what-it-does-not-count:
+  en: a3ff72e93710e42b
+  zh: f9a2a05a3cd27338
+/see-what-a-chat-costs/next:
+  en: 65c49dd949cfe9a4
+  zh: 4a2258951302d4ee

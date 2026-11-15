@@ -4,7 +4,7 @@ description: "Design of required guards: a marker on upstream's guard lookups so
 
 # Required guards
 
-English
+English | [中文](required-guards.zh.md)
 
 ## Summary
 

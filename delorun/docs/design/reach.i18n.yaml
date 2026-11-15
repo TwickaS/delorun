@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for reach.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/reach.md
+/:
+  en: 048de7d1660a1d03
+  zh: ff419bb32bd1a404
+/reach-on-your-own-tailnet:
+  en: 47fc226491cea807
+  zh: 6d90b85ba7be2ea8
+/reach-on-your-own-tailnet/summary:
+  en: a96203567302508a
+  zh: 68b9a151b545e5c1
+/reach-on-your-own-tailnet/contents:
+  en: b114f0a637b214c2
+  zh: 4d028f7ef78e9b14
+/reach-on-your-own-tailnet/what-exists-today:
+  en: adc7d33d6c0458fa
+  zh: eeb201455caf9ca3
+/reach-on-your-own-tailnet/exact-fetch-routes-a-device-meets:
+  en: de38ec124ec4ff07
+  zh: 923f373be76a5c96
+/reach-on-your-own-tailnet/the-rules:
+  en: 69ac054b668fcc66
+  zh: be9454bd35582018
+/reach-on-your-own-tailnet/the-rules/the-route:
+  en: 70613fff54912a64
+  zh: b92aa39824dcf048
+/reach-on-your-own-tailnet/the-rules/sign-in-and-approval:
+  en: d5e3c89068d66973
+  zh: 075cb83bbc274cc9
+/reach-on-your-own-tailnet/the-rules/what-a-remote-session-may-do:
+  en: 9aa628f09a9e77fd
+  zh: d4f407cc0ef82926
+/reach-on-your-own-tailnet/the-rules/loopback-credentials:
+  en: 7046de41a26213ae
+  zh: 39731b330b27448e
+/reach-on-your-own-tailnet/the-rules/commands:
+  en: 4695fb2f9e423fe4
+  zh: e81bad8805bcab51
+/reach-on-your-own-tailnet/what-this-does-not-protect-against:
+  en: b5150b0f477060ec
+  zh: 52c126dbfa0c840f
+/reach-on-your-own-tailnet/denial-tests:
+  en: d70adcb71b768636
+  zh: 741910611c523388
+/reach-on-your-own-tailnet/never-run-on-a-real-tailnet-or-phone:
+  en: 840e56337eb9c15d
+  zh: 3ca4234d062fc207
+/reach-on-your-own-tailnet/implementation-status:
+  en: e35faa5397de1c42
+  zh: 6e634a858ad178fd

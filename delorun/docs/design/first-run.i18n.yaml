@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for first-run.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/design/first-run.md
+/:
+  en: 1528c731488b199e
+  zh: 6b5560819847283f
+/the-first-run:
+  en: 3aaf5d0856fb6706
+  zh: b1679a4a961cf181
+/the-first-run/summary:
+  en: 476d77e85bafecfd
+  zh: c220f7af2e84b8bf
+/the-first-run/contents:
+  en: 479fc10754bd01ac
+  zh: 6d4b5937ce2819d3
+/the-first-run/what-exists-today:
+  en: b6129e0a0faef9cb
+  zh: 47731c4277ee4fb3
+/the-first-run/the-rules:
+  en: f651c9f88182c94c
+  zh: 0e06c6ba3fe451d3
+/the-first-run/what-this-does-not-protect-against:
+  en: 76779635f3665318
+  zh: 5d01ee13739d1384
+/the-first-run/denial-tests:
+  en: 2481dbe2bba19a9b
+  zh: eefb11e783234c6e
+/the-first-run/implementation-status:
+  en: 50f5ce5bc5c23942
+  zh: 82f61c94a12d97dd

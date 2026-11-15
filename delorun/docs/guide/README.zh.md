@@ -1,17 +1,73 @@
 ---
-description: "Delo 用户指南索引：面向 Delo 使用者的页面，从 Delo 与 stock DeepSeek Harness 的区别开始。"
+description: "Delorun 用户指南，按你想做的事组织成一张地图：安装与首次运行、从 stock DeepSeek Harness 切换、日常使用、模型提供方、成本计量器、更新、用手机访问 studio、定制 Delorun 及其改动、安全与信任，以及故障排查。"
 ---
 
-# Delo 用户指南
+# Delorun 用户指南
 
 [English](README.md) | 中文
 
-用户指南面向使用 Delo 的人。请从 [Delo 与 stock DeepSeek Harness](delorun-vs-stock.zh.md) 开始，它说明两者中哪些保持不变、哪些不同，以及如何在二者之间迁移。
+## 摘要
 
-[你使用 Delo 时信任什么](trust.zh.md)说明什么在你的电脑上运行、Delo Run 能做什么与不能做什么、每个远程访问选项向其提供方展示什么，以及什么会离开你的机器。
+用户指南面向安装并使用 Delorun 的人。Delorun 是一个可以按你自己的工作来塑造的 agent harness，构建在 DeepSeek Harness 之上；无论你对两者都是新手，还是从 stock DeepSeek Harness 切换而来，都适用。Delorun 运行在你自己的电脑上。本页是一张地图：找到你想做的事，再沿链接进入对应的页面与章节。如果你是新手，请先读[安装与首次运行](install.zh.md)，再读[日常使用](daily-use.zh.md)。技术术语会链接到[术语表](../reference/glossary.zh.md)。
 
-[你的 Delo home](home.zh.md) 说明 `delorun` 把你的数据保存在哪里、如何迁移它、profile 如何运作，以及如何修复其他用户可读取的 home 或密钥文件。
+## 目录
 
-[提示词注入与数据外泄](prompt-injection.zh.md)列出一次攻击需要的三个条件、每种工作区网络设置为沙箱中的命令与 `web_fetch` 关闭了什么，以及无论怎样选择仍然开放的途径。
+- [我想开始使用](#i-want-to-get-started)
+- [我想每天使用它](#i-want-to-use-it-every-day)
+- [我想选择或更换模型](#i-want-to-choose-or-change-the-model)
+- [我想用手机访问它](#i-want-to-reach-it-from-my-phone)
+- [我想把它变成我自己的](#i-want-to-make-it-mine)
+- [我想知道什么是安全的](#i-want-to-know-what-is-safe)
+- [出了问题](#something-went-wrong)
+- [给想深入了解的人](#for-the-technically-curious)
 
-[Delo 的日志存放在哪里](logs.zh.md)列出每份运行日志的位置、日志保存什么与绝不保存什么、日志保留多久，以及 `delorun logs` 如何显示与清空它们。
+## 我想开始使用
+
+- **安装 Delorun 并进行第一次 chat：**[安装与首次运行](install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](install.zh.md#setup-how-you-will-use-delorun)、[studio 与你的第一次 chat](install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)。
+- **带上我的 DeepSeek Harness chat：**[从 DeepSeek Harness 切换](switching.zh.md)。它说明哪些内容会被复制、哪些会被保留不动，以及[如何切换回去](switching.zh.md#going-back)。
+- **了解 Delorun 与 stock DeepSeek Harness 有何不同：**[Delorun 与 stock DeepSeek Harness](delorun-vs-stock.zh.md)。它列出每一处差异，以及 Delorun 不包含什么。
+- **了解 Delorun 是做什么的、将走向哪里：**[路线图](roadmap.zh.md)。它说明现在正在构建什么、接下来是什么、之后是什么。
+
+## 我想每天使用它
+
+- **启动、打开、停止或检查 Delorun：**[启动、打开与停止](daily-use.zh.md#start-open-and-stop)和[检查发布版本与你的设置](daily-use.zh.md#check-the-release-and-your-setup)。
+- **决定模型在某个文件夹里可以改动什么：**[工作区与模型可以改动的内容](daily-use.zh.md#workspaces-and-what-the-model-may-change)。
+- **从阻止 Delorun 启动的插件中恢复：**[安全模式与恢复](daily-use.zh.md#safe-mode-and-recovery)。
+- **恢复已删除的 chat，或在不同 home 之间移动 chat：**[回收站、导出与导入](daily-use.zh.md#trash-export-and-import)。
+- **升级到新的发布版本，或回退：**[更新](updates.zh.md)和[回退](updates.zh.md#going-back)。
+- **我运行了很多第三方插件时如何更新：**[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。它涵盖先保存了什么、如何阅读报告中的 `disabled` 行、如何用版本豁免强行尝试某个插件，以及如何回退。
+- **找到我的数据在哪里、移动它，或使用两个 profile：**[你的 Delorun home](home.zh.md)。
+- **找出某件事为何失败：**[Delorun 的日志存放在哪里](logs.zh.md)。
+- **带上我在 DeepSeek 网站上的 chat：**[导入你的 DeepSeek 网站 chat](import-deepseek-chats.zh.md)。
+- **查看一次 chat 花了多少钱：**[查看一次 chat 的花费](cost-meter.zh.md)。
+- **逐字阅读模型的思考过程：**[逐字阅读模型的思考过程](thinking-tab.zh.md)。
+
+## 我想选择或更换模型
+
+- **选择提供方和密钥，或在我自己的电脑上运行模型：**[模型提供方](providers.zh.md)。它列出 setup 支持的每家提供方，以及如何[之后更换提供方](providers.zh.md#change-the-provider-later)。
+
+## 我想用手机访问它
+
+- **开启远程访问、批准设备或移除设备：**[用手机访问 studio](reach.zh.md)。
+
+## 我想把它变成我自己的
+
+- **选择修改 Delorun 的合适方式：**[什么该在哪里定制](https://docs.delorun.com/guide/customise)比较了设置、profile 补丁、agent 预设、你自己的插件、已发布插件的改名 fork，以及直接编辑 Delorun 本身，并说明每种方式在每次更新时会让你付出什么。
+- **编写插件：**[为 Delorun 编写插件](https://docs.delorun.com/guide/plugins)从 `delorun plugin new` 讲到一个能在你的 studio 中加载的插件。
+- **查看、保护或撤销改动：**[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
+
+## 我想知道什么是安全的
+
+- **了解沙箱、完全访问与各项同意：**[Delorun 保护什么](safety.zh.md)。
+- **了解提示词注入以及什么会离开我的电脑：**[提示词注入与数据外泄](prompt-injection.zh.md)。
+- **了解我使用 Delorun 时信任什么：**[你使用 Delorun 时信任什么](trust.zh.md)。
+
+## 出了问题
+
+- **看不懂的消息或代码：**[故障排查](troubleshooting.zh.md)。它解释[如何读懂一次拒绝](troubleshooting.zh.md#reading-a-refusal)，并按代码列出常见情况及修复办法。
+- **Delorun 无法启动：**[启动与停止](troubleshooting.zh.md#starting-and-stopping)，然后运行 `delorun doctor`（见[日常使用](daily-use.zh.md#check-the-release-and-your-setup)）。
+- **更新失败：**[更新与回退](troubleshooting.zh.md#updates-and-rollback)。
+
+## 给想深入了解的人
+
+这些页面描述的是你看到的和你要做的。[Delorun 文档索引](../README.zh.md)通向定义确切规则的约定、设计和威胁模型；每个指南页面的末尾都链接到它所依赖的那些文档。

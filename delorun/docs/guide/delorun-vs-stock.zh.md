@@ -34,8 +34,8 @@ Delorun 遵守以下规则：
 
 - **Stock 优先。**全新安装遵循 stock DSH 的工作流。Delorun 不发送任何关于你的信息；它默认的网络请求只有每次启动时的公开发布日志检查与每天一次的新版本检查，可在 Settings → General → Updates 中关闭（[你使用 Delorun 时信任什么](trust.zh.md#what-leaves-your-machine)）。
 - **由你修改。**配置、插件、预设、skill、主题与 studio 都归你所有，没有任何隐藏的层会覆盖它们。
-- **更新绝不会夺走你的工作。**更新之前，你会看到它将改变什么；你的 [profile](../reference/glossary.zh.md#profile) 会先被保存；一条命令即可回退（[更新](updates.md)）。
-- **Delorun 无法擅自进入。**你的 studio 运行在你的电脑上，每台新设备都需要你在这台电脑上批准（[从手机访问 studio](reach.md)）。
+- **更新绝不会夺走你的工作。**更新之前，你会看到它将改变什么；你的 [profile](../reference/glossary.zh.md#profile) 会先被保存；一条命令即可回退（[更新](updates.zh.md)）。
+- **Delorun 无法擅自进入。**你的 studio 运行在你的电脑上，每台新设备都需要你在这台电脑上批准（[从手机访问 studio](reach.zh.md)）。
 - **诚实的声明。**只有经测试证明的防护才会被称为已强制执行，本指南会说明 Delorun 不包含什么。
 
 <a id="what-stays-the-same"></a>
@@ -54,21 +54,21 @@ Delorun 遵守以下规则：
 
 | 方面 | stock DSH | Delorun |
 | --- | --- | --- |
-| 安装 | npm 包与桌面应用 | `npx delorun`，它在安装每个发布版本之前校验其签名及其在公开发布日志中的条目；支持 Linux x64 与 arm64，以及通过 WSL2 的 Windows（[安装与首次运行](install.md)） |
+| 安装 | npm 包与桌面应用 | `npx delorun`，它在安装每个发布版本之前校验其签名及其在公开发布日志中的条目；支持 Linux x64 与 arm64，以及通过 WSL2 的 Windows（[安装与首次运行](install.zh.md)） |
 | home | `~/.dsh` | `~/.delorun`，只有你能读取；`~/.dsh` 永不被修改，`delorun import-home` 会从中复制你选择的内容（[你的 Delorun home](home.zh.md)） |
-| 运行 | 终端中的一条命令，或桌面应用 | `delorun` 在后台运行并打开 studio；`delorun start`、`stop`、`status`、`open`、`doctor` 与 `logs` 管理它（[日常使用](daily-use.md)） |
+| 运行 | 终端中的一条命令，或桌面应用 | `delorun` 在后台运行并打开 studio；`delorun start`、`stop`、`status`、`open`、`doctor` 与 `logs` 管理它（[日常使用](daily-use.zh.md)） |
 | 设置 | 首次运行对话框 | 终端中的 [setup](../reference/glossary.zh.md#setup)：隐私、从 `~/.dsh` 复制、模型密钥与提示的谨慎程度，较长的形式还包括后台运行、远程访问、profile 名称与端口。脚本使用 `delorun setup --yes` |
 | studio | DSH 的外观 | Delorun 的主题、侧边栏、chat 状态、设置布局与新手引导，或一个开关切换为 stock 外观 |
-| 更新 | 启动时可能停用不兼容的插件 | 确认之前显示将改变什么的报告，先创建 profile 快照并可选复制你的 chat 数据，之后进行健康检查，失败时自动回滚，并可用 `delorun recover` 回退（[更新](updates.md)） |
+| 更新 | 启动时可能停用不兼容的插件 | 确认之前显示将改变什么的报告，先创建 profile 快照并可选复制你的 chat 数据，之后进行健康检查，失败时自动回滚，并可用 `delorun recover` 回退（[更新](updates.zh.md)） |
 | 你自己的修改 | Profile 层 | Profile 层、可由 `delorun recover restore` 恢复的 profile 历史、[安全模式](../reference/glossary.zh.md#safe-mode)，以及拒绝丢弃你添加的插件、设置或本地插件的更新检查 |
-| 命令能触及什么 | [沙箱](../reference/glossary.zh.md#sandbox)限制文件写入 | 同一沙箱还会在你的系统能够强制执行时，阻止命令写入或读取 Delorun 的 home 及其密钥，以及连接其控制套接字与 Docker（[Delorun 保护什么](safety.md#the-sandbox)） |
-| 权限 | 所有工作区使用同一个默认值 | 每个新工作区都从 Workspace Write 开始。选择 [Ask me first](../reference/glossary.zh.md#ask-me-first) 时，[完全访问](../reference/glossary.zh.md#full-access)需要你对每个工作区同意一次，并在你的电脑上给出（[完全访问](safety.md#full-access)） |
-| 同意 | — | 选择 Ask me first 时，模型的文件工具写入 `AGENTS.md`、skill 与预设之前会先询问，计划任务会连同其时间安排与目标一起询问，运行命令的新 [MCP 服务器](../reference/glossary.zh.md#mcp-server)会等到你在自己的电脑上允许之后才启动（[同意](safety.md#consents)） |
-| 网络 | 命令可访问任何主机 | 每个工作区可在 Settings → Safety → Network 中设为 Open、Allowlist 或 Off；默认是 Open（[网络设置](safety.md#the-network-setting)） |
-| 费用 | — | 消息框下方的可选计量器显示一个 chat 花费了多少（[查看一个 chat 的花费](cost-meter.md)） |
-| 思考 | — | 右侧边栏中的可选标签页逐字显示模型的推理与回复（[逐字阅读模型的思考](thinking-tab.md)） |
+| 命令能触及什么 | [沙箱](../reference/glossary.zh.md#sandbox)限制文件写入 | 同一沙箱还会在你的系统能够强制执行时，阻止命令写入或读取 Delorun 的 home 及其密钥，以及连接其控制套接字与 Docker（[Delorun 保护什么](safety.zh.md#the-sandbox)） |
+| 权限 | 所有工作区使用同一个默认值 | 每个新工作区都从 Workspace Write 开始。选择 [Ask me first](../reference/glossary.zh.md#ask-me-first) 时，[完全访问](../reference/glossary.zh.md#full-access)需要你对每个工作区同意一次，并在你的电脑上给出（[完全访问](safety.zh.md#full-access)） |
+| 同意 | — | 选择 Ask me first 时，模型的文件工具写入 `AGENTS.md`、skill 与预设之前会先询问，计划任务会连同其时间安排与目标一起询问，运行命令的新 [MCP 服务器](../reference/glossary.zh.md#mcp-server)会等到你在自己的电脑上允许之后才启动（[同意](safety.zh.md#consents)） |
+| 网络 | 命令可访问任何主机 | 每个工作区可在 Settings → Safety → Network 中设为 Open、Allowlist 或 Off；默认是 Open（[网络设置](safety.zh.md#the-network-setting)） |
+| 费用 | — | 消息框下方的可选计量器显示一个 chat 花费了多少（[查看一个 chat 的花费](cost-meter.zh.md)） |
+| 思考 | — | 右侧边栏中的可选标签页逐字显示模型的推理与回复（[逐字阅读模型的思考](thinking-tab.zh.md)） |
 | Web 抓取 | 在每种模式下都能访问回环与私有网络主机 | `web_fetch` 拒绝回环、链路本地与私有网络地址（包括云元数据地址）；命令不在该防护范围之内 |
-| 从其他设备访问 | 你在局域网地址上的自有证书，或实验性的 Liveshare | 通过你自己 tailnet 上的 Tailscale，每台设备都在你的电脑上凭其显示的代码批准（[从手机访问 studio](reach.md)） |
+| 从其他设备访问 | 你在局域网地址上的自有证书，或实验性的 Liveshare | 通过你自己 tailnet 上的 Tailscale，每台设备都在你的电脑上凭其显示的代码批准（[从手机访问 studio](reach.zh.md)） |
 | 验证 | — | `delorun verify` 检查已安装发布版本的签名、其发布日志条目及其文件 |
 | 日志 | 终端中的进程输出 | 按进程划分的运行日志，经过轮转并隐去机密，`delorun logs` 用于查找它们（[Delorun 把日志放在哪里](logs.zh.md)） |
 | 数据共享 | 桌面分析与 DeepSeek 会话日志上传默认开启 | Delorun 没有自己的遥测。DeepSeek 会话日志上传在你于 Settings → Safety → Privacy 中开启之前保持关闭，`delorun` 运行的 profile 中没有桌面分析 |
@@ -79,7 +79,7 @@ Delorun 遵守以下规则：
 <details>
 <summary>边缘情况</summary>
 
-- 如果你在 Windows 上运行，那么命令可以读取 Delorun 的 home、其密钥与其令牌，但不能写入——请把模型的命令视为能够读取它们（[Delorun 保护什么](safety.md#the-sandbox)）。
+- 如果你在 Windows 上运行，那么命令可以读取 Delorun 的 home、其密钥与其令牌，但不能写入——请把模型的命令视为能够读取它们（[Delorun 保护什么](safety.zh.md#the-sandbox)）。
 - 如果你在桌面版 Linux 上运行且没有 bubblewrap，那么 Delorun 会完全拒绝运行沙箱中的命令——请安装 bubblewrap。
 - 如果你在 setup 中选择了 [**Ask less (like DeepSeek Harness)**](../reference/glossary.zh.md#ask-less)，那么完全访问、指令文件、MCP 服务器与计划任务的同意都是关闭的，网络设置也不可用——运行 `delorun setup prompts` 可重新选择 Ask me first。
 - 如果你想要 stock 外观，那么在 Settings → General → Look 中关闭 **Delorun look**——同一开关可再次打开。
@@ -97,7 +97,7 @@ Delorun 遵守以下规则：
 - DeepSeek 的会话日志上传在你开启之前保持关闭。
 - `web_fetch` 拒绝回环、链路本地与私有网络地址。
 - 在你的系统能够强制执行时，模型运行的命令无法写入或读取 Delorun 的 home，也无法连接其控制套接字。
-- 选择 Ask me first 时，指令文件、MCP 服务器与计划任务的同意适用。setup 中的 **Ask less (like DeepSeek Harness)** 回答会关闭它们以及完全访问的拒绝（[Ask less (like DeepSeek Harness)](switching.md#ask-less-like-deepseek-harness)）。
+- 选择 Ask me first 时，指令文件、MCP 服务器与计划任务的同意适用。setup 中的 **Ask less (like DeepSeek Harness)** 回答会关闭它们以及完全访问的拒绝（[Ask less (like DeepSeek Harness)](switching.zh.md#ask-less-like-deepseek-harness)）。
 - 默认工作区是你的 Documents 文件夹中的 `Delorun/default-workspace`；系统未指定 Documents 文件夹时，位于你的 home 文件夹中。
 
 其他差异存在于代码中，但在 `delorun` 运行的 profile 中是关闭的，因此每一项都保持 DSH 的行为。[对等清单](../reference/parity.zh.md)列出了它们。
@@ -129,7 +129,7 @@ Delorun 不包含以下内容，本指南只在它们影响某项选择时才描
 
 ## 在 DSH 与 Delorun 之间迁移
 
-- **从 DSH 迁入：**setup 会提议从 `~/.dsh` 复制你的 chat 与工作区，`delorun import-home` 随时可以执行这一操作，并逐项询问你的 profile、设置、指令、skill 与密钥；`~/.dsh` 永不被修改（[从 DeepSeek Harness 切换](switching.md)）。
+- **从 DSH 迁入：**setup 会提议从 `~/.dsh` 复制你的 chat 与工作区，`delorun import-home` 随时可以执行这一操作，并逐项询问你的 profile、设置、指令、skill 与密钥；`~/.dsh` 永不被修改（[从 DeepSeek Harness 切换](switching.zh.md)）。
 - **回到 DSH：**你的 DSH home 保持不变，因此 stock DSH 可以与 Delorun 并存运行。`delorun export` 把 chat 与工作区写成另一个 home 可以导入的文件。
 - **在 Delorun 中使用 stock 行为：**关闭 Delorun 的 studio 附加功能即可使用 stock 外观，在 `delorun setup prompts` 中回答 **Ask less (like DeepSeek Harness)** 即可使用 DSH 的提示。
 
@@ -154,7 +154,7 @@ Delorun 不包含以下内容，本指南只在它们影响某项选择时才描
 
 Delorun 的用途、计划了什么及其顺序，以及不计划什么，见[路线图](roadmap.zh.md)。
 
-**接下来。**要安装 Delorun，请阅读[安装与首次运行](install.md)。要保留你的 DeepSeek Harness 工作，请阅读[从 DeepSeek Harness 切换](switching.md)。如果出了问题，请在[故障排除](troubleshooting.md)中查找其消息。
+**接下来。**要安装 Delorun，请阅读[安装与首次运行](install.zh.md)。要保留你的 DeepSeek Harness 工作，请阅读[从 DeepSeek Harness 切换](switching.zh.md)。如果出了问题，请在[故障排除](troubleshooting.zh.md)中查找其消息。
 
 <a id="for-the-technically-curious"></a>
 
