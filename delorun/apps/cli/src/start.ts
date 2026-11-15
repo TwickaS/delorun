@@ -41,7 +41,7 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { assertDelorunInvariants, composeDelorunProfile, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
-import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delorun/contract-home-layout'
+import { DELORUN_START_CHECK_ENV, HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delorun/contract-home-layout'
 import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
@@ -82,7 +82,7 @@ import { secretFieldAdmission, type ConfigSchemasOf } from '@delorun/profile-saf
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
-import { fullCheckDaysOf, storeUpdateSupport } from './update/store-support.ts'
+import { fullCheckDaysOf, storeUpdateSupport, successorStartCheckRecord } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDelorunEnvironment } from './launch-environment.ts'
 import { attachHomeLogs, registerEnvironment } from './log-secrets.ts'
@@ -161,6 +161,11 @@ export interface StartDependencies {
    * @throws {ChangesError} `HARNESS_CHANGED` when the composed tree differs.
    */
   readonly checkRuntime: typeof checkRunningRuntime
+  /**
+   * The start-check record a successor runs with ({@link successorStartCheckRecord}); the predecessor, which may be an
+   * older release, starts it without one.
+   */
+  readonly successorStartCheck: typeof successorStartCheckRecord
   /**
    * Hand the start off to the composed tree of its runtime before anything else runs ([harness start](./changes/harness-start.ts));
    * {@link handOffToComposedTree} for this process in a real start.
@@ -512,6 +517,7 @@ export function upstreamDependencies(): StartDependencies {
     runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
     updates: storeUpdateSupport,
     checkRuntime: checkRunningRuntime,
+    successorStartCheck: successorStartCheckRecord,
     handOff: request => handOffToComposedTree(request, processHandOff(runtimeOfFile(request.home, fileURLToPath(import.meta.url)), request.output)),
     handover: () => inheritedHandover(),
     opener: computerOpener(process.env),
@@ -584,13 +590,16 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   const retry = startRetry({ home: request.home, profile: request.profile, env: request.env, successor: handover !== undefined, output: request.output, logger: homeLog.logger, ...runtime.store ? { runtime: runtime.version } : {} })
   try {
     const running = handover?.handover.to ?? runtime.version
+    // A successor that fails its own start check does not boot, so the predecessor's health check fails and it rolls back.
+    const record = handover !== undefined && runtime.store ? await dependencies.successorStartCheck(request.home, running, homeLog.logger, request.env, Date.now()) : undefined
+    const startRequest: StartRequest = record === undefined ? request : { ...request, env: { ...request.env, [DELORUN_START_CHECK_ENV]: record } }
     const options: HomeProcessOptions = {
       home: request.home,
       profile: request.profile,
       running,
       startId,
       host: {
-        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry),
+        boot: () => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry),
       },
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,

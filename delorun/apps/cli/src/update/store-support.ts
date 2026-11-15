@@ -8,11 +8,12 @@
  *
  * @module @delorun/cli/update/store-support
  */
-import type { RuntimeVersion } from '@delorun/contract-home-layout'
+import { DELORUN_LAUNCHER_ROOTS_ENV, DELORUN_START_CHECK_ENV, type RuntimeVersion } from '@delorun/contract-home-layout'
+import { dirname } from 'node:path'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { UpdateSupport } from '@delorun/home-process'
 import type { DelorunLogger } from '@delorun/logs'
-import { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type OpenUpdateChannel, type TrustedRootSource, type VerifiedRuntime } from '@delorun/runtime-store'
+import { FULL_CHECK_DAYS_ENV, parseStartCheckHandoff, resolveFullCheckDays, RuntimeStore, START_CHECK_SCHEMA, startCheckHandoffText, type OpenUpdateChannel, type TrustedRootSource, type CheckedRuntime } from '@delorun/runtime-store'
 import { homeReleaseChannel, runtimePlatformOf } from './channel.ts'
 import { storeReportSources } from './sources.ts'
 import { homeUpdateSupport } from './support.ts'
@@ -84,6 +85,41 @@ export function storeUpdateSupport(home: string, profile: string, running: Runti
  * @throws {RuntimeStoreError} when the version is not installed, its files do not match its manifest, or the root
  *   does not verify it; `ROOT_NOT_ANCHORED` when the root cannot be anchored.
  */
-export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DelorunLogger, root: TrustedRootSource, fullCheckDays: number): Promise<VerifiedRuntime> {
+export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DelorunLogger, root: TrustedRootSource, fullCheckDays: number): Promise<CheckedRuntime> {
   return new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger }).startCheckRuntime(version, await root(), fullCheckDays)
+}
+
+/**
+ * The start-check record for a successor runtime, whose predecessor starts it without `DELORUN_START_CHECK`: the
+ * predecessor may be an older release that cannot hand one over, so the successor runs the store's start check on its own
+ * release, as the launcher's start does, and records what that check did. A record that already names the release is
+ * kept. No record is made without a passing check: a failing check throws.
+ * @param request - the release, the environment, the clock and the check.
+ * @param request.version - the release this process runs.
+ * @param request.env - the process's environment, read for the record and `DELORUN_LAUNCHER_ROOTS`.
+ * @param request.now - the clock, in milliseconds since the epoch.
+ * @param request.check - the start check of the release's files and signed manifest; {@link checkStoredRuntime} in a real start.
+ * @returns the record's text for `DELORUN_START_CHECK`, or `undefined` when the environment already holds one for this release.
+ * @throws whatever the check throws.
+ */
+export async function successorRecord(request: { readonly version: RuntimeVersion, readonly env: Readonly<Record<string, string | undefined>>, readonly now: number, readonly check: () => Promise<Pick<CheckedRuntime, 'check'>> }): Promise<string | undefined> {
+  if (parseStartCheckHandoff(request.env[DELORUN_START_CHECK_ENV])?.release === String(request.version)) return undefined
+  const verified = await request.check()
+  // The launcher names its roots' directory inside its package directory; the Host runs `delorun verify` through that package.
+  const roots = request.env[DELORUN_LAUNCHER_ROOTS_ENV] ?? ''
+  return startCheckHandoffText({ schema: START_CHECK_SCHEMA, release: String(request.version), at: request.now, ...verified.check, launcher: { version: null, path: dirname(roots) } })
+}
+
+/**
+ * {@link successorRecord} over this home's store, with the root anchored on the launcher's roots.
+ * @param home - the resolved Delorun home.
+ * @param version - the release this process runs.
+ * @param logger - the home process's logger.
+ * @param env - the process's environment.
+ * @param now - the clock, in milliseconds since the epoch.
+ * @returns the record's text, or `undefined` when the environment already holds one for this release.
+ * @throws {RuntimeStoreError} when the installation's files or manifest do not verify, or the root cannot be anchored.
+ */
+export function successorStartCheckRecord(home: string, version: RuntimeVersion, logger: DelorunLogger, env: Readonly<Record<string, string | undefined>>, now: number): Promise<string | undefined> {
+  return successorRecord({ version, env, now, check: () => checkStoredRuntime(home, version, logger, launcherAnchor(home, env).root, fullCheckDaysOf(env)) })
 }

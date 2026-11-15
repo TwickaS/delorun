@@ -30,5 +30,5 @@ export {
   type UpdateReporter,
 } from './seam.ts'
 export { parseStartCheckHandoff, START_CHECK_SCHEMA, startCheckHandoffText, type StartCheckHandoff, type StartCheckSummary } from './start-record.ts'
-export { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type FilledRelease, type InstallRequest, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeStoreOptions, type StagedFiles, type VerifiedRuntime } from './store.ts'
+export { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type CheckedRuntime, type FilledRelease, type InstallRequest, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeStoreOptions, type StagedFiles, type VerifiedRuntime } from './store.ts'
 export type { TreeProblem } from './tree.ts'

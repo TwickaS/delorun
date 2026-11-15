@@ -498,6 +498,16 @@ describe('the start check on request, which an update runs on the running runtim
   })
 })
 
+describe('the summary a passing start check returns, which a successor hands over', () => {
+  it('names the files it checked, and a changed file or manifest after the switch gives no summary', async () => {
+    await settledInstall()
+    const passed = await fixture.store.startCheckRuntime(V1, fixture.root, 0)
+    expect(passed.check).toMatchObject({ full: true, files: passed.check.hashed })
+    changeInPlace(TARGET)
+    expect((await refusal(fixture.store.startCheckRuntime(V1, fixture.root, 0))).message).toContain(`${TARGET} (sha256)`)
+  })
+})
+
 describe('file systems whose change times are not trusted', () => {
   it.each<[string, () => void]>([
     ['NFS', () => { replaceStatfs(() => Promise.resolve({ type: 0x6969 })) }],

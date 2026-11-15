@@ -270,6 +270,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runtime: home => runtimeOfFile(home, join(home, 'not-a-runtime')),
       updates: () => { throw new Error('a start outside the store has no update support') },
       checkRuntime: () => Promise.reject(new Error('a start outside the store checks no stored runtime')),
+      successorStartCheck: () => Promise.reject(new Error('a start outside the store has no successor')),
       handover: async () => Promise.resolve(undefined),
       opener: { canOpen: () => true, link: requestStudioLink, open: () => Promise.reject(new Error('no link reaches the browser here')) },
       relaunch: () => Promise.reject(new Error('no second start here')),
