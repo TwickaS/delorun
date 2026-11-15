@@ -58,7 +58,7 @@ function presetFill(choice: Exclude<AccentChoice, 'custom'>): { readonly light: 
 }
 
 /**
- * The contrast slider: 50 to 200, with a notch at 100; the setting is saved when the slider is let go.
+ * The contrast slider: 50 to 200, with a notch at 100 that names its value only while the slider is elsewhere, so the value never shows twice; the setting is saved when the slider is let go.
  * @param props - the saved value, whether it is disabled, the label and the save.
  * @returns the slider.
  */
@@ -83,9 +83,10 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
           onChange={(event) => { setDraft(Number(event.currentTarget.value)) }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         <button type="button" className={css.notch} disabled={disabled} aria-pressed={value === CONTRAST.default}
+          aria-label={`${String(CONTRAST.default)}%`}
           style={{ left: `${String(((CONTRAST.default - CONTRAST.min) / (CONTRAST.max - CONTRAST.min)) * 100)}%` }}
           onClick={() => { if (value !== CONTRAST.default) onCommit(CONTRAST.default) }}>
-          {`${String(CONTRAST.default)}%`}
+          {shown === CONTRAST.default ? null : `${String(CONTRAST.default)}%`}
         </button>
       </div>
     </div>
@@ -121,7 +122,7 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
   const customColour = parseHex(current.customAccent) === undefined ? DEFAULT_SETTINGS.customAccent : current.customAccent
 
   return (
-    <>
+    <div className={cardCss.stack}>
     <SettingsCard id="delorun-appearance-colours" title={t('colours')} className={css.section}>
       <section className={cardCss.block}>
         <SettingHeading id="delorun-appearance-mode" title={t('mode')} lead={t('mode.lead')} />
@@ -179,6 +180,6 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
       {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
     </SettingsCard>
     <BrandingSection t={brandingT} settings={settings} pickerT={pickerT} />
-    </>
+    </div>
   )
 }
