@@ -33,7 +33,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -304,10 +304,15 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('settings/openSettingsDocument', {})
   })
 
-  it('never reaches credentials or account sign-in', async () => {
-    await expectRefused('credentials/describe', { refs: [] })
-    await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
-    await expectRefused('credentials/unset', { ref: 'deepseek' })
+  it('admits the model key actions (A380) to an approved device', () => {
+    // Decided through remote access, not called, so the test saves no key.
+    const principal = reachDevicePrincipal(deviceId, LISTENER)
+    for (const action of Object.keys(REACH_KEY_ACTIONS)) {
+      expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
+    }
+  })
+
+  it('never reaches account sign-in', async () => {
     await expectRefused('account/getState', {})
   })
 
@@ -394,7 +399,6 @@ describe('an elevated reach device through the Gateway', () => {
         expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
       }
       // Pins the never table under an unlock: credentials, the account and the computer's own screen.
-      await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
       await expectRefused('account/getState', {})
       await expectRefused('settings/openSettingsDocument', {})
       // The unlock admits nothing for the same device's principal on another listener, where it has no Peer.
@@ -596,7 +600,7 @@ describe('the reach access tables', () => {
     return endpoints
   }
 
-  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
+  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
   const forwarded = (): Set<string> => new Set(API_REMOTE_FORWARDED_EVENTS.map(entry => `event:${entry.event}`))
 
   it('classify every Remote method and forwarded event of the composition', () => {

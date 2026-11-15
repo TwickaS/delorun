@@ -16,6 +16,7 @@ import {
   REACH_ALLOWED_ACTIONS,
   REACH_DANGEROUS_ACTIONS,
   REACH_DENIED_ACTIONS,
+  REACH_KEY_ACTIONS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
   CREATE_OUTSIDE_WORKSPACES,
@@ -69,6 +70,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => undefined,
     pageUnlockOf: () => undefined,
+    pinEnabled: () => false,
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
@@ -103,7 +105,7 @@ describe('the reach-device policy', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
       // Pins the roles: a role listing a never action would allow it on every bound resource, and the condition alone
       // keeps an elevated one to a device that holds an elevation.
-      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DANGEROUS_ACTIONS)])
+      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DANGEROUS_ACTIONS)])
       expect(binding.role.resource).toBe(binding.resource.kind)
       // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
       // and a workspace-file read names a Session one.
@@ -121,8 +123,8 @@ describe('the reach-device policy', () => {
   it('explains a refusal by naming the action', () => {
     const policy = createReachAccessPolicy(facts())
     // Pins `explain`: the refusal names the action, and tells a resource it cannot name from an action it refuses.
-    expect(policy.explain?.({ principal: DEVICE, action: 'credentials/set', resources: [{ kind: 'global' }] }))
-      .toBe('loopback-required: credentials/set')
+    expect(policy.explain?.({ principal: DEVICE, action: 'account/signOut', resources: [{ kind: 'global' }] }))
+      .toBe('loopback-required: account/signOut')
     expect(policy.explain?.({ principal: DEVICE, action: 'session/cancel', resources: [{ kind: 'session', id: session('cold') }] }))
       .toBe('resource-unlisted: session/cancel')
   })
@@ -541,9 +543,37 @@ describe('an elevated action', () => {
   })
 })
 
+describe('the model key actions (A380)', () => {
+  const locked = reachDevicePrincipal('device-1', LISTENER)
+  const unlockedPage = { ...locked, unlockId: 'page-1' }
+  const KEY_CALLS = [
+    { action: 'credentials/describe', args: { refs: ['DEEPSEEK_API_KEY'] } },
+    { action: 'credentials/set', args: { ref: 'DEEPSEEK_API_KEY', value: 'sk-test' } },
+    { action: 'credentials/unset', args: { ref: 'DEEPSEEK_API_KEY' } },
+  ] as const
+
+  it('admits an approved device without an unlock while PIN mode is off', () => {
+    const condition = createCondition(facts(), locked)
+    for (const { action, args } of KEY_CALLS) expect(condition({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+    for (const action of ['event:credentials/record-updated', 'event:credentials/reference-updated'] as const) {
+      expect(condition({ action, resource: GLOBAL }), action).toEqual({ kind: 'allow' })
+    }
+  })
+
+  it('refuses a locked page and admits an unlocked one while PIN mode is on', () => {
+    const on = facts({ pinEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
+    for (const { action, args } of KEY_CALLS) {
+      // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
+      expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(on, { ...locked, unlockId: 'ended' })({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+    }
+  })
+})
+
 describe('the refusal reasons', () => {
   it('require the home\'s own computer for every action not allowed, classified or not', () => {
-    expect(reachRefusal('credentials/set')).toBe('loopback-required: credentials/set')
+    expect(reachRefusal('account/signOut')).toBe('loopback-required: account/signOut')
     expect(reachRefusal('unclassified/method' as RemoteAccessAction)).toBe('loopback-required: unclassified/method')
     expect(reachRefusal('event:deepseek-account/session-expired')).toBe('loopback-required: event:deepseek-account/session-expired')
     expect(reachRefusal('session/list')).toBe('resource-unlisted: session/list')
@@ -552,7 +582,8 @@ describe('the refusal reasons', () => {
 })
 
 /** The owner's classification (A297), stated as families, which every table entry is checked against. */
-const NEVER = [/^credentials\//, /^event:credentials\//, /^account\//, /^event:deepseek-account\//, /^settings\/openSettingsDocument$/, /^session\/openWorkspacePath$/, /^session\/workspacePathApplications$/]
+const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettingsDocument$/, /^session\/openWorkspacePath$/, /^session\/workspacePathApplications$/]
+const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
@@ -564,14 +595,15 @@ const UNLOCK = [
  * @param action - the action.
  * @returns its class.
  */
-function classOf(action: string): 'allowed' | 'elevated' | 'never' {
+function classOf(action: string): 'allowed' | 'keys' | 'elevated' | 'never' {
+  if (KEYS.some(pattern => pattern.test(action))) return 'keys'
   if (NEVER.some(pattern => pattern.test(action))) return 'never'
   return UNLOCK.some(pattern => pattern.test(action)) ? 'elevated' : 'allowed'
 }
 
 describe('the tables', () => {
   it('list no action in two of the three tables', () => {
-    expect(() => { assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }) }).not.toThrow()
+    expect(() => { assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }) }).not.toThrow()
     // Pins the check the module runs at load.
     expect(() => { assertDisjoint({ allowed: { 'b/x': 'x', 'a/y': 'y' }, elevated: { 'a/y': 'y' }, never: { 'b/x': 'x', 'c/z': 'z' } }) })
       .toThrow('reach access lists ["a/y (allowed, elevated)","b/x (allowed, never)"] in two tables')
@@ -579,7 +611,7 @@ describe('the tables', () => {
 
   it('put every action in the class the owner\'s rule gives it', () => {
     // Pins each table entry: moving an action to another table fails here, naming it.
-    const tables = { allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }
+    const tables = { allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }
     for (const [name, table] of Object.entries(tables)) {
       for (const action of Object.keys(table)) expect(classOf(action), action).toBe(name)
     }
@@ -590,13 +622,16 @@ describe('the tables', () => {
     for (const action of ['settings/update', 'commands/execute', 'pluginManager/restore', 'terminal/attach', 'directoryPicker/pick', 'workspace/create', 'dynamicCordisRunner/invoke', 'event:cordis/request-run']) {
       expect(Object.hasOwn(REACH_ELEVATED_ACTIONS, action), action).toBe(true)
     }
-    for (const action of ['credentials/set', 'event:credentials/record-updated', 'account/startSignIn', 'event:deepseek-account/session-expired', 'settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications']) {
+    for (const action of ['credentials/set', 'credentials/describe', 'credentials/unset', 'event:credentials/record-updated', 'event:credentials/reference-updated']) {
+      expect(Object.hasOwn(REACH_KEY_ACTIONS, action), action).toBe(true)
+    }
+    for (const action of ['account/startSignIn', 'event:deepseek-account/session-expired', 'settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications']) {
       expect(Object.hasOwn(REACH_DENIED_ACTIONS, action), action).toBe(true)
     }
   })
 
   it('give every entry a one-line reason', () => {
-    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
+    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_KEY_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
       expect(reason).toMatch(/^[^\n]{8,}$/)
     }
   })

@@ -200,7 +200,6 @@ export const REACH_ALLOWED_ACTIONS = {
   'event:schedule/changed': 'refresh the scheduled follow-ups',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
-const CREDENTIALS = 'credentials are secrets of the home'
 const ACCOUNT = 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer'
 const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a device has no use for'
 
@@ -213,11 +212,6 @@ const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a 
  */
 export const REACH_DENIED_ACTIONS = {
   'settings/openSettingsDocument': 'opens the settings document in an editor on the home\'s computer, which a device has no use for',
-  'credentials/describe': CREDENTIALS,
-  'credentials/set': CREDENTIALS,
-  'credentials/unset': CREDENTIALS,
-  'event:credentials/record-updated': CREDENTIALS,
-  'event:credentials/reference-updated': CREDENTIALS,
   'account/getNotificationContent': ACCOUNT,
   'account/getNotifications': ACCOUNT,
   'account/reportNotificationEvent': ACCOUNT,
@@ -239,20 +233,29 @@ export const REACH_DENIED_ACTIONS = {
 /**
  * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
  * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
- * `elevation-required: <action>` to a locked device while it holds. A saved credential is never sent to a device:
- * `credentials/describe` answers presence and writability only. Each other action of the never table stays at the
+ * `elevation-required: <action>` to a locked device while it holds. Each other action of the never table stays at the
  * computer in every mode.
  */
 export const REACH_DANGEROUS_ACTIONS = {
-  'credentials/describe': 'read whether a provider key is saved, never its value',
-  'credentials/set': 'save or change a provider key, which the device never reads back',
-  'credentials/unset': 'remove a saved provider key',
-  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value',
-  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value',
   'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
   'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
 } as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
+
+/**
+ * The actions that add, remove and check a model provider's key from an approved device (A380). Each is allowed to a
+ * device without an unlock and, while PIN mode is on, only to a Peer of an unlocked page; a locked page's Peer is refused
+ * with `elevation-required: <action>`. A stored key is never sent to a device: `credentials/describe` answers presence
+ * and writability only, and the events name the key, never its value.
+ */
+export const REACH_KEY_ACTIONS = {
+  'credentials/describe': 'read whether a provider key is saved, never its value (A380)',
+  'credentials/set': 'save or change a provider key, which the device never reads back (A380)',
+  'credentials/unset': 'remove a saved provider key (A380)',
+  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value (A380)',
+  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value (A380)',
+} as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
+const KEY_SET: ReadonlySet<string> = new Set(Object.keys(REACH_KEY_ACTIONS))
 
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
@@ -337,7 +340,7 @@ export function assertDisjoint(tables: Readonly<Record<string, Readonly<Record<s
   if (both.length > 0) throw new TypeError(`@delorun/home-auth: reach access lists ${JSON.stringify(both.sort())} in two tables`)
 }
 
-assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS })
+assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS })
 
 /** The allowed actions, which every role of the policy lists. */
 const ALLOWED: readonly RemoteAccessAction[] = Object.freeze(Object.keys(REACH_ALLOWED_ACTIONS) as (keyof typeof REACH_ALLOWED_ACTIONS)[])
@@ -346,6 +349,7 @@ const ELEVATED_SET: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACT
 /** The actions every role lists: the allowed ones, the elevated ones, which the condition refuses without an unlock, and the ones dangerous mode lifts. */
 const ROLE_ACTIONS: readonly RemoteAccessAction[] = Object.freeze([
   ...ALLOWED,
+  ...(Object.keys(REACH_KEY_ACTIONS) as (keyof typeof REACH_KEY_ACTIONS)[]),
   ...(Object.keys(REACH_ELEVATED_ACTIONS) as (keyof typeof REACH_ELEVATED_ACTIONS)[]),
   ...(Object.keys(REACH_DANGEROUS_ACTIONS) as (keyof typeof REACH_DANGEROUS_ACTIONS)[]),
 ])
@@ -803,7 +807,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinLiftedSettings'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -855,6 +859,7 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
+    if (KEY_SET.has(action) && facts.pinEnabled() && !pageUnlocked) return { kind: 'deny', reason: `elevation-required: ${action}` }
     if (ELEVATED_SET.has(action)) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
@@ -927,6 +932,11 @@ export interface ReachAccessFacts {
    * @returns the unlock, or undefined once it ended.
    */
   readonly pageUnlockOf: (unlockId: string) => { readonly id: string } | undefined
+  /**
+   * Whether PIN mode is on, which makes the model key actions ({@link REACH_KEY_ACTIONS}) need an unlocked page.
+   * @returns whether it is.
+   */
+  readonly pinEnabled: () => boolean
   /**
    * Record one line in the operational log, for each call an unlock admits.
    * @param line - the line.

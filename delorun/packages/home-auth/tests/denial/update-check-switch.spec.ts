@@ -52,7 +52,7 @@ async function mounted(withRow: boolean, facts: { unlocked?: boolean, dangerous?
   accessContext = access
   access.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-    elevationOf: () => (facts.unlocked === false ? undefined : ELEVATION as never), pageUnlockOf: () => (facts.unlocked === false ? undefined : {}) as never, logElevated: () => {},
+    elevationOf: () => (facts.unlocked === false ? undefined : ELEVATION as never), pinEnabled: () => false, pageUnlockOf: () => (facts.unlocked === false ? undefined : {}) as never, logElevated: () => {},
     liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => homeAuth.computerOnlySwitches(),
     protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => facts.dangerous === true,

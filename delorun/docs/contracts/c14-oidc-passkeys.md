@@ -196,7 +196,6 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 
 | Family | Actions | Why |
 | --- | --- | --- |
-| Credentials | `credentials/*`, `event:credentials/*` | Credentials are the home's secrets. |
 | Account | `account/*`, `event:deepseek-account/*` | Account sign-in is off in Delorun, and an account change belongs to the computer. |
 | The computer's own screen | `settings/openSettingsDocument`, `session/openWorkspacePath`, `session/workspacePathApplications` | They open an application on the computer, which a device has no use for. |
 | Grants and devices | a full-access escalation, a workspace's full-access consent, a `workspace-management` prompt, device approval and removal, starting, approving or extending an unlock | The computer's routes and the answer guard refuse each ([tailnet membership](#tailnet-membership)); none is a Remote method a table could list. |

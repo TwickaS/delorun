@@ -39,6 +39,7 @@ Under `/api`, an exact Fetch route answers a device only when it admits that Pee
 | --- | --- | --- |
 | `/api/session/uploadFileBinary` | Per call | Remote access decides `fileUploads/upload`, which the `reach-device` policy allows, so a phone can attach a file to a chat it may write to. |
 | `/api/delorunChatStates.list`, `/api/delorunChatStates.set` | Refused | Snooze and settle states order the chat list at the computer; a device renders every chat without them. |
+| `/api/delorunOnboarding.keyTest` | Per page (A380) | An approved phone tests its model keys; the answer names each provider and its result and never a key. An approved device is admitted without an unlock, and while PIN mode is on only a page unlocked with the PIN is. The key Remote calls `credentials/describe`, `credentials/set` and `credentials/unset` follow the same rule. |
 | `/api/delorunOnboarding.setupRecord` | Refused | What terminal setup recorded serves onboarding at the computer. |
 | `/api/delorunOnboarding.addWorkspace` | Refused, `LOOPBACK_ONLY` | Adding a folder as a workspace is workspace management, which the home's computer keeps; onboarding refuses it off the loopback listener before upstream's gate. |
 | `/api/delorunNetwork.list`, `/api/delorunNetwork.set` | Refused, `LOOPBACK_REQUIRED` | A workspace's network for its sandboxed commands is read and changed only at the home's computer; the permission defaults refuse both off the loopback listener before upstream's gate. |

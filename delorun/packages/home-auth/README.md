@@ -89,7 +89,7 @@ While dangerous mode holds, an unlocked, signed-in device does what the computer
 | The network routes (`delorunNetwork.list`, `.set`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
 | The MCP consent routes (`delorunMcpConsent.pending`, `.accept`, `.decline`, `.revoke`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
 | The external-agent consent routes (`delorunDelegationConsent.*`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
-| Provider keys (`credentials/describe`, `.set`, `.unset` and the two `credentials` events), which answer presence and writability and never a saved key | `loopback-required` | Admitted for an unlocked device |
+| Provider keys (`credentials/describe`, `.set`, `.unset` and the two `credentials` events, `REACH_KEY_ACTIONS`) and the key test (`/api/delorunOnboarding.keyTest`, A380), which answer presence, writability and each provider's result and never a saved key | An approved device is admitted without an unlock; while PIN mode is on, only a page unlocked with the PIN (`elevation-required` for a locked page, `403` on the key test) | Same as a device without an unlock |
 | Opening a chat's folder in an application on the computer (`session/openWorkspacePath`, `session/workspacePathApplications`) | `loopback-required` | Admitted for an unlocked device |
 | A workspace-file call (`workspaceFiles/*`, `officeKit/render`) with a path outside the chat's workspace | `loopback-required: … with a path outside the chat's workspace` | Admitted for an unlocked device; the Delorun home stays out of reach. The lift equals what full access already gives a chat in the mode |
 
