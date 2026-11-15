@@ -227,7 +227,7 @@ describe('storeReportSources', () => {
     it('reads the target\'s bundle tables with its own Node by default and answers for the profile\'s bundle list', TIMEOUT, async () => {
       writeFiles(profileDir, { 'package.json': manifest({ dsh: { profile: { bundles: ['@a/one', '@a/two'] } } }) })
 
-      expect((await sources().target('1.1.0')).bundles).toEqual({ retired: [], template: ['@a/new'], skipped: [ABSENT('@a/new')], layers: [] })
+      expect((await sources().target('1.1.0')).bundles).toEqual({ retired: [], template: ['@a/new'], skipped: [ABSENT('@a/new')], layers: [], runningLayers: [] })
     })
 
     it('hands the injected reader the target\'s directory and its Node, and uses what it returns', TIMEOUT, async () => {
@@ -240,7 +240,7 @@ describe('storeReportSources', () => {
       }).target('1.1.0')
 
       expect(asked).toEqual([[store.paths.version(v('1.1.0')), store.launchCommand(v('1.1.0'), PROFILE, []).command]])
-      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [ABSENT('@mine/bundle')], layers: [] })
+      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [ABSENT('@mine/bundle')], layers: [], runningLayers: [] })
     })
   })
 
@@ -260,9 +260,11 @@ describe('storeReportSources', () => {
         retired: [],
         skipped: [{ package: '@p/old', reason: 'it requires DSH ^0.1.0 and the target runs DSH 0.2.2', verification: 'verified' }],
         layers: [
-          { layer: '@t/bundle', rows: [{ id: 'target-row', name: 'plugin-target', plugins: ['plugin-target'] }] },
-          { layer: '@p/bundle', rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] },
+          { layer: '@t/bundle', disabledRows: [], rows: [{ id: 'target-row', name: 'plugin-target', plugins: ['plugin-target'] }] },
+          { layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] },
         ],
+        // The running release resolves its own anchor, so the target-only bundle is absent from the baseline.
+        runningLayers: [{ layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] }],
       })
       expect(target.notChecked).toEqual(['revocations'])
     })
@@ -273,7 +275,7 @@ describe('storeReportSources', () => {
         [EXEMPTION_FILES.dsh]: JSON.stringify({ '@mine/bundle@1.0.0': ['0.2.2'] }),
       })
       const asked: unknown[] = []
-      const layers = [{ layer: '@mine/bundle', rows: [] }]
+      const layers = [{ layer: '@mine/bundle', rows: [], disabledRows: [] }]
 
       const target = await storeReportSources({
         home, profile: PROFILE, store, running: v('1.0.0'), root: async () => Promise.resolve(rootOf.metadata), fullCheckDays: 7,
@@ -284,13 +286,22 @@ describe('storeReportSources', () => {
         },
       }).target('1.1.0')
 
-      expect(asked).toEqual([[['@mine/bundle'], {
-        anchors: [join(store.paths.version(v('1.1.0')), 'app', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), join(profileDir, 'package.json')],
-        versions: { dsh: '0.2.2', delorun: '1.1.0' },
-        exemptions: { '@mine/bundle@1.0.0': ['0.2.2'] },
-        platform: process.platform,
-      }]])
-      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [], layers })
+      expect(asked).toEqual([
+        [['@mine/bundle'], {
+          anchors: [join(store.paths.version(v('1.1.0')), 'app', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), join(profileDir, 'package.json')],
+          versions: { dsh: '0.2.2', delorun: '1.1.0' },
+          exemptions: { '@mine/bundle@1.0.0': ['0.2.2'] },
+          platform: process.platform,
+        }],
+        // The running release's baseline: the profile's list as written, read from the running runtime with its versions.
+        [['@old/bundle', '@mine/bundle'], {
+          anchors: [join(store.paths.version(v('1.0.0')), 'app', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), join(profileDir, 'package.json')],
+          versions: { dsh: '0.2.2', delorun: '1.0.0' },
+          exemptions: { '@mine/bundle@1.0.0': ['0.2.2'] },
+          platform: process.platform,
+        }],
+      ])
+      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [], layers, runningLayers: layers })
     })
   })
 

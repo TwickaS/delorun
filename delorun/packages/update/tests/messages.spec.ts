@@ -60,18 +60,18 @@ describe('reasonMessage', () => {
   })
 
   it('states a retired bundle, a normalised list and a skipped bundle', () => {
-    const retired = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: ['dsh-old'], skipped: [], layers: [] } } }))
+    const retired = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: ['dsh-old'], skipped: [], layers: [], runningLayers: [] } } }))
     expect(reasonMessage(retired.items[0]!, retired)).toBe('dsh-old is retired in DSH 0.3.0 and leaves the bundle list.')
-    const normalised = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: [], skipped: [], layers: [], template: ['dsh-base'] } } }))
+    const normalised = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: [], skipped: [], layers: [], runningLayers: [], template: ['dsh-base'] } } }))
     expect(reasonMessage(normalised.items[0]!, normalised)).toBe('The bundle list matches an installation-owned list that DSH 0.3.0 replaces with its template.')
-    const skipped = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-broken'] }), target: { ...input().target, bundles: { retired: [], skipped: [{ package: 'dsh-broken', reason: 'missing dependency', verification: 'verified' }], layers: [] } } }))
+    const skipped = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-broken'] }), target: { ...input().target, bundles: { retired: [], skipped: [{ package: 'dsh-broken', reason: 'missing dependency', verification: 'verified' }], layers: [], runningLayers: [] } } }))
     expect(reasonMessage(skipped.items[0]!, skipped)).toBe('dsh-broken cannot load on the target: missing dependency.')
   })
 
   it('states a disabled row and a blocked Include', () => {
     const rows = buildUpdateReport(input({
       profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })], layers: [{ layer: 'dsh-base', rows: [{ id: 'core', name: 'dsh-core', plugins: ['calendar'] }, { name: 'include', include: { file: 'x.yml', rows: [{ name: 'row', plugins: ['calendar'] }] } }] }] }),
-      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [] }, revocations: [] },
+      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [], runningLayers: [] }, revocations: [] },
     }))
     const messages = rows.items.filter(item => item.kind === 'row').map(item => reasonMessage(item, rows))
     expect(messages).toEqual(['Row core in dsh-base loads calendar, which the update disables.', 'Include x.yml reaches calendar, which the update disables, so the whole Include is disabled.'])
@@ -83,7 +83,7 @@ describe('reasonMessage', () => {
         plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })],
         layers: [{ layer: 'dsh-base', rows: [{ name: 'outer', include: { file: 'outer.yml', rows: [{ name: 'inner', include: { file: 'inner.yml', rows: [{ name: 'leaf', plugins: ['calendar'] }] } }] } }] }],
       }),
-      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [] }, revocations: [] },
+      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [], runningLayers: [] }, revocations: [] },
     }))
     expect(nested.items.filter(item => item.kind === 'row').map(item => reasonMessage(item, nested))).toEqual(['Include outer.yml reaches calendar, which the update disables, so the whole Include is disabled.'])
   })
@@ -107,6 +107,7 @@ describe('reasonMessage', () => {
       'bare is revoked: , .',
     ])
     expect(reasonMessage({ kind: 'bundle', subject: { package: 'dsh-x' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('dsh-x cannot load on the target: .')
+    expect(reasonMessage({ kind: 'row', subject: { id: 'llm-x', name: 'llm-x', layer: '@delorun/bundle-local' }, reason: 'row-disabled-by-release', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe(`Delorun ${report.to.delorun} switches off row llm-x through its bundle @delorun/bundle-local; the row stays in your profile but does not run.`)
     expect(reasonMessage({ kind: 'row', subject: { name: 'row-a', layer: 'home patch' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('Row row-a in home patch loads , which the update disables.')
   })
 

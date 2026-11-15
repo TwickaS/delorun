@@ -537,6 +537,16 @@ describe('checkHealth', () => {
     })
   })
 
+  it('accepts a bundle-disabled row once the report names it by id, and still fails it when the report does not', async () => {
+    const port = await studioAnswering(204)
+    const off: BootedRow = { id: 'llm-deepseek-account', name: 'plugin-llm-deepseek-account', disabled: true, state: 'active' }
+
+    expect(await checkHealth(facts(port, { rows: () => [off] }), { ...NOTHING_NAMED, namedRows: ['some-other-row'] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row llm-deepseek-account is disabled and the report did not name it',
+    })
+    expect(await checkHealth(facts(port, { rows: () => [off] }), { ...NOTHING_NAMED, namedRows: ['llm-deepseek-account'] })).toEqual({ passed: true })
+  })
+
   /** A row as the previous release's Host handed it over. */
   const before = (id: string, name: string, generated = false): { id: string, name: string, generated: boolean } => ({ id, name, generated })
 

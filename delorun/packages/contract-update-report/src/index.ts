@@ -239,6 +239,7 @@ export type ReportReason =
   | 'bundle-skipped'
   | 'row-disabled'
   | 'row-include-blocked'
+  | 'row-disabled-by-release'
   | 'data-format-changed'
   | 'data-format-unknown'
   | 'harness-change-carried'

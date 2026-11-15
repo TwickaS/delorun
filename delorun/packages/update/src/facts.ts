@@ -68,6 +68,8 @@ export interface BundleFacts {
   readonly skipped: readonly SkippedBundleFact[]
   /** The patch layer of each bundle the target loads, in the order of that list, each named by its bundle. */
   readonly layers: readonly LayerFact[]
+  /** The patch layers of the bundles the running release loads, read like {@link BundleFacts.layers}: the baseline for the rows the target's layers disable. */
+  readonly runningLayers: readonly LayerFact[]
 }
 
 /** The staged target release. */
@@ -110,6 +112,8 @@ export interface LayerFact {
   readonly layer: string
   /** The layer's rows, in application order. */
   readonly rows: readonly RowFact[]
+  /** The ids of the rows this layer's patch disables: a patch entry with an `id` and `disabled: true`, or an inserted row that is disabled and has an id. Absent means the layer disables no row; only bundle layers carry it. */
+  readonly disabledRows?: readonly string[]
 }
 
 /** The profile as the update would find it, before anything changes. */

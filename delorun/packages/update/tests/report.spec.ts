@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { INSTALLATIONS, UPDATE_REPORT_SCHEMA } from '@delorun/contract-update-report'
 import type { ReportItem } from '@delorun/contract-update-report'
-import { buildUpdateReport, bundleItems, countItems, disabledPluginNames, predictBundleList, rowItems, sortItems, versionOf } from '../src/index.ts'
+import { buildUpdateReport, bundleItems, bundleRowItems, countItems, disabledPluginNames, predictBundleList, rowItems, sortItems, versionOf } from '../src/index.ts'
 import { BUNDLE_FACTS, FROM, GENERATED, PROFILE, STATUSES, TO, input, installed, profile, release, target, version } from './support.ts'
 
 /**
@@ -98,7 +98,7 @@ describe('the bundle list', () => {
   })
 
   it('replaces an installation-owned list with the target template, naming what leaves and what arrives', () => {
-    const facts = { retired: [], skipped: [], layers: [], template: ['dsh-base', 'dsh-template-new'] }
+    const facts = { retired: [], skipped: [], layers: [], runningLayers: [], template: ['dsh-base', 'dsh-template-new'] }
     expect(predictBundleList(PROFILE.bundles, facts)).toEqual(['dsh-base', 'dsh-template-new'])
     expect(bundleItems(PROFILE.bundles, facts)).toMatchObject([
       { reason: 'bundle-template-normalised', effect: 'changed', subject: { package: 'dsh-retired-thing' } },
@@ -108,21 +108,43 @@ describe('the bundle list', () => {
   })
 
   it('marks a skip that rests on metadata Delorun could not read as unverified', () => {
-    const facts = { retired: [], skipped: [{ package: 'dsh-tools-bundle', reason: 'Delorun could not read its package.json', verification: 'unverified' as const }], layers: [] }
+    const facts = { retired: [], skipped: [{ package: 'dsh-tools-bundle', reason: 'Delorun could not read its package.json', verification: 'unverified' as const }], layers: [], runningLayers: [] }
     expect(bundleItems(['dsh-tools-bundle'], facts)).toEqual([
       { kind: 'bundle', subject: { package: 'dsh-tools-bundle' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'unverified', detail: { failure: 'Delorun could not read its package.json' }, actions: ['keep-disabled', 'skip-update'] },
     ])
   })
 
   it('names a bundle the template adds as skipped when the target cannot load it', () => {
-    const facts = { retired: [], skipped: [{ package: 'dsh-template-new', reason: 'its package.json declares no dsh.bundle', verification: 'verified' as const }], layers: [], template: ['dsh-base', 'dsh-template-new'] }
+    const facts = { retired: [], skipped: [{ package: 'dsh-template-new', reason: 'its package.json declares no dsh.bundle', verification: 'verified' as const }], layers: [], runningLayers: [], template: ['dsh-base', 'dsh-template-new'] }
     expect(bundleItems(['dsh-base'], facts)).toMatchObject([
       { reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', subject: { package: 'dsh-template-new' }, detail: { failure: 'its package.json declares no dsh.bundle' } },
     ])
   })
 
   it('names nothing for a bundle the target skips and the profile does not list', () => {
-    expect(bundleItems(['dsh-base'], { retired: [], skipped: [{ package: 'dsh-absent', reason: 'missing dependency', verification: 'verified' }], layers: [] })).toEqual([])
+    expect(bundleItems(['dsh-base'], { retired: [], skipped: [{ package: 'dsh-absent', reason: 'missing dependency', verification: 'verified' }], layers: [], runningLayers: [] })).toEqual([])
+  })
+})
+
+describe('rows a bundle patch disables', () => {
+  const layer = (name: string, disabledRows: readonly string[]): { layer: string, rows: [], disabledRows: readonly string[] } => ({ layer: name, rows: [], disabledRows })
+  const bundles = (layers: ReturnType<typeof layer>[], runningLayers: ReturnType<typeof layer>[]) => ({ retired: [], skipped: [], layers, runningLayers })
+
+  it('names a row the target\'s bundle patch disables and the running release\'s did not', () => {
+    const report = buildUpdateReport(input({ target: target({ bundles: bundles([layer('@delorun/bundle-local', ['deepseek-account', 'llm-deepseek-account'])], [layer('@delorun/bundle-local', ['deepseek-account'])]) }) }))
+    expect(report.items.filter(item => item.reason === 'row-disabled-by-release')).toEqual([
+      { kind: 'row', subject: { id: 'llm-deepseek-account', name: 'llm-deepseek-account', layer: '@delorun/bundle-local' }, reason: 'row-disabled-by-release', effect: 'disabled', verification: 'verified', detail: {}, actions: [] },
+    ])
+    expect(report.counts.disabled).toBeGreaterThanOrEqual(1)
+  })
+
+  it('names nothing for a row both releases disable or one the target stops disabling', () => {
+    const report = buildUpdateReport(input({ target: target({ bundles: bundles([layer('b', ['kept'])], [layer('b', ['kept', 'dropped'])]) }) }))
+    expect(report.items.filter(item => item.reason === 'row-disabled-by-release')).toEqual([])
+  })
+
+  it('names a row once when two layers disable it', () => {
+    expect(bundleRowItems([layer('a', ['x']), layer('b', ['x'])], [])).toHaveLength(1)
   })
 })
 
@@ -148,7 +170,7 @@ describe('the profile rows', () => {
   })
 
   it('disables a row of a bundle layer the target loads, as it does a row of the person\'s layers', () => {
-    const bundles = { retired: [], skipped: [], layers: [{ layer: 'dsh-own-bundle', rows: [{ id: 'own', name: 'dsh-own', plugins: ['calendar'] }] }] }
+    const bundles = { retired: [], skipped: [], runningLayers: [], layers: [{ layer: 'dsh-own-bundle', rows: [{ id: 'own', name: 'dsh-own', plugins: ['calendar'] }] }] }
     const report = buildUpdateReport(input({
       profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.1.0' })], layers: [{ layer: 'profile patch', rows: [{ name: 'calendar', plugins: ['calendar'] }] }] }),
       target: target({ bundles }),

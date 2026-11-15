@@ -16,7 +16,7 @@ import { UpdateReportError } from './errors.ts'
 import type { ReportInput, TargetFacts } from './facts.ts'
 import { dataItems } from './data-formats.ts'
 import { harnessItems } from './harness-items.ts'
-import { bundleItems, pluginItems, rowItems } from './items.ts'
+import { bundleItems, bundleRowItems, pluginItems, rowItems } from './items.ts'
 import type { AxisVersions } from './versions.ts'
 
 /** The order C3's item table lists the kinds in, which the report sorts by first. */
@@ -131,6 +131,7 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
     ...bundleItems(profile.bundles, target.bundles),
     // The bundles' layers apply first, then the person's patch layers, as upstream composes them.
     ...rowItems([...target.bundles.layers, ...profile.layers], plugins.disabled),
+    ...bundleRowItems(target.bundles.layers, target.bundles.runningLayers),
     ...dataItems(input.data),
     ...harnessItems(input.harness),
   ])

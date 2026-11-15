@@ -224,6 +224,28 @@ export function rowItems(layers: readonly LayerFact[], disabled: ReadonlyMap<str
 }
 
 /**
+ * The rows the target's bundle patches disable that the running release's bundle patches did not: a release that
+ * switches a row off in its own composition changes the profile as a plugin it disables does, and H3 holds the report
+ * to name it. A row both releases disable is not new, and a row the target stops disabling is not reported.
+ * @param target - the target's bundle layers.
+ * @param running - the running release's bundle layers.
+ * @returns one `row-disabled-by-release` item per newly disabled row id, in layer and patch order.
+ */
+export function bundleRowItems(target: readonly LayerFact[], running: readonly LayerFact[]): readonly ReportItem[] {
+  const before = new Set(running.flatMap(layer => layer.disabledRows ?? []))
+  const seen = new Set<string>()
+  const items: ReportItem[] = []
+  for (const layer of target) {
+    for (const id of layer.disabledRows ?? []) {
+      if (before.has(id) || seen.has(id)) continue
+      seen.add(id)
+      items.push({ kind: 'row', subject: { id, name: id, layer: layer.layer }, reason: 'row-disabled-by-release', effect: 'disabled', verification: 'verified', detail: {}, actions: [] })
+    }
+  }
+  return items
+}
+
+/**
  * The version one axis carries in one release, for the callers that build {@link AxisVersions}.
  * @param versions - the release's versions.
  * @param axis - the axis.
