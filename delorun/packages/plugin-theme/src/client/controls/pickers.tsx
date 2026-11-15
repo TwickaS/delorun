@@ -117,7 +117,7 @@ export interface StudioLookSwitchProps {
  */
 export function StudioLookSwitch({ label, value, delorunLabel, stockLabel, onChange, disabled }: StudioLookSwitchProps) {
   return (
-    <ChipGroup<StudioLook> label={label} value={value} onChange={onChange} disabled={disabled === true} manual
+    <ChipGroup<StudioLook> label={label} hideLabel value={value} onChange={onChange} disabled={disabled === true} manual
       options={[{ value: 'delorun', label: delorunLabel }, { value: 'stock', label: stockLabel }]} />
   )
 }

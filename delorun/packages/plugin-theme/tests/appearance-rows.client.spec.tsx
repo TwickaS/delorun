@@ -29,7 +29,10 @@ describe('the Look row', () => {
   it('offers Delorun and Stock as a radio group with Delorun chosen, and turns the studio additions off from Stock', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     open(StudioLookRow, themeForm(STUDIO_ON), useStockLook)
-    expect(screen.getAllByText(en.look).length).toBeGreaterThan(0)
+    // One visible "Studio look": the row's title. The control's label stays for assistive technology only.
+    const labels = screen.getAllByText(en.look)
+    expect(labels).toHaveLength(2)
+    expect(labels.filter(each => /srOnly/.test(each.className))).toHaveLength(1)
     expect(screen.getByText(en['look.lead'])).toBeTruthy()
     const radios = within(group(en.look)).getAllByRole('radio')
     expect(radios.map(radio => [radio.textContent, radio.getAttribute('aria-checked')])).toEqual([['Delorun', 'true'], ['Stock', 'false']])
