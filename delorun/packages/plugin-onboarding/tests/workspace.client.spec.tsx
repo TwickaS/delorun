@@ -23,7 +23,7 @@ const DEFAULT: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE, 
 function mount(options: { readonly target?: StartTarget; readonly choice?: FolderChoice; readonly host?: HostFace; readonly guide?: Guide } = {}) {
   const start = startFace(options.target ?? DEFAULT, options.choice)
   const guide = options.guide ?? createGuide(options.host ?? hostFake().host, 1)
-  const view = render(<WorkspaceStep services={stepServices({ start: start.face })} guide={guide} target={options.target ?? DEFAULT} />)
+  const view = render(<WorkspaceStep services={stepServices({ start: start.face })} guide={guide} target={options.target ?? DEFAULT} keepCurrent={false} />)
   return { ...view, start, guide }
 }
 

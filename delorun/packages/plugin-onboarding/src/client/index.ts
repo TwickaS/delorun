@@ -55,7 +55,7 @@ import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
-import { FinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
+import { FinishSetupChip, FloatingFinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
@@ -110,6 +110,9 @@ export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } 
 
 /** The Finish setup chip's place in the input dock: just above the message box, below the notices. */
 export const FINISH_SETUP_ENTRY = { id: 'delorun-onboarding.finish-setup', order: 8 } as const
+
+/** The floating Finish setup chip's place over the studio, used while no chat has a dock. */
+export const FINISH_SETUP_OVERLAY = { id: 'delorun-onboarding.finish-setup.floating', order: 8 } as const
 
 /** The wire name of the model tool whose row {@link RenameRow} draws; `@delorun/plugin-workspaces` defines the tool. */
 export const RENAME_TOOL = 'rename_workspace'
@@ -306,7 +309,8 @@ export function applyStudio(ctx: Context): void {
     const release = ctx.get('uiWorkspace')?.holdDefaultWorkspaceNotice()
     return (told) => { release?.({ told }) }
   }
-  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice }
+  const hasWorkspace = (): boolean => (ctx.get('workspaces')?.list.getSnapshot().items.length ?? 0) > 0
+  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice, hasWorkspace }
 
   /**
    * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
@@ -335,8 +339,10 @@ export function applyStudio(ctx: Context): void {
 
   const laterStore = createSnapshotStore(false)
   const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore })
+  const dockedStore = createSnapshotStore(false)
   const finishSetup: FinishSetupInjected = {
     later: laterStore,
+    docked: dockedStore,
     progress,
     reopen: () => {
       laterStore.set(false)
@@ -397,6 +403,10 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: FINISH_SETUP_ENTRY.id, order: FINISH_SETUP_ENTRY.order, locale: NS, inject: () => finishSetup,
       }, FinishSetupChip)),
+      // The dock exists only inside a chat; before the first chat the chip floats instead.
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: FINISH_SETUP_OVERLAY.id, order: FINISH_SETUP_OVERLAY.order, locale: NS, inject: () => finishSetup,
+      }, FloatingFinishSetupChip)),
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: SET_ASIDE_ENTRY.id, order: SET_ASIDE_ENTRY.order, locale: NS, inject: () => setAside,
       }, SetAsideBanner)),

@@ -28,6 +28,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
   const mode = useSyncExternalStore(useCallback(listener => scheme.subscribe(listener), [scheme]), () => scheme.get())
   const keys = useStore(guide.keys)
   const workspace = useStore(guide.workspace)
+  const phone = useStore(guide.phone)
   const settings = useSyncExternalStore(useCallback(listener => look.settings.subscribe(listener), [look]), () => look.settings.getSnapshot())
   const views = useSyncExternalStore(useCallback(listener => bundles.views.subscribe(listener), [bundles]), () => bundles.views.getSnapshot())
   const added = (name: string): boolean => views[name]?.state === 'installed' || views[name]?.state === 'restart'
@@ -43,7 +44,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
     { key: 'look', label: t('ready.look'), value: [palette === 'soft' ? `${appearance('palette.soft')} · ${appearance(`accent.${settings.value?.accent ?? 'peach'}`)}` : appearance(`palette.${palette}`), appearance(`mode.${mode}`)].join(' · '), tone: undefined },
     { key: 'agents', label: t('ready.agents'), value: agents.length === 0 ? t('ready.none') : agents.join(', '), tone: undefined },
     { key: 'plugins', label: t('ready.plugins'), value: extra === 0 ? t('ready.none') : t('ready.plugins.count', { count: String(extra) }), tone: undefined },
-    ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' ? 'ready.reach.on' : 'ready.reach.off'), tone: undefined }],
+    ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' || phone === 'on' ? 'ready.reach.on' : phone === 'done' ? 'ready.reach.check' : 'ready.reach.off'), tone: undefined }],
     workspace !== undefined
       ? { key: 'workspace', label: t('ready.workspace'), value: workspace.path, tone: undefined }
       : target.kind === 'default' && !keepCurrent

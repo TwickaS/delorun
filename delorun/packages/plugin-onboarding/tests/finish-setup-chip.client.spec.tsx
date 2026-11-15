@@ -2,7 +2,7 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FinishSetupChip } from '../src/client/FinishSetupChip.tsx'
+import { FinishSetupChip, FloatingFinishSetupChip } from '../src/client/FinishSetupChip.tsx'
 import { en } from '../src/client/locales.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { liveForm, settings, t } from './fixtures.client.ts'
@@ -14,8 +14,9 @@ function mount(aside: boolean, overrides: Partial<OnboardingSettings> = {}, stat
   const later = createSnapshotStore(aside)
   const progress = liveForm<OnboardingSettings>(settings(overrides), { status })
   const reopen = vi.fn()
-  const view = render(<FinishSetupChip t={t} later={later} progress={progress.form} reopen={reopen} />)
-  return { ...view, later, reopen }
+  const docked = createSnapshotStore(false)
+  const view = render(<FinishSetupChip t={t} later={later} docked={docked} progress={progress.form} reopen={reopen} />)
+  return { ...view, later, docked, reopen }
 }
 
 describe('the Finish setup chip', () => {
@@ -32,5 +33,16 @@ describe('the Finish setup chip', () => {
   ])('is absent while %s', (_, aside, overrides, status) => {
     mount(aside, overrides, status)
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('marks the dock as holding the chip while mounted, so the floating chip steps aside', async () => {
+    const { docked, later, reopen, unmount } = mount(true)
+    expect(docked.getSnapshot()).toBe(true)
+    const floating = render(<FloatingFinishSetupChip t={t} later={later} docked={docked} progress={liveForm<OnboardingSettings>(settings()).form} reopen={reopen} />)
+    expect(floating.container.querySelector('button')).toBeNull()
+    unmount()
+    expect(docked.getSnapshot()).toBe(false)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('button', { name: en.finishSetup })).toBeTruthy()
   })
 })

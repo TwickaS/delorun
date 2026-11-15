@@ -36,6 +36,9 @@ export const CLONE_POLL_MS = 1000
 /** Where the providers step stands: the cards, the walk through the ticked providers, or the summary. */
 export type ProvidersPhase = 'landing' | 'walk' | 'summary'
 
+/** What the person did on Phone access: nothing yet, Not now, "I've done this" while reach reads off, or reach found on. */
+export type PhoneOutcome = 'untouched' | 'skipped' | 'done' | 'on'
+
 /** A read-only store. */
 export interface Store<T> {
   /** @returns the current value. */
@@ -69,6 +72,12 @@ export interface Guide {
   readonly clone: Store<CloneView>
   /** Where the providers step stands, which decides the dialog's own buttons. */
   readonly providersPhase: Store<ProvidersPhase>
+  /** What the person did on Phone access, which Ready reports. */
+  readonly phone: Store<PhoneOutcome>
+  /**
+   * @param outcome - what the person did on Phone access.
+   */
+  setPhone(outcome: PhoneOutcome): void
   /**
    * @param phase - where the providers step stands now.
    */
@@ -134,6 +143,7 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   const mode = createSnapshotStore<WorkspaceMode>('default')
   const clone = createSnapshotStore<CloneView>({ state: 'idle' })
   const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
+  const phone = createSnapshotStore<PhoneOutcome>('untouched')
   const gates = new Map<string, ContinueGate>()
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -166,7 +176,8 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   fill(readiness, host.readiness)
   fill(keys, host.keyTest)
   return {
-    readiness, keys, recommendations, workspace, mode, clone, providersPhase,
+    readiness, keys, recommendations, workspace, mode, clone, providersPhase, phone,
+    setPhone: (outcome) => { phone.set(outcome) },
     setProvidersPhase: (phase) => { providersPhase.set(phase) },
     setGate: (key, gate) => { if (gate === undefined) gates.delete(key); else gates.set(key, gate) },
     passGates: async () => {

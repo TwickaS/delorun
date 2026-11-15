@@ -489,7 +489,7 @@ describe('the phone access step', () => {
 
 describe('the ready step', () => {
   const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices } = {}) =>
-    render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} />)
+    render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} keepCurrent={false} />)
   const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
 
   it('shows the default workspace as a plain value when the Workspace step was skipped', async () => {
@@ -535,7 +535,7 @@ describe('the ready step', () => {
   it('names the last-used workspace with the general prompts, and phone access as off', async () => {
     ready(guideOf(hostFake({ keys: undefined }).host), { target: { kind: 'other' } })
     await settle()
-    expect(rows().slice(-2)).toEqual([['Phone access', 'Off', undefined], ['Workspace', en['ready.workspace.last'], undefined]])
+    expect(rows().slice(-2)).toEqual([['Phone access', 'Not set up', undefined], ['Workspace', en['ready.workspace.last'], undefined]])
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.general.1.label'], en['starter.general.2.label'], en['starter.general.3.label']])
   })
 

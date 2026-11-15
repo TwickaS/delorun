@@ -175,6 +175,7 @@ export function startFace(
   initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH },
   choice: FolderChoice = { kind: 'cancelled' },
   outcome: AddOutcome = { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: `${HOME}/projects`, folder: 'code' },
+  hasWorkspace = true,
 ) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
@@ -183,7 +184,7 @@ export function startFace(
   const folders = browseFake()
   const release = vi.fn((_told: boolean) => {})
   const holdNotice = vi.fn(() => release)
-  const face: StartFace = { target: store, resolve, chooseFolder, addFolder, browse: folders.browse, holdNotice }
+  const face: StartFace = { target: store, resolve, chooseFolder, addFolder, browse: folders.browse, holdNotice, hasWorkspace: () => hasWorkspace }
   return { face, set: store.set, resolve, chooseFolder, addFolder, folders, holdNotice, release }
 }
 

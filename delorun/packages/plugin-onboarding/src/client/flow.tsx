@@ -32,8 +32,12 @@ export interface FlowStep {
   readonly render: (next: () => void, back: () => void) => ReactNode
   /** Skip's label where "Skip" does not say what happens; absent means "Skip". */
   readonly skipLabel?: () => string
+  /** Continue's label where "Continue" does not say what happens; absent means "Continue". */
+  readonly continueLabel?: () => string
   /** Runs when the person presses Continue, before the flow moves on. */
   readonly onContinue?: () => void
+  /** Runs when the person presses Skip, before the flow moves on. */
+  readonly onSkip?: () => void
 }
 
 /** The built-in steps' ids and places. */
@@ -83,7 +87,7 @@ export function buildSteps({ services, guide, record, extra, reach, target, noti
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
   // A studio opened from a phone is already on one, so it has no Phone access step.
-  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), render: () => <ReachStep {...props} /> })
+  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), continueLabel: () => t('reach.done'), onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
   built.push(
     { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} keepCurrent={keepCurrent} /> },
     { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} keepCurrent={keepCurrent} /> },

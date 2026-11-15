@@ -71,7 +71,7 @@ const BASE = [en['step.welcome'], en['step.providers'], en['step.look'], en['ste
 const forward = async (times: number) => {
   for (let n = 0; n < times; n++) {
     await settle()
-    const next = screen.queryByRole('button', { name: en.continue })
+    const next = screen.queryByRole('button', { name: en.continue }) ?? screen.queryByRole('button', { name: en['reach.done'] })
     if (next !== null) { await click(next); continue }
     for (const box of screen.queryAllByRole('checkbox')) if ((box as HTMLInputElement).checked) await click(box)
     await click(button(en['providers.continueNoKey']))
@@ -478,5 +478,44 @@ describe('finishing later and the last step', () => {
     expect(screen.getByText(en['ready.workspace.last'])).toBeTruthy()
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined, true)
+  })
+
+  it('uses the default workspace when the guide was opened again with no workspace and Workspace is skipped', async () => {
+    const { startChat } = await mountEntry({ explicit: true, start: startFace(undefined, undefined, undefined, false) })
+    await forward(4)
+    expect(heading().textContent).toBe(en['step.workspace'])
+    await click(button(en.skip))
+    expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+    await click(button(en.start))
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
+  })
+
+  it('reopens at the saved step after Escape, and the chip\'s reopen shows the guide again', async () => {
+    const { aside, complete } = await mountEntry()
+    await forward(2)
+    await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
+    expect(aside.getSnapshot()).toBe(true)
+    expect(complete).toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  describe.each<readonly [string, 'skip' | 'done', ReachState, string]>([
+    ['Not now', 'skip', 'off', 'Not set up'],
+    ['"I\'ve done this" while reach still reads off', 'done', 'off', 'Check in Settings → Devices'],
+    ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
+  ])('phone access with %s', (_, action, reachNow, summary) => {
+    it(`tells Ready: ${summary}`, async () => {
+      const { host } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+      await forward(titles().indexOf(en['step.reach']))
+      expect(heading().textContent).toBe(en['step.reach'])
+      expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
+      host.reach.mockResolvedValue(reachNow)
+      await click(button(action === 'skip' ? en['reach.notNow'] : en['reach.done']))
+      await settle()
+      await forward(1)
+      expect(heading().textContent).toBe(en['step.ready'])
+      const term = [...document.querySelectorAll('dt')].find(each => each.textContent === 'Phone access')
+      expect(term?.nextElementSibling?.textContent).toBe(summary)
+    })
   })
 })

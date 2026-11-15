@@ -115,11 +115,12 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const workspace = useSyncExternalStore(useCallback(listener => guide.workspace.subscribe(listener), [guide]), () => guide.workspace.getSnapshot())
   // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
+  // A re-run keeps the workspace the studio already holds until the person chooses another; with none, as on a first run, Skip takes the default.
+  const [keepCurrent] = useState(() => explicit && start.hasWorkspace())
   useEffect(() => {
-    // A re-run keeps the workspace the chat is in until the person chooses another.
-    if (!explicit && target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
+    if (!keepCurrent && target.kind === 'default' && guide.workspace.getSnapshot() === undefined) guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
     if (target.kind === 'none') told.current = true
-  }, [target, guide, told, explicit])
+  }, [target, guide, told, keepCurrent])
   const { plugins, optionalRows } = settings
   const services = useMemo<StepServices>(() => ({ ...fixed, t, remote: reach === 'remote', plugins, optionalRows, renderSection }), [fixed, t, reach, plugins, optionalRows, renderSection])
 
@@ -135,8 +136,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice, keepCurrent: explicit }),
-    [services, guide, record, addedSteps, reach, target, notice, explicit],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice, keepCurrent }),
+    [services, guide, record, addedSteps, reach, target, notice, keepCurrent],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
@@ -154,7 +155,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   }
   const last = current === steps.length - 1
   // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step.
-  const needsFolder = last && workspace === undefined && target.kind !== 'other' && !(explicit && target.kind === 'default')
+  const needsFolder = last && workspace === undefined && target.kind !== 'other' && !(keepCurrent && target.kind === 'default')
   const advance = (): void => {
     step.onContinue?.()
     if (!last) {
@@ -167,7 +168,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     }
     finish()
     completeStep(UPSTREAM_KEY_STEP)
-    void startChat(workspace?.workspaceId, folderOf(workspace), explicit)
+    void startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
   }
   // A step with something unfinished (a highlighted folder, an open Add question) holds Continue until it is settled.
   const next = (): void => {
@@ -180,9 +181,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     ? null
     : (
       <StepFooter
-        {...showSkip ? { skip: { label: step.skipLabel?.() ?? t('skip'), onClick: () => { go(current + 1) } } } : {}}
+        {...showSkip ? { skip: { label: step.skipLabel?.() ?? t('skip'), onClick: () => { step.onSkip?.(); go(current + 1) } } } : {}}
         {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
-        next={{ label: t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue'), onClick: next }} />
+        next={{ label: needsFolder ? t('chooseFolder') : last ? t('start') : step.continueLabel?.() ?? t('continue'), onClick: next }} />
     )
   return (
     <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>

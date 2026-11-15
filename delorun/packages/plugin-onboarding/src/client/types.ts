@@ -192,6 +192,8 @@ export interface StartFace {
    * the notice, and false shows a kept notice.
    */
   readonly holdNotice: () => (told: boolean) => void
+  /** @returns whether the studio already holds a workspace, which a re-run's Skip on Workspace keeps. */
+  readonly hasWorkspace: () => boolean
 }
 
 /** What starting a clone came to: its job, why it was refused, or that the harness could not be asked. */

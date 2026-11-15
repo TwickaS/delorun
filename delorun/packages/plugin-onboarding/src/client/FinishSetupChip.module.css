@@ -33,3 +33,19 @@
 .chip:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
+
+/* Without a chat dock the chip sits at the bottom centre; the wrapper lets clicks through around it. */
+.floating {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(var(--delorun-space-12, 24px) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.floating .chip {
+  pointer-events: auto;
+  box-shadow: var(--dsw-shadow-sm, 0 1px 4px rgb(0 0 0 / 12%));
+}
