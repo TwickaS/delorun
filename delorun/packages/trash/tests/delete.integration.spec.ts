@@ -70,7 +70,7 @@ describe('delete', () => {
         { sessionId: 'ses-ws-a', cwd },
         { sessionId: 'ses-ws-b', cwd },
       ],
-      label: 'Wave 2',
+      label: 'Batch 2',
     })
 
     expect(item.kind).toBe('workspace')

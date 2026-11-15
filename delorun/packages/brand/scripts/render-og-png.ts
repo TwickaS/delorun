@@ -3,7 +3,7 @@
  * The page is `apps/website/scripts/og.html`, written by `render-og.ts`. The script serves the `delorun/` root on
  * 127.0.0.1, opens a browse session that allows only that origin, waits for the brand fonts, and saves the screenshot.
  * Usage: `node_modules/.bin/tsx delorun/packages/brand/scripts/render-og-png.ts` from the repository root. It needs the
- * `browse` CLI (`BROWSE_BIN` overrides `/mnt/c/Users/user/.local/bin/browse.exe`) and fails when a brand font does not load.
+ * `browse` CLI (`BROWSE_BIN` names its executable; the default is `browse` on the path) and fails when a brand font does not load.
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -17,7 +17,7 @@ import type { AddressInfo } from 'node:net'
 const DELORUN_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const OUTPUT = join(DELORUN_ROOT, 'apps/website/public/og.png')
 const PAGE_PATH = '/apps/website/scripts/og.html'
-const BROWSE = process.env.BROWSE_BIN ?? '/mnt/c/Users/user/.local/bin/browse.exe'
+const BROWSE = process.env.BROWSE_BIN ?? 'browse'
 /** Characters of base64 per `browse execute` call; one call returns a bounded value. */
 const CHUNK = 8000
 const CONTENT_TYPES: Record<string, string> = {
