@@ -6,6 +6,7 @@
  */
 import { webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { MARK } from '@delorun/brand/mark'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 // @ts-expect-error -- the sign-in page's browser module is JavaScript without declarations.
@@ -350,6 +351,21 @@ describe('asking for approval', () => {
     await settle()
     expect(view()).toBe('request')
     expect(opened).toEqual([])
+  })
+})
+
+describe('the header', () => {
+  it('draws the Delorun mark beside the wordmark, decorative and within the page\'s own markup', () => {
+    const header = new DOMParser().parseFromString(SIGN_IN_PAGE, 'text/html').querySelector('header.brand')
+    const mark = header?.querySelector('svg.mark')
+    expect(mark?.getAttribute('aria-hidden')).toBe('true')
+    expect(mark?.getAttribute('viewBox')).toBe('0 0 32 32')
+    expect(mark?.querySelector('path')?.getAttribute('d')).toBe(MARK.nut)
+    const plug = mark?.querySelector('circle')
+    expect([plug?.getAttribute('cx'), plug?.getAttribute('cy'), plug?.getAttribute('r')]).toEqual([String(MARK.plug.cx), String(MARK.plug.cy), String(MARK.plug.r)])
+    expect(header?.querySelector('.wordmark')?.textContent).toBe('Delorun')
+    // The reach listener sends no CSP (reach-routes.spec.ts), and the mark needs no image request, style attribute or script.
+    expect(mark?.outerHTML).not.toMatch(/\b(href|src|style|on\w+)=/)
   })
 })
 
