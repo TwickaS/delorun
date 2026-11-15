@@ -45,7 +45,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 
 - If Delorun already runs, then `delorun start` says so and changes nothing. Open it with `delorun open`.
 - If a command needs Delorun running and it is not, then the command exits with code 3. Start it with `delorun start`. Exit codes: 0 done, 1 failed, 2 wrong command line, 3 not running ([Troubleshooting](troubleshooting.md#reading-a-refusal)).
-- If `delorun start` ends with `the home process exited with code 1 before it was running; see its log`, then read `delorun logs`, and run `delorun doctor`. A busy studio port shows as `fail port` ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
+- If `delorun start` ends with `Delorun did not start. Delorun stopped with exit code 1 before it was running.`, then run `delorun logs` to see why, and `delorun doctor` to check your setup. A busy studio port shows as `fail port` ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
 - If `delorun stop --now` cannot end the process, then it stops it with a signal and warns that commands it started may still be running.
 - If you run a `delorun trash`, `export` or `import` command while Delorun runs, then it refuses and asks you to run `delorun stop` first.
 

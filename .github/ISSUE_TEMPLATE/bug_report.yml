@@ -6,11 +6,31 @@ body:
     attributes:
       value: |
         Do not report a vulnerability here. Report it privately as [SECURITY.md](https://github.com/Delo-Run/delo/blob/HEAD/SECURITY.md) describes.
+  - type: markdown
+    attributes:
+      value: |
+        The Settings → About page also opens a pre-filled report with your version, system and a redacted log excerpt; you review it in your browser before anything is sent.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Studio (the app in your browser)
+        - Chat and agent
+        - Plugins
+        - Sandbox and approvals
+        - Reaching Delorun from a phone or another computer
+        - Install, setup and updates
+        - Command line
+        - Documentation
+        - Other
+    validations:
+      required: true
   - type: input
     id: version
     attributes:
       label: Version
-      description: The output of `delorun --version`.
+      description: The output of `delorun --version`, or the version on the Settings → About page.
     validations:
       required: true
   - type: dropdown
@@ -31,10 +51,31 @@ body:
     validations:
       required: true
   - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: The result you expected.
+    validations:
+      required: true
+  - type: textarea
     id: happened
     attributes:
-      label: What happened
-      description: The result you saw, and the result you expected.
+      label: Actual
+      description: The result you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What this stops you doing, and whether a workaround exists.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js version, browser, and how you run Delorun (installed or from source).
     validations:
       required: true
   - type: textarea
@@ -43,3 +84,8 @@ body:
       label: Logs
       description: Relevant output of `delorun logs`. Delorun redacts its logs, but read them before you post them and remove anything private.
       render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drop images or recordings here. Hide anything private first.

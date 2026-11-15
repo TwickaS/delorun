@@ -20,6 +20,7 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 - [Keep approval yours](#keep-approval-yours)
 - [What an approved phone can and cannot do](#what-an-approved-phone-can-and-cannot-do)
 - [Unlock sensitive actions for a while](#unlock-sensitive-actions-for-a-while)
+- [Unlock with a PIN](#unlock-with-a-pin)
 - [Remove a device](#remove-a-device)
 - [Turn remote access off](#turn-remote-access-off)
 - [Get a one-time owner code](#get-a-one-time-owner-code)
@@ -84,7 +85,7 @@ You should see "Approved <device name>. It signs in on its own now." on your com
 
 A phone that Tailscale reports as signed in as the user you allowed can ask outside an approval window. Either way you type the 8-digit code the phone shows, at this computer, and three wrong codes cancel the request.
 
-`delorun devices list` and the Devices section list every approved device. The list shows an id, the name, the address, when it was approved and when it last signed in. With no device, `delorun devices list` says "This home trusts no device yet. Add one with delorun devices approve."
+`delorun devices list` and the Devices section list every approved device. The list shows an id, the name, the address, when it was approved and when it last signed in. With no device, `delorun devices list` says "No device is trusted on this computer yet. Add one with delorun devices approve."
 
 <details>
 <summary>Edge cases</summary>
@@ -204,6 +205,35 @@ An unlock lasts 15 minutes. Nothing extends it: when it ends, unlock again. It w
 
 - `elevationMinutes` in the profile's reach row changes how long an unlock lasts, from 1 to 60 minutes.
 - Unlock ahead of time from Settings, Devices on the phone before you start work that needs it.
+
+</details>
+
+## Unlock with a PIN
+
+PIN mode lets an approved device unlock sensitive actions by typing a PIN or passcode, without asking you for a code at your computer each time. It is off until you turn it on, and you can only turn it on at your computer. It works only on the Tailscale private address, not on a Funnel address.
+
+Run `delorun devices pin set` in a terminal while Delorun is running. It asks for the secret twice, with the characters hidden. A PIN has at least 6 digits and is not a repeat or a run, such as `111111` or `123456`. A passcode has at least 10 characters and is any secret that is not all digits. To pipe one line instead of typing it, add `--stdin`.
+
+You should see "PIN mode is on, with a PIN." and a short list of what it allows. Setting or changing the PIN, turning the mode on or off, and approving a device stay at your computer.
+
+A page locks again after it sits idle. `--idle-minutes <1-60>` sets how long, and `--lock-when-hidden` also locks it at once when you switch away from it. Change either later with `delorun devices pin options`, and use `--no-lock-when-hidden` to undo the second.
+
+The mode limits wrong tries. Five wrong tries on one device lock that device. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
+
+| Command | What it does |
+| --- | --- |
+| `delorun devices pin set` | Turns PIN mode on, or changes the PIN or passcode. |
+| `delorun devices pin options` | Changes the idle time or the lock-when-hidden choice. |
+| `delorun devices pin off` | Turns PIN mode off and drops the PIN. Devices go back to codes from your computer. |
+| `delorun devices pin resume` | Resumes PIN unlocks after wrong tries paused them. |
+| `delorun devices pin status` | Says whether PIN mode is on and how it is set. It works when Delorun is not running. |
+
+<details>
+<summary>Edge cases</summary>
+
+- If Delorun is not running, then `pin set`, `options`, `off` and `resume` stop and say so. Start it with `delorun start`, then run the command again. Nothing changes until then.
+- If the PIN is too weak, then the command says why and changes nothing (`PIN_FAILED` in [Troubleshooting](troubleshooting.md)).
+- If `delorun devices pin status` says "PIN mode is off. Turn it on with delorun devices pin set.", then devices still unlock with a code from your computer.
 
 </details>
 

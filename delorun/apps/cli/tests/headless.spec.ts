@@ -259,7 +259,7 @@ describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
     expect((error as CliError).exit).toBe(EXIT.failed)
     expect((error as CliError).message).toContain(JSON.stringify(workspaceKey(workspace)))
     expect((error as CliError).message).toContain(`run delorun workspace full-access ${shellQuote(workspaceKey(workspace))} on`)
-    expect((error as CliError).message).toContain('in the studio\'s Settings → Permissions;')
+    expect((error as CliError).message).toContain('in the studio\'s Settings → Safety → Permissions;')
     expect(seen).toEqual([])
   })
 

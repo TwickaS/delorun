@@ -925,9 +925,12 @@ const FAILURE_LOG_BYTES = 65_536
  */
 export function startFailure(profile: string, what: string, log: string): string {
   const flag = profileFlag(profile)
-  const busy = homeLogTail(log).some(line => /EADDRINUSE|address already in use/i.test(line))
+  const tail = homeLogTail(log)
+  const busy = tail.some(line => /EADDRINUSE|address already in use/i.test(line))
+  const unbuilt = tail.some(line => /(?:ERR_MODULE_NOT_FOUND|Cannot find module)[^]*\/lib\//.test(line))
   return [
     `delorun start: Delorun did not start. ${what}.`,
+    ...unbuilt ? ['A built file is missing. In a source checkout, run pnpm run build:artifacts and pnpm --filter @delorun/bundle-local run build, then start again.'] : [],
     ...busy ? [`Another program is using the studio's port. Choose another port with delorun setup profile${flag}, or set the port to 0 in the profile so Delorun picks a free one.`] : [],
     `Run delorun logs${flag} to see why, then delorun doctor${flag} to check your setup.`,
     '',

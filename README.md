@@ -16,6 +16,12 @@ The `delorun` command provides:
 - `update` to show the newest release's report and apply it after you confirm, and `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
 - `verify` to check the installed release against its signed manifest and the release log.
 - `trash`, `export` and `import` to restore or purge deleted chats and workspaces, and to move a chat or a workspace between homes as a signed archive.
+- `open` to open the studio in your browser, or print a link that signs in once.
+- `reach` and `devices` to reach the studio from your phone over your own tailnet, and to approve, unlock and remove the devices that may sign in, including PIN mode.
+- `changes` to review, apply, discard or undo the changes that wait for you.
+- `workspace` to let chats use full access in a folder, or let an outside agent start there, from this computer.
+- `mcp` to answer, from this computer, the questions about tool servers that chats want to start.
+- `import-home` to copy a DeepSeek Harness home (`~/.dsh`) into your Delorun home after a preview.
 - `plugin` and `headless`. `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. `delorun headless` answers one task and exits, as `dsh headless` does, but with Delorun's sandbox protection, guards and consents, and with DeepSeek's session-log upload off; a consent that would ask you refuses instead, because nobody is there to answer.
 
 Review the [safety notice](SAFETY.md) before running the project. The [user guide](delorun/docs/guide/README.md) explains how to install and use Delorun, and [Roadmap and vision](delorun/docs/guide/roadmap.md) describes where it is going.
@@ -34,7 +40,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the artifacts, and `pnpm dsh web` starts the Web UI from them. `pnpm dsh --profile headless "task"` runs one task and needs a `DEEPSEEK_API_KEY`. To run the checks that cover your change, use `pnpm check`. [AGENTS.md](AGENTS.md) lists every command.
+`pnpm run build` prepares the artifacts, and `pnpm dsh web` starts the Web UI from them. `pnpm dsh --profile headless "task"` runs one task and needs a `DEEPSEEK_API_KEY`. When `delorun start` from a checkout says a built file is missing, run `pnpm run build:artifacts` and `pnpm --filter @delorun/bundle-local run build`, then start again. To run the checks that cover your change, use `pnpm check`. [AGENTS.md](AGENTS.md) lists every command.
 
 ## Compatibility with stock
 

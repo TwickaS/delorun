@@ -206,7 +206,7 @@ function routeProfile(answer: ModelProviderAnswer, current: Readonly<Record<stri
 }
 
 /**
- * Write a provider answer's rows into a profile's patch, in the form Settings → Models and the model picker save them.
+ * Write a provider answer's rows into a profile's patch, in the form Settings → Agent → Models and the model picker save them.
  * DeepSeek with its default variable and model leaves its rows as the bundle inserts them, so the profile matches
  * stock DeepSeek Harness's; another variable sets `apiKeyEnv` on `llm-deepseek`. A pi-ai provider sets its route on
  * `llm-pi-ai`, keeping the routes already there. Every answer sets the default model of new chats, without a reasoning

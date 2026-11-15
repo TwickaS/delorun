@@ -61,6 +61,12 @@ describe('delorun <command> --help', () => {
     expect(commandHelp('reach')).toContain('With on tailscale: skip the question. Required when there is no terminal.')
   })
 
+  it('documents devices pin and update --from', () => {
+    expect(commandHelp('devices')).toContain('pin set|options|off|resume|status')
+    expect(commandHelp('devices')).toContain('pin resume')
+    expect(commandHelp('update')).toContain('--from <folder|https-address>')
+  })
+
   it('refuses a name that is not a command with the usage code', async () => {
     const result = await run(['help', 'nonesuch'])
     expect(result.exit).toBe(EXIT.usage)
