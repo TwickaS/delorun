@@ -344,12 +344,15 @@ export function applyStudio(ctx: Context): void {
         if (!ok) console.warn('delorun sidebar: the workspace icon was not saved')
       }, (error: unknown) => { console.warn('delorun sidebar: the workspace icon was not saved', error) })
     },
-    attach: latest => ctx.provide('delorunSidebar', {
-      canAddWorkspace: () => latest.current.canAddWorkspace,
-      addWorkspace: () => { latest.current.addWorkspace() },
-      IconBadge: ({ icon, title, size }) => createElement(WorkspaceBadge, { title, color: 'blue', icon, size }),
-      IconPickerDialog: ({ title, icon, onSave, onClose }) => createElement(IconPicker, { t: ctx.locale.bind(NS), target: { workspaceId: 'branding', title, color: 'blue', icon }, onSave, onClose }),
-    }),
+    attach: (latest) => {
+      const service: DelorunSidebar = {
+        canAddWorkspace: () => latest.current.canAddWorkspace,
+        addWorkspace: () => { latest.current.addWorkspace() },
+        IconBadge: ({ icon, title, size }) => createElement(WorkspaceBadge, { title, color: 'blue', icon, size }),
+        IconPickerDialog: ({ title, icon, onSave, onClose }) => createElement(IconPicker, { t: ctx.locale.bind(NS), target: { workspaceId: 'branding', title, color: 'blue', icon }, onSave, onClose }),
+      }
+      return ctx.provide('delorunSidebar', service)
+    },
     pruneIcons: (liveIds) => {
       const pruned = pruneWorkspaceIcons(settings.getSnapshot().workspaceIcons, liveIds)
       if (pruned === undefined) return
