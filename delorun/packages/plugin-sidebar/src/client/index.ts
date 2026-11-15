@@ -40,7 +40,7 @@ import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '
 
 /** The row of the release check, whose `enabled` switch mounts the notice route. */
 const UPDATE_CHECK_ROW_ID = 'delorun-update-check'
-import { pruneWorkspaceIcons, withWorkspaceIcon } from '../workspace-icon.ts'
+import { parseWorkspaceIcon, pruneWorkspaceIcons, withWorkspaceIcon } from '../workspace-icon.ts'
 import type { RowStateActions } from './ChatRow.tsx'
 import { FootLauncher } from './FootLauncher.tsx'
 import { HeaderArt, type HeaderArtInjected } from './HeaderArt.tsx'
@@ -324,6 +324,10 @@ export function applyStudio(ctx: Context): void {
     pin,
     unpin,
     setWorkspaceIcon: (workspaceId, icon) => {
+      if (icon !== null && parseWorkspaceIcon(icon) === undefined) {
+        console.warn('delorun sidebar: the workspace icon was not saved because it is not a valid icon')
+        return
+      }
       form.set('workspaceIcons', withWorkspaceIcon(settings.getSnapshot().workspaceIcons, workspaceId, icon)).then((ok) => {
         if (!ok) console.warn('delorun sidebar: the workspace icon was not saved')
       }, (error: unknown) => { console.warn('delorun sidebar: the workspace icon was not saved', error) })

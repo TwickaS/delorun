@@ -174,6 +174,38 @@ export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefin
   return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
 }
 
+/** What {@link keyRefsOf} reads of the model provider directory. */
+interface ProviderDirectoryView {
+  listConfigurableProviders(): readonly { readonly provider: string; readonly settingsNs: string; readonly settingsPath: readonly string[]; readonly nativeAuth?: { readonly env: readonly string[] } }[]
+}
+
+/** What {@link keyRefsOf} reads of the settings service. */
+interface SettingsValuesView {
+  describe(): readonly { readonly ns: string; readonly value: unknown }[]
+}
+
+/**
+ * The credential references the model providers declare, which a device's key action may name: each configurable
+ * provider's conventional reference (the provider route in upper case, non-alphanumerics as `_`, then `_API_KEY`, as the
+ * models page derives it), the environment variables its authentication reads, and the `apiKeyEnv` its profile names.
+ * @param ctx - a context of the running profile.
+ * @returns the references, none without a model provider directory.
+ */
+export function keyRefsOf(ctx: Context): ReadonlySet<string> {
+  const directory: ProviderDirectoryView | undefined = ctx.get('llm')
+  const settings: SettingsValuesView | undefined = ctx.get('settings')
+  const refs = new Set<string>()
+  for (const entry of directory?.listConfigurableProviders() ?? []) {
+    refs.add(`${entry.provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`)
+    for (const name of entry.nativeAuth?.env ?? []) refs.add(name)
+    let profile: unknown = settings?.describe().find(row => row.ns === entry.settingsNs)?.value
+    for (const key of entry.settingsPath) profile = typeof profile === 'object' && profile !== null ? Reflect.get(profile, key) : undefined
+    const named = typeof profile === 'object' && profile !== null ? Reflect.get(profile, 'apiKeyEnv') : undefined
+    if (typeof named === 'string' && named.length > 0) refs.add(named)
+  }
+  return refs
+}
+
 /** The module of upstream's permission presets, whose rows' `defaultPreset` names the permission new chats start in. */
 const PERMISSION_PRESETS_MODULE = '@deepseek-ai/dsh-permission-presets'
 
@@ -244,6 +276,8 @@ export class HomeAuthAuthenticator extends Authenticator {
         delorunHome: ctx.homeAuth.delorunHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
+        pinEnabled: () => ctx.homeAuth.pinEnabled(),
+        keyRefs: () => keyRefsOf(access),
         logElevated: (line) => { ctx.logger.info(line) },
         liftedSettings: lifts => ctx.homeAuth.recordLifts(lifts),
         pinLiftedSettings: lifts => ctx.homeAuth.recordPinLifts(lifts),

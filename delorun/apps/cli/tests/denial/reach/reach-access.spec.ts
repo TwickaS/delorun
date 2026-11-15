@@ -33,7 +33,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -83,6 +83,9 @@ async function expectRefused(endpoint: string, args: Record<string, unknown>): P
     error: { code: 'remote-access/denied', details: { action: endpoint, reason: `loopback-required: ${endpoint}` } },
   })
 }
+
+/** The exact Fetch routes whose `admitPeer` admits an approved device. */
+const ADMITTED_ROUTES: ReadonlySet<string> = new Set(['/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunMcpConsent.waiting'])
 
 /**
  * Assert that one call is refused by remote access until the device holds an elevation, naming its action.
@@ -295,6 +298,12 @@ describe('a reach device through the Gateway', () => {
     const namespaces = described.namespaces.map(view => view.ns)
     expect(namespaces.length).toBeGreaterThan(0)
     for (const ns of namespaces) {
+      // A381: the everyday namespaces are written without an unlock; the pairing is pinned in home-auth's reach-access spec.
+      if (Object.hasOwn(REACH_EVERYDAY_SETTINGS, ns)) {
+        // Decided through remote access, not called, so the test writes no setting.
+        expect(studio.ctx.remoteAccess.decide({ principal: reachDevicePrincipal(deviceId, LISTENER), action: 'settings/update', resources: [GLOBAL], args: { ns, patch: {} } }), ns).toEqual({ kind: 'allow' })
+        continue
+      }
       // Pins the unlock check for each namespace the composition describes.
       await expectElevationRequired('settings/mutate', { ns, ops: [{ op: 'unset', path: ['delorun'] }] })
       await expectElevationRequired('settings/update', { ns, patch: {} })
@@ -304,10 +313,15 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('settings/openSettingsDocument', {})
   })
 
-  it('never reaches credentials or account sign-in', async () => {
-    await expectRefused('credentials/describe', { refs: [] })
-    await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
-    await expectRefused('credentials/unset', { ref: 'deepseek' })
+  it('admits the model key actions (A380) to an approved device', () => {
+    // Decided through remote access, not called, so the test saves no key.
+    const principal = reachDevicePrincipal(deviceId, LISTENER)
+    for (const action of Object.keys(REACH_KEY_ACTIONS)) {
+      expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
+    }
+  })
+
+  it('never reaches account sign-in', async () => {
     await expectRefused('account/getState', {})
   })
 
@@ -394,7 +408,6 @@ describe('an elevated reach device through the Gateway', () => {
         expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
       }
       // Pins the never table under an unlock: credentials, the account and the computer's own screen.
-      await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
       await expectRefused('account/getState', {})
       await expectRefused('settings/openSettingsDocument', {})
       // The unlock admits nothing for the same device's principal on another listener, where it has no Peer.
@@ -536,7 +549,8 @@ describe('a reach device and the exact Fetch routes', () => {
     // The routes this rule is about: a file read by path, deliverable actions and change reads.
     expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
     for (const [path, methods] of routes) {
-      if (path === UPLOAD) continue
+      // The upload route, the key test (A380) and the recommended plugins' purposes (A381) admit an approved device.
+      if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.
         const response = await send(`${path}?path=${encodeURIComponent(directory)}&sessionId=any&seq=0&index=0`, { method })
@@ -596,7 +610,7 @@ describe('the reach access tables', () => {
     return endpoints
   }
 
-  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
+  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
   const forwarded = (): Set<string> => new Set(API_REMOTE_FORWARDED_EVENTS.map(entry => `event:${entry.event}`))
 
   it('classify every Remote method and forwarded event of the composition', () => {
@@ -622,6 +636,7 @@ describe('the reach access tables', () => {
       action,
       decision: Object.hasOwn(REACH_ALLOWED_ACTIONS, action)
         ? 'allow'
+        : Object.hasOwn(REACH_KEY_ACTIONS, action) ? 'allow' // PIN mode is off here
         : Object.hasOwn(REACH_ELEVATED_ACTIONS, action) ? `elevation-required: ${action}` : `loopback-required: ${action}`,
     })))
   })

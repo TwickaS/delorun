@@ -2599,6 +2599,12 @@
       "class": "generic-fix",
       "feature": "studio-seams",
       "reason": "Re-exports `readlink` and `rmdir` from the preview's `node:fs` promises face, which the hardened local file reader imports. Offer upstream."
+    },
+    {
+      "path": "packages/api/settings-controller/src/credentials.ts",
+      "class": "delorun-feature",
+      "feature": "device-key-privacy",
+      "reason": "Write-only keys for approved devices (A380): `credentials/describe` leaves out `masked`, which carries the key's prefix, suffix and length, for any caller that is not the owner; the owner's page keeps its view."
     }
   ],
   "retired": []

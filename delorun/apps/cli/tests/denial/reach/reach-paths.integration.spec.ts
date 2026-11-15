@@ -88,7 +88,7 @@ interface FetchDecision {
   readonly device: 'refused' | 'per-call' | 'read' | 'admitted'
   readonly reason: string
   readonly refusal?: string
-  /** The status a `read` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
+  /** The status a `read` or `admitted` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
   readonly answers?: number
 }
 
@@ -116,8 +116,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunOnboarding.clone': { device: 'refused', reason: 'runs Git as the person and adds the clone as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
   '/api/delorunOnboarding.cloneStatus': { device: 'refused', reason: 'reports a clone the computer started', refusal: 'LOOPBACK_ONLY' },
   '/api/delorunOnboarding.readiness': { device: 'refused', reason: 'whether the coding agents are signed in and how far Tailscale is set up serves onboarding at the computer' },
-  '/api/delorunOnboarding.keyTest': { device: 'refused', reason: 'the key test asks each model provider from the computer and serves onboarding there' },
-  '/api/delorunOnboarding.recommend': { device: 'refused', reason: 'the recommended plugins\' connections serve onboarding at the computer, and asking the registry is a network request the computer makes' },
+  '/api/delorunOnboarding.keyTest': { device: 'admitted', reason: 'A380: an approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted' },
+  '/api/delorunOnboarding.recommend': { device: 'admitted', answers: 400, reason: 'A381: an approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only' },
   '/api/delorunMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/delorunMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
   '/api/delorunTrust.bill': { device: 'read', reason: 'the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret' },
@@ -334,7 +334,7 @@ describe('the routes a signed-in device reaches', () => {
       }
       if (decision?.device === 'admitted') {
         const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
-        expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: 200 })
+        expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: decision.answers ?? 200 })
         continue
       }
       if (decision?.device !== 'refused') continue
@@ -347,6 +347,37 @@ describe('the routes a signed-in device reaches', () => {
       // A body each POST route refuses or ignores, so nothing is deleted.
       const answer = await asStudio(route.path, method, '{"clearLogs":"not a flag"}')
       expect.soft({ path: route.path, refused: answer.status === 401 || answer.status === 403 }).toEqual({ path: route.path, refused: false })
+    }
+  })
+
+  it('lets an approved phone test model keys (A380) but not an unauthenticated or locked one, and sends no key back', async () => {
+    const path = '/api/delorunOnboarding.keyTest'
+    const fakeKey = 'sk-a380-known-fake-key-0123456789'
+    const saved = process.env['DEEPSEEK_API_KEY']
+    process.env['DEEPSEEK_API_KEY'] = fakeKey
+    try {
+      // Pins `admitPeer` on the route: a tailnet request with no session never reaches the route.
+      const anonymous = await phone.send(path, { origin: phone.origin }, { method: 'POST' })
+      expect.soft(anonymous.status, 'no session').toBeGreaterThanOrEqual(401)
+      expect.soft(anonymous.body).not.toContain(fakeKey)
+      // Pins the admission of the approved device.
+      const admitted = await asPhone(path, { method: 'POST' })
+      expect(admitted.status).toBe(200)
+      // Pins the answer: it names providers and results alone, so no admitted response carries the key.
+      expect(admitted.body).not.toContain(fakeKey)
+      for (const [route, decision] of Object.entries(FETCH_ROUTES)) {
+        if (decision.device !== 'read' && decision.device !== 'admitted') continue
+        expect.soft((await asPhone(route, { method: route === path ? 'POST' : 'GET' })).body, route).not.toContain(fakeKey)
+      }
+      // Pins the PIN check: while PIN mode is on, a page that presents no unlock is refused.
+      await studio.ctx.homeAuth.setPin('739150', {})
+      const locked = await asPhone(path, { method: 'POST' })
+      expect(locked.status).toBe(403)
+      expect(locked.body).not.toContain(fakeKey)
+    } finally {
+      await studio.ctx.homeAuth.turnPinOff()
+      if (saved === undefined) delete process.env['DEEPSEEK_API_KEY']
+      else process.env['DEEPSEEK_API_KEY'] = saved
     }
   })
 })

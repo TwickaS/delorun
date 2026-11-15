@@ -200,7 +200,6 @@ export const REACH_ALLOWED_ACTIONS = {
   'event:schedule/changed': 'refresh the scheduled follow-ups',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
-const CREDENTIALS = 'credentials are secrets of the home'
 const ACCOUNT = 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer'
 const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a device has no use for'
 
@@ -213,11 +212,6 @@ const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a 
  */
 export const REACH_DENIED_ACTIONS = {
   'settings/openSettingsDocument': 'opens the settings document in an editor on the home\'s computer, which a device has no use for',
-  'credentials/describe': CREDENTIALS,
-  'credentials/set': CREDENTIALS,
-  'credentials/unset': CREDENTIALS,
-  'event:credentials/record-updated': CREDENTIALS,
-  'event:credentials/reference-updated': CREDENTIALS,
   'account/getNotificationContent': ACCOUNT,
   'account/getNotifications': ACCOUNT,
   'account/reportNotificationEvent': ACCOUNT,
@@ -239,20 +233,194 @@ export const REACH_DENIED_ACTIONS = {
 /**
  * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
  * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
- * `elevation-required: <action>` to a locked device while it holds. A saved credential is never sent to a device:
- * `credentials/describe` answers presence and writability only. Each other action of the never table stays at the
+ * `elevation-required: <action>` to a locked device while it holds. Each other action of the never table stays at the
  * computer in every mode.
  */
 export const REACH_DANGEROUS_ACTIONS = {
-  'credentials/describe': 'read whether a provider key is saved, never its value',
-  'credentials/set': 'save or change a provider key, which the device never reads back',
-  'credentials/unset': 'remove a saved provider key',
-  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value',
-  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value',
   'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
   'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
 } as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
+
+/**
+ * The actions that add, remove and check a model provider's key from an approved device (A380). Each is allowed to a
+ * device without an unlock and, while PIN mode is on, only to a Peer of an unlocked page; a locked page's Peer is refused
+ * with `elevation-required: <action>`. A stored key is never sent to a device: `credentials/describe` answers presence
+ * and writability only, and the events name the key, never its value. A call may name only the references the model
+ * providers declare ({@link ReachAccessFacts.keyRefs}); any other is refused with {@link UNDECLARED_KEY_REFUSAL}.
+ */
+export const REACH_KEY_ACTIONS = {
+  'credentials/describe': 'read whether a provider key is saved, never its value (A380)',
+  'credentials/set': 'save or change a provider key, which the device never reads back (A380)',
+  'credentials/unset': 'remove a saved provider key (A380)',
+  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value (A380)',
+  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value (A380)',
+} as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
+const KEY_SET: ReadonlySet<string> = new Set(Object.keys(REACH_KEY_ACTIONS))
+
+/** The reason a key action that names a reference no model provider declares is refused to a device, unlocked or not. */
+export const UNDECLARED_KEY_REFUSAL = 'loopback-required: a key reference no model provider names'
+
+/**
+ * Whether a key action's reference arguments all name a reference of the model providers. `credentials/set` and
+ * `credentials/unset` name one `ref`, `credentials/describe` a list of `refs`; a list that holds one undeclared name is
+ * refused as a whole, and arguments the condition cannot read are refused. Events carry no arguments.
+ * @param action - the key action.
+ * @param args - the call's arguments.
+ * @param declared - the references the model providers declare.
+ * @returns whether the call names only declared references.
+ */
+function namesOnlyDeclaredRefs(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, declared: ReadonlySet<string>): boolean {
+  const names = action === 'credentials/describe' ? args.refs : [args.ref]
+  return Array.isArray(names) && names.every(name => typeof name === 'string' && declared.has(name))
+}
+
+/**
+ * The settings namespaces an approved device writes without an unlock (A381): the everyday settings the computer's
+ * Settings pages change, each with what it holds. A write to any other namespace stays in
+ * {@link REACH_ELEVATED_ACTIONS}. The computer-only switches, the protected rows and the default permission still
+ * refuse a write to these namespaces first, and an approved device on a locked PIN page writes them as it sends a
+ * message: PIN mode does not gate them.
+ */
+export const REACH_EVERYDAY_SETTINGS = {
+  'ui-theme': 'the colour scheme',
+  'ui-chat': 'the composer and chat display',
+  'ui-conversation': 'the conversation display',
+  'ui-settings-general': 'general display settings',
+  'locale': 'the language',
+  'delorun-theme': 'the palette, accent and studio look',
+  'delorun-onboarding': 'how far the first-run guide has got',
+  'delorun-sidebar': 'the sidebar',
+  'delorun-chat-states': 'snooze and settle options',
+  'delorun-cost-meter': 'the cost meter',
+  'delorun-thinking-rsvp': 'the Thinking tab',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * The fields of an everyday namespace an approved device writes without an unlock, for a namespace whose other fields
+ * stay unlocked-only: onboarding's `plugins` and `optionalRows` decide which packages the guide installs and which rows
+ * it turns on, and chat states' `maxRecords` and `pruneMinutes` size the Host's sweep. A namespace not listed here has
+ * every field everyday. A write that touches another field, rebuilds the whole section (`settings/replace`, or an
+ * operation on the section's root) or cannot be read is not an everyday call and needs an unlock.
+ */
+export const REACH_EVERYDAY_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  'delorun-onboarding': ['done', 'step', 'starterSession', 'starterKind'],
+  'delorun-chat-states': ['snoozePresets', 'autoSettleDays', 'refreshSeconds'],
+}
+
+/**
+ * The top-level fields a settings write touches.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns the field names, or undefined for a write that rebuilds the section or whose arguments cannot be read.
+ */
+function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): readonly string[] | undefined {
+  if (action === 'settings/update') return isObject(args.patch) ? Object.keys(args.patch) : undefined
+  if (action !== 'settings/mutate' || !Array.isArray(args.ops)) return undefined
+  const fields: string[] = []
+  for (const op of args.ops as unknown[]) {
+    if (!isObject(op) || !Array.isArray(op.path) || typeof op.path[0] !== 'string') return undefined
+    fields.push(op.path[0])
+  }
+  return fields
+}
+
+/** An icon field that names a choice: a short word, a named colour or a `#RRGGBB` value, never markup. */
+const ICON_CHOICE = /^[A-Za-z0-9#_-]{1,32}$/
+const ICON_KEYS: ReadonlySet<string> = new Set(['kind', 'letters', 'glyph', 'emoji', 'seed', 'color', 'shape', 'style'])
+const ICON_TEXT_KEYS: ReadonlySet<string> = new Set(['letters', 'emoji'])
+
+/**
+ * Whether a value is a workspace icon the sidebar's picker can write: an object of the picker's fields only, its choices
+ * short words, its text free of markup characters, its seed a number. The sidebar validates each icon it reads with
+ * `WorkspaceIconSchema`; this check keeps a device from storing anything else.
+ * @param icon - the value.
+ * @returns whether it is.
+ */
+function isWorkspaceIcon(icon: unknown): boolean {
+  if (!isObject(icon) || typeof icon.kind !== 'string') return false
+  return Object.entries(icon).every(([key, value]) => {
+    if (!ICON_KEYS.has(key)) return false
+    if (key === 'seed') return typeof value === 'number'
+    if (typeof value !== 'string') return false
+    return ICON_TEXT_KEYS.has(key) ? value.length <= 16 && !/[<>&"'`\\]/.test(value) : ICON_CHOICE.test(value)
+  })
+}
+
+/**
+ * Whether a settings write to the sidebar row sets `workspaceIcons` only to valid icons: a whole map, one entry, or an
+ * unset. A write that leaves the field alone passes.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns whether every icon the write sets is valid.
+ */
+function writesOnlyValidIcons(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  const isMap = (value: unknown): boolean => isObject(value) && Object.values(value).every(isWorkspaceIcon)
+  if (action === 'settings/update') return !isObject(args.patch) || !('workspaceIcons' in args.patch) || isMap(args.patch.workspaceIcons)
+  if (action === 'settings/replace') return !isObject(args.section) || !('workspaceIcons' in args.section) || isMap(args.section.workspaceIcons)
+  if (!Array.isArray(args.ops)) return false
+  return (args.ops as unknown[]).every((op) => {
+    if (!isObject(op) || !Array.isArray(op.path) || op.path[0] !== 'workspaceIcons') return true
+    if (op.op === 'unset') return true
+    if (op.path.length === 1) return isMap(op.value)
+    return op.path.length === 2 && isWorkspaceIcon(op.value)
+  })
+}
+
+/**
+ * Whether a settings write stays inside the fields an approved device writes without an unlock.
+ * @param action - the settings write.
+ * @param args - the call's arguments, naming a namespace of {@link REACH_EVERYDAY_SETTINGS}.
+ * @returns whether every field it touches is everyday.
+ */
+function touchesOnlyEverydayFields(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  if (args.ns === 'delorun-sidebar' && !writesOnlyValidIcons(action, args)) return false
+  const allowed = REACH_EVERYDAY_FIELDS[String(args.ns)]
+  if (allowed === undefined) return true
+  const touched = fieldsTouched(action, args)
+  return touched !== undefined && touched.every(field => allowed.includes(field))
+}
+
+/**
+ * The plugin rows of Delorun's own profile an approved device turns on or off through `pluginManager/setPluginEnabled`
+ * without an unlock (A381), by row id: the optional rows onboarding offers. The plugin manager still refuses a
+ * protected row (see {@link PROTECTED_ROW_REFUSAL}).
+ */
+export const REACH_SHIPPED_ROWS = {
+  'delorun-thinking-rsvp': 'the Thinking tab',
+  'delorun-cost-meter': 'the cost meter',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * The installed packages an approved device turns on or off through `pluginManager/setBundleEnabled` without an
+ * unlock (A381), by package name: the plugins onboarding recommends. Installing a package that is not on the
+ * computer, and removing one, stay unlocked-only.
+ */
+export const REACH_SHIPPED_BUNDLES = {
+  '@delorun/plugin-thinking-rsvp': 'the Thinking tab',
+  '@delorun/plugin-cost-meter': 'the cost meter',
+  '@deepseek-ai/dsh-experimental-session-search': 'chat search',
+  '@deepseek-ai/dsh-experimental-terminal-bundle': 'the terminal',
+  '@deepseek-ai/dsh-experimental-tool-worktree': 'worktrees',
+  '@deepseek-ai/dsh-experimental-session-titles-bundle': 'chat titles',
+  '@deepseek-ai/dsh-deepseek-chat-import': 'importing chats from the DeepSeek website',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * Whether an elevated call is an everyday one a device makes without an unlock: a settings write to a namespace of
+ * {@link REACH_EVERYDAY_SETTINGS}, or a plugin toggle of {@link REACH_SHIPPED_ROWS} or {@link REACH_SHIPPED_BUNDLES}.
+ * @param action - the call's action.
+ * @param args - the call's arguments.
+ * @returns whether the call needs no unlock.
+ */
+function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  if (SETTINGS_WRITES.has(action)) {
+    return typeof args.ns === 'string' && Object.hasOwn(REACH_EVERYDAY_SETTINGS, args.ns) && touchesOnlyEverydayFields(action, args)
+  }
+  if (action === 'pluginManager/setPluginEnabled') return typeof args.id === 'string' && Object.hasOwn(REACH_SHIPPED_ROWS, args.id)
+  if (action === 'pluginManager/setBundleEnabled') return typeof args.name === 'string' && Object.hasOwn(REACH_SHIPPED_BUNDLES, args.name)
+  return false
+}
 
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
@@ -337,7 +505,7 @@ export function assertDisjoint(tables: Readonly<Record<string, Readonly<Record<s
   if (both.length > 0) throw new TypeError(`@delorun/home-auth: reach access lists ${JSON.stringify(both.sort())} in two tables`)
 }
 
-assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS })
+assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS })
 
 /** The allowed actions, which every role of the policy lists. */
 const ALLOWED: readonly RemoteAccessAction[] = Object.freeze(Object.keys(REACH_ALLOWED_ACTIONS) as (keyof typeof REACH_ALLOWED_ACTIONS)[])
@@ -346,6 +514,7 @@ const ELEVATED_SET: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACT
 /** The actions every role lists: the allowed ones, the elevated ones, which the condition refuses without an unlock, and the ones dangerous mode lifts. */
 const ROLE_ACTIONS: readonly RemoteAccessAction[] = Object.freeze([
   ...ALLOWED,
+  ...(Object.keys(REACH_KEY_ACTIONS) as (keyof typeof REACH_KEY_ACTIONS)[]),
   ...(Object.keys(REACH_ELEVATED_ACTIONS) as (keyof typeof REACH_ELEVATED_ACTIONS)[]),
   ...(Object.keys(REACH_DANGEROUS_ACTIONS) as (keyof typeof REACH_DANGEROUS_ACTIONS)[]),
 ])
@@ -803,7 +972,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinLiftedSettings'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -855,7 +1024,9 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
-    if (ELEVATED_SET.has(action)) {
+    if (KEY_SET.has(action) && facts.pinEnabled() && !pageUnlocked) return { kind: 'deny', reason: `elevation-required: ${action}` }
+    if (KEY_SET.has(action) && args !== undefined && !namesOnlyDeclaredRefs(action, args, facts.keyRefs())) return { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
+    if (ELEVATED_SET.has(action) && !(args !== undefined && isEverydayCall(action, args))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
@@ -927,6 +1098,18 @@ export interface ReachAccessFacts {
    * @returns the unlock, or undefined once it ended.
    */
   readonly pageUnlockOf: (unlockId: string) => { readonly id: string } | undefined
+  /**
+   * Whether PIN mode is on, which makes the model key actions ({@link REACH_KEY_ACTIONS}) need an unlocked page.
+   * @returns whether it is.
+   */
+  readonly pinEnabled: () => boolean
+  /**
+   * The credential references the model providers declare, read when a key action arrives: each provider's conventional
+   * key reference, the environment variables its authentication reads and the `apiKeyEnv` its profile names. A key action
+   * of a device may name no other reference.
+   * @returns the references.
+   */
+  readonly keyRefs: () => ReadonlySet<string>
   /**
    * Record one line in the operational log, for each call an unlock admits.
    * @param line - the line.

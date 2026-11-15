@@ -564,6 +564,13 @@ describe('the workspace filter', () => {
     expect(within(row(container, 'a')).getByText('ZQ', { selector: 'text' })).toBeTruthy()
     expect(within(row(container, 's')).getByText('SI', { selector: 'text' })).toBeTruthy()
   })
+
+  it('loads with a stored markup entry, shows that workspace\'s default icon and renders no markup', () => {
+    const { container } = show({ settings: { workspaceIcons: { 'w-api': '<img src=x onerror=alert(1)>', 'w-site': { kind: 'letters', letters: 'zq' } } } })
+    expect(within(row(container, 'a')).getByText('AP', { selector: 'text' })).toBeTruthy()
+    expect(within(row(container, 's')).getByText('ZQ', { selector: 'text' })).toBeTruthy()
+    expect(container.querySelector('img')).toBeNull()
+  })
 })
 
 describe('the search', () => {

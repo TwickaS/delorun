@@ -64,13 +64,19 @@ describe('a Workspace icon', () => {
 })
 
 describe('the stored icons', () => {
-  const numbered = (count: number): Record<string, unknown> => Object.fromEntries(Array.from({ length: count }, (_, index) => [`w${String(index)}`, 'x']))
+  const numbered = (count: number): Record<string, unknown> => Object.fromEntries(Array.from({ length: count }, (_, index) => [`w${String(index)}`, DEFAULT_WORKSPACE_ICON]))
 
   it('set a Workspace\'s icon as the newest entry, and clear it', () => {
-    const stored = { a: 'old-a', b: 'old-b' }
+    const stored = { a: { ...DEFAULT_WORKSPACE_ICON, letters: 'a' }, b: { ...DEFAULT_WORKSPACE_ICON, letters: 'b' } }
     expect(Object.keys(withWorkspaceIcon(stored, 'a', DEFAULT_WORKSPACE_ICON))).toEqual(['b', 'a'])
-    expect(withWorkspaceIcon(stored, 'a', null)).toEqual({ b: 'old-b' })
-    expect(stored).toEqual({ a: 'old-a', b: 'old-b' })
+    expect(withWorkspaceIcon(stored, 'a', null)).toEqual({ b: stored.b })
+    expect(Object.keys(stored)).toEqual(['a', 'b'])
+  })
+
+  it('write only valid icons: an entry stored in another shape is dropped by a save or a prune', () => {
+    const stored = { good: DEFAULT_WORKSPACE_ICON, junk: '<img src=x onerror=alert(1)>', old: { kind: 'glyph', glyph: 'rocket' } }
+    expect(Object.keys(withWorkspaceIcon(stored, 'fresh', DEFAULT_WORKSPACE_ICON))).toEqual(['good', 'fresh'])
+    expect(pruneWorkspaceIcons(stored, new Set(['good', 'junk', 'old']))).toEqual({ good: DEFAULT_WORKSPACE_ICON })
   })
 
   it('keep at most the bound, dropping the oldest first', () => {
@@ -85,8 +91,9 @@ describe('the stored icons', () => {
   })
 
   it('drop the icons of Workspaces that no longer exist, and report nothing to drop as undefined', () => {
-    expect(pruneWorkspaceIcons({ a: 1, gone: 2, b: 3 }, new Set(['a', 'b', 'other']))).toEqual({ a: 1, b: 3 })
-    expect(pruneWorkspaceIcons({ a: 1 }, new Set(['a']))).toBeUndefined()
+    const icon = DEFAULT_WORKSPACE_ICON
+    expect(pruneWorkspaceIcons({ a: icon, gone: icon, b: icon }, new Set(['a', 'b', 'other']))).toEqual({ a: icon, b: icon })
+    expect(pruneWorkspaceIcons({ a: icon }, new Set(['a']))).toBeUndefined()
     expect(pruneWorkspaceIcons({}, new Set())).toBeUndefined()
   })
 })

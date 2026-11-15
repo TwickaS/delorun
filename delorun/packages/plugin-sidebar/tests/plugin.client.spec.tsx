@@ -118,6 +118,9 @@ function harness(options: {
   }
 }
 
+const ICON_X = { ...DEFAULT_WORKSPACE_ICON, letters: 'x' }
+const ICON_Y = { ...DEFAULT_WORKSPACE_ICON, letters: 'y' }
+
 describe('the studio half', () => {
   it('registers its copy, the art, the Sidebar section, the list, the foot, the Settings button and the layout, and removes them on disposal', async () => {
     const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, width: 300 } })
@@ -203,7 +206,7 @@ describe('the studio half', () => {
   })
 
   it('gives the list the open menu, falls back without chat states, and saves, clears and reports workspace icons and pins', async () => {
-    const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: { w1: 'x', w2: 'y' } } })
+    const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: { w1: ICON_X, w2: ICON_Y } } })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await h.fiber.await()
     const list = h.face<SidebarInjected>('sidebar.workspaces.list#')
@@ -212,8 +215,8 @@ describe('the studio half', () => {
     list.setWorkspaceIcon('w1', DEFAULT_WORKSPACE_ICON)
     list.setWorkspaceIcon('w2', null)
     expect(h.setCalls).toEqual([
-      ['workspaceIcons', { w2: 'y', w1: DEFAULT_WORKSPACE_ICON }],
-      ['workspaceIcons', { w1: 'x' }],
+      ['workspaceIcons', { w2: ICON_Y, w1: DEFAULT_WORKSPACE_ICON }],
+      ['workspaceIcons', { w1: ICON_X }],
     ])
     h.uiWorkspace.pinSession.mockRejectedValueOnce(new Error('down'))
     list.pin(SessionId('a'))
@@ -225,7 +228,7 @@ describe('the studio half', () => {
   })
 
   it('keeps the saved icons within the bound, dropping the oldest, and prunes the icons of removed workspaces only when some are stale', async () => {
-    const icons = Object.fromEntries(Array.from({ length: MAX_WORKSPACE_ICONS }, (_, index) => [`w${String(index)}`, 'x']))
+    const icons = Object.fromEntries(Array.from({ length: MAX_WORKSPACE_ICONS }, (_, index) => [`w${String(index)}`, ICON_X]))
     const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: icons } })
     await h.fiber.await()
     const list = h.face<SidebarInjected>('sidebar.workspaces.list#')
@@ -234,7 +237,7 @@ describe('the studio half', () => {
     expect(Object.keys(saved)).toHaveLength(MAX_WORKSPACE_ICONS)
     expect([Object.keys(saved)[0], Object.keys(saved).at(-1)]).toEqual(['w1', 'fresh'])
     list.pruneIcons(new Set(['w0', 'w1', 'w2']))
-    expect(h.setCalls[1]).toEqual(['workspaceIcons', { w0: 'x', w1: 'x', w2: 'x' }])
+    expect(h.setCalls[1]).toEqual(['workspaceIcons', { w0: ICON_X, w1: ICON_X, w2: ICON_X }])
     list.pruneIcons(new Set(Object.keys(icons)))
     expect(h.setCalls).toHaveLength(2)
   })
@@ -265,7 +268,7 @@ describe('the studio half', () => {
 
   it('reports the pruning of icons that the harness did not accept, or could not be reached', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const settings = { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: { gone: 'x' } }
+    const settings = { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: { gone: ICON_X } }
     const refused = harness({ settings, set: vi.fn(() => Promise.resolve(false)) })
     await refused.fiber.await()
     refused.face<SidebarInjected>('sidebar.workspaces.list#').pruneIcons(new Set())

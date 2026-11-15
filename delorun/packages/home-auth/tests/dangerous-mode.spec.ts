@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import {
+  admitKeyDevice,
   admitUnlockedDevice,
   requireComputer,
   requireComputerUnlessDangerous,
@@ -63,10 +64,11 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => (unlocked ? UNLOCK : undefined),
     pageUnlockOf: () => undefined,
-    logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
     defaultPermission: () => PERMISSION,
+    pinEnabled: () => false,
     dangerousMode: () => mode,
   }
 }
@@ -77,9 +79,6 @@ const LIFTED: readonly { readonly name: string; readonly action: string; readonl
   { name: 'loosening the permission new chats start in', action: 'settings/update', args: { ns: 'permission', patch: { defaultPreset: 'danger-full-access' } }, reason: DEFAULT_PERMISSION_REFUSAL },
   { name: 'changing a protected plugin row', action: 'pluginManager/setPluginEnabled', args: { id: PROTECTED_ROW, enabled: false }, reason: PROTECTED_ROW_REFUSAL },
   { name: 'a slash command a device does not run', action: 'commands/execute', args: { line: '/config set enabled false' }, reason: UNLISTED_COMMAND_REFUSAL },
-  { name: 'saving a provider key', action: 'credentials/set', args: { ref: 'DEEPSEEK_API_KEY', value: 'sk-test' }, reason: 'loopback-required: credentials/set' },
-  { name: 'removing a provider key', action: 'credentials/unset', args: { ref: 'DEEPSEEK_API_KEY' }, reason: 'loopback-required: credentials/unset' },
-  { name: 'reading whether a provider key is saved', action: 'credentials/describe', args: { ref: 'DEEPSEEK_API_KEY' }, reason: 'loopback-required: credentials/describe' },
   { name: 'opening a chat\'s folder in an application', action: 'session/openWorkspacePath', args: { sessionId: 's-1' }, reason: 'loopback-required: session/openWorkspacePath' },
   { name: 'listing the applications that open a chat\'s folder', action: 'session/workspacePathApplications', args: { sessionId: 's-1' }, reason: 'loopback-required: session/workspacePathApplications' },
 ]
@@ -261,6 +260,24 @@ describe('admitUnlockedDevice', () => {
     expect(admits(home(LISTENER, true, false), device)).toBe(false)
     expect(admits(home(LISTENER, true), peer('anonymous'))).toBe(false)
     expect(admits(undefined, device)).toBe(false)
+  })
+})
+
+describe('admitKeyDevice (A380)', () => {
+  const principal = { kind: 'reach-device', deviceId: 'device-1', listener: LISTENER }
+  const admits = (service: ReturnType<typeof home> | undefined, who: object): boolean => admitKeyDevice(() => service)({} as never, { principal: who as never })
+
+  it('admits an approved device without an unlock while PIN mode is off, and no other Peer', () => {
+    expect(admits(home(LISTENER, false, false, false), principal)).toBe(true)
+    expect(admits(home(LISTENER, false, false, false), { kind: 'anonymous' })).toBe(false)
+    expect(admits(undefined, principal)).toBe(false)
+  })
+
+  it('admits only an unlocked page while PIN mode is on', () => {
+    // Pins the PIN check: a locked page, a page whose unlock ended and a device unlock are refused.
+    expect(admits(home(LISTENER, false, false, true, true), { ...principal, unlockId: 'page-1' })).toBe(true)
+    expect(admits(home(LISTENER, false, false, true, false), { ...principal, unlockId: 'page-1' })).toBe(false)
+    expect(admits(home(LISTENER, false, true, true, true), principal)).toBe(false)
   })
 })
 

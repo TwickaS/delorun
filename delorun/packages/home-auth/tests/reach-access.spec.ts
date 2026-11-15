@@ -16,6 +16,12 @@ import {
   REACH_ALLOWED_ACTIONS,
   REACH_DANGEROUS_ACTIONS,
   REACH_DENIED_ACTIONS,
+  REACH_KEY_ACTIONS,
+  REACH_EVERYDAY_FIELDS,
+  REACH_EVERYDAY_SETTINGS,
+  UNDECLARED_KEY_REFUSAL,
+  REACH_SHIPPED_BUNDLES,
+  REACH_SHIPPED_ROWS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
   CREATE_OUTSIDE_WORKSPACES,
@@ -35,6 +41,7 @@ import {
   type PermissionLevel,
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
+import { keyRefsOf } from '../src/authenticator.ts'
 
 const session = (id: string): SessionId => id as SessionId
 const workspace = (id: string): WorkspaceId => id as WorkspaceId
@@ -69,6 +76,8 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => undefined,
     pageUnlockOf: () => undefined,
+    pinEnabled: () => false,
+    keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
@@ -103,7 +112,7 @@ describe('the reach-device policy', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
       // Pins the roles: a role listing a never action would allow it on every bound resource, and the condition alone
       // keeps an elevated one to a device that holds an elevation.
-      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DANGEROUS_ACTIONS)])
+      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DANGEROUS_ACTIONS)])
       expect(binding.role.resource).toBe(binding.resource.kind)
       // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
       // and a workspace-file read names a Session one.
@@ -121,8 +130,8 @@ describe('the reach-device policy', () => {
   it('explains a refusal by naming the action', () => {
     const policy = createReachAccessPolicy(facts())
     // Pins `explain`: the refusal names the action, and tells a resource it cannot name from an action it refuses.
-    expect(policy.explain?.({ principal: DEVICE, action: 'credentials/set', resources: [{ kind: 'global' }] }))
-      .toBe('loopback-required: credentials/set')
+    expect(policy.explain?.({ principal: DEVICE, action: 'account/signOut', resources: [{ kind: 'global' }] }))
+      .toBe('loopback-required: account/signOut')
     expect(policy.explain?.({ principal: DEVICE, action: 'session/cancel', resources: [{ kind: 'session', id: session('cold') }] }))
       .toBe('resource-unlisted: session/cancel')
   })
@@ -541,9 +550,77 @@ describe('an elevated action', () => {
   })
 })
 
+describe('the model key actions (A380)', () => {
+  const locked = reachDevicePrincipal('device-1', LISTENER)
+  const unlockedPage = { ...locked, unlockId: 'page-1' }
+  const KEY_CALLS = [
+    { action: 'credentials/describe', args: { refs: ['DEEPSEEK_API_KEY'] } },
+    { action: 'credentials/set', args: { ref: 'DEEPSEEK_API_KEY', value: 'sk-test' } },
+    { action: 'credentials/unset', args: { ref: 'DEEPSEEK_API_KEY' } },
+  ] as const
+
+  it('admits an approved device without an unlock while PIN mode is off', () => {
+    const condition = createCondition(facts(), locked)
+    for (const { action, args } of KEY_CALLS) expect(condition({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+    for (const action of ['event:credentials/record-updated', 'event:credentials/reference-updated'] as const) {
+      expect(condition({ action, resource: GLOBAL }), action).toEqual({ kind: 'allow' })
+    }
+  })
+
+  it('refuses a locked page and admits an unlocked one while PIN mode is on', () => {
+    const on = facts({ pinEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
+    for (const { action, args } of KEY_CALLS) {
+      // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
+      expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(on, { ...locked, unlockId: 'ended' })({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+    }
+  })
+})
+
+describe('the references a key action may name (A380)', () => {
+  const condition = createCondition(facts(), reachDevicePrincipal('device-1', LISTENER))
+  const deny = { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
+
+  it('refuses a reference no model provider declares, whole when a list mixes one in', () => {
+    // Pins namesOnlyDeclaredRefs: without it a phone reads, overwrites or removes any named secret slot, such as a token.
+    expect(condition({ action: 'credentials/set', resource: GLOBAL, args: { ref: 'GITHUB_TOKEN', value: 'x' } })).toEqual(deny)
+    expect(condition({ action: 'credentials/unset', resource: GLOBAL, args: { ref: 'AWS_PROFILE' } })).toEqual(deny)
+    expect(condition({ action: 'credentials/describe', resource: GLOBAL, args: { refs: ['GITHUB_TOKEN'] } })).toEqual(deny)
+    expect(condition({ action: 'credentials/describe', resource: GLOBAL, args: { refs: ['DEEPSEEK_API_KEY', 'AWS_PROFILE'] } })).toEqual(deny)
+    expect(condition({ action: 'credentials/describe', resource: GLOBAL, args: { refs: 'DEEPSEEK_API_KEY' } })).toEqual(deny)
+    expect(condition({ action: 'credentials/set', resource: GLOBAL, args: {} })).toEqual(deny)
+    expect(condition({ action: 'credentials/describe', resource: GLOBAL, args: { refs: ['DEEPSEEK_API_KEY', 'OPENAI_API_KEY'] } })).toEqual({ kind: 'allow' })
+  })
+
+  it('resolves the declared references at request time', () => {
+    let declared = new Set(['DEEPSEEK_API_KEY'])
+    const live = createCondition(facts({ keyRefs: () => declared }), reachDevicePrincipal('device-1', LISTENER))
+    const call = { action: 'credentials/set', resource: GLOBAL, args: { ref: 'NEW_API_KEY', value: 'x' } } as const
+    expect(live(call)).toEqual(deny)
+    declared = new Set(['NEW_API_KEY'])
+    expect(live(call)).toEqual({ kind: 'allow' })
+  })
+})
+
+describe('the references the model providers declare', () => {
+  it('lists each provider\'s derived reference, native environment variables and profile apiKeyEnv', () => {
+    const services: Record<string, unknown> = {
+      llm: { listConfigurableProviders: () => [
+        { provider: 'minimax-cn', settingsNs: 'llm-a', settingsPath: ['providers', 'minimax-cn'], nativeAuth: { env: ['MINIMAX_TOKEN'] } },
+        { provider: 'deepseek', settingsNs: 'llm-b', settingsPath: [] },
+      ] },
+      settings: { describe: () => [{ ns: 'llm-a', value: { providers: { 'minimax-cn': { apiKeyEnv: 'MY_MINIMAX_KEY' } } } }, { ns: 'llm-b', value: {} }] },
+    }
+    const ctx = { get: (name: string) => services[name] } as never
+    expect([...keyRefsOf(ctx)].sort()).toEqual(['DEEPSEEK_API_KEY', 'MINIMAX_CN_API_KEY', 'MINIMAX_TOKEN', 'MY_MINIMAX_KEY'])
+    expect(keyRefsOf({ get: () => undefined } as never).size).toBe(0)
+  })
+})
+
 describe('the refusal reasons', () => {
   it('require the home\'s own computer for every action not allowed, classified or not', () => {
-    expect(reachRefusal('credentials/set')).toBe('loopback-required: credentials/set')
+    expect(reachRefusal('account/signOut')).toBe('loopback-required: account/signOut')
     expect(reachRefusal('unclassified/method' as RemoteAccessAction)).toBe('loopback-required: unclassified/method')
     expect(reachRefusal('event:deepseek-account/session-expired')).toBe('loopback-required: event:deepseek-account/session-expired')
     expect(reachRefusal('session/list')).toBe('resource-unlisted: session/list')
@@ -552,7 +629,8 @@ describe('the refusal reasons', () => {
 })
 
 /** The owner's classification (A297), stated as families, which every table entry is checked against. */
-const NEVER = [/^credentials\//, /^event:credentials\//, /^account\//, /^event:deepseek-account\//, /^settings\/openSettingsDocument$/, /^session\/openWorkspacePath$/, /^session\/workspacePathApplications$/]
+const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettingsDocument$/, /^session\/openWorkspacePath$/, /^session\/workspacePathApplications$/]
+const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
@@ -564,14 +642,15 @@ const UNLOCK = [
  * @param action - the action.
  * @returns its class.
  */
-function classOf(action: string): 'allowed' | 'elevated' | 'never' {
+function classOf(action: string): 'allowed' | 'keys' | 'elevated' | 'never' {
+  if (KEYS.some(pattern => pattern.test(action))) return 'keys'
   if (NEVER.some(pattern => pattern.test(action))) return 'never'
   return UNLOCK.some(pattern => pattern.test(action)) ? 'elevated' : 'allowed'
 }
 
 describe('the tables', () => {
   it('list no action in two of the three tables', () => {
-    expect(() => { assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }) }).not.toThrow()
+    expect(() => { assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }) }).not.toThrow()
     // Pins the check the module runs at load.
     expect(() => { assertDisjoint({ allowed: { 'b/x': 'x', 'a/y': 'y' }, elevated: { 'a/y': 'y' }, never: { 'b/x': 'x', 'c/z': 'z' } }) })
       .toThrow('reach access lists ["a/y (allowed, elevated)","b/x (allowed, never)"] in two tables')
@@ -579,7 +658,7 @@ describe('the tables', () => {
 
   it('put every action in the class the owner\'s rule gives it', () => {
     // Pins each table entry: moving an action to another table fails here, naming it.
-    const tables = { allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }
+    const tables = { allowed: REACH_ALLOWED_ACTIONS, keys: REACH_KEY_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }
     for (const [name, table] of Object.entries(tables)) {
       for (const action of Object.keys(table)) expect(classOf(action), action).toBe(name)
     }
@@ -590,14 +669,118 @@ describe('the tables', () => {
     for (const action of ['settings/update', 'commands/execute', 'pluginManager/restore', 'terminal/attach', 'directoryPicker/pick', 'workspace/create', 'dynamicCordisRunner/invoke', 'event:cordis/request-run']) {
       expect(Object.hasOwn(REACH_ELEVATED_ACTIONS, action), action).toBe(true)
     }
-    for (const action of ['credentials/set', 'event:credentials/record-updated', 'account/startSignIn', 'event:deepseek-account/session-expired', 'settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications']) {
+    for (const action of ['credentials/set', 'credentials/describe', 'credentials/unset', 'event:credentials/record-updated', 'event:credentials/reference-updated']) {
+      expect(Object.hasOwn(REACH_KEY_ACTIONS, action), action).toBe(true)
+    }
+    for (const action of ['account/startSignIn', 'event:deepseek-account/session-expired', 'settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications']) {
       expect(Object.hasOwn(REACH_DENIED_ACTIONS, action), action).toBe(true)
     }
   })
 
   it('give every entry a one-line reason', () => {
-    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
+    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_KEY_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
       expect(reason).toMatch(/^[^\n]{8,}$/)
     }
+  })
+})
+
+describe('the everyday settings and shipped plugin toggles of an approved device (A381)', () => {
+  const approved = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts(overrides), DEVICE)
+  const ALLOW = { kind: 'allow' }
+  const DENY = (action: string) => ({ kind: 'deny', reason: `elevation-required: ${action}` })
+
+  it('admits a write to an everyday namespace without an unlock, PIN mode on or off', () => {
+    // Pins isEverydayCall: without it the Look step's write is refused `elevation-required` and the phone says it could not save.
+    for (const ns of Object.keys(REACH_EVERYDAY_SETTINGS)) {
+      const field = REACH_EVERYDAY_FIELDS[ns]?.[0] ?? 'palette'
+      expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { [field]: 'soft' } } })).toEqual(ALLOW)
+      expect(approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns, ops: [{ op: 'set', path: [field], value: 1 }] } })).toEqual(ALLOW)
+      // The PIN rule: everyday settings follow ordinary device writes, so a locked page is admitted.
+      expect(approved({ pinEnabled: () => true })({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: {} } })).toEqual(ALLOW)
+    }
+  })
+
+  it('keeps the fields that steer installs and the Host\'s sweep at an unlock', () => {
+    const write = (ns: string, patch: Record<string, unknown>) => approved()({ action: 'settings/update', resource: GLOBAL, args: { ns, patch } })
+    const mutate = (ns: string, path: string[]) => approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns, ops: [{ op: 'set', path, value: 1 }] } })
+    // Pins REACH_EVERYDAY_FIELDS: onboarding's package and row lists decide what the guide installs and turns on.
+    expect(write('delorun-onboarding', { plugins: ['evil'] })).toEqual(DENY('settings/update'))
+    expect(write('delorun-onboarding', { optionalRows: ['x'] })).toEqual(DENY('settings/update'))
+    expect(write('delorun-onboarding', { step: 'look', plugins: [] })).toEqual(DENY('settings/update'))
+    expect(mutate('delorun-onboarding', ['plugins'])).toEqual(DENY('settings/mutate'))
+    expect(mutate('delorun-onboarding', ['optionalRows', '0'])).toEqual(DENY('settings/mutate'))
+    expect(mutate('delorun-onboarding', [])).toEqual(DENY('settings/mutate'))
+    expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-onboarding', section: { step: 'look' } } })).toEqual(DENY('settings/replace'))
+    expect(write('delorun-onboarding', { step: 'look' })).toEqual(ALLOW)
+    expect(write('delorun-onboarding', { done: true, starterSession: 'x', starterKind: '' })).toEqual(ALLOW)
+    expect(mutate('delorun-onboarding', ['step'])).toEqual(ALLOW)
+    expect(write('delorun-chat-states', { maxRecords: 1 })).toEqual(DENY('settings/update'))
+    expect(write('delorun-chat-states', { pruneMinutes: 1 })).toEqual(DENY('settings/update'))
+    expect(mutate('delorun-chat-states', ['maxRecords'])).toEqual(DENY('settings/mutate'))
+    expect(write('delorun-chat-states', { autoSettleDays: 3, snoozePresets: [] })).toEqual(ALLOW)
+    // Unreadable arguments are not everyday.
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-onboarding', patch: 'x' } })).toEqual(DENY('settings/update'))
+    expect(approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns: 'delorun-onboarding', ops: 'x' } })).toEqual(DENY('settings/mutate'))
+    // An unlock still admits them.
+    expect(createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-onboarding', patch: { plugins: [] } } })).toEqual(ALLOW)
+  })
+
+  it('admits only valid workspace icons to the sidebar row without an unlock', () => {
+    const icon = { kind: 'glyph', glyph: 'folder', color: '#aabbcc', seed: 3, letters: 'ab', emoji: '✨' }
+    const update = (workspaceIcons: unknown) => approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-sidebar', patch: { workspaceIcons } } })
+    expect(update({ w1: icon })).toEqual(ALLOW)
+    for (const bad of ['<img src=x onerror=alert(1)>', { w1: '<img src=x onerror=alert(1)>' }, { w1: { kind: 'letters', letters: '<b>' } }, { w1: { kind: 'glyph', color: 'javascript:alert(1)' } }, { w1: { kind: 'glyph', extra: 'x' } }, [icon]]) {
+      expect(update(bad), JSON.stringify(bad)).toEqual(DENY('settings/update'))
+    }
+    const mutate = (op: unknown) => approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns: 'delorun-sidebar', ops: [op] } })
+    expect(mutate({ op: 'set', path: ['workspaceIcons', 'w1'], value: icon })).toEqual(ALLOW)
+    expect(mutate({ op: 'set', path: ['workspaceIcons', 'w1'], value: '<svg onload=x>' })).toEqual(DENY('settings/mutate'))
+    expect(mutate({ op: 'unset', path: ['workspaceIcons', 'w1'] })).toEqual(ALLOW)
+    expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-sidebar', section: { workspaceIcons: { w1: '<x>' } } } })).toEqual(DENY('settings/replace'))
+  })
+
+  it('admits a replace of an everyday namespace whose every field is everyday, by the same field rules as a mutate', () => {
+    const replace = (ns: string, section: unknown) => approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns, section } })
+    expect(replace('delorun-theme', { palette: 'soft' })).toEqual(ALLOW)
+    expect(replace('delorun-chat-states', { autoSettleDays: 1 })).toEqual(DENY('settings/replace'))
+    // The computer-only and default-permission rules apply to a replace as to a mutate.
+    expect(createCondition(facts({ computerOnlySwitches: () => [{ ns: 'delorun-theme', field: 'x', label: 'the x switch' }] }), DEVICE)({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-theme', section: {} } }))
+      .toEqual({ kind: 'deny', reason: 'loopback-required: turning the x switch off' })
+  })
+
+  it('refuses the shipped-row and bundle toggles of a locked PIN page the same as a locked device without PIN mode', () => {
+    // PIN mode does not gate everyday calls (a locked page toggles a shipped row), and still gates any other.
+    const locked = facts({ pinEnabled: () => true })
+    const condition = createCondition(locked, DEVICE)
+    expect(condition({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'delorun-cost-meter', enabled: true } })).toEqual(ALLOW)
+    expect(condition({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter', enabled: true } })).toEqual(ALLOW)
+    expect(condition({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'include:delorun-trash', enabled: true } })).toEqual(DENY('pluginManager/setPluginEnabled'))
+    expect(condition({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name: 'left-pad', enabled: true } })).toEqual(DENY('pluginManager/setBundleEnabled'))
+  })
+
+  it('refuses a write to any other namespace, and arguments that name none, without an unlock', () => {
+    // Pins the namespace list: a plugin's own configuration stays behind an unlock.
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-mcp-consent', patch: {} } })).toEqual(DENY('settings/update'))
+    expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'plugin-manager', section: {} } })).toEqual(DENY('settings/replace'))
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { patch: {} } })).toEqual(DENY('settings/update'))
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: '__proto__', patch: {} } })).toEqual(DENY('settings/update'))
+  })
+
+  it('admits turning a shipped row or package on or off, and refuses any other, an install and a removal', () => {
+    for (const id of Object.keys(REACH_SHIPPED_ROWS)) {
+      expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id, enabled: true } })).toEqual(ALLOW)
+    }
+    for (const name of Object.keys(REACH_SHIPPED_BUNDLES)) {
+      expect(approved()({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name, enabled: true } })).toEqual(ALLOW)
+    }
+    expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'include:delorun-trash', enabled: false } })).toEqual(DENY('pluginManager/setPluginEnabled'))
+    expect(approved()({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name: 'left-pad', enabled: true } })).toEqual(DENY('pluginManager/setBundleEnabled'))
+    // A registry install and a removal stay at an unlock, even for a shipped package's name.
+    expect(approved()({ action: 'pluginManager/installBundle', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter' } })).toEqual(DENY('pluginManager/installBundle'))
+    expect(approved()({ action: 'pluginManager/removeBundle', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter' } })).toEqual(DENY('pluginManager/removeBundle'))
+  })
+
+  it('still refuses a protected row and a computer-only switch', () => {
+    expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: PROTECTED_ROW, enabled: false } })).toEqual({ kind: 'deny', reason: PROTECTED_ROW_REFUSAL })
   })
 })

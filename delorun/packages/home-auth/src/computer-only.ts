@@ -76,6 +76,33 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
 }
 
 /**
+ * The `admitPeer` of a route that adds or tests model keys (A380): it admits a reach device (an approved device holds a
+ * session; no unlock is needed) and, while PIN mode is on, only the Peer of an unlocked page. The owner's Peer never
+ * reaches `admitPeer`.
+ * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
+ * @returns the function for `ConnectionFetchRoute.admitPeer`.
+ */
+export function admitKeyDevice(homeAuth: () => DangerousModeHome | undefined): (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean {
+  return (_request, peer) => {
+    const home = homeAuth()
+    if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
+    if (!home.pinEnabled()) return true
+    const { unlockId } = peer.principal as ReachDevicePrincipal
+    return unlockId !== undefined && home.pageUnlockOf(unlockId) !== undefined
+  }
+}
+
+/**
+ * The `admitPeer` of a read-only route every approved device may ask (A381), such as the recommended plugins' purposes:
+ * it admits a reach device whether or not its page is unlocked, and nothing else. The owner's Peer never reaches
+ * `admitPeer`.
+ * @returns the function for `ConnectionFetchRoute.admitPeer`.
+ */
+export function admitApprovedDevice(): (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean {
+  return (_request, peer) => peer.principal.kind === REACH_DEVICE
+}
+
+/**
  * The pathname upstream's Connection routes a request target by: the target parsed against a base, which resolves dot
  * segments, their percent-encoded spellings and backslashes as the route lookup does. A hook that guards an exact route
  * compares this, never the raw target.
