@@ -39,8 +39,8 @@
 # the two differ. The session-log upload row is left out: C16 gives it
 # upstream's value, and this overlay follows each replay's root configuration,
 # which turns upload off for the headless and ACP corpora and leaves it on
-# elsewhere, so a row here would override it. The account row `deepseek-account`
-# is left out too: C16 gives it upstream's value. Desktop analytics keeps Delorun's
+# elsewhere, so a row here would override it. The account rows `deepseek-account` and
+# `llm-deepseek-account` are left out too: C16 gives them upstream's value. Desktop analytics keeps Delorun's
 # `false`. The Privacy section and the Delorun sidebar brand are present and
 # disabled, because recorded web scenarios compare upstream's interface output
 # and brand. The sandbox row is left out, so the replay runs upstream's
