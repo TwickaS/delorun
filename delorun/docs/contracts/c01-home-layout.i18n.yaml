@@ -10,49 +10,49 @@
   zh: 26efe8f6dd2e62ec
 /c1-home-layout-and-runtime-store/summary:
   en: 1e420233ac3d4933
-  zh: a94c12116d465b20
+  zh: 9cd9d9f01e8fcd8e
 /c1-home-layout-and-runtime-store/status:
   en: 77a0cf758505bc89
-  zh: ad73894ff6d36a5e
+  zh: 706c386c35af6952
 /c1-home-layout-and-runtime-store/contents:
   en: 883ce1fcd15257ca
   zh: cf4d17b6f980be94
 /c1-home-layout-and-runtime-store/the-home-directory:
   en: 8cafb35d12397f6e
-  zh: d94f7255530533b6
+  zh: c960d9765cfcad56
 /c1-home-layout-and-runtime-store/the-home-tree:
   en: c6837e9c78c498d0
-  zh: cbe46b5fa425889b
+  zh: fc1fd38d7d2c9338
 /c1-home-layout-and-runtime-store/modes-and-the-refusal-rule:
   en: 0b1098f532b31ae7
-  zh: 50f343f046e69d38
+  zh: 585256065b07087a
 /c1-home-layout-and-runtime-store/secrets:
   en: 8c6761d05d881209
-  zh: 235139f180063e9f
+  zh: 64521113a1307cf7
 /c1-home-layout-and-runtime-store/sockets-and-the-start-token:
   en: 25ba77f86609777c
-  zh: 77957cd49b977a78
+  zh: fa79dae684ca30dd
 /c1-home-layout-and-runtime-store/the-home-lock:
   en: cfa614cd84187d15
-  zh: dd199fe157485cc0
+  zh: 2a12a16ea819032d
 /c1-home-layout-and-runtime-store/profiles:
   en: 89ef503b9736fbcc
-  zh: d2dab450c76e8414
+  zh: 23889542cd4c4a56
 /c1-home-layout-and-runtime-store/the-runtime-store:
   en: 2efb3b97a61429f6
-  zh: 876e925e73a1d127
+  zh: b2996ac7a38b89d3
 /c1-home-layout-and-runtime-store/launcher-and-store-compatibility:
   en: 57a3cfd4100d0857
   zh: 5d937edfc14bc888
 /c1-home-layout-and-runtime-store/the-npm-launcher-and-the-install-script:
   en: 71b3f9f4fb778ad5
-  zh: 217bd49cd8f862be
+  zh: e0ade742f0c6bc42
 /c1-home-layout-and-runtime-store/confinement-rules:
   en: af521931d34a38bd
-  zh: b1f43f99787843a7
+  zh: b3b2c8c8b0046784
 /c1-home-layout-and-runtime-store/limits:
   en: 5c228bd826a3530e
-  zh: 5ef44708b4dfdb6c
+  zh: 97751d6e90d7973a
 /c1-home-layout-and-runtime-store/errors:
   en: c5a8c05be8b13033
   zh: c8884dcbcd92d754
@@ -61,19 +61,19 @@
   zh: 72aca9a7a57a990b
 /c1-home-layout-and-runtime-store/compatibility:
   en: 0b4928046ceb59d1
-  zh: 5d1761018f80ba19
+  zh: 33de82462e25c982
 /c1-home-layout-and-runtime-store/security:
   en: 52543dba9bf0d349
   zh: bd232096a834cc62
 /c1-home-layout-and-runtime-store/security/requirements:
   en: 719b744d18a79dfb
-  zh: 2cf34e527740eff8
+  zh: a911303c370cec80
 /c1-home-layout-and-runtime-store/security/denial-tests:
   en: 709d8411eb7142f8
-  zh: fd7d9c409970c378
+  zh: 442d0de1481aa30f
 /c1-home-layout-and-runtime-store/security/what-this-does-not-prove:
   en: 7d5cc126c8ee88d9
-  zh: 5ca18d6fdbe609b7
+  zh: e439248aeac13116
 /c1-home-layout-and-runtime-store/enforcement-per-platform-and-dialect:
   en: 9838cf167dededdd
-  zh: ef1a488ba1893341
+  zh: d2da267f7b5699ba

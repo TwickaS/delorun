@@ -33,8 +33,8 @@ description: "Delorun 约定索引：每份约定页面、其类型包，以及�
 | C18 | [C18 发布日志与见证者](c18-release-log.zh.md) | [`@delorun/contract-release-log`](../../packages/contract-release-log/README.zh.md) | 部分已构建 | `delorun/apps/release`、`delorun/apps/install` 与 `delorun/apps/npm-launcher`、`delorun/packages/release-verify`、`delorun verify` |
 | C19 | [C19 Home 进程与更新握手](c19-home-process.zh.md) | [`@delorun/contract-home-process`](../../packages/contract-home-process/README.zh.md) | 部分已构建 | `delorun/packages/home-process`、`delorun/apps/cli`、`delorun/packages/runtime-store`、`delorun/packages/logs` |
 | C20 | [C20 运行日志](c20-operational-logs.zh.md) | [`@delorun/contract-operational-logs`](../../packages/contract-operational-logs/README.zh.md) | 部分已构建 | `delorun/packages/logs`、`delorun/apps/cli`（`delorun logs` 与清除）、`delorun/packages/home-process`、`delorun/apps/relay` |
-| C21 | [C21 变更](c21-changes.md) | [`@delorun/changes`](../../packages/changes/README.md) | 部分已构建 | `delorun/apps/cli`（`delorun start`、`headless`、`changes`、`verify`、`doctor`）、`delorun/packages/home-process`、`delorun/packages/plugin-changes`、`delorun/packages/plugin-instruction-consent` |
-| C22 | [C22 Delorun 版本对插件的承诺](c22-delorun-plugin-interface.md) | [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.zh.md) | 部分已构建 | `delorun/apps/release`（补丁规则）、`delorun/apps/cli`（`delorun plugin check`）、插件作者 |
+| C21 | [C21 变更](c21-changes.zh.md) | [`@delorun/changes`](../../packages/changes/README.md) | 部分已构建 | `delorun/apps/cli`（`delorun start`、`headless`、`changes`、`verify`、`doctor`）、`delorun/packages/home-process`、`delorun/packages/plugin-changes`、`delorun/packages/plugin-instruction-consent` |
+| C22 | [C22 Delorun 版本对插件的承诺](c22-delorun-plugin-interface.zh.md) | [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.zh.md) | 部分已构建 | `delorun/apps/release`（补丁规则）、`delorun/apps/cli`（`delorun plugin check`）、插件作者 |
 
 ## 约定的变更
 

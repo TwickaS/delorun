@@ -3,65 +3,68 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c13-catalogue-revocation.md
 /:
-  en: 21938af78fd72b06
-  zh: 83c268400ae687f0
+  en: 70623b8a432eef6b
+  zh: ca1e7f28fb294dc7
 /c13-catalogue-index-and-revocation-list:
-  en: d8d40a481bad969a
-  zh: c363fc36b52b2ef9
+  en: 5a435e81db7b034c
+  zh: e0e085d2aa48652f
 /c13-catalogue-index-and-revocation-list/summary:
-  en: 0785d634188930ae
-  zh: adfee68d99065195
+  en: 4d325396751efaec
+  zh: c72fb3650de9a8d4
+/c13-catalogue-index-and-revocation-list/status:
+  en: 25ed6b392564c642
+  zh: 253eb235c1f32bd4
 /c13-catalogue-index-and-revocation-list/contents:
-  en: 3f89cbe15d0d04da
-  zh: 06ccafdacdfb5b12
+  en: ea62ddc60513b6f8
+  zh: 11b9951c8985452d
 /c13-catalogue-index-and-revocation-list/where-the-files-are-served:
-  en: 6607364a7b36c753
-  zh: c60dcd422eac5fdc
+  en: 0c3b97ada677ac6f
+  zh: b337d8ed6e9d579a
 /c13-catalogue-index-and-revocation-list/catalogue-index:
-  en: 952e4469c363ccf7
-  zh: 9d3d7e9cac823d16
+  en: 9930b70300df9f94
+  zh: b80c3f8da41107b8
 /c13-catalogue-index-and-revocation-list/badge-record:
-  en: 6f93d5ffeb96c96a
-  zh: aaa1ff88c5760c42
+  en: f0ed48f3782c0b72
+  zh: 2774430e10400d48
 /c13-catalogue-index-and-revocation-list/listed-findings:
-  en: 4f167e71192fc9b5
-  zh: d4232e8320039706
+  en: 5d8736bdb8d2d4ac
+  zh: d9295c4004e69cf7
 /c13-catalogue-index-and-revocation-list/installing-from-the-catalogue:
-  en: bd6fcfc34350d6af
-  zh: 5fdbf751eca554e9
+  en: 8047a678978bcfe3
+  zh: de8a46c841319ad7
 /c13-catalogue-index-and-revocation-list/revocation-list:
-  en: aadd2da16e5ef6ac
-  zh: a0e9bbab667eb275
+  en: dbc30a6fe20ce719
+  zh: e72b8e0723da8154
 /c13-catalogue-index-and-revocation-list/fetching-and-caching:
-  en: b442393b242d86e8
-  zh: 087ab56adf215d1c
+  en: 3b52084105721439
+  zh: 78eabaa62315bcbe
 /c13-catalogue-index-and-revocation-list/stale-state:
-  en: ded42e290586341e
-  zh: a15978b9565e5666
+  en: eee37cf213396141
+  zh: 720eb445d877d826
 /c13-catalogue-index-and-revocation-list/disabling-a-revoked-plugin:
-  en: 5a3e66f552148c77
-  zh: f31656411d1b1a30
+  en: 14eddf4c5b479bc1
+  zh: d5c8c203d6a014a0
 /c13-catalogue-index-and-revocation-list/catalogue-repository-ci:
-  en: a90b33d26be51ee2
-  zh: a0e9bae5cb2564aa
+  en: fd6d8e4979d6ecdb
+  zh: 3ac98f3dea6f2131
 /c13-catalogue-index-and-revocation-list/values-and-limits:
   en: d85b42995219b4bb
   zh: c9b786e52f83278b
 /c13-catalogue-index-and-revocation-list/consumers:
-  en: b4950f1f733fa6b8
-  zh: 4d3c334f7c8e4b38
+  en: 8399bf5daaca0dc2
+  zh: 8002476382e29393
 /c13-catalogue-index-and-revocation-list/compatibility:
-  en: c1910cdf4f1b75e4
-  zh: 15938b861928fa46
+  en: 7aa141e444fdf8b2
+  zh: 770dd2576dffd260
 /c13-catalogue-index-and-revocation-list/security:
   en: 52543dba9bf0d349
   zh: bd232096a834cc62
 /c13-catalogue-index-and-revocation-list/security/requirements:
-  en: e6907eec044db4da
-  zh: 7915fee3c3c2311b
+  en: 30d37b38463eeb2f
+  zh: 146c0f46cd6dfc90
 /c13-catalogue-index-and-revocation-list/security/denial-tests:
-  en: b05ebba3f6307867
-  zh: 9495eb1b6a4c40d0
+  en: f8ef44e61d14125d
+  zh: c082ff02e3d270e5
 /c13-catalogue-index-and-revocation-list/security/what-this-does-not-prove:
-  en: 4410879758cc8423
-  zh: e922ad6782f3ab15
+  en: 67cd07cbad7f2667
+  zh: 7d907624d6a61fc8

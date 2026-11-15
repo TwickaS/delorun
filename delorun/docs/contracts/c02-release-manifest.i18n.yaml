@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c02-release-manifest.md
 /:
   en: 6b7ccf8ed297d642
-  zh: a0ea6e2e8a77f3a3
+  zh: f94d547e8354d7fd
 /c2-release-manifest-and-signature:
   en: 9ac1ff65e534a874
   zh: 0bb4dad4eed0283b
 /c2-release-manifest-and-signature/summary:
   en: e3807f61bb33aa69
-  zh: 79010c84fa56bf2b
+  zh: c2dafa888495b03b
 /c2-release-manifest-and-signature/status:
   en: 66eefe3309fc69c7
   zh: 031c00a71f4b6b64
@@ -19,7 +19,7 @@
   zh: a45e701f55e97403
 /c2-release-manifest-and-signature/release-files:
   en: 7f693b8e0d65ee31
-  zh: b2fcaa7f97f9558c
+  zh: a24594c13b8db29c
 /c2-release-manifest-and-signature/signature-envelope:
   en: 20517546844abf71
   zh: e050b8cf1d35e68d
@@ -28,13 +28,13 @@
   zh: 3e62ee4122748c66
 /c2-release-manifest-and-signature/root-metadata:
   en: bbc79c5325bcb32f
-  zh: 062d89264ec34b85
+  zh: dbd84e539e4e0852
 /c2-release-manifest-and-signature/timestamp-metadata:
   en: fcc74d28d68ce6e3
   zh: fea8e84698a80e6a
 /c2-release-manifest-and-signature/release-manifest:
   en: 4ae1e09d51750e42
-  zh: e923163f3b9b9a95
+  zh: bf02128db8020264
 /c2-release-manifest-and-signature/runtime-file-list:
   en: 865ccdd3be486a45
   zh: 7637ce72dc06658f
@@ -52,13 +52,13 @@
   zh: a0d153f708ddf17d
 /c2-release-manifest-and-signature/dependency-advisory-check:
   en: 77a34af58b6f0eff
-  zh: d2d4c743a58260e8
+  zh: a608438665d86d2b
 /c2-release-manifest-and-signature/npm-publication:
   en: d17777fe77c35824
-  zh: ede9a1c94bdc119e
+  zh: db1960e4ec68e000
 /c2-release-manifest-and-signature/desktop-updates-and-rollback:
   en: 9d13b5982b8f67db
-  zh: d2322bb0311d6fdd
+  zh: d35f9858f4c2f1f6
 /c2-release-manifest-and-signature/values-and-limits:
   en: 1e900ffb3e177356
   zh: 48ae0568ca58290e

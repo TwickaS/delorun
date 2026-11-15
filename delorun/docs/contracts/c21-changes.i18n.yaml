@@ -1,0 +1,88 @@
+# Bilingual-pair consistency record for c21-changes.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/contracts/c21-changes.md
+/:
+  en: fdd210f49518bd76
+  zh: 8cc69e14fd7f5d24
+/c21-changes:
+  en: 3e82e2797407e4a1
+  zh: ab623afcab21ce33
+/c21-changes/summary:
+  en: 433bc3bbd886df99
+  zh: 64125cf2279911d3
+/c21-changes/contents:
+  en: aef4c714f7953615
+  zh: 87ca0752f3fc111f
+/c21-changes/the-home-s-changes-directory:
+  en: 9ed83dbc264aa5f0
+  zh: 54eb57ff0720fb56
+/c21-changes/change-kinds-and-states:
+  en: dbe0c8d134e3a92d
+  zh: 2b033d815c27857e
+/c21-changes/loading-approved-content:
+  en: 1855f11eebe7f79e
+  zh: e9ddbd799cb736cd
+/c21-changes/harness-edits:
+  en: 239c89efb2c01d3c
+  zh: d58777157c58ad93
+/c21-changes/reloads-and-restores:
+  en: aefca49cc311cf15
+  zh: ed75b1273a203a59
+/c21-changes/collecting-the-store:
+  en: 7de0a75e85d1debf
+  zh: 5f03ad75b5ae71c8
+/c21-changes/the-first-start-under-changes:
+  en: 90a98f9a264f0229
+  zh: 0fdcf256e850b435
+/c21-changes/the-protection-setting:
+  en: 7641871a1b2f6028
+  zh: cdab0e538da49aac
+/c21-changes/the-protection-setting/loading-without-review:
+  en: a791625b779a0a72
+  zh: c3e065676be2f0a6
+/c21-changes/work-sessions:
+  en: 9f9ca8e8a2f0b890
+  zh: 9c1c6f3eafc3767a
+/c21-changes/when-a-start-fails:
+  en: 5a161fce8c2d10ae
+  zh: 1be40e1804a3276d
+/c21-changes/the-risk-summary:
+  en: 8c5243b26a8ce44d
+  zh: 5f5a809c5b8ccff5
+/c21-changes/the-agent-and-plugins:
+  en: 2068541a3665f2ba
+  zh: 83e57c66e74344fb
+/c21-changes/who-may-do-what-from-where:
+  en: a2ba07db50073aec
+  zh: 9c7d8d3ac8f78fec
+/c21-changes/routes-and-the-recovery-screen:
+  en: 3dc42c138c1f316b
+  zh: e76c1b3ef2b3acaa
+/c21-changes/the-studio-s-changes-section:
+  en: 81e830e898977769
+  zh: 887435144ebeb4c0
+/c21-changes/commands:
+  en: 12e542acbc034898
+  zh: efd8de314d490a3c
+/c21-changes/what-verify-and-doctor-report:
+  en: f5ca9edb10f06625
+  zh: d0eb62085c7032c1
+/c21-changes/consumers:
+  en: 03dc0076590fd6ba
+  zh: ff1c4e5c1cf9868f
+/c21-changes/compatibility:
+  en: edded5b583319c19
+  zh: e5bd750a3ee71686
+/c21-changes/security:
+  en: 52543dba9bf0d349
+  zh: e612a6c5b83e9afc
+/c21-changes/security/requirements:
+  en: 7e785612e1d6f2e0
+  zh: 37a4756f1917d3df
+/c21-changes/security/denial-tests:
+  en: dd45805ea0de12cc
+  zh: 694f85950e9edb59
+/c21-changes/security/what-this-does-not-prove:
+  en: 385e9419e8c5b306
+  zh: e1f213e4292ccf86

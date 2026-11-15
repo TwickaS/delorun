@@ -1,5 +1,5 @@
 ---
-description: "约定 C18：每个 Delo 发布 manifest 如何记录在 Sigstore 的公开 Rekor 日志中、客户端对其检查点所要求的见证者共同签名、发布日志 bundle 的格式、启动器、delorun verify 与桌面更新器如何检查包含关系，以及没有网络时的启动如何进行。"
+description: "约定 C18：每个 Delorun 发布 manifest 如何记录在 Sigstore 的公开 Rekor 日志中、客户端对其检查点所要求的见证者共同签名、发布日志 bundle 的格式、启动器、delorun verify 与桌面更新器如何检查包含关系，以及没有网络时的启动如何进行。"
 ---
 
 # C18 发布日志与见证者
@@ -8,7 +8,7 @@ description: "约定 C18：每个 Delo 发布 manifest 如何记录在 Sigstore 
 
 ## 摘要
 
-[C2](c02-release-manifest.zh.md) 的每个已签名发布 manifest（元数据清单）在 Sigstore 的公开 Rekor 日志中都有一个条目；Rekor 是一个仅追加的透明日志，不由 Delo 运营。Rekor 为其树的检查点签名，公共见证网络中的一个独立见证者为这些检查点共同签名，因此，如果日志向一个客户端展示的历史与向另一个客户端展示的不同，见证者就会发现。每个发布版本都会发布一个 bundle，其中包含该条目、它的包含证明和一个经见证的检查点。客户端拒绝其检查点不带有效见证者共同签名的 bundle；日志提供的最新检查点不带这种共同签名时，只会使发布版本保持未检查，并给出警告。安装发布版本始终需要经过验证的包含证明。当日志无法访问、没有给出由其密钥签名的检查点、其最新检查点缺少见证者的共同签名，或其最新的共同签名已过时，安装或更新会发出警告，凭发布版本的签名继续，并记录在线检查未运行；若日志随后给出的已签名检查点与该发布版本矛盾，或见证者共同签名存在但无效，则拒绝。`delorun update` 在其报告中显示所记录的状态，`--yes` 不会确认保持未检查的发布版本。没有网络时的启动会带着一条指明未检查发布版本的警告启动，并在下次连接时检查；运行时仓库安装的发布版本若缺少已存储的 bundle，则会停止启动，因为每次这样的安装都会保留它验证过的 bundle。类型位于 [`@delorun/contract-release-log`](../../packages/contract-release-log/README.zh.md)。
+[C2](c02-release-manifest.zh.md) 的每个已签名发布 manifest（元数据清单）在 Sigstore 的公开 Rekor 日志中都有一个条目；Rekor 是一个仅追加的透明日志，不由 Delorun 运营。Rekor 为其树的检查点签名，公共见证网络中的一个独立见证者为这些检查点共同签名，因此，如果日志向一个客户端展示的历史与向另一个客户端展示的不同，见证者就会发现。每个发布版本都会发布一个 bundle，其中包含该条目、它的包含证明和一个经见证的检查点。客户端拒绝其检查点不带有效见证者共同签名的 bundle；日志提供的最新检查点不带这种共同签名时，只会使发布版本保持未检查，并给出警告。安装发布版本始终需要经过验证的包含证明。当日志无法访问、没有给出由其密钥签名的检查点、其最新检查点缺少见证者的共同签名，或其最新的共同签名已过时，安装或更新会发出警告，凭发布版本的签名继续，并记录在线检查未运行；若日志随后给出的已签名检查点与该发布版本矛盾，或见证者共同签名存在但无效，则拒绝。`delorun update` 在其报告中显示所记录的状态，`--yes` 不会确认保持未检查的发布版本。没有网络时的启动会带着一条指明未检查发布版本的警告启动，并在下次连接时检查；运行时仓库安装的发布版本若缺少已存储的 bundle，则会停止启动，因为每次这样的安装都会保留它验证过的 bundle。类型位于 [`@delorun/contract-release-log`](../../packages/contract-release-log/README.zh.md)。
 
 <a id="status"></a>
 
@@ -42,8 +42,8 @@ bundle 格式、其验证与在线检查已构建，并在安装时、启动器�
 
 - 日志是 Sigstore 公开 Rekor v2 日志的一个分片，它用 Ed25519 note 密钥为检查点签名。它的检查点 origin 行与检查点验证密钥位于根元数据的 `log` 字段中（[C2](c02-release-manifest.zh.md#root-metadata)），因此只能通过根轮换改变。
 - 检查点使用 C2SP signed-note 格式（`tlog-checkpoint`）；见证者共同签名使用 C2SP `tlog-cosignature`（`cosignature/v1`），其签名消息包含共同签名时间。
-- 见证者以公共见证网络中各见证者的密钥表示，列在根元数据的 `witnesses.keys` 中，`witnesses.threshold` 为 1：至少 1 个所列见证者为某个检查点共同签名时，该检查点即为经见证。Delo 不运营其中任何一个。
-- 除其发布 manifest 与重新签名的 manifest 的条目外，Delo 不向该日志发布任何内容。
+- 见证者以公共见证网络中各见证者的密钥表示，列在根元数据的 `witnesses.keys` 中，`witnesses.threshold` 为 1：至少 1 个所列见证者为某个检查点共同签名时，该检查点即为经见证。Delorun 不运营其中任何一个。
+- 除其发布 manifest 与重新签名的 manifest 的条目外，Delorun 不向该日志发布任何内容。
 
 <a id="log-entry"></a>
 
@@ -105,7 +105,7 @@ bundle 发布到 GitHub Releases，与 manifest 放在一起。`log-release` 命
 
 一条规则决定每种结果：检查点的日志签名验证通过之前的任何情况都使发布版本保持 `unchecked`，验证通过之后任何不能自洽的情况都为 `failed`。因此，没有应答、请求超过其 30 秒超时、整个检查超过其 90 秒截止时间、`5xx`、检查点返回 `404` 或 `410`、检查点被重定向到其他主机或应答超出其大小上限，以及正文不是由根的日志密钥签名的检查点（代理的页面、另一个日志的 note），都使发布版本保持 `unchecked`；这不算失败。已签名的检查点小于已存储的检查点、一致性证明无法通过验证、已签名树大小表明存在的瓦片返回 `404` 或 `410`、长度不对、字节数超出其格式允许的范围或被重定向到其他主机，以及所列见证者的共同签名存在但无法通过验证，都为 `failed`。最新检查点计入的所列共同签名少于 `witnesses.threshold` 个（时间超前 5 分钟以上的共同签名不计入，`detail` 会说明是哪个见证者以及客户端的时钟），或其最新的共同签名早于 24 小时之前，会使发布版本保持 `unchecked`，且只在回滚检查与一致性检查之后才如此，因此与发布版本矛盾的日志无法通过省略共同签名来避开这些检查。存在但无效的共同签名，其失败代码为 `witness-cosignature-missing`，检查的 `detail` 说明是哪个见证者以及原因。客户端自身代码的失败作为客户端的错误报告，绝不当作日志无法访问。
 
-发现 `unchecked` 的安装或更新只凭发布版本的签名继续，并告知本人。启动器打印步骤 "Checking the release log: not checked" 及其原因，然后打印警告 "Release <version> has not been checked against the release log; Delo checks it at the next connection."。运行时仓库安装该发布版本之后，它在检查状态文件中将该发布版本记录为 `unchecked`，并以原因作为 `detail`；被仓库拒绝的发布版本不留下记录。能够阻断某人到日志及其见证者连接的人，会让此人只剩下签名可依；发布版本自身 bundle 中的包含证明仍会在安装任何内容之前离线验证。发现 `failed` 的安装或更新不安装任何内容，也不记录检查状态。它验证过的根与时间戳，以及通过的检查所验证的检查点，仍记录在 `trust/` 下，因为之后的安装要让根链、时间戳与日志遵守它们已证明的内容。
+发现 `unchecked` 的安装或更新只凭发布版本的签名继续，并告知本人。启动器打印步骤 "Checking the release log: not checked" 及其原因，然后打印警告 "Release <version> has not been checked against the release log; Delorun checks it at the next connection."。运行时仓库安装该发布版本之后，它在检查状态文件中将该发布版本记录为 `unchecked`，并以原因作为 `detail`；被仓库拒绝的发布版本不留下记录。能够阻断某人到日志及其见证者连接的人，会让此人只剩下签名可依；发布版本自身 bundle 中的包含证明仍会在安装任何内容之前离线验证。发现 `failed` 的安装或更新不安装任何内容，也不记录检查状态。它验证过的根与时间戳，以及通过的检查所验证的检查点，仍记录在 `trust/` 下，因为之后的安装要让根链、时间戳与日志遵守它们已证明的内容。
 
 早先的安装写下的只有树大小与根哈希、没有 signed note 的 `trust/checkpoint.json`，是客户端自身无法检查的下限。只有当从它到日志已签名最新检查点的一致性证明通过验证时，在线检查才保留它，随后由已验证的检查点替换该文件。证明无法通过验证时，它不设定下限，由已验证的检查点替换它，本次尝试记录一条给出其树大小的通知；日志无法访问时，该文件保持原样。完全无法读取的 `trust/checkpoint.json` 同样不设定下限：下限从发布版本自身的检查点重新开始，本次尝试记录一条说明这一点的通知，并列出 home 记录为 `verified` 的发布版本，因此重置从不会悄无声息。
 
@@ -131,7 +131,7 @@ bundle 发布到 GitHub Releases，与 manifest 放在一起。`log-release` 命
 | --- | --- | --- |
 | npm 启动器与安装脚本 | 需要经过验证的 bundle。在线检查通过时，安装并记录 `verified`。为 `unchecked` 时，打印原因与警告，安装，并记录 `unchecked`。为 `failed` 时，不安装任何内容。 | — |
 | `delorun update` 与 studio 的 "Update now" | 需要目标版本经过验证的 bundle，并像启动器一样对待在线检查：`unchecked` 时警告、继续并记录，`failed` 时拒绝更新并给出原因。更新报告显示所记录的状态，`--yes` 不会确认 `unchecked`。 | — |
-| CLI（命令行界面）启动器，每次启动时 | — | 离线验证已存储的 bundle。有网络时，运行在线检查。没有网络时，带着警告 "Release <version> has not been checked against the release log; Delo checks it at the next connection." 启动，并记录 `unchecked`。为 `failed` 时，或运行时仓库安装的发布版本没有已存储的 bundle 时，在每种验证模式下都停止，并提供回滚。 |
+| CLI（命令行界面）启动器，每次启动时 | — | 离线验证已存储的 bundle。有网络时，运行在线检查。没有网络时，带着警告 "Release <version> has not been checked against the release log; Delorun checks it at the next connection." 启动，并记录 `unchecked`。为 `failed` 时，或运行时仓库安装的发布版本没有已存储的 bundle 时，在每种验证模式下都停止，并提供回滚。 |
 | 无界面 home | — | 与 CLI 启动器相同；警告输出到终端、运行日志（[C20](c20-operational-logs.zh.md)）与 `delorun status`。 |
 | 运行中的 home 进程（home process） | — | 状态为 `unchecked` 期间，每 15 分钟以及每次启动时重试在线检查，直到通过或失败。 |
 | 桌面更新器 | 在 `quitAndInstall` 之前，以及对请求的回滚目标，需要经过验证的 bundle；在线检查为 `unchecked` 时警告并记录，为 `failed` 时拒绝。 | 启动时，若已存储其发布版本的 bundle 则验证它，并运行在线检查；没有网络时，在应用中显示同一条警告，并每 15 分钟重试。 |
@@ -212,7 +212,7 @@ bundle 的 `schema` 指明其主版本。日志的 origin 与密钥以及见证�
 
 ### 这些检查不能证明什么
 
-- **见证者的独立性。** 客户端验证的是 root 元数据所列出的某个见证者密钥对检查点进行了联署。它无法验证该见证者的运营独立于日志或 Delo；这取决于 root 元数据列出哪些见证者。
+- **见证者的独立性。** 客户端验证的是 root 元数据所列出的某个见证者密钥对检查点进行了联署。它无法验证该见证者的运营独立于日志或 Delorun；这取决于 root 元数据列出哪些见证者。
 - **离线的 home。** 始终无法连接日志的 home 会保持 `unchecked`，并在每次启动时显示警告。它永远无法完成一致性检查，因此在它连接之前，向它展示的不同日志视图不会被发现。无法连接日志的安装或更新也以同样方式继续，因此能够阻断某人到日志及其见证者连接的人，会让此人只剩下发布版本的签名与离线包含证明可依。
 - **对时钟的依赖。** 对最新已见证检查点不超过 24 小时的限制以客户端的时钟为准；时钟有误时，可能接受较旧的检查点，或者对当前的检查点记录 `unchecked`。
 - **日志条目的含义。** 一条已验证的条目说明 manifest 已发布在每个客户端都能检查的日志中；它并不说明该发布没有缺陷或漏洞。

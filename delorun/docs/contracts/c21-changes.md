@@ -4,6 +4,8 @@ description: "Contract C21: Changes. A person's harness is the signed release pl
 
 # C21 Changes
 
+English | [中文](c21-changes.zh.md)
+
 ## Summary
 
 What a person's harness runs is the signed release plus the changes they made, each recorded; with protection on, only the changes they approved at their computer. A plugin the profile links from a folder loads from a copy of its approved content, kept under the Delorun home. Protection is off by default: each start, and each save in the folder while Delorun runs, makes the folder's content the approved content and logs it as an applied change the person lists, shows and undoes ([The protection setting](#the-protection-setting)). With protection on, edits in the folder are pending changes until the person applies them. The person's edits to the harness itself are made in a writable copy of the installed release and run, once applied, from a composed tree beside the signed installation, which is never edited ([Harness edits](#harness-edits)). The library is [`@delorun/changes`](../../packages/changes/README.md); `delorun start` and `delorun headless` apply it in their pre-start step `changes`, before upstream prepares the profile, and hold the prepared profile to its invariants in the composition's approved plugin content step.

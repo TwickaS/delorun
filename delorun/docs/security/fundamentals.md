@@ -4,7 +4,7 @@ description: "Delorun's security fundamentals: the short governed list of rules 
 
 # Security fundamentals
 
-English
+English | [中文](fundamentals.zh.md)
 
 ## Summary
 

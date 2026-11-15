@@ -3,32 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c06-relay-protocol.md
 /:
-  en: aa2307c106945d87
-  zh: bca7f13e6163f830
+  en: 0739c4a1b5266374
+  zh: 4d28c2264652a1ce
 /contract-c6-relay-protocol:
-  en: 28d2cd67183a9b76
-  zh: 24a808ed2b023fc6
+  en: 687b954dc3b033da
+  zh: 7da7ae130a59acfc
 /contract-c6-relay-protocol/summary:
-  en: 520603bab27a215e
-  zh: a2d230274d0d6adf
+  en: 48fc2daf59fe0a9b
+  zh: b9784aa940057da5
+/contract-c6-relay-protocol/status:
+  en: b263003f441da3ea
+  zh: 5cad87f3257ac6e7
 /contract-c6-relay-protocol/contents:
-  en: 9b819cb8e9a4be68
-  zh: 286d66da363fb716
+  en: 43e0a896afb92715
+  zh: 21c1ce12b818e8bb
 /contract-c6-relay-protocol/contract:
   en: 96b2246f7b10179f
   zh: 845e6240c0e8aaea
 /contract-c6-relay-protocol/contract/parties:
-  en: de8dc7a276c51a52
-  zh: 6a9ad4ddb509d7a7
+  en: 506513757cab1661
+  zh: 0aa98387c915314d
 /contract-c6-relay-protocol/contract/relay-configuration:
-  en: 3f3655fa2ecf58f2
-  zh: d2b2d72cfc4f2e63
+  en: 7eac0896fbe964ec
+  zh: 7f79f7222de693b5
 /contract-c6-relay-protocol/contract/tunnel-token:
   en: 42eb2cf52923e7a0
   zh: 5f32060e161949f3
 /contract-c6-relay-protocol/contract/handshake:
-  en: ed1e52498205e7fd
-  zh: f1865d9bfcc8934c
+  en: e859340a7a5e28a3
+  zh: cd576f21ba99ac2d
 /contract-c6-relay-protocol/contract/frames:
   en: a4539c4fdc6c736e
   zh: f06f733452f23c88
@@ -45,32 +48,32 @@
   en: 0535262eb4ee0b44
   zh: 01e461169ef336f4
 /contract-c6-relay-protocol/contract/announcements:
-  en: 364ef82123294ffb
-  zh: fdb7418e70d04e67
+  en: 5a2e57d88e8fb0cf
+  zh: 0a5d71a475b93651
 /contract-c6-relay-protocol/contract/certificate-monitoring:
-  en: 4466bcbb1a8044c1
-  zh: 5a2f414fbf3a31d9
+  en: 3bcad58eb201cebc
+  zh: ec6371ff36c121ab
 /contract-c6-relay-protocol/contract/limits:
   en: 5f18edfe5d033223
   zh: b50f6eb28903c7e6
 /contract-c6-relay-protocol/contract/errors:
-  en: 959ca3fcb461ca16
-  zh: e72a36c4e1be282f
+  en: 1bf260e89eb0ff47
+  zh: 3b8a90b853e8120d
 /contract-c6-relay-protocol/contract/delorun-relay:
-  en: 4a443a6e725cff7c
-  zh: 9db9f8d2534eafe9
+  en: bfa5f4b7e6fafc68
+  zh: 97bdf29fb14bac8c
 /contract-c6-relay-protocol/consumers:
-  en: e0e4b900654307e3
-  zh: ea35425af8f4415a
+  en: 2e74b6f8851ffd1c
+  zh: 65b207f118fb0b06
 /contract-c6-relay-protocol/compatibility:
-  en: 78fe0b5de2efd15c
-  zh: 82bbc837e6a1a356
+  en: 1fafce8b391bdfa9
+  zh: 80bb1c3a29cac3b3
 /contract-c6-relay-protocol/security:
   en: 1c132c28889854e4
   zh: 24887abe5fdabbeb
 /contract-c6-relay-protocol/security/what-this-does-not-prove:
-  en: 95dd4cab0ae99733
-  zh: 824ac72c67ebfe8d
+  en: 14248bfda716f429
+  zh: e1e6283fbeb5fd4b
 /contract-c6-relay-protocol/decided-values:
   en: a45973ea64995eb6
   zh: ee23b9a2333f3d91

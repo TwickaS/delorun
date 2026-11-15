@@ -13,31 +13,31 @@
   zh: 7278b37aa9a01b41
 /c19-home-process-and-update-handshake/status:
   en: 2542e8a86d106e35
-  zh: 8e5799f50f497663
+  zh: 4c97924651b1c634
 /c19-home-process-and-update-handshake/contents:
   en: 3ef67699fbb0b789
   zh: a9861e6985ba100f
 /c19-home-process-and-update-handshake/the-home-process:
   en: 857fb6d6cb8ff4f0
-  zh: 1e8be0025d4349a5
+  zh: fd5797fbe99cde5d
 /c19-home-process-and-update-handshake/the-home-process/host-invariants:
   en: 6dab3c0caef5611a
-  zh: 95e46abc7dd9ac9f
+  zh: c67f88efac8bb6df
 /c19-home-process-and-update-handshake/commands:
   en: 7f76260dd6e333c4
-  zh: 73ff95cf2346f070
+  zh: 10f5b43678d803b9
 /c19-home-process-and-update-handshake/start-at-login:
   en: 7c58071ad07367ad
-  zh: 98901c1ca1552d82
+  zh: e7a8d172d3df05cb
 /c19-home-process-and-update-handshake/the-update-channel:
   en: e7d4be3be443a871
-  zh: 338434ef830b3569
+  zh: 2b7285fa64dc95c5
 /c19-home-process-and-update-handshake/requests-and-responses:
   en: 30f84898e2f4082b
-  zh: fb3d030471b0eae7
+  zh: b3658e2362818611
 /c19-home-process-and-update-handshake/the-update-handshake:
   en: 2bb07dee7e9ffbe1
-  zh: d9846c00b6cdab3d
+  zh: 3685fc63f6ce24fb
 /c19-home-process-and-update-handshake/interrupted-updates:
   en: 90c34fbe0ecfb835
   zh: 5f0738793b57399d
@@ -52,25 +52,25 @@
   zh: 724b38b4f39b1436
 /c19-home-process-and-update-handshake/errors:
   en: 769151e2657d98d7
-  zh: 7677251dbfeb2160
+  zh: f27e103fe336727a
 /c19-home-process-and-update-handshake/consumers:
   en: 480e03b94384852d
-  zh: f698f226478b978a
+  zh: 7b0936c4044aa32e
 /c19-home-process-and-update-handshake/compatibility:
   en: d259d39f6f5bc822
-  zh: 2c4d0063a185bea0
+  zh: 84b42b328ada73d1
 /c19-home-process-and-update-handshake/security:
   en: 52543dba9bf0d349
   zh: e612a6c5b83e9afc
 /c19-home-process-and-update-handshake/security/requirements:
   en: 5a0db25e002e2561
-  zh: 41fdcb8575f77085
+  zh: c75c75da66e51183
 /c19-home-process-and-update-handshake/security/denial-tests:
   en: 17d4a3e9f838ab08
   zh: 149b88dc4df51ff0
 /c19-home-process-and-update-handshake/security/what-this-does-not-prove:
   en: 7c3f9583b983c00c
-  zh: d7f1efac8241ee96
+  zh: 677b4e936dd872af
 /c19-home-process-and-update-handshake/enforcement-per-platform-and-dialect:
   en: 2eabc996e07c44d8
   zh: 9c2d4e814095734a

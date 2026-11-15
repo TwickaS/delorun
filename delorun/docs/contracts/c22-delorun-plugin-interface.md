@@ -4,7 +4,7 @@ description: "Contract C22: what a Delorun version promises a plugin: the interf
 
 # C22 What a Delorun version promises a plugin
 
-English
+English | [中文](c22-delorun-plugin-interface.zh.md)
 
 ## Summary
 

@@ -8,10 +8,22 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 ## 摘要
 
-本约定定义工作区如何选择其命令的运行位置，以及唯一与 Docker 通信的 Delo 组件。运行时提供方报告机器能隔离和强制执行什么，并以原生方式或以两种 Docker 形态之一运行每个工作区：S2，每个 Docker 工作区有自己的容器；受限的 S3，一个容器隔离计算机，但不隔离各工作区之间。Docker 监管器只从已校验发布所列的镜像摘要运行工作区容器，只在本人于 setup 时选择的根目录之下运行，并通过 `~/.delorun` 下一个套接字上的固定结构 API 提供服务；该套接字只接受当前 home 进程启动的令牌，且从不把请求透传给 Docker。每项限制只有在检查机器表明其生效时才报告为已强制执行。类型包 [`@delorun/contract-runtime-supervisor`](../../packages/contract-runtime-supervisor/README.zh.md) 提供接口、结构、预设与限额。
+本约定定义工作区如何选择其命令的运行位置，以及唯一与 Docker 通信的 Delorun 组件。运行时提供方报告机器能隔离和强制执行什么，并以原生方式或以两种 Docker 形态之一运行每个工作区：S2，每个 Docker 工作区有自己的容器；受限的 S3，一个容器隔离计算机，但不隔离各工作区之间。Docker 监管器只从已校验发布所列的镜像摘要运行工作区容器，只在本人于 setup 时选择的根目录之下运行，并通过 `~/.delorun` 下一个套接字上的固定结构 API 提供服务；该套接字只接受当前 home 进程启动的令牌，且从不把请求透传给 Docker。每项限制只有在检查机器表明其生效时才报告为已强制执行。类型包 [`@delorun/contract-runtime-supervisor`](../../packages/contract-runtime-supervisor/README.zh.md) 提供接口、结构、预设与限额。
+
+<a id="status"></a>
+
+## 状态
+
+本页的内容均未被使用：没有任何命令或发布的 profile 运行 Docker 工作区，每个工作区都是原生的。
+
+- **已构建，但无人使用：** `@delorun/supervisor`，带有基于每次启动令牌的固定 schema API、其根目录检查、通过探测容器生成的能力报告、带加固和内部网络的 S2 工作区容器，以及镜像摘要检查。`delorun start` 不向 home 进程传递监管器，因此 home 进程从不启动它，也没有任何东西写入监管器的根目录文件。容器拒绝标记已在上游的沙箱、shell 和 PTC 包中构建，沙箱的 `containerDenialMarker` 选项默认关闭，且没有任何发布的 profile 设置它。
+- **尚未构建：** `delorunRuntime` 提供方和 `@delorun/runtime-docker` 包；S2 辅助通道和每个 S3 操作，监管器以 `SHAPE_UNAVAILABLE` 拒绝它们；除无之外的凭据转发，监管器拒绝它；S2 镜像中的出站代理程序；setup 的 Docker 步骤、其限额列表和无 root 引擎提示；studio 的运行时选择；`workspace-isolation` 检查，`delorun verify` 将其报告为未运行；Windows 上的命名管道。
+
+下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。原生工作区的命令在各平台上能访问什么，是 [C1](c01-home-layout.zh.md) 的主题。
 
 ## 目录
 
+- [状态](#status)
 - [运行时提供方](#the-runtime-provider)
 - [能力报告](#the-capability-report)
 - [Docker 形态](#docker-shapes)
@@ -37,7 +49,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 ## 运行时提供方
 
-运行时提供方是一个 Service Definition，Delo 的运行时包把它注册为 Cordis 服务 `delorunRuntime`。每个 Host 只有一个活动提供方，它服务该 Host 的每个工作区。
+运行时提供方是一个 Service Definition，Delorun 的运行时包把它注册为 Cordis 服务 `delorunRuntime`。每个 Host 只有一个活动提供方，它服务该 Host 的每个工作区。
 
 - **种类。** 工作区以 `native`、`docker-s2` 或 `docker-s3` 运行。Docker 形态是在 setup 中选择的机器设置。在 S2 下，原生或 Docker 是工作区设置。在 S3 下，每个工作区都在那一个容器内运行，不提供按工作区的选择。
 - **操作。** `report()` 返回[能力报告](#the-capability-report)。`resolve(request)` 把工作区请求转换为完整的规格：它显式地用默认值填充预设、出站模式与凭据选项，并拒绝能力报告无法满足的请求。`start(spec)`、`stop(workspaceId, mode)` 与 `state(workspaceId)` 管理工作区的运行时。Docker 种类的每个 Docker 操作都调用监管器，从不自行调用 Docker。
@@ -73,7 +85,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | 镜像 | S2 工作区镜像 | S3 harness 镜像 |
 
 - **studio 对 S3 的标注** 说明它把本计算机与 agent 的命令隔离开，但不隔离各工作区之间。
-- **S3 的 harness 用户。** harness 与 home 进程在容器内以用户 `delorun-harness`（uid 1001）运行。容器的根文件系统只读，因此容器内没有用户能修改 harness 代码。Delo home 位于一个归 `delorun-harness` 所有、权限为 0700 的卷上。工作区命令以用户 `delorun`（uid 1000）运行，因此无法读取或修改 home 的密钥。
+- **S3 的 harness 用户。** harness 与 home 进程在容器内以用户 `delorun-harness`（uid 1001）运行。容器的根文件系统只读，因此容器内没有用户能修改 harness 代码。Delorun home 位于一个归 `delorun-harness` 所有、权限为 0700 的卷上。工作区命令以用户 `delorun`（uid 1000）运行，因此无法读取或修改 home 的密钥。
 - **S3 的权限。** harness 只保留 `CAP_SETUID` 与 `CAP_SETGID`，用于以 `delorun` 身份启动命令；它启动的每条命令都以空能力集和 `no-new-privileges` 运行。
 - **S3 的 studio。** 在容器内，studio 在容器运行目录中的一个 Unix 套接字上监听，该目录从机器的 `~/.delorun/run/<profile>/s3/` 绑定挂载。机器上的 home 进程把其回环监听器转发到该套接字，因此容器不发布任何端口。
 - **S3 的主机侧。** 在机器上，home 进程持有 [C1](c01-home-layout.zh.md) 的锁与令牌，并运行监管器与回环转发；Host 在容器内运行。
@@ -156,7 +168,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 ## Docker 监管器
 
-监管器是唯一调用 Docker 的 Delo 组件。它以本人用户的独立进程运行，从不以 root 运行，所用运行时发行包与 home 进程相同。
+监管器是唯一调用 Docker 的 Delorun 组件。它以本人用户的独立进程运行，从不以 root 运行，所用运行时发行包与 home 进程相同。
 
 - **生命周期。** 机器设置了 Docker 时，home 进程启动它，并通过继承的管道把启动令牌传给它。它随这次 home 进程启动一起停止，后继 home 进程以新令牌启动新的监管器。容器在监管器重启后继续运行。
 - **套接字。** 它在 [C1](c01-home-layout.zh.md) 的 `run/<profile>/supervisor.sock` 上监听，Windows 上则在 [C1](c01-home-layout.zh.md) 命名的命名管道上监听。
@@ -192,10 +204,10 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 ## 监管器根目录
 
 - **根目录文件。** `supervisor/roots.json`（[C1](c01-home-layout.zh.md)，权限 0600）保存 `{"v":1,"parents":["<absolute path>", ...]}`，最多 16 个父目录。只有 `delorun setup` 在本人的终端中写入它；没有 Host API、工具或配置行写入它。监管器在启动时读取它。
-- **父目录。** 每个父目录以其规范绝对路径保存。setup 拒绝 `/`、操作系统 home 目录、Delo home、任何包含 Delo home 的路径以及任何位于其内的路径。
-- **工作区根目录。** 在 `workspace.create` 时，监管器自行用 `realpath` 解析 `root`。根目录为 `/`、操作系统 home 目录或 Delo home，包含操作系统 home 目录，包含 Delo home 或位于其内，位于引擎上另一个带有 Delo 标签的工作区容器（无论其 home 与 profile）的根目录之内或包含该根目录，或不是本人所有的目录时，以 `ROOT_REFUSED` 拒绝；根目录不严格位于某个父目录之内时，以 `ROOT_NOT_UNDER_PARENT` 拒绝。路径按文件身份比较，因此某目录的别名视同该目录。
+- **父目录。** 每个父目录以其规范绝对路径保存。setup 拒绝 `/`、操作系统 home 目录、Delorun home、任何包含 Delorun home 的路径以及任何位于其内的路径。
+- **工作区根目录。** 在 `workspace.create` 时，监管器自行用 `realpath` 解析 `root`。根目录为 `/`、操作系统 home 目录或 Delorun home，包含操作系统 home 目录，包含 Delorun home 或位于其内，位于引擎上另一个带有 Delorun 标签的工作区容器（无论其 home 与 profile）的根目录之内或包含该根目录，或不是本人所有的目录时，以 `ROOT_REFUSED` 拒绝；根目录不严格位于某个父目录之内时，以 `ROOT_NOT_UNDER_PARENT` 拒绝。路径按文件身份比较，因此某目录的别名视同该目录。
 - **每次启动之前。** 每次 `workspace.start` 时，监管器再次检查该工作区的容器：每个容器都必须带有其 home 与 profile 的标签，根目录挂载的来源必须仍解析为其自身并通过上述每条规则（`ROOT_REFUSED`），[容器](#containers)的每项设置都必须仍然生效（`LIMITS_MISSING`）。未通过检查的容器不会启动。
-- **挂载。** S2 容器的绑定挂载是解析后的工作区根目录、该工作区的辅助程序套接字目录，以及工作区转发 agent 时该 agent 的套接字。S3 容器的挂载是解析后的各工作区根目录、保存其 Delo home 的卷以及机器的 `~/.delorun/run/<profile>/s3/`。不挂载其他任何主机路径。创建容器后，监管器把检查到的挂载来源与解析后的路径比较，有任何差异就以 `ROOT_REFUSED` 删除该容器。
+- **挂载。** S2 容器的绑定挂载是解析后的工作区根目录、该工作区的辅助程序套接字目录，以及工作区转发 agent 时该 agent 的套接字。S3 容器的挂载是解析后的各工作区根目录、保存其 Delorun home 的卷以及机器的 `~/.delorun/run/<profile>/s3/`。不挂载其他任何主机路径。创建容器后，监管器把检查到的挂载来源与解析后的路径比较，有任何差异就以 `ROOT_REFUSED` 删除该容器。
 - **谁能修改根目录。** 凡 [C1](c01-home-layout.zh.md) 的 `home-write` 规则成立之处，受限命令都无法写入该文件；上游的进程内文件工具限于可写根目录，而可写根目录从不包括 home。在 `danger-full-access` 下运行的命令或工具可以写入它。
 
 <a id="the-s2-helper-channel"></a>
@@ -268,7 +280,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | `SCHEMA_VIOLATION` | `op` 或字段未知，或值超出其类型或范围 |
 | `REQUEST_TIMEOUT` | 5 秒内未收到请求行 |
 | `BUSY` | 已打开 32 个连接 |
-| `ROOT_REFUSED` | 根目录为 `/`、操作系统 home 或 Delo home，包含操作系统 home，包含 Delo home 或位于其内，位于另一个工作区的根目录之内或包含它，不是本人的目录，或创建后其挂载来源不同，或启动前不再解析为其自身 |
+| `ROOT_REFUSED` | 根目录为 `/`、操作系统 home 或 Delorun home，包含操作系统 home，包含 Delorun home 或位于其内，位于另一个工作区的根目录之内或包含它，不是本人的目录，或创建后其挂载来源不同，或启动前不再解析为其自身 |
 | `ROOT_NOT_UNDER_PARENT` | 根目录不严格位于某个 setup 父目录之内 |
 | `IMAGE_NOT_IN_MANIFEST` | 镜像摘要未被已校验 manifest 列出，或拉取到的摘要不同 |
 | `IMAGE_PULL_FAILED` | 拉取所列摘要失败 |
@@ -300,7 +312,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - 预设名称、出站模式、凭据选项名称、容器与网络名称及其标签都是外部接口：一个发布创建的工作区由下一个发布管理。修改其中任一项都要在监管器中附带迁移，并在 `delorun/docs/upgrade-guide/` 下附升级指南。
 - 根目录文件的 `v` 为 1；监管器读取之前的每个版本。
 - 环境标记的文本对模型可见，按上文保持不变；修改它会改变已录制的 Docker 场景。
-- 类型包跟随 Delo 的版本，并与本页在同一个拉取请求中修改。
+- 类型包跟随 Delorun 的版本，并与本页在同一个拉取请求中修改。
 
 <a id="security"></a>
 
@@ -346,7 +358,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 ### 本约定不能证明的内容
 
-- **Landlock 与 rootful 引擎。** Landlock 无法拒绝原生命令连接 Docker 套接字，因此在只有 Landlock 且使用 rootful 引擎的系统上，任何受限原生命令都能启动挂载机器文件的容器。Delo 会报告它并提供 rootless 引擎；在那里无法阻止它。
+- **Landlock 与 rootful 引擎。** Landlock 无法拒绝原生命令连接 Docker 套接字，因此在只有 Landlock 且使用 rootful 引擎的系统上，任何受限原生命令都能启动挂载机器文件的容器。Delorun 会报告它并提供 rootless 引擎；在那里无法阻止它。
 - **经网络的 Docker。** 端点为 TCP 或 SSH 的 context 可被任何有网络访问的命令访问，而没有方言限制网络；报告将其标为 `docker-endpoint-network`，并且不在其上提供 Docker 形态。
 - **主机网关与回环。** 内部网络与机器之间的距离由引擎保证：网络以桥接驱动的 `isolated` 网关模式创建，忽略该选项的引擎只在检查时由探测发现，不会在每次工作区启动时再次确认。仍让网关可达的机器不满足 `host-gateway-block`，因此不在其上提供 S2。
 - **磁盘限制。** 大多数存储驱动、所有 rootless 引擎与 Docker Desktop 都不强制执行容器的磁盘大小；在那里预设的磁盘值仅作建议。

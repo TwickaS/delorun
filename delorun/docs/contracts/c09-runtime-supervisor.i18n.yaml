@@ -6,80 +6,83 @@
   en: f7cdd065f3ff7fe3
   zh: 4c6dc44f7f61cfed
 /c9-runtime-and-supervisor-interface:
-  en: 189d65069d2cbcce
-  zh: f05ba42c8a05516d
+  en: d1444bec3120cd57
+  zh: 289b2d66e1980ea2
 /c9-runtime-and-supervisor-interface/summary:
-  en: f4fc9ac4b385287f
-  zh: eb8b426a32523b31
+  en: 83fd0288bf9e1ba9
+  zh: 5237b6f673bb7150
+/c9-runtime-and-supervisor-interface/status:
+  en: 4df57b1b44ae262b
+  zh: 23a5c0123c00d5f2
 /c9-runtime-and-supervisor-interface/contents:
-  en: 564b7780fa1155f0
-  zh: 009e523b93e57345
+  en: 6d3f932003bd19e7
+  zh: d5d8f1a20bb7b7f4
 /c9-runtime-and-supervisor-interface/the-runtime-provider:
-  en: fe1f067edc22f073
-  zh: 1e05c25f2241c221
+  en: bd7ed7a2fb49dfd2
+  zh: f697b192b814c1ab
 /c9-runtime-and-supervisor-interface/the-capability-report:
-  en: e6c42c6ed9338460
-  zh: 345764a9defd93c8
+  en: aa0221e621305481
+  zh: a2d787a2d0e2f6ac
 /c9-runtime-and-supervisor-interface/docker-shapes:
-  en: 4c5373d630a53c77
-  zh: 4429e0c12c5a4a7d
+  en: 336ae62b738079b2
+  zh: 4ce00b3283760fd6
 /c9-runtime-and-supervisor-interface/sandbox-backend-per-shape:
-  en: 9b775ff93ef6ca8e
-  zh: 7c0bb24def1e4146
+  en: cbc4a840177420cd
+  zh: e1fdc1fc64600096
 /c9-runtime-and-supervisor-interface/containers:
-  en: ca39bb0f0b1144b9
-  zh: a10688531d416f5e
+  en: db59688406d37bbd
+  zh: b44809d8b551de6a
 /c9-runtime-and-supervisor-interface/networks-and-egress:
-  en: 39a5f25e90f2723f
-  zh: c0c1ccd29a2173d8
+  en: dbe34b393fc3909e
+  zh: 54dcf0a104d26fda
 /c9-runtime-and-supervisor-interface/resource-presets:
   en: 4e23e944823304ea
   zh: 9a2bcdd23dbbc1a5
 /c9-runtime-and-supervisor-interface/credential-forwarding:
-  en: 81d5cadd2696da8d
-  zh: 52d3af3b233785d3
+  en: 104253d8b7804ca3
+  zh: 9ba242285d1b611c
 /c9-runtime-and-supervisor-interface/the-docker-supervisor:
-  en: a197a1f8f617500d
-  zh: 085458c4e115cc06
+  en: 775c1769cba65957
+  zh: 0ba5d855614e108b
 /c9-runtime-and-supervisor-interface/the-supervisor-api:
   en: d888e3b8925ae251
   zh: e51dac802099aa4f
 /c9-runtime-and-supervisor-interface/supervisor-roots:
-  en: bd291e6fc3e16088
-  zh: 45c45afdfe81a59f
+  en: 8c0aee9632744e92
+  zh: 1b9dc4b18340e5ec
 /c9-runtime-and-supervisor-interface/the-s2-helper-channel:
-  en: bf86e8151b3bd3e0
-  zh: 31bb38ade68d5900
+  en: 556dff1d00ce52fd
+  zh: 9a7f971801983812
 /c9-runtime-and-supervisor-interface/images:
-  en: b6124c7ac6276a35
-  zh: 26de59c90eb0cbf6
+  en: ca7e418ee02e6e30
+  zh: 8db2db6c6b10e2d6
 /c9-runtime-and-supervisor-interface/the-container-denial-marker:
-  en: 4ba5bfb8db42f65f
-  zh: 012df69688b7bbd2
+  en: 220795593ec2cb14
+  zh: 7273f607260ad49b
 /c9-runtime-and-supervisor-interface/limits:
   en: 9e650573f4027231
   zh: 672c78d9f250c864
 /c9-runtime-and-supervisor-interface/errors:
-  en: 30067683f1213664
-  zh: a8f7c082a58a2e18
+  en: 0c7b727539e0e61d
+  zh: 49ea1ec73b38fbf1
 /c9-runtime-and-supervisor-interface/consumers:
-  en: d72a5e8f5ebc81f5
-  zh: a888f14c0d2adbe2
+  en: ea38cebf6eb69a15
+  zh: f40e0e3a6cd20adc
 /c9-runtime-and-supervisor-interface/compatibility:
-  en: 1bb1dc07a5dc6d49
-  zh: c8076c6b4b00bbb0
+  en: 7c4c060ed1e3b93a
+  zh: 6e908807fb6c2195
 /c9-runtime-and-supervisor-interface/security:
   en: 52543dba9bf0d349
   zh: e612a6c5b83e9afc
 /c9-runtime-and-supervisor-interface/security/requirements:
-  en: 30992d1ddc627013
-  zh: 86661bbf2df9ed9d
+  en: b138c121fc36dcad
+  zh: 3788fa75a6502960
 /c9-runtime-and-supervisor-interface/security/denial-tests:
-  en: 2329acef6318988c
-  zh: 0e4234ee4109d002
+  en: f2a19e8ae06d7cde
+  zh: c776da9589d3157e
 /c9-runtime-and-supervisor-interface/security/what-this-does-not-prove:
-  en: b29c1febd69a417f
-  zh: 8ab61d736d253b25
+  en: 84fb36ccbddc1b34
+  zh: 92e491f610e03d9a
 /c9-runtime-and-supervisor-interface/enforcement-per-platform-and-dialect:
-  en: 495e3b0a9a57b6b7
-  zh: 4a668b29d7a09700
+  en: 221436eea747644e
+  zh: 0154bdcfd096e5c4

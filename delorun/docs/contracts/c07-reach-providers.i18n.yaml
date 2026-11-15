@@ -3,65 +3,68 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c07-reach-providers.md
 /:
-  en: 16107e8b99fbe952
-  zh: 4b165a5cc8f7c73a
+  en: 6e135f6400b256c7
+  zh: 55eef540073ec65f
 /contract-c7-reach-providers:
-  en: 521dc6700c829b71
-  zh: ef5b82ad024eeb41
+  en: 646765f2eebc3b06
+  zh: 6bf76b85fce48be9
 /contract-c7-reach-providers/summary:
-  en: 75955425d852b11a
-  zh: 9c45d4afb5858011
+  en: f7976dbae05dd89f
+  zh: b3ca45cfa4c93fd3
+/contract-c7-reach-providers/status:
+  en: 306f5f2d3de4e48e
+  zh: cda185b8f9e02256
 /contract-c7-reach-providers/contents:
-  en: 5b11358485b626f4
-  zh: de157daf3d2ff3a5
+  en: 4bf2a61c43253669
+  zh: c1f805c913889c0e
 /contract-c7-reach-providers/contract:
   en: 10b83fa3a579072f
   zh: 8812008c5de02731
 /contract-c7-reach-providers/contract/reach-options:
-  en: 6a17e0653c2f239f
-  zh: bd42732022b7fdab
+  en: f14a97206ea0129f
+  zh: 70288ae50664c16e
 /contract-c7-reach-providers/contract/provider-service-definition:
-  en: 2a2f48a103934504
-  zh: 5a73e0303e2c18a5
+  en: 2e276b8aead39507
+  zh: ef05f7c0f9753b5e
 /contract-c7-reach-providers/contract/states:
-  en: 566e9bb4bc553667
-  zh: e0ec797361578db4
+  en: 5d81903a50835d6b
+  zh: 7600c9b431529d43
 /contract-c7-reach-providers/contract/visibility-notes:
-  en: 20a72c08730d7381
-  zh: e1457d5cacef48a2
+  en: cf1a8063aeee8321
+  zh: 49867d9125f84fe9
 /contract-c7-reach-providers/contract/configuration-rows:
-  en: fbd7c099bb6cd4f7
-  zh: 9f17d1f92de439e1
+  en: 1d372c5fabcd75f5
+  zh: 95e75ef22fdb75a2
 /contract-c7-reach-providers/contract/tailscale-serve-target:
-  en: 5b67ce13000cecd8
-  zh: 5ac6d3e32a1f3bc9
+  en: 886ec62dfa83d683
+  zh: 782e7c862c284084
 /contract-c7-reach-providers/contract/identity-headers:
-  en: 5b4de08a5552077c
-  zh: 2f9cf504edbc7905
+  en: 95603f1183397309
+  zh: e33afdfda8e44208
 /contract-c7-reach-providers/contract/funnel:
   en: dfc489187579ab0e
   zh: 0ed6518da4c8a3b2
 /contract-c7-reach-providers/contract/own-domain-reach:
-  en: 8b2b834050fc6be0
-  zh: c11d3ed4840562f0
+  en: 9bffb91977841163
+  zh: 1001f14b526698bc
 /contract-c7-reach-providers/contract/errors:
-  en: 915cbe285674748e
-  zh: a3681affdc7f6680
+  en: 5289c9faccaa8b28
+  zh: 07111f5251be501d
 /contract-c7-reach-providers/contract/delorun-relay-client:
-  en: ebb5465023320f96
-  zh: 0a29a024eb0c1c4c
+  en: e47a0a51226d2de3
+  zh: 11c7a8f51554a0f3
 /contract-c7-reach-providers/consumers:
-  en: 0f60368640c31613
-  zh: 4cde928e539a3f5f
+  en: 35f0daef5a4a6429
+  zh: 8f2f642bd5b5e63d
 /contract-c7-reach-providers/compatibility:
-  en: a33c180e4a25c00e
-  zh: d81dc90c4fee1c5e
+  en: 3ec6791e5349c9f8
+  zh: e34ced6280a41d99
 /contract-c7-reach-providers/security:
-  en: 929628105bb15816
-  zh: 615bcf9e37f82096
+  en: dbdb42029e608acc
+  zh: 7a3c4c327613bb54
 /contract-c7-reach-providers/security/what-this-does-not-prove:
-  en: c6a84ba56440fffe
-  zh: 70c19480ba9c7215
+  en: 5a40689a308cd871
+  zh: 8bc14ec8c9a4c428
 /contract-c7-reach-providers/decided-values:
-  en: d3c1cbc678526afe
-  zh: fca1c4e65299c8ec
+  en: 67dbd8f7d1c6c964
+  zh: 3ac632ffecb10bb4

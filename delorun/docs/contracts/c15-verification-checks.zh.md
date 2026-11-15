@@ -9,12 +9,24 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 <a id="summary"></a>
 ## 摘要
 
-验证检查报告本人自己的 Delo 是否符合本人的预期。检查是一个已注册的函数，它检视 home 的某一部分，并产生四种结果之一。检查在 home 的进程中以本人的权限运行。其报告列出每项结果及一段简短详情，详情从不包含密钥或文件内容；只有当模式为 `enforce` 且每项检查都通过时，徽章才显示为绿色。检查用于发现漂移、其他程序的篡改以及错误配置。它们不会阻止拥有该机器的本人，模式决定哪些结果会阻止启动或远程访问。
+验证检查报告本人自己的 Delorun 是否符合本人的预期。检查是一个已注册的函数，它检视 home 的某一部分，并产生四种结果之一。检查在 home 的进程中以本人的权限运行。其报告列出每项结果及一段简短详情，详情从不包含密钥或文件内容；只有当模式为 `enforce` 且每项检查都通过时，徽章才显示为绿色。检查用于发现漂移、其他程序的篡改以及错误配置。它们不会阻止拥有该机器的本人，模式决定哪些结果会阻止启动或远程访问。
+
+<a id="status"></a>
+
+## 状态
+
+十一项检查中有两项运行，只在 `delorun verify` 上，且只在 `warn` 模式下；其他检查、各阶段、可选择的模式和 Verification 面板尚未构建。
+
+- **已构建并已使用：** 带 `--release`、`--offline` 和 `--json` 的 `delorun verify` 运行 `release-signature`（锚定在启动器所带根上的已存根、manifest 的签名、时间戳的新鲜度，以及发布日志 bundle，除非给出 `--offline`，否则含在线检查）和 `runtime-files`（每个已安装文件对照已签名的文件列表），并把其他每个注册表条目报告为 `unknown`，详情为「delorun verify does not include this check」，文本报告省略这些条目并只计数。它的报告带有通知、最多 512 个字符的详情、模式 `warn` 和徽章 `not-green`。在检查行之后，它打印 Delorun 的物料清单，`--json` 以 `bill`（`delorun.trust-bill/1`）携带它：发布的提交、manifest 与文件列表的 SHA-256 值、受信任根、启动器和最近一次完整哈希；启动器的启动检查；记录的发布日志状态；profile 的插件；Changes；本人的 patch 层中的行和 `!!js` 值；技能根目录；以及 MCP 服务器。插件和 Changes 在插件安装检查和 Changes 提供它们之前是 `unknown`。文本报告说明这些检查以本人的访问权限运行，以该权限运行的程序可以改变它们，其摘要写明物料清单的状态。启动器对运行时文件和发布日志的启动检查在每次启动时运行，位于注册表之外。
+- **尚未构建：** 检查 `workspace-isolation`、`confinement-rule`、`reach-binding`、`own-domain-caa`、`certificates`、`owner-and-devices`、`plugin-pins`、`data-sharing` 和 `home-modes`；在 `start`、`update` 和 `change` 阶段的运行；`integrity.mode` 设置和 `delorun verify --mode`，因此无法选择 `enforce` 和 `off`，徽章也从不是 `green`；`@delorun/integrity` 包；studio 的 Verification 面板；显示模式和最近结果的 `delorun status`；已签名的机器报告。
+
+下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
 
 <a id="contents"></a>
 ## 目录
 
 - [摘要](#summary)
+- [状态](#status)
 - [约定](#contract)
   - [注册表条目](#registry-entry)
   - [检查与阶段](#checks-and-stages)
@@ -33,7 +45,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 <a id="registry-entry"></a>
 ### 注册表条目
 
-每项检查是 `@delorun/integrity` 检查注册表中的一个条目。条目包含下列字段。
+每项检查是检查注册表 `@delorun/contract-verification-checks` 的 `VERIFICATION_CHECKS` 中的一个条目。条目包含下列字段。
 
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
@@ -44,7 +56,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 <a id="checks-and-stages"></a>
 ### 检查与阶段
 
-阶段为 `start`、`update`、`change` 与 `verify`。`start` 在 home 启动时运行。`update` 在更新应用之后运行。`change` 在远程访问选项或运行时变化之后运行。`verify` 在 `delorun verify` 运行时以及 studio 的验证面板刷新时运行。每一项已注册的检查都在每次运行中运行，报告会写明该次运行的阶段。
+阶段为 `start`、`update`、`change` 与 `verify`。`start` 在 home 启动时运行。`update` 在更新应用之后运行。`change` 在远程访问选项或运行时变化之后运行。`verify` 在 `delorun verify` 运行时以及 studio 的验证面板刷新时运行。每一项已注册的检查都在每次运行中运行，报告会写明该次运行的阶段。只有 `verify` 阶段运行，通过 `delorun verify`，它运行 `release-signature` 和 `runtime-files`；其他每个条目都得到 `unknown`，详情为「delorun verify does not run this check」。
 
 注册表包含下列检查。
 
@@ -53,7 +65,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | `release-signature` | `start-always` | 已安装发布版本的签名及其发布日志条目，依据发布约定；经验证的失败在每种模式下都会阻止启动。 |
 | `runtime-files` | `start` | 运行时文件与已签名清单的比对，依据发布约定。文件被改动即为 `fail`。 |
 | `workspace-isolation` | `none` | 每个工作区实际生效的隔离，以及机器上 Docker 所实施的限制。 |
-| `confinement-rule` | `none` | 机器的沙箱方言是否使受限命令无法读取 Delo 的密钥与令牌，且无法连接其控制套接字与 Docker socket，依据运行时约定。无法实施该规则的方言结果为 `not-enforced`。 |
+| `confinement-rule` | `none` | 机器的沙箱方言是否使受限命令无法读取 Delorun 的密钥与令牌，且无法连接其控制套接字与 Docker socket，依据运行时约定。无法实施该规则的方言结果为 `not-enforced`。 |
 | `reach-binding` | `reach` | 远程访问监听器的绑定与生效的远程访问选项。暴露不匹配即为 `fail`。 |
 | `own-domain-caa` | `reach` | 自有域名的 CAA 记录，仅就远程访问约定所指定的证书颁发机构所实施的参数进行检查。 |
 | `certificates` | `reach` | home 名称的证书状态，以及 home 已发出的证书告警。 |
@@ -62,7 +74,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | `data-sharing` | `none` | 上游的两项选择加入项，按本人的设定为开或关。 |
 | `home-modes` | `none` | `~/.delorun` 及其密钥文件的模式。若模式含有组或其他用户的位，即为 `fail`，且详情写明修正它的 `chmod` 命令。 |
 
-启动器的运行时哈希检查不在注册表之内。它在每种模式下都会阻止被改动的运行时，因此修改 `@delorun/integrity` 包不会使其失效。
+启动器的运行时启动检查不在注册表之内：npm 启动器在每次启动时调用 `@delorun/runtime-store`，被改动、缺失或多出的运行时文件在每种模式下都会阻止启动，因此对注册表或 `delorun verify` 的更改不会使其失效。启动只对其标识记录无法担保的文件计算哈希（[C2](c02-release-manifest.zh.md#client-verification)）；`delorun verify` 下的 `runtime-files` 总是对每个文件计算哈希。
 
 每条沙箱规则的状态都映射为一个验证检查结果：`enforced` 为 `pass`，`not-enforced` 为 `not-enforced`，`unconfined` 为 `fail`，`unknown` 为 `unknown`。 `confinement-rule` 检查对 [C1](c01-home-layout.zh.md#confinement-rules) 的每条规则应用该映射。
 
@@ -79,7 +91,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 <a id="modes"></a>
 ### 模式
 
-模式为 `warn`、`enforce` 或 `off`。本人可在设置中以键 `integrity.mode` 设定它，也可用 `delorun verify --mode` 设定。
+模式为 `warn`、`enforce` 或 `off`。约定在设置中以键 `integrity.mode` 设定它，或用 `delorun verify --mode` 设定。这两者都不存在：没有任何东西读取 `integrity.mode`，`delorun verify` 没有 `--mode` 选项且总是以 `warn` 报告，启动器总是按 `enforce` 的方式应用其启动规则，因此本人无法选择 `enforce` 或 `off`。
 
 - `warn`，即默认值：检查在各自的阶段运行，并报告每项结果。除 `start-always` 的 `fail` 会阻止启动之外，没有任何结果会阻止启动或远程访问。启动器的运行时哈希检查仍会阻止被改动的运行时。
 - `enforce`：`blocks` 为 `start` 的检查若产生 `fail`，则阻止启动。`blocks` 为 `reach` 的检查若产生 `fail`，则阻止远程访问，直至结果通过。`blocks` 为 `none` 的检查若产生 `fail`，除报告与徽章外没有其他效果。
@@ -117,6 +129,8 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | `badge` | `green` 或 `not-green`。 | 遵循下文的徽章规则。 |
 | `checks` | 每个注册表条目对应一个对象。 | 每个对象包含 `id`、`result` 与 `detail`。 |
 | `checks[].detail` | 最多 512 个字符的字符串。 | 说明状态与修正方法。从不包含密钥、令牌、所有者验证码、cookie、密钥或文件内容。 |
+
+`delorun verify` 还在其检查行之后，打印本人批准的更改以及存在但本人未批准的任何内容，其 `--json` 报告把它们作为 `changes` 加入（[C21](c21-changes.zh.md#what-verify-and-doctor-report)）。
 
 home 报告不带签名。机器报告带有该机器密钥对报告的规范 JSON 字节（不含 `signature` 字段）所作的 `signature`，并带有 home 发出的一次性挑战，即以 base64url 编码的 32 字节值。
 

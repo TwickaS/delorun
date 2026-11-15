@@ -3,44 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c11-setup-answers.md
 /:
-  en: 244022e59a95cc11
+  en: 97ea8cfa9f809377
   zh: 47e73a1d8b064f60
 /contract-c11-setup-answers:
-  en: 04594b0811754f20
-  zh: 071261a0b16dfd0f
+  en: 892689c114b90b9c
+  zh: 4551b83033068827
 /contract-c11-setup-answers/summary:
-  en: 42062dca15ad7b6d
-  zh: 1d094d667a5dd79a
+  en: 9786a50e27ddcd5b
+  zh: f636534a49ad6786
+/contract-c11-setup-answers/status:
+  en: dde865c0aaa695fa
+  zh: d852557d7a2ee505
 /contract-c11-setup-answers/contents:
-  en: e3fca8d1c607e446
-  zh: 38c3ef50bc38524e
+  en: 5610c10ce5494829
+  zh: be8c3be70fa370da
 /contract-c11-setup-answers/contract:
-  en: dbff55d08b79bea6
-  zh: ddb70133ca858ef4
+  en: 83a5725682b108c4
+  zh: 7b8c51f511ebd229
+/contract-c11-setup-answers/contract/use-cases-and-sections:
+  en: f0e0862d18b6cd0b
+  zh: 09445564d462fda8
 /contract-c11-setup-answers/contract/questions:
-  en: 024eb83704184128
-  zh: ce58a121884345b3
+  en: 0c874a494f17abc1
+  zh: 7587cac6a6c864fc
+/contract-c11-setup-answers/contract/model-providers:
+  en: 2fb643895476e8c9
+  zh: 39b0463caf292f60
 /contract-c11-setup-answers/contract/answer-schema:
-  en: 2cdc63011a3e8d30
-  zh: a9e030adac19cc94
+  en: 423e813b36c0725b
+  zh: 3a2d493ca1db71c9
 /contract-c11-setup-answers/contract/profile-writes:
-  en: d0c489555706ee68
-  zh: 9f28d56bfed1acc3
+  en: 1b713ae03e563be1
+  zh: d815438166a30607
 /contract-c11-setup-answers/contract/the-yes-and-config-forms:
-  en: 928bececeb752878
-  zh: 1c9d5864aef2d52b
+  en: 83159d6170499131
+  zh: 1ac1f8e9888dad67
 /contract-c11-setup-answers/contract/statements:
-  en: 78a44d9222ea99b3
-  zh: 1b1bb60b62d87f56
+  en: 75b2bf47603caff7
+  zh: 550dcaeda1357c6d
 /contract-c11-setup-answers/consumers:
-  en: 517c4c82acf29501
-  zh: a02b5f8c9053191b
+  en: c87a694d938c38ca
+  zh: c4b6fb34eef0f59a
 /contract-c11-setup-answers/compatibility:
-  en: 9532e2d95dfb9821
-  zh: ee2a5134d88930c8
+  en: eddb3471170f7b95
+  zh: 338afb18e07ed0b4
 /contract-c11-setup-answers/security:
-  en: 15aa1d1f48c309b6
-  zh: 445cf91a5ae33ed1
+  en: 24eeeda6377892bb
+  zh: 0f94a5012ce03676
 /contract-c11-setup-answers/decided-values:
-  en: 5651fe9f3a4319ef
-  zh: d2580fff38e4a166
+  en: c2cd9b5f8a07f87c
+  zh: 3926d0cd0b8bd6af

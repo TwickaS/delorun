@@ -1,5 +1,5 @@
 ---
-description: "契约 C3：Delo 更新应用之前显示的更新报告，其条目（插件、组合包、行、原因、已验证或未验证）与原因代码，CLI home 与桌面 Host 的版本与更新状态，健康检查标准，回滚触发条件，以及撤销与恢复的检查与批准提示。"
+description: "契约 C3：Delorun 更新应用之前显示的更新报告，其条目（插件、组合包、行、原因、已验证或未验证）与原因代码，CLI home 与桌面 Host 的版本与更新状态，健康检查标准，回滚触发条件，以及撤销与恢复的检查与批准提示。"
 ---
 
 # C3 更新报告
@@ -8,7 +8,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 ## 摘要
 
-更新应用之前，Delo 会显示目标发布将在本人（the person）的 profile 中改变或破坏什么：它将停用、移除或更改的每个插件、组合包与 profile 行，连同原因，以及该预测是基于 Delo 能够读取的元数据（已验证）还是不能读取的元数据（未验证）。本人确认之前，任何内容都不会应用。CLI（命令行界面）home 与桌面 Host 是彼此独立更新的两套安装，报告同时显示两者的版本与更新状态。切换之后，健康检查会在 120 秒内判定更新是否成立；检查失败会自动回滚，本人之后也可以随时回滚。profile 历史（profile history）的撤销与恢复会运行与安装相同的插件检查，并在应用之前列出它们会改变的内容。类型位于 [`@delorun/contract-update-report`](../../packages/contract-update-report/README.zh.md)。
+更新应用之前，Delorun 会显示目标发布将在本人（the person）的 profile 中改变或破坏什么：它将停用、移除或更改的每个插件、组合包与 profile 行，以及本人修改过的 harness 的每个文件（并说明该修改是否沿用），连同原因，以及该预测是基于 Delorun 能够读取的元数据（已验证）还是不能读取的元数据（未验证）。本人确认之前，任何内容都不会应用。CLI（命令行界面）home 与桌面 Host 是彼此独立更新的两套安装，报告同时显示两者的版本与更新状态。切换之后，健康检查会在 120 秒内判定更新是否成立；检查失败会自动回滚，本人之后也可以随时回滚。profile 历史（profile history）的撤销与恢复会运行与安装相同的插件检查，并在应用之前列出它们会改变的内容。类型位于 [`@delorun/contract-update-report`](../../packages/contract-update-report/README.zh.md)。
 
 <a id="status"></a>
 
@@ -17,6 +17,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun recover` 使用；studio 与桌面应用的更新与回滚尚未构建，撤销与恢复在运行时不带其检查与批准提示。
 
 - **已构建并已使用：** `delorun update` 针对通道上最新的发布生成报告，在本人确认之前不应用任何内容（`--yes` 只确认没有 `disabled`、`removed` 或未验证条目且 `log` 为 `passed` 的报告），写入快照，在 CLI profile 的更新闸门拒绝新轮次期间等待运行中的 chat，取得会话数据副本（session-data copy），在 120 秒内运行 H1 至 H5，并在其中任一项失败时自动回滚。`delorun recover` 通过同一张表回滚，恢复 profile 历史版本，进入与退出安全模式，并丢弃已搁置（set aside）的数据。[更新检查](#update-check)（update check）在从运行时仓库运行的 CLI home 的 Host 中运行，写入其记录，并把提示提供给终端、studio 的侧边栏与 `delorun doctor`。
+- **已构建并已使用：** 报告的 `harness` 条目，运行中 runtime 所运行的、非其签名文件的每个文件对应一条（[C21](c21-changes.zh.md#harness-edits)），与目标的已验证文件合并，由 `delorun update` 打印，`--yes` 按其规则处理；并在切换之前应用这些条目（[更新期间的 harness 文件](#harness-files-across-an-update)）。
 - **尚未构建：** studio 的更新界面、「Update now」与回滚；桌面更新程序对本报告与本流程的使用；状态记录，报告会读取它们，但没有任何安装写入它们，因此另一套安装始终显示 `unknown`；撤销与恢复的批准提示与安装时插件检查（R5），因此 `delorun recover restore` 会立即应用一个版本，并在之后列出改变的内容；撤销列表（没有任何发布发布撤销列表，因此每份报告都把 `revocations` 列为未检查）；H1 的发布日志条件，因为 H1 只检查运行时文件；还原中途失败的恢复，这样的恢复会让 profile 处于部分恢复状态；带有 Update、Keep disabled 与 Roll back 的启动报告，因为上游的启动会停用不兼容的行，并向标准错误打印一行；桌面的致命错误恢复写入历史版本并提供更新之前的 profile；profile 规范化之前的历史版本。
 
 下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
@@ -33,6 +34,7 @@ CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun reco
 - [已验证与未验证](#verified-and-unverified)
 - [数据格式](#data-formats)
 - [应用更新](#applying-an-update)
+- [更新期间的 harness 文件](#harness-files-across-an-update)
 - [健康检查](#health-check)
 - [回滚触发条件](#rollback-triggers)
 - [回滚](#rollback)
@@ -49,9 +51,9 @@ CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun reco
 | 安装 | Id | 更新途径 |
 | --- | --- | --- |
 | CLI home：运行时仓库（runtime store）与 home 进程（home process） | `cli-home` | `delorun update`，经由更新通道（[C19](c19-home-process.zh.md)） |
-| 桌面应用及其 Host | `desktop-host` | Delo 更新源上的桌面更新程序（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)） |
+| 桌面应用及其 Host | `desktop-host` | Delorun 更新源上的桌面更新程序（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)） |
 
-每套安装都有自己的 profile，以及自己的 Delo 与 DSH 版本；更新其中一套从不切换另一套。报告会在 [C1](c01-home-layout.zh.md) 指定的路径读取每套安装的状态记录（安装 id、Delo 版本、DSH 版本、通道、更新状态、目标版本、时间）。没有任何安装写入其记录，因此两者都显示为 `unknown`；记录缺失或无法读取时，该安装显示为 `unknown`。
+每套安装都有自己的 profile，以及自己的 Delorun 与 DSH 版本；更新其中一套从不切换另一套。报告会在 [C1](c01-home-layout.zh.md) 指定的路径读取每套安装的状态记录（安装 id、Delorun 版本、DSH 版本、通道、更新状态、目标版本、时间）。没有任何安装写入其记录，因此两者都显示为 `unknown`；记录缺失或无法读取时，该安装显示为 `unknown`。
 
 | 状态 | 含义 |
 | --- | --- |
@@ -79,7 +81,7 @@ CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun reco
 
 每次检查都以 0600 模式写入 `run/<profile>/update-check.json`，schema 为 `delorun.update-check/1`：`checked`，检查的时间；`newest`，最近一次成功检查所验证的最新发布，附带其 `delorun` 与 `dsh` 版本、其 `channel`、`security`（manifest 不带该标记时为 false），以及 manifest 携带 `summary` 时的 `summary`；`verified`，`newest` 被验证的时间；`timestamp`，指明 `newest` 的时间戳的版本；以及 `failure`，上次检查失败的原因，取值为代码 `running-release-unreadable`、`trust-state-invalid`、`unreachable`、`download-refused`、`deadline`、`unverified`、`log-bundle-invalid`、`regressed` 与 `internal` 之一。记录只保存代码，从不保存失败本身的文本，因为该文本可能带有通道主机选定的文字；home 日志保存该文本，并转义其中的控制字符。失败的检查保留 `newest`、`verified` 与 `timestamp`。当通道时间戳的版本低于记录中的版本，或其在同一通道上的发布低于 `newest` 时，检查为 `regressed`。权限比 0600 模式宽松或无法通过验证的记录按不存在读取。
 
-当 `newest.delorun` 比正在运行的 Delo 版本更新时，存在一条提示。它写明正在运行的发布、更新的发布、按语义化版本划分的跨度（`patch`、`minor` 或 `major`），以及该更新的发布会在任一版本轴上停用 profile 中多少个已安装插件；这一数目由[条目](#items)中的插件评估在没有撤销列表的情况下决定，依据读取提示时已安装的 profile。提示指明 `delorun update`，不应用任何内容。终端把它显示为一行；studio 的侧边栏通过 Connection 路由 `GET /api/delorunUpdateCheck.notice` 显示它，该路由向所有者回答 `{ "notice": <notice> | null }`，并拒绝远程访问设备；`delorun doctor` 把它显示为其 `update` 行。开关关闭时，该行不注册任何路由，下一次启动会移除该记录。
+当 `newest.delorun` 比正在运行的 Delorun 版本更新时，存在一条提示。它写明正在运行的发布、更新的发布、按语义化版本划分的跨度（`patch`、`minor` 或 `major`），以及该更新的发布会在任一版本轴上停用 profile 中多少个已安装插件；这一数目由[条目](#items)中的插件评估在没有撤销列表的情况下决定，依据读取提示时已安装的 profile。提示指明 `delorun update`，不应用任何内容。终端把它显示为一行；studio 的侧边栏通过 Connection 路由 `GET /api/delorunUpdateCheck.notice` 显示它，该路由向所有者回答 `{ "notice": <notice> | null }`，并拒绝远程访问设备；`delorun doctor` 把它显示为其 `update` 行。开关关闭时，该行不注册任何路由，下一次启动会移除该记录。
 
 Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateCheck.channel`，无论检查是否开启。`host` 是启动器记录在主目录 `trust/channel.json` 中的渠道来源的主机（有端口时包含端口）；该渠道提供时间戳、根文件、清单和日志记录，因此检查不会联系其他主机。生产渠道为 `null`，联系 releases.delorun.com 和 GitHub。工作室用它在发布检查的同意文案中写明所联系的主机。
 
@@ -103,7 +105,7 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 | `installations` | `{ "id", "delorun", "dsh", "state", "target"? }` 的列表 | 两套安装的版本与更新状态。 |
 | `items` | 条目列表 | 发生改变的全部内容，先按种类、再按主体排序。 |
 | `notChecked` | `revocations` 的列表 | 报告未读取的来源；报告会如实写明，而不是把它们算作已检查。`revocations` 表示目标没有发布撤销列表，报告写明：`Not checked: revocations. This release publishes no revocation list; the health check after the switch holds what one would show.` |
-| `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | 具有每种效果的条目数、未验证条目数，以及 `data` 条目数。 |
+| `counts` | `{ "disabled", "removed", "changed", "unverified", "data", "harness" }` | 具有每种效果的条目数、未验证条目数、`data` 条目数，以及 `harness` 条目数。 |
 
 报告保存在快照的历史版本中，因此历史会显示该更新被预测将改变什么。没有任何发布会读回已保存的报告，因此 `log` 的 `unchecked` 取值属于格式 2，无需新版本：较早发布写入的报告从不携带该取值。
 
@@ -113,12 +115,12 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `kind` | `plugin`、`bundle`、`row` 或 `data` | 条目所涉及的内容。 |
-| `subject` | 对象 | 对于 `plugin`：`{ "name", "version" }`；对于 `bundle`：`{ "package" }`；对于 `row`：`{ "id"?, "name", "layer" }`，其中 `layer` 指明持有该行的组合包、profile patch、home patch 或 overlay；对于 `data`：`{ "directories": ["sessions", "storages"] }`。 |
+| `kind` | `plugin`、`bundle`、`row`、`data` 或 `harness` | 条目所涉及的内容。 |
+| `subject` | 对象 | 对于 `plugin`：`{ "name", "version" }`；对于 `bundle`：`{ "package" }`；对于 `row`：`{ "id"?, "name", "layer" }`，其中 `layer` 指明持有该行的组合包、profile patch、home patch 或 overlay；对于 `data`：`{ "directories": ["sessions", "storages"] }`；对于 `harness`：`{ "file" }`，即文件相对于 runtime 根目录的路径。 |
 | `reason` | 原因代码 | 改变的原因（[原因](#reasons)）。 |
 | `effect` | `disabled`、`removed`、`changed` 或 `kept` | 它在目标上会发生什么；`kept` 只出现在本人应当看到的已豁免或未验证主体上。 |
-| `verification` | `verified` 或 `unverified` | 预测是否基于 Delo 读取的元数据（[已验证与未验证](#verified-and-unverified)）。 |
-| `detail` | 对象 | 该原因的事实，例如要求范围、版本轴、撤销消息或替代组合包。 |
+| `verification` | `verified` 或 `unverified` | 预测是否基于 Delorun 读取的元数据（[已验证与未验证](#verified-and-unverified)）。 |
+| `detail` | 对象 | 该原因的事实，例如要求范围、版本轴、撤销消息、替代组合包，或 harness 文件的 `merge`、`result` 与 `diff`。 |
 | `actions` | 列表 | 提供的选项：`update-plugin`、`keep-disabled`、`allow-version`、`skip-update`、`copy-session-data`、`continue-without-copy`。 |
 
 <a id="reasons"></a>
@@ -127,54 +129,69 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 | 原因 | 种类 | 效果 | 消息 |
 | --- | --- | --- | --- |
-| `dsh-requirement-unmet` | plugin | disabled | `<plugin> requires DSH <range>; Delo <to.delorun> runs DSH <to.dsh>.` |
-| `delorun-requirement-unmet` | plugin | disabled | `<plugin> requires Delo <range>; the update installs Delo <to.delorun>.` |
-| `requirement-unreadable` | plugin | disabled | `<plugin> declares engines.<axis> in a form Delo cannot read.` |
-| `requirement-exempted` | plugin | kept | `<plugin> requires <DSH or Delo> <range>; your exemption for this exact version covers <version>.` |
+| `dsh-requirement-unmet` | plugin | disabled | `<plugin> requires DSH <range>; Delorun <to.delorun> runs DSH <to.dsh>.` |
+| `delorun-requirement-unmet` | plugin | disabled | `<plugin> requires Delorun <range>; the update installs Delorun <to.delorun>.` |
+| `requirement-unreadable` | plugin | disabled | `<plugin> declares engines.<axis> in a form Delorun cannot read.` |
+| `requirement-exempted` | plugin | kept | `<plugin> requires <DSH or Delorun> <range>; your exemption for this exact version covers <version>.` |
 | `exemption-not-carried` | plugin | disabled | `<plugin> runs today under your exemption for <from version>; the exemption does not cover <to version>.` |
 | `requirement-undeclared` | plugin | kept | `<plugin> declares no DSH requirement, so its compatibility with DSH <to.dsh> is not stated.` 仅当插件既未声明 `engines.dsh`，也未声明 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` peer 时给出。 |
 | `plugin-revoked` | plugin | disabled | `<plugin> is revoked: <reason>, <message>.`（[C13](c13-catalogue-revocation.zh.md#revocation-list)） |
-| `manifest-unreadable` | plugin | kept | `Delo could not read <plugin>'s package.json; it cannot predict what the update does to it.` |
+| `manifest-unreadable` | plugin | kept | `Delorun could not read <plugin>'s package.json; it cannot predict what the update does to it.` |
 | `bundle-retired` | bundle | removed | `<bundle> is retired in DSH <to.dsh> and leaves the bundle list.`（上游的 `RETIRED_BUNDLES`） |
 | `bundle-template-normalised` | bundle | changed | `The bundle list matches an installation-owned list that DSH <to.dsh> replaces with its template.` |
 | `bundle-skipped` | bundle | disabled | `<bundle> cannot load on the target: <reason>.`（上游的 `skippedBundles`） |
-| `row-disabled` | row | disabled | `Row <id or name> in <layer> loads <plugin>, which the update disables.` |
+| `row-disabled` | row | disabled | `Row <id or name> in <layer> loads <plugin>, which the update disables.`；带 `detail.bundlePatch` 时：`Delorun <to.delorun> switches off row <id> through its bundle <bundle>; the row stays in your profile but does not run.` |
 | `row-include-blocked` | row | disabled | `Include <file> reaches <plugin>, which the update disables, so the whole Include is disabled.` |
-| `data-format-changed` | data | changed | `Delo <to.delorun> keeps chat data in a format Delo <from.delorun> may not read.` |
-| `data-format-unknown` | data | changed | `Delo cannot tell whether Delo <from.delorun> reads the chat data Delo <to.delorun> writes.` |
+| `data-format-changed` | data | changed | `Delorun <to.delorun> keeps chat data in a format Delorun <from.delorun> may not read.` |
+| `data-format-unknown` | data | changed | `Delorun cannot tell whether Delorun <from.delorun> reads the chat data Delorun <to.delorun> writes.` |
+| `harness-change-carried` | harness | kept | `Your change to <file> carries over to Delorun <to.delorun>.` |
+| `harness-change-merged` | harness | changed | `Your change to <file> and Delorun <to.delorun>'s change to it merge into a file neither has; read the merge before you confirm.` |
+| `harness-change-conflicts` | harness | disabled | `Your change to <file> conflicts with Delorun <to.delorun>'s file; the new release's file runs, and yours is kept beside it as <file>.mine.`；对于 `release-changed-removed`：`You removed <file>, and Delorun <to.delorun> changed it; the new release's file runs.` |
 
-`bundle-skipped` 条目与组合包层的行来自目标将加载的组合包列表：模板，或去掉已退役组合包之后的 profile 列表。每个组合包先从目标的安装锚点解析，再从 profile 解析，与上游的 profile 加载的解析方式相同。目标会跳过这样的组合包：无法解析、未声明 `dsh.bundle`、所列 `dsh.bundle.platforms` 不含本机平台、其 DSH 要求（`engines.dsh`，否则为其 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` peer）目标不满足且没有精确版本豁免涵盖，或其 `engines.delorun` 目标不满足。已加载组合包在 `dsh.bundle.patch` 中声明的 patch 文件会像 profile patch 那样逐行遍历，每一行的 `layer` 都是该组合包。
+`bundle-skipped` 条目与组合包层的行来自目标将加载的组合包列表：模板，或去掉已退役组合包之后的 profile 列表。每个组合包先从目标的安装锚点解析，再从 profile 解析，与上游的 profile 加载的解析方式相同。目标会跳过这样的组合包：无法解析、未声明 `dsh.bundle`、所列 `dsh.bundle.platforms` 不含本机平台、其 DSH 要求（`engines.dsh`，否则为其 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` peer）目标不满足且没有精确版本豁免涵盖，或其 `engines.delorun` 目标不满足。已加载组合包在 `dsh.bundle.patch` 中声明的 patch 文件会像 profile patch 那样逐行遍历，每一行的 `layer` 都是该组合包。带 `id` 且字面为 `disabled: true` 的 patch 条目，或带 `id` 的已停用插入行，会关闭该行；报告会列出目标的组合包 patch 停用而运行中版本的 patch 没有停用的每一行（`row-disabled`，带 `detail.bundlePatch`，`disabled`，`verified`），因此 H3 接受它。运行中版本的 patch 用同一读取器从其自身 runtime 读取。`!!js` 表达式视为未停用。
+
+`harness` 条目为 `verified`，来自对三方内容的三向合并：运行中版本的签名文件、运行中 runtime 所运行的内容（已批准的内容；对于启动失败而被排除的变更，则仍被排除，改为运行实际在运行的内容），以及目标的签名文件，在目标的文件列表验证之后读取；其 `detail.merge` 指明结果。当目标保持该文件不变（`release-unchanged`），或目标的文件已等于已批准的内容（`in-release`）时，变更原样沿用（`harness-change-carried`，无操作）。当两个版本的文件都有差异，且从运行中版本的文件到已批准内容的 patch 能在无模糊匹配、无换行符转换的情况下应用于目标的文件，或只有执行位不同时，目标运行双方都没有的合并结果（`merged`，`harness-change-merged`，操作 `skip-update`）：该条目带有 `detail.diff`，即从目标的文件到合并后文件的统一 diff，执行位不同时带有 `old mode` 与 `new mode` 行，其大小限制与 [C21](c21-changes.zh.md) 的 diff 相同（二进制或大于 1 MiB 的一侧不含行，报告的合并 diff 总量超过 256 KiB 后任何 diff 都不含行，各自以 `notShown` 说明原因），`delorun update` 会把它打印在该条目之下。对于目标运行的、沿用或合并变更所涉及的每个文件，`detail.result` 保存其所运行内容的 SHA-256 与执行位。其余情形都是冲突（`harness-change-conflicts`，操作 `skip-update`）：编辑重叠（`edits-overlap`）、双方都修改了非 UTF-8 文本的文件（`binary`）或大于 1 MiB 的文件（`too-large`）、目标删除了本人修改过的文件（`release-removed`）、本人删除了目标修改过的文件（`release-changed-removed`），或双方以不同内容新增同一文件（`both-added`）。冲突文件绝不会悄悄保留任何一方。回滚的报告没有 `harness` 条目，因为回滚到的 runtime 运行它自己的已批准文件。
 
 任一版本轴不匹配时，报告会写明两个目标版本，其 `actions` 提供将插件更新到满足目标的版本，并针对未满足的那条轴，提供在目标版本上的精确版本豁免（[C17](c17-plugin-versions.zh.md#exemptions)）。
 
-每个插件的两条轴由上游自己的评估决定，即插件安装程序与启动预检调用的函数（`evaluatePluginCompatibility` 与 `evaluateDelorunRequirement`），以目标的 DSH 与 Delo 版本代替正在运行的版本，且不带豁免；报告随后按轴应用豁免文件。在 DSH 轴上，声明了 `engines.dsh` 时由它单独决定；否则每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` peer 范围都必须接受目标的 DSH，`workspace:` peer 接受任何版本。未满足的 peer 在 `<range>` 中写作 `<peer range> (peer <package>)`，因此报告会停用下一次启动将停用的每个插件。上游拒绝读取的声明，包括不是字符串的 peer 范围，为 `requirement-unreadable`。更新检查用同一评估统计它将停用的插件，`delorun plugin check` 则为单个插件显示该评估（[C17](c17-plugin-versions.zh.md#evaluation)）。
+每个插件的两条轴由上游自己的评估决定，即插件安装程序与启动预检调用的函数（`evaluatePluginCompatibility` 与 `evaluateDelorunRequirement`），以目标的 DSH 与 Delorun 版本代替正在运行的版本，且不带豁免；报告随后按轴应用豁免文件。在 DSH 轴上，声明了 `engines.dsh` 时由它单独决定；否则每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` peer 范围都必须接受目标的 DSH，`workspace:` peer 接受任何版本。未满足的 peer 在 `<range>` 中写作 `<peer range> (peer <package>)`，因此报告会停用下一次启动将停用的每个插件。上游拒绝读取的声明，包括不是字符串的 peer 范围，为 `requirement-unreadable`。更新检查用同一评估统计它将停用的插件，`delorun plugin check` 则为单个插件显示该评估（[C17](c17-plugin-versions.zh.md#checking-a-plugin-before-it-is-installed)）。
 
 <a id="verified-and-unverified"></a>
 
 ## 已验证与未验证
 
-当条目陈述的每项事实都读自 Delo 检查过的来源时，该条目为 `verified`：已安装插件的 `package.json`、暂存目标的包，以及已验证的 manifest。当某项事实缺失或无法读取时，条目为 `unverified`，例如无法解析的 manifest、模块无法解析的行、未声明要求的插件，或其 `package.json`、`dsh.bundle`、要求或 patch 文件不是上游可读取形式的组合包，后者是一个 `bundle-skipped` 条目。未验证条目从不被算作安全：报告在每个此类条目旁显示 "Delo cannot predict this item"，摘要也会统计它们。健康检查将它们与报告列出的条目同等对待。
+当条目陈述的每项事实都读自 Delorun 检查过的来源时，该条目为 `verified`：已安装插件的 `package.json`、暂存目标的包，以及已验证的 manifest。当某项事实缺失或无法读取时，条目为 `unverified`，例如无法解析的 manifest、模块无法解析的行、未声明要求的插件，或其 `package.json`、`dsh.bundle`、要求或 patch 文件不是上游可读取形式的组合包，后者是一个 `bundle-skipped` 条目。未验证条目从不被算作安全：报告在每个此类条目旁显示 "Delorun cannot predict this item"，摘要也会统计它们。健康检查将它们与报告列出的条目同等对待。
 
 <a id="data-formats"></a>
 
 ## 数据格式
 
-每个运行时发行包（runtime closure）都在其根目录携带 `data-formats.json`，并列在其已签名的文件列表中（[C2](c02-release-manifest.zh.md)）：`{ "schema": "delorun.data-formats/1", "persistence": <SHA-256 of upstream's docs/persistence-schema.json at the built commit>, "delorunRecords": { <record name>: <version> } }`。`delorunRecords` 列出 Delo 自己的包在 home 下保存的每份带版本的记录。
+每个运行时发行包（runtime closure）都在其根目录携带 `data-formats.json`，并列在其已签名的文件列表中（[C2](c02-release-manifest.zh.md)）：`{ "schema": "delorun.data-formats/1", "persistence": <SHA-256 of upstream's docs/persistence-schema.json at the built commit>, "delorunRecords": { <record name>: <version> } }`。`delorunRecords` 列出 Delorun 自己的包在 home 下保存的每份带版本的记录。
 
-报告比较正在运行的发布与目标发布。当两份 manifest 的 `dsh` 版本不同、`persistence` 摘要不同，或 `delorunRecords` 不同时，chat 数据即有差异；上游的 schema 清单涵盖 Session 头、信封与事件，但不涵盖 `storages/` 下的任何存储单元，因此 `dsh` 版本不同本身就算作一处差异。任何差异都是一个原因为 `data-format-changed` 的 `verified` `data` 条目，Delo 将每处差异都视为单向的。任一方的 `data-formats.json` 缺失或无法读取时为 `data-format-unknown`，即 `unverified`，并按同样方式对待。不存在降级拒绝：该比较从不阻止回滚。
+报告比较正在运行的发布与目标发布。当两份 manifest 的 `dsh` 版本不同、`persistence` 摘要不同，或 `delorunRecords` 不同时，chat 数据即有差异；上游的 schema 清单涵盖 Session 头、信封与事件，但不涵盖 `storages/` 下的任何存储单元，因此 `dsh` 版本不同本身就算作一处差异。任何差异都是一个原因为 `data-format-changed` 的 `verified` `data` 条目，Delorun 将每处差异都视为单向的。任一方的 `data-formats.json` 缺失或无法读取时为 `data-format-unknown`，即 `unverified`，并按同样方式对待。不存在降级拒绝：该比较从不阻止回滚。
 
-`data` 条目提供 `copy-session-data`（默认）与 `continue-without-copy`。其 detail 保存副本的文件数与大小，以及 home 所在文件系统的可用空间，报告在旁边写明：`Without the copy, Delo cannot go back to <from.delorun> after <to.delorun> first starts.` 没有任何差异时不提供副本，`delorun update --data-copy` 仍会取得一份。
+`data` 条目提供 `copy-session-data`（默认）与 `continue-without-copy`。其 detail 保存副本的文件数与大小，以及 home 所在文件系统的可用空间，报告在旁边写明：`Without the copy, Delorun cannot go back to <from.delorun> after <to.delorun> first starts.` 没有任何差异时不提供副本，`delorun update --data-copy` 仍会取得一份。
 
-会话数据副本以真正的副本（`COPYFILE_FICLONE`，不可用时回退为完整复制）保存 home 的 `sessions/` 与 `storages/`，从不使用硬链接。`attachments/` 留在原处，因为没有任何操作从中删除内容；`cache/` 不纳入副本，会重建；Delo 在 `secrets/` 下的记录从不被复制或恢复：上一个发布能读取当前发布写入的每份记录。副本在运行中的 chat 结束、Host 停止之后，在持有 home 锁期间，写入 `data-copies/<to.delorun>/`，旁边是 `copy.json`（两个发布的 `data-formats.json`、文件数与字节总数）；写入时使用临时名称，并在运行时切换之前重命名并同步。放不下的副本会以 `DATA_COPY_NO_SPACE` 拒绝更新，除非本人选择不带副本继续。只保留一份副本：后一次更新提交时，其副本替换较早的那份；在切换之前结束的更新，其副本会被移除。
+`delorun repair` 把 home 的 `data-format.json`（[C1](c01-home-layout.zh.md)）与它所安装的发布作比较，而此处的比较读取的是两个发布：记录更新或无法排序时，修复以 `DATA_NEWER` 被拒绝；记录无法与该发布比较（发布格式无法读取，或版本不是 semver）的 home，以 `DATA_UNREADABLE` 被拒绝；只有没有记录的 home 才会继续。`--restore-copy` 只在副本的格式等于或早于该发布时（否则为 `DATA_COPY_NEWER`），把写入这些数据的发布所对应的副本放回，这会通过下文的恢复把今天的 `sessions/` 和 `storages/` 搁置，然后把副本的事实写为 home 的记录。
+
+会话数据副本以真正的副本（`COPYFILE_FICLONE`，不可用时回退为完整复制）保存 home 的 `sessions/` 与 `storages/`，从不使用硬链接。`attachments/` 留在原处，因为没有任何操作从中删除内容；`cache/` 不纳入副本，会重建；Delorun 在 `secrets/` 下的记录从不被复制或恢复：上一个发布能读取当前发布写入的每份记录。副本在运行中的 chat 结束、Host 停止之后，在持有 home 锁期间，写入 `data-copies/<to.delorun>/`，旁边是 `copy.json`（两个发布的 `data-formats.json`、文件数与字节总数）；写入时使用临时名称，并在运行时切换之前重命名并同步。放不下的副本会以 `DATA_COPY_NO_SPACE` 拒绝更新，除非本人选择不带副本继续。只保留一份副本：后一次更新提交时，其副本替换较早的那份；在切换之前结束的更新，其副本会被移除。
 
 <a id="applying-an-update"></a>
 
 ## 应用更新
 
-1. 本人确认报告；`delorun update` 会打印报告并询问，`delorun update --yes` 会确认一份没有 `disabled` 或 `removed` 条目、没有未验证条目且 `log` 为 `passed` 的报告。有 `data` 条目时，本人还要就副本作出选择：`--yes` 会取得副本，拒绝则需要 `--no-data-copy` 或提示中的第二个选项。
-2. 写入快照：一个名为「Before update to Delo <to.delorun>」的 profile 历史版本，包含 profile patch、home patch、组合包列表、两个豁免文件、该 profile 的 `pnpm-workspace.yaml` 以及报告。更新记录 `run/<profile>/update.json`（[C1](c01-home-layout.zh.md)）写明两个版本、数据是否有差异、是否取得副本，以及快照的历史版本（`snapshot`）。
+1. 本人确认报告；`delorun update` 会打印报告并询问，`delorun update --yes` 会确认一份没有 `disabled` 或 `removed` 条目、没有 `harness-change-merged` 条目、没有未验证条目且 `log` 为 `passed` 的报告。有 `data` 条目时，本人还要就副本作出选择：`--yes` 会取得副本，拒绝则需要 `--no-data-copy` 或提示中的第二个选项。
+2. 写入快照：一个名为「Before update to Delorun <to.delorun>」的 profile 历史版本，包含 profile patch、home patch、组合包列表、两个豁免文件、该 profile 的 `pnpm-workspace.yaml` 以及报告。更新记录 `run/<profile>/update.json`（[C1](c01-home-layout.zh.md)）写明两个版本、数据是否有差异、是否取得副本，以及快照的历史版本（`snapshot`）。
 3. 运行中的 chat 结束，或由本人停止；CLI 的切换经由 home 进程的更新握手进行，该握手从不在 chat 运行时切换（[C19](c19-home-process.zh.md)），桌面应用则在其重启前步骤中完成这一步。在 Host 已停止且持有 home 锁时，如果本人选择了会话数据副本，则写入该副本。
 4. 更新记录的 `targetStarted` 被写入并同步，随后目标启动，健康检查开始运行。
+
+<a id="harness-files-across-an-update"></a>
+
+## 更新期间的 harness 文件
+
+当运行中 runtime 的 harness 变更在其可写副本中等待评审时，更新会以 [C19](c19-home-process.zh.md) 的 `HARNESS_CHANGES_PENDING` 拒绝：一次在 `update.prepare`、拉取任何内容之前，一次在切换之前。本人须先应用或丢弃这些变更，这样更新就不会留下未经查看的变更。当副本无法扫描时（因为超出扫描限制、某个条目无法读取，或文件在读取期间发生变化），更新在同样两个时点以 `HARNESS_COPY_UNREADABLE` 拒绝，并写明失败原因和清除它的命令：`delorun changes edit-harness --discard`，或修复副本后运行 `delorun changes list`。
+
+在切换之前，即会话数据副本写入之后、在 harness 的锁内（runtime 切换在该锁内运行），home 进程针对目标的已验证文件重新规划合并，并与本人所确认报告中的 `harness` 条目比较；该报告是它在 `update.prepare` 时保留的，它不从客户端读取报告的任何内容。某个文件只出现在其中一方、`merge` 不同或 `result` 不同，都会以 `HARNESS_REPORT_STALE` 拒绝更新，该错误写明文件并提示本人重新运行 `delorun update`；不会为目标写入任何内容，更新以 `aborted` 结束，Host 重新运行。否则，它写入目标 runtime 的 harness 文件（[C21](c21-changes.zh.md#harness-edits)）。先前安装在 `changes/harness/<to>/` 下留下的内容会先被移除，绝不合并。每个沿用的文件成为目标的一个已批准文件，其 `signed` 为目标的文件，并记录为目标 runtime 的一次已应用 `harness-edit`，`decidedFrom: "update"`；目标已持有的文件不需要任何操作。有冲突的文件运行目标的文件：当运行中的 runtime 有可写副本，或任一文件冲突时，目标获得一个可写副本，本人修改过的每个冲突文件以 `<file>.mine` 保留其中，它从不算作变更；本人删除的文件没有需要保留的内容。切换前如有任何失败，为目标写入的内容会被移除，更新以 `aborted` 结束，Host 重新运行。运行中 runtime 的记录、副本和日志条目从不被写入，因此回滚到它时会再次运行其已批准文件。目标的组合树由它的首次启动构建，其签名入口通过交接描述符（[C21](c21-changes.zh.md#harness-edits)）交给它，因此健康检查覆盖它所运行的文件。
 
 <a id="health-check"></a>
 
@@ -198,7 +215,7 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 - T2. 目标启动 120 秒后健康检查仍未完成；
 - T3. 目标的 Host 进程在健康检查期间退出。
 
-应本人请求，本人之后可以随时用 `delorun recover rollback` 回滚。studio 没有更新界面，桌面应用也没有 Delo 回滚。
+应本人请求，本人之后可以随时用 `delorun recover rollback` 回滚。studio 没有更新界面，桌面应用也没有 Delorun 回滚。
 
 回滚会恢复快照中的文件，并将安装切换回被替换的发布：对于 `cli-home`，是运行时仓库保留的运行时（[C1](c01-home-layout.zh.md)）；对于 `desktop-host`，是缓存的上一个发布（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)），该项尚未构建。自动回滚之后，`delorun update` 会写明未满足的标准。失败的回滚会使状态保持为 `failed`，并提供安全模式与 `delorun recover`。
 
@@ -225,7 +242,7 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 撤销（恢复到最近一次之前的版本）与恢复（任一历史版本）会带回 profile 文件，并随之带回插件版本、构建批准与豁免。`delorun recover restore <version>` 规划恢复，立即写入计划列出的文件，并在应用之后打印改变的内容；它不运行下面的任何检查，不显示提示，也不传入撤销列表。中途失败的恢复会让 profile 处于部分恢复状态，并将其报告为失败的恢复。要求是，在写入任何内容之前，两者都会：
 
-- 对其带回的每个插件版本运行安装时运行的检查：两条版本轴（[C17](c17-plugin-versions.zh.md)）、撤销列表（[C13](c13-catalogue-revocation.zh.md)）、完整性固定值、pnpm 的构建批准，以及在挂载了 `pluginAudit` 服务时运行该服务，其发现显示为 [C13](c13-catalogue-revocation.zh.md#listed-findings) 中的状态；Delo 本身不运行任何插件审计；
+- 对其带回的每个插件版本运行安装时运行的检查：两条版本轴（[C17](c17-plugin-versions.zh.md)）、撤销列表（[C13](c13-catalogue-revocation.zh.md)）、完整性固定值、pnpm 的构建批准，以及在挂载了 `pluginAudit` 服务时运行该服务，其发现显示为 [C13](c13-catalogue-revocation.zh.md#listed-findings) 中的状态；Delorun 本身不运行任何插件审计；
 - 显示一个批准提示，列出发生改变的插件（新增、移除或换成另一个版本）、发生改变的构建（恢复的版本允许、拒绝或保持待定的 pnpm `allowBuilds` 条目）以及发生改变的豁免（向 `compatibility.json` 与 `delorun-compatibility.json` 新增或从中移除的授权）；
 - 只在本人批准之后应用，并将结果写为一个新的历史版本。
 
@@ -256,7 +273,7 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 ## 兼容性
 
-报告的 `schema` 指明其主版本；原因代码在该版本中构成封闭列表，新增原因即为新的主版本，因此读取方永远不会遇到它不认识的代码。对上游自身启动行为的必要改动是：启动时不兼容的插件以 Update、Keep disabled 与 Roll back 报告，而不是在标准错误上打印一行后被停用；桌面的致命错误恢复「Disable third-party plugins」写入一个历史版本，并提供「Restore profile from before the update」；profile 规范化先写入一个历史版本；这三项均未构建，规范化会在不写历史版本的情况下改写组合包列表。
+报告的 `schema` 指明其主版本；原因代码在该版本中构成封闭列表，新增原因即为新的主版本，因此读取方永远不会遇到它不认识的代码。格式 1 和 2 已退役：没有任何 Delorun 版本写过它们，因此不存在它们的读取器。0.1.0-rc.1 至 rc.3 写过格式 3，所以其原因列表是封闭的；此后的改动只增加了格式 3 的读取方会忽略的可选 `detail` 字段（`bundlePatch`），需要新原因的版本写格式 4，并附带格式 3 的读取器。对上游自身启动行为的必要改动是：启动时不兼容的插件以 Update、Keep disabled 与 Roll back 报告，而不是在标准错误上打印一行后被停用；桌面的致命错误恢复「Disable third-party plugins」写入一个历史版本，并提供「Restore profile from before the update」；profile 规范化先写入一个历史版本；这三项均未构建，规范化会在不写历史版本的情况下改写组合包列表。
 
 <a id="security"></a>
 
@@ -320,4 +337,8 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 | `update-report-applies-nothing` | update | `delorun update --report` 打印报告，不询问任何内容，也不应用任何内容。 |
 | `update-notice-off-makes-no-request` | update-notice | 开关关闭时，该行不挂载任何服务与路由。 |
 | `update-notice-remote-session-offers-no-action` | update-notice | 远程会话的提示不提供任何控件。 |
+| `c03-harness-change-carried` | update | 目标未改动的 harness 文件的变更为一个 `harness-change-carried` 条目，`kept` 且 `verified`，写明目标所运行内容的 SHA-256，`--yes` 仍会确认该报告；应用更新时会写入带有沿用文件的目标记录和一条在 `update` 时决定的已应用日志条目，回滚则再次运行上一个 runtime 自己的记录（`harness-items.spec.ts`、`harness-update.integration.spec.ts`、`update.e2e.integration.spec.ts`）。 |
+| `c03-harness-change-merged` | update | 目标改动过但与之不重叠的 harness 文件的变更为一个 `harness-change-merged` 条目，`changed` 且 `verified`，提供 `skip-update`，并附带从目标的文件到合并后文件的 diff；`delorun update` 打印该 diff，`--yes` 不会确认该报告（`@delorun/update` 与 CLI 中的 `harness-items.spec.ts`、`command.spec.ts`、`harness-merge.spec.ts`）。 |
+| `c03-harness-report-stale` | update | 在 harness 锁内合并结果与已确认报告的 `harness` 条目在文件、`merge` 或 `result` 上不同的应用，会在写入或切换任何内容之前以 `HARNESS_REPORT_STALE` 拒绝；home 进程把它保留的报告交给沿用步骤（`harness-carry.integration.spec.ts`、`harness-update.integration.spec.ts`、`handshake.integration.spec.ts`）。 |
+| `c03-harness-conflict-keeps-mine` | update | 与目标冲突的 harness 文件变更为一个 `harness-change-conflicts` 条目，`disabled`，提供 `skip-update`，`--yes` 不会确认该报告；应用更新时运行目标的文件，并把本人的内容以 `<file>.mine` 写在目标可写副本中它的旁边（`harness-items.spec.ts`、`command.spec.ts`、`harness-update.integration.spec.ts`）。 |
 | `c03-previous-release-reads-delorun-records` | update | `delorunRecords` 列出的每份记录都按所列版本写入，且一个发布写入的更新记录会由同一读取方读回。 |

@@ -6,47 +6,59 @@
   en: dda214082df87c16
   zh: f1749d5955ea1451
 /contract-c5-device-approval:
-  en: fbd3ca76614d540d
-  zh: 05446b1e2abc685d
+  en: a36300850d6aa68c
+  zh: f48853351a3fff1f
 /contract-c5-device-approval/summary:
-  en: 5bb9938e84c122a9
-  zh: d23290cb4f4c02a6
+  en: f782a14471996f28
+  zh: fb935274a65be795
+/contract-c5-device-approval/status:
+  en: 313b9aa21912fca4
+  zh: 7e60434b0ae52d22
 /contract-c5-device-approval/contents:
-  en: e356f5bdfd74bf46
-  zh: 4597fae68e13e2b6
+  en: 1fbf42d12d2d5bf7
+  zh: 03b0f807fa83d9e6
 /contract-c5-device-approval/contract:
   en: f01b7dcd9a443524
   zh: 612df9cabb1d68ca
 /contract-c5-device-approval/contract/keys-and-storage:
-  en: d1aed654af95c35d
-  zh: 2f374faf46a54c3b
+  en: e6e130f7307dca60
+  zh: 79720ad9e7243b82
 /contract-c5-device-approval/contract/binding-to-an-address:
-  en: ebb557f5a7d85527
-  zh: 2170b752279402dc
+  en: 79b44deed524f601
+  zh: 0fab32686a2e2729
 /contract-c5-device-approval/contract/owner-claim:
-  en: aec263e8728edcb3
-  zh: 2a5d1854ff103a8d
+  en: f4bace457321329c
+  zh: 27ff8987686af91e
 /contract-c5-device-approval/contract/approval-request:
-  en: 28b79819dac176ab
-  zh: c194c8b7353cae5d
+  en: 45c2cafdeb8f008a
+  zh: 7304d0dba70b0d23
+/contract-c5-device-approval/contract/approval-window:
+  en: ed9dd6bb0262b5de
+  zh: d4673a4a23d00e22
+/contract-c5-device-approval/contract/pop-up-pairing:
+  en: 87e8fb94dfbd1649
+  zh: 66ac48a05cbafd50
 /contract-c5-device-approval/contract/match-code:
-  en: 7e8c5e0c86acf1bd
-  zh: a88b7b3010c75251
+  en: 6486a12fd6ff91f5
+  zh: de52201f37f8fc7c
 /contract-c5-device-approval/contract/approval:
-  en: 80175773cd49ef27
-  zh: 9414b28ddd7c5851
+  en: ebac68ecfaccbef9
+  zh: 1decd4c3ca0cdae8
 /contract-c5-device-approval/contract/approval-prompt:
-  en: cfe54fee4619907c
-  zh: 39492b6b921fc482
+  en: 7dc574cdd47b1de5
+  zh: cdede30ba3cf54b8
+/contract-c5-device-approval/contract/local-approval:
+  en: 5a26c129ef9905e8
+  zh: 42ebeb73c1dc0ea5
 /contract-c5-device-approval/contract/sign-in:
-  en: 94a6c5346ea886f3
-  zh: 7fed6671a638c0be
+  en: ac33033e968a74b7
+  zh: d97772854a6ec7e3
 /contract-c5-device-approval/contract/removal:
-  en: f7e3148e391a47cc
-  zh: aa0b1e3da5130202
+  en: 6638328b81ffedbd
+  zh: ed4576dc1bc30159
 /contract-c5-device-approval/contract/reset:
-  en: 54ba339d36c15f38
-  zh: 00dceeeb70d14326
+  en: d2251fc6f2df5e19
+  zh: b6d1a5417f4dee01
 /contract-c5-device-approval/contract/recovery-kit:
   en: 1ac987fbc3c568ca
   zh: 78062175be8b92c9
@@ -54,29 +66,29 @@
   en: 033c365caf37c5a0
   zh: ed6216e0a1b14d83
 /contract-c5-device-approval/contract/alerts:
-  en: 06b9a7f2a05801aa
-  zh: 7448fe4b5cf00403
+  en: 54374cf08dd44c89
+  zh: 06da55fc83722c00
 /contract-c5-device-approval/contract/limits:
-  en: c25755676dd829dd
-  zh: 4a177a69de2279f2
+  en: 7ac0a26c2e842990
+  zh: 907b54c1de73ea5f
 /contract-c5-device-approval/contract/errors:
-  en: 0d3fc76fec01c8f6
-  zh: ed60e0e4f56adeee
+  en: cdd2da28b6c3fb27
+  zh: fbad38fb63d19490
 /contract-c5-device-approval/contract/delo-run-mailbox:
-  en: 8ebd7d1c762a9d68
-  zh: 2d9ecb87740577e5
+  en: d4216e052b6b5af8
+  zh: b85b158f50b94cd9
 /contract-c5-device-approval/consumers:
-  en: dd460db5021435fb
-  zh: e83358154f24ed30
+  en: 01b67904e78edd67
+  zh: 260a4a5d09cedc70
 /contract-c5-device-approval/compatibility:
-  en: bc38a28d4da65407
-  zh: 05b69b92e20f6d83
+  en: e6c9fa99c59eaa01
+  zh: 4c124ffd6828380c
 /contract-c5-device-approval/security:
-  en: e88a33ca935cbdcb
-  zh: 95c92e50cdd1b7c4
+  en: aabcc205f5a49fb4
+  zh: 70d45a2198b7f437
 /contract-c5-device-approval/security/what-this-does-not-prove:
-  en: ee4c600be10d6545
-  zh: 7edffe2f2a53b6d3
+  en: 8dc077aa2f449caf
+  zh: 6690146ff344c3b3
 /contract-c5-device-approval/decided-values:
-  en: bfe3467bb77d0a6c
-  zh: bed697fee31c5a39
+  en: 664c2fee0586ebff
+  zh: d62db0f9a0fcc38e

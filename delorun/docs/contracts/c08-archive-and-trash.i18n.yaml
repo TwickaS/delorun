@@ -3,17 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c08-archive-and-trash.md
 /:
-  en: e00d4d88721711b5
+  en: 12ba6603512ab0bd
   zh: a79b911a953152e3
 /contract-c8-archive-format-v1-and-trash:
-  en: 30ac39223cda0a0f
-  zh: a76fefc5d291799d
+  en: a7d07e94a0ff8b65
+  zh: e193beb07613c965
 /contract-c8-archive-format-v1-and-trash/summary:
-  en: f3a4d8621586336a
-  zh: e221b663b316a515
+  en: 0011809e6db7cb11
+  zh: b8ca355fb5512944
+/contract-c8-archive-format-v1-and-trash/status:
+  en: 8df3ec7d41e4eff9
+  zh: 70f837d1cf5da6eb
 /contract-c8-archive-format-v1-and-trash/contents:
-  en: 0ca4a8cc588eefac
-  zh: ae21584f5dc77ceb
+  en: b8bd9b5bd4684917
+  zh: f188cc5fe00969ad
 /contract-c8-archive-format-v1-and-trash/contract:
   en: f0997a1d33527593
   zh: 24ae1a953c8dd0ff
@@ -21,38 +24,41 @@
   en: 3e220645bdbbfd86
   zh: 303e7da2bafcb0d3
 /contract-c8-archive-format-v1-and-trash/contract/manifest:
-  en: 657ce83aaaa0e31c
-  zh: 39f1736b40052f1e
+  en: 9f04bcf24ae3fdac
+  zh: a5e17a21e2d4fb3c
 /contract-c8-archive-format-v1-and-trash/contract/customisation-schema:
-  en: 6c930d1b314e32df
-  zh: 0d2db38ed7e7d40c
+  en: 3a30e5c831ed0806
+  zh: e920e0bc92e0c001
 /contract-c8-archive-format-v1-and-trash/contract/signature:
-  en: 7b088797c1b2773a
-  zh: 554da7fd51aec16d
+  en: 9b954ba2c418a7c3
+  zh: 7d376fe0cafc780f
 /contract-c8-archive-format-v1-and-trash/contract/limits:
-  en: 1500224317616051
-  zh: 8ea5153dbbed8b9a
+  en: 7d985bdf6480b9fc
+  zh: 223efce531ca4017
 /contract-c8-archive-format-v1-and-trash/contract/import-and-export:
-  en: 6dc9acf3b4d7cf93
-  zh: 9478aec9ce767029
+  en: 758b93ce95b757b5
+  zh: 07dc04a64ae3ce17
+/contract-c8-archive-format-v1-and-trash/contract/the-stock-home-import:
+  en: ef403e9e10eeafa4
+  zh: 7741fb9f6cb7aabc
 /contract-c8-archive-format-v1-and-trash/contract/errors:
-  en: 4a5e6f3af47399e6
-  zh: bf342857a595e46b
-/contract-c8-archive-format-v1-and-trash/contract/untrusted-imported-chats:
-  en: 699162ece4d0b610
-  zh: 48edc3a356fcea81
+  en: 9f4cdefcdad4ffc5
+  zh: 522207d702a6494e
+/contract-c8-archive-format-v1-and-trash/contract/imported-chats:
+  en: 00402cd9cc89d1ec
+  zh: 87d2b1662760df3a
 /contract-c8-archive-format-v1-and-trash/contract/trash-and-purge:
-  en: 980a396cdbe75514
-  zh: 0c61a4ca5df0e94d
+  en: 7a288de8d7e840cb
+  zh: a840dbe01ab215cd
 /contract-c8-archive-format-v1-and-trash/consumers:
-  en: 3b94e73620f64bf7
-  zh: 425da12267ba71df
+  en: daa4b752706f3059
+  zh: 758c768d15329786
 /contract-c8-archive-format-v1-and-trash/compatibility:
   en: 2d227e10a1e724ee
   zh: 52f6f801ff5b9f92
 /contract-c8-archive-format-v1-and-trash/security:
-  en: 697c036e0b22a1cf
-  zh: 1580a6fdd147161b
+  en: 28fb45e1dd5723a9
+  zh: 363f7ed77b2436a2
 /contract-c8-archive-format-v1-and-trash/decided-values:
-  en: baa554c5b43aa98e
-  zh: 05f7ee14b4755fe3
+  en: 434a3dad1d6ce66d
+  zh: 80e5c53294053751

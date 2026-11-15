@@ -1,5 +1,5 @@
 ---
-description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及其 Ed25519 信封、root、targets、timestamp 与插件索引密钥角色、新鲜度、回滚保护与密钥轮换、targets 密钥持有者在签名前进行的重建、npm 可信发布、依赖安全公告检查，以及桌面回滚规则。"
+description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 及其 Ed25519 信封、root、targets、timestamp 与插件索引密钥角色、新鲜度、回滚保护与密钥轮换、targets 密钥持有者在签名前进行的重建、npm 可信发布、依赖安全公告检查，以及桌面回滚规则。"
 ---
 
 # C2 发布 manifest 与签名
@@ -8,7 +8,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 ## 摘要
 
-每个 Delo 发布都是 GitHub Releases 上的一组文件，由一份发布 manifest（元数据清单）描述，并由离线的 targets 密钥签名。该 manifest 列出该发布所发布的每个平台的运行时归档、桌面安装程序、S2 与 S3 镜像摘要、SPDX SBOM（软件物料清单）、npm 包与安装脚本，每项都附带其长度与 SHA-256 摘要。一个在线的时间戳密钥签名一个小型时间戳文件，该文件指明每个通道当前的 manifest，并在 3 天后过期，因此扣留某个发布的托管方会在下一次安装、更新或更新检查时被察觉，这些操作会拒绝陈旧的时间戳；启动则使用已有的发布继续。同样离线的根密钥签名每个角色的密钥列表及其每次轮换。targets 密钥持有者只有在一台由自己控制的机器上、于 CI 之外依据发布分支上的已签名标签重建某个公开发布，且该发布的锁文件通过依赖安全公告检查之后，才签名该发布；本地发布（为其自己的通道签名、未经重建）不得使用生产根或生产密钥，从生产发布位置获取内容的启动器会拒绝它。npm 启动器、`delorun update`、每次启动时的启动器与 `delorun verify` 按本页所述验证这些文件，并且还要求具备 [C18](c18-release-log.zh.md) 所定义的该发布的日志条目。类型位于 [`@delorun/contract-release-manifest`](../../packages/contract-release-manifest/README.zh.md)。
+每个 Delorun 发布都是 GitHub Releases 上的一组文件，由一份发布 manifest（元数据清单）描述，并由离线的 targets 密钥签名。该 manifest 列出该发布所发布的每个平台的运行时归档、桌面安装程序、S2 与 S3 镜像摘要、SPDX SBOM（软件物料清单）、npm 包与安装脚本，每项都附带其长度与 SHA-256 摘要。一个在线的时间戳密钥签名一个小型时间戳文件，该文件指明每个通道当前的 manifest，并在 3 天后过期，因此扣留某个发布的托管方会在下一次安装、更新或更新检查时被察觉，这些操作会拒绝陈旧的时间戳；启动则使用已有的发布继续。同样离线的根密钥签名每个角色的密钥列表及其每次轮换。targets 密钥持有者只有在一台由自己控制的机器上、于 CI 之外依据发布分支上的已签名标签重建某个公开发布，且该发布的锁文件通过依赖安全公告检查之后，才签名该发布；本地发布（为其自己的通道签名、未经重建）不得使用生产根或生产密钥，从生产发布位置获取内容的启动器会拒绝它。npm 启动器、`delorun update`、每次启动时的启动器与 `delorun verify` 按本页所述验证这些文件，并且还要求具备 [C18](c18-release-log.zh.md) 所定义的该发布的日志条目。类型位于 [`@delorun/contract-release-manifest`](../../packages/contract-release-manifest/README.zh.md)。
 
 <a id="status"></a>
 
@@ -48,7 +48,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 ## 发布文件
 
-版本为 `<version>`（Delo 的语义化版本，不带前导 `v`）的发布，是 Delo 公开仓库 `https://github.com/Delo-Run/delorun` 的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。发布会发布其配方列为发布平台的那些平台的运行时（该发布提交处 `delorun/apps/release/closure.json` 中的 `platforms`），其 manifest 恰好指明这些平台。配方拒绝列出它无法从带标签的源码构建其原生代码的平台，因此在能够构建之前，`darwin-x64` 与 `darwin-arm64` 不是发布平台；目前的发布平台是 `linux-x64`、`linux-arm64` 与 `win32-x64`。
+版本为 `<version>`（Delorun 的语义化版本，不带前导 `v`）的发布，是 Delorun 公开仓库 `https://github.com/Delo-Run/delorun` 的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。发布会发布其配方列为发布平台的那些平台的运行时（该发布提交处 `delorun/apps/release/closure.json` 中的 `platforms`），其 manifest 恰好指明这些平台。配方拒绝列出它无法从带标签的源码构建其原生代码的平台，因此在能够构建之前，`darwin-x64` 与 `darwin-arm64` 不是发布平台；目前的发布平台是 `linux-x64`、`linux-arm64` 与 `win32-x64`。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -61,9 +61,9 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 | `delorun-<version>.rebuild.json` | targets 密钥持有者所做重建的重建记录。 |
 | `delorun-<version>.advisories.json` | 依赖安全公告检查的结果。 |
 | `install.sh`、`install.ps1` | 本发布的安装脚本。 |
-| `Delo-<version>-mac-arm64.dmg`、`Delo-<version>-mac-x64.dmg` | macOS 桌面安装程序。 |
-| `Delo-<version>-mac-arm64.zip`、`Delo-<version>-mac-x64.zip` | electron-updater 所应用的 macOS 桌面更新归档。 |
-| `Delo-<version>-win-x64.exe` | Windows 桌面安装程序（NSIS）。 |
+| `Delorun-<version>-mac-arm64.dmg`、`Delorun-<version>-mac-x64.dmg` | macOS 桌面安装程序。 |
+| `Delorun-<version>-mac-arm64.zip`、`Delorun-<version>-mac-x64.zip` | electron-updater 所应用的 macOS 桌面更新归档。 |
+| `Delorun-<version>-win-x64.exe` | Windows 桌面安装程序（NSIS）。 |
 | `*.blockmap` | 桌面文件的 electron-updater 块映射。 |
 | `latest.yml`、`latest-mac.yml`（stable）；`beta.yml`、`beta-mac.yml`（beta） | electron-updater 的更新源文件。它们不经签名；桌面应用只信任 manifest。 |
 
@@ -115,7 +115,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 | `issued`、`expires` | 时间戳 | `expires` 最多在 `issued` 之后 365 天。 |
 | `keys` | 由 `keyid` 映射到 `{ "algorithm": "ed25519", "public": <base64 32 bytes> }` 的映射 | 任一角色所指明的每个密钥。 |
 | `roles.root`、`roles.timestamp`、`roles.catalogue` | `{ "keyids": [...], "threshold": n }` | 该角色的当前密钥。 |
-| `roles.targets` | `{ "keys": [{ "keyid", "status", "lastRelease"? }], "threshold": n }` | `status` 为 `active`、`retired` 或 `revoked`；`retired` 密钥携带 `lastRelease`，即它签名的最后一个 Delo 版本。 |
+| `roles.targets` | `{ "keys": [{ "keyid", "status", "lastRelease"? }], "threshold": n }` | `status` 为 `active`、`retired` 或 `revoked`；`retired` 密钥携带 `lastRelease`，即它签名的最后一个 Delorun 版本。 |
 | `log` | `{ "origin", "vkey" }` | 发布日志的检查点来源行与验证密钥（[C18](c18-release-log.zh.md)）。 |
 | `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | 见证者的验证密钥，以及必须联署的见证者数量（[C18](c18-release-log.zh.md)）。 |
 
@@ -144,7 +144,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `version` | 语义化版本 | 本发布的 Delo 版本。 |
+| `version` | 语义化版本 | 本发布的 Delorun 版本。 |
 | `dsh` | 语义化版本 | 发布中 `@deepseek-ai/dsh-app-boot` 的 `version`，即上游的版本（[C17](c17-plugin-versions.zh.md)）。 |
 | `channel` | `stable` 或 `beta` | 发布所在的通道。 |
 | `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL（`https://github.com/Delo-Run/delorun`）、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
@@ -284,7 +284,7 @@ acceptances:
 | `range` | 该接受记录覆盖的锁定版本的语义化版本范围。 |
 | `reason` | 发布为何可以带着它交付。 |
 | `approver` | 批准它的维护者的 GitHub 登录名，即 `delorun/release/` 的一名 CODEOWNERS 所有者。 |
-| `lapsesAfter` | 该接受记录覆盖的最后一个 Delo 版本；之后的发布会使检查失败，直到该条目被续期或移除。 |
+| `lapsesAfter` | 该接受记录覆盖的最后一个 Delorun 版本；之后的发布会使检查失败，直到该条目被续期或移除。 |
 | `added` | 添加该条目的日期，`YYYY-MM-DD`。 |
 
 当 id 与包匹配、锁定版本满足 `range`、发布的版本不高于 `lapsesAfter`，且 `approver` 是该发布提交处 `.github/CODEOWNERS` 中以登录名列出的该文件所有者时，接受记录覆盖该安全公告；团队所有者不计入。未知字段与缺失字段会使检查失败。manifest 的 `advisories.accepted` 列出已接受的 id。
@@ -293,13 +293,13 @@ acceptances:
 
 ## npm 发布
 
-`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delo 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.md)。
+`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delorun 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.md)。
 
 <a id="desktop-updates-and-rollback"></a>
 
 ## 桌面更新与回滚
 
-桌面应用是未经改动的上游应用，Delo 不构建任何桌面应用。其更新器（`apps/desktop/src/update-coordinator.ts` 中的 `DesktopUpdateCoordinator`）在本人点击时下载并安装每次更新，并拒绝降级（`allowDowngrade` 为 false）。它不检查任何 Delo 时间戳、manifest 或日志条目，不保留之前的发布，也不提供回滚。验证每次更新并回滚到已签名、已记录日志的发布的桌面应用，其规则见[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
+桌面应用是未经改动的上游应用，Delorun 不构建任何桌面应用。其更新器（`apps/desktop/src/update-coordinator.ts` 中的 `DesktopUpdateCoordinator`）在本人点击时下载并安装每次更新，并拒绝降级（`allowDowngrade` 为 false）。它不检查任何 Delorun 时间戳、manifest 或日志条目，不保留之前的发布，也不提供回滚。验证每次更新并回滚到已签名、已记录日志的发布的桌面应用，其规则见[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
 
 <a id="values-and-limits"></a>
 

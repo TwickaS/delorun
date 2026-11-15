@@ -11,10 +11,23 @@ description: "约定 C10：host id、studio 客户端状态与浏览器存储所
 
 studio 可以同时连接多个 home，而两个连接也可能共享同一个浏览器 origin。host 限定键使它们的客户端状态与浏览器存储互不混淆。每个连接都有一个 host id，由浏览器生成，且从不发送。host 限定键把该 host id 与一个上游的会话或工作区 id 合在一起，并为 studio 写入的每一个已持久化浏览器条目命名。上游的 id、请求与响应的格式以及会话事件都保持不变，因此任何上游客户端、SDK 或已保存的会话都无需新增字段。本页定义 host id、键的形式、已持久化浏览器键的清单，以及每个已持久化键都带有 host id 的规则。
 
+<a id="status"></a>
+
+## 状态
+
+键的形式已构建；但从不设置 host id，因此 studio 以上游的 stock 名称写入每个条目。
+
+- **已构建，但无人使用：** `packages/client/store` 中的 `setPersistenceHostId` 与 `qualifiedPersistKey`，`ui-conversation`、`ui-schedule` 和 `ui-sidebar-right` 为其条目使用它们。测试之外没有任何东西调用 `setPersistenceHostId`，没有 host id 时，`qualifiedPersistKey` 返回不带限定的 stock 名称。
+- **已构建并已使用：** 从 studio 回收站一节执行清除时，会在执行它的浏览器中，移除被清除 chat 的草稿条目，包括不带限定的名称下的条目，以及每个 host 限定名称下的条目。
+- **尚未构建：** studio 的连接列表以及为每个连接创建 host id；快捷键、终端、用户提问、工作区视图和侧边栏浏览器条目的 host 限定名称，它们不调用 `qualifiedPersistKey`；每个持久化条目都带 host id 且不读取 stock 条目的规则，因为 studio 目前读写 stock 名称；枚举规格，以及两个连接的浏览器状态的分离。
+
+下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
+
 <a id="contents"></a>
 ## 目录
 
 - [摘要](#summary)
+- [状态](#status)
 - [约定](#contract)
   - [host id](#host-id)
   - [host 限定键](#host-qualified-keys)
@@ -72,7 +85,7 @@ host 限定键有两种形式。
 
 cookie 不在本清单之内。Host 设置 `dsh-auth-*` cookie，其名称由连接约定固定。每个 studio 地址都有各自的 origin，因此一个连接的 cookie 不会随另一个连接的请求发送。
 
-以不带 host id 的名称写入的 stock DeepSeek Harness 条目不会被读取。Delo 不迁移这些取值。
+以不带 host id 的名称写入的 stock DeepSeek Harness 条目不会被读取。Delorun 不迁移这些取值。
 
 <a id="unchanged-formats"></a>
 ### 保持不变的格式

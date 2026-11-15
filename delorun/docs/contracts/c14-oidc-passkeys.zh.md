@@ -40,6 +40,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
   - [tailnet 成员身份](#tailnet-membership)
   - [设备可以调用什么](#what-a-device-may-call)
   - [提权](#elevation)
+  - [PIN 模式](#pin-mode)
   - [上限](#limits)
   - [错误](#errors)
   - [Delo Run 签发方](#delo-run-issuer)
@@ -78,7 +79,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 <a id="passkeys"></a>
 ### 通行密钥
 
-- **注册选项。** `POST /auth/passkey/register/options` 返回：`rp` `{ id: <relying-party ID>, name: "Delo" }`；`user` `{ id: <the home's owner handle>, name: "owner", displayName: <device label> }`，其中所有者句柄是每个 home 固定的 32 个随机字节；`pubKeyCredParams` EdDSA（-8）、ES256（-7）与 RS256（-257）；`authenticatorSelection` `{ residentKey: "required", userVerification: "required" }`；`attestation: "none"`；列出本地址凭据的 `excludeCredentials`；一个 32 字节的质询；以及 300,000 毫秒的超时。
+- **注册选项。** `POST /auth/passkey/register/options` 返回：`rp` `{ id: <relying-party ID>, name: "Delorun" }`；`user` `{ id: <the home's owner handle>, name: "owner", displayName: <device label> }`，其中所有者句柄是每个 home 固定的 32 个随机字节；`pubKeyCredParams` EdDSA（-8）、ES256（-7）与 RS256（-257）；`authenticatorSelection` `{ residentKey: "required", userVerification: "required" }`；`attestation: "none"`；列出本地址凭据的 `excludeCredentials`；一个 32 字节的质询；以及 300,000 毫秒的超时。
 - **存储。** `~/.delorun/secrets/home-auth/passkeys.json` 按凭据保存：凭据 id、COSE 公钥与算法、地址、依赖方 ID、签名计数器、传输方式、创建时间以及注册设备的 id。
 - **断言选项。** `POST /auth/passkey/options` 返回一个 32 字节的质询、监听器所在地址的依赖方 ID、列出该地址凭据的 `allowCredentials`，以及 `userVerification: "required"`。
 - **断言检查。** home 只在以下条件全部满足时接受断言：`clientDataJSON.type` 为 `webauthn.get`；其质询由 home 签发，且未使用、未过期；其来源与监听器的地址完全相等；`rpIdHash` 等于该地址依赖方 ID 的 SHA-256 哈希；用户在场与用户已验证标志均已设置；该凭据已为该地址注册；签名可用存储的密钥验证；已存储的计数器非零时小于所呈现的计数器，随后 home 存储所呈现的计数器。
@@ -87,10 +88,10 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 <a id="client-registration"></a>
 ### 客户端注册
 
-在 setup 期间，或在本人开启远程访问时，本人在自己的 OpenID Connect 提供方处将 Delo 注册为客户端，并输入三个值：签发方 URL、客户端 ID 与客户端密钥。setup 列出需要注册的重定向 URI：为 home 的每个 `ts.net` 地址与自有域名地址各列一个 `https://<address>/auth/oidc/callback`。
+在 setup 期间，或在本人开启远程访问时，本人在自己的 OpenID Connect 提供方处将 Delorun 注册为客户端，并输入三个值：签发方 URL、客户端 ID 与客户端密钥。setup 列出需要注册的重定向 URI：为 home 的每个 `ts.net` 地址与自有域名地址各列一个 `https://<address>/auth/oidc/callback`。
 
 - **发现。** home 通过 `https` 读取 `<issuer>/.well-known/openid-configuration`。该文档的 `issuer` 必须与输入的签发方完全相等，`response_types_supported` 必须包含 `code`，`code_challenge_methods_supported` 必须包含 `S256`，`id_token_signing_alg_values_supported` 必须包含 [ID 令牌检查](#id-token-checks)中的一种算法；否则 setup 以相应的代码拒绝。
-- **动态注册。** 只有当提供方的元数据含有 `registration_endpoint` 且本人选择使用它时，home 才按 RFC 7591 的描述注册自身：`client_name` 为 `Delo`，重定向 URI 为上述各项，`grant_types` 为 `["authorization_code"]`，`response_types` 为 `["code"]`，`token_endpoint_auth_method` 为 `client_secret_basic`，`application_type` 为 `web`；当提供方要求初始访问令牌且本人输入了它时，附带该令牌。
+- **动态注册。** 只有当提供方的元数据含有 `registration_endpoint` 且本人选择使用它时，home 才按 RFC 7591 的描述注册自身：`client_name` 为 `Delorun`，重定向 URI 为上述各项，`grant_types` 为 `["authorization_code"]`，`response_types` 为 `["code"]`，`token_endpoint_auth_method` 为 `client_secret_basic`，`application_type` 为 `web`；当提供方要求初始访问令牌且本人输入了它时，附带该令牌。
 - **存储。** `~/.delorun/secrets/home-auth/oidc-client.json` 保存签发方、客户端 ID、客户端密钥、重定向 URI，以及动态注册之后的注册访问令牌。任何配置行都不保存它们。
 - **每个 home 一个客户端。** home 的客户端注册归它自己所有：两个 home 永远不共用一个客户端 ID，因此客户端 ID 就是指明该 home 的受众。
 - **添加地址。** 添加地址会在提供方处添加其重定向 URI：由本人添加，或由 home 通过其注册访问令牌更新动态注册。
@@ -147,54 +148,83 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 `tailnet-membership` 因子不携带任何证明：它表明一个请求经由声明了该因子的远程访问提供方的 serve 目标到达。只有 `reach-tailscale-private` 提供方可以声明它（[C7](c07-reach-providers.zh.md#provider-service-definition)），对于任何其他监听器以及任何不是 `ts.net` 地址的地址，home 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝该声明。在该监听器上，已批准设备的一个新鲜设备密钥签名本身即可创建完整会话（[C5](c05-device-approval.zh.md#sign-in)），会话记录携带该因子（[C4](c04-admission.zh.md#sessions)）。
 
-对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许[设备可以调用什么](#what-a-device-may-call)一节列出的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其三张表格位于 [`@delorun/home-auth`](../../packages/home-auth/README.zh.md)。
+对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主 chat 的工作区工具及其其他询问，以及指令层写入）；授予标记为 `external-agent` 的提示（启动 Claude Code 或 Codex 之类的外部智能体），以及为某个工作区允许或撤销这类智能体；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的 studio。远程 studio 会提示在电脑上批准该操作。观看、回复、开始 chat、答复其他所有提示以及停止运行都是允许的，而从手机安装插件需要在电脑上批准的[解锁](#elevation)。同一规则适用于 studio 调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许[设备可以调用什么](#what-a-device-may-call)一节列出的方法和转发事件，仅在解锁时准入提权类操作，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其三张表格位于 [`@delorun/home-auth`](../../packages/home-auth/README.zh.md)。
 
 <a id="what-a-device-may-call"></a>
 ### 设备可以调用什么
 
-所有者对设备的规则是：人在手机上能做的，就是在电脑上能做的，只有需要由电脑在场做出决定的操作除外。`@delorun/home-auth` 把 Delo 默认配置的每个 Remote 方法和每个转发事件归入四类之一，reach 访问拒绝测试套件在某个操作不被任何表格列出、某个表格条目没有对应操作或某个操作被两个表格列出时失败。
+所有者对设备的规则是：已批准的设备就是本人，它本来就可以向智能体发送提示：风险不高于一条提示的每项操作都被允许，而[解锁](#elevation)只覆盖那些少见的操作，即扩大智能体可触及的范围、添加在电脑上运行的代码，或更改 home 的设置。`@delorun/home-auth` 把 Delorun 默认 profile 的每个 Remote 方法和每个转发事件归入四类之一；当某个操作不被任何表格列出、某个表格条目没有对应操作、某个操作被两个表格列出，或某个操作位于[提权](#elevation)表格给其所属族的类别之外时，reach 访问拒绝测试套件失败。
 
-- **允许**：设备做人在电脑上做的事。各项操作及其原因见 [`reach-access.ts`](../../packages/home-auth/src/reach-access.ts) 中的 `REACH_ALLOWED_ACTIONS`。
-- **提权**：除非设备持有本人在电脑上批准的[提权](#elevation)，否则以 `403` 和原因 `elevation-required: <action>` 拒绝。各项操作及其用途见同一文件中的 `REACH_ELEVATED_ACTIONS`；只有列在其中的操作才可提权。
-- **保留给 home 自己的电脑**：无论是否提权，都以 `403 LOOPBACK_REQUIRED` 和原因 `loopback-required: <action>` 拒绝。各项操作及其原因见同一文件中的 `REACH_DENIED_ACTIONS`。
-- **只能由电脑授予的授权**：在授予之处而不是调用之处被拒绝（[tailnet 成员身份](#tailnet-membership)）。
+- **允许**：设备做本人在电脑上做的事。各项操作及其原因见 [`reach-access.ts`](../../packages/home-auth/src/reach-access.ts) 中的 `REACH_ALLOWED_ACTIONS`。
+- **解锁**：除非设备持有本人在电脑上批准的[解锁](#elevation)，否则以 `403` 和原因 `elevation-required: <action>` 拒绝。各项操作及其让本人能做什么见同一文件中的 `REACH_ELEVATED_ACTIONS`；只有列在其中的操作才可提权。位于已知工作区之外文件夹中的 `session/create` 由策略的条件提权，原因为 `CREATE_OUTSIDE_WORKSPACES`。
+- **从不**：无论是否解锁，都以 `403 LOOPBACK_REQUIRED` 和原因 `loopback-required: <action>` 拒绝。各项操作及其原因见同一文件中的 `REACH_DENIED_ACTIONS`；没有任何配置能改变该表格。
+- **只有电脑能给出的授权**：在授予之处而不是调用之处被拒绝（[tailnet 成员身份](#tailnet-membership)）。
 
-| 类别 | 操作 | 分类 | 原因 |
-| --- | --- | --- | --- |
-| 对话、工作区、后台任务、目标与计划，读取 | `session/*` 的读取、`workspace/follow`、`job/*`、`goals/get`、`schedule/*` 的读取 | 允许 | 读取对话、工作区或计划既触不到任何密钥，也不改变任何运行。 |
-| 对话，写入 | `session/create`、`session/fork`、`session/prompt`、`session/updateQueue`、`session/cancel`、`session/rename`、`workspace/pinSession`、`workspace/unpinSession`、`fileUploads/upload`、`userQuestions/answer`、`subagents/*` | 允许 | 回复、停止运行、答复提问以及整理对话列表，正是人在电脑上做的事。 |
-| 代理预设 | `agentPresets/list`、`agentPresets/read`、`agentPresets/select` | 允许 | 预设决定尚未开始的对话以哪些插件和工具运行。选择预设本身不授予任何访问：工作区的完全访问同意仍然是电脑上的答复，每个批准提示也仍然适用。 |
-| 对话自己工作区的文件 | `workspaceFiles/list`、`workspaceFiles/read`、`workspaceFiles/readBytes`、`workspaceFiles/stat`、`officeToPdf/render`、`officeToPdf/generation`、`fileReferences/list` | 允许，限于工作区内 | 工作区文件服务只读，对每一页、每个字节窗口、完整文件和列表都设有上限，并检查文件类型。它会跟随路径中任一目录的符号链接，并按绝对路径读取其指向的任何位置，因此只有调用给出的每个路径（含字节读取的基准文件）的真实路径都位于对话工作区的真实路径之内、且在 Delo 主目录之外时，调用才被准入；含 `..` 段或以 `~` 开头的路径以及不存在的路径会被拒绝。 |
-| 设置与模型，读取 | `settings/describe`、`permissionPresets/catalog`、`llm/listProviders`、`llm/listConfigurableProviders`、`session/modelCatalog` | 允许 | 已脱敏的设置和提供方名称不携带任何密钥。 |
-| 插件与配置历史，读取 | `pluginManager/listPlugins`、`listBundles`、`listVersionExemptions`、`listVersions`、`readBundleDetail`、`inspect`、`registries`、`history`、`waitForInstall`、`pluginInventory/list`、`pluginRegistryProbe/fastest` | 允许 | 设备展示已安装的插件和发生过什么变化；每一项安装、启用、移除或回退操作仍然保留。 |
-| 转发事件，读取 | `event:api-session/*`、`event:commands/change`、`event:goal/*`、`event:llm/*`、`event:permission-presets/*`、`event:settings/document-updated`、`event:schedule/changed`、`event:agent-preset/selected`、`event:plugin-manager/changed`、`event:plugin-market/changed` | 允许 | 设备本就可读的界面所需的刷新信号。 |
-| 批准提示 | `event:approval/request` | 允许，授予除外 | 答复守卫会拒绝授予完全访问或工作区管理的答复（[tailnet 成员身份](#tailnet-membership)）。 |
-| 插件与配置历史，写入 | `pluginManager/installBundle`、`updateBundle`、`removeBundle`、`setBundleEnabled`、`setPluginEnabled`、`setVersionExemption`、`cancelInstall`、`undo`、`restore` | 保留 | 插件管理会安装或启用任何沙箱之外在 Host 中运行的代码，而配置历史可以关掉守卫插件。 |
-| 设置，写入 | `settings/mutate`、`settings/replace`、`settings/update`、`settings/openSettingsDocument` | 保留 | 设置写入可能改变模型提供方的地址或沙箱，设备不能写入任何设置命名空间。 |
-| 默认模型 | `session/selectModel`、`session/initializeDefaultModel` | 提权 | 选择对话使用的模型是电脑上的日常操作，不触及任何密钥。 |
-| 密钥与账户 | `credentials/*`、`llm/discoverModels`、`account/*`、`event:credentials/*`、`event:deepseek-account/*` | 从不 | 密钥是 home 的秘密，账户登录属于本人。 |
-| 终端、目录与电脑 | `terminal/*`、`directoryPicker/*`、`session/openWorkspacePath`、`session/workspacePathApplications` | 保留 | 终端是沙箱之外的 shell，目录选择器浏览电脑，其余会在电脑上打开应用。 |
-| 注册文件夹 | `workspace/create` | 保留 | 文件夹决定对话的命令可以写入哪里，因此新文件夹由电脑选择。 |
-| 工作区与对话列表 | `workspace/delete`、`workspace/initializeDefault`、`workspace/insertBefore`、`workspace/rename`、`workspace/archiveSession`、`workspace/unarchiveSession`、`workspace/insertSessionBefore`、`workspaceFiles/changes` | 提权 | 重命名、重排和归档，可从回收站恢复的删除，以及按工作区文件规则在对话工作区内读取的 Changes 界面。 |
-| 斜杠命令 | `commands/execute` | 保留 | 斜杠命令可以更改设置、插件或配置。 |
-| 目标与计划，写入 | `goals/create`、`goals/edit`、`goals/pause`、`goals/resume`、`goals/complete`、`goals/clear`、`schedule/create`、`schedule/edit`、`schedule/run`、`schedule/deleteInactive` | 提权 | 目标引导对话，计划的跟进稍后以该对话自己的权限运行其提示；两者都不授予访问。 |
-| 动态插件代码 | `dynamicCordisRunner/*`、`event:cordis/*` | 保留 | 它会在 Host 中运行模型编写的插件代码。 |
-| 反馈 | `sessionFeedback/record`、`messageFeedback/*` | 保留 | 反馈会离开 home，Delo 已将其关闭。 |
-| 授权 | 完全访问升级、工作区的完全访问同意、`workspace-management` 提示 | 从不 | 工作区的同意和升级都是本人在电脑上给出的答复，无论设备被允许调用什么。 |
+在允许的操作之内，策略的条件对每次调用保持两条规则。工作区文件调用（`workspaceFiles/*`、`officeKit/render`）只有在它指名的每个路径（含字节读取的基准文件）的真实路径都位于该 chat 工作区的真实路径之内、且在 Delorun 主目录之外时才被准入；含 `..` 段或以 `~` 开头的路径，以及不存在的路径，无论是否解锁都会被拒绝。`session/create` 在其指名 Host 所列出的某个 Workspace，或其真实路径是某个已列出 Workspace 的路径的文件夹时被允许，可使用任何预设；指名其他文件夹，或既没有指名 Workspace 也没有指名文件夹（Host 自己的工作目录）的调用需要解锁。选择预设本身不授予任何访问：工作区的完全访问同意仍然是电脑上的答复，每个批准提示也仍然适用。
 
 <a id="elevation"></a>
 ### 提权
 
-提权（“sudo 模式”）让一台设备在几分钟内执行提权操作，由本人在 home 自己的电脑上批准。`@delorun/home-auth` 在 [`elevation.ts`](../../packages/home-auth/src/elevation.ts) 中把它保存在内存里，限制为 `@delorun/contract-oidc-passkeys` 的 `ELEVATION_LIMITS`。
+提权（在 studio 的措辞中是解锁，即「sudo 模式」）让一台设备在几分钟内执行提权操作，由本人在 home 自己的电脑上批准。`@delorun/home-auth` 在 [`elevation.ts`](../../packages/home-auth/src/elevation.ts) 中把它保存在内存里，限制为 `@delorun/contract-oidc-passkeys` 的 `ELEVATION_LIMITS`。
+
+**无需解锁即允许**
+
+| 族 | 操作 |
+| --- | --- |
+| chat，读取与写入 | `session/*` 的读取、在已知工作区内以任何预设进行的 `session/create`、`session/fork`、`session/prompt`、`session/updateQueue`、`session/cancel`、`session/rename`、`fileUploads/upload`、`userQuestions/*`、`subagents/*`、`job/*`、`toolResults/watch`、`sessionReferenceResolver/candidates`、`skills/list`、`commands/list` |
+| chat 与工作区的整理 | `workspace/follow`、`workspace/pinSession`、`workspace/unpinSession`、`workspace/archiveSession`、`workspace/unarchiveSession`、`workspace/insertSessionBefore`、`workspace/insertBefore`、`workspace/rename`、`workspace/delete`（移入回收站）、`workspace/initializeDefault` |
+| 目标与计划的跟进 | `goals/*`、`schedule/*` |
+| 模型与预设 | `session/selectModel`、`session/initializeDefaultModel`、`session/modelCatalog`、`llm/listProviders`、`llm/listConfigurableProviders`、`llm/discoverModels`、`agentPresets/*`、`permissionPresets/catalog` |
+| chat 所在工作区的文件 | `workspaceFiles/list`、`read`、`readBytes`、`stat`、`changes`，`officeKit/*`、`fileReferences/list`，遵循工作区文件规则 |
+| 设置与插件的读取 | `settings/describe`（密钥已脱敏）、`pluginManager/history`、`inspect`、`listBundles`、`listPlugins`、`listVersionExemptions`、`listVersions`、`readBundleDetail`、`registries`、`waitForInstall`、`pluginInventory/list`、`pluginRegistryProbe/fastest` |
+| 反馈 | `sessionFeedback/record`、`messageFeedback/*` |
+| 转发事件 | `event:approval/request`（答复守卫仍然拒绝授权）、`event:user-questions/request`、`event:api-session/*`、`event:agent-preset/selected`、`event:commands/change`、`event:goal/activation-changed`、`event:llm/*`、`event:permission-presets/catalog-changed`、`event:plugin-manager/*`、`event:plugin-market/changed`、`event:settings/document-updated`、`event:schedule/changed` |
+
+**解锁**
+
+| 族 | 操作 | 原因 |
+| --- | --- | --- |
+| 设置写入 | `settings/mutate`、`settings/replace`、`settings/update` | 它们更改 home 的设置。对于可能关闭仅限电脑的开关的写入，条件会拒绝，并给出 `loopback-required: turning <switch> off`，解锁时同样如此：插件在挂载期间用 `HomeAuthService.registerComputerOnlySwitch` 注册这样的开关，`@delorun/plugin-delegation-consent` 注册它的 `enabled` 字段，因此拒绝信息读作 `loopback-required: turning the external-agent consent off`。该字段只能被写成字面量 `true`，`replace` 必须这样写明它，条件无法读取的参数会被拒绝。条件还会拒绝写入权限预设行的 `defaultPreset` 而放宽新 chat 开始时的权限，并给出 `loopback-required: loosening the permission new chats start in`，解锁时同样如此：沙箱模式或批准策略比当前预设更宽松的预设、各行并未持有的预设、删除该字段的写入，或当前预设无法读取时的任何更改；更严格或相同的预设是普通写入。唯一属于设置命名空间的受保护插件行是外部智能体同意的，其开关由条件决定；bash 沙箱的实时字段是执行限制，沙箱模式属于 sandbox-policy 行，它没有这样的字段。 |
+| 斜杠命令 | 对 `REACH_DEVICE_COMMANDS` 所列命令（`compact`、`export`、`goal`、`permission` 和 `plan`）的 `commands/execute` | 每个命令只更改或读取它自己的 chat。条件用命令服务自己的解析器解析该行，并以 `loopback-required: commands/execute of a command a device does not run` 拒绝任何其他命令或未指名任何命令的行，解锁时同样如此，因此插件新增的命令在被列出之前会被拒绝。 |
+| 插件与 profile 历史 | `pluginManager/installBundle`、`updateBundle`、`removeBundle`、`setBundleEnabled`、`setPluginEnabled`、`setVersionExemption`、`cancelInstall`、`undo`、`restore` | 它们添加或启用在沙箱之外于 Host 中运行的代码。受保护的行，即其模块被 `plugin-manager` 行的 `protectedPlugins` 指名的行（同意与防护行、更新闸门与更新检查、home-auth、reach 和沙箱行），从不通过设备更改：条件对其上的 `setPluginEnabled`，或带有无法读取的参数的调用，以 `loopback-required: changing a protected plugin row` 拒绝，解锁时同样如此，列表无法读取时则拒绝每一行。插件管理器以 `management-required` 拒绝任何其他会停用、移除或重新配置受保护行的更改，或恢复到其中某一行不同的 profile 状态，无论是否解锁。 |
+| 终端 | `terminal/*` | 终端是电脑上沙箱之外的 shell。它总是需要解锁：任何开关、完全访问授权或危险模式都不能免除它。 |
+| 外部工具服务器 | `mcpManager/probe`、`restart`、`watch` | 它们启动并观察 home 为其外部工具服务器配置的命令。 |
+| 文件夹 | `directoryPicker/*`、`workspace/create`、位于已知工作区之外文件夹中的 `session/create` | 文件夹决定 chat 的命令可以写入哪里。 |
+| 动态插件代码 | `dynamicCordisRunner/*`、`event:cordis/*` | 它在 Host 中运行模型编写的插件代码。 |
+
+**从不**
+
+| 族 | 操作 | 原因 |
+| --- | --- | --- |
+| 账户 | `account/*`、`event:deepseek-account/*` | 账户登录在 Delorun 中是关闭的，账户更改属于电脑。 |
+| 电脑自己的屏幕 | `settings/openSettingsDocument`、`session/openWorkspacePath`、`session/workspacePathApplications` | 它们会在电脑上打开应用，设备用不到。 |
+| 授权与设备 | 完全访问升级、工作区的完全访问同意、`workspace-management` 提示、设备批准与移除、启动、批准或延长解锁 | 电脑上的路由和答复守卫会拒绝其中每一项（[tailnet 成员身份](#tailnet-membership)）；它们都不是可由表格列出的 Remote 方法。 |
 
 - **路由。** 设备在 `GET /auth/elevation` 读取状态，在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
-- **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。
-- **批准。** 只有在 home 电脑前的本人能批准，方法是在 `delorun devices elevate` 中输入设备上的代码（它调用 [C19](c19-home-process.zh.md) 的 `devices.elevate`），或通过电脑路由；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
-- **时长。** 提权持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长提权：新的批准会替换它。
-- **范围。** `reach-device` 主体只指明设备，因此策略查询该设备在 home 服务的任一监听器上的提权；目前只有 Tailscale 私有监听器为设备服务。每个配置的 Host 保留自己的提权，重启会结束它们。
-- **检查。** 设备绑定的条件在每个提权操作之前读取提权，调用与事件、快照或列表筛选一视同仁，并且即使计时器尚未触发，也会拒绝已过期的提权。每次提权调用都会连同设备、监听器、操作和提权 id 记入日志。
-- **结束。** 提权在到期时、本人在电脑上撤销时、设备锁定时、新的批准替换时、发起请求的会话结束时（其期限或轮换；滚动会延续它）、设备被移除时、监听器停止时以及 Host 停止时结束。每次开始和结束都会连同设备、监听器、提权 id 和原因（`ELEVATION_END_REASONS`）记入日志。
-- **从不。** 提权只解除 `REACH_ELEVATED_ACTIONS`。密钥、账户、设备批准与移除、插件、设置写入、终端、斜杠命令、动态插件代码、新文件夹、在指定文件夹或以指定预设开始的对话，以及 [tailnet 成员身份](#tailnet-membership)的每项授权，仍属于电脑。
+- **被放宽的设置。** 危险模式成立期间，已解锁的设备可以放宽默认预设，并关闭 `DANGEROUS_LIFTABLE_SWITCHES` 所列的开关。策略在调用继续之前，把每次这样的写入连同字段的先前值和调用所设的值，记录在 `~/.delorun/secrets/home-auth/reach-dangerous-settings.json` 中。当该模式不再成立时（在第一次发现它已结束的读取时，以及在启动时），home 通过设置服务把先前值写回去，除非该字段已不再保存所记录的设备值，因为本人在电脑上更改了它。失败的写入保留其记录并被重试。
+- **终端。** 每个 `terminal/*` 操作总是需要解锁，对每个 Session 和全局资源都是如此：危险模式、工作区的完全访问授权，以及终端将打开的文件夹，都不起任何作用。早先版本在 `~/.delorun/secrets/home-auth/reach-terminal.json` 中保留一个终端开关；现在没有任何东西读取该文件，仍有该文件的 home 继续工作，该文件可以删除。已打开的终端会一直运行到结束。
+- **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。设备持有解锁期间，其状态显示的是解锁而不是代码，因此设备无法延长自己的解锁。
+- **批准。** 只有在 home 电脑前的本人能批准，方法是在 `delorun devices elevate` 中输入设备上的代码（它调用 [C19](c19-home-process.zh.md) 的 `devices.elevate`）、在 studio 的 Settings 的 Devices 中输入，或通过电脑路由；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
+- **时长。** 解锁持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长解锁：新的批准会替换它。
+- **范围。** 解锁绑定到它的设备、监听器和 profile。`reach-device` 主体指明设备及其 Peer 所在的监听器，策略只在该监听器上询问设备的解锁。一个 profile 的 Host 把自己的解锁保存在内存中，从不放在共享的 secrets 目录里，因此另一个 profile 的 Host 看不到任何解锁，重启会结束它们。
+- **检查。** 设备绑定的条件在每个提权操作之前读取解锁，调用与事件、快照或列表筛选一视同仁，并且即使计时器尚未触发，也会拒绝已过期的解锁。解锁准入的每次调用都会连同设备、监听器、操作和解锁 id 记入日志。Gateway 只在流打开时作出决定，因此解锁结束时 home 会关闭该设备的远程访问连接，studio 随后不带解锁地重新连接。
+- **结束。** 解锁在到期时、本人在电脑上撤销时、设备锁定时、新的批准替换时、发起请求的会话结束时（其期限或轮换；滚动会延续它）、设备被移除时、监听器停止时以及 Host 停止时结束。每次开始和结束都会连同设备、监听器、解锁 id 和原因（`ELEVATION_END_REASONS`）记入日志。
+
+<a id="pin-mode"></a>
+### PIN 模式
+
+PIN 模式让持有已批准设备的人，用 PIN 或口令解锁它，而不必在电脑上输入代码。它增加了第二种[提权](#elevation)，即页面解锁，除此之外不改变登录的任何其他方面：设备密钥和远程访问会话保持原样。该模式的第 1 版只为 Tailscale 私有地址构建；通行密钥解锁、Funnel 与中继地址，以及从设备设置 PIN、开启该模式和配对设备都尚未构建，它们仍然留在电脑上。
+
+- **状态。** `~/.delorun/secrets/home-auth/pin-mode.json` 保存 `enabled`、密钥的 `kind`、带盐的 `scrypt` 哈希及其参数、空闲分钟数和隐藏时锁定的选择。`pin-attempts.json` 保存每台设备和全 home 的错误尝试，重启会保留它们。`reach-pin-settings.json`（0600）记录已解锁页面放宽的设置，及每个字段的先前值，与 `reach-dangerous-settings.json` 对危险模式的做法相同；关闭该模式会把每一项设回去，除非本人此后已更改它。其设置行尚未被描述的记录会保留；设回操作在启动时以及设置服务挂载时运行。失败的写入为每个字段记录一条警告（命名空间和字段，从不记录值），并按 `pinSetBackRetrySeconds`（1 至 3600，默认 30）的计时器重试，该计时器只在该模式关闭之后有放宽在等待时运行；读取该模式不会开始任何一轮。`GET /auth/pin/mode` 把仍在等待的字段列为 `setBackWaiting`，`delorun devices pin status` 写明它们。用 `/auth/pin/options` 设置更短的空闲时间，也会结束在该时间内运行的解锁的空闲。已锁定页面的设置写入被拒绝，已解锁页面的设置写入在记录无法保存时被拒绝。设置文档和 `account/*` 对每个页面保持拒绝。没有该文件，或 `enabled: false` 的 home，与本页其他各处描述的 home 完全一样：下面每个路由都回答 `PIN_MODE_OFF`，PIN 不会引起任何提权。
+- **密钥。** PIN 是 6 至 128 位数字，且不是重复（`111111`、`123123`）、连续（`345678`）或常见的 PIN。任何其他密钥都是 10 至 128 个字符的口令，且不是同一个字符的重复。两者都规范化为 NFC。home 以恒定时间比较，从不把密钥以明文写入日志、错误或文件。限制是 `@delorun/contract-oidc-passkeys` 的 `PIN_MODE_LIMITS`。
+- **设置它。** 只有在电脑前的本人才能设置、替换或清除 PIN，并开启或关闭该模式：`POST /auth/pin/set`、`/auth/pin/options`、`/auth/pin/off` 和 `/auth/pin/resume` 回答在回环监听器上带 studio 凭据到达的请求，并以 `LOOPBACK_REQUIRED` 拒绝设备；[C19](c19-home-process.zh.md) 的 `pin.set`、`pin.options`、`pin.off` 和 `pin.resume` 请求为 `delorun` 做同样的事。`pin-mode-change` 在 `LOOPBACK_REQUIRED_ACTIONS` 中。更改 PIN 会结束每个页面解锁。`POST /auth/pin/options` 接受 `idleMinutes`（1 至 60 的整数）和 `lockWhenHidden`，只更改该模式已持有的记录上的这两项，不需要 PIN 或口令：电脑对该设置已经是受信任的。它不触动哈希、种类和页面解锁，在该模式关闭时以 `PIN_MODE_OFF` 拒绝，对空更改、其他字段或超出范围的值以 `BAD_REQUEST` 拒绝，并与其他每项更改一样用受保护的写入来写入。
+- **解锁。** 带 `{ "secret": "…" }` 的 `POST /auth/pin/unlock`，来自 studio 自己的源并处于 Tailscale 私有监听器的有效会话之下，回答 `{ token, unlockId, endsAt, idleEndsAt }`。令牌是 32 个随机字节，只出现一次，home 只保留其 SHA-256 摘要。解锁属于持有令牌的那一个页面：它是该设备、监听器和会话的一条记录，只有该页面自己的 Peer 持有它（[C4「页面解锁」](c04-admission.zh.md#page-unlock)），因此它从不准入该设备的其他页面，重新加载会从锁定开始。设备范围的 `elevationOf` 从不返回它。已解锁页面的 Peer 持有解锁表格中的操作，并且如同危险模式解除这些限制那样，解除对受保护插件行、未列出的命令、`REACH_DANGEROUS_ACTIONS` 以及 chat 工作区之外的工作区路径的拒绝，并可以回答完全访问、工作区管理和外部智能体的授权；同一设备的已锁定标签页不持有其中任何一项。设置写入保持危险模式所留下的样子。危险模式对已解锁设备开放的同意与权限路由，对未处于危险模式的已解锁页面也开放；改变远程访问或网络暴露、批准或移除设备、更改 PIN 或关闭该模式的路由，在第 1 版中仍留在电脑上。在会话滚动之后的 30 秒内用旧 cookie 解锁的页面，绑定到延续它的会话。在另一个远程访问监听器上，该路由回答 `PIN_NOT_ALLOWED_ON_ADDRESS`，在回环监听器上它不是设备路由。
+- **使用令牌。** 页面在其 `/api` 请求上以 `Delorun-Unlock` 头发送令牌，在 `/api/remote.mux` 升级请求上以 WebSocket 子协议 `delorun-unlock.<token>` 发送，从不放在 URL 中；home 在下游读取请求之前剥离这两者（[C4「页面解锁」](c04-admission.zh.md#page-unlock)）。`POST /auth/pin/touch` 把空闲结束时间向后推，但不超过上限；`POST /auth/pin/lock` 结束解锁；`GET /auth/pin/state` 报告该模式（其字段中有 `lockWhenHidden`），并对持有令牌的页面报告其解锁。与另一台设备、监听器或会话的 cookie 一起出示的令牌，或 home 不认识的令牌，得到 `401 UNLOCK_INVALID`；由错误的一方出示的令牌还会结束其解锁。
+- **结束。** 每次结束都会关闭该解锁所在会话的远程访问连接，设备的其他页面以各自的令牌重新连接。在没有触碰 `idleMinutes`（默认 15，最多 60）之后、在 12 小时的绝对上限、在锁定时、在 PIN 更改或该模式关闭时，以及在提权会有的每种结束时：其会话结束、其设备被移除、其监听器或 Host 停止。
+- **错误尝试。** 尝试在比较密钥之前计数并写入，每台设备一次一个。一台设备的第五次错误尝试会像在电脑上移除一样移除该设备，因此其会话和连接关闭，它需要在电脑上再次获得批准。全 home 在 24 小时内的十次错误尝试会暂停 PIN 解锁，回答 `PIN_UNLOCKS_PAUSED`，直到本人在电脑上恢复它们。正确的密钥会清除该设备的计数。
+- **日志。** 每次解锁的开始和结束都是一次提权的开始和结束。每次错误尝试、锁定、暂停、恢复、PIN 更改和模式更改都是一行日志，写明设备而从不写明密钥。
+
+错误代码 `PIN_INVALID`、`PIN_WEAK`、`PIN_MODE_OFF`、`PIN_NOT_ALLOWED_ON_ADDRESS`、`PIN_UNLOCKS_PAUSED` 和 `UNLOCK_INVALID` 并入[下文的错误](#errors)。`PIN_INVALID` 的回答携带结构化字段 `triesLeft`（数字）和 `removed`（布尔值，第五次失误时为真，此时已移除该设备），`PIN_UNLOCKS_PAUSED` 的回答在 `error` 和 `message` 之外还携带 `paused: true`，因此客户端从不解析句子。对于处于开启状态的页面，`GET /auth/pin/state` 携带 `lockWhenHidden`。
 
 <a id="limits"></a>
 ### 上限
@@ -237,12 +267,18 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | `PASSKEY_USER_VERIFICATION_REQUIRED` | 用户已验证标志未设置。 |
 | `PASSKEY_COUNTER_REGRESSED` | 计数器没有增大。 |
 | `TAILNET_IDENTITY_UNAVAILABLE` | 在 C7 的套接字变体之外使用 `tailnet` 因子，或为 Tailscale 私有地址之外的监听器或地址声明 `tailnet-membership`。 |
+| `PIN_INVALID` | 不正确的 PIN 或口令；一台设备的第五次也会移除该设备。响应体还携带 `triesLeft`（数字）和 `removed`（布尔值，第五次为真），因此页面从不解析句子。 |
+| `PIN_WEAK` | 违反 [PIN 模式](#pin-mode)规则的新 PIN 或口令。 |
+| `PIN_MODE_OFF` | 该模式关闭时的 PIN 解锁。 |
+| `PIN_NOT_ALLOWED_ON_ADDRESS` | Tailscale 私有监听器之外的远程访问监听器上的 PIN 解锁。 |
+| `PIN_UNLOCKS_PAUSED` | 全 home 在 24 小时内十次错误尝试之后的 PIN 解锁，直到本人在电脑上恢复它们。响应体还携带 `paused: true`。 |
+| `UNLOCK_INVALID` | 未知、已结束，或与另一台设备、监听器或会话一同出示的页面解锁令牌。 |
 | `LOOPBACK_REQUIRED` | 因子为 `tailnet-membership` 的会话答复提示或发送请求，而该操作只在 home 自己的电脑上授予（[tailnet 成员身份](#tailnet-membership)）。 |
 
 <a id="delo-run-issuer"></a>
 ### Delo Run 签发方
 
-Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续功能，随 Delo 中继（Delo relay）一同推出：Delo 1.0 不配置任何 Delo Run 签发方。添加它时，它作为第二个签发方遵循本页的每条规则，并且还遵循以下规则：
+Delo Run 签发方让本人可以用 Delo Run 账户登录，它不属于 Delorun，Delorun 不配置任何 Delo Run 签发方（[路线图](../guide/roadmap.zh.md)）。这样的签发方作为第二个签发方遵循本页的每条规则，并且还遵循以下规则：
 
 - 其重定向 URI 为 `https://<address>/auth/oidc/callback/delorun`，因此它永远不与本人的提供方共用重定向 URI。
 - 它只用非对称密钥签署 ID 令牌，每个令牌头部都携带 `kid`，并且它发布一个密钥集。
@@ -304,12 +340,20 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 | `a regressed counter is refused` | 计数器不大于非零已存储计数器的断言被拒绝。 |
 | `a passkey on a ts.net address is refused under the current contract` | `ts.net` 地址上的通行密钥注册选项与断言选项返回 `PASSKEY_UNAVAILABLE`。 |
 | `tailnet-membership is refused on a Funnel or own-domain address` | 为 Funnel 监听器或自有域名地址声明 `tailnet-membership` 的提供方以 `TAILNET_IDENTITY_UNAVAILABLE` 被拒绝。 |
-| `a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent` | 来自 `tailnet-membership` 会话、对授予完全访问的提示给出的 `allowed-once` 答复以 `LOOPBACK_REQUIRED` 被拒绝；被升级的调用不会运行，工作区也不记录同意，而同一提示在 loopback 工作室上答复则授予。 |
+| `a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent` | 来自 `tailnet-membership` 会话、对授予完全访问的提示给出的 `allowed-once` 答复以 `LOOPBACK_REQUIRED` 被拒绝；被升级的调用不运行，工作区不记录任何同意，而在回环 studio 上答复同一提示则会授予。 |
+| `a tailnet-route session cannot start an external agent` | 来自 `tailnet-membership` 会话、对标记为 `external-agent` 的提示给出的 `allowed-once` 答复以 `LOOPBACK_REQUIRED` 被拒绝，因此该智能体不会启动；从该会话拒绝它会生效，而在回环 studio 上答复同一提示则会被应用。 |
 | `a tailnet-route session cannot remove a device, reset, enrol a factor or change reach` | 来自 `tailnet-membership` 会话的每一个此类请求都被拒绝，且 home 的设备与 reach 状态保持不变。 |
-| `a device chooses the preset a chat that has not started runs with` | 来自 `reach-device` Peer 的 `agentPresets/select` 返回所选的预设，且该对话记录 `agent-preset/selected`；请求完全访问的预设仍然会遇到工作区同意的拒绝，而该同意只在电脑上授予。 |
-| `a device reads the files of its chat's workspace and no path outside it` | `workspaceFiles/list`、`read`、`readBytes` 和 `stat` 对真实路径位于 Session 工作区内的路径成功，对工作区外的路径、经由指向工作区外的符号链接的路径、进入 Delo 主目录的路径以及不存在的路径以 `loopback-required: <action> with a path outside the chat's workspace` 拒绝；`workspaceFiles/changes` 保持拒绝。 |
-| `a device reads the installed plugins and cannot change them` | `pluginManager/listPlugins`、`listBundles`、`registries`、`history` 和 `pluginInventory/list` 成功，而 `installBundle`、`setPluginEnabled`、`setBundleEnabled`、`removeBundle` 和 `undo` 以 `loopback-required: <action>` 拒绝。 |
+| `five wrong PINs remove the device and close its sessions` | 一台设备的第五个错误 PIN 会像在电脑上移除那样移除它，关闭其会话，重启会保留计数；二十个并行的猜测最多消耗五次。 |
+| `ten wrong PINs across the home pause unlocks` | 若干台设备在 24 小时内共十次错误尝试之后，正确的 PIN 得到 `PIN_UNLOCKS_PAUSED`，直到电脑恢复。 |
+| `the PIN routes refuse a Funnel listener, the loopback listener and a device that sets the PIN` | `PIN_NOT_ALLOWED_ON_ADDRESS`、对非设备路由的拒绝，以及 `LOOPBACK_REQUIRED`。 |
+| `a page-unlock token from another device, session or listener is refused` | `UNLOCK_INVALID`，并且解锁结束。 |
+| `a page unlock ends idle, at its cap, on lock and when the PIN changes` | 此后 `elevationOf` 不准入任何内容。 |
+| `with PIN mode off nothing changes` | 解锁回答 `PIN_MODE_OFF`，不存在任何提权，提权类操作像以前一样被拒绝。 |
+| `the PIN is in no log, error or file in the clear` | PIN 文本不出现在日志行、响应体和文件中。 |
 | `a stale re-authentication is refused` | `auth_time` 距今超过 120 秒，或 `nonce` 不是批准哈希的 `reauth` 令牌，不会批准。 |
+| `a device chooses the preset a chat that has not started runs with` | 来自 `reach-device` Peer 的 `agentPresets/select` 返回所选的预设，且该 chat 记录 `agent-preset/selected`；写明完全访问的预设仍然会遇到工作区同意的拒绝，该同意只能在电脑上授予。 |
+| `a device reads the files of its chat's workspace and no path outside it` | `workspaceFiles/list`、`read`、`readBytes` 和 `stat` 对真实路径位于 Session 工作区内的路径成功，对工作区外的路径、经由指向工作区外的符号链接的路径、进入 Delorun 主目录的路径以及不存在的路径，以 `loopback-required: <action> with a path outside the chat's workspace` 被拒绝；`workspaceFiles/changes` 仍被拒绝。 |
+| `a device reads the installed plugins and cannot change them` | `pluginManager/listPlugins`、`listBundles`、`registries`、`history` 和 `pluginInventory/list` 成功，而 `installBundle`、`setPluginEnabled`、`setBundleEnabled`、`removeBundle` 和 `undo` 以 `loopback-required: <action>` 拒绝。 |
 
 <a id="what-this-does-not-prove"></a>
 ### 本约定不能证明的内容
@@ -323,7 +367,7 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 <a id="decided-values"></a>
 ## 决定的取值
 
-- 本人在 setup 期间在自己的 OpenID Connect 提供方处将 Delo 注册为客户端，输入客户端 ID 与密钥，重定向 URI 为用于 `ts.net` 地址与自有域名地址的 `https://<address>/auth/oidc/callback`；只有当提供方公布支持动态注册且本人选择使用时，才使用动态注册。
+- 本人在 setup 期间在自己的 OpenID Connect 提供方处将 Delorun 注册为客户端，输入客户端 ID 与密钥，重定向 URI 为用于 `ts.net` 地址与自有域名地址的 `https://<address>/auth/oidc/callback`；只有当提供方公布支持动态注册且本人选择使用时，才使用动态注册。
 - 通行密钥依赖方 ID：自有域名上为该地址的主机名；在 `ts.net` 上不提供，直到某个 spike 结果采纳主机名。
 - 允许的 ID 令牌算法：`RS256`、`PS256`、`ES256` 与 `EdDSA`；通行密钥算法为 EdDSA、ES256 与 RS256。
 - 流程：32 字节的 `state`、`nonce` 与 verifier，10 分钟生存期，每个 home 20 个待处理流程；票据 60 秒。

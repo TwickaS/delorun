@@ -3,62 +3,77 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c03-update-report.md
 /:
-  en: ae6e839f0f3ce33e
-  zh: 8bf150a39938d76b
+  en: dc9789a898cec67d
+  zh: 9d1d5307b039c5d8
 /c3-update-report:
-  en: 89f49269d2f94e52
-  zh: 83b4f1a1839aeef9
+  en: 51ee017ee106f9e5
+  zh: 77b67d87c5e52d4a
 /c3-update-report/summary:
-  en: dfc7bbaa8d7d11ee
-  zh: dd9a1f749e3ffa0f
+  en: 5644a8840874c29f
+  zh: b27465304730e1a6
+/c3-update-report/status:
+  en: 39c150334e161b7c
+  zh: 0c3aff50f2898d27
 /c3-update-report/contents:
-  en: 98dd07fe45e4f833
-  zh: 0426455a0d4a3da8
+  en: 4ba02e033642f907
+  zh: 2b28d73a58d6a020
 /c3-update-report/installations-and-update-states:
-  en: e05f2bc592a16db3
-  zh: ed95a01dfc83c09c
+  en: 952b0640f3be4696
+  zh: 6288bce6bb53a9b7
+/c3-update-report/update-check:
+  en: ea780d30d13516da
+  zh: 4261e59728179b1c
 /c3-update-report/when-a-report-is-made:
-  en: 1dc146c6c6c872ac
-  zh: 03645d32b5dc227a
+  en: 7b3c7983646767fc
+  zh: 7e72cbcda88bc806
 /c3-update-report/report-fields:
-  en: 04b18155915c7b02
-  zh: 6bd08dcd15aec06d
+  en: 35aec67190025f06
+  zh: 3eb1fbe7589b4ff5
 /c3-update-report/items:
-  en: 0c52a7b1f90d683b
-  zh: b68575e79fc76054
+  en: 75a677e3ba13aec8
+  zh: c83f2ce5003b9584
 /c3-update-report/reasons:
-  en: aff0cd9656b8f91b
-  zh: 6262681ec371fee2
+  en: e0cd9100d3c072bc
+  zh: 5c97128fe2c5d8ca
 /c3-update-report/verified-and-unverified:
-  en: 991b9eddaec78329
-  zh: 8b073e81cd065a89
+  en: 7aebb3b554bd6589
+  zh: 63779e3c24b3710a
+/c3-update-report/data-formats:
+  en: ee16b12c8042ec7e
+  zh: 13fa24fd9e7c335b
 /c3-update-report/applying-an-update:
-  en: cb3547d446e40078
-  zh: b9e3b7cbb23eac30
+  en: 12f5bf4ab93ea4b9
+  zh: 9ded5e08d2d035cc
+/c3-update-report/harness-files-across-an-update:
+  en: d32fe7a917eff1b0
+  zh: 79aba1ea436b9ca2
 /c3-update-report/health-check:
-  en: 9da4f61673d4aaec
-  zh: 082014c9c4171c3b
+  en: f594eedfcb4d0e7b
+  zh: 29cf67280ad048b9
 /c3-update-report/rollback-triggers:
-  en: 1a8f523ba2afd1aa
-  zh: 6dbb650f42e71e0e
+  en: 8c4901d7f1de4e4b
+  zh: 4b99b53aae09da4a
+/c3-update-report/rollback:
+  en: b69a67d07a2bd5b0
+  zh: 22fd887a234ba356
 /c3-update-report/undo-and-restore:
-  en: a5c3c0962c5b4a8b
-  zh: e788fe8054127b95
+  en: c07978dc08ca7e13
+  zh: bed3ed22b4839388
 /c3-update-report/values-and-limits:
-  en: 72edbbf6ad227318
-  zh: ebaaa2313cc0f44c
+  en: 5010cc2fbe04b39a
+  zh: 3c468a261ce85eff
 /c3-update-report/consumers:
-  en: 0b979070d0f080af
-  zh: a1972bd6a7b28742
+  en: cb2e8a9d4192b518
+  zh: c72d85618152e179
 /c3-update-report/compatibility:
-  en: 665a051899606212
-  zh: 958c3d28716ff77f
+  en: 8774c8aad351a7b9
+  zh: edb1e6ecfc1140ae
 /c3-update-report/security:
   en: 52543dba9bf0d349
   zh: bd232096a834cc62
 /c3-update-report/security/requirements:
-  en: 79f955e0a869a723
-  zh: becb39b1ba91c5ef
+  en: 7da641cf934f911a
+  zh: 32c016c156fe0997
 /c3-update-report/security/denial-tests:
-  en: 29e413728ed27888
-  zh: 12421d89e80902fc
+  en: ba8ed85c63830a53
+  zh: 4c811bbc98be0932

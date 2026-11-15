@@ -6,41 +6,44 @@
   en: 36486638987df388
   zh: f38c0c6feeb15404
 /contract-c16-parity-composition:
-  en: 80600ca60eb983b8
-  zh: 8c30b68580958724
+  en: b8e3d47a9984b6e2
+  zh: 5c4344a7fd7aba23
 /contract-c16-parity-composition/summary:
-  en: f947acf99a8239d8
-  zh: 6f18e92ec9156691
+  en: 77d97504b2ff0ffc
+  zh: e9f27d0f4fe4019e
+/contract-c16-parity-composition/status:
+  en: 08983573e81fe036
+  zh: 38d88c1537da3871
 /contract-c16-parity-composition/contents:
-  en: 9c9d9eecca7bfd80
-  zh: 9127c809423784ee
+  en: decb75cff54d768f
+  zh: 2cc9bdafafd2b27a
 /contract-c16-parity-composition/contract:
   en: fc2209b246452100
   zh: 0bf8d0ab45039888
 /contract-c16-parity-composition/contract/composition:
-  en: 1a4e1d321498eff6
-  zh: b953407b8abed450
+  en: 9a4de0ad8f8139c7
+  zh: 8e56ad6526485f7e
 /contract-c16-parity-composition/contract/changed-defaults:
-  en: 4fcfcb22b57d042d
-  zh: b72298d8ef2dd157
+  en: 35785c0a7d27b092
+  zh: 253fbabdf7f6c12d
 /contract-c16-parity-composition/contract/switch-registry:
-  en: bfa2db606cf19ae6
-  zh: 351f0bd096f95807
+  en: b34aef953a076783
+  zh: cb4536c901bb9e6f
 /contract-c16-parity-composition/contract/replay-lane:
-  en: 0d1e5c12186038d2
-  zh: 0fe0de33e27279a7
+  en: 49c9892f4aa9329e
+  zh: ec561550c4467868
 /contract-c16-parity-composition/contract/switch-sweep-and-pass-rule:
-  en: a28fd3593ef066b7
-  zh: aed55caa683d9254
+  en: fafbb3d2a8dbb3dc
+  zh: 751358eedffb5db4
 /contract-c16-parity-composition/consumers:
-  en: 84d2e8ac6e776a9b
-  zh: af3b204012234b91
+  en: cf5f6cca6cd05c92
+  zh: ecdf08f9087495e3
 /contract-c16-parity-composition/compatibility:
   en: 1a51c90528cde819
   zh: 106f99cdd32180bf
 /contract-c16-parity-composition/security:
-  en: 90e4d05ea096c742
-  zh: 0aba3d038931593e
+  en: fe8cdf3fa36d6505
+  zh: c111dcd06a409fb2
 /contract-c16-parity-composition/decided-values:
-  en: 6ea907ef935b7554
-  zh: 06a42f44f458ff2b
+  en: 5d88ae29e4f390ef
+  zh: 6165bb96e445ce77

@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c18-release-log.md
 /:
   en: b92ef73ed073080d
-  zh: af7b64a60330dd56
+  zh: 7d921fd52878437f
 /c18-release-log-and-witness:
   en: 38e870dd1fe077e2
   zh: 5c5829ce85d793de
 /c18-release-log-and-witness/summary:
   en: 35bf8d2da2c2605d
-  zh: 086f3b5865fa4561
+  zh: c5cc4bbd3bcf89fb
 /c18-release-log-and-witness/status:
   en: b25a9d3043ba907d
   zh: 898f0e9784832e8c
@@ -19,7 +19,7 @@
   zh: 5599def4d6f40b7c
 /c18-release-log-and-witness/the-log-and-the-witness:
   en: b88d7f0c3af63cba
-  zh: dba464b5456b93c1
+  zh: 48dbb04e51385707
 /c18-release-log-and-witness/log-entry:
   en: e3369b2b057775a3
   zh: 22651f66bb89e027
@@ -31,13 +31,13 @@
   zh: 96f0d4be332b6f15
 /c18-release-log-and-witness/consistency-with-the-current-log:
   en: 32a6418a7fba1ddb
-  zh: 382453e1134eddd3
+  zh: 51ce45f96a0771cb
 /c18-release-log-and-witness/check-states:
   en: 6b69ed4301247b68
   zh: 8352c08e63fe718a
 /c18-release-log-and-witness/behaviour-per-client:
   en: a59cb893f463e21b
-  zh: 264dff98c4032c2c
+  zh: 8339c36393299747
 /c18-release-log-and-witness/values-and-limits:
   en: 1f7a6573040ea4c4
   zh: 10fab7b1bb2d349f
@@ -58,4 +58,4 @@
   zh: e82508ed9d886c73
 /c18-release-log-and-witness/security/what-this-does-not-prove:
   en: 7dea7b8a180eb506
-  zh: 9ec57b1118ccdaed
+  zh: 8062ac85f26eb3ca

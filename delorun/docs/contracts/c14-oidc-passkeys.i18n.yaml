@@ -15,8 +15,8 @@
   en: b4a089315f01a0be
   zh: 4452aa45478cf719
 /contract-c14-openid-connect-and-passkeys/contents:
-  en: a438020260e2dfc2
-  zh: bbc9cdc80b378e69
+  en: ba0206131f7f04e4
+  zh: 15bc1d3277230031
 /contract-c14-openid-connect-and-passkeys/contract:
   en: 01be7ced4357bf93
   zh: d0b98165ff86d494
@@ -28,10 +28,10 @@
   zh: 080439e72c703320
 /contract-c14-openid-connect-and-passkeys/contract/passkeys:
   en: 5e84629bc57d266e
-  zh: afe868268d867e0b
+  zh: e16c372d07ef8520
 /contract-c14-openid-connect-and-passkeys/contract/client-registration:
   en: dc16e208eb1035e1
-  zh: 3d7c749ea13e352d
+  zh: f6da3a0d5c7905ca
 /contract-c14-openid-connect-and-passkeys/contract/authorisation-flow:
   en: 788fd5ed6d28687d
   zh: cff2369e050dd5e6
@@ -52,22 +52,25 @@
   zh: b8267a64e91d4807
 /contract-c14-openid-connect-and-passkeys/contract/tailnet-membership:
   en: 40365cfca9c32550
-  zh: 28c2e57c8c764c59
+  zh: 115712d8dccd5099
 /contract-c14-openid-connect-and-passkeys/contract/what-a-device-may-call:
   en: 382c2e3ce48f7817
-  zh: 4b28f9576a4ad897
+  zh: 54292edb4cfad2e5
 /contract-c14-openid-connect-and-passkeys/contract/elevation:
-  en: 91dd7a272d5596e1
-  zh: 0b38103f3663af3d
+  en: 040995b2620261a4
+  zh: e4accd9fa4ba0304
+/contract-c14-openid-connect-and-passkeys/contract/pin-mode:
+  en: 4da2e8dee8ace14e
+  zh: abc89d0d3c7cf490
 /contract-c14-openid-connect-and-passkeys/contract/limits:
   en: a72ddae0f679d724
   zh: ac19d58423de47a9
 /contract-c14-openid-connect-and-passkeys/contract/errors:
-  en: c56a06776520faad
-  zh: 5637eeab1177687a
+  en: 6035a46e2327411b
+  zh: bec45aca51606b50
 /contract-c14-openid-connect-and-passkeys/contract/delo-run-issuer:
   en: 6051dd4d0ff54a25
-  zh: ebb82c521b6b92ba
+  zh: 770990173ac3d2c2
 /contract-c14-openid-connect-and-passkeys/consumers:
   en: a364f544d5ebac68
   zh: 64399ccdd6f722c6
@@ -75,11 +78,11 @@
   en: 33920b0a42258627
   zh: 1dbaa430a41344f7
 /contract-c14-openid-connect-and-passkeys/security:
-  en: 0222e3431f02a7be
-  zh: fb34cc768ef9b3b4
+  en: fb38bcefffde8d6c
+  zh: 53ec38ced3c76c62
 /contract-c14-openid-connect-and-passkeys/security/what-this-does-not-prove:
   en: f3c64d28162bc1a6
   zh: 366e111e39f78631
 /contract-c14-openid-connect-and-passkeys/decided-values:
   en: c175f66a9360e197
-  zh: 899291ad0c5ad41d
+  zh: 5d19f3bcff819d78

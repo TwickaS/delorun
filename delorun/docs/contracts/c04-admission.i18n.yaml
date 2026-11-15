@@ -6,56 +6,65 @@
   en: f7b0b7dcc5d74a14
   zh: 0c734da1a0e4b24a
 /contract-c4-admission-and-listeners:
-  en: ce46f0a15bdb4056
-  zh: 3388c01e1b22bfc1
+  en: e4e4badf87ecbef1
+  zh: b501b0c54db03ff2
 /contract-c4-admission-and-listeners/summary:
-  en: f41e8395a1daeae4
-  zh: b4978ad880411986
+  en: e5d64c3a31a685f1
+  zh: 60e5def4b5c0dfcf
+/contract-c4-admission-and-listeners/status:
+  en: 68ea081e353a510f
+  zh: 792bca7ece4d8042
 /contract-c4-admission-and-listeners/contents:
-  en: d1059fdba7423979
-  zh: c175c55ed9390195
+  en: cc8c482a97471688
+  zh: e10a2e80903fe40a
 /contract-c4-admission-and-listeners/contract:
   en: 39cadec1d5dc150e
   zh: add9ad7d3bf31526
 /contract-c4-admission-and-listeners/contract/authenticator:
-  en: d964af4f53db3615
-  zh: b89045b2f78d07ec
+  en: 7a7588b0e4199ad3
+  zh: 6343c740aed1f08b
 /contract-c4-admission-and-listeners/contract/listeners:
-  en: f93b0f3f910e881d
-  zh: de5a9f7341da569b
+  en: bd8f3e4407e0e0d9
+  zh: 7dce1e165aaf28d7
 /contract-c4-admission-and-listeners/contract/dispatch-order:
-  en: c4da1623a77a6d00
-  zh: cf08aaf86a1aadf1
+  en: e1f7e4f509c46e56
+  zh: 155410f7dc540a35
 /contract-c4-admission-and-listeners/contract/pre-login-allowlist:
-  en: 87e724ca86bcedb5
-  zh: 774f34b0173c2d80
+  en: f027c6233f673874
+  zh: 7715dd3978cb5da7
 /contract-c4-admission-and-listeners/contract/sessions:
-  en: c02c02fa934bb5ad
-  zh: 42f9e14ec7c6e325
+  en: 29dce2b4ba074f84
+  zh: ac153df8a611b78e
+/contract-c4-admission-and-listeners/contract/page-unlock:
+  en: a9bf215f14505e2f
+  zh: f5119414c2b151df
+/contract-c4-admission-and-listeners/contract/launch-tokens:
+  en: d75a8e7791eb2e92
+  zh: decf09070d1b5272
 /contract-c4-admission-and-listeners/contract/rotation-and-revocation:
-  en: 8483dba7430aafc1
-  zh: fb3cde2a0d3d39bb
+  en: 2c94a2627f9c3cf9
+  zh: 97df99701dc3e46b
 /contract-c4-admission-and-listeners/contract/response-headers:
-  en: 2fad8665f0894934
-  zh: 7c9c470a28fcf9af
+  en: 1eb8ea8b65a7f2be
+  zh: 0e0b899b9695359b
 /contract-c4-admission-and-listeners/contract/trusted-types:
-  en: 9f14f9a2899fd139
-  zh: 922b3e6e950c5d4b
+  en: 7df52658dc18f863
+  zh: 98bf217d3bb1d574
 /contract-c4-admission-and-listeners/contract/refusals:
-  en: 470799b1c5e4db0a
-  zh: 47e55e929b64222a
+  en: 2fe8f484b4c90b45
+  zh: 9ea7a7f00dba84ae
 /contract-c4-admission-and-listeners/consumers:
-  en: 7daf2f21ee8ce543
-  zh: c799313456c513dc
+  en: ec0e9a26f98b0baf
+  zh: 251b7858868f9922
 /contract-c4-admission-and-listeners/compatibility:
-  en: 7345dc83de8aacce
-  zh: 1707bebc04a8d8e7
+  en: 3076387bf3b05575
+  zh: 416a123a7fb97523
 /contract-c4-admission-and-listeners/security:
-  en: 2cdb48f19325ae1d
-  zh: e9926c0eb3914cf6
+  en: 3f6a2da8e4141756
+  zh: e00cb5102e4b89c7
 /contract-c4-admission-and-listeners/security/what-this-does-not-prove:
-  en: 8fe953058c0a12bd
-  zh: b486ff093af3cc93
+  en: 668abf73ab55bdfa
+  zh: 9d57a0de331621dc
 /contract-c4-admission-and-listeners/decided-values:
-  en: 53fa99724f726790
-  zh: 4a5ebba028768f50
+  en: ee3f964a0a8e7743
+  zh: 02056d985d463a37

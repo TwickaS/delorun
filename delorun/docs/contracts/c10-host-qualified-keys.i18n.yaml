@@ -6,14 +6,17 @@
   en: 7b36b36ba1cf7675
   zh: 7d7d45a4df00df17
 /contract-c10-host-qualified-keys:
-  en: 2aaaefc33300a672
-  zh: b373bf3ad9f7432f
+  en: 79e522dce6498557
+  zh: e8df5b70b8a36448
 /contract-c10-host-qualified-keys/summary:
-  en: ceddb8d017d144d1
-  zh: 6dff19933c2ff49c
+  en: b3fd780c28445b1b
+  zh: f2085e56b9a290f3
+/contract-c10-host-qualified-keys/status:
+  en: e96bc78c5be06155
+  zh: 0cf0c370c7f92463
 /contract-c10-host-qualified-keys/contents:
-  en: f74073b1ec4358d1
-  zh: e8c3c209c8cc562f
+  en: ab8924fbe5490c5e
+  zh: 1e4be6a37fc85e80
 /contract-c10-host-qualified-keys/contract:
   en: 678232d971b98e51
   zh: 72b59b1877a0da53
@@ -24,14 +27,14 @@
   en: 64875bde27d9ff83
   zh: 374c165fe123e252
 /contract-c10-host-qualified-keys/contract/persisted-browser-keys:
-  en: 7d5c6043849aa904
-  zh: 32f8ffad113f237b
+  en: ab53f6503b5f9b0e
+  zh: b393f5376a095655
 /contract-c10-host-qualified-keys/contract/unchanged-formats:
   en: 9e3c56bb83a640b3
   zh: d604c0e1a7b1eb1c
 /contract-c10-host-qualified-keys/consumers:
-  en: ffa3f43bc265eb7b
-  zh: 35e72d64acc52064
+  en: 1dbe6aff46f20cfc
+  zh: f0f84526b82cca77
 /contract-c10-host-qualified-keys/compatibility:
   en: 1241ba4a775e7c74
   zh: 89d781d39c4b40f3

@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for c22-delorun-plugin-interface.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/contracts/c22-delorun-plugin-interface.md
+/:
+  en: 6169c60f391139ee
+  zh: 8464a7fdde5387d1
+/c22-what-a-delorun-version-promises-a-plugin:
+  en: e3e6160c0a1d2812
+  zh: 24751f7052fc83d4
+/c22-what-a-delorun-version-promises-a-plugin/summary:
+  en: 99dc9c98b86a2a6f
+  zh: 02b4004913902681
+/c22-what-a-delorun-version-promises-a-plugin/status:
+  en: 70dd86feaf59be83
+  zh: 034ae10c648f3e10
+/c22-what-a-delorun-version-promises-a-plugin/contents:
+  en: dd4917b46e2356c4
+  zh: 13b29f36c2e62317
+/c22-what-a-delorun-version-promises-a-plugin/covered-interfaces:
+  en: ba005eae60f3acf1
+  zh: 0a49e0f7169d8540
+/c22-what-a-delorun-version-promises-a-plugin/what-each-release-may-change:
+  en: 5ff08b2a45a56cb0
+  zh: c25dfea50791896b
+/c22-what-a-delorun-version-promises-a-plugin/versions-before-1-0:
+  en: aaa7f77847a9130d
+  zh: e4c64cb0ccc64196
+/c22-what-a-delorun-version-promises-a-plugin/targeting-delorun:
+  en: e4da63a6a4d24c6b
+  zh: 86bf88e9e0f898e3
+/c22-what-a-delorun-version-promises-a-plugin/checking-a-plugin:
+  en: c64c707d5c70976c
+  zh: 2e5eee0c71a9e921
+/c22-what-a-delorun-version-promises-a-plugin/the-patch-rule:
+  en: f1fde14322800838
+  zh: f350ef1f6b1ce55a
+/c22-what-a-delorun-version-promises-a-plugin/consumers:
+  en: 04f3c515b269f789
+  zh: 93162954a6c12310
+/c22-what-a-delorun-version-promises-a-plugin/compatibility:
+  en: 9d24519b3c3fd595
+  zh: 08d01928740f46e7
+/c22-what-a-delorun-version-promises-a-plugin/security:
+  en: 52543dba9bf0d349
+  zh: e612a6c5b83e9afc
+/c22-what-a-delorun-version-promises-a-plugin/security/requirements:
+  en: fd8100d6f2b1b80f
+  zh: 5286eb9ac952de6c
+/c22-what-a-delorun-version-promises-a-plugin/security/denial-tests:
+  en: f7530a0295d6ec41
+  zh: c3da83a35e851459
+/c22-what-a-delorun-version-promises-a-plugin/security/what-this-does-not-prove:
+  en: 858902dc45bf0e7e
+  zh: ef52d171054768ab

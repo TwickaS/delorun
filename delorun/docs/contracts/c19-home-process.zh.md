@@ -18,7 +18,7 @@ home 进程、带令牌检查与固定请求集合的更新通道、握手、被
 
 - **已构建并已接入：** 锁；以恒定时间比较的每次启动令牌；Host 的通道令牌与 `studio.open-token`（由 `delorun open`、启动过程与 setup 的结尾使用）；位于 Unix 套接字 `run/<profile>/update.sock` 上、带请求、大小、时间与连接限额的更新通道；带 CLI profile 轮次拒绝的排空；通过继承管道的交接；健康检查与自动回滚；以及在下次启动时完成被中断更新的日志文件。
 - **未构建：** 启动顺序的第 6 步，因为 `delorun start` 不向 home 进程传递监管器（[C9](c09-runtime-supervisor.zh.md)）；第 8 步，即限制探测，以及 `delorun verify` 对其结果的报告；登录时启动、`--at-login` 及其运行的启动器副本；Host 的更新插件，因此 studio 的「Update now」与回滚并不存在，通道只服务 `delorun` 命令；`delorun status --follow`；Windows 上的命名管道：通道在每个平台上都使用同一个套接字路径，没有测试表明它能在 Windows 上打开，windows-acl 也没有拒绝受限命令连接或读取令牌的规则；要求 10 所指的提权提示措辞（[C1](c01-home-layout.zh.md)）。
-- **Delo 的沙箱规则未覆盖：** 在 `danger-full-access` 下运行的命令（`delorun headless` 任务只有在工作目录记录了完全访问授权时才会到达这种情况），以及 `delorun plugin` 操作所运行的命令，都能在 home 进程运行期间读取启动令牌并连接通道；要求 4 的封闭请求集合仍然适用于它们。
+- **Delorun 的沙箱规则未覆盖：** 在 `danger-full-access` 下运行的命令（`delorun headless` 任务只有在工作目录记录了完全访问授权时才会到达这种情况），以及 `delorun plugin` 操作所运行的命令，都能在 home 进程运行期间读取启动令牌并连接通道；要求 4 的封闭请求集合仍然适用于它们。
 
 下文中被本列表列为未构建或无任何调用方接入的要求与拒绝测试，在某次变更构建并接入它们之前不保护任何人。
 
@@ -58,7 +58,7 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
   4. 写入新的启动令牌（[C1](c01-home-layout.zh.md)）；
   5. 在更新通道上监听，从这一步起它对 `status` 回答 `starting`；
   6. 机器已设置 Docker 时启动 Docker 监管器（[C9](c09-runtime-supervisor.zh.md)）；尚未构建，因此不启动任何监管器；
-  7. 通过 Delo 唯一的组合启动 Host，并使其遵守 [Host 不变量](#host-invariants)；
+  7. 通过 Delorun 唯一的组合启动 Host，并使其遵守 [Host 不变量](#host-invariants)；
   8. 运行 [C1](c01-home-layout.zh.md) 的限制探测并记录结果；尚未构建，因此不运行任何探测；
   9. 进入 `running`。
 - **正常停止。** 进程关闭 Host，删除令牌文件，关闭更新通道，停止它启动的监管器，删除锁并退出。关闭失败的 Host 会被记录到日志，后续步骤照常执行。
@@ -69,15 +69,15 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 
 ### Host 不变量
 
-Delo 在 home 之上启动的每个 Host 都经过同一个组合：前台启动、其脱离终端的子进程、setup 的结尾、更新或回滚的后继，以及被中断更新之后的启动（都运行 `delorun start --foreground`），安全模式，以及 `delorun headless`——它启动 home 的 `headless` profile，即链接了 `@delorun/bundle-headless` 的上游 `headless` 模板。该组合准备 profile，拒绝跳过了某个 Delo 组合包的 profile，拒绝未加载 `@delorun/bundle-headless` 的 `headless` profile，应用安全模式过滤后的层与 overlay，应用已批准插件内容步骤的 overlay，并最后写入 [C1](c01-home-layout.zh.md) 的沙箱 overlay，使其覆盖在组合包层、profile patch、home patch 与其他每个 overlay 之上。在任何插件运行之前检查组合后的行，启动之后再次检查 Loader 的行：
+Delorun 在 home 之上启动的每个 Host 都经过同一个组合：前台启动、其脱离终端的子进程、setup 的结尾、更新或回滚的后继，以及被中断更新之后的启动（都运行 `delorun start --foreground`），安全模式，以及 `delorun headless`——它启动 home 的 `headless` profile，即链接了 `@delorun/bundle-headless` 的上游 `headless` 模板。该组合准备 profile，拒绝跳过了某个 Delorun 组合包的 profile，拒绝未加载 `@delorun/bundle-headless` 的 `headless` profile，应用安全模式过滤后的层与 overlay，应用已批准插件内容步骤的 overlay，并最后写入 [C1](c01-home-layout.zh.md) 的沙箱 overlay，使其覆盖在组合包层、profile patch、home patch 与其他每个 overlay 之上。在任何插件运行之前检查组合后的行，启动之后再次检查 Loader 的行：
 
-- 每个必需行、`sandbox` 行以及 Delo 组合包插入的每一行，都由声明它的组合包插入一次（`sandbox` 由上游的 `@deepseek-ai/dsh-base` 插入，Delo 行由 Delo 组合包插入），并运行该组合包指定的插件：任何其他组合包、profile patch、home patch 或 overlay 对该 id 的第二次插入都会被拒绝，因为上游会挂载两个条目，后一个会替换该行；
+- 每个必需行、`sandbox` 行以及 Delorun 组合包插入的每一行，都由声明它的组合包插入一次（`sandbox` 由上游的 `@deepseek-ai/dsh-base` 插入，Delorun 行由 Delorun 组合包插入），并运行该组合包指定的插件：任何其他组合包、profile patch、home patch 或 overlay 对该 id 的第二次插入都会被拒绝，因为上游会挂载两个条目，后一个会替换该行；
 - 每个必需行都已启用且处于活动状态，安全模式的 overlay 从不豁免其中任何一行；
 - `sandbox` 行的 `protectedHome` 是 home 的真实路径，其 `deniedSockets` 包含 C1 拒绝的每个套接字，其 `escapeSocketDirectories` 包含启动过程指定的每个目录（例如 WSL 的 `/run/WSL`），且它不设置 `runnerCommand` 或 `runnerFailureSignatures`；
-- 在 CLI profile 中，每个提示行的开关取已记录的提示答案赋予它的值（“更安全的提示”取 Delo 的默认值，“与库存相同”取对等值），且 `delorun-fetch-guard` 与 `delorun-update-gate` 为开启，更新闸门带 `holdUntilChecked`，若 `delorun` 未释放它，等待中的轮次在 `checkWaitSeconds`（默认 60）之后以 `START_CHECK_PENDING` 结束；在没有 setup 答案的 `headless` profile 中，`@delorun/bundle-headless` 的各行取 Delo 的默认值：`delorun-instruction-consent`、`delorun-mcp-consent`、`delorun-schedule-consent`、`delorun-permission-defaults`、`delorun-fetch-guard` 与 `delorun-update-gate` 为开启，更新闸门带 `holdUntilChecked`，且插件管理像 `@delorun/bundle-local` 那样保护这些行与沙箱行；
-- 启动之后，必需行提供的每个服务都由该行的 fiber 或其下的 fiber 提供，而不仅仅是存在：`sandbox` 由 `sandbox` 提供，`fetchGuard` 由 `delorun-fetch-guard` 提供，`delorunTurnGate` 由 `delorun-update-gate` 提供，`writeConsent`、`mcpAddConsent` 与 `scheduleConsent` 由各自的同意行提供，`permissionDefaults` 与 `sandboxModeGuard` 由 `delorun-permission-defaults` 提供；只有当某行的开关关闭时，其服务才可以不存在。
+- 在 CLI profile 中，每个提示行的开关取已记录的提示答案赋予它的值（「Ask me first」取 Delorun 的默认值，「Ask less (like DeepSeek Harness)」取对等值），且 `delorun-fetch-guard` 与 `delorun-update-gate` 为开启，更新闸门带 `holdUntilChecked`，若 `delorun` 未释放它，等待中的轮次在 `checkWaitSeconds`（默认 60）之后以 `START_CHECK_PENDING` 结束；在没有 setup 答案的 `headless` profile 中，`@delorun/bundle-headless` 的各行取 Delorun 的默认值：`delorun-instruction-consent`、`delorun-mcp-consent`、`delorun-schedule-consent`、`delorun-permission-defaults`、`delorun-fetch-guard` 与 `delorun-update-gate` 为开启，更新闸门带 `holdUntilChecked`，且插件管理像 `@delorun/bundle-local` 那样保护这些行与沙箱行；
+- 启动之后，必需行提供的每个服务都由该行的 fiber 或其下的 fiber 提供，而不仅仅是存在：`sandbox` 由 `sandbox` 提供，`fetchGuard` 由 `delorun-fetch-guard` 提供，`delorunTurnGate` 由 `delorun-update-gate` 提供，`writeConsent`、`mcpAddConsent` 与 `scheduleConsent` 由各自的同意行提供，`permissionDefaults`、`sandboxModeGuard`、`delorunCommandNetwork` 与 `sandboxNetwork` 由 `delorun-permission-defaults` 提供；只有当某行的开关关闭时，其服务才可以不存在。
 
-违反这些规则会在启动之前停止启动，或停止已启动的 Host，并给出一条拒绝信息，写明每一行、设置该值的文件以及补救办法：删除该设置，或运行 `delorun recover safe-mode`。在 CLI profile 与 `headless` profile 中，更新闸门会保持每个 agent 轮次的第一步，直到已启动的 Host 通过检查，因此任何轮次的模型请求都不会在此之前发送；被拒绝的 Host 停止时仍在等待的轮次以 `UPDATE_PENDING` 被拒绝。闸门只保持轮次：轮次步骤之外的模型调用，例如上游的 chat 标题生成、自动审查以及本人发起的压缩，不受保持。在 `headless` profile 中，没有更新或停止会等待该闸门；它保持任务的第一步直到检查通过，因此任务只在 Delo 检查了各行与各服务之后才开始，被检查拒绝的 Host 会与任务一同停止。需要询问本人的防护在 `headless` profile 中会拒绝，因为它不组合任何审批应答方。在 `headless` profile 中，`delorun-permission-defaults` 的完全访问同意会拒绝在没有完全访问授权的工作目录中切换到完全访问的每个请求，本人在 home 的电脑上于 studio 中或使用 `delorun workspace full-access` 记录该授权。当 `delorun headless` 从 `--permission-mode`（`danger-full-access`，或任一层映射到 `danger-full-access` 沙箱模式的预设）或 `DSH_PERMISSION_MODE=danger-full-access`（各自去除首尾空白并忽略大小写）读到这样的请求，或无法读取授权记录时，它也会在启动之前提前拒绝。`delorun headless` 运行在启动之后崩溃时，由 CLI 的最后兜底处理器结束进程，该处理器会先在其时限内销毁 Host。启动从不使用上游的浏览器交接，因此 studio 只有在 home 进程运行、检查通过之后，才通过 `studio.open-token` 打开。
+违反这些规则会在启动之前停止启动，或停止已启动的 Host，并给出一条拒绝信息，写明每一行、设置该值的文件以及补救办法：删除该设置，或运行 `delorun recover safe-mode`。在 CLI profile 与 `headless` profile 中，更新闸门会保持每个 agent 轮次的第一步，直到已启动的 Host 通过检查，因此任何轮次的模型请求都不会在此之前发送；被拒绝的 Host 停止时仍在等待的轮次以 `UPDATE_PENDING` 被拒绝。闸门只保持轮次：轮次步骤之外的模型调用，例如上游的 chat 标题生成、自动审查以及本人发起的压缩，不受保持。在 `headless` profile 中，没有更新或停止会等待该闸门；它保持任务的第一步直到检查通过，因此任务只在 Delorun 检查了各行与各服务之后才开始，被检查拒绝的 Host 会与任务一同停止。需要询问本人的防护在 `headless` profile 中会拒绝，因为它不组合任何审批应答方。在 `headless` profile 中，`delorun-permission-defaults` 的完全访问同意会拒绝在没有完全访问授权的工作目录中切换到完全访问的每个请求，本人在 home 的电脑上于 studio 中或使用 `delorun workspace full-access` 记录该授权。当 `delorun headless` 从 `--permission-mode`（`danger-full-access`，或任一层映射到 `danger-full-access` 沙箱模式的预设）或 `DSH_PERMISSION_MODE=danger-full-access`（各自去除首尾空白并忽略大小写）读到这样的请求，或无法读取授权记录时，它也会在启动之前提前拒绝。`delorun headless` 运行在启动之后崩溃时，由 CLI 的最后兜底处理器结束进程，该处理器会先在其时限内销毁 Host。启动从不使用上游的浏览器交接，因此 studio 只有在 home 进程运行、检查通过之后，才通过 `studio.open-token` 打开。
 
 在任何 Host 启动之前，会运行一个有序的启动前步骤列表：撤回被中断的库存 DeepSeek Harness home 导入；完成被中断的会话数据副本恢复（[C3](c03-update-report.zh.md)）；这两步在运行期间都会把启动自身的数据使用方注册改为独占，并在有其他进程注册时拒绝；在全新启动（而非更新的后继）以及每次 `delorun headless` 运行时，执行 profile 的 `delorun-migrations.json` 未列出的 profile 一次性变更，该记录无法读取时不执行任何变更（[C1](c01-home-layout.zh.md#profiles)）；`headless` profile 的变更 `headless-bundle` 链接 `@delorun/bundle-headless`，并在首次运行时创建该 profile；以及更新提示的检查，这是一个在该功能落地之前不做任何事的位置。home 进程在持有其 home 锁之后、完成被中断的更新之前运行该列表；`delorun headless` 在注册为 chat 数据的共享使用方之后运行导入与提示步骤以及 profile 的一次性变更。任一步骤抛出异常都会拒绝启动。
 
@@ -89,9 +89,9 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 - **`delorun start`** 为该 profile 启动 home 进程，并等待它报告 `running`，最多 120 秒；未进入 `running` 的启动会打印失败原因与日志位置。若已有存活的 home 进程回答 `status`，该命令打印其状态并以 0 退出。`--foreground` 在终端中运行该进程，同时写入其日志。会先安装登录项的 `--at-login`（[登录时启动](#start-at-login)）尚未构建。
 - **不带参数的 `delorun`** 在没有 CLI profile 的 home 上运行 setup；否则它像 `delorun start` 一样启动 home 进程，并像 `delorun open` 一样打开 studio。
-- **`delorun open`** 以 `studio.open-token` 向运行中的 home 进程请求一个 studio 链接，并把它交给默认浏览器；`--print` 改为打印该链接一次，`--port <n>` 为一个转发到 studio 的回环端口生成链接。在 Delo 的组合下，该链接只能在 60 秒内登录一次（[C4](c04-admission.zh.md#sessions)）。启动会打印不带令牌的 studio 地址以及指出 `delorun open` 的那一行；`delorun start --open`、不带参数的 `delorun` 与 setup 的结尾通过 `studio.open-token` 打开 studio，从不从日志中读取地址。没有 home 进程运行时，`delorun open` 以 3 退出。
+- **`delorun open`** 以 `studio.open-token` 向运行中的 home 进程请求一个 studio 链接，并把它交给默认浏览器；`--print` 改为打印该链接一次，`--port <n>` 为一个转发到 studio 的回环端口生成链接。在 Delorun 的组合下，该链接只能在 60 秒内登录一次（[C4](c04-admission.zh.md#launch-tokens)）。启动会打印不带令牌的 studio 地址以及指出 `delorun open` 的那一行；`delorun start --open`、不带参数的 `delorun` 与 setup 的结尾通过 `studio.open-token` 打开 studio，从不从日志中读取地址。没有 home 进程运行时，`delorun open` 以 3 退出。
 - **`delorun stop`** 以 `drain` 模式发送 `stop`：home 进程拒绝新的轮次，等待运行中的 chat 最多 1,800 秒，然后停止。`--now` 发送 `cancel` 模式，通过上游的取消机制取消运行中的轮次与后台作业，然后停止。在另一个 `stop` 等待期间发送的 `stop` 会加入它并得到相同的最后一行；加入的 `cancel` 会先取消运行中的 chat，因此 `delorun stop --now` 会结束正在排空的停止的等待。被接受的停止总会发送其最后一行并结束进程：取消失败会被记录到日志，停止继续进行；无法读取的状态会从该行中省略。`--at-login` 同时移除登录项。没有 home 进程运行时，该命令打印这一情况并以 0 退出。对于 `--now` 停止，若 home 进程在 60 秒内未发送最后一行、未发送最后一行就关闭了通道，或在接受后 120 秒仍未退出，则以信号结束它：先 `SIGTERM`，若 30 秒后进程仍在运行则 `SIGKILL`。每次发送信号之前，该命令都确认该进程是锁的持有者：锁仍持有开始时读取的记录，且存活的进程具有其 `pid` 与 `processStart`，并在记录了 `pidNamespace` 时位于该命名空间中。无法确认的持有者（未记录 `processStart`、另一个或无法读取的 pid 命名空间、不同或无法读取的启动标识，或无法读取的锁）不会被发送信号；该命令写明进程 id 以及需要检查的内容，并以 1 退出。Windows 不记录启动标识，因此在那里 `--now` 从不发送信号。该命令打印它发送了哪个信号以及进程是否已退出；`SIGKILL` 之后它还会打印 Delorun 启动的命令可能仍在运行，因为在其自身 systemd scope 中启动的命令会在 home 进程结束后继续存在。`SIGKILL` 5 秒后仍在运行的进程使该命令以 1 退出。拒绝停止的 home 进程以及排空停止从不会被发送信号。
-- **`delorun status`** 打印状态、进程 id、`startId`，`current`、`previous` 与正在运行的运行时版本，启动器版本，正在进行的更新的阶段，以及运行中的 chat 数量；它不显示登录项，因为登录项尚未构建。`--json` 打印 `status` 响应。home 进程运行时以 0 退出，没有运行时以 3 退出，出错时以 1 退出。
+- **`delorun status`** 打印状态、进程 id、`startId`，`current`、`previous` 与运行中的运行时版本，正在进行的更新的阶段（如有）、运行中的 chat 数量以及 studio 的地址；它不打印启动器版本；它不显示登录项，因为登录项尚未构建。`--json` 打印 `status` 响应。home 进程运行时以 0 退出，没有运行时以 3 退出，出错时以 1 退出。
 
 <a id="start-at-login"></a>
 
@@ -107,6 +107,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 - 每个登录项都从 [C1](c01-home-layout.zh.md) 的启动器副本运行 `<home>/bin/delorun start --foreground --profile <profile>`，因此既不需要 npm，也不需要网络。
 - 失败后，登录项在 300 秒内最多重启该进程 3 次，之后保持停止，直到下次登录或手动启动。
+- **`npx delorun@latest repair`** 是启动器自己的命令，而不是 home 进程的命令：它只在启动器中、从终端、且没有任何 profile 的 home 进程运行时才运行（`HOME_RUNNING` 写明 `delorun stop`）。它不接受来自更新通道、Connection 路由或远程设备的请求，通道的请求集中没有针对它的操作；拒绝规格 `apps/npm-launcher/tests/repair.spec.ts` 守住这一点。
 
 <a id="the-update-channel"></a>
 
@@ -114,7 +115,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 更新通道是 [C1](c01-home-layout.zh.md) 放在 `run/<profile>/update.sock` 的套接字，在 Windows 上则是 [C1](c01-home-layout.zh.md) 命名的命名管道。它承载读取或改变 home 进程状态的每个请求。
 
-- **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。Host 的更新插件尚未构建，因此没有任何 studio 操作抵达该通道；该插件将代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌。
+- **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。任何 Host 都不读取另一个 profile 的令牌文件，也不向另一个 profile 的通道发送请求。Host 的更新插件将代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌，该插件尚未构建，因此没有任何 studio 操作抵达该通道。
 - **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`devices.elevate`、`pin.set`、`pin.options`、`pin.off`、`pin.resume`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
 - **令牌检查。** 每个连接的第一行是带有 `token` 字段的请求。home 进程以恒定时间把它与当前启动的令牌比较。缺失、格式错误、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，连接随即关闭；该响应不携带其他任何信息。
 - **Host 的通道令牌。** home 进程在每次启动时创建第二个令牌，只把它保存在内存中，并在 Host 启动时通过其收到的 `UpdateChannelAccess` 交给 Host。通道对除 `studio.open-token` 之外的每个操作都接受它，`studio.open-token` 对它回答 `UNAUTHENTICATED`。
@@ -136,26 +137,27 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `update.cancel` | 无 | 一行；仍处于 `waiting` 的更新回到 `running`，运行时不变 |
 | `rollback` | `wait` 与 `drainTimeoutS`，同 `update.apply`；`profileOnly`：布尔值 | 同 `update.apply`，目标为更新记录的 `from`；最终的 `outcome` 为 `rolled-back`、`aborted` 或 `failed` |
 | `stop` | `mode`：`drain` 或 `cancel` | 进度行，然后是进程退出前的最后一行，能读取时带 `status` |
-| `studio.open-token` | `port`，可选：转发到 studio 的回环端口，1 至 65535 | 一行：`url`，即 studio 的回环地址（给出 `port` 时以它代替 studio 自己的端口）以及 Host 为本次请求签发的启动令牌，和 `oneTime`，即该令牌是否只能在 60 秒内使用一次（[C4](c04-admission.zh.md#sessions)）；没有 Host 运行、Host 不提供 studio、其 studio 在回环以外的地址上监听，或它在公共 URL 上发布 studio 时，返回带原因的 `STUDIO_UNAVAILABLE` |
+| `studio.open-token` | `port`，可选：转发到 studio 的回环端口，1 至 65535 | 一行：`url`，即 studio 的回环地址（给出 `port` 时以它代替 studio 自己的端口）以及 Host 为本次请求签发的启动令牌，和 `oneTime`，即该令牌是否只能在 60 秒内使用一次（[C4](c04-admission.zh.md#launch-tokens)）；没有 Host 运行、Host 不提供 studio、其 studio 在回环以外的地址上监听，或它在公共 URL 上发布 studio 时，返回带原因的 `STUDIO_UNAVAILABLE` |
 | `changes.reload` | 无 | 一行 `reload`：Host 运行了 profile 文件所指定的内容时为 `{"ok":true}`；热重载关闭、插件加载或启动失败，或该更改需要重启时为 `{"ok":false,"error":"<原因>"}`；更新或回滚正在运行，或进程不处于 `running` 时为 `UPDATE_IN_PROGRESS` |
-| `devices.approve` | 无；`requestId` 与 `typedCode` 一起；或单独的 `cancelRequestId` | 不带参数时：打开 [C5](c05-device-approval.zh.md#approval-request) 的批准窗口，为本地的本人认领没有所有者的 home，并在有请求待处理或窗口关闭后回答一行 `closesAt` 与 `pending`；带 `requestId` 与 `typedCode` 时：[C5](c05-device-approval.zh.md#approval) 的本地批准，回答一行已批准的 `device`；带 `cancelRequestId` 时：取消该待处理请求，回答一行 `cancelled` |
+| `devices.approve` | 无；`requestId` 与 `typedCode` 一起；或单独的 `cancelRequestId` | 不带参数时：打开 [C5](c05-device-approval.zh.md#approval-window) 的批准窗口，为本地的本人认领没有所有者的 home，并在有请求待处理或窗口关闭后回答一行 `closesAt` 与 `pending`；带 `requestId` 与 `typedCode` 时：[C5](c05-device-approval.zh.md#local-approval) 的本地批准，回答一行已批准的 `device`；带 `cancelRequestId` 时：取消该待处理请求，回答一行 `cancelled` |
 | `devices.remove` | `deviceId` | 移除一台受信任的设备（[C5](c05-device-approval.zh.md)），立即结束其会话并关闭其远程访问连接，回答一行 `removed`、`sessions` 与 `connections` |
-| `pin.set` | `secret`；可选的 `idleMinutes`（1 到 60）与 `lockWhenHidden` | 设置或替换 PIN 或口令并开启 PIN 模式（C14）；每个页面解锁都会结束；回答一行 `enabled` 与 `secret` 的种类 `pin` 或 `passcode`；密钥绝不会在拒绝中回显，也不会被记入日志 |
-| `pin.options` | `idleMinutes`（1 到 60）与 `lockWhenHidden`，至少一个 | 只更改已开启的 PIN 模式的空闲分钟数与隐藏时锁定，无需密钥（C14）；哈希与页面解锁保持不变；回答一行 `enabled: true`、`idleMinutes` 与 `lockWhenHidden`；模式关闭时为 `PIN_FAILED`（`PIN_MODE_OFF`） |
+| `pin.set` | `secret`；可选的 `idleMinutes`（1 到 60）与 `lockWhenHidden` | 设置或替换 PIN 或口令并开启 PIN 模式（[C14](c14-oidc-passkeys.zh.md#pin-mode)）；每个页面解锁都会结束；回答一行 `enabled` 与 `secret` 的种类 `pin` 或 `passcode`；密钥绝不会在拒绝中回显，也不会被记入日志 |
+| `pin.options` | `idleMinutes`（1 到 60）与 `lockWhenHidden`，至少一个 | 只更改已开启的 PIN 模式的空闲分钟数与隐藏时锁定，无需密钥（[C14](c14-oidc-passkeys.zh.md#pin-mode)）；哈希与页面解锁保持不变；回答一行 `enabled: true`、`idleMinutes` 与 `lockWhenHidden`；模式关闭时为 `PIN_FAILED`（`PIN_MODE_OFF`） |
 | `pin.off` | 无 | 关闭 PIN 模式并丢弃 PIN；回答一行 `enabled: false` |
 | `pin.resume` | 无 | 恢复因全 home 十次错误尝试而暂停的 PIN 解锁；回答一行 `paused: false` |
 | `devices.elevate` | 无；`requestId` 与 `typedCode` 一起；或单独的 `revokeId` | 答复设备解锁敏感操作的请求（[C14](c14-oidc-passkeys.zh.md#elevation)）；无参数时：回答一行 `pending`，即等待中的请求，带 `requestId`、`deviceId`、`label`、`platform`、`requestedAt` 与 `expiresAt`，但从不带验证码，以及 `running`，即正在进行的提权，带 `id`、`deviceId`、`label`、`platform` 与 `endsAt`；带 `requestId` 与 `typedCode` 时：用设备显示的验证码批准该请求，回答一行已开始的 `elevation`（`id`、`deviceId`、`endsAt`）；带 `revokeId` 时：拒绝该请求或结束该提权，回答一行 `revoked`，即是否找到其中之一 |
-| `permission.reload` | 无 | Host 在 `delorun workspace full-access` 写入 `@delorun/plugin-permission-defaults` 的按工作区权限存储之后重新读取它，并把失去授权的工作区中打开的 chat 设回更安全的预设；一行 `digest`，即 Host 现在持有的存储条目的 SHA-256，存储无法读取时还带 `storeProblem` |
-| `mcp.list` | 无 | 一行 `servers`：Host 的添加时同意拒绝了其启动的每个 stdio MCP 服务器，带 `serverName`、`reviewId`、`command`、`args`、`cwd`、`env`（每个变量的 `name`，只有 `NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`PATH`、`PYTHONPATH` 与 `DYLD_*` 这些会改变运行内容的变量才带 `value`）、`reason`、`change`（与该服务器的接受相比有何不同：`new`、`command`、`arguments`、`directory`、`environment`，接受存储无法读取时的 `unreadable`，或按服务器名称保存接受之前已接受的启动的 `upgraded`）、`changedVariables`（对 `environment` 而言，增加、删除或变更的变量）、`state`（`waiting`，或本人搁置直到其变化的启动的 `declined` 或 `revoked`）与 `reviewedAt`；以及 `accepted`：每个服务器名称已接受的启动，带 `acceptanceId`、`serverName`、`command`、`args`、`cwd`、`env`、`acceptedAt` 与 `configured`（是否有已配置服务器使用该名称），存储无法读取时为空 |
+| `permission.reload` | 无 | Host 重新读取 `@delorun/plugin-permission-defaults` 的按工作区权限存储，并把失去授权的工作区中打开的 chat 设回更安全的预设；一行 `digest`，即 Host 现在持有的存储条目的 SHA-256，`added` 与 `lost`，即自其打开的 chat 上次被设置以来，有多少工作区获得和失去了授权，存储无法读取时还带 `storeProblem`。没有任何 Delorun 进程发送它：每个 Host 都监视该存储文件，并在另一个进程写入后一秒内重新读取它，无论如何都会在其下一次决定时读取 |
+| `mcp.list` | 无 | 一行 `servers`：Host 的添加时同意拒绝了其启动的每个 stdio MCP 服务器，带 `serverName`、`reviewId`、`command`、`args`、`cwd`、`resolvedCommand` 与 `resolvedCwd`（该启动实际解析到的绝对可执行文件和规范目录）、`resolvedShell`（在 Windows 上，运行批处理文件的命令 shell；其他情况下不出现）、`env`（每个变量的 `name`，只有 `NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`PATH`、`PYTHONPATH` 与 `DYLD_*` 这些会改变运行内容的变量才带 `value`）、`files`（该启动所运行的文件，以 `path`（规范路径）和 `sha256`（内容的摘要）固定：先是可执行文件，其路径即服务器被生成时所用的文件，然后是每个参数所指名的文件及其 `argument` 索引；文件无法读取时为空）、`writableByChats`（位于该 profile 的某个工作区或临时目录内、因而 chat 可以写入的规范工作目录和已固定文件）、`reason`、`change`（与该服务器的接受相比有何不同：`new`、`command`、`arguments`、`directory`、`environment`，现在解析到另一个可执行文件、目录或命令 shell 的启动为 `resolved`，已固定文件发生变化或无法读取时为 `contents`，接受存储无法读取时为 `unreadable`）、`changedVariables`（对 `environment` 而言，增加、删除或变更的变量）、`state`（`waiting`，或本人搁置直到其变化的启动的 `declined` 或 `revoked`）与 `reviewedAt`；以及 `accepted`：每个服务器名称已接受的启动，带 `acceptanceId`、`serverName`、`command`、`args`、`cwd`、`resolvedCommand`、`resolvedCwd`、存在时的 `resolvedShell`、`env`、`files`、`acceptedAt` 与 `configured`（是否有已配置服务器使用该名称），存储无法读取时为空 |
 | `mcp.accept` | `serverName`、`reviewId` | 把该审查所显示的启动记录为已接受，并再次启动该服务器被拒绝的行；一行 `started`，即启动了多少行 |
 | `mcp.decline` | `serverName`、`reviewId` | 把该审查搁置为已拒绝，不记录任何接受；服务器保持停止，直到其启动变化或本人接受它；一行 `declined` |
 | `mcp.revoke` | `acceptanceId`（32 位小写十六进制数字） | 撤回 `mcp.list` 以该 id 显示的接受，并停止该服务器运行中的行，这些行以已撤销状态保持停止，直到其启动变化或本人再次接受它；其他每项接受不变；一行 `stopped`，即停止了多少行 |
 
-`delorun devices pin set | options | off | resume` 用令牌文件中的令牌发送这四个请求。`options` 接受 `--idle-minutes <1-60>` 与 `--lock-when-hidden` 或 `--no-lock-when-hidden`，至少需要一个，不要求密钥，并在发送之前检查范围。`set` 从隐藏的终端提示读取 PIN 或口令（询问两次），或用 `--stdin` 读取标准输入的一行（标准输入是终端时被拒绝，因为那会显示密钥），绝不从参数或环境变量读取，并在发送之前检查 C14 的 PIN 与口令规则；这四个命令中任何一个不接受的参数或选项都会被拒绝，消息不重复该参数。`delorun devices pin status` 读取 home 中的 PIN 文件，写明哪些设置正等待恢复，并且不发送任何内容。
+`delorun devices pin set | options | off | resume` 用令牌文件中的令牌发送这四个请求。`options` 接受 `--idle-minutes <1-60>` 与 `--lock-when-hidden` 或 `--no-lock-when-hidden`，至少需要一个，不要求密钥，并在发送之前检查范围。`set` 从隐藏的终端提示读取 PIN 或口令（询问两次），或用 `--stdin` 读取标准输入的一行（标准输入是终端时被拒绝，因为那会显示密钥），绝不从参数或环境变量读取，并在发送之前检查 [C14](c14-oidc-passkeys.zh.md#pin-mode) 的 PIN 与口令规则；这四个命令中任何一个不接受的参数或选项都会被拒绝，消息不重复该参数。`delorun devices pin status` 读取 home 中的 PIN 文件，写明哪些设置正等待恢复，并且不发送任何内容。
 
 - **响应行。** 每行都有 `ok`（布尔值）；失败行带有 `error`，即[错误](#errors)中的代码；进度行带有 `phase`，或在 `update.prepare` 安装目标期间带有 `line`：安装进度中带换行符的一行，与启动器安装发布时打印的文本相同。报告在 `update.prepare` 返回后 600 秒过期；以过期或未知的 `reportId` 调用 `update.apply` 会以 `REPORT_EXPIRED` 失败。若请求以 home 进程不在通道上报告的方式失败，则该请求在没有最终行的情况下结束，失败记录在 home 进程的日志中；请求方将该请求的结果视为未知，`delorun update` 会说明这一点并指出 `delorun logs home`。
 - **`failed`。** 以 `failed` 结束的 `update.apply` 或 `rollback` 留下一个 home 进程可能无法自行完成的回滚；home 进程在发送最后一行后停止，更新记录保留到下次启动（[被中断的更新](#interrupted-updates)）。
 - **一次一个。** 同一时间只运行一个更新或回滚；第二个以 `UPDATE_IN_PROGRESS` 失败。
+- **`changes.reload`。** 它不改变任何文件：Host 通过上游的热重载，根据 profile 的文件重新组合 profile。`delorun changes` 在 profile 的写锁下改变 profile 的文件之后发送它（[C21](c21-changes.zh.md#commands)）。
 - **断开的请求方。** 请求方断开连接不会改变正在运行的更新。`delorun status` 显示正在进行的更新的阶段；`delorun status --follow` 尚未构建。
 
 <a id="the-update-handshake"></a>
@@ -169,7 +171,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 3. **`reporting`。** 针对 `to` 计算更新报告（[C3](c03-update-report.zh.md)），并由 `update.prepare` 返回。在 `update.apply` 指定该报告之前，此阶段之后的步骤都不运行。
 4. **`snapshot`。** 保存一个以该更新命名的 profile 历史版本，包括 home patch（[C3](c03-update-report.zh.md)）；更新记录把其 id 保存为 `snapshot`。
 5. **`waiting`。** 运行中的 chat 是指本 Host 中有活动轮次或运行中后台作业的会话。从本阶段开始，新的轮次以 `UPDATE_PENDING` 被拒绝，studio 会连同取消操作一起显示它；计划投递被暂缓到更新结束。使用 `drain` 时，本阶段等待运行中的 chat 数量降为零，最多 `drainTimeoutS`，之后更新以 `DRAIN_TIMEOUT` 结束为 `aborted`。使用 `abort-if-busy` 时，若本阶段开始时有任何 chat 在运行，更新以 `CHATS_RUNNING` 结束为 `aborted`。使用 `cancel` 时，通过上游的取消机制取消运行中的轮次与作业，待它们结束后本阶段继续。
-6. **`switching`。** 在没有 chat 运行且新轮次被拒绝的情况下，前任进程先像启动器在启动某个版本之前那样检查 `to`（[C2](c02-release-manifest.zh.md) 对锚定根目录下每个文件的启动检查，然后是 [C18](c18-release-log.zh.md) 的发布日志启动检查）；未通过的版本使更新在任何改变之前以 `VERIFY_FAILED` 结束为 `aborted`，回滚的目标也会在任何步骤之前以同样方式检查。然后它再次检查没有其他 chat 数据使用方注册（[其他 profile](#the-home-process)）；若有，则在任何改变之前以 `CHATS_RUNNING` 拒绝该更新，其记录按在 `switching` 之前结束的更新处理。然后它停止其 Host 与它启动的监管器，写入 [C1](c01-home-layout.zh.md) 的 `previous` 与 `current` 指针，写入日志文件，并从 `to` 以 `standby` 启动后继进程。前任通过作为文件描述符 3 继承的管道传递交接，从不通过命令行或环境变量传递。为切换而停止 Host 不结束任何进程：前任最多等待 `drainTimeoutS` 让 Host 完成拆除；拆除失败或超时时，不切换任何内容，也不写入副本，更新以 `HOST_STOP_FAILED` 结束为 `aborted`，其记录按在 `switching` 之前结束的更新处理，前任重新启动其 Host；该启动失败时，前任停止，下次启动运行 `from`。Host 未能停止的回滚也以同样方式在任何步骤之前结束，并保留其记录。
+6. **`switching`。** 在没有 chat 运行且新轮次被拒绝的情况下，前任进程先像启动器在启动某个版本之前那样检查 `to`（[C2](c02-release-manifest.zh.md) 对锚定根目录下每个文件的启动检查，然后是 [C18](c18-release-log.zh.md) 的发布日志启动检查）；未通过的版本使更新在任何改变之前以 `VERIFY_FAILED` 结束为 `aborted`，回滚的目标也会在任何步骤之前以同样方式检查。然后它再次检查没有其他 chat 数据使用方注册（[其他 profile](#the-home-process)）；若有，则在任何改变之前以 `CHATS_RUNNING` 拒绝该更新，其记录按在 `switching` 之前结束的更新处理。然后它停止其 Host 与它启动的监管器，写入本人所选的会话数据副本，把本人已批准的 harness 文件带到 `to`（[C21](c21-changes.zh.md#harness-edits)），当其合并结果与 `update.apply` 所指定的报告不同时以 `HARNESS_REPORT_STALE` 拒绝，并在持有 harness 的锁期间写入 [C1](c01-home-layout.zh.md) 的 `previous` 与 `current` 指针；在指针写入之前失败的带入会使更新以 `aborted` 结束，并移除它为 `to` 写入的内容，前任重新启动其 Host。然后它写入日志文件，并从 `to` 以 `standby` 启动后继进程。前任通过作为文件描述符 3 继承的管道传递交接，从不通过命令行或环境变量传递。为切换而停止 Host 不结束任何进程：前任最多等待 `drainTimeoutS` 让 Host 完成拆除；拆除失败或超时时，不切换任何内容，也不写入副本，更新以 `HOST_STOP_FAILED` 结束为 `aborted`，其记录按在 `switching` 之前结束的更新处理，前任重新启动其 Host；该启动失败时，前任停止，下次启动运行 `from`。Host 未能停止的回滚也以同样方式在任何步骤之前结束，并保留其记录。
 7. **`health-check`。** 后继进程启动其 Host。满足以下条件即通过：Host 在 120 秒内完成启动，它在启动时禁用的插件是报告所列插件的子集，且 studio 监听器回答其健康请求。
 8. **`committed`。** 后继进程通过管道报告 `ready`。前任以原子方式把锁改写为后继的进程 id 与 `startId`，然后关闭其更新通道。后继写入新的启动令牌，在更新通道上监听，启动监管器，进入 `running`，并把更新记录标记为 `committed`；然后它只保留本次更新的会话数据副本，删除暂存记录，并删除 `current` 与 `previous` 所指版本之外的每个已安装运行时（[C1](c01-home-layout.zh.md) 的保留规则），删除失败的由下一次更新重试。前任退出。
 
@@ -179,7 +181,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 **Host 停止之后的子进程。** Host 停止之后，Host 的子进程不会写入 home 的 `sessions/` 或 `storages/`。作业的子进程只写入它自己的管道：Host 读取这些管道，并自行追加每个会话事件与存储写入；长输出的溢出文件写入系统临时目录下的按进程目录。停止 Host 会销毁作业注册表（它取消每个作业并等待每个作业结束），以及子进程提供方（它终止每个受管进程范围并等待其清空），因此会话数据副本只在最后一个受管子进程退出之后才开始。失败或超过 `drainTimeoutS` 的销毁不写入副本，也不切换任何内容：更新以 `HOST_STOP_FAILED` 结束为 `aborted`，如 `switching` 所述。离开其受管范围的后代进程不会被等待：在有用户 systemd 管理器的 Linux 上，该范围是一个 systemd scope，它保留 `setsid` 与被重新指定父进程的后代；在 Windows 上它是一个 Job 对象，脱离（breakaway）的进程会离开它；在 macOS 以及没有用户 systemd 管理器的 Linux 上，它是一个进程组，后代进程可以离开它。
 
-**`switching` 或 `health-check` 中的失败。** 后继进程退出、发送 `failed`，或未在 120 秒内报告 `ready` 时，前任停止它，并应用 [C3](c03-update-report.zh.md#rollback) 的回滚表，把两个指针恢复为更新前的值：恢复 profile 快照，并在数据不同且目标已启动时恢复副本。在执行该表的第一步之前，记录被改写为阶段 `rolling-back`。然后前任在 `from` 上重新启动自己的 Host，删除记录，放回暂存的记录，并回到 `running`；更新以带原因的 `rolled-back` 结束，当后继进程的 Host 已启动但未通过 [C3](c03-update-report.zh.md) 的某项标准时，还带有点名该标准的 `criterion`，例如 `H2-host-ready`，`delorun update` 会打印它。当该表因数据不同、目标已启动且不存在副本而拒绝时，不恢复任何内容：记录增加 `refused`，更新以 `ROLLBACK_NEEDS_DATA_COPY` 结束为 `failed`，`current` 指向 `to`，前任停止。回滚开始后某一步失败时，更新以 `failed` 结束，记录保持为 `rolling-back`，前任停止，不再运行其 Host。
+**`switching` 或 `health-check` 中的失败。** 后继进程退出、发送 `failed`，或未在 120 秒内报告 `ready` 时，前任用 `SIGKILL` 停止它，信号发给后继所领导的进程组（后继交接给的、组合树中的 `delorun` 留在该进程组中，[C21](c21-changes.zh.md#harness-edits)），在 Windows 上则对其进程树使用 `taskkill /T /F`，并应用 [C3](c03-update-report.zh.md#rollback) 的回滚表，把两个指针恢复为更新前的值：恢复 profile 快照，并在数据不同且目标已启动时恢复副本。在执行该表的第一步之前，记录被改写为阶段 `rolling-back`。然后前任在 `from` 上重新启动自己的 Host，删除记录，放回暂存的记录，并回到 `running`；更新以带原因的 `rolled-back` 结束，当后继进程的 Host 已启动但未通过 [C3](c03-update-report.zh.md) 的某项标准时，还带有点名该标准的 `criterion`，例如 `H2-host-ready`，`delorun update` 会打印它。当该表因数据不同、目标已启动且不存在副本而拒绝时，不恢复任何内容：记录增加 `refused`，更新以 `ROLLBACK_NEEDS_DATA_COPY` 结束为 `failed`，`current` 指向 `to`，前任停止。回滚开始后某一步失败时，更新以 `failed` 结束，记录保持为 `rolling-back`，前任停止，不再运行其 Host。
 
 **由此保证的规则。** 只有在等待阶段确认运行中的 chat 为零且新轮次被拒绝之后，`current` 才切换，因此运行时从不在运行中的 chat 之下切换。从 `switching` 开始，到后继的监听器或恢复后的 Host 应答为止，studio 不可用。
 
@@ -265,9 +267,9 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `VERIFY_FAILED` | 目标的元数据、日志条目或文件无法获取，或未通过 [C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md) 或 [C18](c18-release-log.zh.md) 的检查；该行的 `detail` 是启动器对同一失败的拒绝说明及其补救办法 |
 | `CHANNEL_UNREACHABLE` | `update.prepare` 的某次下载未能完成：连接失败、停滞，或对方以 200 以外的状态应答；未安装任何内容，该行的 `detail` 是启动器对同一失败的拒绝说明 |
 | `GIT_UNAVAILABLE` | 保存与恢复 profile 历史所用的 git 无法运行；`update.prepare` 与每次回滚都在任何步骤之前以它拒绝，因此回滚绝不会因此半途停止 |
-| `HARNESS_CHANGES_PENDING` | 对运行中的运行时的 harness 所作的更改在其可写副本中等待审阅（C21），更新会把它们丢在后面；`update.prepare` 在获取任何内容之前拒绝，`update.apply` 在切换之前拒绝且不切换任何内容 |
+| `HARNESS_CHANGES_PENDING` | 对运行中的运行时的 harness 所作的更改在其可写副本中等待审阅（[C21](c21-changes.zh.md#harness-edits)），更新会把它们丢在后面；`update.prepare` 在获取任何内容之前拒绝，`update.apply` 在切换之前拒绝且不切换任何内容 |
 | `HARNESS_COPY_UNREADABLE` | 运行中的运行时的可写副本无法扫描（超出扫描限制、条目不可读、文件在读取期间发生变化），因此不知道是否有更改在等待审阅；在与 `HARNESS_CHANGES_PENDING` 相同的位置被拒绝，detail 写明失败之处、`delorun changes edit-harness --discard` 与 `delorun changes list` |
-| `HARNESS_REPORT_STALE` | 切换之前重新规划的、本人已批准的 harness 文件的合并结果，与本人确认的报告中的 `harness` 项不同（C3）；`update.apply` 拒绝且不切换任何内容，本人需再次运行 `delorun update` |
+| `HARNESS_REPORT_STALE` | 切换之前重新规划的、本人已批准的 harness 文件的合并结果，与本人确认的报告中的 `harness` 项不同（[C3](c03-update-report.zh.md#harness-files-across-an-update)）；`update.apply` 拒绝且不切换任何内容，本人需再次运行 `delorun update` |
 | `NO_PREVIOUS` | 请求了回滚，但不存在 `previous` 指针 |
 | `NO_UPDATE_RECORD` | 请求了回滚，但没有记录到正在运行版本的已提交更新 |
 | `DATA_COPY_NO_SPACE` | 本人选择的会话数据副本在 home 的文件系统上放不下（[C3](c03-update-report.zh.md#data-formats)） |
@@ -275,7 +277,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `ROLLBACK_TARGET_UNUSABLE` | 回滚要回到的版本未安装或未通过其启动检查，因此回滚在任何步骤之前被拒绝 |
 | `STUDIO_UNAVAILABLE` | `studio.open-token` 没有找到运行中的 Host，或找到的 Host 无法为这台电脑生成链接；该行的 `detail` 说明是哪种情况 |
 | `HOST_STOP_FAILED` | 为切换而进行的 Host 拆除失败或未在 `drainTimeoutS` 内完成；没有切换任何内容，Host 重新运行 |
-| `NO_RUNTIME_STORE` | 启动时存在一条不是 `committed` 的更新记录，而进程在运行时仓库之外运行，因此它不启动任何 Host；本人通过启动器启动 Delo，或运行 `delorun recover` |
+| `NO_RUNTIME_STORE` | 启动时存在一条不是 `committed` 的更新记录，而进程在运行时仓库之外运行，因此它不启动任何 Host；本人通过启动器启动 Delorun，或运行 `delorun recover` |
 | `LOOPBACK_REQUIRED` | `devices.approve`、`devices.remove`、`devices.elevate`、`pin.set`、`pin.options`、`pin.off`、`pin.resume`、`mcp.accept`、`mcp.decline` 或 `mcp.revoke` 携带了 Host 的通道令牌 |
 | `APPROVAL_FAILED` | 本地批准或取消被拒绝；detail 写明 [C5](c05-device-approval.zh.md#errors) 的代码，例如 `APPROVAL_CODE_MISMATCH` |
 | `APPROVALS_UNAVAILABLE` | `devices.approve`、`devices.remove`、`devices.elevate`、`pin.set`、`pin.options`、`pin.off` 或 `pin.resume` 抵达了未加载 `@delorun/home-auth` 的 profile |
@@ -291,7 +293,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 ## 使用方
 
 - `delorun/packages/home-process`：home 进程、更新通道、握手、日志文件与登录项。
-- `delorun/apps/cli`：`delorun`、`delorun start`、`open`、`stop`、`status`、`update` 与 `recover`，以及通过 `studio.open-token` 打开 studio 的 setup 结尾；`delorun devices`，写入权限存储后发送 `permission.reload` 的 `delorun workspace full-access`，以及 `delorun mcp`。
+- `delorun/apps/cli`：`delorun`、`delorun start`、`open`、`stop`、`status`、`update` 与 `recover` 与 `changes`，以及通过 `studio.open-token` 打开 studio 的 setup 结尾；`delorun devices`，自己写入权限存储且不向运行中的 profile 发送任何内容的 `delorun workspace full-access`，以及 `delorun mcp`。`delorun changes` 在更改 profile 的文件之后发送 `changes.reload`。
 - `delorun/packages/runtime-store`：握手调用的指针写入与安装（[C1](c01-home-layout.zh.md)）。
 - `delorun/packages/logs`：home 进程的运行日志（[C20](c20-operational-logs.zh.md)）。
 - Host 的更新插件、「Update now」与 studio 的回滚，它们尚未构建；没有已发布的组合包挂载更新插件。
@@ -306,7 +308,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 - 新的操作、可选字段与新的错误代码保持 `v` 不变；调用方忽略未知的响应字段。
 - 交接行有自己的 `v`，为 1。后继进程检查它认识的每个字段，并丢弃它不认识的每个字段（顶层、`health`、行与 `previousProtection` 中均如此），因此前驱进程可以添加一个可选字段，只要忽略该字段的后继进程不读它也能安全地完成检查。后继进程为安全检查必须读取的字段，或现有字段含义的改变，都会提高交接行的 `v`；后继进程拒绝 `v` 未知的行，前驱进程随后如同健康检查失败一样回滚。首个发布之前没有已安装的发布会进行交接，因此在此之前的变更保持 `v` 为 1：`health.previousProtection`，以及不再涵盖该行保护的 sandbox 行 `configHash`。
 - 上述登录项路径与命令参数是外部接口；改变其中任一项都是破坏性变更，需在 `delorun/docs/upgrade-guide/` 下附升级指南。
-- 类型包跟随 Delo 的版本，并与本页在同一个拉取请求中修改。
+- 类型包跟随 Delorun 的版本，并与本页在同一个拉取请求中修改。
 
 <a id="security"></a>
 
@@ -323,7 +325,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 7. 请求大小、请求时限与连接数都有限额，被拒绝的认证记录到日志时不含所提交的值。在 Landlock 下，受限命令仍能打开连接直至达到这些限额；这只影响可用性，`delorun` 会重试 `BUSY` 的连接。
 8. 交接通过继承的管道传递；令牌从不出现在命令行、环境变量、响应或日志中。
 9. 该保护依赖于对 agent 命令的限制。沙箱之外的本人用户进程可以自行运行 `delorun update`，本约定不声称能防范它。不存在 root 所有的辅助程序。
-10. 只有不受限制地运行的命令才能携带令牌抵达更新通道。`danger-full-access` 提权只能经由 [C1](c01-home-layout.zh.md) 的提权提示批准，该提示说明完全访问可以触及 Delo 的 home、其令牌、Docker 监管器与更新通道。
+10. 只有不受限制地运行的命令才能携带令牌抵达更新通道。`danger-full-access` 提权只能经由 [C1](c01-home-layout.zh.md) 的提权提示批准，该提示说明完全访问可以触及 Delorun 的 home、其令牌、Docker 监管器与更新通道。
 11. 通道只为携带启动令牌的 `studio.open-token` 提供 studio 链接，从不为携带 Host 通道令牌的请求提供。响应行与链接都不会记录到日志，`delorun` 只在 `delorun open --print` 下打印链接。
 12. `devices.approve`、`devices.remove`、`devices.elevate`、`pin.set`、`pin.options`、`pin.off`、`pin.resume`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 只在携带本人自己的命令从令牌文件读取的令牌时才被接受；Host 的通道令牌（home 进程只把它保存在内存中）对其中每一个都会被拒绝。
 13. `mcp.accept` 与 `mcp.decline` 指定 `mcp.list` 显示的审查，`mcp.revoke` 指定它显示的接受 id；对服务器已不再持有的审查的答复，或对存储已不再持有的接受的撤回，以 `STALE_REVIEW` 被拒绝，且不记录任何内容。没有任何操作开启工作区的完全访问：`delorun workspace full-access` 在本人于终端确认之后自行写入权限存储，`permission.reload` 只让 Host 读取存储中的内容。
@@ -355,7 +357,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 - **Landlock。** 受限命令能连接更新通道；拒绝只依赖于令牌不可读。这样的命令还能占用连接直至通道的限额，这会影响可用性。
 - **完全访问。** 获准 `danger-full-access` 的命令可以读取令牌，并在封闭的请求集合内发送 `delorun` 命令能发送的任何请求。
-- **进程内存。** 在 macOS 与 Windows 上，对 home 进程内存的保护依赖于操作系统自身关于读取其他进程内存的规则，没有 Delo 测试证明这一点。
+- **进程内存。** 在 macOS 与 Windows 上，对 home 进程内存的保护依赖于操作系统自身关于读取其他进程内存的规则，没有 Delorun 测试证明这一点。
 - **本人自己的进程。** 沙箱之外的本人用户进程可以读取令牌，并自行运行 `delorun update`。持有令牌时，它还可以运行 `devices.approve`（打开批准窗口，并在给出匹配码时批准待处理的请求）、`devices.remove`、`devices.elevate`（在给出设备显示的验证码时批准设备解锁敏感操作的请求），以及返回新的 studio 登录链接的 `studio.open-token`。同时控制一台请求批准的设备的持有者可以在无人在场的情况下批准它。防范 agent 做同样的事，只依赖于其命令无法读取令牌文件或连接套接字。
 - **Host 中的代码。** Host 的通道令牌阻止 Host 通过通道发送的请求（例如它为 studio 会话转发的请求）获得 studio 链接。它不限制 Host 代码：Host 插件在 home 进程中不受限制地运行，可以自行调用上游的 `authenticatedUrl` 或读取令牌文件。
 

@@ -1,5 +1,5 @@
 ---
-description: "约定 C6：自托管中继的协议：其配置与名称绑定、短时有效的隧道令牌、每条隧道上的 home 密钥质询、流的分帧与流量控制、加密浏览器连接的 SNI 路由、每个名称一条活动隧道、带 60 秒延迟的重新绑定、限额、证书监控，以及作为后续功能的 Delo 中继。"
+description: "约定 C6：自托管中继的协议：其配置与名称绑定、短时有效的隧道令牌、每条隧道上的 home 密钥质询、流的分帧与流量控制、加密浏览器连接的 SNI 路由、每个名称一条活动隧道、带 60 秒延迟的重新绑定、限额、证书监控，以及作为后续功能的 Delorun 中继。"
 ---
 
 # 约定 C6：中继协议
@@ -9,12 +9,24 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 <a id="summary"></a>
 ## 摘要
 
-中继让浏览器能够访问一个不接受任何入站连接的 home。home 向中继打开一个出站 WebSocket，并证明其 home 密钥；中继只读取 443 端口上每个浏览器连接的 SNI，并把该连接的加密字节经 WebSocket 传给 home，TLS 在 home 上以 home 自己的证书终止。中继不持有 studio 的任何密钥，也无法读取其流量。在 Delo 1.0 中，中继即自托管中继，由本人（the person）使用 `delorun/apps/relay/` 中的镜像，在自己的服务器与域名上运行。本页定义其配置、隧道（tunnel）令牌、握手、帧、SNI 路由、限额、重新绑定、通告与证书监控，并说明哪些规则约束 Delo 中继（Delo relay），它是一个后续功能（fast-follow）项。类型包 [`@delorun/contract-relay-protocol`](../../packages/contract-relay-protocol/README.zh.md) 承载帧类型、代码与限额。
+中继让浏览器能够访问一个不接受任何入站连接的 home。home 向中继打开一个出站 WebSocket，并证明其 home 密钥；中继只读取 443 端口上每个浏览器连接的 SNI，并把该连接的加密字节经 WebSocket 传给 home，TLS 在 home 上以 home 自己的证书终止。中继不持有 studio 的任何密钥，也无法读取其流量。在 Delorun 1.0 中，中继即自托管中继，由本人（the person）使用 `delorun/apps/relay/` 中的镜像，在自己的服务器与域名上运行。本页定义其配置、隧道（tunnel）令牌、握手、帧、SNI 路由、限额、重新绑定、通告与证书监控，并说明哪些规则约束 Delorun 中继（Delorun relay），它是一个后续功能（fast-follow）项。类型包 [`@delorun/contract-relay-protocol`](../../packages/contract-relay-protocol/README.zh.md) 承载帧类型、代码与限额。
+
+<a id="status"></a>
+## 状态
+
+中继的服务器端已构建并已搁置；没有任何 home 能使用它。
+
+- **已构建，但无人使用：** `delorun/apps/relay`，标记为已搁置，带有其配置检查、一次性 60 秒的隧道令牌、home 密钥质询、每个名称一条活动隧道及对第二条的拒绝、分帧、流量控制与限额、SNI 路由，以及其容器镜像。不存在 home 端的中继客户端，因此没有任何 home 打开隧道。
+- **在中继中不成立：** 重新绑定。中继只检查重新绑定声明写明了该绑定的名称与新密钥；它不验证旧密钥的签名，不应用 60 秒延迟，也不发出任何通告，并且它的配置只在启动时读取一次，因此编辑文件并重启的运营者可以悄悄地重新绑定一个名称。安全一节所说的模糊测试语料库并不存在。
+- **尚未构建：** home 端的中继客户端、通告引发的告警、证书监控以及在证书无法解释时拒绝打开隧道，以及 `delorun reach rebind-statement`。
+
+下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
 
 <a id="contents"></a>
 ## 目录
 
 - [摘要](#summary)
+- [状态](#status)
 - [约定](#contract)
   - [参与方](#parties)
   - [中继配置](#relay-configuration)
@@ -29,7 +41,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
   - [证书监控](#certificate-monitoring)
   - [限额](#limits)
   - [错误](#errors)
-  - [Delo 中继](#delorun-relay)
+  - [Delorun 中继](#delorun-relay)
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
@@ -43,7 +55,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 ### 参与方
 
 - **中继。** `delorun/apps/relay/` 中的中继数据面：一个 Node 服务，在 TCP 443 端口上接受浏览器连接与来自各 home 的隧道。它不存储任何流量，不持有任何 studio 密钥，只为自己的隧道主机终止 TLS。
-- **令牌签发方。** 签发隧道令牌的一方。对于自托管中继，它是中继进程本身，使用中继首次启动时生成的令牌密钥。对于 Delo 中继，它是 Delo Run 上的中继控制面。
+- **令牌签发方。** 签发隧道令牌的一方。对于自托管中继，它是中继进程本身，使用中继首次启动时生成的令牌密钥。对于 Delorun 中继，它是 Delo Run 上的中继控制面。
 - **中继客户端。** home 一侧的部分，位于 `delorun/packages/reach/`。它获取令牌、打开隧道、回答质询，并把每个流交给 [C4](c04-admission.zh.md#listeners) 的 `reach-self-hosted-relay` 监听器，TLS 在该监听器处终止。
 
 每个字节串都是不带填充的 base64url，每个签名对象都对其去掉 `signature` 字段后的 RFC 8785 序列化进行签名。home 密钥与 home 密钥 id 即 [C5](c05-device-approval.zh.md#keys-and-storage) 中定义的密钥与密钥 id。
@@ -76,7 +88,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 <a id="handshake"></a>
 ### 握手
 
-1. **升级。** 中继客户端以 WebSocket 子协议 `delorun-relay.v1` 和请求头 `Authorization: Delo-Tunnel <token>` 请求 `GET wss://<tunnelHost>/v1/tunnel`。中继在升级之前验证令牌的签名、有效期、`jti` 未被使用以及绑定，否则以[错误](#errors)中的代码回答 `401`。
+1. **升级。** 中继客户端以 WebSocket 子协议 `delorun-relay.v1` 和请求头 `Authorization: Delorun-Tunnel <token>` 请求 `GET wss://<tunnelHost>/v1/tunnel`。中继在升级之前验证令牌的签名、有效期、`jti` 未被使用以及绑定，否则以[错误](#errors)中的代码回答 `401`。
 2. **质询。** 中继发送文本消息 `{ "type": "challenge", "relayId", "nonce" }`，`nonce` 中为 32 个随机字节。
 3. **证明。** 中继客户端回答 `{ "type": "proof", "signature" }`：home 密钥对 `"delorun-relay-tunnel-v1" ‖ 0x00 ‖ relayId ‖ name ‖ jti ‖ nonce` 所作的 Ed25519 签名。中继用绑定到该令牌名称的密钥验证它。
 4. **活动检查。** 若该名称已有活动隧道，中继发送 `{ "type": "refused", "code": "TUNNEL_ALREADY_LIVE" }`，以代码 4409 关闭，并把这次尝试[通告](#announcements)给活动隧道。
@@ -185,9 +197,9 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 | `REBOUND` | 关闭 4410 | 该名称已被重新绑定到另一个密钥。 |
 
 <a id="delorun-relay"></a>
-### Delo 中继
+### Delorun 中继
 
-Delo 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上；它是后续功能：Delo 1.0 不包含 Delo 中继客户端，也不包含中继控制面。上述中继数据面、帧、SNI 路由、握手与限额原样适用于它，由中继控制面担任令牌签发方。以下规则也约束它：
+Delorun 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上；它不属于 Delorun，Delorun 不包含 Delorun 中继客户端，也不包含中继控制面（[路线图](../guide/roadmap.zh.md)）。上述中继数据面、帧、SNI 路由、握手与限额原样适用于它，由中继控制面担任令牌签发方。以下规则也约束它：
 
 - 名称永不重新分配给另一个账户，随机名称永不复用。
 - 重新绑定需要绑定密钥的签名；不存在强制重新绑定。
@@ -195,7 +207,7 @@ Delo 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上�
 - `delo.run` 名称的 DNS-01 质询通过 CNAME 委派给一个限定范围的质询区域，中继控制面只在 home 密钥证明之后写入该区域。
 - 只有当 Chromium、Firefox 与 Safari 的当前发布版本都已包含 `delo.run` 的 Public Suffix List（公共后缀列表）条目时，该条目才算已就位。
 
-自托管中继的运营者即其所有者，因此 Delo 中继的每账户限额与停用开关不适用于它。
+自托管中继的运营者即其所有者，因此 Delorun 中继的每账户限额与停用开关不适用于它。
 
 <a id="consumers"></a>
 ## 消费方

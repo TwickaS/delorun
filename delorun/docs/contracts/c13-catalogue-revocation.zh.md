@@ -1,5 +1,5 @@
 ---
-description: "约定 C13：Discover 首先列出的已签名插件索引文件、其条目 schema、「tested with Delo X」徽章记录、条目可以列出并作为其作者或评审者主张的发现、带有序列号、过期时间与 24 小时最长缓存时长的已签名撤销列表、陈旧状态、在下一次加载时停用被撤销的插件，以及这两个文件的托管位置。"
+description: "约定 C13：Discover 首先列出的已签名插件索引文件、其条目 schema、「tested with Delorun X」徽章记录、条目可以列出并作为其作者或评审者主张的发现、带有序列号、过期时间与 24 小时最长缓存时长的已签名撤销列表、陈旧状态、在下一次加载时停用被撤销的插件，以及这两个文件的托管位置。"
 ---
 
 # C13 插件索引文件与撤销列表
@@ -8,10 +8,22 @@ description: "约定 C13：Discover 首先列出的已签名插件索引文件�
 
 ## 摘要
 
-插件索引是一份公开的插件清单，位于 `Delo-Run` 的仓库 `Delo-Run/delo-plugins` 中，添加插件的方式是提交一个 PR（Pull Request）。它的发布任务使用 [C2](c02-release-manifest.zh.md#key-roles) 的插件索引密钥为两个文件签名，即索引文件与撤销列表，GitHub Pages 在 `catalogue.delorun.com` 上提供它们；该托管方不受信任，因为客户端会拒绝签名无法验证的文件。索引条目固定确切的插件版本及其完整性哈希，带有来自兼容性语料库的「tested with Delo X」徽章，并且可以列出发现，studio 会把这些发现显示为插件作者或具名评审者的主张：Delo 不执行插件审计，也不核实这些发现。撤销列表列出 Delo 会在其下一次加载时停用的插件版本，并带有防止回放的序列号、一个过期时间以及 24 小时的最长缓存时长；超过该时长后，studio 进入陈旧状态。这些类型位于 [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.zh.md)。
+插件索引是一份公开的插件清单，位于 `Delo-Run` 的仓库 `Delo-Run/delo-plugins` 中，添加插件的方式是提交一个 PR（Pull Request）。它的发布任务使用 [C2](c02-release-manifest.zh.md#key-roles) 的插件索引密钥为两个文件签名，即索引文件与撤销列表，GitHub Pages 在 `catalogue.delorun.com` 上提供它们；该托管方不受信任，因为客户端会拒绝签名无法验证的文件。索引条目固定确切的插件版本及其完整性哈希，带有来自兼容性语料库的「tested with Delorun X」徽章，并且可以列出发现，studio 会把这些发现显示为插件作者或具名评审者的主张：Delorun 不执行插件审计，也不核实这些发现。撤销列表列出 Delorun 会在其下一次加载时停用的插件版本，并带有防止回放的序列号、一个过期时间以及 24 小时的最长缓存时长；超过该时长后，studio 进入陈旧状态。这些类型位于 [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.zh.md)。
+
+<a id="status"></a>
+
+## 状态
+
+本页的内容均未构建：没有任何代码获取、验证或缓存插件索引文件或撤销列表。
+
+- **已构建并已使用：** [C2](c02-release-manifest.zh.md#key-roles) 的根元数据 schema 中的 `catalogue` 密钥角色，以及 [C1](c01-home-layout.zh.md) 的 home 布局中的文件名 `catalogue/revocations.json`。插件通过上游的插件管理器安装，它把每个包的完整性哈希记录在 profile 的 `pnpm-lock.yaml` 中；Delorun 不增加自己的固定。
+- **尚未构建：** `@delorun/catalogue` 包；已签名的索引与撤销列表及其发布任务；使用精确版本和完整性固定从插件索引安装；序号、过期和 24 小时缓存时长检查；陈旧状态；在下一次加载时停用被撤销的插件版本；studio 中的徽章和列出的发现；`plugin-pins` 检查，`delorun verify` 将其报告为未运行。`delorun update` 的报告把 `revocations` 列为未检查。
+
+下文中，本列表称为尚未构建的要求与拒绝测试，在某次改动构建它们之前，不保护任何人。已安装的插件无论之后得知它的什么情况，都保持启用，直到本人移除它。
 
 ## 目录
 
+- [状态](#status)
 - [文件的托管位置](#where-the-files-are-served)
 - [插件索引文件](#catalogue-index)
 - [徽章记录](#badge-record)
@@ -79,20 +91,20 @@ description: "约定 C13：Discover 首先列出的已签名插件索引文件�
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `kind` | `tested-with-delorun` | 唯一的徽章类型。 |
-| `delorun`、`dsh` | 确切的语义化版本 | 语料库运行时所用的 Delo 发布版本及其上游版本。 |
-| `channel` | `stable` 或 `beta` | 该 Delo 发布版本的通道。 |
+| `delorun`、`dsh` | 确切的语义化版本 | 语料库运行时所用的 Delorun 发布版本及其上游版本。 |
+| `channel` | `stable` 或 `beta` | 该 Delorun 发布版本的通道。 |
 | `result` | `passed` 或 `failed` | 语料库结果。 |
 | `corpus` | 40 位十六进制提交 | 所运行的语料库修订版本。 |
 | `run` | HTTPS URL | 产生该结果的 CI 运行。 |
 | `recorded` | 时间戳 | 发布任务记录它的时间。 |
 
-studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <delorun>」，其中写明发布版本。徽章表示该插件版本在该发布版本上通过了兼容性语料库测试；它不是背书，也不是安全审查，任何界面都不会以其他方式表述它。
+studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delorun <delorun>」，其中写明发布版本。徽章表示该插件版本在该发布版本上通过了兼容性语料库测试；它不是背书，也不是安全审查，任何界面都不会以其他方式表述它。
 
 <a id="listed-findings"></a>
 
 ## 列出的发现
 
-一个版本可以列出发现。每条发现都是其作者的主张，Delo 不予核实。
+一个版本可以列出发现。每条发现都是其作者的主张，Delorun 不予核实。
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -106,8 +118,8 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 
 显示规则：
 
-- 每条发现在渲染时都带有其作者的角色与姓名，以及标签「Claim by <name>, not verified by Delo」。
-- 任何界面都不会就某个插件说「audited」、「safe」或「no findings」，也不会称某个插件已经核实。没有列出任何发现的版本渲染为「The catalogue lists no claims about this version. Delo does not audit plugins.」。未挂载 `pluginAudit` 服务时，安装界面会说明来自审计的发现不可用。
+- 每条发现在渲染时都带有其作者的角色与姓名，以及标签「Claim by <name>, not verified by Delorun」。
+- 任何界面都不会就某个插件说「audited」、「safe」或「no findings」，也不会称某个插件已经核实。没有列出任何发现的版本渲染为「The catalogue lists no claims about this version. Delorun does not audit plugins.」。未挂载 `pluginAudit` 服务时，安装界面会说明来自审计的发现不可用。
 - 一条发现的摘要值是该发现的 RFC 8785 规范 JSON 的 SHA-256。在安装前接受某个版本的发现，会把它们的摘要值记录到插件管理器的接受台账中（模式 0600，只含摘要值）。缺失的台账，或内容不是该记录的台账，都视为未接受，因此这些发现会再次征询；发生变化的发现具有新的摘要值，也会再次征询。
 
 <a id="installing-from-the-catalogue"></a>
@@ -183,7 +195,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 
 ## 插件索引仓库的 CI
 
-- 语料库任务针对当前的 stable 与 beta Delo 发布版本运行插件代码。它不持有任何可以写入索引文件、徽章或仓库的 token，也从不在 `pull_request_target` 下运行 PR 代码。
+- 语料库任务针对当前的 stable 与 beta Delorun 发布版本运行插件代码。它不持有任何可以写入索引文件、徽章或仓库的 token，也从不在 `pull_request_target` 下运行 PR 代码。
 - 一个独立的发布任务不运行任何插件代码；它以产物形式读取语料库结果，对其进行校验，写入徽章记录，并用插件索引密钥为两个文件签名。
 - 更改某个条目的 PR，在该条目未通过本 schema 校验时失败。
 
@@ -232,8 +244,8 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - R3. 陈旧的列表会拒绝新的插件索引安装，让已安装的插件继续加载且已被撤销的版本保持停用，在 studio 中说明这一点，并进行重试。
 - R4. 格式错误的撤销项会导致整个列表被拒绝；安全相关的行失败时关闭（fail closed）。
 - R5. 被撤销的版本在下一次加载时被停用，并附带其原因、一个历史版本与重启提示。
-- R6. 徽章只显示「Tested with Delo X」并写明发布版本，且只有不运行任何插件代码的发布任务会写入徽章。
-- R7. 任何界面都不声称 Delo 审计插件；发现在渲染时标明其作者，作为 Delo 不予核实的主张，且接受台账失败时关闭（fail closed）。
+- R6. 徽章只显示「Tested with Delorun X」并写明发布版本，且只有不运行任何插件代码的发布任务会写入徽章。
+- R7. 任何界面都不声称 Delorun 审计插件；发现在渲染时标明其作者，作为 Delorun 不予核实的主张，且接受台账失败时关闭（fail closed）。
 - R8. 语料库任务不持有任何写入 token，且没有任何插件索引工作流使用 `pull_request_target`。
 
 <a id="denial-tests"></a>
@@ -252,8 +264,8 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 | `c13-integrity-mismatch-refused` | WP7.4 | 完整性与索引条目不符的 tarball 会被拒绝。 |
 | `c13-plugin-cannot-write-badge` | WP7.2 | 语料库任务中试图写入徽章或推送的 fixture（测试前置数据）插件会因没有 token 而失败，其尝试不会留下任何徽章记录。 |
 | `c13-no-pull-request-target` | WP7.2 | 对任何使用 `pull_request_target` 的插件索引工作流，工作流 lint 都会失败。 |
-| `c13-no-audited-wording` | WP7.4 | 安装一个 fixture 插件时，不渲染任何「audited」、「safe」或「no findings」字样，不称该插件已经核实，并说明 Delo 不审计插件。 |
-| `c13-findings-labelled-as-claims` | WP7.4 | fixture 条目的发现在渲染时带有其作者的角色与姓名，以及「not verified by Delo」标签。 |
+| `c13-no-audited-wording` | WP7.4 | 安装一个 fixture 插件时，不渲染任何「audited」、「safe」或「no findings」字样，不称该插件已经核实，并说明 Delorun 不审计插件。 |
+| `c13-findings-labelled-as-claims` | WP7.4 | fixture 条目的发现在渲染时带有其作者的角色与姓名，以及「not verified by Delorun」标签。 |
 | `c13-missing-ledger-asks-again` | WP7.4 | 当接受台账缺失或格式错误时，这些发现会在安装前再次征询。 |
 
 <a id="what-this-does-not-prove"></a>
@@ -262,5 +274,5 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 
 - **撤销在下次加载时生效。** 新近被撤销的版本会一直运行，直到 Host 再次加载它；撤销列表无法停止已经在运行的插件代码。从撤销到生效之间，最多有 6 小时等待下一次刷新，另加本人重启之前的时间。
 - **徽章的写入。** 只有发布作业才能写入徽章，这一点由 `Delo-Run/delo-plugins` 的 CI 配置保证：语料作业不持有写入令牌，由单独的作业发布，工作流 lint 拒绝 `pull_request_target`。客户端只验证插件索引密钥的签名，因此被攻破的发布作业或插件索引密钥可以签署任何徽章；徽章写入的拒绝测试在那个仓库中运行，而不在本仓库中。
-- **列出的发现。** Delo 不核实列出的发现。一条发现陈述的是其作者的主张；没有列出发现，并不说明插件的任何情况。
+- **列出的发现。** Delorun 不核实列出的发现。一条发现陈述的是其作者的主张；没有列出发现，并不说明插件的任何情况。
 - **对时钟的依赖。** 最大缓存时长、撤销列表的过期时间与索引的过期时间都以客户端的时钟为准；时钟被调慢时，撤销列表可能在实际过期后仍被使用。
