@@ -325,29 +325,40 @@ describe('a stored record the trusted root\'s log did not sign', () => {
 })
 
 describe('the cosigning time', () => {
-  it('refuses a checkpoint whose only cosignature is dated beyond the clock-skew allowance ahead of the client\'s clock', async () => {
+  it('leaves unchecked a checkpoint whose only cosignature is dated beyond the clock-skew allowance ahead of the client\'s clock', async () => {
     const fixture = scenario()
     const now = COSIGNED_AT - 365 * 86_400
     const verdict = await online(fixture, (transport) => { transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT) }, undefined, now)
-    expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'witness-cosignature-missing' })
-    if (verdict.ok || verdict.kind !== 'failed') return
-    // The refusal names the cosigning time and the local clock, so a wrong clock can be seen.
+    expect(verdict).toMatchObject({ ok: false, kind: 'unwitnessed' })
+    if (verdict.ok || verdict.kind !== 'unwitnessed') return
+    // The detail names the cosigning time and the local clock, so a wrong clock can be seen.
     expect(verdict.detail).toContain(new Date(COSIGNED_AT * 1000).toISOString().replace('.000Z', 'Z'))
     expect(verdict.detail).toContain(new Date(now * 1000).toISOString().replace('.000Z', 'Z'))
   })
 
-  it('counts a cosignature dated up to the allowance ahead, and refuses one a second beyond it', async () => {
+  it('counts a cosignature dated up to the allowance ahead, and leaves unchecked one a second beyond it', async () => {
     const fixture = scenario()
     const within = await online(fixture, (transport) => { transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT) }, undefined, COSIGNED_AT - COSIGNATURE_CLOCK_SKEW_SECONDS)
     expect(within.ok).toBe(true)
     const beyond = await online(fixture, (transport) => { transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT) }, undefined, COSIGNED_AT - COSIGNATURE_CLOCK_SKEW_SECONDS - 1)
-    expect(beyond).toMatchObject({ ok: false, kind: 'failed', refusal: 'witness-cosignature-missing' })
+    expect(beyond).toMatchObject({ ok: false, kind: 'unwitnessed' })
   })
 
-  it('refuses a witness whose newest cosignature is dated beyond the allowance, though an older one is valid', async () => {
+  it('counts a witness\'s older valid cosignature when its newest is dated beyond the allowance', async () => {
     const fixture = scenario()
     const future = NOW + COSIGNATURE_CLOCK_SKEW_SECONDS + 3600
     const verdict = await online(fixture, (transport) => { transport.note = fixture.witness.cosign(fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT), future) })
+    expect(verdict.ok).toBe(true)
+  })
+
+  it('still fails a cosignature that does not verify, whatever its date', async () => {
+    const fixture = scenario()
+    const note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
+    const lines = note.trimEnd().split('\n')
+    const last = lines[lines.length - 1]!
+    // Corrupt the signature bytes of the cosignature line, keeping its name, key hash and framing.
+    lines[lines.length - 1] = `${last.slice(0, -6)}${last.slice(-6, -5) === 'A' ? 'B' : 'A'}${last.slice(-5)}`
+    const verdict = await online(fixture, (transport) => { transport.note = `${lines.join('\n')}\n` })
     expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'witness-cosignature-missing' })
   })
 })

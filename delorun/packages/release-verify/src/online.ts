@@ -1,15 +1,15 @@
 /**
  * The online half of contract C18's release-log check (`Consistency with the current log`): fetch the log's latest
  * checkpoint with its witness cosignatures, verify the log's signature, refuse a listed witness's cosignature that is
- * present and does not verify or is dated more than {@link COSIGNATURE_CLOCK_SKEW_SECONDS} after the client's clock,
- * then verify an RFC 6962 consistency proof from the bundle's or the stored checkpoint to the latest one.
+ * present and does not verify, then verify an RFC 6962 consistency proof from the bundle's or the stored checkpoint to the latest one.
  *
  * The rule that sorts every outcome: an answer before any signed data is `unchecked`, and once the checkpoint's log
  * signature verifies, anything that does not hold together is `failed`. So no answer, a timeout, a `5xx`, a `404` or
  * `410` for the checkpoint, and a body that is not a checkpoint the root's log signed (a proxy's page, another log's
  * note) leave the release `unchecked`; a rollback against the stored checkpoint, a proof that does not verify, a tile
- * the signed size says exists answering `404`, `410` or the wrong length, and an invalid or future-dated cosignature
- * fail it. A checkpoint the witnesses have not cosigned, or whose newest cosignature is older than 24 hours, leaves the
+ * the signed size says exists answering `404`, `410` or the wrong length, and an invalid cosignature fail it. A
+ * checkpoint the witnesses have not cosigned, whose cosignatures are dated more than
+ * {@link COSIGNATURE_CLOCK_SKEW_SECONDS} after the client's clock, or whose newest cosignature is older than 24 hours, leaves the
  * release `unchecked` after the rollback and consistency checks, so leaving the cosignature out avoids neither.
  *
  * The whole check runs under one deadline of {@link ONLINE_CHECK_DEADLINE_SECONDS}; when it passes the release is
@@ -52,7 +52,8 @@ export interface ReleaseLogTransport {
 
 /**
  * How far ahead of the client's clock a witness cosignature may be dated: 5 minutes. A witness cosigns a checkpoint it
- * has seen, never one it will see, so a later date is not a valid cosignature; the allowance absorbs clock differences.
+ * has seen, never one it will see, so a later date means this machine's clock runs slow or the witness's runs fast; the
+ * check does not count such a cosignature and leaves the release `unchecked`. The allowance absorbs small clock differences.
  */
 export const COSIGNATURE_CLOCK_SKEW_SECONDS = 300
 
@@ -162,25 +163,29 @@ function signedCheckpoint(root: RootMetadata, note: string): Signed | string {
 
 /** The witnesses that cosigned a signed checkpoint. */
 interface Cosigners {
-  /** Distinct listed witnesses, by raw key, with a valid cosignature. */
+  /** Distinct listed witnesses, by raw key, with a valid cosignature that is not dated beyond the clock skew. */
   readonly count: number
-  /** The newest valid cosigning time, or `undefined` when none cosigned. */
+  /** The newest counted cosigning time, or `undefined` when none cosigned. */
   readonly newest: number | undefined
+  /** One reason per witness whose only valid cosignatures are dated beyond the clock skew, which the check does not count. */
+  readonly ahead: readonly string[]
 }
 
 /**
  * The listed witnesses' cosignatures of a signed checkpoint. A witness with no line is absent, which is not an error;
- * one whose lines are present and none verifies, or whose newest verified one is dated more than
- * {@link COSIGNATURE_CLOCK_SKEW_SECONDS} after `now`, is refused.
+ * one whose lines are present and none verifies is refused. A valid cosignature dated more than
+ * {@link COSIGNATURE_CLOCK_SKEW_SECONDS} after `now` is not counted and is reported in `ahead`: it cannot be told from
+ * this machine's clock running slow, so it leaves the release `unchecked` rather than `failed`.
  * @param root - the trusted root.
  * @param latest - the signed checkpoint.
  * @param now - the client's clock.
  * @returns the cosigners.
- * @throws ReleaseLogRefusalError `witness-cosignature-missing` naming each refused witness.
+ * @throws ReleaseLogRefusalError `witness-cosignature-missing` naming each witness whose cosignature does not verify.
  */
 function cosignersOf(root: RootMetadata, latest: Signed, now: number): Cosigners {
   const times = new Map<string, number>()
   const problems: string[] = []
+  const ahead: string[] = []
   for (const verifier of trustedLogKeys(root).witnesses) {
     const present = latest.lines.filter(line => line.name === verifier.name && line.keyHash.equals(verifier.keyHash))
     if (present.length === 0) continue
@@ -189,15 +194,15 @@ function cosignersOf(root: RootMetadata, latest: Signed, now: number): Cosigners
       problems.push(`the cosignature of witness ${verifier.name} does not verify`)
       continue
     }
-    const newest = Math.max(...verified)
-    if (newest > now + COSIGNATURE_CLOCK_SKEW_SECONDS) {
-      problems.push(`the cosignature of witness ${verifier.name} is dated ${utcText(newest)}, more than ${String(COSIGNATURE_CLOCK_SKEW_SECONDS)} seconds after this machine's clock, which reads ${utcText(now)}`)
+    const counted = verified.filter(time => time <= now + COSIGNATURE_CLOCK_SKEW_SECONDS)
+    if (counted.length === 0) {
+      ahead.push(`the cosignature of witness ${verifier.name} is dated ${utcText(Math.max(...verified))}, more than ${String(COSIGNATURE_CLOCK_SKEW_SECONDS)} seconds after this machine's clock, which reads ${utcText(now)}`)
       continue
     }
-    times.set(verifier.raw.toString('hex'), newest)
+    times.set(verifier.raw.toString('hex'), Math.max(...counted))
   }
   if (problems.length > 0) throw refuse('witness-cosignature-missing', problems.join('; '))
-  return { count: times.size, newest: times.size === 0 ? undefined : Math.max(...times.values()) }
+  return { count: times.size, newest: times.size === 0 ? undefined : Math.max(...times.values()), ahead }
 }
 
 /**
@@ -329,7 +334,8 @@ export async function checkOnline(input: OnlineCheckInput): Promise<OnlineVerdic
   // The contract fixes the client's witness threshold at 1, so a root that carries none still needs one cosignature.
   const threshold = Math.max(input.root.witnesses.threshold, WITNESS_THRESHOLD)
   if (cosigners.newest === undefined || cosigners.count < threshold) {
-    return { ok: false, kind: 'unwitnessed', detail: `the latest checkpoint has ${String(cosigners.count)} of the ${String(threshold)} witness cosignatures a check needs`, notices }
+    const counted = `the latest checkpoint has ${String(cosigners.count)} of the ${String(threshold)} witness cosignatures a check needs`
+    return { ok: false, kind: 'unwitnessed', detail: cosigners.ahead.length === 0 ? counted : `${counted}; ${cosigners.ahead.join('; ')}`, notices }
   }
   const age = input.now - cosigners.newest
   if (age > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) {
