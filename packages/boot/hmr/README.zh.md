@@ -62,6 +62,8 @@ App-boot 负责 profile 解析和 patch 优先级规则。HMR 读取启动器提
 
 `reconcileProfile()` 由 HMR 的 profile 监听和 Plugin Manager 共用；调用方持有 `runExclusive()`。Config Editor 通过 app-boot 重新组合，不替换模块。app-boot 在缓存或运行中条目发生变化前准备新一代组合并执行预检。
 
+发行版可以提供可选的 `profileReconcileCheck` 服务。`reconcileProfile()` 先在 `runExclusive()` 内、任何内容停止或被逐出之前等待其 `check(profile)`，因此无论由哪个调用方发起，每一次重新组合都可以被拒绝：检查抛出错误时，`reconcileProfile()` 以拒绝结束，所有插件仍在运行。该检查可以改写 profile 的文件；它运行时 Plugin Manager 可能持有 profile 的 `package.json` 文件锁，因此当其自身进程持有该锁时，检查不得等待它。
+
 文件比较覆盖 profile 目录及已链接包的目标，在应用就绪时记录。[ModuleFiles](src/module-files.ts) 记录 inode、大小和修改时间；仅添加硬链接不会使模块失效。已有模块保留替换前读取的身份，以检测之后的写入。新加载的模块在结算时记录，因此后续安装不会仅因其文件较新而将其重启。
 
 替换沿 ES 模块链接以及每个 CommonJS 父模块的 `children` 传播。模块的插件从其 ES 模块命名空间以及 Node 已缓存的 CommonJS exports 中读取，不求值任何代码，因此在 Loader entry 之外注册的 CommonJS 插件保留其缓存。宿主依赖及可遍历 Loader 树之外的插件保持待处理。其余已变化模块及其导入方被逐出且不保留备份，运行受影响插件的 Loader entry 被停止。HMR 本身不导入替换代码：新一代组合启动条目时，Loader 导入当前文件，因此停用、删除和不兼容的行永远不会执行替换代码，动态 `disabled` 表达式和嵌套 Include 按启动时的方式求值。

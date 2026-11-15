@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-catalogue-revocation/README.md
 /:
   en: f04187d3053757a2
-  zh: 2bf54eded01cb619
+  zh: 8d2fad2bd8eb2975
 /delorun-contract-catalogue-revocation:
   en: 77a75a3832baab93
   zh: eea1d5eaaab89990
@@ -13,10 +13,10 @@
   zh: fda627d01e8e4e24
 /delorun-contract-catalogue-revocation/contents:
   en: b67c52f41a4f6214
-  zh: a5f8c7025c5338d0
+  zh: 143d16412c2a79d8
 /delorun-contract-catalogue-revocation/use-this-package:
   en: fada2eda5dd2eca3
-  zh: 71d7eee466c7bb2d
+  zh: fdf13397d39aa8fe
 /delorun-contract-catalogue-revocation/known-limitations:
   en: e5793b4dec9eac17
-  zh: 021419a4b3784f71
+  zh: d12b423fd0e5e72d

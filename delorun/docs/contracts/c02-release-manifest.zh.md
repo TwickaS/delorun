@@ -17,7 +17,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 客户端验证、启动检查，以及签名、时间戳与安全公告命令已构建；发布工作流、桌面更新器的检查与安装脚本尚未构建。
 
 - **已构建并被调用：** npm 启动器与 `delorun update` 的安装验证（`delorun/apps/install`）、启动器在每次启动时对每个已安装文件的检查（`delorun/packages/runtime-store`）、`delorun verify` 的两项发布检查，以及 `delorun/apps/release/src/` 下的命令：在一致的重建之后签名发布、在不降低任何通道的前提下签名时间戳，以及检查安全公告。
-- **尚未构建：** 发布工作流，因此没有定时作业每 24 小时重新签名时间戳，也没有工作流步骤运行安全公告检查或发布到 npm；npm 可信发布；N 个中两个的重建；Authenticode 签名；安装脚本；以及桌面应用的每一项检查，桌面应用是未经改动的上游应用。这些规则见[发布工作流设计](../design/release-workflow.md)与[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
+- **尚未构建：** 发布工作流，因此没有 CI 作业和工作流步骤运行安全公告检查或发布到 npm；npm 可信发布；N 个中两个的重建；Authenticode 签名；安装脚本；以及桌面应用的每一项检查，桌面应用是未经改动的上游应用。这些规则见[发布工作流设计](../design/release-workflow.md)与[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
 - **部分构建：** 安全公告的接受记录只计入在 `.github/CODEOWNERS` 中以登录名列出的所有者，而该文件只列出一个团队，因此没有任何接受记录有效，每个安全公告都会使检查失败。发行包配方只为 Linux 平台编译上游的原生 system addon，因此 macOS 平台不是发布平台，在配方拥有用于 macOS 二进制文件的固定工具链之前，发布不发布任何 macOS 运行时（[签名前重建](#rebuild-before-signing)）。
 
 下文中被此列表列为尚未构建的要求与拒绝测试，在某次变更构建它们之前不保护任何人。
@@ -134,7 +134,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 | `root` | `{ "version", "sha256" }` | 最新的根版本及其文件摘要。 |
 | `channels.stable`、`channels.beta` | `{ "release": <version>, "manifest": FileRef }` | 每个通道当前的发布及其 manifest 文件。 |
 
-时间戳命令 `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts` 签名它，并拒绝发布分支所提交的 `delorun/release/production-keys.json` 未列出的 timestamp 密钥；每 24 小时一次的定时重新签名见[发布工作流设计](../design/release-workflow.md)，尚未构建。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
+时间戳命令 `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts` 签名它，并拒绝发布分支所提交的 `delorun/release/production-keys.json` 未列出的 timestamp 密钥；生产通道的 cron Worker 每 24 小时用 `delorun/apps/release-channel/src/resign-core.ts` 重新签名时间戳（[发布通道](../../apps/release-channel/README.md)）。重新签名后的时间戳是当前已签名的 JSON，只替换 `version`（下一个）、`issued`（签名前一小时）与 `expires`（上文的有效期），因此根与每个通道条目，无论是否已知，都保持签名时的样子。Worker 拒绝重新签名无法通过最新已存储根验证的时间戳，或低于其高水位线（更低的版本，或指向更低发布的通道）的时间戳，高水位线保存在发布令牌无法写入的存储中。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
 
 <a id="release-manifest"></a>
 
@@ -159,6 +159,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 | `advisories` | `{ "report": FileRef, "accepted": [advisory ids] }` | 安全公告检查的结果与每个已接受的安全公告。 |
 | `security` | 布尔值，可选 | 该发布是否标记为安全修复。读取方把缺失的值视为 `false`。 |
 | `summary` | 字符串，可选 | 发布的单行摘要：1 至 200 个 Unicode 码位，不含控制字符（Cc）、格式字符（Cf）、行分隔符（Zl）或段分隔符（Zp），不含孤立的 UTF-16 代理，两端没有空白，因此它在终端与 studio 中都打印为一行纯文本（`isValidSummary`）。读取方把缺失的值视为没有摘要。 |
+| `notes` | 文件引用，可选 | 发布说明：发布目录中 1 至 65,536 字节的纯文本文件（`isValidNotes`）：格式正确的 UTF-8，除换行符与制表符外不含控制字符，不含格式字符（Cf）、行分隔符（Zl）或段分隔符（Zp），也不含孤立代理项。读取方把缺失的值视为没有发布说明。更新检查依据此引用验证其长度与 SHA-256 之后，studio 以纯文本显示该文本。 |
 
 签名会把 `security` 与 `summary` 写入每份 manifest，更新通知会把它们与 `version` 和 `dsh` 一起显示；它们位于 targets 签名的 manifest 中，因为时间戳密钥只签名新鲜度。
 
@@ -195,6 +196,7 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 - **身份记录。** `trust/runtime-files/delorun-<version>-<platform>.json`，权限为 0600（[C1](c01-home-layout.zh.md#the-home-tree)），只由刚刚哈希或写入其所记录文件的进程在 `store.lock` 下原子地写入。它为每个列出的文件保存一个身份（inode、带文件类型的 mode、大小，以及以纳秒计的修改时间与变更时间）、捕获时间、最近一次哈希每个文件的检查时间，以及它的绑定：schema `delorun.runtime-identity/1`、版本、平台、文件列表与 manifest 的 SHA-256、安装目录的 inode 以及文件系统的 `statfs` 类型。它不带任何密钥，因为每个能写它的进程也能读取同一 home 下的密钥。
 - **担保的条件。** 当文件位于安装目录所在的设备上、其身份与记录的身份相同，且该变更时间比记录的捕获时间至少早 2 秒时，文件即被担保；其他任何文件都会被哈希。哈希通过的启动会重写该记录，定时的完整检查也会重写；按请求进行的完整检查（例如 `delorun verify` 的检查）只在记录缺失、未绑定或指明其他身份时才重写它。失败的哈希从不写入它。
 - **完整哈希。** 以下情况会哈希每个文件：安装时，每个文件按写入它的字节哈希一次；更新的准备阶段中每个运行时一次，其报告读取方共享该结果；每次 `delorun verify`；最近一次完整检查早于 `DELORUN_RUNTIME_FULL_CHECK_DAYS` 天（默认 7，取值从 0，即每次启动都哈希，到 30）或晚于时钟时；以及记录缺失、无法读取、格式错误、权限宽于 0600、是链接、属于其他用户或绑定到其他任何内容时。
+- **普通启动发现不了什么。** 该记录不带密钥，因此以本人权限运行的程序可以改写它，为自己改动过的文件担保，其中包括 Node 可执行文件与 `delorun` 自身的文件；普通启动随后会通过，直到下一次完整哈希。`delorun verify` 与 studio 的“立即检查”（它通过启动器运行）会先哈希每个文件，从而发现改动。
 - **变更时间可担保之处。** Linux 上的 ext2、ext3 与 ext4、XFS、Btrfs、F2FS 与 tmpfs，它们的变更时间只由本地内核设置，任何非特权进程都无法把它调回。在其他所有文件系统与平台上，包括 overlayfs、macOS 与 Windows，每次启动都哈希每个文件，且不写入任何记录：无论其各层位于什么文件系统上，overlayfs 都报告它自己的类型。
 
 `delorun verify` 运行相同的检查并报告每项结果（[C15](c15-verification-checks.zh.md)）。[C9](c09-runtime-supervisor.zh.md) 的 Docker 监管器（没有任何随附命令启动它）只运行已验证 manifest 所列的 S2 或 S3 镜像摘要。
@@ -336,7 +338,7 @@ acceptances:
 ### 要求
 
 - R1. 根密钥与 targets 密钥离线；时间戳密钥在线，且只签名新鲜度；插件索引密钥只签名 [C13](c13-catalogue-revocation.zh.md) 的文件。
-- R2. 时间戳元数据在签发 3 天后过期；客户端拒绝已过期或更旧的时间戳，`delorun update` 不提供时间戳未为该通道指明的 manifest。每 24 小时重新签名尚未构建（[发布工作流设计](../design/release-workflow.md)）。
+- R2. 时间戳元数据在签发 3 天后过期；客户端拒绝已过期或更旧的时间戳，`delorun update` 不提供时间戳未为该通道指明的 manifest。[发布通道](../../apps/release-channel/README.md)的 cron Worker 每 24 小时重新签名它。因此持有时间戳密钥的人可以让陈旧的发布在 3 天之后仍保持最新，但无法伪造发布：每个通道条目都指明由离线 targets 密钥签名的 manifest，且没有任何签名会把通道移到更低的版本。
 - R3. 任何客户端都不会自行降级；本人请求的回滚只能到达已签名、已记录日志的发布。已为 CLI home 构建：没有本人的确认，任何内容都不会安装或切换，运行时仓库以 `TARGET_LOWER` 拒绝低于正在运行版本的更新目标，`delorun update` 拒绝这样的报告，`delorun recover rollback` 只能到达 `previous` 指向的版本（[新鲜度与回滚保护](#freshness-and-rollback-protection)）。
 - R4. 轮换通过根版本进行，由旧根与新根的阈值签名；被吊销的 targets 密钥不验证任何内容。
 - R5. CLI 启动器在每次启动时，按哈希或按其上次哈希之后记录的身份，对照已签名的文件列表检查每个运行时文件；一个被改动、缺失或多出的文件就会停止启动。每个文件在每个配置的间隔内至少被哈希一次，间隔最长 30 天。
@@ -363,6 +365,7 @@ acceptances:
 | `c02-start-periodic-full-hash` | WP3.3 | 最近一次完整检查早于间隔或晚于时钟，或间隔为 0，会使启动哈希每个文件。 |
 | `c02-verify-always-hashes` | WP3.3 | 即使每个身份都与记录相符，`delorun verify` 背后的完整检查也会哈希每个文件。 |
 | `c02-start-record-forgery-out-of-scope` | WP3.3 | 被改写为某个已改动文件身份的记录会让启动通过，这是文档所述的限制，而完整检查仍会阻止它。 |
+| `c02-update-start-check-catches-in-place-change` | WP3.3 | 更新对运行中发布及其目标所执行的启动检查，即使在文件大小、权限模式与修改时间已恢复、且身份记录存在的情况下，也会在被改动的字节处停止。 |
 | `c02-install-refuses-bad-signature` | WP3.2 | 由 targets 角色之外的密钥签名的 manifest 被拒绝，且 `~/.delorun/runtimes/` 下不出现任何文件。 |
 | `c02-install-refuses-tampered-archive` | WP3.2 | SHA-256 与 manifest 不同的归档在解压之前被拒绝。 |
 | `c02-refuses-expired-timestamp` | WP3.1, WP3.2 | 超过 `expires` 一秒的时间戳会阻止更新，并写明过期时间。 |
@@ -393,6 +396,7 @@ acceptances:
 | `c02-summary-control-characters-refused` | update-notice | 含有 ESC（`\u001b`）、换行符或 U+202E 从右到左覆盖字符的摘要，会被 manifest 读取方与签名拒绝。 |
 | `c02-summary-too-long-refused` | update-notice | 201 个码位的摘要会被读取方与签名拒绝；200 个码位可以读取。 |
 | `c02-security-not-boolean-refused` | update-notice | 为字符串、数字或 `null` 的 `security` 会被读取方与签名拒绝。 |
+| `c02-notes-invalid-text-refused` | whats-new | 含有从右到左覆盖字符、转义符、回车符、字节顺序标记或非 UTF-8 字节的发布说明、空的发布说明，以及超过 65,536 字节的发布说明，会被 `isValidNotes`、签名与更新检查拒绝；换行符与制表符可以读取。 |
 | `c02-manifest-without-notice-fields-reads` | update-notice | 不带 `security` 与 `summary` 的 manifest 可以读取，其读取方看不到安全标记，也看不到摘要。 |
 | `c02-draft-without-notice-fields-refused` | update-notice | 签名拒绝不带 `security` 的草稿以及不带 `summary` 的草稿，且不写入任何内容。 |
 | `patch-rule-refuses-base-move` | update-notice | 上游版本与更早发布不同的补丁被拒绝，并指明两个版本以及应改为发布的次版本。 |

@@ -14,7 +14,7 @@ kind: "package-library"
 ## 目录
 
 - [使用本包](#use-this-package)
-- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [已知限制](#known-limitations)
 
 <a id="use-this-package"></a>
 
@@ -22,8 +22,8 @@ kind: "package-library"
 
 上游 app-boot 的兼容性差异块、`delorun/apps/cli/src/version.ts`、更新前报告与插件索引语料库使用本包。用 `import type` 导入类型，用值导入从 `@delorun/contract-plugin-versions` 导入常量；读取或写入本约定所定义文件的包仍须在其解析器中校验这些文件，因为这些类型描述的是有效文件，并不检查它们。
 
-<a id="known-limitations-and-deferred-work"></a>
+<a id="known-limitations"></a>
 
-## 已知限制与延期工作
+## 已知限制
 
 - 范围匹配本身由上游的 `evaluatePluginCompatibility` 借助 `semver` 完成；本包为两条轴的结果提供类型，并不评估范围。

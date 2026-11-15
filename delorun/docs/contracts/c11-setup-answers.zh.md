@@ -30,6 +30,7 @@ setup 回答是 `delorun setup` 所问的问题、保存每个回答的 schema�
 - [约定](#contract)
   - [模式与部分](#modes-and-sections)
   - [问题](#questions)
+  - [模型提供方](#model-providers)
   - [回答 schema](#answer-schema)
   - [profile 写入](#profile-writes)
   - [--yes 与 --config 形式](#yes-and-config-forms)
@@ -77,6 +78,31 @@ setup 按以下顺序提出这些问题。本人接受默认值时即采用该�
 从任何地方远程访问、身份因子与运行时尚未询问；它们的包会加入这些部分。setup 读取 stock home 只是为了从中复制，且从不修改它。setup 的导入只复制数据：不复制 profile、设置层、指令、技能或已保存的密钥，因为这些会改变 Delo 运行的内容或告诉 agent 的内容；`delorun import-home` 在各自单独确认后复制其中每一项。
 
 实时密钥检查向提供方的源发送一次经过认证的模型列表请求，即 `https://api.deepseek.com` 或 `DEEPSEEK_BASE_URL` 的源，不发往其他任何地方；重定向会导致失败。检查失败时打印其原因，原因写明源与 HTTP 状态，从不写出密钥，并让本人重新输入密钥，或在没有成功检查的情况下继续。`--yes`、`--config` 与从环境读取的密钥跳过检查，除非给出 `--check-key`；给出 `--check-key` 时，提供方不接受的密钥会让无人值守的运行停止。
+
+<a id="model-providers"></a>
+### 模型提供方
+
+setup 提供下列提供方，按名称排列，不让任何一家排在另一家之前。DeepSeek 运行在上游的 DeepSeek 适配器上，即 profile 的 `llm-deepseek` 行，无需安装。其余每家提供方都是上游 pi-ai 适配器（`llm-pi-ai` 行）的一条路由：要么是 pi-ai 已安装目录中的一条路由，其端点与模型由该目录提供，要么是 `openai-compatible` 路由，由 setup 以本人给出的基础 URL 与模型声明。profile 的适配器所支持而 setup 不提供的提供方，包括 pi-ai 目录中的其余提供方，在 studio 的设置 → 模型中设置。
+
+| 提供方 | Id | 密钥变量 | 密钥检查 |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | 带 `x-api-key` 与 `anthropic-version` 的 `GET /v1/models?limit=1` |
+| DeepSeek | `deepseek-official` | `DEEPSEEK_API_KEY` | 在 `https://api.deepseek.com` 或 `DEEPSEEK_BASE_URL` 的源上，通过上游的模型列表客户端发送带 `x-api-key` 的 `GET /models` |
+| Google Gemini | `google` | `GEMINI_API_KEY` | 带 `x-goog-api-key` 的 `GET /models?pageSize=1` |
+| Groq | `groq` | `GROQ_API_KEY` | 带 bearer 令牌的 `GET /models` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | 带 bearer 令牌的 `GET /v1/models` |
+| Moonshot AI | `moonshotai` | `MOONSHOT_API_KEY` | 带 bearer 令牌的 `GET /models` |
+| OpenAI | `openai` | `OPENAI_API_KEY` | 带 bearer 令牌的 `GET /models` |
+| OpenAI 兼容端点 | `openai-compatible` | `OPENAI_COMPATIBLE_API_KEY` | 在本人给出的基础 URL 下，带 bearer 令牌的 `GET /models` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | 带 bearer 令牌的 `GET /key` |
+| Together AI | `together` | `TOGETHER_API_KEY` | 带 bearer 令牌的 `GET /models` |
+| xAI | `xai` | `XAI_API_KEY` | 带 bearer 令牌的 `GET /models` |
+
+每家目录内提供方的路径，都附加在 pi-ai 已安装目录为它提供的端点之后。输入的密钥存放在密钥变量之下，该变量就是适配器读取的凭据引用；从环境读取的密钥，读自密钥变量，或读自 `--key-env` 或文档所指定的变量。不需要任何密钥即可返回其模型列表的端点，也能通过 `openai-compatible` 检查。
+
+密钥变量是各家提供方自己的工具所读取的名称，其中一些与设置 → 模型在保存密钥时从路由推导出的引用不同：setup 使用 `GEMINI_API_KEY`，而 studio 推导为 `GOOGLE_API_KEY`；setup 使用 `MOONSHOT_API_KEY`，而 studio 推导为 `MOONSHOTAI_API_KEY`。路由的 `apiKeyEnv` 记录 setup 所用的变量，因此适配器与 studio 都从它读取密钥。
+
+基础 URL 是不含用户名、密码、查询或片段的 `http` 或 `https` URL，因此不携带凭据；setup 拒绝任何其他形式，且不重复它。通过明文 `http` 访问这台电脑的回环地址（`localhost`、`127.0.0.0/8`、`::1`）以外主机的基础 URL 会被接受并给出警告（在终端中是一条说明，否则是标准错误上的一行），因为密钥与每条提示随后会不加密地穿过网络。模型 id 只包含字母、数字与 `. _ : / @ ~ + -`，最多 200 个字符。
 
 <a id="answer-schema"></a>
 ### 回答 schema

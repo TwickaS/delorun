@@ -4,16 +4,16 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/README.md
 /:
   en: 158a935f83680c6c
-  zh: 9163f7ba141dd983
+  zh: b449e1010698a7c7
 /delorun-contracts:
   en: 46ded971e42fc133
-  zh: 6d61326747196f59
+  zh: e4df963bec6a9831
 /delorun-contracts/summary:
   en: 175e0948cc378188
-  zh: 12b7624d90c18ed9
+  zh: 9eabd9ed0b37ed44
 /delorun-contracts/the-contracts:
   en: bd45716859cf8e2d
-  zh: 89cdd0487adf258d
+  zh: 51bc92048d8d6d65
 /delorun-contracts/changing-a-contract:
   en: 8d65de4be0066451
   zh: ed3e78e9f742f35f
