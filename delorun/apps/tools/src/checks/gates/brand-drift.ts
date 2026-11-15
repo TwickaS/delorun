@@ -45,8 +45,8 @@ const MARK = /M16 2\.5L27\.7|A6\.6 6\.6 0 1 0 9\.4 16/
 /** A `font-family` declaration whose value names a typeface in quotes. */
 const FONT = /font-family\s*:[^;{}]*['"]/i
 
-/** The source trees the gate reads; the brand package is the one place the literals live. */
-const SCANNED = /^delorun\/(?:packages\/(?!brand\/)[^/]+\/src\/|apps\/(?:website|docs)\/(?:src|public|scripts)\/|packages\/site-design\/)/
+/** The source trees the gate reads, including the sign-in page's assets; the brand package is the one place the literals live. */
+const SCANNED = /^delorun\/(?:packages\/(?!brand\/)[^/]+\/src\/|apps\/(?:website|docs)\/(?:src|public|scripts)\/|packages\/site-design\/|packages\/home-auth\/assets\/)/
 const EXTENSIONS = /\.(?:css|ts|tsx|svg|html)$/
 
 /**

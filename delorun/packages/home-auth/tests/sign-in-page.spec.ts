@@ -6,18 +6,19 @@
  */
 import { webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { MARK } from '@delorun/brand/mark'
+import { MARK } from '@delorun/brand/mark-data'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 // @ts-expect-error -- the sign-in page's browser module is JavaScript without declarations.
 import { COPY, POLL_MS, VIEWS, defaultLabelOf, deviceIdOf, fill, landingOf, languageOf, matchCodeOf, start } from '../assets/sign-in.js'
+import { fillBrand } from '../src/sign-in-template.ts'
 
 const subtle = webcrypto.subtle
 /**
  * The page's markup as the route serves it, read from the asset: under jsdom, Vite rewrites a source module's
  * `import.meta.url`, so `src/reach-routes.ts` cannot read its assets here. `reach-routes.spec.ts` pins the served page.
  */
-const SIGN_IN_PAGE = readFileSync(fileURLToPath(import.meta.url).replace(/tests[\\/]sign-in-page\.spec\.ts$/, 'assets/sign-in.html'), 'utf8')
+const SIGN_IN_PAGE = fillBrand(readFileSync(fileURLToPath(import.meta.url).replace(/tests[\\/]sign-in-page\.spec\.ts$/, 'assets/sign-in.html'), 'utf8'))
 const ORIGIN = 'https://home.example.ts.net'
 const HOME_KEY = 'aG9tZS1wdWJsaWMta2V5'
 const HOME_NONCE = 'aG9tZS1ub25jZS0xMjM0NQ'

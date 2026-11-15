@@ -19,6 +19,9 @@ export const BRAND_COLOURS = {
   paper: '#EBEBEB',
 } as const
 
+/** The page background in each scheme, which a page also names to the browser as its `theme-color`. */
+export const BRAND_SURFACE = { light: '#FCFCFC', dark: '#111110' } as const
+
 /** The typefaces: Schibsted Grotesk for text and JetBrains Mono for code, with the system fallbacks. */
 export const BRAND_FONTS = {
   sans: "'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif",

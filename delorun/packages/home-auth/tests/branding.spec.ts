@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH } from '../src/branding.ts'
+import { fillBrand } from '../src/sign-in-template.ts'
 
-const TEMPLATE = readFileSync(fileURLToPath(new URL('../assets/sign-in.html', import.meta.url)), 'utf8')
+const TEMPLATE = fillBrand(readFileSync(fileURLToPath(new URL('../assets/sign-in.html', import.meta.url)), 'utf8'))
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 
 /** A response that records what the icon route writes. */

@@ -1,7 +1,7 @@
 /** The brand values agree across `tokens.ts`, `tokens.css`, the mark's static files and the studio's default accent. */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { BRAND_COLOURS, BRAND_FONTS, BRAND_RADII } from '../src/tokens.ts'
+import { BRAND_COLOURS, BRAND_FONTS, BRAND_RADII, BRAND_SURFACE } from '../src/tokens.ts'
 import { MARK } from '../src/mark.tsx'
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -32,6 +32,7 @@ describe('the brand colours', () => {
     expect(css).toContain(`--dl-peach: ${BRAND_COLOURS.peach};`)
     expect(css).toContain(`light-dark(${BRAND_COLOURS.peachText}, ${BRAND_COLOURS.peach})`)
     expect(css).toContain(`--dl-on-accent: ${BRAND_COLOURS.onPeach};`)
+    expect(css).toContain(`--dl-surface: var(--dsw-alias-bg-base, light-dark(${BRAND_SURFACE.light}, ${BRAND_SURFACE.dark}))`)
     for (const [name, px] of Object.entries(BRAND_RADII)) expect(css).toContain(`var(--dsw-radius-${name}, ${px}px)`)
     expect(css).toContain(BRAND_FONTS.sans.split(',')[0])
   })

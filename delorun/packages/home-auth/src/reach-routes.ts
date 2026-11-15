@@ -25,6 +25,7 @@
  */
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type PreLoginRoute, type ReachListenerId } from '@delorun/contract-admission'
@@ -35,6 +36,7 @@ import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './recor
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
 import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH, type BrandingSource, type IconReader } from './branding.ts'
 import { plainPathname } from './reach-paths.ts'
+import { fillBrand } from './sign-in-template.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
 export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
@@ -81,13 +83,24 @@ function asset(file: string, type: string): [string, Asset] {
 }
 
 const SCRIPT = asset('sign-in.js', 'text/javascript; charset=utf-8')
-const STYLE = asset('sign-in.css', 'text/css; charset=utf-8')
+/**
+ * The page's stylesheet: the brand's `tokens.css` followed by `assets/sign-in.css`, one same-origin asset, so the page
+ * reads the `--dl-*` custom properties from `@delorun/brand` and loads nothing else.
+ */
+function styleAsset(): [string, Asset] {
+  const tokens = readFileSync(createRequire(import.meta.url).resolve('@delorun/brand/tokens.css'))
+  const page = readFileSync(new URL('../assets/sign-in.css', import.meta.url))
+  const body = Buffer.concat([tokens, Buffer.from('\n'), page])
+  return [`sign-in-${createHash('sha256').update(body).digest('hex').slice(0, 12)}.css`, { type: 'text/css; charset=utf-8', body }]
+}
+
+const STYLE = styleAsset()
 
 /** The sign-in page's assets by their content-hashed names: the only names the asset route answers. */
 export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE])
 
 /** The sign-in page's markup, `assets/sign-in.html`, with its two placeholders. */
-const PAGE_TEMPLATE = readFileSync(new URL('../assets/sign-in.html', import.meta.url), 'utf8')
+const PAGE_TEMPLATE = fillBrand(readFileSync(new URL('../assets/sign-in.html', import.meta.url), 'utf8'))
 
 /**
  * The sign-in page: `assets/sign-in.html` with the paths of the two assets in place of `{{style}}` and `{{script}}`.
