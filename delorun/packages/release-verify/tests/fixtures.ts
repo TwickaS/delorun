@@ -454,6 +454,9 @@ export class FixtureTransport implements ReleaseLogTransport {
   /** The proof the log serves. */
   proof: readonly string[] = []
 
+  /** Proofs served for a given older tree size, ahead of {@link proof}. */
+  readonly proofsFrom = new Map<number, readonly string[]>()
+
   /** What the distributor throws, when it is unreachable. */
   distributorFailure: Error | undefined = undefined
 
@@ -483,7 +486,7 @@ export class FixtureTransport implements ReleaseLogTransport {
   async consistencyProof(first: number, second: number): Promise<readonly string[]> {
     this.asked.push({ first, second })
     if (this.logFailure !== undefined) throw this.logFailure
-    return this.proof
+    return this.proofsFrom.get(first) ?? this.proof
   }
 }
 

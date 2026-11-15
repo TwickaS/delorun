@@ -257,10 +257,24 @@ describe('consistency with the tree the client holds', () => {
     const stored = signedStored(fixture, 1)
     const transport = new FixtureTransport()
     transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
+    transport.proofsFrom.set(1, consistencyProof(1, fixture.log.leafHashes.slice(0, 3)).map(hash => hash.toString('hex')))
     const verdict = await checkOnline({ root: fixture.root, bundle: verified(fixture), stored, transport, now: NOW })
     // The stored record lowers the floor, so the proof starts from the bundle's tree of 3, not the record's 1.
     expect(verdict.ok).toBe(true)
-    expect(transport.asked).toEqual([{ first: 3, second: 3 }])
+    // The record is also proved a prefix of the latest tree, so a fork after its size cannot pass.
+    expect(transport.asked).toEqual([{ first: 1, second: 3 }, { first: 3, second: 3 }])
+  })
+
+  it('c18-inconsistent-log-fails-start: refuses a log that forked after a stored record smaller than the bundle\'s tree', async () => {
+    const fixture = scenario()
+    // The record is signed and below the bundle's tree of 3, but its one leaf is not the log's first leaf.
+    const forkedLeaf = Buffer.alloc(32, 5)
+    const stored = signedStored(fixture, 1, treeRoot([forkedLeaf]))
+    const transport = new FixtureTransport()
+    transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
+    transport.proof = consistencyProof(1, [forkedLeaf, ...fixture.log.leafHashes.slice(1)]).map(hash => hash.toString('hex'))
+    const verdict = await checkOnline({ root: fixture.root, bundle: verified(fixture), stored, transport, now: NOW })
+    expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'consistency-proof-invalid' })
   })
 
   it('c18-checkpoint-rollback-refused: refuses a latest checkpoint below the bundle\'s tree, though the stored record is lower still', async () => {

@@ -304,6 +304,12 @@ export async function checkOnline(input: OnlineCheckInput): Promise<OnlineVerdic
     const below = stored !== undefined && stored.treeSize >= input.bundle.treeSize ? 'the checkpoint the client stored' : 'the bundle\'s verified tree'
     return { ok: false, kind: 'failed', refusal: 'checkpoint-rolled-back', detail: `the latest checkpoint is tree size ${String(latest.size)}, below ${below} at ${String(fromSize)}`, notices }
   }
+  // A stored record below the bundle's tree is no floor, but it still has to be a prefix of the log's latest tree: a
+  // log that forked after the stored size would otherwise go unnoticed, since the bundle's tree is the only one proved.
+  if (stored !== undefined && stored.treeSize > 0 && stored.treeSize < input.bundle.treeSize) {
+    const prefix = await proofOf(stored.treeSize, Buffer.from(stored.rootHash, 'hex'))
+    if (prefix !== 'verified') return prefix
+  }
   // A record of the installer's earlier format carries no signature: it is kept as the floor only when the log proves
   // the tree it names a prefix of the latest one, and replaced with a notice otherwise.
   if (input.legacy !== undefined && input.legacy.treeSize > fromSize) {
