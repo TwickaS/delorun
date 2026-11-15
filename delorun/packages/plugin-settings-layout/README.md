@@ -43,7 +43,7 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 | Data | Trash | Deleted chats and workspaces | section `delorun-trash` |
 | Data | Changes | The review of plugin and harness changes, with protection on or off | section `delorun-changes` |
 | Data | Setup versions | The profile history's versions, what a switch changes, Save this setup and Switch to this version | section `delorun-setup-versions` |
-| Data | About | A Versions card, then licences and project links | row `current-version`; section `delorun-about` |
+| Data | About | The Versions card (Delorun and the DeepSeek Harness), licences and project links, all drawn by the About section | section `delorun-about` |
 
 After Data, each third-party plugin that names its sections in `settingsPluginGroups` has a group of its own, titled with the plugin's display title, with one page per section. The search field finds pages, cards and rows by name and by keywords in English and Chinese. Anything neither the layout nor a plugin group places, such as an unnamed third-party section or a new upstream General row, appears under Other, so no section or row disappears.
 

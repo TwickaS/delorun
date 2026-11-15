@@ -60,7 +60,6 @@ export const en = {
   'card.composer': 'Composer',
   'card.links': 'Links and usage',
   'card.newChats': 'New chats',
-  'card.versions': 'Versions',
   'item.language': 'Language',
   'item.language.keywords': 'english chinese locale',
   'item.look': 'Studio look',
@@ -91,8 +90,6 @@ export const en = {
   'item.performanceUsage.keywords': 'tokens speed cost',
   'item.permission': 'Default permission mode',
   'item.permission.keywords': 'workspace write read only full access',
-  'item.currentVersion': 'Current version',
-  'item.currentVersion.keywords': 'release build',
   'search.placeholder': 'Search settings',
   'search.empty': 'No settings match.',
 }
@@ -160,7 +157,6 @@ export const zh: Record<SettingsLayoutLocaleKey, string> = {
   'card.composer': '输入框',
   'card.links': '链接与用量',
   'card.newChats': '新对话',
-  'card.versions': '版本',
   'item.language': '语言',
   'item.language.keywords': '英文 中文 区域',
   'item.look': '工作室外观',
@@ -191,8 +187,6 @@ export const zh: Record<SettingsLayoutLocaleKey, string> = {
   'item.performanceUsage.keywords': 'token 速度 费用',
   'item.permission': '默认权限模式',
   'item.permission.keywords': '工作区写入 只读 完全访问',
-  'item.currentVersion': '当前版本',
-  'item.currentVersion.keywords': '发行版 构建',
   'search.placeholder': '搜索设置',
   'search.empty': '没有匹配的设置。',
 }

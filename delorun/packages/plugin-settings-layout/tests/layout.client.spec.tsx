@@ -73,8 +73,15 @@ describe("Delorun's layout", () => {
       Trash: ['delorun-trash'],
       'Setup versions': ['delorun-setup-versions'],
       Changes: ['delorun-changes'],
-      About: ['Versions: current-version', 'delorun-about'],
+      About: ['delorun-about'],
     })
+  })
+
+  it('leaves the About page to its section, which draws the one Versions card, and hides the stock version row', () => {
+    const about = layout.groups.flatMap(group => group.pages).find(page => page.id === 'about')
+    expect(about?.blocks.map(block => block.kind)).toEqual(['section'])
+    expect(HIDDEN_ITEMS).toContain('current-version')
+    expect(JSON.stringify(projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS))).not.toContain('"current-version"')
   })
 
   it('leaves out External agents and Network where their sections are not registered', () => {
@@ -144,7 +151,7 @@ describe("Delorun's layout", () => {
     expect(searchNav(nav, 'telemetry').map(result => result.pageId)).toEqual(['privacy'])
     expect(searchNav(nav, 'newline').map(result => result.path)).toEqual([['Chat', 'Composer', 'Send behaviour while busy']])
     expect(searchNav(nav, 'release').map(result => result.path)).toEqual([
-      ['General'], ['General', 'Updates', 'Check for new releases'], ['General', 'Updates', 'Current versions'], ['About'], ['About', 'Versions', 'Current version'],
+      ['General'], ['General', 'Updates', 'Check for new releases'], ['General', 'Updates', 'Current versions'], ['About'],
     ])
   })
 

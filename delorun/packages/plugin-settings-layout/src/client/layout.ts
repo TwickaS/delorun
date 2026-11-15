@@ -58,7 +58,6 @@ export const ITEMS = {
   linkOpening: 'link-opening',
   performanceUsage: 'performance-usage',
   permission: 'permission',
-  currentVersion: 'current-version',
 } as const
 
 /**
@@ -66,9 +65,10 @@ export const ITEMS = {
  * which Delorun's Appearance section replaces, its Work details row, which
  * Delorun's Conversation section replaces, and its session-log upload switch,
  * which Delorun's Privacy section replaces with the same switch behind its
- * consent dialog.
+ * consent dialog, and its version row, which names Delorun's version alone
+ * where the Updates card has `delorun-versions` and Settings → About shows both.
  */
-export const HIDDEN_ITEMS = ['appearance', 'transcript-view', 'session-log-deepseek'] as const
+export const HIDDEN_ITEMS = ['appearance', 'transcript-view', 'session-log-deepseek', 'current-version'] as const
 
 /** A row name the layout's copy defines. */
 type ItemName = keyof typeof ITEMS
@@ -217,7 +217,7 @@ export function delorunSettingsLayout(
           },
           {
             id: 'about', label: text('page.about'), icon: IconInfoOutlineMedium, keywords: text('page.about.keywords'),
-            blocks: [card('versions', 'card.versions', ['currentVersion']), section(SECTIONS.about)],
+            blocks: [section(SECTIONS.about)],
           },
         ],
       },
