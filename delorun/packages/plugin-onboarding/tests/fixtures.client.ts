@@ -12,8 +12,10 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { CloneStatus, KeyTestAnswer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AddOutcome, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
+import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
+import { DIRECTORY } from './directory.fixture.ts'
 
 /** This plugin's copy. */
 export const t: StepServices['t'] = makeTranslate(en)
@@ -182,6 +184,15 @@ export function startFace(
   return { face, set: store.set, resolve, chooseFolder, addFolder, folders, holdNotice, release }
 }
 
+/** The providers service with every call a spy; each can be replaced. */
+export function providersFake(change: { readonly directory?: readonly DirectoryEntry[] | undefined; readonly probe?: KeyProbe; readonly save?: boolean } = {}) {
+  const directory = vi.fn(() => Promise.resolve('directory' in change ? change.directory : DIRECTORY))
+  const probe = vi.fn((_entry: DirectoryEntry, _key: string, _baseURL: string | undefined) => Promise.resolve(change.probe ?? { kind: 'works', models: 12, defaultModel: 'deepseek-chat' } as KeyProbe))
+  const save = vi.fn((_entry: DirectoryEntry, _key: string, _baseURL: string | undefined) => Promise.resolve(change.save ?? true))
+  const face: ProvidersFace = { directory, probe, save }
+  return { face, directory, probe, save }
+}
+
 /** Step services with every part faked; each can be replaced. */
 export function stepServices(change: Partial<StepServices> = {}): StepServices & { readonly spies: ReturnType<typeof installerFake> } {
   const bundles = installerFake()
@@ -194,6 +205,7 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     look: { settings: theme.form, useStockLook: () => Promise.resolve(true) },
     bundles: bundles.installer,
     host: hostFake().host,
+    providers: providersFake().face,
     start: startFace().face,
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),

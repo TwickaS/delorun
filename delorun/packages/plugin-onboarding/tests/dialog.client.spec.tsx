@@ -63,10 +63,16 @@ async function mountEntry(options: Options = {}) {
 }
 
 /** The steps a first run shows with nothing configured. */
-const BASE = [en['step.welcome'], en['step.look'], en['step.agents'], en['step.workspace'], en['step.ready']]
+const BASE = [en['step.welcome'], en['step.providers'], en['step.look'], en['step.agents'], en['step.workspace'], en['step.ready']]
 
 /** Press Continue a number of times. */
-const forward = async (times: number) => { for (let n = 0; n < times; n++) await click(button(en.continue)) }
+// The Models step has its own buttons until its summary: leaving it by Skip for now stands in for Continue.
+const forward = async (times: number) => {
+  for (let n = 0; n < times; n++) {
+    await settle()
+    await click(screen.queryByRole('button', { name: en.continue }) ?? button(en['providers.skip']))
+  }
+}
 
 const titles = () => within(screen.getByRole('navigation')).getAllByRole('listitem').map(each => each.textContent?.replace(/^(\d+|✓)/, ''))
 const heading = () => screen.getByRole('heading', { level: 2 })
@@ -98,7 +104,7 @@ describe('a profile that has finished onboarding', () => {
     expect(titles()).toEqual(BASE)
     expect(complete).not.toHaveBeenCalled()
     expect(progress.set).not.toHaveBeenCalled()
-    await click(button(en.continue))
+    await forward(2)
     expect(heading().textContent).toBe(en['step.look'])
     expect(notice.acknowledge).not.toHaveBeenCalled()
   })
@@ -128,14 +134,15 @@ describe('the first run', () => {
     expect(heading().textContent).toBe(en['step.welcome'])
     expect(screen.getByText('Delorun is a pre-release community fork.')).toBeTruthy()
     expect(titles()).toEqual(BASE)
-    expect(screen.getByText('Step 1 of 5')).toBeTruthy()
+    expect(screen.getByText('Step 1 of 6')).toBeTruthy()
     expect(screen.queryByRole('button', { name: en.back })).toBeNull()
     expect(screen.queryByRole('button', { name: en.skip })).toBeNull()
     expect(notice.acknowledge).not.toHaveBeenCalled()
-    await click(button(en.continue))
+    await forward(2)
     expect(notice.acknowledge).toHaveBeenCalledOnce()
     expect(heading().textContent).toBe(en['step.look'])
     expect(button(en.skip)).toBeTruthy()
+    await click(button(en.back))
     await click(button(en.back))
     expect(screen.getByText('Delorun is a pre-release community fork.')).toBeTruthy()
   })
@@ -144,7 +151,7 @@ describe('the first run', () => {
     await mountEntry()
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
     expect(document.activeElement).toBe(heading())
-    await click(button(en.continue))
+    await forward(2)
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
     expect(document.activeElement).toBe(heading())
   })
@@ -153,14 +160,6 @@ describe('the first run', () => {
     await mountEntry({ notice: noticeFace(true) })
     expect(screen.queryByText('Delorun is a pre-release community fork.')).toBeNull()
     expect(button(en.skip)).toBeTruthy()
-  })
-
-  it('draws the Models section of Settings inside Welcome', async () => {
-    Element.prototype.scrollIntoView = vi.fn()
-    onTestFinished(() => { Reflect.deleteProperty(Element.prototype, 'scrollIntoView') })
-    await mountEntry()
-    await click(button(en['welcome.models.open']))
-    expect(screen.getByText('section models')).toBeTruthy()
   })
 
   it('holds the page\'s root inert while it shows and gives it back afterwards, and works without a root', async () => {
@@ -185,10 +184,12 @@ describe('the first run', () => {
 
   it('goes forward and back, saving the step reached, and starts the chat in the default workspace from Ready', async () => {
     const { progress, startChat, complete, completeStep } = await mountEntry()
-    await click(button(en.continue))
+    await forward(1)
+    expect(progress.value()?.step).toBe('providers')
+    await forward(1)
     expect(progress.value()?.step).toBe('look')
     await click(button(en.back))
-    expect(progress.value()?.step).toBe('welcome')
+    expect(progress.value()?.step).toBe('providers')
     await forward(4)
     expect(heading().textContent).toBe(en['step.ready'])
     expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
@@ -204,10 +205,10 @@ describe('the first run', () => {
 
   it('lists the steps with the current one marked and the earlier ones done', async () => {
     await mountEntry()
-    await click(button(en.continue))
+    await forward(1)
     const items = within(screen.getByRole('navigation')).getAllByRole('listitem')
-    expect(items.map(each => each.getAttribute('data-state'))).toEqual(['done', 'current', 'next', 'next', 'next'])
-    expect(items.map(each => each.getAttribute('aria-current'))).toEqual([null, 'step', null, null, null])
+    expect(items.map(each => each.getAttribute('data-state'))).toEqual(['done', 'current', 'next', 'next', 'next', 'next'])
+    expect(items.map(each => each.getAttribute('aria-current'))).toEqual([null, 'step', null, null, null, null])
     expect(items[0]?.textContent?.startsWith('✓')).toBe(true)
   })
 
@@ -234,7 +235,7 @@ describe('the first run', () => {
   it('warns, and goes on, when progress cannot be saved', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await mountEntry({ writeResult: 'reject' })
-    await click(button(en.continue))
+    await forward(2)
     await settle()
     expect(heading().textContent).toBe(en['step.look'])
     expect(warn).toHaveBeenCalledWith('delorun onboarding: progress was not saved', expect.any(Error))
@@ -249,8 +250,8 @@ describe('which steps apply', () => {
 
   it('adds recommended plugins when packages are configured, and leaves the step out otherwise', async () => {
     await mountEntry({ settings: settings({ plugins: ['@scope/p'] }) })
-    expect(titles()).toEqual([en['step.welcome'], en['step.look'], en['step.agents'], en['step.plugins'], en['step.workspace'], en['step.ready']])
-    await forward(3)
+    expect(titles()).toEqual([en['step.welcome'], en['step.providers'], en['step.look'], en['step.agents'], en['step.plugins'], en['step.workspace'], en['step.ready']])
+    await forward(4)
     expect(heading().textContent).toBe(en['step.plugins'])
     await settle()
     expect(screen.getByRole('heading', { level: 4 }).textContent).toBe('P')
@@ -276,7 +277,7 @@ describe('which steps apply', () => {
     expect(heading().textContent).toBe(en['step.reach'])
     expect(screen.getByText(en['reach.remote'])).toBeTruthy()
     expect(screen.queryByText(en['reach.then'])).toBeNull()
-    await click(button(en.continue))
+    await forward(1)
     expect(heading().textContent).toBe(en['step.workspace'])
   })
 
@@ -290,15 +291,15 @@ describe('which steps apply', () => {
 
   it('leaves out the steps whose section the terminal covered, but never Welcome, Workspace or Ready', async () => {
     await mountEntry({ settings: settings({ plugins: ['@scope/p'] }), record: { reachSetUp: false, sections: ['look', 'agents', 'plugins', 'welcome', 'workspace', 'ready'] } })
-    expect(titles()).toEqual([en['step.welcome'], en['step.workspace'], en['step.ready']])
+    expect(titles()).toEqual([en['step.welcome'], en['step.providers'], en['step.workspace'], en['step.ready']])
   })
 
   it('places steps other plugins added by their order, before Workspace, and hands them the way forward', async () => {
     const Body = ({ next }: { next: () => void }) => <button type="button" onClick={next}>Added body</button>
     const added: OnboardingStep = { id: 'thinking.reader', order: 600, title: () => 'Reader', component: Body }
     const { extra } = await mountEntry({ extra: [added] })
-    expect(titles()).toEqual([en['step.welcome'], en['step.look'], en['step.agents'], 'Reader', en['step.workspace'], en['step.ready']])
-    await forward(3)
+    expect(titles()).toEqual([en['step.welcome'], en['step.providers'], en['step.look'], en['step.agents'], 'Reader', en['step.workspace'], en['step.ready']])
+    await forward(4)
     expect(heading().textContent).toBe('Reader')
     await click(button('Added body'))
     expect(heading().textContent).toBe(en['step.workspace'])
@@ -314,7 +315,7 @@ describe('the workspace and the last button', () => {
     const start = startFace({ kind: 'checking' })
     await mountEntry({ start })
     expect(start.resolve).toHaveBeenCalledOnce()
-    await forward(3)
+    await forward(4)
     expect(screen.getByText(en['start.lead.checking'])).toBeTruthy()
     await act(async () => { start.set({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH }) })
     expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
@@ -323,7 +324,7 @@ describe('the workspace and the last button', () => {
   it('starts the chat in a folder the Workspace step added, with what the folder holds', async () => {
     const start = startFace(undefined, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'code' })
     const { startChat } = await mountEntry({ start })
-    await forward(3)
+    await forward(4)
     await click(screen.getByRole('radio', { name: en['workspace.mode.folder'] }))
     await click(button(en['workspace.folder.choose']))
     await settle()
@@ -335,7 +336,7 @@ describe('the workspace and the last button', () => {
 
   it('starts the chat through the workspace UI where other workspaces exist but no default', async () => {
     const { startChat } = await mountEntry({ start: startFace({ kind: 'other' }) })
-    await forward(4)
+    await forward(5)
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined)
   })
@@ -343,7 +344,7 @@ describe('the workspace and the last button', () => {
   it('sends the person back to Workspace from Ready while no folder is chosen and there is no default', async () => {
     const start = startFace({ kind: 'none' }, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'empty' })
     const { startChat, complete } = await mountEntry({ start })
-    await forward(4)
+    await forward(5)
     expect(screen.queryByRole('button', { name: en.start })).toBeNull()
     await click(button(en.chooseFolder))
     expect(heading().textContent).toBe(en['step.workspace'])
@@ -361,7 +362,7 @@ describe('the workspace and the last button', () => {
   ])('keeps the dialog open and says why when the harness %s', async (_, choice, text) => {
     const start = startFace({ kind: 'none' }, choice)
     const { startChat, complete } = await mountEntry({ start })
-    await forward(3)
+    await forward(4)
     await click(button(en['workspace.folder.choose']))
     await settle()
     expect(screen.getByRole('alert').textContent).toBe(text)

@@ -4,10 +4,10 @@
  * harness (a key test, a sign-in, Tailscale) shows while it loads, when it is fine, and when it could not be read.
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
-import type { AgentSignIn, KeyResult, TailscaleReadiness } from '../wire.ts'
+import type { AgentSignIn, TailscaleReadiness } from '../wire.ts'
 import type { BundleView } from './bundles.ts'
 import { Choices, PaletteSwatch } from './choices.tsx'
 import { fits, folderOf, presentConnections, type Guide, type Store } from './guide.ts'
@@ -69,23 +69,14 @@ export function Command({ command, t }: { readonly command: string; readonly t: 
 /** The tone of a status line: done, needs attention, or neutral. */
 type Tone = 'done' | 'attention' | undefined
 
-/** A key test's tone. */
-const KEY_TONES: Readonly<Record<KeyResult, Tone>> = { 'works': 'done', 'rejected': 'attention', 'unreachable': 'attention', 'failed': 'attention', 'no-key': 'attention', 'untested': undefined }
-
 /**
- * Welcome: the language, the preview notice while it is owed, and the model providers with each key's test, where the
- * Models section of Settings adds or changes a provider without leaving the guide.
+ * Welcome: the language and the preview notice while it is owed.
  * @param props - the services, the guide and the preview notice when it is owed.
  * @returns the step body.
  */
-export function WelcomeStep({ services, guide, notice }: StepProps & { readonly notice: NoticeFace | undefined }): ReactNode {
-  const { t, language, renderSection } = services
+export function WelcomeStep({ services, notice }: StepProps & { readonly notice: NoticeFace | undefined }): ReactNode {
+  const { t, language } = services
   const locale = useSyncExternalStore(useCallback(listener => language.subscribe(listener), [language]), () => language.getSnapshot())
-  const keys = useStore(guide.keys)
-  const [editing, setEditing] = useState(false)
-  const editorId = useId()
-  // The section opens below the fold of a short window, so it is brought into view once when it opens.
-  const reveal = useCallback((node: HTMLDivElement | null) => { node?.scrollIntoView({ block: 'nearest' }) }, [])
   const paragraphs = notice?.paragraphs() ?? []
   return (
     <div className={css.stack}>
@@ -99,36 +90,6 @@ export function WelcomeStep({ services, guide, notice }: StepProps & { readonly 
           {paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
         </div>
       )}
-      <section className={css.field} aria-labelledby={`${editorId}-title`}>
-        <h3 id={`${editorId}-title`} className={css.label}>{t('welcome.model')}</h3>
-        <div aria-live="polite">
-          {keys.status === 'loading' && <p className={css.status}>{t('key.testing')}</p>}
-          {keys.status === 'failed' && <p className={css.status} data-tone="attention">{t('key.unread')}</p>}
-          {keys.status === 'ready' && keys.value.providers.length === 0 && <p className={css.status} data-tone="attention">{t('key.none')}</p>}
-          {keys.status === 'ready' && keys.value.providers.length > 0 && (
-            <ul className={css.rows}>
-              {keys.value.providers.map(each => (
-                <li key={each.provider} className={css.row}>
-                  <span>{each.name}</span>
-                  <span className={css.status} data-tone={KEY_TONES[each.result]}>{t(`key.${each.result}`)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className={css.actions}>
-          <Button variant="outline" size="sm" aria-expanded={editing} aria-controls={editorId} onClick={() => {
-            // Closing the providers tests the keys again, so the rows show what the person just changed.
-            if (editing) guide.testKeys()
-            setEditing(!editing)
-          }}>
-            {t(editing ? 'welcome.models.close' : 'welcome.models.open')}
-          </Button>
-          <Button variant="ghost" size="sm" disabled={keys.status === 'loading'} onClick={() => { guide.testKeys() }}>{t('key.again')}</Button>
-        </div>
-        {editing && <div id={editorId} ref={reveal} className={css.embedded}>{renderSection('models')}</div>}
-        <p className={css.hint}>{t('welcome.model.hint')}</p>
-      </section>
     </div>
   )
 }

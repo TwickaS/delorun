@@ -108,6 +108,9 @@ export const Readiness = z.strictObject({
 /** {@link Readiness}'s parsed value. */
 export type Readiness = z.output<typeof Readiness>
 
+/** The official DeepSeek route, which `@deepseek-ai/dsh-llm-deepseek-api-key` registers. */
+export const DEEPSEEK_ROUTE = 'deepseek-official'
+
 /** The harness's route that tests each model provider's key with its free model listing. `POST` with no body answers {@link KeyTestAnswer}. */
 export const KEY_TEST_PATH = '/api/delorunOnboarding.keyTest'
 

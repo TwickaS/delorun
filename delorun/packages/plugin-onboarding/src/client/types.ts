@@ -10,6 +10,7 @@ import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
+import type { DirectoryEntry, KeyProbe } from './providers.ts'
 import type { CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
@@ -225,8 +226,32 @@ export interface HostFace {
   readonly cloneStatus: (job: string) => Promise<CloneStatus>
 }
 
+/** The model providers' directory, key test and key saving, which go through the studio's own credential and settings routes. */
+export interface ProvidersFace {
+  /** @returns the configurable provider routes; undefined when the harness cannot be asked. It never rejects. */
+  readonly directory: () => Promise<readonly DirectoryEntry[] | undefined>
+  /**
+   * Ask the provider for its model list with a typed key: the free request, no message and no spend. The key is not stored.
+   * @param entry - the provider route.
+   * @param key - the typed key.
+   * @param baseURL - the endpoint typed under More settings, when one was typed.
+   * @returns what the request answered; it never rejects.
+   */
+  readonly probe: (entry: DirectoryEntry, key: string, baseURL: string | undefined) => Promise<KeyProbe>
+  /**
+   * Save a key where the Models settings page saves it: the credential store, with the profile naming its reference.
+   * @param entry - the provider route.
+   * @param key - the typed key; never read back.
+   * @param baseURL - the endpoint typed under More settings, when one was typed.
+   * @returns true when the key was saved; it never rejects.
+   */
+  readonly save: (entry: DirectoryEntry, key: string, baseURL: string | undefined) => Promise<boolean>
+}
+
 /** The services that do not change while the dialog is open. */
 export interface StaticServices {
+  /** The model providers. */
+  readonly providers: ProvidersFace
   /** The preview notice, or undefined where there is none. */
   readonly notice: NoticeFace | undefined
   /** The interface languages. */

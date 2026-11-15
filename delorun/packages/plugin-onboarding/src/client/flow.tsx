@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react'
 import type { SetupRecord } from '../wire.ts'
 import type { Guide } from './guide.ts'
+import { ProvidersStep } from './ProvidersStep.tsx'
 import { AgentsStep, LookStep, PluginsStep, ReachStep, RemoteReachStep, ReadyStep, WelcomeStep } from './steps.tsx'
 import type { NoticeFace, OnboardingStep, ReachState, StartTarget, StepServices } from './types.ts'
 import { WorkspaceStep } from './WorkspaceStep.tsx'
@@ -30,6 +31,7 @@ export interface FlowStep {
 /** The built-in steps' ids and places. */
 export const STEPS = {
   welcome: { id: 'welcome', order: 100 },
+  providers: { id: 'providers', order: 150 },
   look: { id: 'look', order: 200 },
   agents: { id: 'agents', order: 300 },
   plugins: { id: 'plugins', order: 400 },
@@ -66,6 +68,7 @@ export function buildSteps({ services, guide, record, extra, reach, target, noti
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
   const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
+  built.push({ ...STEPS.providers, title: () => t('step.providers'), render: next => <ProvidersStep {...props} next={next} /> })
   if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: () => <LookStep {...props} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })

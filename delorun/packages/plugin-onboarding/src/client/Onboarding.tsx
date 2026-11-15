@@ -140,6 +140,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const current = Math.min(index, steps.length - 1)
   // The list is never empty: Welcome, Workspace and Ready are always built.
   const step = steps[current] as FlowStep
+  const providersPhase = useSyncExternalStore(useCallback(listener => guide.providersPhase.subscribe(listener), [guide]), () => guide.providersPhase.getSnapshot())
+  // The providers step's landing and walk have their own buttons; its summary uses the dialog's Continue.
+  const ownButtons = step.id === STEPS.providers.id && providersPhase !== 'summary'
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus({ preventScroll: true }) }, [step.id])
 
@@ -189,10 +192,10 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
             <div className={css.body} key={step.id}>{step.render(next)}</div>
           </div>
           <footer className={css.footer}>
-            {notice === undefined || step.id !== STEPS.welcome.id ? <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button> : null}
+            {!ownButtons && (notice === undefined || step.id !== STEPS.welcome.id) ? <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button> : null}
             <span className={css.spacer} />
             {current > 0 && <Button variant="ghost" onClick={() => { go(current - 1) }}>{t('back')}</Button>}
-            <Button variant="primary" onClick={next}>{t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>
+            {!ownButtons && <Button variant="primary" onClick={next}>{t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>}
           </footer>
         </div>
       </div>

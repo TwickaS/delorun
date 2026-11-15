@@ -160,54 +160,6 @@ describe('the welcome step', () => {
     render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
     expect(screen.queryByText(/Delorun is a pre-release/)).toBeNull()
   })
-
-  it('says it is testing the keys, then each provider\'s result, worded for a person', async () => {
-    const keys: KeyTestAnswer = { providers: [
-      { provider: 'deepseek-official', name: 'DeepSeek', result: 'works' },
-      { provider: 'openai', name: 'OpenAI', result: 'rejected' },
-      { provider: 'local', name: 'Local', result: 'untested' },
-    ] }
-    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
-    expect(screen.getByText(en['key.testing'])).toBeTruthy()
-    await settle()
-    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([`DeepSeek${en['key.works']}`, `OpenAI${en['key.rejected']}`, `Local${en['key.untested']}`])
-    expect(screen.getByText(en['key.works']).getAttribute('data-tone')).toBe('done')
-    expect(screen.getByText(en['key.rejected']).getAttribute('data-tone')).toBe('attention')
-    expect(screen.getByText(en['key.untested']).getAttribute('data-tone')).toBeNull()
-    expect(document.body.textContent).toContain('nothing is spent')
-  })
-
-  it.each<readonly [string, KeyTestAnswer | undefined, string]>([
-    ['no provider is set up', { providers: [] }, en['key.none']],
-    ['the keys could not be tested', undefined, en['key.unread']],
-  ])('says so when %s', async (_, keys, text) => {
-    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
-    await settle()
-    expect(screen.getByText(text).getAttribute('data-tone')).toBe('attention')
-  })
-
-  it('opens the Models section of Settings in place, and tests the keys again when it closes or when asked', async () => {
-    const fake = hostFake()
-    const scrollIntoView = vi.fn()
-    Element.prototype.scrollIntoView = scrollIntoView
-    onTestFinished(() => { Reflect.deleteProperty(Element.prototype, 'scrollIntoView') })
-    render(<WelcomeStep services={stepServices()} guide={guideOf(fake.host)} notice={undefined} />)
-    await settle()
-    expect(screen.queryByText('section models')).toBeNull()
-    const toggle = screen.getByRole('button', { name: en['welcome.models.open'] })
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    await click(toggle)
-    expect(screen.getByText('section models')).toBeTruthy()
-    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(fake.keyTest).toHaveBeenCalledOnce()
-    await click(screen.getByRole('button', { name: en['welcome.models.close'] }))
-    expect(screen.queryByText('section models')).toBeNull()
-    expect(fake.keyTest).toHaveBeenCalledTimes(2)
-    await settle()
-    await click(screen.getByRole('button', { name: en['key.again'] }))
-    expect(fake.keyTest).toHaveBeenCalledTimes(3)
-  })
 })
 
 describe('a command', () => {

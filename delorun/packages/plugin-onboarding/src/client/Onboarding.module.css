@@ -778,9 +778,119 @@
 
   /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
   .chip,
+  .card,
+  .input,
+  .moreSummary,
+  .link,
   .folder,
   .scroll button,
   .footer button {
     min-height: 44px;
   }
+}
+
+/* The providers step. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--delorun-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-2) var(--delorun-space-4);
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--delorun-space-3) var(--delorun-space-5);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
+  cursor: pointer;
+}
+
+.card:has(.tick:checked) {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.card:has(.tick:focus-visible) {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+.tick {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.cardName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.place {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
+
+.input {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: var(--delorun-space-3) var(--delorun-space-5);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  /* 16px keeps a phone browser from zooming the page when the field takes focus. */
+  font-size: max(16px, var(--dsw-font-s-14-font-size));
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.keyState {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-2) var(--delorun-space-5);
+  min-height: var(--dsw-font-xs-13-line-height);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 36px;
+  color: var(--dsw-alias-brand-primary);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+}
+
+.moreSummary {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  cursor: pointer;
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
 }

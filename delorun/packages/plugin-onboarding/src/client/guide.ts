@@ -33,6 +33,9 @@ export type CloneView =
 /** How often a running clone is asked where it stands, in milliseconds. */
 export const CLONE_POLL_MS = 1000
 
+/** Where the providers step stands: the cards, the walk through the ticked providers, or the summary. */
+export type ProvidersPhase = 'landing' | 'walk' | 'summary'
+
 /** A read-only store. */
 export interface Store<T> {
   /** @returns the current value. */
@@ -58,6 +61,12 @@ export interface Guide {
   readonly mode: Store<WorkspaceMode>
   /** The Workspace step's clone. */
   readonly clone: Store<CloneView>
+  /** Where the providers step stands, which decides the dialog's own buttons. */
+  readonly providersPhase: Store<ProvidersPhase>
+  /**
+   * @param phase - where the providers step stands now.
+   */
+  setProvidersPhase(phase: ProvidersPhase): void
   /** Test the keys again, as after the person changed a provider. */
   testKeys(): void
   /**
@@ -107,6 +116,7 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   const workspace = createSnapshotStore<WorkspaceChoice | undefined>(undefined)
   const mode = createSnapshotStore<WorkspaceMode>('default')
   const clone = createSnapshotStore<CloneView>({ state: 'idle' })
+  const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
   const poll = (job: string): void => {
@@ -138,7 +148,8 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   fill(readiness, host.readiness)
   fill(keys, host.keyTest)
   return {
-    readiness, keys, recommendations, workspace, mode, clone,
+    readiness, keys, recommendations, workspace, mode, clone, providersPhase,
+    setProvidersPhase: (phase) => { providersPhase.set(phase) },
     testKeys: () => { fill(keys, host.keyTest) },
     recommend: (registry) => { fill(recommendations, () => host.recommend(registry)) },
     chooseWorkspace: (choice) => { workspace.set(choice) },

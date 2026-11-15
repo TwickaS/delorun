@@ -1,0 +1,171 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ProvidersStep } from '../src/client/ProvidersStep.tsx'
+import { createGuide } from '../src/client/guide.ts'
+import { en } from '../src/client/locales.ts'
+import { TEST_DELAY_MS } from '../src/client/providers.ts'
+import type { KeyTestAnswer } from '../src/wire.ts'
+import { hostFake, providersFake, stepServices } from './fixtures.client.ts'
+
+afterEach(cleanup)
+beforeEach(() => { vi.useFakeTimers() })
+afterEach(() => { vi.useRealTimers() })
+
+const KEYS: KeyTestAnswer = { providers: [
+  { provider: 'deepseek-official', name: 'DeepSeek', result: 'works' },
+  { provider: 'openai', name: 'OpenAI', result: 'no-key' },
+  { provider: 'typesafe', name: 'Typesafe', result: 'no-key' },
+  { provider: 'gateway', name: 'Gateway', result: 'no-key' },
+] }
+
+const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
+const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
+const type = async (field: HTMLElement, value: string) => { await act(async () => { fireEvent.change(field, { target: { value } }) }) }
+
+async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS) {
+  const providers = providersFake(change)
+  const next = vi.fn()
+  const guide = createGuide(hostFake({ keys }).host)
+  render(<ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} />)
+  await flush()
+  return { ...providers, next, guide }
+}
+
+describe('the providers landing', () => {
+  it('lists the cards, ticks the ones with a key found and counts them on the button', async () => {
+    await mount()
+    expect(screen.getAllByRole('checkbox').map(box => [box.parentElement?.textContent, (box as HTMLInputElement).checked])).toEqual([
+      [`DeepSeek${en['providers.found']}`, true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false],
+    ])
+    expect(screen.getByRole('button', { name: 'Connect 1 →' })).toBeTruthy()
+    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    expect(screen.getByRole('button', { name: 'Connect 2 →' })).toBeTruthy()
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    expect(screen.getByRole('button', { name: 'Connect 0 →' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('leaves the step when skipped', async () => {
+    const { next } = await mount()
+    await click(screen.getByRole('button', { name: en['providers.skip'] }))
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  it.each<readonly [string, Parameters<typeof providersFake>[0], string]>([
+    ['the directory cannot be read', { directory: undefined }, en['providers.unread']],
+    ['no provider connects with a key', { directory: [] }, en['providers.none']],
+  ])('says so when %s', async (_, change, text) => {
+    const { next } = await mount(change)
+    expect(screen.getByText(text)).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['providers.skip'] }))
+    expect(next).toHaveBeenCalledOnce()
+  })
+})
+
+describe('the walk', () => {
+  const start = async (change: Parameters<typeof providersFake>[0] = {}) => {
+    const mounted = await mount(change)
+    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('button', { name: 'Connect 2 →' }))
+    return mounted
+  }
+
+  it('shows k of N, one provider at a time, with Skip and Next', async () => {
+    await start()
+    expect(screen.getByText('1 of 2')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' })).toBeTruthy()
+    // A found key is never echoed: the field is empty and the status says so.
+    expect((screen.getByLabelText(en['providers.key']) as HTMLInputElement).value).toBe('')
+    expect(screen.getByText(en['providers.found'])).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(screen.getByText('2 of 2')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 3, name: 'OpenAI' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['providers.next'] }).hasAttribute('disabled')).toBe(true)
+    await click(screen.getByRole('button', { name: en['providers.skipOne'] }))
+    expect(screen.getByText(en['providers.outcome.connected'])).toBeTruthy()
+    expect(screen.getByText(en['providers.outcome.skipped'])).toBeTruthy()
+  })
+
+  it('links to the official key page, in a new tab, only where there is one', async () => {
+    await start()
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    const link = screen.getByRole('link', { name: en['providers.getKey'] })
+    expect(link.getAttribute('href')).toBe('https://platform.openai.com/api-keys')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('tests a pasted key once, after the typing stops, and shows the model count and the default model', async () => {
+    const { probe } = await start()
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    const field = screen.getByLabelText(en['providers.key'])
+    await type(field, 'sk-a')
+    await flush(TEST_DELAY_MS - 100)
+    await type(field, 'sk-abc')
+    await flush(TEST_DELAY_MS - 100)
+    expect(probe).not.toHaveBeenCalled()
+    expect(screen.getByText(en['providers.testing'])).toBeTruthy()
+    await flush(200)
+    expect(probe).toHaveBeenCalledOnce()
+    expect(probe.mock.calls[0]?.slice(1)).toEqual(['sk-abc', undefined])
+    expect(screen.getByText('✓ Key works · 12 models')).toBeTruthy()
+    expect(screen.getByText('Default model: deepseek-chat')).toBeTruthy()
+  })
+
+  it('says when a key cannot be confirmed and when it does not look like a key, without asking the provider', async () => {
+    const { probe } = await start({ probe: { kind: 'failed' } })
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    const field = screen.getByLabelText(en['providers.key'])
+    await type(field, 'two words')
+    await flush(TEST_DELAY_MS)
+    expect(probe).not.toHaveBeenCalled()
+    expect(screen.getByText(en['providers.invalid'])).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['providers.next'] }).hasAttribute('disabled')).toBe(true)
+    await type(field, 'sk-abc')
+    await flush(TEST_DELAY_MS)
+    expect(screen.getByText(en['providers.failed'])).toBeTruthy()
+  })
+
+  it('saves a typed key on Next and reports a key that was not saved', async () => {
+    const mounted = await start({ save: false })
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await flush(TEST_DELAY_MS)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(mounted.save.mock.calls[0]?.[1]).toBe('sk-abc')
+    expect(screen.getByText(en['providers.saveFailed'])).toBeTruthy()
+    mounted.save.mockResolvedValueOnce(true)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(screen.getAllByText(en['providers.outcome.connected'])).toHaveLength(2)
+  })
+
+  it('offers a base URL under More settings for a declared route only', async () => {
+    const mounted = await mount()
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('checkbox', { name: /Gateway/ }))
+    await click(screen.getByRole('button', { name: 'Connect 1 →' }))
+    await click(screen.getByText(en['providers.more']))
+    await type(screen.getByLabelText(en['providers.baseURL']), ' http://127.0.0.1:9 ')
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await flush(TEST_DELAY_MS)
+    expect(mounted.probe.mock.calls[0]?.[2]).toBe('http://127.0.0.1:9')
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(mounted.save.mock.calls[0]?.[2]).toBe('http://127.0.0.1:9')
+  })
+})
+
+describe('the summary', () => {
+  it('lists each provider as connected, saved or skipped, tests the keys again and goes back to the cards on request', async () => {
+    const { guide } = await mount()
+    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('button', { name: 'Connect 2 →' }))
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await flush(TEST_DELAY_MS)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(guide.providersPhase.getSnapshot()).toBe('summary')
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual([`DeepSeek${en['providers.outcome.connected']}`, `OpenAI${en['providers.outcome.connected']}`])
+    await click(screen.getByRole('button', { name: en['providers.change'] }))
+    expect(guide.providersPhase.getSnapshot()).toBe('landing')
+  })
+})
