@@ -172,6 +172,9 @@ const BACKGROUND_ROLES = [
 /** The label roles hint and description text use: 4.5:1, WCAG AA, on every background role. */
 const HINT_ROLES = ['--dsw-alias-label-secondary', '--dsw-alias-label-tertiary'] as const
 
+/** The roles status lines ("Signed in", "No working key", an error) use as text colour. */
+const STATE_TEXT_ROLES = ['--dsw-alias-state-success-primary', '--dsw-alias-state-warn-primary', '--dsw-alias-state-error-primary'] as const
+
 describe('hint text with the default accent and contrast', () => {
   it('is floored on the background roles listed here', () => {
     expect([...TEXT_SURFACES]).toEqual([...BACKGROUND_ROLES])
@@ -184,7 +187,7 @@ describe('hint text with the default accent and contrast', () => {
   ]
   for (const [id, palette, accent] of palettes) for (const scheme of SCHEMES) {
     const resolve = resolver([paletteLayer(palette), accentLayer(accent, palette), fontLayer()], scheme)
-    for (const role of HINT_ROLES) it.each(BACKGROUND_ROLES)(`${id}, ${scheme}: ${role} on %s reaches 4.5:1`, (surface) => {
+    for (const role of [...HINT_ROLES, ...STATE_TEXT_ROLES]) it.each(BACKGROUND_ROLES)(`${id}, ${scheme}: ${role} on %s reaches 4.5:1`, (surface) => {
       expect(contrast(rgbOf(resolve, role), rgbOf(resolve, surface))).toBeGreaterThanOrEqual(4.5)
     })
   }
