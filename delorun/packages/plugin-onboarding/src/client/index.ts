@@ -378,7 +378,8 @@ export function applyStudio(ctx: Context): void {
   }
   const keyBanner: KeyBannerInjected = {
     keyTest: () => keyStatus.refresh(),
-    openModels: () => { ctx.settingsShell.openSection('models') },
+    // Looked up on click: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
+    openModels: () => { ctx.get('settingsShell')?.openSection('models') },
   }
   const dismissedStore = createSnapshotStore(false)
   const setAside: SetAsideInjected = {

@@ -647,6 +647,17 @@ describe('the no-key banner\'s services', () => {
   })
 })
 
+describe('the no-key banner when the Settings shell loads after this plugin', () => {
+  it('opens Settings at Models through the service that arrived later', async () => {
+    const openSection = vi.fn()
+    vi.spyOn(hostApi, 'keyTest').mockResolvedValue({ providers: [] })
+    const { entries, served } = await harness({ late: { settingsShell: { openSection, openOnboarding: vi.fn() } } })
+    served.on()
+    face<KeyBannerInjected>(entries, BANNER_KEY).openModels()
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('models')
+  })
+})
+
 describe('the set-aside notice\'s services', () => {
   it('read the Host\'s answer through the page and stay dismissed once dismissed', async () => {
     const { entries, served } = await harness()
