@@ -8,6 +8,13 @@
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts --init-state --root <root file> --state <state.json>`
  *
+ * `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts --import-from <timestamp.json | https origin> --root <root file>... --state <state.json>`
+ *
+ * `--import-from` adopts the timestamp the channel serves into the state, after the Worker's daily re-signing moved it
+ * past the state's last timestamp: from a downloaded file, or from `<origin>/timestamp.json` over HTTPS (HTTP on loopback
+ * only). It needs no key. The file must verify as a client verifies it, not be below or fork the state's last
+ * timestamp, and not move a channel back; the next signing then continues from its version.
+ *
  * `--state` is the signer's state (`delorun.release-timestamp-state/1`): the root it trusts and the last timestamp it
  * signed, with its version, SHA-256 and bytes, which the next signing continues from. It lives where the release
  * workflow's protected environment keeps it, never on the metadata host; the package README states where.
@@ -28,11 +35,12 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { RELEASE_FILE_SIZE_LIMITS } from '@delorun/contract-release-manifest'
 import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { productionKeyProblem, DEFAULT_RELEASE_BRANCH } from './sign/source.ts'
-import { initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile } from './sign/timestamp.ts'
+import { importTimestamp, initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile } from './sign/timestamp.ts'
 import { trustRootChain, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 
 function manifestFile(path: string): ManifestFile {
@@ -44,6 +52,23 @@ function replaceFile(path: string, bytes: Uint8Array | string): void {
   renameSync(`${path}.signing`, path)
 }
 
+/**
+ * Read the served timestamp.
+ * @param source - a file path, or the channel's origin.
+ * @returns the file's bytes, at most the timestamp size limit.
+ */
+async function readServed(source: string): Promise<Uint8Array> {
+  if (!/^https?:\/\//u.test(source)) return readFileSync(resolve(source))
+  const url = new URL('timestamp.json', source.endsWith('/') ? source : `${source}/`)
+  const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) throw new Error(`${url.origin} is not HTTPS (HTTP is accepted on loopback only)`)
+  const response = await fetch(url, { headers: { 'cache-control': 'no-cache' }, redirect: 'error' })
+  if (!response.ok) throw new Error(`${url.href} answered ${String(response.status)}`)
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (bytes.byteLength > RELEASE_FILE_SIZE_LIMITS.timestamp) throw new Error(`${url.href} is larger than ${String(RELEASE_FILE_SIZE_LIMITS.timestamp)} bytes`)
+  return bytes
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({
     args: [...argv],
@@ -51,6 +76,7 @@ async function main(argv: readonly string[]): Promise<number> {
     options: {
       'state': { type: 'string' },
       'init-state': { type: 'boolean' },
+      'import-from': { type: 'string' },
       'root': { type: 'string', multiple: true },
       'first': { type: 'boolean' },
       'stable': { type: 'string' },
@@ -70,6 +96,16 @@ async function main(argv: readonly string[]): Promise<number> {
       if (existsSync(statePath)) throw new Error(`${statePath} exists; the state is written once`)
       writeFileSync(statePath, `${JSON.stringify(initialState(roots[0]!), undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
       console.log(`sign-timestamp: wrote the state for root ${String(roots[0]!.metadata.version)} to ${statePath}`)
+      return 0
+    }
+    if (values['import-from'] !== undefined) {
+      const adopted = importTimestamp({ state: readTimestampState(readFileSync(statePath)), roots, bytes: await readServed(values['import-from']), now })
+      if (adopted === undefined) {
+        console.log('sign-timestamp: the state already holds the served timestamp')
+        return 0
+      }
+      replaceFile(statePath, `${JSON.stringify(adopted, undefined, 2)}\n`)
+      console.log(`sign-timestamp: the state continues from the served timestamp ${String(adopted.timestamp!.version)}; the next signing is version ${String(adopted.timestamp!.version + 1)}`)
       return 0
     }
     if (values.stable === undefined || values.beta === undefined || values.out === undefined) throw new Error('pass --stable <manifest>, --beta <manifest> and --out <file>')
