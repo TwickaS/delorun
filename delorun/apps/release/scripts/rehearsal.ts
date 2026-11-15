@@ -296,7 +296,7 @@ if (options.windows === true) {
 try {
   const base = await buildBaseClosure(work, R1, options.closure)
   const derived = Promise.all([
-    deriveInChild(base, work, R2, 'none'),
+    deriveInChild(base, work, R2, 'bundle-row-disabled'),
     deriveInChild(base, work, R3, 'studio-without-index'),
     deriveInChild(base, work, R4, 'tampered'),
     deriveInChild(base, work, R5, 'none'),
@@ -358,12 +358,15 @@ try {
     await publishRelease(R2)
     const checked = await run('delorun', ['update', '--check'])
     expect(checked.stdout.includes(R2) || checked.stderr.includes(R2), `update --check does not name ${R2}: ${excerpt(checked)}`)
-    const updated = await run('delorun', ['update', '--yes'])
-    expect(updated.status === 0, `update failed: ${excerpt(updated)}`)
+    // Release 2's own bundle patch switches off a row, so the report names it and `--yes` does not confirm it.
+    const refused = await run('delorun', ['update', '--yes'])
+    expect(refused.status !== 0 && await running() === R1, `--yes confirmed a report that disables a row: [${String(refused.status)}] ${excerpt(refused)}`)
+    const updated = await terminal('delorun', ['update'], [{ when: /Applytheupdateto/u, send: 'y' }])
+    expect(updated.status === 0 && /session-turn-outline/u.test(updated.stdout), `update failed or did not name the row: [${String(updated.status)}] ${excerpt(updated)}`)
     const version = await running()
     expect(version === R2, `the home process runs ${String(version)}, not ${R2}`)
     expect(existsSync(MARKER), 'the person\'s file is gone')
-    return `update exit 0, running ${version}`
+    return `report named the row; update exit 0, running ${version}`
   })
 
   await scenario('rollback-auto', 'a release whose Host never becomes ready rolls back on its own', async () => {
