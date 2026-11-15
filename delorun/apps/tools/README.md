@@ -205,7 +205,7 @@ A brief has a problem when:
 
 - a field is missing, blank or unknown, or the file is not a non-empty JSON array of briefs;
 - `Model` is not one of Haiku at medium, high or max effort, or Opus at medium or high effort, so Opus at max effort is refused;
-- a link is neither an `https://` URL on github.com/Delo-Run/delo or docs.delorun.com nor a relative path that the repository tracks;
+- a link is neither an `https://` URL on github.com/Delo-Run/delorun or docs.delorun.com nor a relative path that the repository tracks;
 - a backticked path, whose first segment is a top-level directory of the repository, names no tracked file or directory, except in `You own`, where a new file or directory is allowed when its nearest existing parent directory is tracked;
 - the text names `delorun/docs/plans/`, the private plan directory, or a machine path such as one that starts with `/home/`, `/Users/` or `~/`;
 - a label is not defined in `labels.yml`, the labels omit `brief`, or the brief carries a `kind/*` label, which belongs to pull requests;

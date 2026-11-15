@@ -169,7 +169,7 @@
     - id: delorun-report
       name: '@delorun/bundle-local/report'
       config:
-        issueUrl: https://github.com/Delo-Run/delo/issues/new
+        issueUrl: https://github.com/Delo-Run/delorun/issues/new
         template: bug_report.yml
       disabled: true
 

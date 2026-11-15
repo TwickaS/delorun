@@ -77,7 +77,7 @@ C1's protected files are every file under `secrets/`, `trust/`, `status/` and `c
 
 ## Not implemented
 
-- The Windows DACL check of C1's Windows rule ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory check returns without checking anything, and the protected-file check looks only at the file type, so a home or a secret file that other users can read is not refused there.
+- The Windows DACL check of C1's Windows rule ([#48](https://github.com/Delo-Run/delorun/issues/48)): on Windows the directory check returns without checking anything, and the protected-file check looks only at the file type, so a home or a secret file that other users can read is not refused there.
 - The Windows named pipes with C1's DACL: the token channels listen only on Unix sockets.
 
 ## Development

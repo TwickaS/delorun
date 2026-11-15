@@ -11,7 +11,7 @@ import reportCss from './ReportProblem.module.css'
 import rowCss from './SettingsRow.module.css'
 
 /** Delorun's licence file. */
-export const LICENCE_URL = 'https://github.com/Delo-Run/delo/blob/main/LICENSE'
+export const LICENCE_URL = 'https://github.com/Delo-Run/delorun/blob/main/LICENSE'
 
 /** One public project link: its label key, its target and the address the row shows. */
 interface ProjectLink {
@@ -23,8 +23,8 @@ interface ProjectLink {
 /** The project's public links, in screen order. */
 export const PROJECT_LINKS: readonly ProjectLink[] = [
   { label: 'about.links.docs', href: 'https://docs.delorun.com', address: 'docs.delorun.com' },
-  { label: 'about.links.source', href: 'https://github.com/Delo-Run/delo', address: 'github.com/Delo-Run/delo' },
-  { label: 'about.links.issues', href: 'https://github.com/Delo-Run/delo/issues', address: 'github.com/Delo-Run/delo/issues' },
+  { label: 'about.links.source', href: 'https://github.com/Delo-Run/delorun', address: 'github.com/Delo-Run/delorun' },
+  { label: 'about.links.issues', href: 'https://github.com/Delo-Run/delorun/issues', address: 'github.com/Delo-Run/delorun/issues' },
   { label: 'about.links.support', href: 'mailto:support@delorun.com', address: 'support@delorun.com' },
 ]
 

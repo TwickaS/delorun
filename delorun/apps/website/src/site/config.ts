@@ -12,7 +12,7 @@ export const SITE_URL = 'https://delorun.com'
 export const DOCS_URL = 'https://docs.delorun.com'
 
 /** Delorun's repository. */
-export const GITHUB_URL = 'https://github.com/Delo-Run/delo'
+export const GITHUB_URL = 'https://github.com/Delo-Run/delorun'
 
 /** DeepSeek Harness, the project Delorun is a community fork of. */
 export const UPSTREAM_URL = 'https://github.com/deepseek-ai/deepseek-harness'

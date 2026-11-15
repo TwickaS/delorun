@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Delo-Run/delo/blob/v5/delorun/upstream-patches.schema.json",
+  "$id": "https://github.com/Delo-Run/delorun/blob/v5/delorun/upstream-patches.schema.json",
   "title": "Delorun divergence ledger",
   "description": "Every file outside Delorun's own trees that differs from the upstream commit: upstream source files as entries with a reason and a class, and every other file covered by a path rule.",
   "type": "object",

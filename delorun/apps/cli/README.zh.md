@@ -140,7 +140,7 @@ Setup 按顺序执行各步骤：创建 CLI profile（使用 profile 部分选�
 - 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`，以及启动顺序中的隔离探测。
 - 对话闸门不保持定时投递：在更新等待期间到期的投递，其回合会以 `UPDATE_PENDING` 被拒绝。报告不读取任何吊销列表，因为没有任何发布公布吊销列表（[`@delorun/update`](../../packages/update/README.zh.md#not-yet-implemented)）。
 - setup 的 reach 问题。setup 将 reach 记录为关闭。
-- Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录检查不检查任何内容，受保护文件的检查只查看文件类型。
+- Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delorun/issues/48)）：在 Windows 上，目录检查不检查任何内容，受保护文件的检查只查看文件类型。
 - `reach`、`devices` 与 `dev`。
 - 在 studio 中打开导入的对话。
 - `delorun verify --mode`，以及除 `release-signature` 与 `runtime-files` 之外的每个已注册检查。`delorun verify` 报告默认模式 `warn`，因为目前没有任何内容读取 `integrity.mode`。

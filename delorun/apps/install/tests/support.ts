@@ -189,7 +189,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     version: version(releaseVersion),
     dsh: version(options.dsh ?? '0.2.2'),
     channel: 'stable',
-    source: { repository: 'https://github.com/Delo-Run/delo', tag: `v${releaseVersion}`, commit: 'a'.repeat(40) },
+    source: { repository: 'https://github.com/Delo-Run/delorun', tag: `v${releaseVersion}`, commit: 'a'.repeat(40) },
     published: utc('2027-01-01T00:00:00Z'),
     runtime: Object.fromEntries((options.released ?? RUNTIME_PLATFORMS).map(entry => [entry, artifacts(entry)])),
     desktop: {

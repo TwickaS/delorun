@@ -44,7 +44,7 @@ The requirements and denial tests below that this list names as not built protec
 
 ## Release files
 
-A release with version `<version>` (Delorun's semantic version, without a leading `v`) is the git tag `v<version>` of Delorun's public repository, `https://github.com/Delo-Run/delo`, and the GitHub release of that tag. Platform identifiers are Node's `process.platform` and `process.arch` joined by a hyphen: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` and `win32-x64`. A release publishes the runtime of the platforms its recipe lists as release platforms (`platforms` in `delorun/apps/release/closure.json` at the release's commit), and its manifest names exactly those. The recipe refuses to list a platform whose native code it cannot build from the tagged source, so `darwin-x64` and `darwin-arm64` are not release platforms until it can; the release platforms today are `linux-x64`, `linux-arm64` and `win32-x64`.
+A release with version `<version>` (Delorun's semantic version, without a leading `v`) is the git tag `v<version>` of Delorun's public repository, `https://github.com/Delo-Run/delorun`, and the GitHub release of that tag. Platform identifiers are Node's `process.platform` and `process.arch` joined by a hyphen: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` and `win32-x64`. A release publishes the runtime of the platforms its recipe lists as release platforms (`platforms` in `delorun/apps/release/closure.json` at the release's commit), and its manifest names exactly those. The recipe refuses to list a platform whose native code it cannot build from the tagged source, so `darwin-x64` and `darwin-arm64` are not release platforms until it can; the release platforms today are `linux-x64`, `linux-arm64` and `win32-x64`.
 
 | File | Content |
 | --- | --- |
@@ -133,7 +133,7 @@ The timestamp command, `node_modules/.bin/tsx delorun/apps/release/src/sign-time
 | `version` | semantic version | Delorun's version of this release. |
 | `dsh` | semantic version | The `version` of `@deepseek-ai/dsh-app-boot` in the release, upstream's version ([C17](c17-plugin-versions.md)). |
 | `channel` | `stable` or `beta` | The channel the release is published on. |
-| `source` | `{ "repository", "tag", "commit" }` | The public repository URL (`https://github.com/Delo-Run/delo`), `v<version>` and the 40-hex commit the tag names. |
+| `source` | `{ "repository", "tag", "commit" }` | The public repository URL (`https://github.com/Delo-Run/delorun`), `v<version>` and the 40-hex commit the tag names. |
 | `published` | timestamp | When the targets key signed it. |
 | `runtime` | map of platform to `{ "archive": FileRef, "files": FileRef }` | Each runtime archive and its file list, for exactly the release platforms and at least one; a platform without an entry is not in the release. |
 | `desktop` | map of `mac-arm64`, `mac-x64`, `win-x64` to `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` | Desktop files; `DesktopFileRef` adds `sha512`, the standard base64 SHA-512 electron-updater compares. On Windows the installer is also the update file. |

@@ -190,6 +190,15 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     refusedWithoutWriting(fixture, await fixture.sign(), `the draft names delorun-${VERSION}-linux-arm64.tar.gz and delorun-${VERSION}-linux-arm64.files.json for linux-x64`)
   })
 
+  it('refuses a draft whose source names the private archive repository', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    editDraft(fixture, (draft) => {
+      draft.source.repository = 'https://github.com/Delo-Run/delo'
+    })
+    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft's source must be https://github.com/Delo-Run/delorun at tag v${VERSION}`)
+  })
+
   it('refuses a draft whose runtime platforms are not exactly the release platforms committed at the release', async (test) => {
     const fixture = await releaseFixture(test)
     expect(fixture.record().status).toBe(0)

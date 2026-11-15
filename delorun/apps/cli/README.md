@@ -130,7 +130,7 @@ The CLI does not include the following; the [roadmap](../../docs/guide/roadmap.m
 - Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, and the confinement probes of the start sequence.
 - The chat gate holds no scheduled delivery: a delivery that falls due during an update's wait has its turn refused with `UPDATE_PENDING`. The report reads no revocation list, because no release publishes one ([`@delorun/update`](../../packages/update/README.md#not-implemented)).
 - Setup's reach question. Setup records reach as off.
-- The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory check checks nothing and the protected-file check looks only at the file type.
+- The Windows DACL check ([#48](https://github.com/Delo-Run/delorun/issues/48)): on Windows the directory check checks nothing and the protected-file check looks only at the file type.
 - `reach`, `devices` and `dev`.
 - Opening imported chats in the studio.
 - `delorun verify --mode`, and every registered check but `release-signature` and `runtime-files`. `delorun verify` reports the default mode, `warn`, because nothing reads `integrity.mode`.

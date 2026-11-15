@@ -154,7 +154,7 @@ brief 存在问题的情形如下：
 
 - 字段缺失、为空或未知，或文件不是非空的 brief JSON 数组；
 - `Model` 不是 Haiku 的 medium、high 或 max effort，也不是 Opus 的 medium 或 high effort，因此 Opus 的 max effort 会被拒绝；
-- 链接既不是 github.com/Delo-Run/delo 或 docs.delorun.com 上的 `https://` URL，也不是仓库已跟踪的相对路径；
+- 链接既不是 github.com/Delo-Run/delorun 或 docs.delorun.com 上的 `https://` URL，也不是仓库已跟踪的相对路径；
 - 反引号中的路径（其首段为仓库的顶层目录）所指的文件或目录未被跟踪，但 `You own` 字段除外：该字段允许新文件或新目录，前提是其最近的已存在父目录已被跟踪；
 - 文本提及私有计划目录 `delorun/docs/plans/`，或提及以 `/home/`、`/Users/` 或 `~/` 开头的机器路径；
 - 标签未在 `labels.yml` 中定义，标签中缺少 `brief`，或该 brief 带有属于拉取请求的 `kind/*` 标签；

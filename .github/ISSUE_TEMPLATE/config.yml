@@ -1,14 +1,14 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a vulnerability
-    url: https://github.com/Delo-Run/delo/blob/HEAD/SECURITY.md
+    url: https://github.com/Delo-Run/delorun/blob/HEAD/SECURITY.md
     about: Report a vulnerability privately as SECURITY.md describes. Never report one in a public issue.
   - name: Request a feature
-    url: https://github.com/Delo-Run/delo/discussions/categories/ideas
+    url: https://github.com/Delo-Run/delorun/discussions/categories/ideas
     about: Propose a feature in the Ideas category of GitHub Discussions. A maintainer agrees it before a pull request. A niche feature usually belongs in a plugin (delorun plugin new).
   - name: Ask a question
-    url: https://github.com/Delo-Run/delo/discussions
+    url: https://github.com/Delo-Run/delorun/discussions
     about: Ask questions and discuss ideas in GitHub Discussions.
   - name: Read the documentation and support options
-    url: https://github.com/Delo-Run/delo/blob/HEAD/SUPPORT.md
+    url: https://github.com/Delo-Run/delorun/blob/HEAD/SUPPORT.md
     about: SUPPORT.md lists the documentation, the support channels and what to include in a report.
