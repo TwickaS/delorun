@@ -110,6 +110,10 @@
       name: '@delorun/skill-plugin-authoring'
       disabled: true
 
+    - id: delorun-report-problem
+      name: '@delorun/skill-report-problem'
+      disabled: true
+
     - id: delorun-delegation-consent
       name: '@delorun/plugin-delegation-consent'
       config:
@@ -160,6 +164,13 @@
 - insert:
     - id: delorun-profile-versions
       name: '@delorun/bundle-local/profile-versions'
+      disabled: true
+
+    - id: delorun-report
+      name: '@delorun/bundle-local/report'
+      config:
+        issueUrl: https://github.com/Delo-Run/delo/issues/new
+        template: bug_report.yml
       disabled: true
 
 - insert:

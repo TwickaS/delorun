@@ -41,6 +41,9 @@
       "path": "../../../packages/client/ui-slots"
     },
     {
+      "path": "../../../packages/client/ui-workspace"
+    },
+    {
       "path": "../../../packages/client/ui-approval"
     },
     {

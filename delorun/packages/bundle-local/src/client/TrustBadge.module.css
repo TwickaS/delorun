@@ -24,8 +24,11 @@
 }
 
 .badge {
+  /* Shrinks, with its label's ellipsis, before the foot's other actions overlap the panel icons. */
+  flex: 0 1 auto;
   gap: 6px;
   min-width: 0;
+  overflow: hidden;
   max-width: 100%;
   padding: 0 8px;
   font-size: 12px;

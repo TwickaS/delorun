@@ -63,6 +63,7 @@ import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.ts
 import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
 import { overridePluginCopy } from './plugin-copy.ts'
+import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -262,6 +263,9 @@ export const VERSIONS_ITEM = { id: 'delorun-versions', order: 99 } as const
 /** The `settings.section` id of the About section. */
 export const ABOUT_SECTION_ID = 'delorun-about'
 
+/** The sidebar footer's "Report a problem" button: after the undo notice (order -2) and before the update button. */
+export const REPORT_ACTION = { id: 'delorun-report.footer', order: -1 } as const
+
 /** The About section's place in the Settings navigation: after the Network section. */
 export const ABOUT_SECTION_ORDER = 25
 
@@ -450,7 +454,15 @@ export function apply(ctx: Context): void {
     order: ABOUT_SECTION_ORDER,
     label: () => t('about.nav'),
     locale: NS,
+    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
   }, AboutSection))
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: REPORT_ACTION.id,
+    order: REPORT_ACTION.order,
+    locale: NS,
+    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
+  }, ReportFooterAction))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')

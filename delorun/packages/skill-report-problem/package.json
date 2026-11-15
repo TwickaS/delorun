@@ -1,0 +1,26 @@
+{
+  "name": "@delorun/skill-report-problem",
+  "description": "The delorun-report-problem skill: the triage playbook that helps a person draft a GitHub issue for a problem, which the person reviews and sends",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

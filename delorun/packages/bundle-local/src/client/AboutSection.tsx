@@ -1,9 +1,12 @@
 /** The About settings section: Delorun's licence and the project's public links. */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PrivacyLocaleKey } from './locales.ts'
+import { Button } from '@delorun/brand'
 import { SettingsCard } from '@delorun/settings-controls'
+import { ReportDialog, type ReportFace } from './ReportProblem.tsx'
 import css from './SettingsSection.module.css'
+import reportCss from './ReportProblem.module.css'
 import rowCss from './SettingsRow.module.css'
 
 /** Delorun's licence file. */
@@ -25,14 +28,15 @@ export const PROJECT_LINKS: readonly ProjectLink[] = [
 ]
 
 /** Props the renderer binds for the section. */
-export type AboutSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunPrivacy'>
+export type AboutSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunPrivacy'> & Partial<ReportFace>
 
 /**
- * Render the licence group and the project links group; every link opens in a new tab.
+ * Render the licence group, the report row and the project links group; every link opens in a new tab.
  * @param props - the copy.
  * @returns the section.
  */
-export function AboutSection({ t }: AboutSectionProps): ReactNode {
+export function AboutSection({ t, surface = 'computer', fetchImpl, startChat }: AboutSectionProps): ReactNode {
+  const [reporting, setReporting] = useState(false)
   return <div className={css.section}>
     <h2 className={css.title}>{t('about.title')}</h2>
     <SettingsCard title={t('about.licences.heading')} group="licences">
@@ -42,6 +46,15 @@ export function AboutSection({ t }: AboutSectionProps): ReactNode {
           <a className={rowCss.link} href={LICENCE_URL} target="_blank" rel="noreferrer">{t('about.licences.link')}</a>
         </div>
       </div>
+    </SettingsCard>
+    <SettingsCard title={t('about.report.heading')} group="report">
+      <div className={rowCss.row}>
+        <div className={rowCss.text}>
+          <div className={rowCss.title}>{t('about.report.body')}</div>
+        </div>
+        <Button size="sm" className={reportCss.action} aria-haspopup="dialog" onClick={() => { setReporting(true) }}>{t('about.report.button')}</Button>
+      </div>
+      <ReportDialog open={reporting} onClose={() => { setReporting(false) }} t={t} surface={surface} fetchImpl={fetchImpl} startChat={startChat} />
     </SettingsCard>
     <SettingsCard title={t('about.links.heading')} group="links">
       {PROJECT_LINKS.map(link => <div key={link.href} className={rowCss.row}>
