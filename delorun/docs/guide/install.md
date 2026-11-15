@@ -10,7 +10,7 @@ English
 
 This page takes you from nothing to your first chat. You run one command, `npx delorun`. It downloads Delorun, checks that the download is genuine, asks a few questions and sets Delorun up. You then start it with `delorun`, and it opens in your browser. Everything then runs on your own computer. You need a computer that Delorun supports, Node.js to run the command, and a key for the AI model you want to talk to. A chat needs the key; the studio opens without one, so you can look around first.
 
-Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock), the open-source program that lets an AI model work on files and run commands on your computer.
+Delorun is an agent harness that you shape to your own work. It is built on [DeepSeek Harness](../reference/glossary.md#stock), the open-source program that lets an AI model work on files and run commands on your computer.
 
 ## Contents
 
@@ -27,7 +27,7 @@ Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock
 
 ## Before you start
 
-- **A supported computer.** Linux on x64 or arm64, or Windows through WSL2 ([Windows through WSL2](#windows-through-wsl2)). Delorun 0.1.0 does not run on native Windows, and macOS joins in a later release ([Roadmap and vision](roadmap.md)).
+- **A supported computer.** Linux on x64 or arm64, or Windows through WSL2 ([Windows through WSL2](#windows-through-wsl2)). Delorun 0.1.0 does not run on native Windows, and macOS joins in a later release ([Roadmap](roadmap.md)).
 - **[Node.js](https://nodejs.org) 24.9 or newer.** Only the install command needs it. Check with `node --version`.
 - **A model key.** A key is a secret text that lets Delorun use an AI model on your account. The company or server that runs the model is the [model provider](../reference/glossary.md#provider). The default is a DeepSeek API key. Other providers work too ([Model providers](providers.md)). You can skip the key during setup and add it later.
 - **git**, which `delorun update` uses to save your settings before an update ([Updates](updates.md)). First-run setup does not need it.

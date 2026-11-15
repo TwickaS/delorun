@@ -10,7 +10,7 @@ description: "Delorun 与 stock DeepSeek Harness 的区别：Delorun 为何存�
 
 本页帮助你判断 Delorun 是否适合你，以及从 stock DeepSeek Harness 转来会有什么变化。你不需要任何前置知识。Stock DeepSeek Harness（DSH）是其维护者自己发布的 harness（[stock DSH](../reference/glossary.zh.md#stock)）。
 
-Delorun 是 DSH 的社区分支。它运行 DSH 自身的代码，保持 DSH 插件与 chat 的兼容性，安装与使用方式与 stock DSH 相同：本地运行、无需账户、一条命令打开 [studio](../reference/glossary.zh.md#studio)。在此之上，它增加了自己的 studio 外观、先显示将改变什么且可以回退的更新、对模型所运行命令的防护，以及通过你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 从手机远程访问。每一项会改变模型所见内容的增加功能，你都可以切换回 stock 行为。本页列出哪些保持不变、你会注意到的每一项差异，以及 Delorun 不包含什么。[路线图](roadmap.md)说明了计划。
+Delorun 是构建在 DSH 之上的独立产品。它运行 DSH 自身的代码，保持 DSH 插件与 chat 的兼容性，安装与使用方式与 stock DSH 相同：本地运行、无需账户、一条命令打开 [studio](../reference/glossary.zh.md#studio)。在此之上，它增加了自己的 studio 外观、先显示将改变什么且可以回退的更新、对模型所运行命令的防护，以及通过你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 从手机远程访问。每一项会改变模型所见内容的增加功能，你都可以切换回 stock 行为。本页列出哪些保持不变、你会注意到的每一项差异，以及 Delorun 不包含什么。[路线图](roadmap.zh.md)说明了计划。
 
 ## 目录
 
@@ -21,7 +21,7 @@ Delorun 是 DSH 的社区分支。它运行 DSH 自身的代码，保持 DSH 插
 - [Delorun 移除了什么](#what-delorun-removes)
 - [Delorun 不包含什么](#what-delorun-does-not-include)
 - [在 DSH 与 Delorun 之间迁移](#moving-between-dsh-and-delorun)
-- [路线图与愿景](#roadmap-and-vision)
+- [路线图](#roadmap)
 - [面向技术读者](#for-the-technically-curious)
 
 <a id="why-delorun-exists"></a>
@@ -123,7 +123,7 @@ Delorun 不包含以下内容，本指南只在它们影响某项选择时才描
 - 主 chat、用 `git clone` 导入工作区以及从 studio 编辑其 `AGENTS.md`：它们以插件形式存在，但没有 profile 加载它们；
 - 在新手引导中把 PTC 作为默认模式。
 
-[路线图](roadmap.md)说明了其中哪些在计划之中。
+[路线图](roadmap.zh.md)说明了其中哪些在计划之中。
 
 <a id="moving-between-dsh-and-delorun"></a>
 
@@ -149,11 +149,10 @@ Delorun 不包含以下内容，本指南只在它们影响某项选择时才描
 
 </details>
 
-<a id="roadmap-and-vision"></a>
+<a id="roadmap"></a>
+## 路线图
 
-## 路线图与愿景
-
-Delorun 的用途、计划了什么及其顺序，以及不计划什么，见[路线图与愿景](roadmap.md)。
+Delorun 的用途、计划了什么及其顺序，以及不计划什么，见[路线图](roadmap.zh.md)。
 
 **接下来。**要安装 Delorun，请阅读[安装与首次运行](install.md)。要保留你的 DeepSeek Harness 工作，请阅读[从 DeepSeek Harness 切换](switching.md)。如果出了问题，请在[故障排除](troubleshooting.md)中查找其消息。
 

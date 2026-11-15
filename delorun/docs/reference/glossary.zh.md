@@ -6,7 +6,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 
 每个条目以一句平实的话开头，必要时再补充技术说明，并在二者不同时给出代码所用的名称。界面文本使用该术语；代码与维护者文档可以用反引号加上代码名称。引入新概念的拉取请求须在同一次提交中新增该概念的条目。
 
-部分条目定义了 Delorun 不包含的能力的术语，例如 Delorun 中继与插件索引；[路线图](../guide/roadmap.md)列出了它们。
+部分条目定义了 Delorun 不包含的能力的术语，例如 Delorun 中继与插件索引；[路线图](../guide/roadmap.zh.md)列出了它们。
 
 ## 目录
 
@@ -53,8 +53,8 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 
 其他章节中的定义：home、studio、工作区与 chat 见[运行位置](#where-things-run)，home 进程与网络设置也在那里；远程访问与 tailnet 见[远程访问 studio](#reaching-a-studio)，受信任设备见[登录](#signing-in)，安全模式见[修改 harness](#changing-the-harness)，提示注入与回收站见[保障工作安全](#keeping-work-safe)。
 
-- **Delorun**：开源项目、应用，附带项目与应用，附带 `delorun` 命令：DeepSeek Harness 的社区分支。<a id="delorun"></a>
-- **Delo Run**：位于 delorun.com 的托管服务：社区页面与候补名单；配合 Delorun 中继（[路线图](../guide/roadmap.md)），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delorun 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="delorun-run"></a>
+- **Delorun**：开源项目、应用，附带 `delorun` 命令：构建在 DeepSeek Harness 之上。<a id="delorun"></a>
+- **Delo Run**：位于 delorun.com 的托管服务：网站及其发布消息订阅；配合 Delorun 中继（[路线图](../guide/roadmap.zh.md)），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delorun 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="delorun-run"></a>
 - **stock DSH**：上游按原样发布的 DeepSeek Harness。**stock look**：关闭 studio 附加功能后的 Delorun。<a id="stock"></a>
 - **studio**：harness 的网页界面，在浏览器与桌面应用中相同。代码对应：上游的 Web 客户端。<a id="studio"></a>
 - **studio 附加功能**：Delorun 的主题、侧边栏、chat 状态、设置布局与新手引导；首个发布版本默认开启它们，“设置”中的一个开关可以关闭它们。代码对应：`@delorun/bundle-studio`。<a id="studio-additions"></a>
@@ -158,7 +158,6 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 ## 社区
 
 - **插件索引**（catalogue）：Discover 首先列出的公开插件索引。**兼容徽章**（compatibility badge）：「tested with Delorun X」，表示该插件在该发布版本上通过了兼容性语料库测试，并不构成背书。**撤销列表**（revocation list）：已签名的插件版本列表，Delorun 会在其下次加载时将其停用，并显示可见的原因。**列出的发现**（listed findings）：插件索引条目为某插件列出的发现，显示为作者或评审者的主张，Delorun 不予核实；Delorun 不执行插件审计。**插件安全审查**（plugin security review）：本人在安装插件之前可以运行的一个可选 agent 预设；它可以把发现贡献给共享数据库，且并不完全可靠。未提供此功能，界面文本不使用该术语。<a id="catalogue"></a>
-- **候补名单**（waitlist）：在 delorun.com 上为托管 home、托管机器与备份报名，受隐私政策约束。<a id="waitlist"></a>
 - **文档网站**（documentation website）：`docs.delorun.com`，提供英文与中文的用户指南与参考资料。每个页面都注明其描述的 Delorun 版本，并同时以 Markdown 形式发布；另提供 `llms.txt` 索引，供本人的编码 agent 使用。代码对应：`delorun/apps/docs`。<a id="documentation-website"></a>
 
 <a id="building-delorun"></a>

@@ -51,8 +51,8 @@ The words the [user guide](../guide/README.md) uses most come first, in plain En
 
 Defined in other sections: home, studio, workspace and chat under [Where things run](#where-things-run), the home process and the network setting there too, reach and tailnet under [Reaching a studio](#reaching-a-studio), trusted device under [Signing in](#signing-in), safe mode under [Changing the harness](#changing-the-harness), and prompt injection and trash under [Keeping work safe](#keeping-work-safe).
 
-- **Delorun** — the open-source project, app, with the `delorun` command: a community fork of DeepSeek Harness. <a id="delorun"></a>
-- **Delo Run** — the hosted service at delorun.com: the community pages and the waitlist, and, with the Delorun relay ([roadmap](../guide/roadmap.md)), its accounts (email code, GitHub, optional passkey), sign-in and device approvals through Delorun. Public text names the contact support@delorun.com only. <a id="delorun-run"></a>
+- **Delorun** — the open-source project, app, with the `delorun` command: built on DeepSeek Harness. <a id="delorun"></a>
+- **Delo Run** — the hosted service at delorun.com: the website with its release-news sign-up, and, with the Delorun relay ([roadmap](../guide/roadmap.md)), its accounts (email code, GitHub, optional passkey), sign-in and device approvals through Delorun. Public text names the contact support@delorun.com only. <a id="delorun-run"></a>
 - **stock DSH** — DeepSeek Harness as upstream releases it. **stock look** — Delorun with its studio additions turned off. <a id="stock"></a>
 - **studio** — the harness's web interface, the same in a browser and in the desktop app. Code: upstream's Web client. <a id="studio"></a>
 - **studio additions** — Delorun's theme, sidebar, chat states, settings layout and onboarding; they are on by default, and one Settings switch turns them off. Code: `@delorun/bundle-studio`. <a id="studio-additions"></a>
@@ -144,7 +144,6 @@ Defined in other sections: home, studio, workspace and chat under [Where things 
 ## Community
 
 - **catalogue** — the public index of plugins Discover lists first. **compatibility badge** — "tested with Delorun X": the plugin passed the compatibility corpus on that release; not an endorsement. **revocation list** — the signed list of plugin versions Delorun disables at their next load with a visible reason. **listed findings** — findings a catalogue entry lists for a plugin, shown as the author's or a reviewer's claims, which Delorun does not verify; Delorun runs no plugin audit. **plugin security review** — an optional agent preset the person runs on a plugin before installing it, which can contribute its findings to a shared database and is not fully reliable. Not offered; interface text does not use the term. <a id="catalogue"></a>
-- **waitlist** — sign-ups at delorun.com for hosted homes, hosted machines and backup, covered by the privacy policy. <a id="waitlist"></a>
 - **documentation website** — `docs.delorun.com`: the user guide and reference in English and Chinese, each page naming the Delorun version it describes and also published as Markdown, with `llms.txt` indexes for a person's coding agent. Code: `delorun/apps/docs`. <a id="documentation-website"></a>
 
 ## Building Delorun

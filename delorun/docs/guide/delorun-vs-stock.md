@@ -10,7 +10,7 @@ English | [中文](delorun-vs-stock.zh.md)
 
 This page helps you decide whether Delorun suits you, and what changes if you come from stock DeepSeek Harness. You need nothing first. Stock DeepSeek Harness (DSH) is the harness as its own maintainers release it ([stock DSH](../reference/glossary.md#stock)).
 
-Delorun is a community fork of DSH. It runs DSH's own code, keeps DSH plugins and chats working, and installs and works like stock DSH: on your computer, with no account, and one command that opens the [studio](../reference/glossary.md#studio). On top of that it adds its own studio look, updates that show what they would change and can go back, protections around the commands the model runs, and remote access from your phone over your own [tailnet](../reference/glossary.md#tailnet). You can switch back to stock behaviour for each addition that changes what the model sees. This page lists what stays the same, every difference you notice, and what Delorun does not include. The [roadmap](roadmap.md) says what is planned.
+Delorun is its own product, built on DSH. It runs DSH's own code, keeps DSH plugins and chats working, and installs and works like stock DSH: on your computer, with no account, and one command that opens the [studio](../reference/glossary.md#studio). On top of that it adds its own studio look, updates that show what they would change and can go back, protections around the commands the model runs, and remote access from your phone over your own [tailnet](../reference/glossary.md#tailnet). You can switch back to stock behaviour for each addition that changes what the model sees. This page lists what stays the same, every difference you notice, and what Delorun does not include. The [roadmap](roadmap.md) says what is planned.
 
 ## Contents
 
@@ -21,7 +21,7 @@ Delorun is a community fork of DSH. It runs DSH's own code, keeps DSH plugins an
 - [What Delorun removes](#what-delorun-removes)
 - [What Delorun does not include](#what-delorun-does-not-include)
 - [Moving between DSH and Delorun](#moving-between-dsh-and-delorun)
-- [Roadmap and vision](#roadmap-and-vision)
+- [Roadmap](#roadmap)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Why Delorun exists
@@ -135,9 +135,9 @@ The [roadmap](roadmap.md) says which of these are planned.
 
 </details>
 
-## Roadmap and vision
+## Roadmap
 
-What Delorun is for, what is planned and in what order, and what is not planned are on [Roadmap and vision](roadmap.md).
+What Delorun is for, what is planned and in what order, and what is not planned are on [Roadmap](roadmap.md).
 
 **Next.** To install Delorun, read [Install and first run](install.md). To keep your DeepSeek Harness work, read [Switching from DeepSeek Harness](switching.md). If something went wrong, find its message in [Troubleshooting](troubleshooting.md).
 
