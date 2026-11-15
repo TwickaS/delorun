@@ -111,7 +111,7 @@ function rowName(subject: RowSubject): string {
 function rowSentence(item: ReportItem & { readonly kind: 'row' }, versions: MessageVersions): string {
   const subject = item.subject
   const plugin = item.detail.plugin?.name ?? ''
-  if (item.reason === 'row-disabled-by-release') return `Delorun ${versions.to.delorun} switches off row ${rowName(subject)} through its bundle ${subject.layer}; the row stays in your profile but does not run.`
+  if (item.detail.bundlePatch) return `Delorun ${versions.to.delorun} switches off row ${rowName(subject)} through its bundle ${subject.layer}; the row stays in your profile but does not run.`
   if (item.reason === 'row-include-blocked') return `Include ${subject.name} reaches ${plugin}, which the update disables, so the whole Include is disabled.`
   return `Row ${rowName(subject)} in ${subject.layer} loads ${plugin}, which the update disables.`
 }

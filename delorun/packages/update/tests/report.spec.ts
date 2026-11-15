@@ -132,15 +132,15 @@ describe('rows a bundle patch disables', () => {
 
   it('names a row the target\'s bundle patch disables and the running release\'s did not', () => {
     const report = buildUpdateReport(input({ target: target({ bundles: bundles([layer('@delorun/bundle-local', ['deepseek-account', 'llm-deepseek-account'])], [layer('@delorun/bundle-local', ['deepseek-account'])]) }) }))
-    expect(report.items.filter(item => item.reason === 'row-disabled-by-release')).toEqual([
-      { kind: 'row', subject: { id: 'llm-deepseek-account', name: 'llm-deepseek-account', layer: '@delorun/bundle-local' }, reason: 'row-disabled-by-release', effect: 'disabled', verification: 'verified', detail: {}, actions: [] },
+    expect(report.items.filter(item => item.detail.bundlePatch === true)).toEqual([
+      { kind: 'row', subject: { id: 'llm-deepseek-account', name: 'llm-deepseek-account', layer: '@delorun/bundle-local' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true }, actions: [] },
     ])
     expect(report.counts.disabled).toBeGreaterThanOrEqual(1)
   })
 
   it('names nothing for a row both releases disable or one the target stops disabling', () => {
     const report = buildUpdateReport(input({ target: target({ bundles: bundles([layer('b', ['kept'])], [layer('b', ['kept', 'dropped'])]) }) }))
-    expect(report.items.filter(item => item.reason === 'row-disabled-by-release')).toEqual([])
+    expect(report.items.filter(item => item.detail.bundlePatch === true)).toEqual([])
   })
 
   it('names a row once when two layers disable it', () => {

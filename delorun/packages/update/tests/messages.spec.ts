@@ -107,7 +107,7 @@ describe('reasonMessage', () => {
       'bare is revoked: , .',
     ])
     expect(reasonMessage({ kind: 'bundle', subject: { package: 'dsh-x' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('dsh-x cannot load on the target: .')
-    expect(reasonMessage({ kind: 'row', subject: { id: 'llm-x', name: 'llm-x', layer: '@delorun/bundle-local' }, reason: 'row-disabled-by-release', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe(`Delorun ${report.to.delorun} switches off row llm-x through its bundle @delorun/bundle-local; the row stays in your profile but does not run.`)
+    expect(reasonMessage({ kind: 'row', subject: { id: 'llm-x', name: 'llm-x', layer: '@delorun/bundle-local' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true }, actions: [] }, report)).toBe(`Delorun ${report.to.delorun} switches off row llm-x through its bundle @delorun/bundle-local; the row stays in your profile but does not run.`)
     expect(reasonMessage({ kind: 'row', subject: { name: 'row-a', layer: 'home patch' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('Row row-a in home patch loads , which the update disables.')
   })
 

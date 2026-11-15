@@ -239,7 +239,6 @@ export type ReportReason =
   | 'bundle-skipped'
   | 'row-disabled'
   | 'row-include-blocked'
-  | 'row-disabled-by-release'
   | 'data-format-changed'
   | 'data-format-unknown'
   | 'harness-change-carried'
@@ -267,6 +266,8 @@ export interface ItemDetail {
   readonly failure?: string
   /** The plugin a row or Include reaches, for row reasons. */
   readonly plugin?: PluginSubject
+  /** For `row-disabled`: the row is switched off by a patch of the target release's bundle, not by a plugin the update disables. Readers that do not know the field show the plugin sentence. */
+  readonly bundlePatch?: true
   /** What differs between the two releases' data facts, for `data-format-changed`. */
   readonly differs?: readonly DataFormatDifference[]
   /** Which release's `data-formats.json` is missing or unreadable, for `data-format-unknown`. */
