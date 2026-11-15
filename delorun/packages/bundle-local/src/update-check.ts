@@ -13,7 +13,7 @@
  *
  * @module @delorun/bundle-local/update-check
  */
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context, type Fiber, type Volatile } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
@@ -47,7 +47,7 @@ export interface Config {
    * parity value and the default, it mounts nothing and no check runs. Delorun's composition turns it on, and
    * Settings → General → Updates turns it off.
    */
-  readonly enabled: boolean
+  readonly enabled: Volatile<boolean>
   /** How long after one check, successful or not, the next one runs, in hours. */
   readonly intervalHours: number
   /** How long one check may take in all, in seconds; a check that takes longer fails and shows nothing. */
@@ -56,7 +56,7 @@ export interface Config {
 
 /** Validated configuration. The default of `enabled` is the parity value. */
 export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().volatile().default(false),
   intervalHours: z.natural().min(1).max(MAX_INTERVAL_HOURS).default(UPDATE_CHECK_DEFAULTS.intervalHours),
   timeoutSeconds: z.natural().min(1).max(120).default(UPDATE_CHECK_DEFAULTS.timeoutSeconds),
 })
@@ -202,7 +202,27 @@ export function apply(ctx: Context, config: Config): void {
       },
     }), `${name}: the channel route`)
   })
-  if (!config.enabled) return
+  let mounted: Fiber | undefined
+  const follow = (): void => {
+    if (config.enabled.get() === (mounted !== undefined)) return
+    if (mounted === undefined) {
+      mounted = ctx.plugin({ name: `${name}-mounted`, apply: mountCheck }, config)
+      return
+    }
+    // Disposal reports its own failures through the scope's logger; turning the switch off needs no answer from it.
+    void mounted.dispose()
+    mounted = undefined
+  }
+  follow()
+  ctx.on('loader/volatile-update', follow)
+}
+
+/**
+ * Mount the `delorunUpdateCheck` service and serve its notice while the switch is on.
+ * @param ctx - the mounted scope, disposed when the switch turns off.
+ * @param config - the interval and the deadline.
+ */
+function mountCheck(ctx: Context, config: Config): void {
   const service = new UpdateCheckService(ctx, config)
   ctx.inject(['connection'], (scope) => {
     scope.effect(() => scope.connection.fetch.register({

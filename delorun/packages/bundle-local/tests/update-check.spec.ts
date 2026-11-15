@@ -95,14 +95,15 @@ afterEach(() => {
 
 describe('the switch', () => {
   it('update-notice-off-makes-no-request: off, the default and the parity value, mounts no service and no route', async () => {
-    expect(parse({}).enabled).toBe(false)
+    expect(parse({}).enabled.get()).toBe(false)
     const { ctx, routes } = await mount({})
     expect(ctx.get('delorunUpdateCheck')).toBeUndefined()
     expect([...routes.keys()]).toEqual([UPDATE_CHANNEL_PATH])
   })
 
   it('validates the interval and the deadline', () => {
-    expect(parse({ enabled: true })).toEqual({ enabled: true, intervalHours: 24, timeoutSeconds: 15 })
+    expect(parse({ enabled: true }).enabled.get()).toBe(true)
+    expect(parse({ enabled: true })).toMatchObject({ intervalHours: 24, timeoutSeconds: 15 })
     expect(() => parse({ intervalHours: 0 })).toThrow()
     expect(() => parse({ intervalHours: MAX_INTERVAL_HOURS + 1 })).toThrow()
     expect(() => parse({ timeoutSeconds: 0 })).toThrow()
@@ -266,5 +267,11 @@ describe('the channel route', () => {
   it('answers null for the production channel and for a Host without a profile', async () => {
     expect(await answer({}, false)).toEqual({ host: null })
     expect(await answer(undefined, false)).toEqual({ host: null })
+  })
+})
+
+describe('the switch in Settings', () => {
+  it('update-check-switch-is-served-to-the-studio: the switch is a volatile field, so the Host describes the row and the sidebar reads it', () => {
+    expect(Config.dict?.enabled.meta.volatile).toBe(true)
   })
 })
