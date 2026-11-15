@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for known-issues.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/known-issues.md
+/:
+  en: d6064541d957482c
+  zh: 8b38a8f5ab5358a5
+/known-issues:
+  en: e3589c221a833c82
+  zh: 7febe445236c4067
+/known-issues/summary:
+  en: 4cfcd84d83903165
+  zh: af888c428bbd00cb
+/known-issues/contents:
+  en: ce6583c92f05aa87
+  zh: 6a88efc6c640cceb
+/known-issues/where-delorun-runs:
+  en: 3b558c1809beffab
+  zh: 8706ea6cb8937a55
+/known-issues/what-undo-covers:
+  en: e3d43aec4bca1ef5
+  zh: c1514fdd37e66bfb
+/known-issues/phone-access-from-inside-wsl2:
+  en: fe891806ff0a5a25
+  zh: 562826857b5185e9
+/known-issues/the-key-check:
+  en: ac88c8412c36a922
+  zh: 1fc6cab406fe608f
+/known-issues/phone-width-spacing:
+  en: 27f38d6a6243e288
+  zh: 52bbd927363b28b2
+/known-issues/installing-a-plugin:
+  en: e2725152050aece5
+  zh: 144143fff4ccab79
+/known-issues/documentation-languages:
+  en: d9d76e3cab2da7f3
+  zh: 2a652db0e466ddb1

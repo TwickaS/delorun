@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for roadmap.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/roadmap.md
+/:
+  en: 361414043cb7bf3d
+  zh: 7448a8f8dc61b0ba
+/roadmap:
+  en: b5fb2a8234623693
+  zh: ba5defd8113461a3
+/roadmap/summary:
+  en: 94d3fc945c08329d
+  zh: b36ccc8a5a37df8c
+/roadmap/contents:
+  en: 51747601e074e46c
+  zh: dddcdcfd738b5a9f
+/roadmap/what-delorun-is-for:
+  en: 4005bf3808e395d8
+  zh: 1580c71d69ab8576
+/roadmap/now:
+  en: bde6e2c3c4832290
+  zh: 8ccf8a82186150bc
+/roadmap/next:
+  en: a6cf573694c9da8f
+  zh: 03667360546784c4
+/roadmap/later:
+  en: 9b6b55edf2368823
+  zh: 83014e9e00743d8d
+/roadmap/how-delorun-earns:
+  en: 1f5bc17810377f32
+  zh: 47871b49d67d6185
+/roadmap/not-planned:
+  en: 07a933a8c9c53622
+  zh: 15b7b886fe73abc8
+/roadmap/follow-along:
+  en: b7e401acc3c7d33c
+  zh: 1f2b1ec2b84134bf
+/roadmap/what-to-read-next:
+  en: 6676e1d7109266b9
+  zh: 788d47ada813376d
