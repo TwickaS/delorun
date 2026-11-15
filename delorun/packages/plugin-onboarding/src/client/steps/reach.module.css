@@ -9,7 +9,7 @@
   align-items: center;
   min-height: var(--onb-target);
   cursor: pointer;
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-link);
   font-size: var(--onb-small-size);
 }
 

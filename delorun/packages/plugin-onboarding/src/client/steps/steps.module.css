@@ -463,7 +463,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-link);
   font: inherit;
   font-size: var(--onb-small-size);
   cursor: pointer;

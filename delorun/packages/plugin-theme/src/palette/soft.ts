@@ -6,7 +6,7 @@
  * Changing a hue or chroma here regenerates both colour schemes.
  * @module @delorun/plugin-theme/palette/soft
  */
-import { applyLayers, brandLiterals, chromaticRamp, neutralAt, neutralLiterals, neutralRamp, resolveColor, textSafe, textSafeColor } from './generate.ts'
+import { applyLayers, brandLiterals, chromaticRamp, neutralAt, neutralLiterals, neutralRamp, resolveColor, textSafeColor } from './generate.ts'
 import type { SchemeValues, Seed, TokenLayer, TokenModes } from './generate.ts'
 import { contrast, formatRgb, fromOklch, luminance, toOklch } from './color.ts'
 import type { Rgb } from './color.ts'
@@ -173,8 +173,8 @@ const FOREGROUNDS = ['--dsw-static-neutral-bluish-1000', '--dsw-static-neutral-b
 /** How much darker, in OKLCH lightness, a primary button is while hovered. */
 const PRESSED_STEP = 0.035
 
-/** Accent-coloured text roles and the surface each must stay legible on: WCAG AA, 4.5:1. */
-export const ACCENT_TEXT_ROLES = { '--dsw-alias-link': '--dsw-alias-bg-base' } as const
+/** Accent-coloured text roles and the surfaces each must stay legible on, the page and the cards on it: WCAG AA, 4.5:1. */
+export const ACCENT_TEXT_ROLES = { '--dsw-alias-link': ['--dsw-alias-bg-base', '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2'] } as const
 
 /** Contrast every accent-coloured text role reaches on its surface. */
 export const TEXT_CONTRAST = 4.5
@@ -234,14 +234,18 @@ export function accentLayer(seed: AccentSpec, palette: PaletteSpec = SOFT, stock
   const below = [surfaces, layer]
   const light = applyLayers(stock, below, 'light')
   const dark = applyLayers(stock, below, 'dark')
-  const safe = (values: typeof light, role: string, surface: string): string => {
+  const safe = (values: typeof light, role: string, surfaces: readonly string[]): string => {
     const text = resolveColor(values, role)
-    const ground = resolveColor(values, surface)
-    if (text === undefined || ground === undefined) throw new Error(`accent text role ${role} or its surface ${surface} does not resolve to a colour`)
-    return textSafe(text, ground, TEXT_CONTRAST)
+    if (text === undefined) throw new Error(`accent text role ${role} does not resolve to a colour`)
+    // The text moves away from the surfaces one after another; a move away from one never reduces contrast on the others of the same side.
+    return formatRgb(surfaces.reduce((color, surface) => {
+      const ground = resolveColor(values, surface)
+      if (ground === undefined) throw new Error(`accent text surface ${surface} does not resolve to a colour`)
+      return textSafeColor(color, ground, TEXT_CONTRAST)
+    }, text))
   }
-  for (const [role, surface] of Object.entries(ACCENT_TEXT_ROLES)) {
-    layer[role] = { light: safe(light, role, surface), dark: safe(dark, role, surface) }
+  for (const [role, surfaces] of Object.entries(ACCENT_TEXT_ROLES)) {
+    layer[role] = { light: safe(light, role, surfaces), dark: safe(dark, role, surfaces) }
   }
   return layer
 }

@@ -97,6 +97,8 @@ const TEXT_PAIRS = [
   ['--dsw-alias-label-primary', '--dsw-specific-sidebar-fill'],
   ['--dsw-alias-label-secondary', '--dsw-specific-sidebar-fill'],
   ['--dsw-alias-link', '--dsw-alias-bg-base'],
+  ['--dsw-alias-link', '--dsw-alias-bg-layer-1'],
+  ['--dsw-alias-link', '--dsw-alias-bg-layer-2'],
   ['--dsw-alias-label-primary-foreground', '--dsw-alias-button-primary-fill'],
 ] as const
 
@@ -372,7 +374,7 @@ describe('the generators on a sheet that breaks their assumptions', () => {
       dark: Object.fromEntries(Object.entries(STOCK_TOKENS.dark).filter(([name]) => name !== drop)),
     })
     expect(() => accentLayer(ACCENTS.peach, SOFT, trimmed('--dsw-static-neutral-bluish-1000'))).toThrow('foreground --dsw-static-neutral-bluish-1000 does not resolve to a colour')
-    expect(() => accentLayer(ACCENTS.peach, SOFT, trimmed('--dsw-alias-link'))).toThrow('accent text role --dsw-alias-link or its surface --dsw-alias-bg-base does not resolve to a colour')
+    expect(() => accentLayer(ACCENTS.peach, SOFT, trimmed('--dsw-alias-link'))).toThrow('accent text role --dsw-alias-link does not resolve to a colour')
   })
 
   it('follow var() chains to a colour and stop at a loop, a missing token or a value that is not rgb()', () => {

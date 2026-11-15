@@ -69,7 +69,7 @@
 .more {
   min-height: var(--onb-target);
   padding-left: 0;
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-link);
 }
 
 .action {
