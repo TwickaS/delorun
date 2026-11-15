@@ -1,4 +1,4 @@
-/* The version row: Delorun's version in the primary label colour, the harness version beneath it in the secondary one. Spacing falls back to the stock row's values under the stock look, which defines no Delorun spacing tokens. */
+/* The version row: Delorun's version in the primary label colour. Spacing falls back to the stock row's values under the stock look, which defines no Delorun spacing tokens. */
 
 .row {
   display: flex;
@@ -9,8 +9,4 @@
   font-size: var(--dsw-font-s-14-font-size);
   line-height: var(--dsw-font-s-14-line-height);
   overflow-wrap: anywhere;
-}
-
-.secondary {
-  color: var(--dsw-alias-label-secondary);
 }

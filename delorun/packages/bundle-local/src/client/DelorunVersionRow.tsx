@@ -1,6 +1,6 @@
 /**
- * The version row of Settings: Delorun's version, then the DeepSeek Harness version it runs on, each labelled. It takes
- * the place of the stock row, which shows the harness version alone as the current version.
+ * The version row of Settings: Delorun's version alone. It takes
+ * the place of the stock row, which shows the harness version as the current version; that version is in Settings → About.
  */
 import type { ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -20,7 +20,7 @@ export interface DelorunVersionRowInjected {
 export type DelorunVersionRowProps = PropsRuntime<'settings.general.item'> & InjectFace<DelorunVersionRowInjected>
 
 /**
- * Render both versions, Delorun's first.
+ * Render Delorun's version.
  * @param props - the row's owner props and the injected versions and copy.
  * @returns the row.
  */
@@ -28,7 +28,6 @@ export function DelorunVersionRow({ versions, t }: DelorunVersionRowProps): Reac
   return (
     <div className={css.row}>
       <div>{t('version.delorun', { version: versions.delorun })}</div>
-      <div className={css.secondary}>{t('version.dsh', { version: versions.dsh })}</div>
     </div>
   )
 }

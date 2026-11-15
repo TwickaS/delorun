@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The version row and the versions line name Delorun's version and the DeepSeek Harness version, from the page global the harness prints. */
+/** The version row and the versions line name Delorun's version alone, from the page global the harness prints; About names both. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -43,18 +43,25 @@ describe('the page global', () => {
 })
 
 describe('the version row', () => {
-  it('labels Delorun\'s version first and the DeepSeek Harness version beneath it', () => {
+  it('shows Delorun\'s version and no DeepSeek Harness text', () => {
     const props = { versions: { delorun: '0.1.0', dsh: '0.2.2-rc.1' }, t } as DelorunVersionRowProps
     render(<DelorunVersionRow {...props} />)
     expect(screen.getByText('Delorun version: 0.1.0')).toBeTruthy()
-    expect(screen.getByText('DeepSeek Harness version: 0.2.2-rc.1')).toBeTruthy()
+    expect(screen.queryByText(/DeepSeek Harness/)).toBeNull()
   })
 })
 
 describe('the versions line', () => {
-  it('names both versions on one line, Delorun\'s first', () => {
+  it('names Delorun\'s version alone, with no DeepSeek Harness text', () => {
     const props = { versions: { delorun: '0.1.0', dsh: '0.2.2-rc.1' }, t: makeTranslate(en) } as VersionsRowProps
     render(<VersionsRow {...props} />)
-    expect(screen.getByText('Delorun 0.1.0 · DeepSeek Harness 0.2.2-rc.1')).toBeTruthy()
+    expect(screen.getByText('Delorun 0.1.0')).toBeTruthy()
+    expect(screen.queryByText(/DeepSeek Harness/)).toBeNull()
+  })
+
+  it('reads "Delorun source build" from a checkout', () => {
+    const props = { versions: { delorun: SOURCE_BUILD, dsh: '0.2.2-rc.1' }, t: makeTranslate(en) } as VersionsRowProps
+    render(<VersionsRow {...props} />)
+    expect(screen.getByText('Delorun source build')).toBeTruthy()
   })
 })

@@ -1,9 +1,10 @@
-/** The About settings section: Delorun's licence and the project's public links. */
+/** The About settings section: both versions, Delorun's licence and the project's public links. */
 import { useState, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PrivacyLocaleKey } from './locales.ts'
 import { Button } from '@delorun/brand'
 import { SettingsCard } from '@delorun/settings-controls'
+import type { DelorunVersions } from './versions.ts'
 import { ReportDialog, type ReportFace } from './ReportProblem.tsx'
 import css from './SettingsSection.module.css'
 import reportCss from './ReportProblem.module.css'
@@ -28,17 +29,25 @@ export const PROJECT_LINKS: readonly ProjectLink[] = [
 ]
 
 /** Props the renderer binds for the section. */
-export type AboutSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunPrivacy'> & Partial<ReportFace>
+export type AboutSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunPrivacy'> & Partial<ReportFace> & { readonly versions?: DelorunVersions | undefined }
 
 /**
- * Render the licence group, the report row and the project links group; every link opens in a new tab.
+ * Render the versions group (when the page carries them), the licence group, the report row and the project links group; every link opens in a new tab.
  * @param props - the copy.
  * @returns the section.
  */
-export function AboutSection({ t, surface = 'computer', fetchImpl, startChat }: AboutSectionProps): ReactNode {
+export function AboutSection({ t, surface = 'computer', fetchImpl, startChat, versions }: AboutSectionProps): ReactNode {
   const [reporting, setReporting] = useState(false)
   return <div className={css.section}>
     <h2 className={css.title}>{t('about.title')}</h2>
+    {versions !== undefined && <SettingsCard title={t('about.versions.heading')} group="versions">
+      <div className={rowCss.row}>
+        <div className={rowCss.text}>
+          <div className={rowCss.title}>{t('version.delorun', { version: versions.delorun })}</div>
+          <div className={rowCss.title}>{t('version.dsh', { version: versions.dsh })}</div>
+        </div>
+      </div>
+    </SettingsCard>}
     <SettingsCard title={t('about.licences.heading')} group="licences">
       <div className={rowCss.row}>
         <div className={rowCss.text}>

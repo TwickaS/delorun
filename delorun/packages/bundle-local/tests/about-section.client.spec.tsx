@@ -8,9 +8,9 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
-function renderSection(): void {
+function renderSection(versions?: AboutSectionProps['versions']): void {
   // The renderer's standard props are absent: the section reads none of them.
-  const props = { t: makeTranslate(en), close: () => {} } as AboutSectionProps
+  const props = { t: makeTranslate(en), close: () => {}, versions } as AboutSectionProps
   render(<AboutSection {...props} />)
 }
 
@@ -35,6 +35,18 @@ describe('the About section', () => {
     ])
     for (const link of links) expect([link.getAttribute('target'), link.getAttribute('rel')]).toEqual(['_blank', 'noreferrer'])
     expect(screen.getByText('support@delorun.com')).toBeTruthy()
+  })
+
+  it('names Delorun\'s version and the DeepSeek Harness version it runs on', () => {
+    renderSection({ delorun: '0.1.0-rc.7', dsh: '0.2.2-rc.3' })
+    const versions = screen.getByRole('region', { name: en['about.versions.heading'] })
+    expect(within(versions).getByText('Delorun version: 0.1.0-rc.7')).toBeTruthy()
+    expect(within(versions).getByText('DeepSeek Harness version: 0.2.2-rc.3')).toBeTruthy()
+  })
+
+  it('shows no versions group when the page carries no versions', () => {
+    renderSection()
+    expect(screen.queryByRole('region', { name: en['about.versions.heading'] })).toBeNull()
   })
 
   it('titles itself for a page that does not', () => {

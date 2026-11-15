@@ -455,7 +455,7 @@ export function apply(ctx: Context): void {
     order: ABOUT_SECTION_ORDER,
     label: () => t('about.nav'),
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
+    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx), versions }),
   }, AboutSection))
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
