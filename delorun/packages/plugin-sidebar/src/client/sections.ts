@@ -9,6 +9,7 @@
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { BADGE_COLORS, workspaceInitials, type BadgeColor } from '@delorun/brand/badge-colors'
 import type { SortOrder } from '../config.ts'
 
 /** What a chat is doing, most urgent first: waiting on the person, working, or ready. */
@@ -228,24 +229,7 @@ export function inScope(chats: readonly SidebarChat[], scope: ReadonlySet<Worksp
   return scope.size === 0 ? [...chats] : chats.filter(chat => chat.workspace !== null && scope.has(chat.workspace.workspaceId))
 }
 
-/**
- * A Workspace badge's letters: the initials of its first two words, or its first two letters.
- * @param title - the Workspace's shown title.
- * @returns one or two uppercase letters, or an empty string for a title without letters or digits.
- */
-export function workspaceInitials(title: string): string {
-  const words = title.split(/[^\p{L}\p{N}]+/u).filter(word => word !== '')
-  const [first, second] = words
-  if (first === undefined) return ''
-  const letters = second === undefined ? [...first].slice(0, 2) : [[...first][0], [...second][0]]
-  return letters.join('').toLocaleUpperCase()
-}
-
-/** The badge colours, in Workspace order, so the first five differ. */
-export const BADGE_COLORS = ['blue', 'green', 'amber', 'violet', 'red'] as const
-
-/** One badge colour. */
-export type BadgeColor = typeof BADGE_COLORS[number]
+export { BADGE_COLORS, workspaceInitials, type BadgeColor }
 
 /**
  * A Workspace's badge colour by its place in the Workspace order.

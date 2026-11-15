@@ -14,7 +14,11 @@
     "./branding": "./src/branding.ts",
     "./workspace-icon": "./src/workspace-icon.ts",
     "./workspace-glyphs": "./src/workspace-glyphs.ts",
-    "./picked-icon": "./src/picked-icon.ts"
+    "./picked-icon": "./src/picked-icon.ts",
+    "./badge-colors": "./src/badge-colors.ts",
+    "./workspace-badge": "./src/workspace-badge.tsx",
+    "./icon-picker": "./src/icon-picker.tsx",
+    "./icon-picker-locales": "./src/icon-picker-locales.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",

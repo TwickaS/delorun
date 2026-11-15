@@ -33,7 +33,7 @@ import { followBrandingInDocument } from './branding-dom.ts'
 import { en as brandingEn, zh as brandingZh, type BrandingLocaleKey } from './branding-locales.ts'
 import { publishBranding } from './branding-store.ts'
 import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
-import { watchSidebar } from './sidebar-bridge.ts'
+import { en as pickerEn, zh as pickerZh, type IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
 import { SidebarBrandMark, SidebarBrandName } from './SidebarBrand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
@@ -95,6 +95,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'settings.delorunBranding': BrandingLocaleKey
     /** The New Session headline's copy. */
     'delorunBrand': BrandLocaleKey
+    /** The workspace icon picker's copy. */
+    'delorunIconPicker': IconPickerLocaleKey
   }
 }
 
@@ -134,6 +136,9 @@ export const STUDIO_ROWS = {
 
 /** The New Session headline's dictionary namespace. */
 export const BRAND_NS = 'delorunBrand'
+
+/** The namespace of the workspace icon picker's copy. */
+export const PICKER_NS = 'delorunIconPicker'
 
 /** Services the studio half uses. */
 export const inject = ['theme', 'slots', 'locale', 'configForms']
@@ -266,8 +271,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     [STUDIO_ROWS.density, DensityRow],
     [STUDIO_ROWS.effortLabels, EffortLabelsRow],
   ]
-  const branding: BrandingInjected = { settings: form }
-  watchSidebar(ctx)
+  const branding: BrandingInjected = { settings: form, pickerT: ctx.locale.bind(PICKER_NS) }
   publishBranding(initial.branding)
   controller.update(initial)
   const edges = new EdgeController(document, window)
@@ -286,6 +290,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
       name: 'settings.section', id: CONVERSATION.id, order: CONVERSATION.order, label: () => conversationT('title'), locale: CONVERSATION.ns, inject: () => chat,
     }, ConversationSection))),
     ctx.locale.register(BRANDING.ns, { en: brandingEn, zh: brandingZh }),
+    ctx.locale.register(PICKER_NS, { en: pickerEn, zh: pickerZh }),
     ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section', id: BRANDING.id, order: BRANDING.order, label: () => brandingT('nav'), locale: BRANDING.ns, inject: () => branding,
     }, BrandingSection)),

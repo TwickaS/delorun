@@ -6,6 +6,7 @@ declare module '*.module.css' {
 
 /** The brand's plain stylesheets, imported for their side effect. */
 declare module '*/tokens.css'
+declare module '*/badge-colors.css'
 
 /** Upstream's markdown styles, which the studio build bundles. */
 declare module 'katex/dist/katex.min.css'

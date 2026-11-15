@@ -12,7 +12,10 @@ interface Declaration {
 }
 
 const DIRECTORY = fileURLToPath(new URL('../src/client/', import.meta.url))
-const FILES = readdirSync(DIRECTORY).filter(name => name.endsWith('.css'))
+const BRAND_DIRECTORY = fileURLToPath(new URL('../../brand/src/', import.meta.url))
+/** The stylesheets the badge and the picker keep in `@delorun/brand`, still checked as part of the sidebar's look. */
+const BRAND_FILES = ['badge-colors.css', 'IconPicker.module.css', 'WorkspaceBadge.module.css']
+const FILES = [...readdirSync(DIRECTORY).filter(name => name.endsWith('.css')), ...BRAND_FILES]
 const PALETTE_DATA = ['art-palettes.css', 'badge-colors.css']
 
 /**
@@ -21,7 +24,7 @@ const PALETTE_DATA = ['art-palettes.css', 'badge-colors.css']
  * @returns the declarations in source order.
  */
 function declarationsOf(file: string): Declaration[] {
-  const text = readFileSync(`${DIRECTORY}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const text = readFileSync(`${BRAND_FILES.includes(file) ? BRAND_DIRECTORY : DIRECTORY}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
   const found: Declaration[] = []
   const stack: Array<{ prelude: string; body: string }> = []
   let prelude = ''

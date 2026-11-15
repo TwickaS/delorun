@@ -6,20 +6,23 @@ import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, Notice, TextField } from '@delorun/brand'
+import { IconPicker } from '@delorun/brand/icon-picker'
+import type { IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
 import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_PATH, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
 import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-controls'
 import { useState, type ChangeEvent } from 'react'
 import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
-import { BrandIcon } from './BrandIcon.tsx'
+import { BrandIcon, readPicked } from './BrandIcon.tsx'
 import { publishBranding, useBranding } from './branding-store.ts'
 import css from './BrandingSection.module.css'
 import { useFormWrites } from './form-writes.ts'
-import { sidebarBridge } from './sidebar-bridge.ts'
 
 /** What the section reads and writes. */
 export interface BrandingInjected {
   /** The theme settings, stored by the host half. */
   readonly settings: ConfigForm<ThemeSettings>
+  /** The icon picker's translate function. */
+  readonly pickerT: (key: IconPickerLocaleKey, params?: Readonly<Record<string, string>>) => string
 }
 
 /** The props the section reads. */
@@ -53,7 +56,7 @@ async function storeImage(bytes: Uint8Array, type: string): Promise<string | und
  * @param props - the section's dictionary and injected services.
  * @returns the section.
  */
-export function BrandingSection({ t, settings }: BrandingSectionProps) {
+export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) {
   const { snapshot, disabled, failed, track } = useFormWrites(settings)
   const stored = (snapshot.value ?? DEFAULT_SETTINGS).branding
   const view = useBranding()
@@ -101,7 +104,6 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
     setProblem(undefined)
     write({ icon: 'upload', uploadHash: hash, upload: '' })
   }
-  const bridge = sidebarBridge()
   const pickedName = resolveBranding(stored).name
   const greetingIsPreset = (GREETING_PRESETS as readonly string[]).includes(view.greeting)
   const showCustom = customGreeting || (!greetingIsPreset && stored.greeting !== '')
@@ -141,7 +143,7 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
           />
         </div>
         <div className={css.iconActions}>
-          <Button variant="secondary" disabled={disabled || bridge === undefined} onClick={() => { setPicking(true) }}>{t('icon.pick')}</Button>
+          <Button variant="secondary" disabled={disabled} onClick={() => { setPicking(true) }}>{t('icon.pick')}</Button>
           <label className={css.file}>
             <span>{t('icon.choose')}</span>
             <input type="file" accept="image/png,image/jpeg,image/webp" disabled={disabled} onChange={(event) => { void upload(event) }} />
@@ -181,10 +183,10 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
         <Button variant="ghost" disabled={disabled} onClick={() => { setProblem(undefined); setCustomGreeting(false); write({ ...DEFAULT_STORED_BRANDING }) }}>{t('reset')}</Button>
       </section>
       {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
-      {picking && bridge !== undefined && (
-        <bridge.service.IconPickerDialog
-          title={pickedName}
-          icon={bridge.parse(stored.pickedIcon)}
+      {picking && (
+        <IconPicker
+          t={pickerT}
+          target={{ workspaceId: 'branding', title: pickedName, color: 'blue', icon: readPicked(stored.pickedIcon) }}
           onSave={(icon) => { setPicking(false); if (icon !== null) write({ icon: 'picked', pickedIcon: JSON.stringify(icon) }) }}
           onClose={() => { setPicking(false) }}
         />
