@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { ICON_TYPE_HEADER } from '@delorun/brand/branding'
 import { readIcon } from '@delorun/home-auth'
 import { receiveIcon } from '../src/icon-upload.ts'
 
@@ -12,7 +13,7 @@ let target: string
 beforeEach(() => { directory = mkdtempSync(join(tmpdir(), 'theme-icon-')); target = join(directory, 'storages', 'delorun-theme', 'branding-icon') })
 afterEach(() => { rmSync(directory, { recursive: true, force: true }) })
 
-const post = (body: BodyInit, type: string): Request => new Request('http://studio.invalid/delorun/branding/icon', { method: 'POST', headers: { 'content-type': type }, body })
+const post = (body: BodyInit, type: string): Request => new Request('http://studio.invalid/api/delorunBranding.icon', { method: 'POST', headers: { 'content-type': 'application/octet-stream', [ICON_TYPE_HEADER]: type }, body })
 
 describe('the icon upload', () => {
   it('stores a PNG as one file and answers its hash, which reads back only for that hash', async () => {

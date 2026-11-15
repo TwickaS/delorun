@@ -37,8 +37,14 @@ export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 /** One accepted image type. */
 export type ImageType = typeof IMAGE_TYPES[number]
 
-/** The fixed path of the studio's icon route; a GET answers with the image, a POST stores a new one. */
+/** The fixed path of the studio's icon route; a GET answers with the image, a GET-only route; uploads use `STUDIO_ICON_UPLOAD_PATH`. */
 export const STUDIO_ICON_PATH = '/delorun/branding/icon'
+
+/** The fixed path a new icon is posted to: the body is the raw image bytes and the `x-delorun-icon-type` header names the claimed type. */
+export const STUDIO_ICON_UPLOAD_PATH = '/api/delorunBranding.icon'
+
+/** The request header that carries the claimed image type of an upload. */
+export const ICON_TYPE_HEADER = 'x-delorun-icon-type'
 
 /** The content hash of a stored image: 64 lowercase hex digits of its SHA-256. */
 export const IMAGE_HASH = /^[0-9a-f]{64}$/

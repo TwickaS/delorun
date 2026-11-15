@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-settings'
-import { resolveBranding, STUDIO_ICON_PATH, writeIcon } from '@delorun/brand/branding'
+import { resolveBranding, STUDIO_ICON_PATH, STUDIO_ICON_UPLOAD_PATH, writeIcon } from '@delorun/brand/branding'
 import { admitApprovedDevice, ICON_FILE_SEGMENTS, readIcon } from '@delorun/home-auth'
 import { BOOT_SETTINGS_GLOBAL } from './boot-settings.ts'
 import type { Config as ThemeConfig, ThemeSettings } from './config.ts'
@@ -72,7 +72,8 @@ export function apply(ctx: Context, config: ThemeConfig): void {
   // home's one icon file. An approved device writes it as it writes any everyday setting, with no unlock.
   ctx.inject(['connection'], (scope) => {
     scope.effect(() => scope.connection.fetch.register({
-      path: STUDIO_ICON_PATH,
+      path: STUDIO_ICON_UPLOAD_PATH,
+      requestMediaType: 'application/octet-stream',
       methods: ['POST'],
       requestBody: 'buffered',
       admitPeer: admitApprovedDevice(),

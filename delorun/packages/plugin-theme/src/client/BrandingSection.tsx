@@ -8,7 +8,7 @@ import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, Notice, TextField } from '@delorun/brand'
 import { IconPicker } from '@delorun/brand/icon-picker'
 import type { IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
-import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_PATH, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
+import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_UPLOAD_PATH, ICON_TYPE_HEADER, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
 import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-controls'
 import { useState, type ChangeEvent } from 'react'
 import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
@@ -40,7 +40,7 @@ const PICKER_PREVIEW = 48
  */
 async function storeImage(bytes: Uint8Array, type: string): Promise<string | undefined> {
   try {
-    const response = await fetch(STUDIO_ICON_PATH, { method: 'POST', headers: { 'content-type': type }, body: bytes as BodyInit, credentials: 'same-origin' })
+    const response = await fetch(STUDIO_ICON_UPLOAD_PATH, { method: 'POST', headers: { 'content-type': 'application/octet-stream', [ICON_TYPE_HEADER]: type }, body: bytes as BodyInit, credentials: 'same-origin' })
     if (!response.ok) return undefined
     const answer: unknown = await response.json()
     const hash = typeof answer === 'object' && answer !== null ? Reflect.get(answer, 'hash') : undefined
