@@ -31,7 +31,7 @@ kind: "package-library"
 
 | 导出 | 内容 |
 | --- | --- |
-| `@delorun/brand` | 组件、`Mark`、`MARK` 和令牌；导入它会加载 `tokens.css` |
+| `@delorun/brand` | 组件、`Mark`、`MARK` 和令牌；导入它会加载 `tokens.css`，因此清单不声明 `sideEffects` |
 | `@delorun/brand/tokens` | 以数据形式给出的 `BRAND_COLOURS`、`BRAND_FONTS`、`BRAND_RADII`、`BRAND_SPACE` |
 | `@delorun/brand/tokens.css` | 同样的取值，写成 `--dl-*` 自定义属性 |
 | `@delorun/brand/fonts.css` | Schibsted Grotesk 与 JetBrains Mono 的 `@font-face`，拉丁子集，SIL OFL 1.1 |
@@ -65,6 +65,7 @@ kind: "package-library"
 | `ConfirmAction` | `Button` | 带一次行内确认的破坏性操作 |
 | `Link` | 无 | 文字安全的桃色，带下划线 |
 | `Mark` | 无 | 六角插头标志；螺母取文字颜色，插头取 `--dl-accent` |
+| `SettingsCard`、`SettingHeading`、`SettingRow`、`ChoiceGroup`、`TileGroup` | 无 | 设置分区的控件，仅供 studio 使用：它们读取 studio 的 `--dsw-*` 与 `--delorun-space-*` 属性。[`@delorun/settings-controls`](../settings-controls/README.zh.md) 会重新导出它们 |
 
 <a id="contract"></a>
 ## 约定
@@ -79,7 +80,9 @@ kind: "package-library"
 <a id="the-drift-gate"></a>
 ## 漂移检查
 
-[`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) 在每个 Delorun 包以及网站和文档的源码中（本包除外）拒绝品牌色字面量（`#E5734A`、`#B84A1B`）、`font-family` 中的具名字体，以及第二份标志路径。保留字面量的文件须连同理由列入 [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json)；这个清单只会变短。
+[`gates:brand-drift`](../../apps/tools/src/checks/gates/brand-drift.ts) 在每个 Delorun 包的源码中，以及网站和文档（本包除外）的源码、公开文件和脚本中，拒绝品牌色字面量（`#E5734A`、`#B84A1B`）、`font-family` 中的具名字体，以及第二份标志路径。保留字面量的文件须连同理由列入 [`brand-drift.allowlist.json`](../../apps/tools/src/checks/gates/brand-drift.allowlist.json)；这个清单只会变短。
+
+网站的社交卡片页面 `apps/website/scripts/og.html` 由 `scripts/render-og.ts` 根据标志和品牌的自定义属性生成（`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`）。它的标志路径是唯一列入允许清单的副本，已提交的页面与 [`src/og.ts`](src/og.ts) 不同时 `tests/og.spec.ts` 会失败。`public/og.png` 是该页面按 1200 × 630 截取的屏幕截图：在仓库根目录运行 `node_modules/.bin/tsx delorun/packages/brand/scripts/render-og-png.ts`，它在 127.0.0.1 的 browse 会话中加载该页面，等待品牌字体，并写出 PNG。`tests/og.spec.ts` 检查 PNG 的尺寸。
 
 社交卡的源页 `apps/website/scripts/og.html` 由 `scripts/render-og.ts` 从本包生成（`node_modules/.bin/tsx delorun/packages/brand/scripts/render-og.ts --write`）；`tests/og.spec.ts` 在提交的页面与 `src/og.ts` 不一致时失败。`public/og.png` 是该页 1200×630 的截图，由 `scripts/render-og-png.ts` 生成（从仓库根目录运行 `node_modules/.bin/tsx delorun/packages/brand/scripts/render-og-png.ts`）：它通过 127.0.0.1 上的 browse 会话加载页面，等待品牌字体加载，然后写入 PNG。`tests/og.spec.ts` 还检查 PNG 的尺寸。
 
