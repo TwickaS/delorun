@@ -36,6 +36,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** When a repair was killed during its download, the next start or repair names the set-aside program store (`runtimes.set-aside-*`) and prints the command that puts the old programs back.
 - **Fixed:** `delorun update --from` with a folder that does not exist now says the folder does not exist and that nothing was installed, instead of reporting a failed download.
 - **Fixed:** An update that fails its health check rolls back on its own even when the new release was stopped while it wrote a profile lock file.
+- **Fixed:** An update now lists every row the new release switches off through its own settings, and asks you before it applies them. Before, such a row was left out of the list, so the health check refused the switched-off row after the update started and rolled the update back. A row switched off without being listed still fails the check.
 - **Security:** Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships.
 - **Security:** An installed runtime is made read-only before its files are hashed, so nothing can change a file between its check and the mode that protects it.
 - **Security:** The runtime starts without the `NODE_OPTIONS`, `NODE_PATH`, `LD_*`, `DYLD_*`, `NODE_EXTRA_CA_CERTS` and `NODE_TLS_REJECT_UNAUTHORIZED` variables that the shell passed in, so the shell that started `delorun` cannot stand between the runtime and the connections it verifies. A profile name that would leave the Delorun home is refused before anything is read.
@@ -331,6 +332,14 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A script that changes something through a Host's HTTP API over plain HTTP at an address other than this computer's, such as a name in `trustedHosts` or the address the Host listens on, must send an `Origin` header naming that address, such as `Origin: http://192.0.2.5:3080`; without one the Host answers "forbidden", because a web page could send the same request. Requests on this computer, over HTTPS and from the studio itself are unaffected.
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-rc.4 (2026-11-15)
+
+### Install and update
+- **Fixed:** An update now lists every row the new release switches off through its own settings, and asks you before it applies them. Before, such a row was left out of the list, so the health check refused the switched-off row after the update started and rolled the update back. A row switched off without being listed still fails the check.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-rc.3 (2026-11-15)
 
