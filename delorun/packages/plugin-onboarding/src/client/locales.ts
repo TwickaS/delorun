@@ -66,7 +66,7 @@ export const en = {
   'agents.signIn.unread': 'Delorun could not check the sign-in.',
   'agents.confirm.label': 'What adding {name} means',
   'agents.confirm.handoff': 'When an agent starts from a chat, Delorun asks here on this computer first, unless you\'ve allowed it for that workspace. A phone can\'t answer.',
-  'agents.confirm.limits': 'Read-only chats never start one, runs stay in the chat\'s workspace and stop after 30 minutes, and you can revoke it in Settings → External agents.',
+  'agents.confirm.limits': 'Read-only chats never start one, runs stay in the chat\'s workspace and stop after 30 minutes, and you can revoke it in Settings → Safety → External agents.',
   'agents.confirm.outside': 'It runs outside Delorun\'s sandbox and permission prompts.',
   'agents.confirm.files': 'It can read and change any file its own settings allow, including Delorun\'s own files.',
   'agents.confirm.billing': 'It uses its own sign-in, and its use is billed to that account.',
@@ -186,7 +186,7 @@ export const en = {
   'problem.failed': 'Delorun could not add this folder. Check that it still exists, then try again.',
 
   'ready.model': 'Model',
-  'ready.model.none': 'No working key yet. Chats need one; add it in Settings → Models.',
+  'ready.model.none': 'No working key yet. Chats need one; add it in Settings → Agent → Models.',
   'ready.look': 'Look',
   'ready.agents': 'Agents',
   'ready.plugins': 'Plugins',
@@ -202,7 +202,7 @@ export const en = {
   'start.later': 'Settings → General → Getting started shows this guide again.',
 
   'keyBanner.text': 'Add a model key to start chatting',
-  'keyBanner.open': 'Open Settings → Models',
+  'keyBanner.open': 'Open Settings → Agent → Models',
   'setAside.text': 'Some workspace records could not be read and were set aside: {files}. Run delorun doctor for details.',
   'setAside.dismiss': 'Dismiss',
   'rename.title': 'Rename workspace',

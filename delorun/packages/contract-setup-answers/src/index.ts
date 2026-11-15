@@ -21,7 +21,7 @@ export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3] as const
  * The model providers setup can set up, by the route id the profile selects them with: DeepSeek's own adapter
  * (`deepseek-official`), the pi-ai catalog providers listed here, and `openai-compatible`, a route to any endpoint
  * that speaks OpenAI's Chat Completions API. Every other provider the profile's adapters serve is set up in the
- * studio's Settings → Models.
+ * studio's Settings → Agent → Models.
  */
 export const SETUP_PROVIDER_IDS = [
   'anthropic',

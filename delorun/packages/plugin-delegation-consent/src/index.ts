@@ -23,13 +23,13 @@ export { DelorunDelegationConsent, DelegationConsentError } from './service.ts'
 export { isExternalAgentPackage, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict, targetPackageNames } from './guard.ts'
 
 /**
- * The plugin's configuration: the fields Settings → External agents writes ([`DelegationConsentSettings`](./wire.ts)), each
+ * The plugin's configuration: the fields Settings → Safety → External agents writes ([`DelegationConsentSettings`](./wire.ts)), each
  * live, so a saved change applies without a restart.
  */
 export interface Config {
   /**
    * The C16 switch `external_agent_consent`: off, the plugin mounts nothing. Delorun's composition turns it on; the
-   * person turns it off in Settings → External agents on the home's own computer.
+   * person turns it off in Settings → Safety → External agents on the home's own computer.
    */
   readonly enabled: Volatile<boolean>
   /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */

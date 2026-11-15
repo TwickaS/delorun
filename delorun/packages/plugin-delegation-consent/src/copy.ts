@@ -66,7 +66,7 @@ export function askText(facts: AskFacts): string {
   return `Start ${name} in ${where}?${task} ${name} runs as its own program, outside Delorun's sandbox and approval prompts. `
     + `It can read and change files in this workspace and anywhere else its own settings allow, including Delorun's home folder with its keys and tokens. `
     + `It uses your own ${name} sign-in and account, so any cost goes to that account. `
-    + `Allow once starts this run only. To let ${name} start here without asking, allow it for this workspace; revoke that in Settings → External agents, or with ${CLI_COMMAND}.`
+    + `Allow once starts this run only. To let ${name} start here without asking, allow it for this workspace; revoke that in Settings → Safety → External agents, or with ${CLI_COMMAND}.`
 }
 
 /**
