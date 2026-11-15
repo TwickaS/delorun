@@ -15,7 +15,6 @@ import {
   metadataExpressionErrors,
   packageTestFixtureDependencyErrors,
   packageTestPluginDependencyErrors,
-  shippedPatchDisabledExpressionErrors,
 } from './verify-cordis-config.ts'
 
 describe('verify-cordis-config metadata expressions', () => {
@@ -167,27 +166,5 @@ describe('package-owned Loader test dependency closures', () => {
     } finally {
       rmSync(fixture, { recursive: true, force: true })
     }
-  })
-})
-
-describe('shipped Delorun bundle patches', () => {
-  const file = 'delorun/packages/bundle-local/cordis.patch.yml'
-
-  it('rejects a disabled !!js expression on a patch entry or an inserted row', () => {
-    const entries = [
-      { id: 'a', disabled: { __jsExpr: 'true' } },
-      { insert: [{ id: 'b', name: 'pkg', disabled: { __jsExpr: 'false' } }] },
-      { insert: [{ id: 'g', group: true, config: [{ id: 'c', name: 'pkg', disabled: { __jsExpr: 'true' } }] }] },
-    ]
-    expect(shippedPatchDisabledExpressionErrors(file, entries)).toEqual([
-      `${file}[0].disabled: a bundle patch may only disable a row with a literal true or false; the update report cannot predict an expression`,
-      `${file}[1].insert[0].disabled: a bundle patch may only disable a row with a literal true or false; the update report cannot predict an expression`,
-      `${file}[2].insert[0].config[0].disabled: a bundle patch may only disable a row with a literal true or false; the update report cannot predict an expression`,
-    ])
-  })
-
-  it('accepts literal disabled values and ignores patches outside delorun/', () => {
-    expect(shippedPatchDisabledExpressionErrors(file, [{ id: 'a', disabled: true }, { insert: [{ name: 'pkg', disabled: false }] }])).toEqual([])
-    expect(shippedPatchDisabledExpressionErrors('packages/bundle/base/cordis.patch.yml', [{ id: 'a', disabled: { __jsExpr: 'true' } }])).toEqual([])
   })
 })

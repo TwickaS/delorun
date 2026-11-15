@@ -71,7 +71,6 @@ if (import.meta.main) {
     for (let index = 0; index < document.length; index++) {
       validateEntry(document[index], file, `[${index}]`)
     }
-    if (file.endsWith('cordis.patch.yml')) errors.push(...shippedPatchDisabledExpressionErrors(file, document))
   }
 
   errors.push(...validateAppResolution())
@@ -512,27 +511,6 @@ function validateMetadata(entry: Record<string, unknown>, file: string, path: st
   for (const problem of metadataExpressionErrors(entry, path)) {
     errors.push(`${file}${problem}`)
   }
-}
-
-/**
- * Refuse a `disabled` `!!js` expression in a shipped Delorun bundle patch. The update report reads such a patch
- * statically and counts an expression as "loads", so an expression that evaluates true on the target disables a row
- * the report did not name and the update rolls back unexplained.
- * @param file - the repository-relative patch path; only `delorun/` patches are checked.
- * @param entries - the patch's parsed entries.
- * @returns one diagnostic per patch entry or inserted row whose `disabled` is an expression.
- */
-export function shippedPatchDisabledExpressionErrors(file: string, entries: readonly unknown[]): string[] {
-  if (!file.startsWith('delorun/')) return []
-  const problems: string[] = []
-  const visit = (value: unknown, path: string): void => {
-    if (!isRecord(value)) return
-    if (isJsExpr(value.disabled)) problems.push(`${file}${path}.disabled: a bundle patch may only disable a row with a literal true or false; the update report cannot predict an expression`)
-    if (isUnknownArray(value.insert)) value.insert.forEach((row, index) => visit(row, `${path}.insert[${index}]`))
-    if (isUnknownArray(value.config)) value.config.forEach((row, index) => visit(row, `${path}.config[${index}]`))
-  }
-  entries.forEach((entry, index) => visit(entry, `[${index}]`))
-  return problems
 }
 
 /**
