@@ -8,7 +8,7 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 
 ## 摘要
 
-更新保持手动：`delorun update` 显示它的报告、询问、复制 chat 数据，并在健康检查失败时回退。更新通知告诉此人存在更新的发布版本。正在运行的安装会在启动时并按计划检查发布渠道，像更新验证一样验证它所获取的内容，并在终端中显示一行，在 studio 的侧边栏中显示一条安静的通知。该通知指出更新的类型、它是否是安全修复、它会关闭多少个已安装的插件以及要运行的命令；它不应用任何东西。Delorun 只有一个发布流，所以安全修复就是带有标记的发布版本，发布工具让这样的修复保持为让每个插件都兼容的补丁。Delorun 的版本和上游的版本是两条轴（[C17](../contracts/c17-plugin-versions.zh.md)）；[C22](../contracts/c22-delorun-plugin-interface.md) 陈述了 Delorun 版本对插件的承诺，`delorun plugin check` 向作者显示他们声明的范围接纳什么。
+更新保持手动：`delorun update` 显示它的报告、询问、复制 chat 数据，并在健康检查失败时回退。更新通知告诉此人存在更新的发布版本。正在运行的安装会在启动时并按计划检查发布渠道，像更新验证一样验证它所获取的内容，并在终端中显示一行，在 studio 的侧边栏中显示一条安静的通知。该通知指出更新的类型、它是否是安全修复、它会关闭多少个已安装的插件以及要运行的命令；它不应用任何东西。Delorun 只有一个发布流，所以安全修复就是带有标记的发布版本，发布工具让这样的修复保持为让每个插件都兼容的补丁。Delorun 的版本和上游的版本是两条轴（[C17](../contracts/c17-plugin-versions.zh.md)）；[C22](../contracts/c22-delorun-plugin-interface.zh.md) 陈述了 Delorun 版本对插件的承诺，`delorun plugin check` 向作者显示他们声明的范围接纳什么。
 
 ## 目录
 
@@ -62,7 +62,7 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 
 ### 补丁规则
 
-18. 签名会拒绝这样的发布版本：它的版本是同一主版本和次版本的更早发布版本的补丁（即低于它的非预发布标签 `v<major>.<minor>.<patch>`），而它的上游版本与该发布版本的不同；上游的持久化 schema 或 Delorun 的记录版本不同；或面向插件的接口清单不同，或指出该发布版本不再声明的接口（[C22](../contracts/c22-delorun-plugin-interface.md)）。因此移动上游基础的发布版本至少是一个次版本，而安全修复作为不关闭任何插件的补丁发布。
+18. 签名会拒绝这样的发布版本：它的版本是同一主版本和次版本的更早发布版本的补丁（即低于它的非预发布标签 `v<major>.<minor>.<patch>`），而它的上游版本与该发布版本的不同；上游的持久化 schema 或 Delorun 的记录版本不同；或面向插件的接口清单不同，或指出该发布版本不再声明的接口（[C22](../contracts/c22-delorun-plugin-interface.zh.md)）。因此移动上游基础的发布版本至少是一个次版本，而安全修复作为不关闭任何插件的补丁发布。
 
 ### 以 Delorun 为目标
 
@@ -104,4 +104,4 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 
 ## 实现状态
 
-上述规则均已构建。约定页面把它们陈述为已构建的事实：[C3](../contracts/c03-update-report.zh.md#update-check) 中的检查、其记录和通知，[C2](../contracts/c02-release-manifest.zh.md) 中的已签名字段，[C16](../contracts/c16-parity-composition.zh.md) 中的开关，[C1](../contracts/c01-home-layout.zh.md) 中记录的路径，以及 [C22](../contracts/c22-delorun-plugin-interface.md) 和 [C17](../contracts/c17-plugin-versions.zh.md) 中的承诺、补丁规则和 `delorun plugin check`。本页保留这些规则之所以如此的理由。
+上述规则均已构建。约定页面把它们陈述为已构建的事实：[C3](../contracts/c03-update-report.zh.md#update-check) 中的检查、其记录和通知，[C2](../contracts/c02-release-manifest.zh.md) 中的已签名字段，[C16](../contracts/c16-parity-composition.zh.md) 中的开关，[C1](../contracts/c01-home-layout.zh.md) 中记录的路径，以及 [C22](../contracts/c22-delorun-plugin-interface.zh.md) 和 [C17](../contracts/c17-plugin-versions.zh.md) 中的承诺、补丁规则和 `delorun plugin check`。本页保留这些规则之所以如此的理由。

@@ -29,10 +29,10 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 
 - **插件**（plugin）：为 Delorun 增加一项功能的软件，例如侧边栏、助手可用的工具，或与某家模型公司的连接。Delorun 由插件构成，你可以逐个开启或关闭它们。技术说明：上游的插件是 Cordis 插件；`delorun plugin` 从注册表安装插件。<a id="plugin"></a>
 - **提供方**（provider）：由其 AI 模型回答你的 chat 的公司或服务，例如 DeepSeek 或 OpenAI。setup 会询问使用哪家提供方并保存你为它提供的密钥；之后可在“设置”→“模型”中更改。技术说明：setup 提供十一家提供方（[C11](../contracts/c11-setup-answers.zh.md#model-providers)）。<a id="provider"></a>
-- **API 密钥**（API key）：模型公司给你的秘密代码，使 Delorun 能够使用你在该公司的账户；指南中也称其为模型密钥。setup 用一次请求提供方模型列表（而不是一次 chat）的方式检查你输入的密钥，并把它保存在你的 home 中只有你能读取的 `.credentials.yaml` 内。Delorun 从环境变量读取的密钥不会被保存。技术说明：[模型提供方](../guide/providers.md)列出了每家提供方读取的变量。<a id="api-key"></a>
+- **API 密钥**（API key）：模型公司给你的秘密代码，使 Delorun 能够使用你在该公司的账户；指南中也称其为模型密钥。setup 用一次请求提供方模型列表（而不是一次 chat）的方式检查你输入的密钥，并把它保存在你的 home 中只有你能读取的 `.credentials.yaml` 内。Delorun 从环境变量读取的密钥不会被保存。技术说明：[模型提供方](../guide/providers.zh.md)列出了每家提供方读取的变量。<a id="api-key"></a>
 - **预设**（preset）：助手工作方式的一种已保存选择。Delorun 用这个词指两件事：**agent 预设**决定助手的工具与指令（Standard 是默认的；“设置”→“模式”列出它们），**权限预设**决定助手的命令可以做什么：**Read Only**、**Workspace Write**、**Full access** 或 **Auto review**。技术说明：上游的 agent 预设注册表保存第一种；沙箱模式与批准策略共同构成第二种。<a id="preset"></a>
-- **权限预设**（permission preset）：助手的命令在一个 chat 中可以做什么的四种选择之一：**Read Only**、**Workspace Write**、**Full access** 或 **Auto review**。技术说明：沙箱模式连同批准策略；Delorun 对新工作区的设置是 Workspace Write（[安全](../guide/safety.md#full-access)）。<a id="permission-preset"></a>
-- **沙箱**（sandbox）：围绕助手所运行命令的一道围栏，使它们只能在你允许之处更改文件，并且无法触及 Delorun 自己的密钥。技术说明：由操作系统强制执行（bwrap、Landlock、Seatbelt 或 Windows 访问列表），具体强制执行什么因系统而异，见[安全](../guide/safety.md#the-sandbox)的列举。<a id="sandbox"></a>
+- **权限预设**（permission preset）：助手的命令在一个 chat 中可以做什么的四种选择之一：**Read Only**、**Workspace Write**、**Full access** 或 **Auto review**。技术说明：沙箱模式连同批准策略；Delorun 对新工作区的设置是 Workspace Write（[安全](../guide/safety.zh.md#full-access)）。<a id="permission-preset"></a>
+- **沙箱**（sandbox）：围绕助手所运行命令的一道围栏，使它们只能在你允许之处更改文件，并且无法触及 Delorun 自己的密钥。技术说明：由操作系统强制执行（bwrap、Landlock、Seatbelt 或 Windows 访问列表），具体强制执行什么因系统而异，见[安全](../guide/safety.zh.md#the-sandbox)的列举。<a id="sandbox"></a>
 - **Workspace Write**：每个新工作区开始时使用的权限预设：助手的命令在沙箱内运行，只能写入该工作区以及允许的临时文件夹。技术说明：沙箱模式 `workspace-write`，批准策略为 `ask`。<a id="workspace-write"></a>
 - **完全访问**（full access）：让助手的命令在沙箱之外运行的权限预设，拥有你的用户账户能做的一切，包括 Delorun 的 home 与密钥。在 setup 选择 Ask me first 时，Delorun 会在应用之前，每个工作区一次、在你自己的电脑上询问你。技术说明：沙箱模式 `danger-full-access`；该同意即 `@delorun/plugin-permission-defaults` 为每个工作区记录的那一项。<a id="full-access"></a>
 - **批准卡片**（approval card）：chat 中询问助手是否可以做某事的方框，选项有 Reject、Allow once，而对于需要比该 chat 更多访问权限的请求，还有 Allow for this chat。**Allow for this chat** 把该 chat 切换为请求所要求的权限预设，之后该 chat 中的命令在其中运行而不再询问，直到你降低它。技术说明：上游的批准卡片，Delorun 的选项通过 `conversation.approval.choice` slot 加入。<a id="approval-card"></a>
@@ -42,12 +42,12 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **解锁**（unlock）：你从自己的电脑给手机的一项简短权限，使手机能做敏感的事情，例如更改设置。默认持续 15 分钟，可用 Lock now 提前结束。技术说明：远程访问提权；profile 远程访问行中的 `elevationMinutes` 可设为 1 到 60。<a id="unlock"></a>
 - **设备**（device）：你已批准其打开你的 studio 的浏览器或桌面应用。参见[登录](#signing-in)下的**受信任设备**。<a id="device"></a>
 - **发布版本**（release）：Delorun 的一个带编号的版本，经过签名，使启动器可以在安装之前检查它。**更新**（update）在运行中的版本旁边安装较新的发布版本，并在新版本通过健康检查时切换过去。**回滚**（rollback）回到之前的发布版本，profile 恢复为更新之前的样子。技术说明：`delorun update` 与 `delorun recover rollback`；Delorun 保留两个已安装的发布版本。<a id="release"></a>
-- **发布渠道**（release channel）：一个安装所跟随的发布版本序列，`stable` 或 `beta`。安装只在自己的渠道上检查更新，没有任何设置可以把它移到另一个渠道。技术说明：渠道是已签名发布 manifest 的一部分（[更新](../guide/updates.md#channels)）。<a id="release-channel"></a>
+- **发布渠道**（release channel）：一个安装所跟随的发布版本序列，`stable` 或 `beta`。安装只在自己的渠道上检查更新，没有任何设置可以把它移到另一个渠道。技术说明：渠道是已签名发布 manifest 的一部分（[更新](../guide/updates.zh.md#channels)）。<a id="release-channel"></a>
 - **启动器**（launcher）：`npx delorun` 运行的小程序。它检查发布版本的签名、安装它并启动它；发布版本安装之后，无需网络即可启动。setup 以你运行的版本安装 `delorun` 命令。技术说明：npm 包 `delorun`，`@delorun/npm-launcher`。<a id="launcher"></a>
 - **成本计量器**（cost meter）：消息框下方对一个 chat 已花费金额的可选估算，其中加上了它所启动的各 chat。在你于侧边栏“插件”的 Delorun studio 页面的“组件”下开启它之前，它保持关闭，并且不发出任何自己的请求。技术说明：`@delorun/plugin-cost-meter`；价格是一张可以覆盖的内置表。<a id="cost-meter"></a>
 - **提示回答**（prompts answer）：setup 在 **Ask me first**（默认）与 **Ask less (like DeepSeek Harness)** 之间的选择。Ask me first 开启 Delorun 对完全访问、指令文件、新增 MCP 服务器与计划任务的同意；Ask less (like DeepSeek Harness) 则像 DeepSeek Harness 一样保持关闭。`delorun setup prompts` 可更改它。<a id="prompts-answer"></a>
 - **Ask me first**：setup 提示问题的默认回答：在把工作区切换为完全访问、写入 `AGENTS.md` 之类的指令文件、启动运行命令的新增 MCP 服务器，或创建计划任务之前，Delorun 会先询问你。<a id="ask-me-first"></a>
-- **Ask less (like DeepSeek Harness)**：另一个回答：这四个问题保持关闭，与 DeepSeek Harness 相同。无论哪个回答，`web_fetch` 防护以及外部 agent 运行前的检查都保持开启。`delorun setup prompts` 在二者之间切换（[Ask less (like DeepSeek Harness)](../guide/switching.md#ask-less-like-deepseek-harness)）。<a id="ask-less"></a>
+- **Ask less (like DeepSeek Harness)**：另一个回答：这四个问题保持关闭，与 DeepSeek Harness 相同。无论哪个回答，`web_fetch` 防护以及外部 agent 运行前的检查都保持开启。`delorun setup prompts` 在二者之间切换（[Ask less (like DeepSeek Harness)](../guide/switching.zh.md#ask-less-like-deepseek-harness)）。<a id="ask-less"></a>
 - **setup**：你第一次运行 `delorun` 时，Delorun 在终端中提出的问题，例如隐私、模型密钥与提示的谨慎程度，随后在 studio 启动之前应用它们。`delorun setup <section>` 再次询问其中一个问题，`delorun setup --list` 列出它们，`delorun setup --yes` 不经询问接受所有默认值。技术说明：`delorun setup --config <file>` 从文件读取回答（[setup 回答约定](../contracts/c11-setup-answers.zh.md)）。<a id="setup"></a>
 - **新手引导**（first-run guide）：你第一次打开 studio 时它显示的对话框，以一个 chat 结束。其步骤为 Welcome、Look、Agents、Recommended plugins、Phone access、Workspace 与 Ready，setup 已经涵盖的步骤可以省略。**Skip for now** 不打开 chat 即结束它，“设置”→“通用”→“入门”可再次显示它。技术说明：`@delorun/plugin-onboarding`。<a id="first-run-guide"></a>
 
@@ -91,7 +91,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 ## 远程访问 studio
 
 - **远程访问**（reach）：从另一台设备或网络打开 studio。**远程访问方式**（reach option）：其中一种方式：Tailscale 私有网络、Tailscale Funnel、自托管中继或 Delorun 中继。<a id="reach"></a>
-- **tailnet**：Tailscale 为你建立的你自己的设备私有网络：只有登录你的 Tailscale 账户的设备才能在其上互相访问。Delorun 的远程访问选项只向你的 tailnet 开放 studio。技术说明：`tailscale serve` 在电脑的 `ts.net` 名称上向 tailnet 设备发布 studio（[远程访问](../guide/reach.md)）。<a id="tailnet"></a>
+- **tailnet**：Tailscale 为你建立的你自己的设备私有网络：只有登录你的 Tailscale 账户的设备才能在其上互相访问。Delorun 的远程访问选项只向你的 tailnet 开放 studio。技术说明：`tailscale serve` 在电脑的 `ts.net` 名称上向 tailnet 设备发布 studio（[远程访问](../guide/reach.zh.md)）。<a id="tailnet"></a>
 - **Tailscale 远程访问**（Tailscale reach）：通过本人的 tailnet 远程访问：`tailscale serve` 仅供 tailnet 设备访问，Funnel 面向公共互联网。Delorun 的约定要求它不使用 Delorun 的基础设施；Tailscale 的协调服务与证书则为受信任的对象；除非开启 Tailnet Lock，否则 Tailscale 可以把设备加入 tailnet。<a id="tailscale-reach"></a>
 - **Delorun 中继**（Delorun relay）：Delo Run 的中继，位于 `delo.run` 名称下。**中继控制面**（relay control）：其 Cloudflare Workers 部分，负责名称、密钥绑定、隧道授权、限额与滥用处理。**中继数据面**（relay data plane）：无状态的直通服务器，转发它们无法读取的加密字节。<a id="delorun-relay"></a>
 - **自托管中继**（self-hosted relay）：由本人在自己的服务器与域名上运行的同一中继数据面。端到端加密在以下条件下保持成立：该域名的 CAA 记录把证书签发绑定到 home 的 ACME 账户（`accounturi`），且 home 不通过中继响应任何证书质询。其运营者即其所有者，因此 Delorun 中继的每账户限额不适用于它。<a id="self-hosted-relay"></a>
@@ -207,4 +207,4 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 
 ## 下一步
 
-要了解如何使用 Delorun，请从[用户指南](../guide/README.zh.md)或[安装与首次运行](../guide/install.md)开始。要了解 Delorun 与 DeepSeek Harness 有何不同，请阅读 [Delorun 与 stock DeepSeek Harness](../guide/delorun-vs-stock.zh.md)；要查看每项差异背后的检查，请阅读[对等清单](parity.zh.md)。[参考索引](README.zh.md)列出了开发者页面。
+要了解如何使用 Delorun，请从[用户指南](../guide/README.zh.md)或[安装与首次运行](../guide/install.zh.md)开始。要了解 Delorun 与 DeepSeek Harness 有何不同，请阅读 [Delorun 与 stock DeepSeek Harness](../guide/delorun-vs-stock.zh.md)；要查看每项差异背后的检查，请阅读[对等清单](parity.zh.md)。[参考索引](README.zh.md)列出了开发者页面。

@@ -10,7 +10,7 @@ description: "@delorun/profile-safety 库：约定 C3 中拒绝会丢失本人�
 
 ## 摘要
 
-本包让本人的 profile 在更新之后仍然是本人的。约定 [C3](../../docs/contracts/c03-update-report.zh.md) 要求任何更新都不得停用、删除或更改报告未列明的插件、bundle 或行，也要求撤销与恢复在写入任何内容之前列出它们会带回什么；本包负责做出这一判断并执行它。在更新改动任何文件之前，携带检查会把本人留下的 profile 与目标发布将留下的 profile 相比较，并在目标会删除本人添加的行、本地插件或设置，会重排或改写本人选择的 bundle 列表，或会把本人 eject 过的插件放回来时，以带类型的原因在任何改动发生之前拒绝。它写入的历史是上游 profile 历史的扩展，增加了 Delo 那一轴的豁免文件、Delo 自己的记录、home patch 的副本与更新报告，因此一个版本能带回整个 profile。借助 `delorun` 提供的准入，任何版本都不含插件密钥字段的值（[C1](../../docs/contracts/c01-home-layout.zh.md#secrets)）。eject 会移除插件，同时保留本人为它写的每一行与每一项设置；安全模式在不加载第三方插件的情况下启动，并且不修改 profile 中的任何文件；`delorun recover` 是报告 profile 在更新之后处于何种状态并执行回退方式的命令。
+本包让本人的 profile 在更新之后仍然是本人的。约定 [C3](../../docs/contracts/c03-update-report.zh.md) 要求任何更新都不得停用、删除或更改报告未列明的插件、bundle 或行，也要求撤销与恢复在写入任何内容之前列出它们会带回什么；本包负责做出这一判断并执行它。在更新改动任何文件之前，携带检查会把本人留下的 profile 与目标发布将留下的 profile 相比较，并在目标会删除本人添加的行、本地插件或设置，会重排或改写本人选择的 bundle 列表，或会把本人 eject 过的插件放回来时，以带类型的原因在任何改动发生之前拒绝。它写入的历史是上游 profile 历史的扩展，增加了 Delorun 那一轴的豁免文件、Delorun 自己的记录、home patch 的副本与更新报告，因此一个版本能带回整个 profile。借助 `delorun` 提供的准入，任何版本都不含插件密钥字段的值（[C1](../../docs/contracts/c01-home-layout.zh.md#secrets)）。eject 会移除插件，同时保留本人为它写的每一行与每一项设置；安全模式在不加载第三方插件的情况下启动，并且不修改 profile 中的任何文件；`delorun recover` 是报告 profile 在更新之后处于何种状态并执行回退方式的命令。其中，更新所取的快照、安全模式和 `delorun recover` 由随附的命令触达。没有任何随附命令调用携带检查（`planCarry`、`assertCarriable`）或 `ejectPlugin`，所以 `delorun update` 不运行携带检查，也没有任何东西 eject 插件；`delorun recover restore` 立即应用某个版本，并在事后打印它改动了什么，而不是事先询问。
 
 <a id="contents"></a>
 
@@ -41,7 +41,7 @@ const plan = planCarry(before, targetInventory, { report })
 assertCarriable(plan, profileDir)
 ```
 
-`readInventory` 读取一个 profile 的 manifest、它自己的补丁层与 home 的补丁层，以及 Delo 的记录。目标的清单是同一种结构，读取自目标发布将留下的那个 profile，因此检查比较的是两个值，不写入任何内容。`report` 是构建过更新报告时的约定 C3 报告：某个条目列明的改动就是本人可以看到并确认的改动。`planCarry` 返回每一处差异与每一条拒绝；`assertCarriable` 抛出 `ProfileSafetyError`，携带第一条拒绝的代码、全部对象，以及提供本人的补救措施。
+`readInventory` 读取一个 profile 的 manifest、它自己的补丁层与 home 的补丁层，以及 Delorun 的记录。目标的清单是同一种结构，读取自目标发布将留下的那个 profile，因此检查比较的是两个值，不写入任何内容。`report` 是构建过更新报告时的约定 C3 报告：某个条目列明的改动就是本人可以看到并确认的改动。`planCarry` 返回每一处差异与每一条拒绝；`assertCarriable` 抛出 `ProfileSafetyError`，携带第一条拒绝的代码、全部对象，以及提供本人的补救措施。
 
 <a id="the-carry-check"></a>
 
@@ -56,7 +56,7 @@ assertCarriable(plan, profileDir)
 | `LOCAL_PLUGIN_NOT_CARRIED` | 从这台机器安装的插件（`file:`、`link:`、`portal:`、`workspace:` 或路径）会离开 profile 或改到另一个 spec。 |
 | `BUNDLE_LIST_NOT_CARRIED` | bundle 列表会被重排，或增加一个 bundle——这是任何报告原因都无法表达的；或丢失一个没有报告条目列明的 bundle。 |
 | `EJECTED_PLUGIN_REINSTATED` | 本人 eject 过的插件会被放回来。 |
-| `UNNAMED_CHANGE` | 目标会把本人没有要求、也没有报告条目列明的行、设置或插件写进本人的 profile。 |
+| `UNNAMED_CHANGE` | 目标会把没有任何报告条目列明的行、设置或插件写进本人的 profile。 |
 
 检查在快照之前、切换之前运行，因此拒绝之后 profile 保持原样。报告自身的条目让改动可见：更新停用的插件是本人确认的条目，而加载它的那一行仍留在 profile 中，直到该插件被更新或重新启用。
 
@@ -70,7 +70,7 @@ assertCarriable(plan, profileDir)
 - profile 的 `cordis.patch.yml` 与 home 的补丁层添加的行，每行带有 id、插件名，以及本人补丁是否停用了它；
 - 本人为某个 bundle 声明的行所写的设置，即本人设置的字段及其值；
 - 从这台机器安装的插件，带有其 spec，以及 bundle 列表是否也选择了它；
-- Delo 记录中的 eject。
+- Delorun 记录中的 eject。
 
 manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝并指明该文件，因为对一个无法读取的 profile 做检查毫无意义。
 
@@ -78,7 +78,7 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 ## 扩展后的历史
 
-上游的 profile 历史跟踪插件管理写入的五个文件。Delo 的历史 `PROFILE_SAFETY_FILES` 包含这五个文件，另加四个：约定 C17 中 Delo 那一轴的 `delorun-compatibility.json`、保存 eject 与恢复时保持停用的插件的 Delo 自有记录 `delorun-safety.json`、作为 home patch 副本的 `home-cordis.patch.yml`，以及保存更新所见报告的 `delorun-update-report.json`。`recordSnapshot` 写入更新在改动任何内容之前取得的那个版本，而约定 C3 的快照正是该版本。profile 与 home patch 之外的任何内容都不会被触碰。
+上游的 profile 历史跟踪插件管理写入的五个文件。Delorun 的历史 `PROFILE_SAFETY_FILES` 包含这五个文件，另加四个：约定 C17 中 Delorun 那一轴的 `delorun-compatibility.json`、保存 eject 与恢复时保持停用的插件的 Delorun 自有记录 `delorun-safety.json`、作为 home patch 副本的 `home-cordis.patch.yml`，以及保存更新所见报告的 `delorun-update-report.json`。`recordSnapshot` 写入更新在改动任何内容之前取得的那个版本，而约定 C3 的快照正是该版本。profile 与 home patch 之外的任何内容都不会被触碰。
 
 <a id="secret-fields"></a>
 
@@ -94,11 +94,17 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 当前撤销列表撤销的插件版本会以停用状态回来，并带上原因：被撤销的 bundle 离开 bundle 列表，被撤销插件的行在 profile 补丁中被停用，而插件本身仍然安装。没有 id 的行会以 `RESTORE_REFUSED` 拒绝，因为恢复无法只停用那一行。`rollbackToSnapshot` 是朝着更新所取快照执行的同一种恢复，历史中没有任何版本时会以 `RECOVER_REFUSED` 拒绝。
 
+<a id="versions-for-people"></a>
+
+## 本人可用的版本
+
+`versions.ts` 为 studio 的「设置版本」页面命名并浏览历史，不增加任何存储。`listProfileVersions` 按最新在前列出最多 50 个版本，每个带有它的来源（`update` 表示更新的快照，`saved` 表示本人保存的版本，`switch` 表示切换之前保存的版本，`other` 表示任何其他编辑），并在文件与当前 profile 相同的最新版本上标记 `current`（忽略更新报告和 home patch 副本）；没有任何版本相同时 `unsaved` 为 true。`saveProfileVersion` 在 profile 的写入锁之下，把 profile 记录为 `Saved by you`，可带一个名称（一行，最多 60 个字符），并报告该版本是否为新版本。`switchToVersion` 以设置了 `saveFirst` 的方式运行 `delorun recover restore` 的恢复：当前设置先被保存为 `Before switching to <name or summary>`，然后在同一个加锁步骤中规划并应用该版本，保存被拒绝时 profile 保持原样。差异就是 `planRestore` 的计划。
+
 <a id="eject"></a>
 
 ## eject
 
-`ejectPlugin` 从 profile 的 bundle 列表与依赖中移除一个包，并把这次 eject 记录到 `delorun-safety.json`，附上本人的原因与时间。本人为它写的每一行与每一项设置都会保留，因此若再次安装，配置仍在；之后的更新也无法把该插件放回来——携带检查会以 `EJECTED_PLUGIN_REINSTATED` 拒绝。Delo 自己的 bundle 不能被 eject，因为约定 C11 的隐私默认值只在它加载时成立。
+`ejectPlugin` 从 profile 的 bundle 列表与依赖中移除一个包，并把这次 eject 记录到 `delorun-safety.json`，附上本人的原因与时间。本人为它写的每一行与每一项设置都会保留，因此若再次安装，配置仍在；之后的更新也无法把该插件放回来——携带检查会以 `EJECTED_PLUGIN_REINSTATED` 拒绝。Delorun 自己的 bundle 不能被 eject，因为约定 C11 的隐私默认值只在它加载时成立。
 
 <a id="safe-mode"></a>
 
@@ -110,13 +116,13 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 ## delorun recover
 
-`delorun/apps/cli/src/recover.ts` 为 `delorun recover` 运行 `recover`。不带动作时，它报告 profile 的上次更新、它的快照、最近的版本、它的 eject、恢复时保持停用的插件，以及安全模式是否开启。`--rollback` 回到更新所取的快照，`--restore <version>` 带回指定版本，`--safe-mode` 在不加载第三方插件的情况下启动，`--exit-safe-mode` 结束它。`--json` 把同一份报告打印为一个 JSON 值。
+`delorun/apps/cli/src/recover.ts` 为 `delorun recover` 运行 `recover`。不带动作或带 `status` 时，它报告 profile 的上次更新（已提交、已回滚、记录为 `applying` 时的未提交，或它结束时的状态及其原因）、它的快照、最近的版本、它的 eject、恢复时保持停用的插件，以及安全模式是否开启。`rollback` 通过 `@delorun/update` 的回滚函数从已记录的更新回退，该函数通过 `rollbackToSnapshot` 还原更新所取的快照；没有已记录更新时的 `rollback --profile-only` 还原最新的版本。`restore <version>` 带回指定版本，`safe-mode` 在不加载第三方插件的情况下启动，`exit-safe-mode` 结束它。`--json` 把同一份报告打印为一个 JSON 值。
 
 <a id="errors"></a>
 
 ## 错误
 
-每个失败都是 `ProfileSafetyError`，带有 `code`、涉及的 `path`、本人读到的 `detail`、以约定 C3 措辞给出的 `remedies`，以及拒绝所涉及的 `subjects`。代码是封闭的：无法读取的 profile 文件为 `PROFILE_UNREADABLE`；上表中的携带代码；无法写入历史版本为 `SNAPSHOT_FAILED`；无法按请求处理的版本或包为 `RESTORE_REFUSED` 与 `EJECT_REFUSED`；非 Delo 写入的标记为 `SAFE_MODE_UNREADABLE`；历史无法提供的动作为 `RECOVER_REFUSED`。
+每个失败都是 `ProfileSafetyError`，带有 `code`、涉及的 `path`、本人读到的 `detail`、以约定 C3 措辞给出的 `remedies`，以及拒绝所涉及的 `subjects`。代码是封闭的：无法读取的 profile 文件为 `PROFILE_UNREADABLE`；上表中的携带代码；无法写入历史版本为 `SNAPSHOT_FAILED`；无法按请求处理的版本或包为 `RESTORE_REFUSED` 与 `EJECT_REFUSED`；非 Delorun 写入的标记为 `SAFE_MODE_UNREADABLE`；历史无法提供的动作为 `RECOVER_REFUSED`。
 
 <a id="not-covered"></a>
 
@@ -124,9 +130,9 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 - 更新本身：更新前报告、暂存、切换、健康检查以及运行时仓库的回滚属于更新与运行时仓库的工作包。本包判断 profile 是否能经受它们，并在之后带回 profile。
 - home 锁。约定 C1 要求 `delorun recover` 在改动仓库期间持有 profile 的 home 锁；运行运行时切换的 CLI 命令负责这一点，而本包的恢复只触碰 profile 与 home patch。
-- 客户端界面。studio 的更新界面、撤销与恢复提示以及安全模式开关渲染本包返回的计划。
+- 客户端界面。studio 的「设置版本」页面（[`@delorun/bundle-local`](../bundle-local/README.zh.md)）通过 `listProfileVersions`、`saveProfileVersion` 和 `switchToVersion` 列出、保存和切换版本；studio 没有更新界面，也没有安全模式开关。
 - 未加载插件的密钥字段。只有已加载插件的 schema 标出其密钥字段，因此停用或缺失插件的行要等它加载后才会检查。
-- 插件审计。恢复会列出它带回的插件版本，这是约定 C13 对安装的要求；Delo 自身不运行插件审计。
+- 插件审计。恢复会列出它带回的插件版本，这是约定 C13 对安装的要求；Delorun 自身不运行插件审计。
 
 <a id="development"></a>
 

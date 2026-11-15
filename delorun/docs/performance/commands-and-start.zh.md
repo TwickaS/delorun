@@ -81,7 +81,7 @@ description: "Delorun 的日常命令、一次启动和一次停止要花多长�
 - **启动器的启动检查不再是一个命令的开销。** `--version` 通过启动器需要 1.9 秒，而由运行时自己的 Node 运行需要 0.4 秒；大多数命令在 1 至 2.5 秒内答复。
 - **首次安装，42 秒。** 通过回环下载 193 MB 的归档不到一秒；写入它的 35,287 个文件和存储的安装占据其余时间。
 - **home 的第一次启动，21 秒，而之后的一次为 5.4 秒。** 被复制的 home 的第一次引导要付出之后的启动无需付出的工作；该记录没有进一步拆分。
-- **`delorun stop`，15 秒，而 `stop --now` 为 2.2 秒。** 不是 Host 的关闭：home 进程从停止请求到其 `stopped` 记录用时 0.15 至 0.25 秒，而由运行时自己的 Node 运行的 `delorun stop` 用时 0.8 至 1.1 秒。该套件在第一次启动一个用 `cp -al` 复制的 home 之后立即测量 `stop`，这会移动每个运行时文件的变更时间；第一次启动的标识记录于是不为任何文件担保，所以启动器在 `stop` 之前的检查会再次对所有文件计算哈希（[启动检查设计](../design/start-check.md#measurements)），而 `stop --now` 在之后到来，那时已有记录担保。已安装的 home 不会遇到这种情况，因为安装会等待 2 秒再记录。在该套件的 home 让变更时间在第一次启动之前稳定下来之前，该套件的数字包含这一点；更新的 `stop-host` 曾经持有它自己的一次完整哈希，现在是一次启动检查（[更新耗时](update-timings.zh.md#start-checks-and-parallel-unpacking)）。
+- **`delorun stop`，15 秒，而 `stop --now` 为 2.2 秒。** 不是 Host 的关闭：home 进程从停止请求到其 `stopped` 记录用时 0.15 至 0.25 秒，而由运行时自己的 Node 运行的 `delorun stop` 用时 0.8 至 1.1 秒。该套件在第一次启动一个用 `cp -al` 复制的 home 之后立即测量 `stop`，这会移动每个运行时文件的变更时间；第一次启动的标识记录于是不为任何文件担保，所以启动器在 `stop` 之前的检查会再次对所有文件计算哈希（[启动检查设计](../design/start-check.zh.md#measurements)），而 `stop --now` 在之后到来，那时已有记录担保。已安装的 home 不会遇到这种情况，因为安装会等待 2 秒再记录。在该套件的 home 让变更时间在第一次启动之前稳定下来之前，该套件的数字包含这一点；更新的 `stop-host` 曾经持有它自己的一次完整哈希，现在是一次启动检查（[更新耗时](update-timings.zh.md#start-checks-and-parallel-unpacking)）。
 - **recovery 套件中的 `recover status`、`verify --offline` 和 `recover safe-mode`，13 至 17 秒。** 每一个所用的时间都和完整读取一个运行时的文件一样长；`recover status` 在 cli 套件的 home（Delorun 此前运行过的地方）中用时 1.5 秒，而在刚复制的 home 中作为第一个命令用时 15 秒，那里的每个文件都要计算哈希，与上面的 `stop` 相同。
 - **导出，一个 chat 为 9 至 14 秒，更大的 home 中更长。** 导出会取得每个 profile 的 home 锁，并在写入之前扫描 chat 历史中的密钥；该记录没有在二者之间拆分时间。
 

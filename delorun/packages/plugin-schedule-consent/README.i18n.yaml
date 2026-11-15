@@ -3,26 +3,29 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-schedule-consent/README.md
 /:
-  en: 9cdccb2133b22ce2
-  zh: b73b18c1b5154aa3
+  en: 2c4fffeeef1899ee
+  zh: c7ad860402f92874
 /delorun-plugin-schedule-consent:
-  en: 73f8081501d18f30
-  zh: 0e62bb3fa5e2a119
+  en: a5b73699919a55e4
+  zh: 24d1e02a81313cdd
 /delorun-plugin-schedule-consent/summary:
-  en: 0b929382306da59b
-  zh: 5e67eec5af688d66
+  en: d6c1499ec6f78b16
+  zh: 1114ee26debbf90b
 /delorun-plugin-schedule-consent/contents:
   en: 73a8b921c70b4cb6
   zh: 03d8dbbafebdd50b
 /delorun-plugin-schedule-consent/contract:
-  en: e7ef550153c500fe
-  zh: e7d58836949faf8a
+  en: 6cde9f635501b7c7
+  zh: fb31e25ef1fbc7f5
 /delorun-plugin-schedule-consent/configuration:
-  en: 80d34225dfb0e9a8
-  zh: 67562894ff68fc7b
+  en: d0380131993b3c72
+  zh: b17aa1cc688a672c
 /delorun-plugin-schedule-consent/known-limitations:
-  en: da7baca9f9f994f6
-  zh: 0d402cbbf5df1544
+  en: 8422e380b98d9c5a
+  zh: 84ffd8da846e78f4
 /delorun-plugin-schedule-consent/tests:
-  en: cd657d67fbd6a157
-  zh: e24fd7c1b8f6ffb3
+  en: 357bbdf1a6fbdcfc
+  zh: bf5c5f2aadc7ab7e
+/delorun-plugin-schedule-consent/when-the-service-fails:
+  en: 60388d4e6573699c
+  zh: 9393f791ca747395

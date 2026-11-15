@@ -130,7 +130,7 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 
 ## 实现状态
 
-基本原则 F11、F12 和 F13 指出已构建的拒绝（见[基本原则](../security/fundamentals.md)）。passkey、OpenID Connect、恢复套件、重置、告警、Funnel 和中继提供方以及回环凭据记录尚未构建。
+基本原则 F11、F12 和 F13 指出已构建的拒绝（见[基本原则](../security/fundamentals.zh.md)）。passkey、OpenID Connect、恢复套件、重置、告警、Funnel 和中继提供方以及回环凭据记录尚未构建。
 
 待办的后续工作：
 

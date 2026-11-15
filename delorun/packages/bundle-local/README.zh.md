@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 摘要
 
-`@delorun/bundle-local` 是 Delorun 的 CLI profile 在上游 `web` profile 模板之后加入的组合包。它的 patch 保存 Delorun 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delorun 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面应用的分析，并在设置中新增“隐私”分区（本人在其中经同意对话框后逐项打开，也可再关闭）、“关于”分区以及发布检查所在的“通用”行（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。它挂载 Delorun 的同意与守卫插件并打开其开关：指令层写入同意（连同对已批准插件的写入同意）、MCP 添加时同意、带有唯一一次完全访问同意的按工作区权限默认值、计划任务同意、抓取防护，以及留待审查的插件变更；它还挂载更新闸门，在 `delorun update` 或 `delorun stop` 等待运行中的 chat 结束时拒绝新的轮次；并在上游的 sandbox 行上设置 C1 的 home 保护，使受限命令在 Linux 与 macOS 上无法读取 home 的 `secrets/` 之下的同意存储，Windows 运行器不隔离读取。它在上游的 `workspace-controller` 行上，把 studio 首次使用的工作区所在文件夹设为 `delorun start` 解析出的文件夹，使上游的文档目录查找找不到文档目录时，studio 仍有默认工作区。只有 CLI profile 加载本组合包：`delorun headless` 加载 [`@delorun/bundle-headless`](../bundle-headless/README.md)，它挂载同样的同意与守卫插件，以同样的方式保护它们，并关闭会话日志上传；`delorun plugin` 与桌面应用运行上游自己的 profile，其中这些行都不适用，会话日志上传保持打开。它还打开上游的一次性启动令牌，因此 studio 登录链接只能在一分钟内使用一次。
+`@delorun/bundle-local` 是 Delorun 的 CLI profile 在上游 `web` profile 模板之后加入的组合包。它的 patch 保存 Delorun 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delorun 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面应用的分析，并在设置中新增“隐私”分区（本人在其中经同意对话框后逐项打开，也可再关闭）、“关于”分区以及发布检查所在的“通用”行（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。它挂载 Delorun 的同意与守卫插件并打开其开关：指令层写入同意（连同对已批准插件的写入同意）、MCP 添加时同意、带有唯一一次完全访问同意的按工作区权限默认值、计划任务同意、抓取防护，以及留待审查的插件变更；它还挂载更新闸门，在 `delorun update` 或 `delorun stop` 等待运行中的 chat 结束时拒绝新的轮次；并在上游的 sandbox 行上设置 C1 的 home 保护，使受限命令在 Linux 与 macOS 上无法读取 home 的 `secrets/` 之下的同意存储，Windows 运行器不隔离读取。它在上游的 `workspace-controller` 行上，把 studio 首次使用的工作区所在文件夹设为 `delorun start` 解析出的文件夹，使上游的文档目录查找找不到文档目录时，studio 仍有默认工作区。只有 CLI profile 加载本组合包：`delorun headless` 加载 [`@delorun/bundle-headless`](../bundle-headless/README.zh.md)，它挂载同样的同意与守卫插件，以同样的方式保护它们，并关闭会话日志上传；`delorun plugin` 与桌面应用运行上游自己的 profile，其中这些行都不适用，会话日志上传保持打开。它还打开上游的一次性启动令牌，因此 studio 登录链接只能在一分钟内使用一次。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-bundle"
 <a id="use-this-bundle"></a>
 ## 使用本组合包
 
-- **组合包列表。**[`DELORUN_PROFILE_BUNDLES`](src/profile.ts) 从 `@delorun/bundle-local/profile` 导出，是 Delorun CLI profile 有序的 `dsh.profile.bundles` 列表：先是上游的 `web` 模板（从 `@deepseek-ai/dsh-official-bundles` 读取），然后是 `@delorun/bundle-local`，再然后是挂载 studio 附加功能的 [`@delorun/bundle-studio`](../bundle-studio/README.md)（`STUDIO_BUNDLE`）。上游自己的模板不列出本组合包，因此 `dsh --profile web` 与记录会话回放只组合上游的组合包。
+- **组合包列表。**[`DELORUN_PROFILE_BUNDLES`](src/profile.ts) 从 `@delorun/bundle-local/profile` 导出，是 Delorun CLI profile 有序的 `dsh.profile.bundles` 列表：先是上游的 `web` 模板（从 `@deepseek-ai/dsh-official-bundles` 读取），然后是 `@delorun/bundle-local`，再然后是挂载 studio 附加功能的 [`@delorun/bundle-studio`](../bundle-studio/README.zh.md)（`STUDIO_BUNDLE`）。上游自己的模板不列出本组合包，因此 `dsh --profile web` 与记录会话回放只组合上游的组合包。
 - **`delorun` 的职责。**`delorun` 创建 `~/.delorun/profiles/` 之下的 CLI profile（[C1](../../docs/contracts/c01-home-layout.zh.md#profiles)），把 `DELORUN_PROFILE_BUNDLES` 写入它创建的每个 CLI profile；当上游的 profile 加载器在 `skippedBundles` 中报告本组合包时，它拒绝启动该 CLI profile，因为隐私默认值只在本组合包加载时才成立。本包自身两件事都不做。
 - **层顺序。**本组合包在每个上游组合包之后、profile 自身的 `cordis.patch.yml`、home patch 与 `--patch` overlay 之前生效，因此本人在 profile 中的设置仍然优先于此处的行（[上游的 profile 层](../../../apps/cli/README.zh.md#profiles)）。“隐私”分区写入 profile 的 `cordis.patch.yml`。
 - **读取组合结果。**`dsh --profile <name> --dump-config` 会在每个 `# ==` 行之下打印全部组合后的行；该行写明插入此行的组合包，以及修补过此行的每个组合包。本组合包写入的行，在那里写作 `@delorun/bundle-local`。

@@ -3,26 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-permission-defaults/README.md
 /:
-  en: 6417c7f3f392337a
-  zh: bab88b8fde816898
+  en: 2a6bb731f94d2356
+  zh: 9bf9eb6436611373
 /delorun-plugin-permission-defaults:
-  en: 15fcb00ab2ea84ee
-  zh: fadb21532894edee
+  en: ccc356d4fa00df36
+  zh: 2f67f19a1fbeefa7
 /delorun-plugin-permission-defaults/summary:
-  en: 3a721bea02248361
-  zh: 89d6b36416542df5
+  en: 9c22e50fbe297098
+  zh: e8c4cbad1ca59ea8
 /delorun-plugin-permission-defaults/which-preset-applies:
   en: 0f63b356940b064e
-  zh: 33ff8a2a93480881
+  zh: 66a2d3d5b00b5875
 /delorun-plugin-permission-defaults/what-it-provides:
-  en: 6a775aca51178ecf
-  zh: 143f43665e8d5d96
+  en: ae175074f70ac0ad
+  zh: 9b4ef0ca2cc2f699
 /delorun-plugin-permission-defaults/the-consent-surfaces:
-  en: 93a3d7d7c8f9857a
-  zh: ded056c191e76d3c
+  en: 5305de8620167ca3
+  zh: 1d4b4c06281ccce2
+/delorun-plugin-permission-defaults/the-network-of-sandboxed-commands:
+  en: 21bafbe71aca65bc
+  zh: c37041c7673f6b6c
+/delorun-plugin-permission-defaults/dangerous-mode:
+  en: 2097f2773d6fc457
+  zh: 82c27f0f73c6cebf
 /delorun-plugin-permission-defaults/configuration:
-  en: eb01e8097e01094d
-  zh: d2ef0fdec6be6904
+  en: 98eaaf11dd331979
+  zh: e70a86774a83b292
 /delorun-plugin-permission-defaults/tests:
-  en: 44b049879f69636a
-  zh: d3a75980804c92e3
+  en: 9946622c9ca4369c
+  zh: 2a476b190cc7c072
+/delorun-plugin-permission-defaults/when-a-service-fails:
+  en: ddb0ab9cc9201b23
+  zh: 1bd653d4e3214f3a

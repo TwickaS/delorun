@@ -14,9 +14,9 @@ description: "Delorun 的设计页面：尚未构建或只构建了一部分的�
 
 ## 设计如何变成约定
 
-构建某个设计的更改，会把它的规则连同拒绝测试一起移入拥有这些规则的约定页面或一个新的约定页面，并在同一个 pull request 中把设计页面缩短为指向该约定的指针。只构建了一部分的设计，保留尚未构建的规则，并在“实现状态”下指出已构建的内容。陈述某项[安全基本原则](../security/fundamentals.md)的设计，会在同一次更改中把该基本原则的行从 `designed` 移到 `enforced`，并附上证明它的代码和测试。
+构建某个设计的更改，会把它的规则连同拒绝测试一起移入拥有这些规则的约定页面或一个新的约定页面，并在同一个 pull request 中把设计页面缩短为指向该约定的指针。只构建了一部分的设计，保留尚未构建的规则，并在“实现状态”下指出已构建的内容。陈述某项[安全基本原则](../security/fundamentals.zh.md)的设计，会在同一次更改中把该基本原则的行从 `designed` 移到 `enforced`，并附上证明它的代码和测试。
 
-设计像其他任何文档一样通过 pull request 更改。削弱某项安全基本原则的设计更改，需要[基本原则页面](../security/fundamentals.md#changing-a-fundamental)所描述的决定。
+设计像其他任何文档一样通过 pull request 更改。削弱某项安全基本原则的设计更改，需要[基本原则页面](../security/fundamentals.zh.md#changing-a-fundamental)所描述的决定。
 
 ## 各项设计
 

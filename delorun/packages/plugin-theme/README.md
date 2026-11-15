@@ -5,6 +5,8 @@ kind: "package-reference"
 
 # @delorun/plugin-theme
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 `@delorun/plugin-theme` owns C16 switch `studio_additions`. While the switch is on it lays Delorun's Soft palette, an accent and Delorun's typefaces over upstream's theme tokens, adds the Appearance and Conversation sections and four General rows to Settings, sets Delorun's New Session headline and vocabulary, and provides the `delorunStudio` browser service, which every other Delorun studio plugin requires. Turning the switch off unloads all of them, and the studio is upstream's. The plugin then registers one General row (`settings.general.item`, id `delorun-look`) that turns the switch on again.

@@ -3,20 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-home-layout/README.md
 /:
-  en: 08ed8271f28ce326
-  zh: 1c0c442b07034a81
+  en: bc4474340518b2f1
+  zh: e10523fa8001a41f
 /delorun-contract-home-layout:
-  en: 063d95ef84b92eb8
-  zh: 07936161e0c4eee2
+  en: 1bd95624a47ff6ae
+  zh: 4366dd11409685ef
 /delorun-contract-home-layout/summary:
-  en: d450f2f307941bbe
-  zh: 81ade61c15d21d9b
+  en: 5299b6201326da37
+  zh: faa01c117ed704b1
 /delorun-contract-home-layout/contents:
-  en: 764c51afdb255762
-  zh: e9d3870b783e60d1
+  en: 1ffe367869c8e873
+  zh: 6c568e4f110c14a4
 /delorun-contract-home-layout/use-this-package:
-  en: 8c04f7c94157c496
-  zh: ce1fa077fbb10861
+  en: 10527966eae5066a
+  zh: cac157e196fd9a2d
+/delorun-contract-home-layout/home-entries:
+  en: fb6747d329e84333
+  zh: 3a5ed9c9fa9a36a5
 /delorun-contract-home-layout/exports:
-  en: 1a0e8b934e94f51e
-  zh: cfd7f36f2804cf5e
+  en: bb8b471d85aaf0e0
+  zh: 9ecc9eeff376e205

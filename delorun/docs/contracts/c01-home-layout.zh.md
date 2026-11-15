@@ -18,7 +18,7 @@ home、其在 Linux 与 macOS 上的权限模式、更新通道、锁、运行�
 
 - **已构建且已接入：** home 解析及其拒绝；home 的目录与受保护文件及其在 Linux 与 macOS 上的权限模式与拒绝规则；更新通道的套接字与启动令牌；home 锁；带安装、切换与启动检查的运行时仓库；npm 启动器的下载与校验；以及在 CLI profile 中，bwrap、Landlock 与 Seatbelt 上的 `home-write`、`home-read` 与 `token-read` 规则，bwrap 与 Seatbelt 上的 `home-connect` 与 `docker-connect` 规则，以及对包含 home 的可写根目录的拒绝；WSL 下 bwrap 上的 `wsl-interop` 规则（Landlock 在那里拒绝受限命令）；以及在内核提供虚拟机套接字的每个地方，bwrap 上的 `vsock` 规则。
 - **已构建、但无任何接入：** Docker 监管器的套接字。`delorun start` 把它加入被拒绝的套接字，但没有任何进程创建它，因为没有任何命令启动监管器（[C9](c09-runtime-supervisor.zh.md)）。
-- **尚未构建：** `delorun plugin` 下 Delorun 的规则（它运行上游的 pnpm 操作，不带其中任何规则）；每次启动时的探测，以及 `confinement-rule` 与 `home-modes` 检查（`delorun verify` 把它们报告为未运行）；setup 的 Docker 标注；完全访问提示中对完全访问可触及内容的说明；WSL 下与 Linux 上对 Docker Desktop 控制套接字目录的拒绝；Windows 上的 DACL 检查、命名管道以及任何读取限制；安装脚本、`bin/` 下的启动器副本与登录项；以及 npm 构建证明。这些规则见[原生限制设计](../design/native-confinement.md)与[发布工作流设计](../design/release-workflow.md)。
+- **尚未构建：** `delorun plugin` 下 Delorun 的规则（它运行上游的 pnpm 操作，不带其中任何规则）；每次启动时的探测，以及 `confinement-rule` 与 `home-modes` 检查（`delorun verify` 把它们报告为未运行）；setup 的 Docker 标注；完全访问提示中对完全访问可触及内容的说明；WSL 下与 Linux 上对 Docker Desktop 控制套接字目录的拒绝；Windows 上的 DACL 检查、命名管道以及任何读取限制；安装脚本、`bin/` 下的启动器副本与登录项；以及 npm 构建证明。这些规则见[原生限制设计](../design/native-confinement.zh.md)与[发布工作流设计](../design/release-workflow.zh.md)。
 
 下文中被本列表列为尚未构建或无任何接入的要求与拒绝测试，在某次变更构建并接入它们之前，不保护任何人。
 
@@ -122,8 +122,8 @@ Delorun 在 home 顶层添加标为 Delorun 的条目。其他每个条目都属
 - **受保护文件。** `secrets/`、`trust/`、`status/` 与 `catalogue/` 下的每个文件、`run/<profile>/start-token`、`supervisor/roots.json` 以及 [C20](c20-operational-logs.zh.md) 的日志文件。上游的 `.credentials.yaml` 与 `.env` 遵循上游自己的检查：其他用户可读的文件会被拒绝。
 - **拒绝规则。** 组件读取受保护文件前先用 `lstat` 检查它。路径是符号链接或不是普通文件、所有者不是本进程的用户，或设置了任一组或其他用户权限位（`0o077`）时，组件以 `SECRET_FILE_MODE` 拒绝该文件。错误给出路径与修复命令 `chmod 600 <path>`。
 - **目录。** home、`secrets/` 或 `run/<profile>/` 设置了组或其他用户权限位、是符号链接或属于其他用户时，home 进程以 `HOME_MODE` 拒绝启动。错误给出路径与修复命令 `chmod 700 <path>`。
-- **Windows。** Windows 没有权限位，上述检查在那里被跳过；没有任何检查读取路径的 DACL。DACL 检查见[原生限制设计](../design/native-confinement.md#windows)。
-- **检查。** `delorun doctor` 检查 home、`secrets/` 与 `run/<profile>/` 的权限模式。`delorun verify` 把其 `home-modes` 检查报告为未运行（[原生限制设计](../design/native-confinement.md#checks-at-each-start)）。
+- **Windows。** Windows 没有权限位，上述检查在那里被跳过；没有任何检查读取路径的 DACL。DACL 检查见[原生限制设计](../design/native-confinement.zh.md#windows)。
+- **检查。** `delorun doctor` 检查 home、`secrets/` 与 `run/<profile>/` 的权限模式。`delorun verify` 把其 `home-modes` 检查报告为未运行（[原生限制设计](../design/native-confinement.zh.md#checks-at-each-start)）。
 
 <a id="secrets"></a>
 
@@ -145,7 +145,7 @@ Delorun 的密钥是 C4 至 C7 定义的 home-auth 密钥、中继与 TLS 密钥
 
 - **套接字路径。** 在 Linux 与 macOS 上，更新通道是 Unix 套接字 `run/<profile>/update.sock`，监管器是 `run/<profile>/supervisor.sock`。二者都是路径名套接字；Delorun 从不在抽象命名空间套接字上监听。套接字在启动令牌写入之后创建，绑定后设为 0600。
 - **路径长度。** 套接字路径最多 103 字节。路径更长时，启动以 `SOCKET_PATH_TOO_LONG` 停止，错误给出该路径并要求使用更短的 `DELORUN_HOME`。
-- **Windows。** 在每个平台上，更新通道都是文件系统套接字路径；不存在命名管道，也不存在管道 DACL。命名管道见[原生限制设计](../design/native-confinement.md#windows)。
+- **Windows。** 在每个平台上，更新通道都是文件系统套接字路径；不存在命名管道，也不存在管道 DACL。命名管道见[原生限制设计](../design/native-confinement.zh.md#windows)。
 - **启动令牌。** 每次 home 进程启动都在任一通道监听之前，把一个新令牌写入 `run/<profile>/start-token`：来自操作系统加密随机源的 32 字节，以不带填充的 base64url 编码（43 个字符），后跟一个换行符。该文件以 0600 原子替换，home 进程正常停止时删除。
 - **令牌有效期。** 令牌只在写入它的那次 home 进程启动运行期间有效。崩溃进程遗留的令牌文件在下次启动时被替换，任何监听方都不接受其值。
 - **令牌处理。** 令牌只存在于 home 进程的内存、监管器的内存与令牌文件中。它从不出现在命令行、环境变量、URL、响应或日志中。`delorun` 客户端命令在发送请求时读取该文件。
@@ -224,7 +224,7 @@ runtimes/
 - **安装前校验。** 启动器按已签名 manifest（[C2](c02-release-manifest.zh.md)）与该 manifest 在发布日志中的条目（[C18](c18-release-log.zh.md)）校验归档，且在 `runtimes/<version>/` 下出现任何文件之前完成，如[运行时仓库](#the-runtime-store)所述。
 - **无网络时。** 启动器在离线启动检查后运行已安装的 `current`。安装始终需要网络和日志收录证明。
 - **未通过检查的 `current`。** 当 `current` 未通过启动检查、而 `previous` 在同一锚定根下通过时，裸 `delorun`、`delorun start` 或 `delorun recover rollback`（各自只带 `--profile` 选项，`--` 之后没有内容）会让启动器打印一行说明，并以 `delorun recover rollback` 启动 `previous`，profile 通过 `DELORUN_PROFILE` 传入；该命令应用 [C3](c03-update-report.zh.md#rollback) 的回滚表格，没有记录到 `current` 的更新时以 `NO_UPDATE_RECORD` 拒绝。其他每个命令都被拒绝：启动器不启动任何发行版，不改动任何内容，写明未通过启动检查的发行版及检查的原因，写明 `delorun recover rollback` 是启动 `previous` 以回滚到它的命令，并以 1 退出。没有这样的 `previous` 时，以及以 `--release` 指明了发行版时，启动的拒绝维持不变。启动器自己不切换任何指针。
-- **信任锚。** `npx delorun` 在任何 Delorun 检查能够运行之前，就运行 npm 提供的启动器。没有任何工作流发布该包，因此没有构建证明把它与公开仓库关联起来；带证明的发布，以及通过公布的哈希获得信任的安装脚本，见[发布工作流设计](../design/release-workflow.md)。
+- **信任锚。** `npx delorun` 在任何 Delorun 检查能够运行之前，就运行 npm 提供的启动器。没有任何工作流发布该包，因此没有构建证明把它与公开仓库关联起来；带证明的发布，以及通过公布的哈希获得信任的安装脚本，见[发布工作流设计](../design/release-workflow.zh.md)。
 - **启动器副本。** 不存在安装脚本，`delorun start` 也不安装登录项，因此没有任何东西写入 `bin/`。
 
 <a id="confinement-rules"></a>
@@ -250,14 +250,14 @@ runtimes/
 
 - **读取豁免。** 受限命令可以读取并执行 `runtimes/`、`skills/` 与 `dsh-runtimes/`。PTC worker 与其他受限进程运行 `runtimes/` 中运行时自带的 `node`，命令运行 `skills/` 中本人的技能脚本，桌面应用的工作区依赖运行于 `dsh-runtimes/`。CLI profile 的启动再增加一个只读条目，即该 profile 位于 `changes/profiles/<profile>/active/` 的已批准插件副本，使把自身工具的路径交给智能体的插件能够工作；该条目只包含已批准的副本，绝不包含待处理或未批准的内容、其他 profile 的副本，或它们旁边的记录与日志，且受限命令无法写入它。豁免之下不写入任何密钥；保管密钥的组件使用 `secrets/`。面向模型的文件与搜索工具还可以读取所属 chat 自己在 `spill/` 下的目录（对该 chat 而言过长的工具输出保存在那里供模型读取），但不能读取其他 chat 的；受限命令不得读取 `spill/`，也没有任何运行器授予该权限。
 - **可写根目录。** home 从不位于可写根目录之内。工作区根目录或附加可写根目录在解析符号链接后等于 home、位于其内或包含它时，`workspace-write` 以 `HOME_IN_WRITABLE_ROOT` 被拒绝。根目录包含 home 的工作区（例如 `~`）仍可运行 `read-only` 命令。
-- **Docker 套接字。** 该套接字位于 home 之外。`delorun start` 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指明的路径。该规则覆盖 context 的路径、其解析后的真实路径、在 Linux 上封装命令时发现的、通向同一套接字的每一处其他挂载（例如 WSL 下 Docker Desktop 的 `/mnt/wsl/docker-desktop-bind-mounts/<distro>/docker.sock`），以及在 macOS 上，启动时存在的 Docker Desktop 套接字：`~/Library/Containers/com.docker.docker/Data/` 下的 `docker.raw.sock` 与 `docker.sock`，以及 `~/.docker/run/docker.sock`。Docker Desktop 的其他控制套接字同样被拒绝：`delorun start` 把 `/mnt/wsl/docker-desktop/shared-sockets` 与 `~/.docker/desktop` 指定为逃逸套接字目录（`session-escape`），并按路径拒绝 `/run/docker-cli.sock`（它向 `docker` 组提供其后端的 API，`daemon-connect`）。它在 macOS 上的控制目录 `~/Library/Containers/com.docker.docker/Data/` 与 `~/.docker/run/` 不会被整体隐藏；原因见[原生限制设计](../design/native-confinement.md#docker-desktops-control-sockets)。端点为 TCP 或 SSH 的 context 使用网络，而任何方言都不限制网络，因此对它不强制执行 `docker-connect`。
+- **Docker 套接字。** 该套接字位于 home 之外。`delorun start` 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指明的路径。该规则覆盖 context 的路径、其解析后的真实路径、在 Linux 上封装命令时发现的、通向同一套接字的每一处其他挂载（例如 WSL 下 Docker Desktop 的 `/mnt/wsl/docker-desktop-bind-mounts/<distro>/docker.sock`），以及在 macOS 上，启动时存在的 Docker Desktop 套接字：`~/Library/Containers/com.docker.docker/Data/` 下的 `docker.raw.sock` 与 `docker.sock`，以及 `~/.docker/run/docker.sock`。Docker Desktop 的其他控制套接字同样被拒绝：`delorun start` 把 `/mnt/wsl/docker-desktop/shared-sockets` 与 `~/.docker/desktop` 指定为逃逸套接字目录（`session-escape`），并按路径拒绝 `/run/docker-cli.sock`（它向 `docker` 组提供其后端的 API，`daemon-connect`）。它在 macOS 上的控制目录 `~/Library/Containers/com.docker.docker/Data/` 与 `~/.docker/run/` 不会被整体隐藏；原因见[原生限制设计](../design/native-confinement.zh.md#docker-desktops-control-sockets)。端点为 TCP 或 SSH 的 context 使用网络，而任何方言都不限制网络，因此对它不强制执行 `docker-connect`。
 - **会话套接字。** `session-escape` 的目录保存本人会话的套接字：在 `/run/user/<uid>` 中，有会话总线 `bus` 与用户管理器的 `systemd/private`（`systemd-run --user` 经由它们，以用户单元的形式在所有命名空间之外启动任意程序，带有主机网络与整个 home）、gpg-agent 及其 ssh 套接字、密钥环、显示与音频服务器、编辑器与终端的控制套接字，以及 rootless Docker 与 Podman；系统总线，它以本人会话的 polkit 授权行事；tmux 与 screen 服务器，它们在本人的终端会话中运行命令；X 服务器，它为本人的其他窗口接收输入；在 WSL 下，WSLg 的显示与音频套接字，以及它对 `/run/user/<uid>` 与 `/` 的第二处挂载；以及 WSL 下和 Linux 上 Docker Desktop 的控制套接字，其中包括其后端的 API，其路由涉及它的设置、引擎的 `daemon.json` 与容器操作。`delorun start` 仅凭用户 id 与操作系统 home，在每台有用户 id 的机器上指定相同的目录，由提供方在每次封装时检查哪些存在。`XDG_RUNTIME_DIR` 指向别处的运行时目录，以及 `TMUX_TMPDIR` 下的 tmux 套接字目录，不在指定之列。
 - **ssh-agent。** 代理会为任何连接的客户端用本人的密钥签名。受限命令不继承 `SSH_AUTH_SOCK`，`agent-connect` 拒绝启动时它所指的套接字，`private-tmp` 与 `session-escape` 隐藏代理默认监听的位置。没有任何 profile 设置会把代理转发给受限命令；需要代理的命令（例如经 ssh 的 `git push`）通过已批准的 `danger-full-access` 提权运行。
 - **主机的 `/tmp`。** 在 bwrap 下，`workspace-write` 命令本来就得到一个空的可写 `/tmp`；`private-tmp` 给 `read-only` 命令一个空的只读 `/tmp`，其中位于 `/tmp` 下的工作区根目录以只读方式绑定回来，并在两种模式下隐藏主机 `/tmp` 的其他每处挂载，例如 WSLg 的 `/mnt/wslg/distro/tmp`。因此 `read-only` 命令以及同样以 `read-only` 运行的 `glob` 与 `grep` 搜索，在工作区之外的 `/tmp` 中什么也找不到；以那里为根的搜索以 `ENOENT` 失败。
 - **其他套接字。** 其他路径名套接字（例如本人 home 下的，或 `XDG_RUNTIME_DIR` 指向别处的运行时目录下的）、抽象套接字，以及网络为 `open` 的工作区的网络，对受限命令仍可访问（[此举不能证明什么](#what-this-does-not-prove)）。
 - **网络设置。** `@delorun/plugin-permission-defaults` 把每个工作区的网络设置保存在 `secrets/permission-defaults/network.json` 中，权限模式 0600，以工作区的规范路径为键；没有条目的工作区采用行 `delorun-permission-defaults` 的 `network` 与 `allowedHosts`，默认为 `open` 与无。它挂载 `sandboxNetwork` 解析器，使每条受限命令的策略携带 `off` 或出站代理的套接字。代理监听 `secrets/permission-defaults/proxy/<pid>/<list>.sock`，每个不同的允许名单一个，且在任何策略指名它们之前就已存在；bwrap 把命令自己的套接字绑定在 home 的 tmpfs 之内，因此 home 下没有其他套接字变得可达。该设置只能通过 `/api/delorunNetwork.list` 与 `/api/delorunNetwork.set` 读取和更改，它们只回应回环监听器上、回环 `Host` 下的请求，而放宽设置的更改需要本人在那里确认。权限宽于 0600、为链接或为其他格式的存储，会使每个工作区都按 `off` 计，直到本人修复。本人的[指南](../guide/prompt-injection.zh.md)说明每项设置关闭了什么。
-- **报告。** 启动时不运行任何探测，`delorun verify` 把 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告为未运行，因此没有任何东西报告在某台机器上哪些规则成立。沙箱提供方会计算它是否找到了 home 与每个被拒绝套接字的其他每个挂载（别名覆盖），但没有任何东西读取该结果。探测、该检查与 setup 的 Docker 标注见[原生限制设计](../design/native-confinement.md#checks-at-each-start)。
-- **提权提示。** `danger-full-access` 提权的批准提示来自上游，它写明所请求的模式与操作，但不说明完全访问会触及 Delorun 的 home、其密钥与令牌，或更新通道。该说明见[原生限制设计](../design/native-confinement.md#full-access)。
+- **报告。** 启动时不运行任何探测，`delorun verify` 把 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告为未运行，因此没有任何东西报告在某台机器上哪些规则成立。沙箱提供方会计算它是否找到了 home 与每个被拒绝套接字的其他每个挂载（别名覆盖），但没有任何东西读取该结果。探测、该检查与 setup 的 Docker 标注见[原生限制设计](../design/native-confinement.zh.md#checks-at-each-start)。
+- **提权提示。** `danger-full-access` 提权的批准提示来自上游，它写明所请求的模式与操作，但不说明完全访问会触及 Delorun 的 home、其密钥与令牌，或更新通道。该说明见[原生限制设计](../design/native-confinement.zh.md#full-access)。
 
 <a id="limits"></a>
 

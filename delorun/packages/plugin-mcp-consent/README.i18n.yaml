@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-mcp-consent/README.md
 /:
-  en: 71e4c7a9c43cae07
-  zh: ba3ba5468698f449
+  en: eafd071fb8500d37
+  zh: 49f7a6421aa69bab
 /delorun-plugin-mcp-consent:
-  en: 856300bc97a3b549
-  zh: 7361ab941aaf7923
+  en: a72a2b4804ac4a19
+  zh: e4475912751def84
 /delorun-plugin-mcp-consent/summary:
-  en: 553e46d79aa8b852
-  zh: e7572d63c696b770
+  en: 017dabefcc762a1b
+  zh: 157d3d5f8207f8b0
 /delorun-plugin-mcp-consent/contents:
   en: dbcc66fdedfde92b
   zh: 32d619b3c1308fa9
 /delorun-plugin-mcp-consent/the-service:
-  en: e038190b849a54e6
-  zh: f3b85632c9fae0f9
+  en: 8f5e5bbf5d64e1bf
+  zh: 2bb430e3eceade7f
 /delorun-plugin-mcp-consent/the-acceptance-store:
-  en: e0d782e0dc5ea434
-  zh: 4cd05512c8b8daa7
+  en: f92be31929e242ac
+  zh: cba3eefe2e9db532
 /delorun-plugin-mcp-consent/reviews:
   en: fec7f0858f48133b
   zh: ab0b14a07c88da92
@@ -27,17 +27,20 @@
   en: 7507da958850ecf3
   zh: 5f5b6b87f4b65c76
 /delorun-plugin-mcp-consent/reviews/places-chats-can-write:
-  en: 0effb466ad1e9fcc
-  zh: 7095509ecd6eedbe
+  en: 09f27ed3bd888165
+  zh: 8e6bc0bb82630f0d
 /delorun-plugin-mcp-consent/recording-an-acceptance:
   en: 433260a6ca4b1d49
   zh: f4ac3a7cb8f82aad
 /delorun-plugin-mcp-consent/pending-reviews:
-  en: f1cd7594330204ec
-  zh: 4a170e03c8028ee2
+  en: ca13cb6901ba242f
+  zh: 429d9a97b33e2591
 /delorun-plugin-mcp-consent/the-mcp-add-consent-switch:
-  en: c714ef3ea575a700
-  zh: 6e735fb7c577d1f2
+  en: 3a5dc029dbc4ac15
+  zh: 0c2d0e4c2dc26b4b
 /delorun-plugin-mcp-consent/development:
-  en: f67c9e0d0bead617
-  zh: eed96c893c847972
+  en: e88f901717c18edc
+  zh: b4fbd14ba859b781
+/delorun-plugin-mcp-consent/when-the-service-fails:
+  en: 7462332472a4ece3
+  zh: 97dda96652dfbba5

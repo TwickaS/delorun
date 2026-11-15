@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/settings-controls/README.md
 /:
   en: 3acc3ca1dbc9997a
-  zh: 1c35df85a15220ab
+  zh: 821c631ae8d59b0d
 /delorun-settings-controls:
   en: 024aa88794105b08
   zh: 2c0e8a72a1b7d24b
 /delorun-settings-controls/summary:
-  en: 77c8aa1ed215929e
-  zh: 05f15225717f2c22
+  en: 84ddd4273ab2a9c5
+  zh: 78d9624600b538ca
 /delorun-settings-controls/contents:
   en: bba432c4912aeb77
   zh: 9bc3d032483328ed
 /delorun-settings-controls/use-this-package:
-  en: 49292506b017ce70
-  zh: fccc24a53dcc3108
+  en: 554e36b719699f59
+  zh: d01430ceaf28f4f5
 /delorun-settings-controls/contract:
   en: 5e3871a249653e16
-  zh: ba4cd17d440d3bb3
+  zh: 0fe6edbe725b1dc4
 /delorun-settings-controls/tests:
-  en: ebd1a820d75bd414
-  zh: 0276ebdefb0f22bd
+  en: b7eeda437a008773
+  zh: ec5647fbb39d8169

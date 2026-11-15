@@ -20,7 +20,7 @@ Delorun 的保护位于 CLI profile 中，该 profile 由 `delorun setup` 创建
 | --- | --- | --- | --- |
 | 原生工作区 | 命令直接在你的账户中运行，由操作系统限制 | Linux 上的 bwrap 或 Landlock、macOS 上的 Seatbelt：由内核拒绝，而不是工具。在 Windows 上，ACL runner 只限制写入 | 是 |
 | Docker 工作区（S2） | 命令在每工作区一个容器中运行 | [C9](../contracts/c09-runtime-supervisor.zh.md) 的监管器 | 否：监管器已构建，但没有命令启动它 |
-| reach 监听器，你自己的 tailnet | 设备会话在你的 Tailscale 地址上可使用的路由 | 已批准设备的密钥，加上 [C4](../contracts/c04-admission.zh.md) 的准入与 [reach 设计](../design/reach.md) | 是，在你开启之前关闭 |
+| reach 监听器，你自己的 tailnet | 设备会话在你的 Tailscale 地址上可使用的路由 | 已批准设备的密钥，加上 [C4](../contracts/c04-admission.zh.md) 的准入与 [reach 设计](../design/reach.zh.md) | 是，在你开启之前关闭 |
 | reach 监听器，自托管中继 | 同一组路由，位于你自己的域名上 | [C6](../contracts/c06-relay-protocol.zh.md) 的中继与 C4 的准入 | 否：中继的服务端已构建，但没有 home 连接它 |
 
 **自托管 home** 不是独立向量：它是你自己机器上的同一个 home 目录。
@@ -57,7 +57,7 @@ Delorun 的保护位于 CLI profile 中，该 profile 由 `delorun setup` 创建
 
 - **原生，CLI profile。** 操作系统沙箱就是边界。在 Linux 与 macOS 上 home 对命令隐藏；账户其余部分与网络不隐藏，与 stock 完全相同。在 Windows 上命令可以读取 home。
 - **原生，`delorun headless`。** CLI profile 的沙箱 overlay、fetch 守卫、指令写入同意、完全访问同意与隐私默认值适用；MCP 与定时任务同意没有可守卫的对象，因为该 profile 不挂载 MCP 客户端，也不挂载定时任务运行时。
-- **Docker 工作区与 reach。** Docker 工作区尚未构建，reach 只构建了 Tailscale 私有路由。它们的规则见 [C9](../contracts/c09-runtime-supervisor.zh.md)、[reach 设计](../design/reach.md) 及其列出的约定，每份都带有说明已存在内容的状态。
+- **Docker 工作区与 reach。** Docker 工作区尚未构建，reach 只构建了 Tailscale 私有路由。它们的规则见 [C9](../contracts/c09-runtime-supervisor.zh.md)、[reach 设计](../design/reach.zh.md) 及其列出的约定，每份都带有说明已存在内容的状态。
 - **自托管 home，仅本地。** 除回环 studio 之外不打开任何监听器，除你主动要求的以外没有任何东西离开机器：模型请求、你启用的工具以及发布检查。
 
 ## 自托管
@@ -76,7 +76,7 @@ Delorun 是加了 Delorun 层的 stock DSH。在限制方面两者是同一机�
 | | Stock | Delorun | 位置 |
 | --- | --- | --- | --- |
 | home 保护 | 没有任何机制向受限命令隐藏 home | 在 CLI profile 中，home 对进程内工具是受保护读取，在 Linux 与 macOS 上对受限命令也是 | [C1](../contracts/c01-home-layout.zh.md) |
-| Reach | 无 | 仅 Tailscale 私有，在本人开启之前关闭；没有 Funnel、中继或通行密钥 | [reach 设计](../design/reach.md) |
+| Reach | 无 | 仅 Tailscale 私有，在本人开启之前关闭；没有 Funnel、中继或通行密钥 | [reach 设计](../design/reach.zh.md) |
 | 权限同意 | 无 | 在 CLI profile 中：按工作区的完全访问同意、文件工具写入的指令层同意、新的 stdio MCP 服务器同意、定时任务同意以及 fetch 守卫；在 parity 组合中关闭 | [C16](../contracts/c16-parity-composition.zh.md) |
 | 发布 | 无校验 | 运行前校验签名、新鲜度、发布日志与文件列表 | [C2](../contracts/c02-release-manifest.zh.md)、[C18](../contracts/c18-release-log.zh.md) |
 | 更新 | 静默禁用与重写 | 对 CLI home 报告、快照、恢复与回滚 | [C3](../contracts/c03-update-report.zh.md) |

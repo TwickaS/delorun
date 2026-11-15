@@ -1,5 +1,7 @@
 # @delorun/plugin-cost-meter
 
+English | [中文](README.zh.md)
+
 An estimate of what each chat has cost, shown under the composer, with the chats it started added up under it. Off by default: a person turns it on under Components on the Delorun studio page of the sidebar's Plugins.
 
 ## What it shows

@@ -3,29 +3,32 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-delegation-consent/README.md
 /:
-  en: af77516384e7fcf6
-  zh: 1c43ebb119c9cd75
+  en: 5f9027233c224db7
+  zh: ae71a3f8f90b53be
 /delorun-plugin-delegation-consent:
-  en: 2bb3139236d259c6
-  zh: 6ab3091e37d57193
+  en: 039fbf937e17066a
+  zh: a676343fd4a85e9c
 /delorun-plugin-delegation-consent/summary:
-  en: 4cb43a42ae2918f4
-  zh: 951f847e8481eb54
+  en: 6279d4be90329d10
+  zh: 9e236f1c3f146a3b
 /delorun-plugin-delegation-consent/contents:
   en: e5af3cc37c2381f4
   zh: 5f0e767498a8fbf2
 /delorun-plugin-delegation-consent/contract:
-  en: ac69b25ad747621b
-  zh: 9c82ea291aab405e
+  en: 68984670cb1596f7
+  zh: d532072dc0f4a6c0
 /delorun-plugin-delegation-consent/configuration:
-  en: 66c3416d0c5f5741
-  zh: 17f92d82bc1ea426
+  en: df4c066ff16592ad
+  zh: 634051778f424753
 /delorun-plugin-delegation-consent/surfaces:
-  en: aec5cfe00a0324a8
-  zh: 347b18e5cb1ea364
+  en: a9c532decb459827
+  zh: 23c3a39402d66230
 /delorun-plugin-delegation-consent/known-limitations:
-  en: db53bff7f5b40e7a
-  zh: 2ea77b915dccd413
+  en: f4245c611dccf164
+  zh: 2a3fc88ecc2357b0
 /delorun-plugin-delegation-consent/tests:
-  en: 6ce31afada0b4391
-  zh: 01834032f8703401
+  en: 9650f81adfd44651
+  zh: b4987f5ff5b2c383
+/delorun-plugin-delegation-consent/when-the-service-fails:
+  en: 660466ff7c09a5c9
+  zh: 9f25aff7ce603206

@@ -55,7 +55,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 - **CLI profile。** 由 `delorun setup` 创建、由 `delorun` 或 `delorun start` 启动的 profile：上游的 web 模板加上 `@delorun/bundle-local` 与 `@delorun/bundle-studio`。本页称为已构建的每项保护都在这里适用。
 - **`delorun headless`。** 它启动 home 的 `headless` profile：上游的 `headless` 模板加上 `@delorun/bundle-headless`，运行在 C1 的沙箱 overlay 之下。抓取防护、指令写入、MCP 与计划任务的同意、完全访问同意、每个工作区的网络设置、Changes 保护开启期间对智能体插件更改的暂缓以及回合闸门都适用，插件管理无法关闭它们，DeepSeek 的会话日志上传也与 CLI profile 一样关闭。会询问本人的防护会拒绝，因为该 profile 不组合任何批准应答者。对于没有在 home 的电脑上记录完全访问授权的工作目录，完全访问同意会拒绝完全访问；在参数或 `DSH_PERMISSION_MODE` 中请求完全访问也会在启动之前被提前拒绝。组合会拒绝不含该组合包的 `headless` profile，并且任务只在 Delorun 检查过该组合包的行与服务之后才开始。启动前步骤 `changes` 使 profile 从文件夹链接的每个插件回到 Changes 所保持的内容，保护关闭时无需审查即加载该文件夹的内容并记录它，保护开启时智能体的 `plugin_manager` 安装、更新和移除像在 CLI profile 中那样等待本人审查（[C21](../contracts/c21-changes.zh.md#the-agent-and-plugins)）；headless 运行不实时重新加载插件文件夹。该模板不挂载 MCP 客户端，也不挂载计划任务运行时；MCP 与计划任务的同意保护的是本人自己的 patch 添加的客户端或运行时。
-- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delorun 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。在 pnpm 运行之前，它把 profile 的包设为从 pnpm 的存储中复制；操作成功之后，它按 profile 中 `delorun-plugin-install-check` 行的设置，对操作安装的内容运行[插件安装检查](#plugins)。让每个启动 Host 的命令都应用 Delorun 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
+- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delorun 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。在 pnpm 运行之前，它把 profile 的包设为从 pnpm 的存储中复制；操作成功之后，它按 profile 中 `delorun-plugin-install-check` 行的设置，对操作安装的内容运行[插件安装检查](#plugins)。让每个启动 Host 的命令都应用 Delorun 的层，见[原生限制设计](../design/native-confinement.zh.md#every-way-a-host-boots)。
 - **桌面应用。** 它是上游的，未作改动，Delorun 的任何行都不适用于它。
 - **Windows。** 沙箱只限制写入。受限命令可以读取整个 home，包括 Delorun 的密钥、上游的凭据文件与启动令牌，并且不会对 home 运行任何权限模式或访问列表检查。
 
@@ -104,7 +104,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 ### Tailscale、本人自己的中继与 OIDC 提供方
 
-远程访问关闭时，任何 Tailscale 节点、中继或身份提供方都不在通往 studio 的路径上。开启 Tailscale 私有远程访问时，由 Tailscale 承载流量：其协调服务能看到机器的名称、机器与每台设备的 IP 地址、连接时间与流量大小，除非开启 Tailnet Lock，它可以向 tailnet 添加设备，并获取 `ts.net` 证书。被添加的设备可以打开登录页面并请求批准，在本人于电脑上批准之前无法打开任何 chat。自托管中继与 OpenID Connect 提供方尚未构建，因此两者都不在任何路径上。[远程访问设计](../design/reach.md)以及约定 [C5](../contracts/c05-device-approval.zh.md)、[C6](../contracts/c06-relay-protocol.zh.md)、[C7](../contracts/c07-reach-providers.zh.md) 与 [C14](../contracts/c14-oidc-passkeys.zh.md) 说明了每一方能看到和能做的事，并各自附有已存在内容的状态。
+远程访问关闭时，任何 Tailscale 节点、中继或身份提供方都不在通往 studio 的路径上。开启 Tailscale 私有远程访问时，由 Tailscale 承载流量：其协调服务能看到机器的名称、机器与每台设备的 IP 地址、连接时间与流量大小，除非开启 Tailnet Lock，它可以向 tailnet 添加设备，并获取 `ts.net` 证书。被添加的设备可以打开登录页面并请求批准，在本人于电脑上批准之前无法打开任何 chat。自托管中继与 OpenID Connect 提供方尚未构建，因此两者都不在任何路径上。[远程访问设计](../design/reach.zh.md)以及约定 [C5](../contracts/c05-device-approval.zh.md)、[C6](../contracts/c06-relay-protocol.zh.md)、[C7](../contracts/c07-reach-providers.zh.md) 与 [C14](../contracts/c14-oidc-passkeys.zh.md) 说明了每一方能看到和能做的事，并各自附有已存在内容的状态。
 
 ### Delo Run 项目
 
@@ -156,13 +156,13 @@ Delo Run 持有离线的 root 与 targets 密钥以及在线的 timestamp 密钥
 - 没有任何东西按机器报告哪些规则成立：启动时不运行探测，`delorun verify` 把 `confinement-rule` 检查报告为未运行。
 - 在 WSL 下，互操作（interop）会让受限命令启动 Windows 程序，该程序在每个 Linux 命名空间、挂载规则与受保护的 home 之外，以本人的 Windows 账户运行，并能读取 Windows 进程的命令行。`delorun start` 把 WSL 的互操作目录 `/run/WSL` 指定为逃逸套接字目录（`wsl-interop`）；在它存在的地方，bwrap 会隐藏它，因此不会有 Windows 程序通过互操作套接字启动，无论是按路径、按裸名称、作为副本、通过 `/init` 还是设置了 `WSL_INTEROP`；Landlock 无法隐藏它，因此改为拒绝每个受限命令。在 bwrap 下，一个 seccomp 过滤器还会拒绝 vsock 套接字（互操作套接字之下 WSL 与 Windows 之间的传输）以及 io_uring（其请求创建的套接字该过滤器看不到）（`vsock`）；它适用于内核提供 vsock 的任何虚拟机，在那里需要 io_uring 的程序会失败，通过 `socketcall` 创建套接字的 32 位程序得不到套接字。抽象 Unix 套接字在每种方言上都仍可访问；WSL 不在任何抽象套接字上监听，而本人运行的、在抽象套接字上监听的程序是可访问的（[C1](../contracts/c01-home-layout.zh.md#what-this-does-not-prove)）。
 - harness 自身会在工作区的仓库上运行 git，以记录每个回合改动的文件。每条这样的命令都在 Session 的沙箱中运行，可写根目录为 Session 的可写根目录加上插件的快照目录；当 Session 为 `read-only` 时，只有该目录可写；只有当 Session 的命令不受限制时它才不受限制地运行，沙箱无法限制的命令，或没有挂载沙箱的受限 Session，不记录任何内容。快照目录位于每个用户的缓存目录中，在 Delorun 的 home 之外；除非某个 Session 的可写根目录包含它，任何方言都不会把它授予受限命令。每次快照与复制都先将其与每个活动 Session 的可写根目录比对，有重叠时不记录任何内容；harness 在每次使用之前检查其中每个目录的设备号与 inode，它在那里的文件操作会拒绝最后一级路径组件是链接的情况、命名管道以及不是它创建的条目。通过已批准的完全访问提权运行的命令不在此范围内。每条命令都在移除每个继承的 `GIT_*` 变量的情况下运行，并带有命令范围的配置，关闭文件系统监视器、钩子、仓库配置定义的每个过滤器与 diff 驱动、分页器、编辑器、凭据助手与传输，因此受限命令写入的 `.git/config`、`.gitattributes`、钩子或 `.git` 文件不会启动任何程序（[workspace-changes](../../../packages/deliverables/workspace-changes/README.zh.md#git-hardening)）。stock 不受限制地运行这些命令，且仓库的配置生效。
-- 本人自己的 git 与编辑器没有加固。在 `workspace-write` 下，受限命令可以写入仓库的 `.git/config`、钩子与属性文件，下次本人在沙箱之外于该仓库中运行 git 或编辑器的 git 集成时，这类设置指定的程序会以本人的完全权限运行。一项让这些文件对受限命令保持只读的[设计选项](../design/workspace-git-state.md)尚待决定。
+- 本人自己的 git 与编辑器没有加固。在 `workspace-write` 下，受限命令可以写入仓库的 `.git/config`、钩子与属性文件，下次本人在沙箱之外于该仓库中运行 git 或编辑器的 git 集成时，这类设置指定的程序会以本人的完全权限运行。一项让这些文件对受限命令保持只读的[设计选项](../design/workspace-git-state.zh.md)尚待决定。
 - 文件工具自行应用 `home-read` 与 `home-write`。`read`、`read_image`、`apply_patch` 与 `str_replace_editor` 拒绝位于 home 下或通往 home 的其他路径（读取豁免除外），本地文件系统会确认它打开的文件或目录就是它检查过的那个，因此在检查与打开之间被替换为指向 home 的链接的工作区目录会导致读取失败：在 Linux 上依据描述符自身的路径，在其他平台上依据其设备号与 inode，在这两次查找之间换入又恢复的链接不会被发现。写入围栏拒绝 home 以及提供方找到的 home 的其他每个挂载。`glob` 与 `grep` 在 ripgrep 启动之前解析其根目录，并在 `read-only` 下以受限方式运行 ripgrep，因此方言的 `home-read` 在搜索的每一层深度都成立，与命令相同；在没有运行器能限制的地方，搜索会失败；在不限制任何读取的 Windows 上，搜索期间换入又恢复的链接不会被发现。这些工具还可以读取它们自己 chat 在 `spill/` 之下的目录，那里保存对该 chat 而言过长的工具输出，溢出提示会告诉模型去读取它，但不能读取其他任何 chat 的目录，这也使派生出的 chat 无法读取它继承的溢出文件；受限命令则完全不能读取 `spill/`。溢出文件只写入 `spill/`（权限模式 0700，若更宽松则收紧）：当 home 无法容纳它时，输出留在 chat 中，而不是写入受限命令可能读取的临时目录。
 - harness 通过其子进程服务启动的命令与其他进程继承其环境，但不包括上游过滤器丢弃的条目：保存凭据的名称，例如 `*_TOKEN`、`*_CREDENTIALS`、`*PASSPHRASE*`、`MYSQL_PWD`、`KUBECONFIG` 与 `KRB5CCNAME`，以及含有带用户信息的 URL 的值，包括仅含令牌的 `https://<token>@host` 或 Sentry DSN。像 `PATH` 这样的搜索列表只丢弃其中指向凭据文件或 agent 套接字的元素。以过滤器不认识的名称和形式出现的凭据会被继承。
 - 有些工具会在工作区中于沙箱之外启动程序：Claude Code 与 ACP 子 agent 工具启动其 agent 进程，stdio 语言服务器工具启动语言服务器，均不受限制。这些程序以本人的完全权限读取工作区的文件与配置，因此受限命令在那里写入的文件可以改变它们的行为。
 - 外部智能体（例如 Claude Code 或 Codex）还以其自己的设置以及本人自己的登录和账户运行，并且可以读取和更改 Delorun 的 home。在 C16 开关 `external_agent_consent` 开启时（Delorun 的 profile 中就是如此，直到本人在 home 自己的电脑上的 Settings、External agents 中将其关闭；远程访问设备不能写入设置，setup 的提示回答也不会改变它），`@delorun/plugin-delegation-consent` 在智能体运行之前审查每次启动：`read-only` chat、没有工作区文件夹的 chat 和没有沙箱策略的组合从不启动它，位于 chat 工作区之外的运行目录被拒绝，并且只有在本人于 home 自己的电脑上允许该次运行，或已为该工作区允许该智能体之后，智能体才会启动；远程访问设备不能回答该询问。每次运行在其时限（默认 30 分钟）之后停止，并且无论目标如何拼写，模型的 `plugin_manager` 都不能安装、启用或配置任何外部智能体包（每个 `@deepseek-ai/dsh-subagent-*` 包，进程内的除外，包括 ACP 的）；具有完全访问权限的 chat 仍然可以用命令安装一个。智能体一旦启动就不受限制：审查决定它是否运行，而不是它做什么（[插件](../../packages/plugin-delegation-consent/README.zh.md)）。
 
-探测、检查、提示的说明、Docker Desktop 的控制套接字目录、Windows，以及 `delorun headless` 下的相同规则，见[原生限制设计](../design/native-confinement.md)。
+探测、检查、提示的说明、Docker Desktop 的控制套接字目录、Windows，以及 `delorun headless` 下的相同规则，见[原生限制设计](../design/native-confinement.zh.md)。
 
 <a id="the-homes-control-channels"></a>
 
@@ -180,7 +180,7 @@ Docker 工作区尚未构建。[C9](../contracts/c09-runtime-supervisor.zh.md) �
 
 ### 准入与监听器
 
-[C4](../contracts/c04-admission.zh.md) 定义准入。回环监听器在 CLI profile 中为 `127.0.0.1:3080`，运行上游的准入并开启一次性启动令牌：启动令牌在 60 秒内只能使用一次，`/connect`，以及无状态的签名 cookie，它们在签发 30 天后过期，没有闲置限制、没有服务器端记录，也不可撤销。能读取 home 的 `.credentials.yaml` 的一方无需任何启动令牌即可签出这样的 cookie。每个持有 cookie 的浏览器都以唯一所有者的身份行事，回环 studio 不发送内容安全策略。设置的 `--yes` 与 `--config` 形式从不开启远程访问（[C11](../contracts/c11-setup-answers.zh.md)）；`delorun reach on tailscale` 以及设置 Full 模式中的“是”答复会开启它。开启远程访问时，远程访问监听器的分发器在任何路由、升级或回退之前认证每个请求。回环凭据是上游的启动 cookie 与 API 凭据，由上游内置的准入接受；不存在按凭据的记录，因此没有任何东西会因为缺少记录而拒绝有效凭据。以 7 天闲置限制记录每个回环凭据，见[远程访问设计](../design/reach.md#loopback-credentials)，尚未构建。
+[C4](../contracts/c04-admission.zh.md) 定义准入。回环监听器在 CLI profile 中为 `127.0.0.1:3080`，运行上游的准入并开启一次性启动令牌：启动令牌在 60 秒内只能使用一次，`/connect`，以及无状态的签名 cookie，它们在签发 30 天后过期，没有闲置限制、没有服务器端记录，也不可撤销。能读取 home 的 `.credentials.yaml` 的一方无需任何启动令牌即可签出这样的 cookie。每个持有 cookie 的浏览器都以唯一所有者的身份行事，回环 studio 不发送内容安全策略。设置的 `--yes` 与 `--config` 形式从不开启远程访问（[C11](../contracts/c11-setup-answers.zh.md)）；`delorun reach on tailscale` 以及设置 Full 模式中的“是”答复会开启它。开启远程访问时，远程访问监听器的分发器在任何路由、升级或回退之前认证每个请求。回环凭据是上游的启动 cookie 与 API 凭据，由上游内置的准入接受；不存在按凭据的记录，因此没有任何东西会因为缺少记录而拒绝有效凭据。以 7 天闲置限制记录每个回环凭据，见[远程访问设计](../design/reach.zh.md#loopback-credentials)，尚未构建。
 
 <a id="device-approval"></a>
 
@@ -192,7 +192,7 @@ Docker 工作区尚未构建。[C9](../contracts/c09-runtime-supervisor.zh.md) �
 
 ### 远程访问方式
 
-Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md)）：它通过 `tailscale serve` 提供一个固定的本地端口，拒绝 Funnel，移除其端口上不属于它的 serve 规则，并每分钟重新检查 Tailscale。Funnel 与自有域名提供方尚未构建，自托管中继的服务器已构建，但没有任何 home 连接它（[C6](../contracts/c06-relay-protocol.zh.md)）。规格测试伪造 `tailscale`；[远程访问设计](../design/reach.md#never-run-on-a-real-tailnet-or-phone)列出了尚未在真实 tailnet 或手机上验证的内容。
+Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md)）：它通过 `tailscale serve` 提供一个固定的本地端口，拒绝 Funnel，移除其端口上不属于它的 serve 规则，并每分钟重新检查 Tailscale。Funnel 与自有域名提供方尚未构建，自托管中继的服务器已构建，但没有任何 home 连接它（[C6](../contracts/c06-relay-protocol.zh.md)）。规格测试伪造 `tailscale`；[远程访问设计](../design/reach.zh.md#never-run-on-a-real-tailnet-or-phone)列出了尚未在真实 tailnet 或手机上验证的内容。
 
 <a id="sign-in"></a>
 
@@ -213,7 +213,7 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 - 在签名、摘要与日志检查通过之前，任何文件都不会进入 `~/.delorun/runtimes/`。每次启动时，npm 启动器都会根据已签名的文件列表检查每个已安装的运行时文件：它对每个文件计算哈希，或将文件的身份与上次计算哈希后记录的身份比较，并默认至少每 7 天对每个文件计算一次哈希。不改变文件变更时间的存储损坏，由该完整检查或 `delorun verify` 发现，而不是由下一次启动发现。本人批准 harness 编辑时，一次启动所运行的组合树，是对照已签名的文件列表和 `changes/harness/` 之下已批准的 harness 记录检查的，两者都从 home 读取，因此它能发现被改动的树文件，但发现不了被同一用户的进程重写的记录（见上文同一用户的其他本地进程）。
 - npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delorun 检查之前运行 npm 提供的启动器。每次启动都以启动器附带的最新 root 为锚，从不以更旧的已存储 root 为锚，因此被附带 root 撤销的 targets 密钥不再能通过验证。设置会安装固定为当前运行的启动器版本的 `delorun` 命令，[信任页面](../guide/trust.zh.md#checking-it-yourself)说明了如何通过带外方式核查该版本。
 
-发布工作流尚不存在：每 24 小时重新签名 timestamp、带构建证明且不使用令牌地发布到 npm，以及安装脚本，见[发布工作流设计](../design/release-workflow.md)。桌面应用的更新器是上游的，不检查任何 Delorun 签名或日志条目（[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)）。
+发布工作流尚不存在：每 24 小时重新签名 timestamp、带构建证明且不使用令牌地发布到 npm，以及安装脚本，见[发布工作流设计](../design/release-workflow.zh.md)。桌面应用的更新器是上游的，不检查任何 Delorun 签名或日志条目（[更新与回滚设计](../design/update-and-rollback.zh.md#the-desktop-app)）。
 
 <a id="the-catalogue-and-revocation"></a>
 
@@ -231,7 +231,7 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 
 ### 导出文件与不受信任的 chat
 
-[C8](../contracts/c08-archive-and-trash.zh.md) 定义导出文件与回收站。导入会先在暂存区验证整个归档，然后才写入任何内容，并且从不覆盖工作区或 chat。定制内容是封闭 schema 下的数据：不会求值任何 `!!js` 表达式，不接受任何 `insert` 行，也没有任何行能设置沙箱模式、凭据引用、远程访问方式或出口。没有导入方 home 能担保的签名的归档，只有在本人将其作为未验证内容接受之后才会导入。不会应用任何定制行，导入的 chat 保存在没有任何东西读取它们的地方，因此它们不会进入任何模型请求。把导入的 chat 作为不受信任的 chat 打开以及应用定制内容，见[导入 chat 设计](../design/imported-chats.md)。清除会从 C8 所列的每个存储中移除条目，请求图片缓存除外；在 studio 中清除会移除该浏览器中该 chat 的草稿，而从 `delorun trash` 清除或在保留期结束时清除不会触及任何草稿。
+[C8](../contracts/c08-archive-and-trash.zh.md) 定义导出文件与回收站。导入会先在暂存区验证整个归档，然后才写入任何内容，并且从不覆盖工作区或 chat。定制内容是封闭 schema 下的数据：不会求值任何 `!!js` 表达式，不接受任何 `insert` 行，也没有任何行能设置沙箱模式、凭据引用、远程访问方式或出口。没有导入方 home 能担保的签名的归档，只有在本人将其作为未验证内容接受之后才会导入。不会应用任何定制行，导入的 chat 保存在没有任何东西读取它们的地方，因此它们不会进入任何模型请求。把导入的 chat 作为不受信任的 chat 打开以及应用定制内容，见[导入 chat 设计](../design/imported-chats.zh.md)。清除会从 C8 所列的每个存储中移除条目，请求图片缓存除外；在 studio 中清除会移除该浏览器中该 chat 的草稿，而从 `delorun trash` 清除或在保留期结束时清除不会触及任何草稿。
 
 <a id="logs-and-redaction"></a>
 

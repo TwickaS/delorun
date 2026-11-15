@@ -17,7 +17,7 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
 设备批准只为 Tailscale 私有路线构建，并在本人开启远程访问期间使用。
 
 - **已构建并已使用：** `@delorun/home-auth`（每个 CLI profile 都加载它）持有一次性所有者验证码、只在回环监听器上响应的所有者认领、批准窗口、待处理请求、匹配码、本地批准（回环 studio 的表单与 `delorun devices approve`）、Tailscale 私有监听器上用设备密钥登录、设备列表与设备移除（`delorun devices list | approve | remove | code`）。`delorun export` 在 `secrets/home-auth/home-key.pem` 创建的 home 密钥只为归档签名（[C8](c08-archive-and-trash.zh.md)）。
-- **尚未构建：** 在有效会话中从受信任设备批准及其批准提示、从另一台设备移除、`delorun devices reset`、恢复套件、通行密钥与 OpenID Connect 登录、桌面应用连接到另一个 home 及其 TLS 固定，以及告警。私有 tailnet 路线的规则见[远程访问设计](../design/reach.md)。
+- **尚未构建：** 在有效会话中从受信任设备批准及其批准提示、从另一台设备移除、`delorun devices reset`、恢复套件、通行密钥与 OpenID Connect 登录、桌面应用连接到另一个 home 及其 TLS 固定，以及告警。私有 tailnet 路线的规则见[远程访问设计](../design/reach.zh.md)。
 
 下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
 

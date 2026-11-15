@@ -3,38 +3,41 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/trash/README.md
 /:
-  en: d6216b45169fc170
-  zh: 4bfc0adbefc413a8
+  en: 077ee3a4cec2a8e0
+  zh: a970e77ef113154a
 /delorun-trash:
-  en: d10c92e143d4f599
-  zh: ce416d67d41d53f7
+  en: 8a1b807c27be91e3
+  zh: c89cc2bcc65adc47
 /delorun-trash/summary:
-  en: f15b09adac7aefab
-  zh: fd627ce10e7bac9f
+  en: 263bf50c3628bfb9
+  zh: 3d4f2182fccfed6c
 /delorun-trash/contents:
-  en: c379729bc195de29
-  zh: 7375e3f34ecb731e
+  en: c6f29cbd36484ca6
+  zh: 968f57ae50da09c3
 /delorun-trash/the-trash-store:
-  en: 6cd299a4015e10a3
-  zh: f27eddd859f10ae5
+  en: f7633c3237f35911
+  zh: 2263329a16592348
 /delorun-trash/deleting:
-  en: a5e6b965d51a25b9
-  zh: cbd09ba083947d43
+  en: 015e6d7b3604e092
+  zh: 7edc8c21d5fd05f8
 /delorun-trash/restoring:
-  en: 3f92f547cb64d200
-  zh: 74165a71f1d66c87
+  en: b972fc18092b30c0
+  zh: 23eedd7216ef8609
 /delorun-trash/purging:
-  en: 2c70abebd4b865b2
-  zh: b81aa15fd66e242c
+  en: 80689c0670c7a3e0
+  zh: 57c4fb14e19a067a
 /delorun-trash/the-clear-logs-offer:
-  en: a9604b3bf8e9beca
-  zh: 183ba34062fd57c5
+  en: 6c2c486af79eceaf
+  zh: 7e72afd06c64457a
 /delorun-trash/retention:
-  en: b2c4ecdda911f679
-  zh: 55f167559d285f25
+  en: a736f64e586051e7
+  zh: abc4495e725cda42
+/delorun-trash/live-chats:
+  en: 61d2bf2d5d9b3ee8
+  zh: 23746c378b19958f
 /delorun-trash/wiring:
-  en: e53ff729eb6e356a
-  zh: 6757d755141e824d
+  en: 0bc7ae443e4a6972
+  zh: 1fb31610081ffaa0
 /delorun-trash/tests:
-  en: 40ae611ee5638115
-  zh: 53aa2de1e39a0ea9
+  en: e8a388621e3b96df
+  zh: 04063c525fc276fc

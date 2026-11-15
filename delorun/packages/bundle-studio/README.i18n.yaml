@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/bundle-studio/README.md
+/:
+  en: 518c258ab1511ed0
+  zh: 543cecf02d6a22c6
+/delorun-bundle-studio:
+  en: aaf974864cbe0c0b
+  zh: bd0f3083eea3704c
+/delorun-bundle-studio/summary:
+  en: 10d3d99a2f41938c
+  zh: 99700dc5be5f1d7b
+/delorun-bundle-studio/contents:
+  en: 8187c043789df827
+  zh: 02d96749bf8fdac5
+/delorun-bundle-studio/use-this-bundle:
+  en: 62dd79b39f357ad0
+  zh: 06456db8747efe89
+/delorun-bundle-studio/rows:
+  en: 72f48bcfa42ac3ad
+  zh: ac43b313d6edafcb
+/delorun-bundle-studio/the-first-run-key-dialog:
+  en: 89a91bbedc587e55
+  zh: b29bcb09197f1f18
+/delorun-bundle-studio/the-stock-look:
+  en: 57c79a97562361c1
+  zh: 747bcef909ab48ea
+/delorun-bundle-studio/tests:
+  en: c4cc0c37fe297a84
+  zh: 1ab072e58f247d53

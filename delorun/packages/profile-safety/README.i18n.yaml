@@ -3,47 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/profile-safety/README.md
 /:
-  en: a03e2e5b3c0abad0
-  zh: 17f23dfeb5ea8606
+  en: b0db5af79a692fc6
+  zh: c97f96cd0012432f
 /delorun-profile-safety:
-  en: 14254f937f97fd8a
-  zh: 1736e25852f0e1da
+  en: 00100144301af7ad
+  zh: 19bb22e93ac05ff1
 /delorun-profile-safety/summary:
-  en: c435615449ebcb90
-  zh: 6a8bd34d76f423d6
+  en: ad28738084981b02
+  zh: bfb82fc5d74ea051
 /delorun-profile-safety/contents:
-  en: e7359bd751e94d1e
-  zh: 0fd2944a07b6004e
+  en: 99dad41caf5b2e9e
+  zh: 735960a364af6b0b
 /delorun-profile-safety/use-this-package:
-  en: 2e7679be90b1a21e
-  zh: 7db5ab3e0b7d2da2
+  en: 7b859474ebbdf194
+  zh: 8a1343c2de59777c
 /delorun-profile-safety/the-carry-check:
   en: 9a725a75a9d29b1c
-  zh: 238175473da61b4d
+  zh: b619cb5735ca229b
 /delorun-profile-safety/what-a-profile-holds:
-  en: 850399fc97012bc0
-  zh: a66ed78064e7b6f2
+  en: 91cb2a5e6004180c
+  zh: afccbbd661aa00da
 /delorun-profile-safety/the-extended-history:
-  en: b50930549b9ea312
-  zh: 14aaec66f920443c
+  en: 9397093413d68b2f
+  zh: 2b4b4f7605ddad2a
+/delorun-profile-safety/secret-fields:
+  en: e2691012b858bfc2
+  zh: ddd61a2b8911f8b5
 /delorun-profile-safety/undo-restore-and-rollback:
   en: f70e8f598f552691
-  zh: 5690edcb9b1548b0
+  zh: 442a9c8541dbace9
+/delorun-profile-safety/versions-for-people:
+  en: 01b058ea076ab102
+  zh: b3fbce6404bf6fdf
 /delorun-profile-safety/eject:
-  en: 5fbcfe28d5888e95
-  zh: 899c197b63eec758
+  en: c2caa33719f94d9f
+  zh: 2f96180ec5be6f2c
 /delorun-profile-safety/safe-mode:
   en: f7a9a3ae0266ef63
   zh: 279e7da9ddfdd591
 /delorun-profile-safety/delorun-recover:
-  en: 18ea77788144ca94
-  zh: 8ed5ae060148b579
+  en: 97e20a4873caed36
+  zh: 995f39b4cddc4dd3
 /delorun-profile-safety/errors:
-  en: 53be2379bc11e0d6
-  zh: 907b871753c90f5f
+  en: d326965620608705
+  zh: 00758c54af81e76d
 /delorun-profile-safety/not-covered:
-  en: 0821d4b713b65466
-  zh: 1a38d9ae85cb3ae7
+  en: dbbb6d81360937eb
+  zh: 10b00fad6cfa4748
 /delorun-profile-safety/development:
-  en: fc917465c896ecd0
-  zh: 5d18a56cd7eeb102
+  en: 7793d694c93b094b
+  zh: 9919ace83acf39ce

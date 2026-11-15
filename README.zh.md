@@ -46,7 +46,7 @@ Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全
 
 ## 运行
 
-安装 Node.js 24.9 或更高版本，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/install.md)带你完成设置和第一次聊天。
+安装 Node.js 24.9 或更高版本，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/install.zh.md)带你完成设置和第一次聊天。
 
 <a id="run-from-source"></a>
 
@@ -88,9 +88,9 @@ Delorun 构建于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - [Delorun 文档](delorun/docs/README.zh.md)
 - [架构](delorun/docs/architecture/README.zh.md)
 - [安全与威胁模型](delorun/docs/security/README.zh.md)
-- [安全基本原则](delorun/docs/security/fundamentals.md)
+- [安全基本原则](delorun/docs/security/fundamentals.zh.md)
 - [路线图](delorun/docs/guide/roadmap.zh.md)
-- [尚未构建的功能设计](delorun/docs/design/README.md)
+- [尚未构建的功能设计](delorun/docs/design/README.zh.md)
 
 ## 社区
 

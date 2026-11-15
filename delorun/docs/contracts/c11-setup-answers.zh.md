@@ -215,7 +215,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 
 - `delorun/apps/cli/src/setup/`：setup 流程、它的各个节及其 `--yes` 与 `--config` 形式。
 - `delorun/packages/bundle-local`：上游选择加入项的行及其在 studio 中的同意屏幕，以及提示回答所设置的行。
-- `delorun/packages/plugin-onboarding`，由 `@delorun/bundle-studio` 挂载：studio 的新手引导从 `setup-answers.json` 读取 `sections`；其余规则见[首次运行设计](../design/first-run.md)。
+- `delorun/packages/plugin-onboarding`，由 `@delorun/bundle-studio` 挂载：studio 的新手引导从 `setup-answers.json` 读取 `sections`；其余规则见[首次运行设计](../design/first-run.zh.md)。
 - `delorun/packages/contract-setup-answers/`：回答类型、默认值与 profile 行名称。
 
 <a id="compatibility"></a>

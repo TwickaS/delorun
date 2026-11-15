@@ -86,7 +86,7 @@ delorun plugin dev ./my-plugin
 delorun plugin check ./my-plugin
 ```
 
-插件在 `package.json` 中声明它能运行的版本：DeepSeek Harness 用 `engines.dsh`，Delorun 用 `engines.delorun`。Delorun 会拒绝安装或加载其范围不包含正在运行的版本的插件。`delorun plugin check` 读取文件夹的 `package.json` 而不运行其中的任何文件，说明每个范围接纳什么，并打印针对正在运行的 Delorun 的那个范围。当更新会因为插件的范围而关闭它时，请见[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。[Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.md)说明了发布版本之间可能改变什么：在 Delorun 1.0 之前，`^0.y.0` 接纳一个次版本及其补丁版本。
+插件在 `package.json` 中声明它能运行的版本：DeepSeek Harness 用 `engines.dsh`，Delorun 用 `engines.delorun`。Delorun 会拒绝安装或加载其范围不包含正在运行的版本的插件。`delorun plugin check` 读取文件夹的 `package.json` 而不运行其中的任何文件，说明每个范围接纳什么，并打印针对正在运行的 Delorun 的那个范围。当更新会因为插件的范围而关闭它时，请见[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。[Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.zh.md)说明了发布版本之间可能改变什么：在 Delorun 1.0 之前，`^0.y.0` 接纳一个次版本及其补丁版本。
 
 ## 安装它
 

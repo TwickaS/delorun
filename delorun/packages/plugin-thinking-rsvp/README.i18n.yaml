@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-thinking-rsvp/README.md
+/delorun-plugin-thinking-rsvp:
+  en: 3f8acd5118dfc9d0
+  zh: a0af86f10191e6f4
+/delorun-plugin-thinking-rsvp/using-the-tab:
+  en: 7fa6aab5c0614cba
+  zh: 81220fdd0a7bcc9f
+/delorun-plugin-thinking-rsvp/contract:
+  en: cae970ed4d6d49d4
+  zh: fbed840b3af8ff29
+/delorun-plugin-thinking-rsvp/development:
+  en: 4b22d31c8a297fd4
+  zh: 788c404cc63cc73f

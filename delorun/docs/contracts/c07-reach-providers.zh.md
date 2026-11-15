@@ -17,7 +17,7 @@ description: "约定 C7：远程访问提供方的 Service Definition 及其状�
 Tailscale 私有提供方已构建；Funnel 与自有域名提供方尚未构建。
 
 - **已构建并已使用：** setup 把远程访问记为关闭：`--yes` 让它保持关闭，写明 `none` 之外某个远程访问方式的 `--config` 文档会被拒绝。`@delorun/reach` 提供 `reach` 服务与 Tailscale 私有提供方：`delorun reach on tailscale` 或 setup 完整模式中的肯定回答开启该方式，随后 home 绑定固定的监听器端口、打开远程访问监听器，并把 `tailscale serve` 配置到该端口。提供方拒绝 Funnel，移除其端口上不归它所有的 serve 规则，并默认每分钟重新检查 Tailscale；`delorun reach off` 移除该规则。
-- **尚未构建：** Funnel 与自有域名提供方、其他方式的可见性说明、Funnel 目标、套接字变体、自有域名的 CAA 记录与 ACME 质询规则检查，以及 `reach-binding` 与 `own-domain-caa` 检查（`delorun verify` 将它们报告为未运行）。没有任何真实的 tailnet 或手机运行过 Tailscale 私有提供方；[远程访问设计](../design/reach.md#never-run-on-a-real-tailnet-or-phone)列出了仍未尝试的内容。本人自己的 tailnet 上远程访问的规则见[远程访问设计](../design/reach.md)。
+- **尚未构建：** Funnel 与自有域名提供方、其他方式的可见性说明、Funnel 目标、套接字变体、自有域名的 CAA 记录与 ACME 质询规则检查，以及 `reach-binding` 与 `own-domain-caa` 检查（`delorun verify` 将它们报告为未运行）。没有任何真实的 tailnet 或手机运行过 Tailscale 私有提供方；[远程访问设计](../design/reach.zh.md#never-run-on-a-real-tailnet-or-phone)列出了仍未尝试的内容。本人自己的 tailnet 上远程访问的规则见[远程访问设计](../design/reach.zh.md)。
 
 下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
 

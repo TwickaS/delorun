@@ -3,41 +3,44 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/home/README.md
 /:
-  en: 4ab63b1ad401b6a6
-  zh: 13920d9d278452c8
+  en: ffe46b0e6f97e5cc
+  zh: 30d2e91d3cf7240d
 /delorun-home:
-  en: 85c57f4ac3d7e90d
-  zh: 5d25ab71ce6e468f
+  en: 030011ff62d253c1
+  zh: bb5bab374148d3bb
 /delorun-home/summary:
-  en: b7aa7cb27bceb834
-  zh: 4f3d93b04f9fcbac
+  en: 9a8f8ed62e46c71f
+  zh: 7f404a23467e04fa
 /delorun-home/contents:
-  en: 86e2a0eeb11ae9ef
-  zh: 24f4ac5ed2f4f7d7
+  en: 1d300757bd578733
+  zh: 7e41012ffd200daa
 /delorun-home/use-this-package:
-  en: 2f5acf2e8513cc19
-  zh: 22e91ff06cbba69a
+  en: d23614a87e0bda9d
+  zh: 625ebee9512f854d
 /delorun-home/resolving-the-home:
-  en: 4651c04bb479172a
-  zh: 295f263602bed536
+  en: 4534fdfec610008e
+  zh: d5aabfad5efbee10
 /delorun-home/the-tree-and-its-modes:
-  en: 1b054a2c279d60ce
-  zh: 2ce56393ceb24f54
+  en: c081dbc32f2a1456
+  zh: d47210359a54834f
 /delorun-home/protected-files:
   en: 61e0c351f3eec285
-  zh: 68f8172a57fdffe5
+  zh: 610cc7025b7c44f9
 /delorun-home/the-home-lock:
-  en: a7ae0dac0681cf18
-  zh: 996cd4a2271843c9
+  en: 284f5a5527c568d0
+  zh: fe975ab1ebaa093f
 /delorun-home/the-start-token:
   en: e54de141d6c7e4fa
   zh: e2f7289c5f641733
 /delorun-home/the-token-channels:
   en: a036cbb9076ddd74
-  zh: 13b695b6bc179fbe
-/delorun-home/not-yet-implemented:
-  en: 398e6f896a43c8d7
-  zh: 125240bd4b8048a6
+  zh: 8e00606fa66ea55b
+/delorun-home/where-a-request-arrived:
+  en: 36f03f8372add940
+  zh: 525cd7767809e876
+/delorun-home/not-implemented:
+  en: 11905d219c2caace
+  zh: f1e5fabe96c985c6
 /delorun-home/development:
-  en: b673da1b4cedc4d1
-  zh: 6ad6d3a3cdc89c54
+  en: 2f97dcbbab34548f
+  zh: ce37906432d1cea9

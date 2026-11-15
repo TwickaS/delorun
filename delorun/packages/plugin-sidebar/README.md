@@ -5,6 +5,8 @@ kind: "package-library"
 
 # @delorun/plugin-sidebar
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 The chat list of Delorun's studio, in the style of T3 Code's sidebar: chats as cards with a status at each card's top right, the Working, Snoozed and Settled shelves held at the bottom, search, a workspace filter, Workspace folders, Alt jumps, a card of details on hover, workspace icons, generated or T3 Code header art behind the top of the sidebar, and a quiet notice when a newer Delorun release exists. The package registers the list, the art, the foot and the Sidebar section of Settings in upstream's sidebar seats, so upstream's rows, menus and dialogs keep working. The rows, sorting rules, shelves and art are ported from [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, under the MIT licence ([notice](THIRD_PARTY_NOTICES.md)); the data is the harness's Sessions and Workspaces. `@delorun/bundle-studio` mounts the package as the row `delorun-sidebar`. It loads only while the Delorun look is on; with the stock look, upstream's list, foot and New Session button return.

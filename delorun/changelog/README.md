@@ -1,5 +1,7 @@
 # Changelog
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 This folder is the one home of Delorun's changelog. It records the whole path from stock DeepSeek Harness (the fork point, upstream release `dsh-v0.2.2-rc.1`) to the Delorun a person is running, in words that a person using Delorun understands.

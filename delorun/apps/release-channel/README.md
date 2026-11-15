@@ -1,5 +1,7 @@
 # Delorun release channel
 
+English | [中文](README.zh.md)
+
 The production release channel: the R2 bucket that holds the signed release files, the public Worker that serves them, the cron Worker that re-signs `timestamp.json` every day and keeps a high-water mark, and the command that publishes a release. Contract [C2](../../docs/contracts/c02-release-manifest.md) defines the files; this package hosts them and adds no cryptography of its own. It reuses `@delorun/release-formats` for verification and `@delorun/release`'s `sign/timestamp.ts` for the content of a re-signed timestamp.
 
 - [Modules](#modules)

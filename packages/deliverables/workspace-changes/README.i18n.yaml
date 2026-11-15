@@ -15,11 +15,17 @@
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-workspace-changes/use-this-package:
-  en: 0ab7680d831598aa
-  zh: 2594f3c8c99cef24
+  en: 6df4fac3287ad1a4
+  zh: 2ac0c42d0a0eebc6
 /deepseek-ai-dsh-workspace-changes/understand-the-implementation:
-  en: 9bfc66bea548bda2
-  zh: 7023c42cdb44569b
+  en: c557d7ad87c66f23
+  zh: 6b3719ceb5ecfaac
+/deepseek-ai-dsh-workspace-changes/understand-the-implementation/private-directory:
+  en: 8a679bd4ca454390
+  zh: 4159e4eb3fef4836
+/deepseek-ai-dsh-workspace-changes/understand-the-implementation/git-hardening:
+  en: 3df96a87c8589334
+  zh: 41bec8fb0d584e97
 /deepseek-ai-dsh-workspace-changes/further-exploration:
   en: 240df7d8b2e80059
   zh: 214cebb4d18ca4d8
@@ -30,8 +36,8 @@
   en: e7ba08477bf22c4e
   zh: f365439c69beb722
 /deepseek-ai-dsh-workspace-changes/known-limitations-and-deferred-work:
-  en: c7091685e5065a40
-  zh: 1e9b85962ea04187
+  en: f98234b9cee71db7
+  zh: d7bf7459bb1efb76
 /deepseek-ai-dsh-workspace-changes/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

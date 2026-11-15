@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-theme/README.md
+/:
+  en: 9e4c97890501aade
+  zh: 21e91fc998176636
+/delorun-plugin-theme:
+  en: 83b4ce236594c572
+  zh: 83bfa3894d264a23
+/delorun-plugin-theme/summary:
+  en: 505580d5cfa03755
+  zh: 100dfd34b2e7ddc7
+/delorun-plugin-theme/contents:
+  en: e9a6dea169be3b64
+  zh: 87cae0fcf2931dd4
+/delorun-plugin-theme/contract:
+  en: ff3a955c9ffcf6d4
+  zh: 2caf5ae033daf63e
+/delorun-plugin-theme/configuration:
+  en: 6d36b1b0409d970c
+  zh: 2f63e1d4550cd6f8
+/delorun-plugin-theme/the-look:
+  en: 61d2e37f92d78874
+  zh: 6a5d03e14260c34b
+/delorun-plugin-theme/the-stock-look:
+  en: 85d55103bb7b6d3d
+  zh: df13f0b24c4db359
+/delorun-plugin-theme/palettes-and-attribution:
+  en: ba77cf574f111890
+  zh: 8b28441b3554800e
+/delorun-plugin-theme/tests:
+  en: 590b869f51e668a6
+  zh: b0a7f4774c29f9a3
+/delorun-plugin-theme/limits:
+  en: 87a57702d9aab5b9
+  zh: 581aa9ba70bd9a36
+/delorun-plugin-theme/shared-controls-and-safari-edges:
+  en: 468ea34fc812c70f
+  zh: 1ef0261d2425772e

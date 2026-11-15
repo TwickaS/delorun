@@ -19,7 +19,7 @@ description: "约定 C4：上游连接中的准入 seam、回环与远程访问�
 - **已构建并已使用：** CLI profile 中位于 `127.0.0.1:3080` 的回环监听器，它准入由 `delorun open` 和启动流程从 home 进程取得的[一次性启动令牌](#launch-tokens)、`/connect` 以及上游的无状态 `dsh-auth-*` cookie（见[会话](#sessions)），并对 `/api` 与 `/connect` 使用上游的 `Host` 与 `Origin` 检查。上游的连接以 `authenticator/minted` 通告每次回环签发，没有任何监听者。
 - **远程访问开启时已构建并已使用：** `authenticator` Service Definition，`@delorun/home-auth` 在每个 CLI profile 中提供它，并在回环监听器上保留上游的准入；Tailscale 私有远程访问监听器，及其分发顺序、对上游凭据的拒绝、响应头、Content Security Policy、Trusted Types 头和远程图像占位符；除通行密钥、OpenID Connect 与恢复路由之外的登录前路由；以及远程访问会话的创建、滚动更新、轮换和空闲与绝对限值。
 - **已构建，但无人使用：** Funnel 与 relay 远程访问监听器，只有测试会打开它们。
-- **尚未构建：** 登录前允许列表中的通行密钥、OpenID Connect 与恢复路由；回环凭据记录、7 天空闲限值和回环凭据的轮换，以及 `delorun devices reset`，它们都在[远程访问设计](../design/reach.md#loopback-credentials)中；以及回环 studio 上的 Content Security Policy。回环凭据是上游的启动 cookie 与 API 凭据，由上游内置的准入准入；不存在逐凭据的记录，因此没有请求因缺少记录而被拒绝。
+- **尚未构建：** 登录前允许列表中的通行密钥、OpenID Connect 与恢复路由；回环凭据记录、7 天空闲限值和回环凭据的轮换，以及 `delorun devices reset`，它们都在[远程访问设计](../design/reach.zh.md#loopback-credentials)中；以及回环 studio 上的 Content Security Policy。回环凭据是上游的启动 cookie 与 API 凭据，由上游内置的准入准入；不存在逐凭据的记录，因此没有请求因缺少记录而被拒绝。
 
 下文中，本列表称为尚未构建或无人使用的要求与拒绝测试，在某次改动构建并接入它们之前，不保护任何人。
 
@@ -138,7 +138,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 - **创建。** `POST /auth/session` 只根据以下两项创建会话：已为该监听器地址批准的受信任设备给出的新鲜设备密钥签名，以及针对该地址的身份因子证明（[C5](c05-device-approval.zh.md#sign-in)、[C14](c14-oidc-passkeys.zh.md)）。
 - **注册会话。** 在没有已注册身份因子的地址上，同样的签名在没有证明时创建一个注册会话：一个绝对限值为 10 分钟的远程访问会话，只准入 [C14](c14-oidc-passkeys.zh.md#enrolment) 的注册路由，在其他地方被拒绝并返回 `401 NOT_SIGNED_IN`。提供方声明 `tailnet-membership` 的监听器没有注册会话：已批准设备的签名会创建带有该因子的完整会话，且不会据此注册任何因子。
 
-**回环会话**保留上游的凭据：启动令牌交换、`/connect`，以及用上游 `.credentials.yaml` 中的浏览器会话密钥签名的无状态 HMAC cookie `dsh-auth-<hash>`。在 CLI profile 中，启动令牌是一次性的（[启动令牌](#launch-tokens)）；上游自己的 profile 保留每个 Host 进程生成一次、在该进程整个生命期内都被接受的 32 字节随机启动令牌。cookie 只检查其签名和到期时间：不存在服务器端记录，没有任何东西能撤销它，每个 cookie 都作为同一个所有者 Peer 准入。它在签发 `cookieMaxAgeDays` 之后到期，即上游的默认值 30，Delorun 的 profile 不改变它。浏览器会话密钥从不被替换，因此 cookie 在重启后仍然有效，直到到期。上游的连接以事件 `authenticator/minted` 通告每次签发，该事件同步发出，且早于写出携带该凭据的响应；它携带凭据的种类（启动令牌交换签发的为 `browser`，`/connect` 签发的为 `api`）、凭据值的 SHA-256 哈希（无填充的 base64url）、其受众、签发与过期时间，以及对 `api` 而言其所接纳的 Peer 的 id；该事件从不携带凭据值。该事件没有监听者；记录每个回环凭据并拒绝没有记录的凭据，见[远程访问设计](../design/reach.md#loopback-credentials)。
+**回环会话**保留上游的凭据：启动令牌交换、`/connect`，以及用上游 `.credentials.yaml` 中的浏览器会话密钥签名的无状态 HMAC cookie `dsh-auth-<hash>`。在 CLI profile 中，启动令牌是一次性的（[启动令牌](#launch-tokens)）；上游自己的 profile 保留每个 Host 进程生成一次、在该进程整个生命期内都被接受的 32 字节随机启动令牌。cookie 只检查其签名和到期时间：不存在服务器端记录，没有任何东西能撤销它，每个 cookie 都作为同一个所有者 Peer 准入。它在签发 `cookieMaxAgeDays` 之后到期，即上游的默认值 30，Delorun 的 profile 不改变它。浏览器会话密钥从不被替换，因此 cookie 在重启后仍然有效，直到到期。上游的连接以事件 `authenticator/minted` 通告每次签发，该事件同步发出，且早于写出携带该凭据的响应；它携带凭据的种类（启动令牌交换签发的为 `browser`，`/connect` 签发的为 `api`）、凭据值的 SHA-256 哈希（无填充的 base64url）、其受众、签发与过期时间，以及对 `api` 而言其所接纳的 Peer 的 id；该事件从不携带凭据值。该事件没有监听者；记录每个回环凭据并拒绝没有记录的凭据，见[远程访问设计](../design/reach.zh.md#loopback-credentials)。
 
 | 监听器 | 空闲限值 | 绝对限值 | 滚动更新 |
 | --- | --- | --- | --- |
@@ -186,7 +186,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 
 轮换会在触发它的操作返回之前，关闭携带过为任一被轮换会话所准入请求的每个已打开的远程访问连接。被轮换的远程访问会话的下一个请求被拒绝，返回 `401 ROTATION_REQUIRED`。随后 studio 签署一个新的设备密钥质询，并携带旧令牌调用 `POST /auth/session`；该调用返回一个绝对到期时间相同的新令牌，并删除旧记录；不会再次要求身份因子。轮换不涉及没有记录的回环凭据。
 
-撤销会立即结束会话。移除设备会在移除操作返回之前删除其会话与记录，并 dispose 其 Peer。`delorun devices reset`（[C5](c05-device-approval.zh.md#reset)）尚未构建，它会删除每条会话记录并替换浏览器会话密钥（[远程访问设计](../design/reach.md#loopback-credentials)）。
+撤销会立即结束会话。移除设备会在移除操作返回之前删除其会话与记录，并 dispose 其 Peer。`delorun devices reset`（[C5](c05-device-approval.zh.md#reset)）尚未构建，它会删除每条会话记录并替换浏览器会话密钥（[远程访问设计](../design/reach.zh.md#loopback-credentials)）。
 
 <a id="response-headers"></a>
 ### 响应头
@@ -264,7 +264,7 @@ cookie 名称 `__Host-delorun-session`、监听器 id、拒绝代码以及会话
 - 在每个监听器上，监听器规则不允许的 `Host` 都会被拒绝；在中继监听器上，`Host` 还须等于 SNI。
 - 远程访问会话以哈希形式保存在服务器端，可被撤销，使用带有与声明协议相符的 `Secure` 属性的 `__Host-` cookie。
 - 会话遵循上述有效期，并在上述事件发生时轮换；被移除设备的会话在移除操作返回之前结束。
-- `delorun devices reset` 替换回环浏览器会话密钥，因此在此之前签发的回环 cookie 停止生效。尚未构建（[远程访问设计](../design/reach.md#loopback-credentials)）。
+- `delorun devices reset` 替换回环浏览器会话密钥，因此在此之前签发的回环 cookie 停止生效。尚未构建（[远程访问设计](../design/reach.zh.md#loopback-credentials)）。
 - 远程访问监听器的内容安全策略把 `connect-src`、`img-src` 与 `media-src` 限制为 `'self'`，图片与媒体另允许 `data:`，图片还允许 `blob:`，且从不允许 `'unsafe-eval'`；chat 中渲染的远程图片是占位符，从不被获取。
 - Trusted Types 以上述两个策略强制执行。
 - 移除或替换 `@delorun/home-auth` 会停止每个远程访问监听器，且远程访问从不回退到上游的 cookie。
@@ -326,7 +326,7 @@ cookie 名称 `__Host-delorun-session`、监听器 id、拒绝代码以及会话
 <a id="decided-values"></a>
 ## 决定的取值
 
-- 回环凭据：自签发起绝对 30 天，上游的默认值；7 天空闲限值见[远程访问设计](../design/reach.md#loopback-credentials)，尚未构建。
+- 回环凭据：自签发起绝对 30 天，上游的默认值；7 天空闲限值见[远程访问设计](../design/reach.zh.md#loopback-credentials)，尚未构建。
 - 远程访问会话：空闲 12 小时，绝对 14 天，使用期间每 24 小时滚动更新一次，旧令牌有 30 秒宽限期。
 - 轮换触发条件：设备批准或移除、登录因子变更，以及远程访问提供方变更。
 - 会话令牌与会话存储：每个令牌 32 个随机字节，记录以 SHA-256 为键，在 5 秒内持久化，且在撤销返回之前持久化。

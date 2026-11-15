@@ -52,7 +52,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 
 同意操作（`src/consents.ts`）通过 `RunningHost.consents` 访问 Host 的同意：`permission.reload` 让 Host 在 `delorun workspace full-access` 写入按工作区权限存储之后重新读取它，并返回它现在持有的条目的摘要；`mcp.list` 返回添加时同意让其保持停止的 stdio MCP 服务器，每个都带有其启动自该服务器的接受以来变化的部分（`change`，以及变化的变量）和本人是否拒绝或撤销了它（`state`），以及已接受的启动，每个服务器名称一项（`accepted`）；`mcp.accept` 与 `mcp.decline` 以 `mcp.list` 显示的审查 id 答复其中一个服务器，`mcp.revoke` 以 `mcp.list` 显示的接受 id 撤回一个服务器的接受，并停止该服务器。这三种操作只接受令牌文件中的令牌，Host 的令牌在读取任何同意之前就以 `LOOPBACK_REQUIRED` 被拒绝（`the channel token cannot answer an MCP server` 规范）；服务器已不再持有的审查或存储已不再持有的接受以 `STALE_REVIEW` 被拒绝，没有该同意的 profile 以 `CONSENT_UNAVAILABLE` 被拒绝。
 
-`changes.reload` 不携带任何内容：当进程处于 `running` 且没有更新或回滚在运行时（否则返回 `UPDATE_IN_PROGRESS`），它要求 Host 加载 profile 的文件现在所指名的内容，并回答 `{"reload":{"ok":true}}` 或 `{"reload":{"ok":false,"error":"…"}}`。`delorun changes` 在改动了 profile 的文件之后发送它（[C21](../../docs/contracts/c21-changes.md#commands)）；它自身不改动任何文件。
+`changes.reload` 不携带任何内容：当进程处于 `running` 且没有更新或回滚在运行时（否则返回 `UPDATE_IN_PROGRESS`），它要求 Host 加载 profile 的文件现在所指名的内容，并回答 `{"reload":{"ok":true}}` 或 `{"reload":{"ok":false,"error":"…"}}`。`delorun changes` 在改动了 profile 的文件之后发送它（[C21](../../docs/contracts/c21-changes.zh.md#commands)）；它自身不改动任何文件。
 
 <a id="the-update-handshake"></a>
 ## 更新握手

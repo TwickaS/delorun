@@ -4,6 +4,8 @@ description: "The @delorun/reach package, for maintainers of reach: contract C7'
 
 # @delorun/reach
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 This package is the Service Definition and the first Service Provider of [contract C7](../../docs/contracts/c07-reach-providers.md). The `reach` service holds one provider per reach option and starts each option whose configuration row is on: it asks `@delorun/home-auth` to serve the option's reach listener with the identity factor the provider declares, binds the option's fixed listener port on `127.0.0.1`, opens the listener through upstream's `ctx.connection.openReachListener` on a port the operating system assigns, relays the fixed port to it, and starts the provider. The `reach-tailscale-private` provider declares `tailnet-membership` ([C14](../../docs/contracts/c14-oidc-passkeys.md#tailnet-membership)) and configures `tailscale serve` to the fixed port. The service mounts behind the C16 switch `reach` (`Config.enabled`), which `@delorun/bundle-local`'s row `delorun-reach` turns on; every option stays off until the person runs `delorun reach on tailscale` or answers yes in setup's Full mode.

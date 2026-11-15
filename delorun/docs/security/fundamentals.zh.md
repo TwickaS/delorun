@@ -8,9 +8,9 @@ description: "Delorun 的安全基本要求：Delorun 对自己约束的简短�
 
 ## 摘要
 
-安全基本要求是关于 Delorun 做什么或拒绝什么的规则，本人可以在每个发布中依赖它。每一条都用一句话陈述，并附有强制执行它的代码，以及在该代码不再强制执行时失败的测试。`enforced` 的基本要求在今天这个仓库的代码上成立。`designed` 的基本要求是 Delorun 已采纳、但其代码尚未构建的规则；它的[设计页面](../design/README.md)说明它将如何成立，构建它的变更会把该行移到 `enforced`。
+安全基本要求是关于 Delorun 做什么或拒绝什么的规则，本人可以在每个发布中依赖它。每一条都用一句话陈述，并附有强制执行它的代码，以及在该代码不再强制执行时失败的测试。`enforced` 的基本要求在今天这个仓库的代码上成立。`designed` 的基本要求是 Delorun 已采纳、但其代码尚未构建的规则；它的[设计页面](../design/README.zh.md)说明它将如何成立，构建它的变更会把该行移到 `enforced`。
 
-防护可以使某项基本要求更严格，没有任何东西能在没有[更改基本要求](#changing-a-fundamental)所述决定的情况下削弱或移除其中一项。尚未构建的[安全扩展点设计](../design/security-extension-points.md)让插件可以使 Delorun 更严格而从不更宽松。
+防护可以使某项基本要求更严格，没有任何东西能在没有[更改基本要求](#changing-a-fundamental)所述决定的情况下削弱或移除其中一项。尚未构建的[安全扩展点设计](../design/security-extension-points.zh.md)让插件可以使 Delorun 更严格而从不更宽松。
 
 ## 目录
 
@@ -44,7 +44,7 @@ description: "Delorun 的安全基本要求：Delorun 对自己约束的简短�
 | F16 | 针对本人未批准的更改的保护设置，只在 home 所在电脑的终端上降低，从不由远程会话或模型的工具降低。 | `designed` | — | — |
 | F17 | Delorun 添加的每项拒绝或同意都有一个拒绝测试，在移除该检查时失败。 | `designed` | — | — |
 
-F12 和 F13 在[远程访问设计](../design/reach.md)中描述；F13 所指的保护设置是 [C21](../contracts/c21-changes.zh.md) 的 Changes 保护设置，只有终端上的 `delorun changes protection` 才能更改它；同时，远程会话只在电脑上批准的解锁之下才写入其他设置，并且从不关闭外部智能体同意。F14 在[更新与回滚设计](../design/update-and-rollback.md)中，F15 和 F16 在[更改设计](../design/changes.md)中。F15 和 F16 在 Changes 保护开启时适用；保护关闭（默认）时，更改无需审查即加载，并且每项更改都被记录（[C21](../contracts/c21-changes.zh.md#the-protection-setting)）。F17 目前是一条评审规则：[CONTRIBUTING.md](../../../CONTRIBUTING.zh.md#quality-bar) 要求这些测试，没有任何检查能发现没有测试的拒绝。
+F12 和 F13 在[远程访问设计](../design/reach.zh.md)中描述；F13 所指的保护设置是 [C21](../contracts/c21-changes.zh.md) 的 Changes 保护设置，只有终端上的 `delorun changes protection` 才能更改它；同时，远程会话只在电脑上批准的解锁之下才写入其他设置，并且从不关闭外部智能体同意。F14 在[更新与回滚设计](../design/update-and-rollback.zh.md)中，F15 和 F16 在[更改设计](../design/changes.zh.md)中。F15 和 F16 在 Changes 保护开启时适用；保护关闭（默认）时，更改无需审查即加载，并且每项更改都被记录（[C21](../contracts/c21-changes.zh.md#the-protection-setting)）。F17 目前是一条评审规则：[CONTRIBUTING.md](../../../CONTRIBUTING.zh.md#quality-bar) 要求这些测试，没有任何检查能发现没有测试的拒绝。
 
 <a id="how-the-list-is-checked"></a>
 
@@ -58,4 +58,4 @@ F12 和 F13 在[远程访问设计](../design/reach.md)中描述；F13 所指的
 
 ## 更改基本要求
 
-更改该列表，即增加一项基本要求、更改某项所陈述的内容或移除某项，需要一项维护者决定，记录为 [Agent Note](../../../.agents/notes/README.zh.md)，并在安全一节中附一个 changelog 片段（[changelog](../../changelog/README.md)），二者都与对本页的更改位于同一个拉取请求中（[治理](../../../GOVERNANCE.md#decisions)）。把某行从 `enforced` 移回 `designed` 会削弱它，需要同样的决定。有两种编辑不改变任何基本要求，也不需要这二者：在构建其代码和测试的变更中，把某行从 `designed` 移到 `enforced`，以及在某项变更移动代码或重命名测试时更新路径和标题。
+更改该列表，即增加一项基本要求、更改某项所陈述的内容或移除某项，需要一项维护者决定，记录为 [Agent Note](../../../.agents/notes/README.zh.md)，并在安全一节中附一个 changelog 片段（[changelog](../../changelog/README.zh.md)），二者都与对本页的更改位于同一个拉取请求中（[治理](../../../GOVERNANCE.md#decisions)）。把某行从 `enforced` 移回 `designed` 会削弱它，需要同样的决定。有两种编辑不改变任何基本要求，也不需要这二者：在构建其代码和测试的变更中，把某行从 `designed` 移到 `enforced`，以及在某项变更移动代码或重命名测试时更新路径和标题。

@@ -30,7 +30,7 @@
 
 汇总会写入 `delorun/changelog/changelog.json`（与 `delorun/upstream-patches.json` 中 `upstream.ref` 所指上游发布的常设比较，以及每个版本），据此在仓库根目录渲染 `CHANGELOG.md`，把发布说明写入 `delorun/changelog/releases/<version>.md`，并把每个已用片段移入 `delorun/changelog/releases/<version>/`。待定的片段从不会被汇总。已经汇总过的版本会被拒绝。把 `CHANGELOG.md` 加入仓库的发布提交，同时也加入它的分歧台账条目。
 
-`--dry-run` 打印条目和说明，不写入任何内容；`--list-unreleased` 按领域打印未发布的片段，并打印待定的片段及其各自等待的条件。片段格式、领域与数据文件见 [`delorun/changelog/README.md`](../../changelog/README.md)。
+`--dry-run` 打印条目和说明，不写入任何内容；`--list-unreleased` 按领域打印未发布的片段，并打印待定的片段及其各自等待的条件。片段格式、领域与数据文件见 [`delorun/changelog/README.md`](../../changelog/README.zh.md)。
 
 ## 运行时发行包
 

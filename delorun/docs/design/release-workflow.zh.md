@@ -31,7 +31,7 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 ## 规则
 
 1. **发布工作流。**Delorun 公开仓库的某个工作流构建每个带标签的发布版本，只有在 targets 密钥持有者的签名和发布日志 bundle 通过验证之后才把它的文件发布到 GitHub 发布版本，并且不持有任何根密钥或 targets 密钥。
-2. **时间戳重新签名。**生产渠道的 cron Worker 每 24 小时用在线时间戳密钥重新签名 `timestamp.json`，该密钥作为该 Worker 唯一的密钥保存（见[发布渠道](../../apps/release-channel/README.md)）；发布一个发布版本时会再次签名，并且发布会拒绝版本不高于已存储版本的时间戳。该 Worker 在只有它被绑定的 Workers KV 命名空间中保存一个高水位标记（版本和每个渠道的发布版本），并拒绝对回滚到它之下的存储桶重新签名，所以 S3 发布令牌无法把旧的时间戳洗成新的。Cloudflare 不提供只读的 R2 绑定，所以公开的 Worker 在代码上是只读的，并有一个测试在它调用 `put` 或 `delete` 时失败。Cloudflare 账户被攻破可以让陈旧的发布版本保持最新，但无法伪造一个发布版本。任何签名都不会把渠道移到更低的版本。
+2. **时间戳重新签名。**生产渠道的 cron Worker 每 24 小时用在线时间戳密钥重新签名 `timestamp.json`，该密钥作为该 Worker 唯一的密钥保存（见[发布渠道](../../apps/release-channel/README.zh.md)）；发布一个发布版本时会再次签名，并且发布会拒绝版本不高于已存储版本的时间戳。该 Worker 在只有它被绑定的 Workers KV 命名空间中保存一个高水位标记（版本和每个渠道的发布版本），并拒绝对回滚到它之下的存储桶重新签名，所以 S3 发布令牌无法把旧的时间戳洗成新的。Cloudflare 不提供只读的 R2 绑定，所以公开的 Worker 在代码上是只读的，并有一个测试在它调用 `put` 或 `delete` 时失败。Cloudflare 账户被攻破可以让陈旧的发布版本保持最新，但无法伪造一个发布版本。任何签名都不会把渠道移到更低的版本。
 3. **签名之前的公告检查。**工作流在 targets 密钥持有者签名之前运行 [C2](../contracts/c02-release-manifest.zh.md#dependency-advisory-check) 的公告检查，检查失败时发布停止。发布说明列出每个已接受的公告，包括它的包、范围、原因、批准者、失效的发布版本和日期。
 4. **npm 发布。**`delorun` 和 `create-delorun` 只通过发布工作流中的 npm 可信发布来发布：发布作业请求一个 OIDC 令牌（`permissions: id-token: write`），不持有 npm 令牌，npm 附上一份经 Sigstore 签名的 SLSA 构建证明，指出仓库、工作流文件和 commit。
 5. **二选 N 重新构建。**一旦维护者持有密钥，签名就要求来自所列 N 个构建者中两个构建者的匹配的重新构建记录，其中至少一个为 `ci: false`。

@@ -8,7 +8,7 @@ description: "Delorun 约定索引：每份约定页面、其类型包，以及�
 
 ## 摘要
 
-约定是供工作包按原样使用的规格：代码所消费的类型、线上格式、限额、错误与安全要求，以及证明这些要求的拒绝测试。每份约定页面都有一个状态章节，说明哪些已构建且已接入、哪些已构建但无任何接入、哪些尚未构建；一个安全章节，陈述其要求及对应的拒绝测试；以及一个「本约定不能证明的内容」小节，用于页面的声明有局限之处。状态章节列为尚未构建的要求不保护任何人；[设计](../design/README.md)保存尚未构建的功能的规则。约定 C12（遥测）不属于 Delorun，因此没有页面涵盖它。
+约定是供工作包按原样使用的规格：代码所消费的类型、线上格式、限额、错误与安全要求，以及证明这些要求的拒绝测试。每份约定页面都有一个状态章节，说明哪些已构建且已接入、哪些已构建但无任何接入、哪些尚未构建；一个安全章节，陈述其要求及对应的拒绝测试；以及一个「本约定不能证明的内容」小节，用于页面的声明有局限之处。状态章节列为尚未构建的要求不保护任何人；[设计](../design/README.zh.md)保存尚未构建的功能的规则。约定 C12（遥测）不属于 Delorun，因此没有页面涵盖它。
 
 ## 约定
 
@@ -33,7 +33,7 @@ description: "Delorun 约定索引：每份约定页面、其类型包，以及�
 | C18 | [C18 发布日志与见证者](c18-release-log.zh.md) | [`@delorun/contract-release-log`](../../packages/contract-release-log/README.zh.md) | 部分已构建 | `delorun/apps/release`、`delorun/apps/install` 与 `delorun/apps/npm-launcher`、`delorun/packages/release-verify`、`delorun verify` |
 | C19 | [C19 Home 进程与更新握手](c19-home-process.zh.md) | [`@delorun/contract-home-process`](../../packages/contract-home-process/README.zh.md) | 部分已构建 | `delorun/packages/home-process`、`delorun/apps/cli`、`delorun/packages/runtime-store`、`delorun/packages/logs` |
 | C20 | [C20 运行日志](c20-operational-logs.zh.md) | [`@delorun/contract-operational-logs`](../../packages/contract-operational-logs/README.zh.md) | 部分已构建 | `delorun/packages/logs`、`delorun/apps/cli`（`delorun logs` 与清除）、`delorun/packages/home-process`、`delorun/apps/relay` |
-| C21 | [C21 变更](c21-changes.zh.md) | [`@delorun/changes`](../../packages/changes/README.md) | 部分已构建 | `delorun/apps/cli`（`delorun start`、`headless`、`changes`、`verify`、`doctor`）、`delorun/packages/home-process`、`delorun/packages/plugin-changes`、`delorun/packages/plugin-instruction-consent` |
+| C21 | [C21 变更](c21-changes.zh.md) | [`@delorun/changes`](../../packages/changes/README.zh.md) | 部分已构建 | `delorun/apps/cli`（`delorun start`、`headless`、`changes`、`verify`、`doctor`）、`delorun/packages/home-process`、`delorun/packages/plugin-changes`、`delorun/packages/plugin-instruction-consent` |
 | C22 | [C22 Delorun 版本对插件的承诺](c22-delorun-plugin-interface.zh.md) | [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.zh.md) | 部分已构建 | `delorun/apps/release`（补丁规则）、`delorun/apps/cli`（`delorun plugin check`）、插件作者 |
 
 ## 约定的变更

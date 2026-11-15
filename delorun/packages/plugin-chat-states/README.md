@@ -5,6 +5,8 @@ kind: "package-bundle"
 
 # @delorun/plugin-chat-states
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 A person snoozes a chat until later or settles a chat that is done, and it moves to a folded Snoozed or Settled shelf below the sidebar's chat list. The harness keeps each chat's state in its storage, outside the session log, so the model never sees it and every browser and phone shows the same sidebar. The studio half registers the shelves, adds Snooze and Settle to a chat's menu, adds a settle hover button, and edits the snooze presets and auto-settle in Settings. The snooze presets and the snooze dialog are ported from [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, under the MIT licence ([notice](THIRD_PARTY_NOTICES.md)). `@delorun/bundle-studio` mounts the package as the row `delorun-chat-states`.

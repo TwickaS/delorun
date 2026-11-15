@@ -81,7 +81,7 @@ const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: anchoredRoot
 
 `checkRuntime(version, root)` 是完整检查：它以 `root` 校验已存储的发布 manifest 与文件列表，然后不论身份记录如何，都按列表对安装中的每个文件计算哈希并比对：缺失、被改动、多出或非普通的条目会使其以 `RUNTIME_CHANGED` 失败，并列出至多十个条目及其类型。补救措施为 `reinstall`；若 `previous` 记录的是另一个已安装版本，则还提供 `rollback`。若 root 撤销了为运行时签名所用的 targets 密钥，则与签名无效的情形相同，同样导致检查失败。检查通过时，仅当记录缺失、未绑定或记录的是另一身份，才在 `store.lock` 之下重写身份记录（不等待锁），因此对完好运行时的检查不写入任何内容。`delorun verify` 与回滚的报告使用它。`startCheckRuntime(version, root, fullCheckDays)` 对任一已安装版本运行 `prepareLaunch` 所运行的启动检查，使用相同的记录、间隔与失败；更新在打开通道之前对正在运行的版本、在准备阶段对已安装的目标、在后继进程启动之前的 `HomeRuntimeStore.checkLaunch` 中以及健康检查的 H1 中使用它。`shareChecks(work)` 运行一段工作，其中对同一版本的各项检查以及该版本的安装共享一次文件检查，`HomeRuntimeStore` 在更新的准备阶段与回滚的报告中使用它：启动检查共享该版本先前的任一检查，完整检查只共享完整检查或安装。
 
-`prepareLaunch` 运行的启动检查读取安装的身份记录，即模式为 0600 的 `trust/runtime-files/delorun-<version>-<platform>.json`（`identity.ts`）。当安装位于其变更时间只由本地内核设置的文件系统上（Linux 上的 ext2 至 ext4、XFS、Btrfs、F2FS 或 tmpfs），记录绑定于本版本、平台、文件列表、manifest、安装目录与文件系统，且其最近一次完整检查距今不足 `fullCheckDays` 天时，启动只列出安装内容，并仅对身份与记录不同、设备不是安装所在设备、或变更时间距记录的捕获时间不足 2 秒的文件计算哈希。否则运行完整检查。计算过哈希并通过的启动会在 `store.lock` 之下（不等待锁）重写记录；失败的启动保留原记录。[启动检查设计](../../docs/design/start-check.md)说明了身份比对能检测和不能检测的内容。
+`prepareLaunch` 运行的启动检查读取安装的身份记录，即模式为 0600 的 `trust/runtime-files/delorun-<version>-<platform>.json`（`identity.ts`）。当安装位于其变更时间只由本地内核设置的文件系统上（Linux 上的 ext2 至 ext4、XFS、Btrfs、F2FS 或 tmpfs），记录绑定于本版本、平台、文件列表、manifest、安装目录与文件系统，且其最近一次完整检查距今不足 `fullCheckDays` 天时，启动只列出安装内容，并仅对身份与记录不同、设备不是安装所在设备、或变更时间距记录的捕获时间不足 2 秒的文件计算哈希。否则运行完整检查。计算过哈希并通过的启动会在 `store.lock` 之下（不等待锁）重写记录；失败的启动保留原记录。[启动检查设计](../../docs/design/start-check.zh.md)说明了身份比对能检测和不能检测的内容。
 
 `resolveFullCheckDays(text)` 根据启动器的 `DELORUN_RUNTIME_FULL_CHECK_DAYS` 解析该间隔：0 至 30 的整天数，未设置时为 7，其他值均报错。
 

@@ -1,5 +1,5 @@
 ---
-description: "@delorun/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（mcpAddConsent），home 受保护状态下的接受存储，让已接受的 stdio 服务器启动得以运行，并把其他每次启动留到本人接受为止。"
+description: "@delorun/plugin-mcp-consent 插件：Delorun 的 MCP 添加时同意（mcpAddConsent），home 受保护状态下的接受存储，让已接受的 stdio 服务器启动得以运行，并把其他每次启动留到本人接受为止。"
 ---
 
 # @delorun/plugin-mcp-consent
@@ -8,7 +8,7 @@ description: "@delorun/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意�
 
 ## 摘要
 
-本包是 Delo 的 MCP 添加时同意（MCP add-time consent）中 `mcpAddConsent` 服务的 Service Provider，该保护由 C16 开关 [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.zh.md) 打开。stdio MCP 服务器命令作为本地子进程在 agent（智能体）沙箱之外运行，因此在这类服务器启动之前，mcp-client 插件会询问已挂载的 `mcpAddConsent` 服务：所配置的启动是否获得许可。本包根据接受存储（acceptance store）作答——home 受保护状态下的一个 JSON 文件，每个已配置的服务器名称持有一条接受：接受恰好覆盖受审查的命令、参数、工作目录和已配置环境，以及它们解析得到的绝对可执行文件路径、命令 shell 和工作目录，且其固定文件仍保持被接受时的内容的服务器立即启动，其余每次审查都让服务器保持停止，并以写明该命令的拒绝作答。本人在 home 自己的电脑上，于 studio 的“设置 → 权限”中或用 `delorun mcp accept` 接受被挂起的服务器，服务器随即启动而无需重启；本人在同样的位置或用 `delorun mcp revoke` 拒绝它或撤销一条接受后，该服务器保持停止，直到其启动发生变化或本人接受它（[待处理的审查](#pending-reviews)）。关闭该开关，或没有已挂载的 Service Provider 时，mcp-client 启动每个已配置服务器的方式与上游完全一致；`@delorun/bundle-local` 在 `delorun` 启动的 CLI profile 中挂载并打开它，`@delorun/bundle-headless` 在 `delorun headless` 运行的 profile 中挂载并打开它，桌面应用运行上游的 profile，不挂载它。
+本包是 Delorun 的 MCP 添加时同意（MCP add-time consent）中 `mcpAddConsent` 服务的 Service Provider，该保护由 C16 开关 [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.zh.md) 打开。stdio MCP 服务器命令作为本地子进程在 agent（智能体）沙箱之外运行，因此在这类服务器启动之前，mcp-client 插件会询问已挂载的 `mcpAddConsent` 服务：所配置的启动是否获得许可。本包根据接受存储（acceptance store）作答——home 受保护状态下的一个 JSON 文件，每个已配置的服务器名称持有一条接受：接受恰好覆盖受审查的命令、参数、工作目录和已配置环境，以及它们解析得到的绝对可执行文件路径、命令 shell 和工作目录，且其固定文件仍保持被接受时的内容的服务器立即启动，其余每次审查都让服务器保持停止，并以写明该命令的拒绝作答。本人在 home 自己的电脑上，于 studio 的“设置 → 权限”中或用 `delorun mcp accept` 接受被挂起的服务器，服务器随即启动而无需重启；本人在同样的位置或用 `delorun mcp revoke` 拒绝它或撤销一条接受后，该服务器保持停止，直到其启动发生变化或本人接受它（[待处理的审查](#pending-reviews)）。关闭该开关，或没有已挂载的 Service Provider 时，mcp-client 启动每个已配置服务器的方式与上游完全一致；`@delorun/bundle-local` 在 `delorun` 启动的 CLI profile 中挂载并打开它，`@delorun/bundle-headless` 在 `delorun headless` 运行的 profile 中挂载并打开它，桌面应用运行上游的 profile，不挂载它。
 
 ## 目录
 
@@ -26,7 +26,9 @@ description: "@delorun/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意�
 
 `DelorunMcpConsent` 扩展 `@deepseek-ai/dsh-mcp-client` seam 的抽象 `McpAddConsent` 服务；在启动每个已配置的 stdio 服务器之前，mcp-client 会咨询它的 `review`。审查从不等待本人：允许一次启动即启动服务器；拒绝一次启动则让 mcp-client 的激活失败，失败带类型的拒绝会写明该命令及其参数，并附带 Service Provider 自己的原因，于是服务器保持停止。在该启动被接受之前，每次启动该服务器配置项时拒绝都会重复出现；拒绝之后给出的一次接受，会让下一次启动运行该服务器。
 
-审查看到服务器的完整启动：服务器名称、命令、其参数、其工作目录及其已配置的环境条目，以及 mcp-client 将它们解析得到的绝对可执行文件路径和规范工作目录，在 Windows 上还有运行 `.cmd` 或 `.bat` 文件的 `COMSPEC` 的规范路径。mcp-client 将空的或相对的工作目录相对于 Host 的工作目录解析，并在服务器将以之启动的 `PATH` 中查找裸命令，然后以这些解析得到的路径 spawn 服务器，因此即使 Host 在另一个目录中启动或其 `PATH` 发生变化，已接受的启动运行的仍是本人接受过的可执行文件。它无法解析的命令会在任何审查之前以 `McpServerStartUnresolvedError` 让服务器保持停止。拒绝写明解析得到的可执行文件、工作目录和已配置环境变量的名称，但不写其中任何值，因为值可能是凭据。审查还会固定可执行文件以及每个由参数指名的文件的内容（[固定文件](#pinned-files)），但不固定程序自行加载的文件：当工作目录或某个固定文件位于对话可以写入的位置时，之后写到那里的模块会在下一次启动或重连时在沙箱之外运行，审查会说明这一点而不是拒绝它（[对话可以写入的位置](#places-chats-can-write)）。
+审查看到服务器的完整启动：服务器名称、命令、其参数、其工作目录及其已配置的环境条目，以及 mcp-client 将它们解析得到的绝对可执行文件路径和规范工作目录，在 Windows 上还有运行 `.cmd` 或 `.bat` 文件的 `COMSPEC` 的规范路径。mcp-client 将空的或相对的工作目录相对于 Host 的工作目录解析，并在服务器将以之启动的 `PATH` 中查找裸命令，然后以这些解析得到的路径 spawn 服务器，因此即使 Host 在另一个目录中启动或其 `PATH` 发生变化，已接受的启动运行的仍是本人接受过的可执行文件。它无法解析的命令会在任何审查之前以 `McpServerStartUnresolvedError` 让服务器保持停止。拒绝写明解析得到的可执行文件、工作目录和已配置环境变量的名称，但不写其中任何值，因为值可能是凭据。审查还会固定可执行文件以及每个由参数指名的文件的内容（[固定文件](#pinned-files)），但不固定程序自行加载的文件：当工作目录或某个固定文件位于 chat 可以写入的位置时，之后写到那里的模块会在下一次启动或重连时在沙箱之外运行，审查会说明这一点而不是拒绝它（[chat 可以写入的位置](#places-chats-can-write)）。
+
+使用 `expandTemplates` 时，mcp-client 在启动时用已存储的凭据填充参数和普通环境值中的 `${credential:NAME}` 部分，因此审查看到并固定的是模板文本，而不是任何密钥。三条规则使已存储的凭据无法改变审查所批准的内容。`command`、`cwd` 或影响运行的变量的值（[`showsEnvValue`](src/wire.ts) 所列的名称）中的模板，会在服务器加载时被拒绝，并写明服务器和字段；应直接写出该值，或改用另一个变量名。被审查的命令和工作目录始终是服务器所 spawn 的那个，因此名字像模板的文件绝不会被展开。完全由一个模板构成、并解析为以 `-` 开头的值的参数，会在启动时被拒绝，并写明服务器和参数序号而绝不写该值；像 `--token=${credential:NAME}` 这样的部分模板仍被允许。审查把带模板的参数以未解析的形式显示，并注明它在启动时由已存储的凭据填充。
 
 本模块把 `providesMcpAddConsent` 导出为 `true`，这是 mcp-client 的同意查找在 Loader 下读取的声明：找不到 `mcpAddConsent` 服务的 mcp-client 配置项，会等到每个配置项都导入了其模块、且本配置项已启动，因此服务器绝不会因为其配置项先于本配置项启动而未经审查就启动。本配置项启动失败时，服务器以 `McpConsentUnavailableError` 保持停止；开关关闭时，本配置项启动但不注册任何内容，服务器以与上游一致的方式启动。
 
@@ -70,11 +72,11 @@ mcp-client 在每次启动服务器配置项时请求审查，并在连接断开
 
 <a id="places-chats-can-write"></a>
 
-### 对话可以写入的位置
+### chat 可以写入的位置
 
-待处理的审查会写明位于本 profile 的对话可以写入之处的规范工作目录和固定文件（[`src/writable.ts`](src/writable.ts)）：profile 工作区注册表中的某个工作区，或 `/tmp` 以及平台的临时目录，每个受限命令都可以写入这些位置。studio 的审查和 `delorun mcp accept` 会在本人作答之前显示它们，因为对话可以更改这样的文件，或从这样的目录加载的模块，而对模块的更改不会被审查。拥有完全访问权限的对话也会写入这些位置之外；这些不会被检测到。
+待处理的审查会写明位于本 profile 的 chat 可以写入之处的规范工作目录和固定文件（[`src/writable.ts`](src/writable.ts)）：profile 工作区注册表中的某个工作区，或 `/tmp` 以及平台的临时目录，每个受限命令都可以写入这些位置。studio 的审查和 `delorun mcp accept` 会在本人作答之前显示它们，因为 chat 可以更改这样的文件，或从这样的目录加载的模块，而对模块的更改不会被审查。拥有完全访问权限的 chat 也会写入这些位置之外；这些不会被检测到。
 
-每次拒绝的原因都以本人接受该服务器的位置结尾：Delo 运行期间在 home 的电脑上执行 `delorun mcp accept <name>`，或 studio 的“设置 → 权限”（[`acceptHint`](src/review.ts)）。
+每次拒绝的原因都以本人接受该服务器的位置结尾：Delorun 运行期间在 home 的电脑上执行 `delorun mcp accept <name>`，或 studio 的“设置 → 权限”（[`acceptHint`](src/review.ts)）。
 
 <a id="recording-an-acceptance"></a>
 
@@ -88,20 +90,26 @@ mcp-client 在每次启动服务器配置项时请求审查，并在连接断开
 
 每次被拒绝的审查都在本进程中作为该服务器的待处理审查保留：每个服务器名称一条，取最新的，因此审查之后发生变化的启动会替换该审查。该服务还以 `mcpReviews` 提供（[`src/review.ts`](src/review.ts)）：
 
-- `pending()` 按界面显示的样子列出每条待处理审查（[`PendingServer`](src/wire.ts)）：服务器名称、命令、其参数、其工作目录、启动解析得到的绝对可执行文件（`resolvedCommand`）和规范工作目录（`resolvedCwd`），在 Windows 上还有运行批处理文件的命令 shell（`resolvedShell`），因此界面在本人作答之前显示实际运行的文件；已配置的环境变量、固定文件（`files`）、对话可以写入的工作目录和固定文件（`writableByChats`）、拒绝的原因、审查询问的内容、发生变化的变量、其状态、审查时间及其审查 id——启动每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。只有当 [`showsEnvValue`](src/review.ts) 对某个环境变量的名称成立时才显示其值：`PATH`、`BASH_ENV`、`ENV`、`GCONV_PATH`、`JAVA_TOOL_OPTIONS`、程序选择器，以及每个以 `LD_`、`DYLD_`、`NODE_`、`PYTHON`、`PERL5`、`RUBY` 或 `OPENSSL_` 开头的名称（`@deepseek-ai/dsh-mcp-client` 中 `isRunAffectingEnv` 的列表，它也拒绝在这些名称中使用凭据模板），它们会改变实际运行的内容；其他任何值都从不显示。`change` 是 [`SERVER_CHANGES`](src/wire.ts) 之一：`new` 表示服务器没有接受或存储不存在；`command`、`arguments`、`directory` 或 `environment` 表示启动中第一个与该服务器的接受不同的部分，`changedVariables` 写明每个被添加、删除或更改的变量；`resolved` 表示按已接受的样子配置、但其命令现在解析到另一个可执行文件、其工作目录解析到另一个目录、或其批处理文件通过另一个命令 shell 运行的启动；`contents` 表示固定文件与接受中的不同或无法读取的启动；`unreadable` 表示被拒绝的存储或无法解析的 home。`state` 是 [`SERVER_STATES`](src/wire.ts) 之一：`waiting`、`declined` 或 `revoked`。
+- `pending()` 按界面显示的样子列出每条待处理审查（[`PendingServer`](src/wire.ts)）：服务器名称、命令、其参数、其工作目录、启动解析得到的绝对可执行文件（`resolvedCommand`）和规范工作目录（`resolvedCwd`），在 Windows 上还有运行批处理文件的命令 shell（`resolvedShell`），因此界面在本人作答之前显示实际运行的文件；已配置的环境变量、固定文件（`files`）、chat 可以写入的工作目录和固定文件（`writableByChats`）、拒绝的原因、审查询问的内容、发生变化的变量、其状态、审查时间及其审查 id——启动每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。只有当 [`showsEnvValue`](src/review.ts) 对某个环境变量的名称成立时才显示其值：`PATH`、`BASH_ENV`、`ENV`、`GCONV_PATH`、`JAVA_TOOL_OPTIONS`、程序选择器，以及每个以 `LD_`、`DYLD_`、`NODE_`、`PYTHON`、`PERL5`、`RUBY` 或 `OPENSSL_` 开头的名称（`@deepseek-ai/dsh-mcp-client` 中 `isRunAffectingEnv` 的列表，它也拒绝在这些名称中使用凭据模板），它们会改变实际运行的内容；其他任何值都从不显示。`change` 是 [`SERVER_CHANGES`](src/wire.ts) 之一：`new` 表示服务器没有接受或存储不存在；`command`、`arguments`、`directory` 或 `environment` 表示启动中第一个与该服务器的接受不同的部分，`changedVariables` 写明每个被添加、删除或更改的变量；`resolved` 表示按已接受的样子配置、但其命令现在解析到另一个可执行文件、其工作目录解析到另一个目录、或其批处理文件通过另一个命令 shell 运行的启动；`contents` 表示固定文件与接受中的不同或无法读取的启动；`unreadable` 表示被拒绝的存储或无法解析的 home。`state` 是 [`SERVER_STATES`](src/wire.ts) 之一：`waiting`、`declined` 或 `revoked`。
 - `acceptReview(serverName, reviewId, confirmed)` 先用 mcp-client 的 `resolveServerStart` 重新解析所显示启动的命令和工作目录，并重新固定其文件；当它们现在解析到另一个可执行文件、目录或命令 shell，某个文件与所显示的固定项不同，或启动或某个文件不再能解析或读取时，它不记录任何内容并以 `STALE_REVIEW` 拒绝，而解析到别处或运行其他内容的启动会被再次审查，因此列表以新的审查 id 显示新的路径和文件。否则它通过 `accept` 恰好记录该审查所显示的启动和固定项（无论处于何种状态），移除该审查，并以各自的配置再次启动该服务器的每个 Loader 配置项——本同意在启动时拒绝的配置项，以及其重连被拒绝的活动配置项——因此服务器无需重启 studio 即可运行；没有 Loader 时，下一次启动会运行它。`declineReview(serverName, reviewId)` 让该审查以 `declined` 保留在列表中，把该启动记录为已拒绝，且不记录任何接受；服务器保持停止，直到其启动发生变化或本人接受它。在存储无法读取或写入期间，这次拒绝只在本进程中有效，并会有一条警告说明这一点。
 - `accepted()` 列出每条接受（[`AcceptedServer`](src/wire.ts)）：其 id、服务器名称、命令、其参数、其工作目录、它解析得到的可执行文件、工作目录和命令 shell、其环境变量、其固定文件、接受时间，以及是否有已配置的 Loader 配置项具有该服务器名称；变量的值只在 `showsEnvValue` 成立、且该服务器已配置的配置项所设的值正是接受所持摘要对应的值时出现。存储不存在或无法读取期间，它不列出任何内容。`revokeAcceptance(acceptanceId, confirmed)` 移除该接受，把其启动记录为已撤销，然后以各自的配置再次应用该服务器名称的每个 Loader 配置项，因此其审查以 `revoked` 拒绝该启动，服务器停止，直到其启动发生变化或本人再次接受它；它答复有多少配置项停止，并保留其他每条接受。
 - 这些答复以 `McpReviewError` 拒绝且不记录任何内容的情况有：`UNCONFIRMED`（不带 `confirmed: true` 的接受或撤销）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查，因为它在显示之后被再次审查或已被接受，其启动现在解析到与审查所显示不同的路径，或没有接受带有被撤销的 id，因为它已被替换或撤销），以及对接受或撤销而言的 `STORE_REFUSED`，它也拒绝解析路径不是绝对路径的所显示启动。每次答复记录一行日志。
-- 在 Connection 为 studio 提供服务的地方，`/api` 下的五条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/delorunMcpConsent.pending`（待处理的审查与已接受的启动）、`GET /api/delorunMcpConsent.waiting`、`POST /api/delorunMcpConsent.accept`、`POST /api/delorunMcpConsent.decline` 和 `POST /api/delorunMcpConsent.revoke`。除 `waiting` 外，每条路由只答复经回环监听器、以回环 `Host` 到达的请求；远程访问设备会在请求体被读取之前以 `403 LOOPBACK_REQUIRED` 被拒绝，因此服务器只能在 home 的电脑上被接受或撤销。`waiting` 还准入远程访问已准入设备的 Peer（`admitPeer`），只答复处于 `waiting` 状态的每条审查的名称和 `change`，从不答复被拒绝或被撤销的审查，也从不答复命令、参数、目录或环境，因此手机可以说明某个服务器正在等待、需要在电脑上批准。studio 的权限部分、MCP 服务器审查和等待中服务器的提示位于 [`@delorun/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept`、`mcp.decline` 和 `mcp.revoke`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以答复它们。
+- 在 Connection 为 studio 提供服务的地方，`/api` 下的五条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/delorunMcpConsent.pending`（待处理的审查与已接受的启动）、`GET /api/delorunMcpConsent.waiting`、`POST /api/delorunMcpConsent.accept`、`POST /api/delorunMcpConsent.decline` 和 `POST /api/delorunMcpConsent.revoke`。除 `waiting` 外，每条路由只答复经回环监听器、以回环 `Host` 到达的请求；远程访问设备会在请求体被读取之前以 `403 LOOPBACK_REQUIRED` 被拒绝，因此服务器只能在 home 的电脑上被接受或撤销，但危险模式持续期间除外：此时持有解锁的设备可以进入这四条路由（[`@delorun/home-auth`](../home-auth/README.zh.md#dangerous-mode)）。`waiting` 还准入远程访问已准入设备的 Peer（`admitPeer`），只答复处于 `waiting` 状态的每条审查的名称和 `change`，从不答复被拒绝或被撤销的审查，也从不答复命令、参数、目录或环境，因此手机可以说明某个服务器正在等待、需要在电脑上批准。studio 的权限部分、MCP 服务器审查和等待中服务器的提示位于 [`@delorun/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept`、`mcp.decline` 和 `mcp.revoke`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以答复它们。
 
 <a id="the-mcp_add_consent-switch"></a>
 
 ## mcp_add_consent 开关
 
-`enabled` 配置字段，即 C16 开关 `mcp_add_consent`，决定插件是否注册该服务。它默认关闭——这是对等值（parity value）——Delo 的组合会打开它；`cordis.yml` 配置项挂载本包并写明开关的值。关闭时，插件不注册任何内容，每个已配置的服务器都以与上游完全一致的方式启动。
+`enabled` 配置字段，即 C16 开关 `mcp_add_consent`，决定插件是否注册该服务。它默认关闭——这是对等值（parity value）——Delorun 的组合会打开它；`cordis.yml` 配置项挂载本包并写明开关的值。关闭时，插件不注册任何内容，每个已配置的服务器都以与上游完全一致的方式启动。
 
 <a id="development"></a>
 
 ## 开发
 
-`tests/consent.spec.ts` 覆盖存储、它对其他每个版本的拒绝、它的锁以及审查；`tests/reviews.spec.ts` 覆盖待处理的审查及其变化内容、显示哪些变量和哪些值、跨新服务实例的已拒绝与已撤销状态、重新启动的配置项、按服务器名称分开保存的已接受启动及其撤销，以及路由，并包含拒绝情形：远程访问设备只能读取等待中服务器的名称和变化内容，其他每条路由都被拒绝，未确认或过期的答复或撤销不记录任何内容。`tests/pinning.spec.ts` 和 `tests/pin-races.spec.ts` 覆盖固定项及其拒绝情形：被改写的可执行文件或脚本、被改指向的 `.bin` 链接、被删除或新指名的参数文件、无法读取的文件、读取期间发生变化的文件、被链接替换的规范路径、任何状态值都看不出的改写、被允许的启动 spawn 所用的路径、对话可以写入的路径，以及对显示之后文件发生变化的审查的答复。`tests/pin-fifo.integration.spec.ts` 覆盖指名 FIFO 的路径，它不等待即被拒绝；`tests/store-lock.integration.spec.ts` 覆盖在撤销等待期间持有存储锁的第二个进程。`tests/restart.spec.ts` 在真实的 Loader 下运行接受和撤销，以及在服务器运行期间被改写的脚本，重连会再次审查它并将其挂起，直到本人接受。spec 用 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-mcp-consent` 运行，本包用 `node_modules/.bin/tsc --noEmit -p delorun/packages/plugin-mcp-consent/tsconfig.json` 进行类型检查。
+`tests/consent.spec.ts` 覆盖存储、它对其他每个版本的拒绝、它的锁以及审查；`tests/reviews.spec.ts` 覆盖待处理的审查及其变化内容、显示哪些变量和哪些值、跨新服务实例的已拒绝与已撤销状态、重新启动的配置项、按服务器名称分开保存的已接受启动及其撤销，以及路由，并包含拒绝情形：远程访问设备只能读取等待中服务器的名称和变化内容，其他每条路由都被拒绝，未确认或过期的答复或撤销不记录任何内容。`tests/pinning.spec.ts` 和 `tests/pin-races.spec.ts` 覆盖固定项及其拒绝情形：被改写的可执行文件或脚本、被改指向的 `.bin` 链接、被删除或新指名的参数文件、无法读取的文件、读取期间发生变化的文件、被链接替换的规范路径、任何状态值都看不出的改写、被允许的启动 spawn 所用的路径、chat 可以写入的路径，以及对显示之后文件发生变化的审查的答复。`tests/pin-fifo.integration.spec.ts` 覆盖指名 FIFO 的路径，它不等待即被拒绝；`tests/store-lock.integration.spec.ts` 覆盖在撤销等待期间持有存储锁的第二个进程。`tests/restart.spec.ts` 在真实的 Loader 下运行接受和撤销，以及在服务器运行期间被改写的脚本，重连会再次审查它并将其挂起，直到本人接受。spec 用 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-mcp-consent` 运行，本包用 `node_modules/.bin/tsc --noEmit -p delorun/packages/plugin-mcp-consent/tsconfig.json` 进行类型检查。
+
+<a id="when-the-service-fails"></a>
+
+## 服务失败时
+
+服务启动失败的同意行不处于激活状态，MCP 客户端会让每个 stdio 服务器保持停止，并给出指名该行的错误（[`fail-closed.spec.ts`](tests/fail-closed.spec.ts)）。`enabled` 关闭时，服务器按 stock 方式启动。

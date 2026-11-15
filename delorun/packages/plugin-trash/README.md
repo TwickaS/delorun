@@ -4,7 +4,7 @@ description: "Delorun's trash in the studio (C8): the Move to trash actions of a
 
 # @delorun/plugin-trash
 
-English
+English | [中文](README.zh.md)
 
 ## Summary
 

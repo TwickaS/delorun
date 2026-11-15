@@ -4,7 +4,7 @@ description: "Delorun's archive format v1 (C8): the ZIP reader and writer, the p
 
 # @delorun/archive
 
-English
+English | [中文](README.zh.md)
 
 ## Summary
 

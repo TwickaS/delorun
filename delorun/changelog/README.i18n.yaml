@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/changelog/README.md
+/changelog:
+  en: 30fef98149308def
+  zh: 5b510d0fa4030cf4
+/changelog/summary:
+  en: ba1880b31cabf4b2
+  zh: 63c97541c3da3454
+/changelog/contents:
+  en: cd15164f93d1b14c
+  zh: 6e71ca38f0afa4d0
+/changelog/folders:
+  en: f99953d663c9a637
+  zh: 75fd3e0ab505dd5c
+/changelog/fragment-format:
+  en: 8845630b9bfc0550
+  zh: 97dc4019245ecc31
+/changelog/edit-in-place:
+  en: b625cf96a74e5a6d
+  zh: eaac23974259e8d0
+/changelog/where-a-change-belongs:
+  en: 2c1057dc19cdb418
+  zh: c39593438cd4fee1
+/changelog/sub-versions:
+  en: a70a38b05e3516eb
+  zh: 3ff6537734d23abf
+/changelog/what-assembly-writes:
+  en: c38f01ccc396e67b
+  zh: a529b43df9282956
+/changelog/who-reads-the-data-file:
+  en: 2d5a0ed227bd5351
+  zh: 4533991c61d052ed
+/changelog/commands:
+  en: b383e190da60850a
+  zh: cd7318c380d62580
+/changelog/when-no-fragment-is-needed:
+  en: 178e669cfc04655d
+  zh: a437a5a23b66b800

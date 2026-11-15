@@ -17,7 +17,7 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 清单、补丁规则和 `delorun plugin check` 均已构建；没有任何发布工作流运行应用该规则的签名命令。
 
 - **已构建并已使用：** 清单 `plugin-interface.json`，以及在源码声明了清单未列出的接口时失败的规格；位于 `delorun/apps/release/src/` 下的签名命令中的补丁规则，由人手动运行（[C2](c02-release-manifest.zh.md#status)）；以及 `delorun plugin check`。
-- **尚未构建：** 发布工作流，因此该规则只在有人为发布签名时才应用（[发布工作流设计](../design/release-workflow.md)）。
+- **尚未构建：** 发布工作流，因此该规则只在有人为发布签名时才应用（[发布工作流设计](../design/release-workflow.zh.md)）。
 
 ## 目录
 
@@ -58,7 +58,7 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 | 次版本，`x.y` 到 `x.y+1` | 可以增加；从 1.0 起，不得移除或不兼容地更改任何一个 | 可以移动 | 可以更改；更新报告会写明（[C3](c03-update-report.zh.md#data-formats)） |
 | 主版本，`x` 到 `x+1` | 可以移除或更改任何一个 | 可以移动 | 可以更改 |
 
-只要可以做成补丁，安全修复就是补丁，因此它不会在任何一条轴上关闭任何插件。无法保持基线或涵盖接口的修复作为次版本发布，并且更新提示会说明它将关闭多少个插件（[设计](../design/update-notice.md)）。
+只要可以做成补丁，安全修复就是补丁，因此它不会在任何一条轴上关闭任何插件。无法保持基线或涵盖接口的修复作为次版本发布，并且更新提示会说明它将关闭多少个插件（[设计](../design/update-notice.zh.md)）。
 
 <a id="versions-before-10"></a>
 

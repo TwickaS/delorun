@@ -3,50 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/update/README.md
 /:
-  en: 237c45c1b2dd0cb2
-  zh: d888f9b0dea77022
+  en: 9b85f0123ad1574c
+  zh: cd67585bbc224d35
 /delorun-update:
-  en: aacc7c985e1bbd81
-  zh: fad903c499abe1de
+  en: a7caf4746ba3e5ac
+  zh: d5e8bdec74eae45d
 /delorun-update/summary:
-  en: 13c60589935cfd37
-  zh: f0e6647f83a1351e
+  en: d96d96f7c1f9bc0b
+  zh: a710ae01c52c4011
 /delorun-update/contents:
-  en: f1aa6fc9f8118e0a
-  zh: 12db23e29b0af2e9
+  en: df67ea1b0c2c69ce
+  zh: 11df00465cea5397
 /delorun-update/what-the-report-decides:
-  en: adbbfd4fa32398a9
-  zh: ce9fc31a4fc237df
+  en: a5740a281bdc5c26
+  zh: 950c95909a1bd894
 /delorun-update/the-two-version-axes:
-  en: 5605646de81f700c
-  zh: d6db7b927992b6da
+  en: 615c47dbeb7ea199
+  zh: 4a3247b82838ac19
 /delorun-update/bundles-and-rows:
   en: 75acd36b9b836eae
   zh: 964da73abe2ce9c1
 /delorun-update/both-installations:
-  en: a76d8f4446a41056
-  zh: 2c43135591525dde
+  en: 0e4103395435a474
+  zh: 1d0ea1a75b37050a
 /delorun-update/data-formats:
-  en: 80463691fc32f97d
-  zh: 8542545bac2de7af
+  en: 7ed4c6013a200dbe
+  zh: 041cd76bd12a5612
+/delorun-update/harness-changes:
+  en: 97b4b5a2a490dceb
+  zh: e9461d9e89c76302
 /delorun-update/the-session-data-copy:
   en: 6d74bcefe56fcd20
   zh: f97d5d6dc963a88f
 /delorun-update/the-one-rollback-function:
   en: e4a0648ecd4a6488
-  zh: db02954b403f2937
+  zh: 7a5aecd18d40f89e
 /delorun-update/confirming-without-asking:
   en: b00903dbdd0ee941
   zh: 6ec767a332612324
 /delorun-update/the-sentences:
   en: 0131a1a741662383
-  zh: 1c694c207972fc81
+  zh: 0f179c9ff6c57d64
 /delorun-update/seams-for-other-packages:
-  en: 461b257eb86d8a37
-  zh: 7de5ca2fd49176e6
-/delorun-update/not-yet-implemented:
-  en: 3ee60a1acbcce772
-  zh: c5a8c1623a1a19b9
+  en: d7dfbbe04ba3a9dc
+  zh: b1ec48871ed94b5d
+/delorun-update/not-implemented:
+  en: 4d75761bff24275a
+  zh: 0948825cfe0930e9
 /delorun-update/tests:
-  en: eed3b2a52a7bceee
-  zh: 54cb8e77f25f850d
+  en: 0957e0129c626a48
+  zh: 7cd81cfeae30898f

@@ -3,14 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-instruction-consent/README.md
 /delorun-plugin-instruction-consent:
-  en: b32f4d2501f9f15a
-  zh: 8c5bceefdfc646e6
+  en: 842a9cb7a0449598
+  zh: aa3490af8280fd07
 /delorun-plugin-instruction-consent/what-it-provides:
-  en: 0cd6d36fe9bab971
-  zh: 46f77a3421c6c03a
+  en: c312eaf584be48c6
+  zh: 2dac9667eebe0918
+/delorun-plugin-instruction-consent/classification:
+  en: 5df1b2f83d9d62e8
+  zh: 9c0ed70b867d4e1c
+/delorun-plugin-instruction-consent/writes-to-an-approved-plugin-s-folder:
+  en: d88cbe3063c2e9f2
+  zh: 373cef91427b399b
 /delorun-plugin-instruction-consent/configuration:
-  en: 1475270227681229
-  zh: 44de76e362844c6f
+  en: 8c0aba8ea2a7397e
+  zh: 2da13fc39d0f161c
 /delorun-plugin-instruction-consent/tests:
-  en: 3c493f4d76970a76
-  zh: 9402f20d4efec2a2
+  en: 7f85c8b0b26cd209
+  zh: 796fe12ffb7189b9

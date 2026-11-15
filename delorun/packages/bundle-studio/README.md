@@ -5,6 +5,8 @@ kind: "package-bundle"
 
 # @delorun/bundle-studio
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 `@delorun/bundle-studio` is the bundle that mounts Delorun's studio additions in every Delorun CLI profile: the theme, the settings layout, chat states, the sidebar and onboarding, and two optional plugins, the cost meter and the Thinking tab, whose rows stay disabled until the person turns them on. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) inserts one row per plugin and turns on [C16](../../docs/contracts/c16-parity-composition.md) switch `studio_additions` on the theme row. One switch in Settings turns all of them off and leaves upstream's studio, the stock look.

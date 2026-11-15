@@ -34,19 +34,19 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 
 - `delorun recover safe-mode` 标记下一次启动在没有其第三方 bundle 和此人为它们所设的行的情况下启动 profile，且不写入任何 profile 文件；`delorun recover exit-safe-mode` 结束它。`delorun recover`（或 `recover status`）还会报告 profile 的状态，`recover rollback` 回退最近一次记录的更新，`recover restore <version>` 恢复某个 profile 历史版本。
 - `delorun doctor` 检查 Docker、DeepSeek API 密钥的格式、home 和 studio 的端口，并打印 Changes 的行。对于 CLI profile 的插件，它报告每个已安装的包的来源及其是否启用、正在运行的发布版本不满足的版本范围、被同名的已发布包隐藏的包、未安装的已启用 bundle、安全模式，以及根据 home 进程的日志得出的、在最近一次启动时未激活的插件行。它不报告关于已批准的内容或引入故障的更改的任何信息。
-- 针对从文件夹链接的插件的 Changes、此人对 harness 本身的编辑、`delorun changes`、开发会话、保护设置、agent 的同意和待处理的插件请求，以及 `delorun verify` 和 `delorun doctor` 中的 Changes，均已构建；[C21](../contracts/c21-changes.md) 对它们作了陈述。
+- 针对从文件夹链接的插件的 Changes、此人对 harness 本身的编辑、`delorun changes`、开发会话、保护设置、agent 的同意和待处理的插件请求，以及 `delorun verify` 和 `delorun doctor` 中的 Changes，均已构建；[C21](../contracts/c21-changes.zh.md) 对它们作了陈述。
 
 ## 规则
 
-1. **一个界面，Changes。**已作为用于插件和 harness 自己文件的 `delorun changes` 构建（[C21，命令](../contracts/c21-changes.md#commands)）；studio 的部分以只读方式显示 harness 更改，决定在终端中做出。
-2. **运行的是已批准的内容，而不是文件夹。**已构建（[C21，加载已批准的内容](../contracts/c21-changes.md#loading-approved-content)）。
-3. **开发会话提供实时重载。**已在终端中构建（[C21，开发会话](../contracts/c21-changes.md#work-sessions)）；Delorun 自己的监视器把文件夹复制到插件的活动目录中，而不是用上游的源代码监视，因为文件夹中的文件并不是已加载的那些。studio 的按钮和徽章尚未构建。
-4. **批准。**已构建（[C21，风险摘要](../contracts/c21-changes.md#the-risk-summary)）。
-5. **agent 与插件。**已构建（[C21，agent 与插件](../contracts/c21-changes.md#the-agent-and-plugins)）。
-6. **一个保护设置，默认关闭。**已构建（[C21，保护设置](../contracts/c21-changes.md#the-protection-setting)）：保护关闭时，插件文件夹和 harness 的可写副本不经审阅就加载，每项更改都被记录为这样；保护开启时，每一项都等待此人。已签名安装中被更改的文件，在两种设置下都会被拒绝：harness 编辑只有作为已应用的 harness 更改才会运行（[C21，harness 编辑](../contracts/c21-changes.md#harness-edits)）。
+1. **一个界面，Changes。**已作为用于插件和 harness 自己文件的 `delorun changes` 构建（[C21，命令](../contracts/c21-changes.zh.md#commands)）；studio 的部分以只读方式显示 harness 更改，决定在终端中做出。
+2. **运行的是已批准的内容，而不是文件夹。**已构建（[C21，加载已批准的内容](../contracts/c21-changes.zh.md#loading-approved-content)）。
+3. **开发会话提供实时重载。**已在终端中构建（[C21，开发会话](../contracts/c21-changes.zh.md#work-sessions)）；Delorun 自己的监视器把文件夹复制到插件的活动目录中，而不是用上游的源代码监视，因为文件夹中的文件并不是已加载的那些。studio 的按钮和徽章尚未构建。
+4. **批准。**已构建（[C21，风险摘要](../contracts/c21-changes.zh.md#the-risk-summary)）。
+5. **agent 与插件。**已构建（[C21，agent 与插件](../contracts/c21-changes.zh.md#the-agent-and-plugins)）。
+6. **一个保护设置，默认关闭。**已构建（[C21，保护设置](../contracts/c21-changes.zh.md#the-protection-setting)）：保护关闭时，插件文件夹和 harness 的可写副本不经审阅就加载，每项更改都被记录为这样；保护开启时，每一项都等待此人。已签名安装中被更改的文件，在两种设置下都会被拒绝：harness 编辑只有作为已应用的 harness 更改才会运行（[C21，harness 编辑](../contracts/c21-changes.zh.md#harness-edits)）。
 7. **被扣住的插件。**保护开启时，当插件的文件不再与已批准的版本匹配，该插件不会被加载，harness 的其余部分继续工作，并向此人提供两个操作：放回已批准的版本，或把当前文件作为一项更改来审阅并批准它们。
-8. **编辑 harness 本身。**已构建（[C21，harness 编辑](../contracts/c21-changes.md#harness-edits)）：`delorun changes edit-harness` 制作此人自己的、已安装发布版本 `app/` 目录的可写副本。每次保存的编辑都是针对已签名文件的一项待处理更改，像其他任何更改一样被应用，已应用的更改从与已签名安装并排的一棵组合树中运行，只有已签名的代码才会启动它。已签名的原件从不被编辑，丢弃每一项 harness 更改就回到它。副本的扫描缓存只在文件的设备、inode、大小、修改时间和状态更改时间都没有变化时才重用它的摘要，所以状态更改时间发生了移动的文件（`chmod`、新的硬链接、保留其字节的恢复）会被再次读取和哈希；对于整个发布版本的副本，这可能意味着再次读取它的每一个文件。
-9. **`verify` 和 `doctor` 报告什么。**已构建（[C21，verify 和 doctor 报告什么](../contracts/c21-changes.md#what-verify-and-doctor-report)）；doctor 的 `release-log` 行说明发布日志检查已经多久没有被检查。
+8. **编辑 harness 本身。**已构建（[C21，harness 编辑](../contracts/c21-changes.zh.md#harness-edits)）：`delorun changes edit-harness` 制作此人自己的、已安装发布版本 `app/` 目录的可写副本。每次保存的编辑都是针对已签名文件的一项待处理更改，像其他任何更改一样被应用，已应用的更改从与已签名安装并排的一棵组合树中运行，只有已签名的代码才会启动它。已签名的原件从不被编辑，丢弃每一项 harness 更改就回到它。副本的扫描缓存只在文件的设备、inode、大小、修改时间和状态更改时间都没有变化时才重用它的摘要，所以状态更改时间发生了移动的文件（`chmod`、新的硬链接、保留其字节的恢复）会被再次读取和哈希；对于整个发布版本的副本，这可能意味着再次读取它的每一个文件。
+9. **`verify` 和 `doctor` 报告什么。**已构建（[C21，verify 和 doctor 报告什么](../contracts/c21-changes.zh.md#what-verify-and-doctor-report)）；doctor 的 `release-log` 行说明发布日志检查已经多久没有被检查。
 10. **更新会重新应用已批准的编辑。**更新报告列出每项已批准的 harness 更改，以及它是否适用于新的发布版本。应用是按文件进行的三方合并；有冲突的文件采用新发布版本的内容，此人的版本作为 `<file>.mine` 保留在旁边并在报告中指出。已批准的插件版本原样保留。更新的健康检查和回退涵盖这一结果（见[更新与回退](update-and-rollback.zh.md)）。
 11. **用词。**此人看到的是更改、审阅、应用、丢弃、撤销和正在开发。代码和约定保留技术术语。
 
@@ -54,7 +54,7 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 
 12. **糟糕的启动会略去最后一项更改。**当启动失败，或未通过更新的健康检查，并且 Changes 中最新的条目是插件或 harness 更改时，Delorun 会在没有该条目的情况下再试一次。该条目被标记为 “left out at start” 并附上故障，终端和 studio 会指出它并提供 Apply again 和 Undo。重试不写入任何 profile 文件：该更改是通过安全模式所使用的同一个覆盖层被略去的。第二次失败会停止，并给出完整的安全模式命令。不会删除任何东西。
 13. **不需要任何插件的恢复界面。**studio 的页面带有一个小型的内置界面，它是启动页面的一部分而不属于任何插件，在 studio 渲染失败时、并在固定的回环地址上显示：什么失败了、最近的更改，以及 Turn off、Undo 和 Safe mode 这些操作。它的路由是 Host 自己的，仅限所有者和回环；远程会话会得到 “This needs you at your computer”。
-14. **失败的重载会回到原来的版本。**已构建（[C21，命令](../contracts/c21-changes.md#commands)和[开发会话](../contracts/c21-changes.md#work-sessions)）。
+14. **失败的重载会回到原来的版本。**已构建（[C21，命令](../contracts/c21-changes.zh.md#commands)和[开发会话](../contracts/c21-changes.zh.md#work-sessions)）。
 15. **两种规模的安全模式。**`delorun recover safe-mode` 在没有每一个第三方插件的情况下启动；`delorun changes off <plugin>` 和 `on <plugin>`，以及恢复界面，则在没有其中一个插件的情况下启动。两者都是 Changes 中的条目，所以它们是可见的，并且以同样的方式撤销。
 16. **`doctor` 指出原因。**对于失败的启动或失败的渲染，`delorun doctor` 会指出其代码失败的插件，以及引入它的更改。
 
@@ -83,4 +83,4 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 
 ## 实现状态
 
-规则 1 到 6、9，以及针对插件的 14，还有规则 15 的 `delorun changes off` 和 `on`，均已构建（[C21](../contracts/c21-changes.md)）；F15 和 F16 仍为已设计状态，在保护开启时适用（见[基本原则](../security/fundamentals.md)）。整个 profile 的安全模式，以及 `delorun recover` 的 profile 回退和恢复，均已构建。
+规则 1 到 6、9，以及针对插件的 14，还有规则 15 的 `delorun changes off` 和 `on`，均已构建（[C21](../contracts/c21-changes.zh.md)）；F15 和 F16 仍为已设计状态，在保护开启时适用（见[基本原则](../security/fundamentals.zh.md)）。整个 profile 的安全模式，以及 `delorun recover` 的 profile 回退和恢复，均已构建。

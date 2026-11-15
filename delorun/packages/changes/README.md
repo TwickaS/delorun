@@ -4,6 +4,8 @@ description: "The @delorun/changes library: the approved copies of plugins linke
 
 # @delorun/changes
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 A person's harness is the signed release plus the changes they made, each recorded; with protection on, only those they approved at their computer. This package keeps the approved copy of every plugin the profile links from a folder, computes what a folder changed against that copy, and makes the profile load the approved copy, never the folder. With protection off, the default, it makes the folder's content the approved copy at each start and each save while Delorun runs, and logs it as a change decided `unreviewed`. It also keeps the person's changes to the harness itself: their writable copy of an installed release, the files they approved, and the composed tree a start runs instead of the signed installation, which it never writes. The contract is [C21](../../docs/contracts/c21-changes.md).

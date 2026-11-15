@@ -17,7 +17,7 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 客户端验证、启动检查，以及签名、时间戳与安全公告命令已构建；发布工作流、桌面更新器的检查与安装脚本尚未构建。
 
 - **已构建并被调用：** npm 启动器与 `delorun update` 的安装验证（`delorun/apps/install`）、启动器在每次启动时对每个已安装文件的检查（`delorun/packages/runtime-store`）、`delorun verify` 的两项发布检查，以及 `delorun/apps/release/src/` 下的命令：在一致的重建之后签名发布、在不降低任何通道的前提下签名时间戳，以及检查安全公告。
-- **尚未构建：** 发布工作流，因此没有 CI 作业和工作流步骤运行安全公告检查或发布到 npm；npm 可信发布；N 个中两个的重建；Authenticode 签名；安装脚本；以及桌面应用的每一项检查，桌面应用是未经改动的上游应用。这些规则见[发布工作流设计](../design/release-workflow.md)与[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
+- **尚未构建：** 发布工作流，因此没有 CI 作业和工作流步骤运行安全公告检查或发布到 npm；npm 可信发布；N 个中两个的重建；Authenticode 签名；安装脚本；以及桌面应用的每一项检查，桌面应用是未经改动的上游应用。这些规则见[发布工作流设计](../design/release-workflow.zh.md)与[更新与回滚设计](../design/update-and-rollback.zh.md#the-desktop-app)。
 - **部分构建：** 安全公告的接受记录只计入在 `.github/CODEOWNERS` 中以登录名列出的所有者，而该文件只列出一个团队，因此没有任何接受记录有效，每个安全公告都会使检查失败。发行包配方只为 Linux 平台编译上游的原生 system addon，因此 macOS 平台不是发布平台，在配方拥有用于 macOS 二进制文件的固定工具链之前，发布不发布任何 macOS 运行时（[签名前重建](#rebuild-before-signing)）。
 
 下文中被此列表列为尚未构建的要求与拒绝测试，在某次变更构建它们之前不保护任何人。
@@ -98,7 +98,7 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 | --- | --- | --- | --- |
 | `root` | 离线，由所有者持有 | 根元数据：每个角色的密钥与阈值、[C18](c18-release-log.zh.md) 的见证者密钥，以及每次轮换 | 1；维护者持有根密钥后为 N 个中的 2 个 |
 | `targets` | 离线，由 targets 密钥持有者持有 | 每份发布 manifest 及其运行时文件列表 | 1 |
-| `timestamp` | 在线，由运行时间戳命令的人持有；[发布工作流设计](../design/release-workflow.md)将其放在某个工作流的受保护环境中 | 仅时间戳元数据；它证明新鲜度并按摘要指明 manifest，无法改变 manifest 列出的内容 | 1 |
+| `timestamp` | 在线，由运行时间戳命令的人持有；[发布工作流设计](../design/release-workflow.zh.md)将其放在某个工作流的受保护环境中 | 仅时间戳元数据；它证明新鲜度并按摘要指明 manifest，无法改变 manifest 列出的内容 | 1 |
 | `catalogue` | 在线，位于插件索引仓库的发布环境中 | [C13](c13-catalogue-revocation.zh.md) 的插件索引与撤销列表 | 1 |
 
 根私钥与 targets 私钥绝不进入 CI、云服务或发布工作流能够访问的机器。Windows Authenticode、macOS Developer ID 与公证（notarisation）是文件本身的平台签名；manifest 记录已签名文件的摘要，平台签名流程不在本约定范围内。
@@ -134,7 +134,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 | `root` | `{ "version", "sha256" }` | 最新的根版本及其文件摘要。 |
 | `channels.stable`、`channels.beta` | `{ "release": <version>, "manifest": FileRef }` | 每个通道当前的发布及其 manifest 文件。 |
 
-时间戳命令 `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts` 签名它，并拒绝发布分支所提交的 `delorun/release/production-keys.json` 未列出的 timestamp 密钥；生产通道的 cron Worker 每 24 小时用 `delorun/apps/release-channel/src/resign-core.ts` 重新签名时间戳（[发布通道](../../apps/release-channel/README.md)）。重新签名后的时间戳是当前已签名的 JSON，只替换 `version`（下一个）、`issued`（签名前一小时）与 `expires`（上文的有效期），因此根与每个通道条目，无论是否已知，都保持签名时的样子。Worker 拒绝重新签名无法通过最新已存储根验证的时间戳，或低于其高水位线（更低的版本，或指向更低发布的通道）的时间戳，高水位线保存在发布令牌无法写入的存储中。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
+时间戳命令 `node_modules/.bin/tsx delorun/apps/release/src/sign-timestamp.ts` 签名它，并拒绝发布分支所提交的 `delorun/release/production-keys.json` 未列出的 timestamp 密钥；生产通道的 cron Worker 每 24 小时用 `delorun/apps/release-channel/src/resign-core.ts` 重新签名时间戳（[发布通道](../../apps/release-channel/README.zh.md)）。重新签名后的时间戳是当前已签名的 JSON，只替换 `version`（下一个）、`issued`（签名前一小时）与 `expires`（上文的有效期），因此根与每个通道条目，无论是否已知，都保持签名时的样子。Worker 拒绝重新签名无法通过最新已存储根验证的时间戳，或低于其高水位线（更低的版本，或指向更低发布的通道）的时间戳，高水位线保存在发布令牌无法写入的存储中。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
 
 <a id="release-manifest"></a>
 
@@ -254,7 +254,7 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 
 `local-release.ts` 为它自己的通道目录构建并签名发布，不进行重建，也不进行安全公告检查。其 manifest 把构建者指明为 `local release (no independent rebuild)`；它拒绝其 SHA-256 或根、targets、时间戳密钥 id 列于 `delorun/release/production-keys.json` 的根文件；从生产发布位置获取内容的启动器会拒绝指明该构建者的 manifest。
 
-签名命令只接受一份重建记录；维护者持有密钥后 N 个中两个构建者的要求见[发布工作流设计](../design/release-workflow.md)，尚未构建。
+签名命令只接受一份重建记录；维护者持有密钥后 N 个中两个构建者的要求见[发布工作流设计](../design/release-workflow.zh.md)，尚未构建。
 
 <a id="dependency-advisory-check"></a>
 
@@ -293,13 +293,13 @@ acceptances:
 
 ## npm 发布
 
-`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delorun 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.md)。
+`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delorun 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.zh.md)。
 
 <a id="desktop-updates-and-rollback"></a>
 
 ## 桌面更新与回滚
 
-桌面应用是未经改动的上游应用，Delorun 不构建任何桌面应用。其更新器（`apps/desktop/src/update-coordinator.ts` 中的 `DesktopUpdateCoordinator`）在本人点击时下载并安装每次更新，并拒绝降级（`allowDowngrade` 为 false）。它不检查任何 Delorun 时间戳、manifest 或日志条目，不保留之前的发布，也不提供回滚。验证每次更新并回滚到已签名、已记录日志的发布的桌面应用，其规则见[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)。
+桌面应用是未经改动的上游应用，Delorun 不构建任何桌面应用。其更新器（`apps/desktop/src/update-coordinator.ts` 中的 `DesktopUpdateCoordinator`）在本人点击时下载并安装每次更新，并拒绝降级（`allowDowngrade` 为 false）。它不检查任何 Delorun 时间戳、manifest 或日志条目，不保留之前的发布，也不提供回滚。验证每次更新并回滚到已签名、已记录日志的发布的桌面应用，其规则见[更新与回滚设计](../design/update-and-rollback.zh.md#the-desktop-app)。
 
 <a id="values-and-limits"></a>
 
@@ -338,12 +338,12 @@ acceptances:
 ### 要求
 
 - R1. 根密钥与 targets 密钥离线；时间戳密钥在线，且只签名新鲜度；插件索引密钥只签名 [C13](c13-catalogue-revocation.zh.md) 的文件。
-- R2. 时间戳元数据在签发 3 天后过期；客户端拒绝已过期或更旧的时间戳，`delorun update` 不提供时间戳未为该通道指明的 manifest。[发布通道](../../apps/release-channel/README.md)的 cron Worker 每 24 小时重新签名它。因此持有时间戳密钥的人可以让陈旧的发布在 3 天之后仍保持最新，但无法伪造发布：每个通道条目都指明由离线 targets 密钥签名的 manifest，且没有任何签名会把通道移到更低的版本。
+- R2. 时间戳元数据在签发 3 天后过期；客户端拒绝已过期或更旧的时间戳，`delorun update` 不提供时间戳未为该通道指明的 manifest。[发布通道](../../apps/release-channel/README.zh.md)的 cron Worker 每 24 小时重新签名它。因此持有时间戳密钥的人可以让陈旧的发布在 3 天之后仍保持最新，但无法伪造发布：每个通道条目都指明由离线 targets 密钥签名的 manifest，且没有任何签名会把通道移到更低的版本。
 - R3. 任何客户端都不会自行降级；本人请求的回滚只能到达已签名、已记录日志的发布。已为 CLI home 构建：没有本人的确认，任何内容都不会安装或切换，运行时仓库以 `TARGET_LOWER` 拒绝低于正在运行版本的更新目标，`delorun update` 拒绝这样的报告，`delorun recover rollback` 只能到达 `previous` 指向的版本（[新鲜度与回滚保护](#freshness-and-rollback-protection)）。
 - R4. 轮换通过根版本进行，由旧根与新根的阈值签名；被吊销的 targets 密钥不验证任何内容。
 - R5. CLI 启动器在每次启动时，按哈希或按其上次哈希之后记录的身份，对照已签名的文件列表检查每个运行时文件；一个被改动、缺失或多出的文件就会停止启动。每个文件在每个配置的间隔内至少被哈希一次，间隔最长 30 天。
-- R6. 桌面应用在每次更新应用之前、在每个平台上，都验证 manifest、文件摘要与日志条目。尚未构建：桌面应用是上游的（[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)）。
-- R7. 没有来自 targets 密钥持有者在 CI 之外的机器上的一致重建记录，签名即拒绝。维护者参与签名后需要 N 个中两个构建者的要求尚未构建（[发布工作流设计](../design/release-workflow.md)）。
+- R6. 桌面应用在每次更新应用之前、在每个平台上，都验证 manifest、文件摘要与日志条目。尚未构建：桌面应用是上游的（[更新与回滚设计](../design/update-and-rollback.zh.md#the-desktop-app)）。
+- R7. 没有来自 targets 密钥持有者在 CI 之外的机器上的一致重建记录，签名即拒绝。维护者参与签名后需要 N 个中两个构建者的要求尚未构建（[发布工作流设计](../design/release-workflow.zh.md)）。
 - R8. 对于没有有效接受记录的任何安全公告、已失效的接受记录以及无法访问的公告源，安全公告检查都会使发布失败。在发布说明中列出每条接受记录尚未构建。
 - R9. 在签名、摘要与日志检查通过之前，没有任何内容落入 `~/.delorun/runtimes/` 之下。带公开摘要的安装脚本尚未构建。
 - R10. npm 包只通过带 OIDC 构建证明的可信发布进行发布；工作流中不存在 npm 令牌。尚未构建：没有任何工作流发布它们。

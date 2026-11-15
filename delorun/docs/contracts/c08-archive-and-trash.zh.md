@@ -18,7 +18,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 - **已构建并已使用：** `delorun export`、`delorun import`、`delorun trash`，CLI profile 中经 `@delorun/plugin-trash` 提供的 studio 回收站与清除，以及 `delorun import-home` 与 setup 的 `import` 一节（[stock home 导入](#the-stock-home-import)）。
 - **已构建，但无人使用：** 在 profile 启动之前撤回被中断的 stock home 导入（`recoverInterruptedImport`），启动路径不调用它；下一次 `delorun import-home` 会撤回被中断的导入。
-- **尚未构建：** 打开已导入的 chat，CLI profile 的任何行都不读取它们；它们的未受信任状态、横幅，以及把某个 chat 标记为受信任的操作；应用定制行（导入只列出而从不写入），及其差异界面和针对已导入技能、预设与插件声明的规则；以及 stock home 导入所复制 chat 的未受信任状态，studio 目前把它们当作本人自己的 chat 打开。这些规则见[导入 chat 设计](../design/imported-chats.md)。
+- **尚未构建：** 打开已导入的 chat，CLI profile 的任何行都不读取它们；它们的未受信任状态、横幅，以及把某个 chat 标记为受信任的操作；应用定制行（导入只列出而从不写入），及其差异界面和针对已导入技能、预设与插件声明的规则；以及 stock home 导入所复制 chat 的未受信任状态，studio 目前把它们当作本人自己的 chat 打开。这些规则见[导入 chat 设计](../design/imported-chats.zh.md)。
 
 下文中，本列表称为尚未构建的要求与拒绝测试，在某次改动构建它们之前，不保护任何人。
 
@@ -90,7 +90,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 被拒绝的行 kind 为 `sandbox-mode`、`credential-reference`、`reach-row` 与 `egress`。设置沙箱模式、凭据引用、远程访问选项或出口限制的行会被拒绝。任何 `!!js` 表达式与任何 `insert` 行都会在求值之前被拒绝，因此归档不会引起任何求值。
 
-导入列出每一行的 kind 与目标，并且不应用任何行：不安装任何 bundle 或插件，也不写入任何预设、skill、主题或 profile 行。`delorun export` 不写出任何行。在差异屏幕之后应用这些行，其中导入的 skill 以禁用状态开始，导入的预设无法提升权限，这在[导入 chat 设计](../design/imported-chats.md)中，尚未构建。
+导入列出每一行的 kind 与目标，并且不应用任何行：不安装任何 bundle 或插件，也不写入任何预设、skill、主题或 profile 行。`delorun export` 不写出任何行。在差异屏幕之后应用这些行，其中导入的 skill 以禁用状态开始，导入的预设无法提升权限，这在[导入 chat 设计](../design/imported-chats.zh.md)中，尚未构建。
 
 <a id="signature"></a>
 ### 签名
@@ -209,7 +209,7 @@ stock home 导入以下表中的一个代码拒绝，并且不会在 Delorun hom
 <a id="untrusted-imported-chats"></a>
 ### 已导入的 chat
 
-`delorun import` 把已导入的工作区及其 chat 发布到 `archive/imported/`，不创建任何会话，并在其报告中说明已导入的 chat 不进入任何模型请求，也无法在 studio 中打开。CLI profile 的任何行都不读取 `archive/imported/`，因此已导入的 chat 不会到达任何 Host 插件，也不会进入任何模型请求。已导入的 chat 没有受信任状态、横幅或信任操作，回收站与清除也不涉及它。把已导入的 chat 作为未受信任的 chat 打开，在本人将其标记为受信任之前，其历史保持在模型上下文之外，这在[导入 chat 设计](../design/imported-chats.md)中，尚未构建。
+`delorun import` 把已导入的工作区及其 chat 发布到 `archive/imported/`，不创建任何会话，并在其报告中说明已导入的 chat 不进入任何模型请求，也无法在 studio 中打开。CLI profile 的任何行都不读取 `archive/imported/`，因此已导入的 chat 不会到达任何 Host 插件，也不会进入任何模型请求。已导入的 chat 没有受信任状态、横幅或信任操作，回收站与清除也不涉及它。把已导入的 chat 作为未受信任的 chat 打开，在本人将其标记为受信任之前，其历史保持在模型上下文之外，这在[导入 chat 设计](../design/imported-chats.zh.md)中，尚未构建。
 
 上述规则尚未构建（[路线图](../guide/roadmap.zh.md)），而 stock home 导入把它的 chat 发布到 `sessions/`，studio 把它们当作本人自己的 chat 打开。它所给予的保护更少：它复制的每个 chat 都按其 Session 标识符记入 `archive/stock-import/imports.json`，`@delorun/archive/dsh-import` 的 `readImportedChats` 会把它读回，因此界面可以标记它；结束于某一轮中间的 chat 不会被沿用，因此来自另一个安装的工具调用不会被提供重试，预览和报告会说明有多少被留下，以及本人仍然可以在未改动的 stock home 中阅读它们；以完全访问权限运行过的 chat 以更安全的预设打开。只要该规则尚未构建，studio 就不会在这类 chat 上显示横幅，本人继续它时，其历史会进入模型。
 
@@ -264,7 +264,7 @@ stock home 导入以下表中的一个代码拒绝，并且不会在 Delorun hom
 - 被拒绝 kind 的行会被拒绝，因此归档无法改变沙箱模式、凭据引用、远程访问选项或出口限制。
 - 签名不校验的归档会被拒绝。由 home 不信任的密钥签名的归档，在本人确认该密钥的指纹之前被拒绝；不带签名的归档，在本人接受其未校验状态之前被拒绝，导入在提问之前会说明这一点。
 - 不应用任何定制行：不安装任何插件声明或 bundle，也不写入任何预设、skill、主题或 profile 行。
-- 已导入的 chat 保存在 CLI profile 的任何行都不读取的位置。导入的 skill 以禁用状态开始、导入的预设无法提升权限，以及导入的 chat 以未受信任状态开始，是[导入 chat 设计](../design/imported-chats.md)的要求，该设计尚未构建。
+- 已导入的 chat 保存在 CLI profile 的任何行都不读取的位置。导入的 skill 以禁用状态开始、导入的预设无法提升权限，以及导入的 chat 以未受信任状态开始，是[导入 chat 设计](../design/imported-chats.zh.md)的要求，该设计尚未构建。
 - 导入从不覆盖工作区或 chat。
 - 回收站在清除之前保留密钥，清除会把内容从本约定列出的每个存储中移除。被篡改的回收站记录无法移动或读取 sessions 根目录之外的目录，或另一个条目的内容。预置在存储根目录、或承载版本化根目录的目录上的符号链接会被拒绝而不会被跟随，因此清除不会删除它所指定存储之外的任何内容。
 - 导出在写入归档之前，会就 chat 历史中的密钥发出警告，并在本人确认之前不写入任何内容。

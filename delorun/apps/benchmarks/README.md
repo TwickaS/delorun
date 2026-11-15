@@ -1,6 +1,6 @@
 # Delorun benchmarks
 
-English
+English | [中文](README.zh.md)
 
 `@delorun/benchmarks` measures the points where a person waits on Delorun, a private package in `delorun/apps/benchmarks`. One harness gives every suite throwaway homes, local signed releases of the measured commit, synthetic data, the result format, the table and the budget check; each suite measures one touch point. What each suite measures, how to run it and the numbers recorded so far are on the [performance pages](../../docs/performance/README.md).
 

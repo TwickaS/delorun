@@ -10,7 +10,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 
 ## 摘要
 
-本人的 harness 所运行的内容是已签名的发布加上本人所作的更改，每项更改都有记录；在保护开启时，只包含本人在自己电脑上批准的更改。profile 从文件夹链接的插件，从保存在 Delorun home 之下的、其已批准内容的副本加载。保护默认关闭：每次启动，以及 Delorun 运行期间在文件夹中的每次保存，都使该文件夹的内容成为已批准的内容，并把它记录为一项已应用的更改，本人可以列出、查看并撤销它（[保护设置](#the-protection-setting)）。在保护开启时，文件夹中的编辑是待处理的更改，直到本人应用它们。本人对 harness 自身的编辑在已安装发布的可写副本中进行，应用之后从已签名安装旁边的组合树运行，该安装从不被编辑（[harness 编辑](#harness-edits)）。库是 [`@delorun/changes`](../../packages/changes/README.md)；`delorun start` 和 `delorun headless` 在其启动前步骤 `changes` 中、在上游准备 profile 之前应用它，并在组合的已批准插件内容步骤中使已准备好的 profile 遵守其不变量。
+本人的 harness 所运行的内容是已签名的发布加上本人所作的更改，每项更改都有记录；在保护开启时，只包含本人在自己电脑上批准的更改。profile 从文件夹链接的插件，从保存在 Delorun home 之下的、其已批准内容的副本加载。保护默认关闭：每次启动，以及 Delorun 运行期间在文件夹中的每次保存，都使该文件夹的内容成为已批准的内容，并把它记录为一项已应用的更改，本人可以列出、查看并撤销它（[保护设置](#the-protection-setting)）。在保护开启时，文件夹中的编辑是待处理的更改，直到本人应用它们。本人对 harness 自身的编辑在已安装发布的可写副本中进行，应用之后从已签名安装旁边的组合树运行，该安装从不被编辑（[harness 编辑](#harness-edits)）。库是 [`@delorun/changes`](../../packages/changes/README.zh.md)；`delorun start` 和 `delorun headless` 在其启动前步骤 `changes` 中、在上游准备 profile 之前应用它，并在组合的已批准插件内容步骤中使已准备好的 profile 遵守其不变量。
 
 <a id="contents"></a>
 

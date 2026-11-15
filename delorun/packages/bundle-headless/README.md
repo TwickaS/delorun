@@ -5,6 +5,8 @@ kind: "package-bundle"
 
 # @delorun/bundle-headless
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 `@delorun/bundle-headless` is the bundle that gives the home's `headless` profile Delorun's guards. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) turns off two privacy defaults, inserts seven guard rows and protects them from plugin management, after upstream's `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-headless` bundles. `delorun headless` links it into the profile, refuses a profile that does not load it, and holds its rows to [C19](../../docs/contracts/c19-home-process.md#host-invariants)'s Host invariants before and after boot.

@@ -49,7 +49,7 @@ agent 预设决定 agent 开始时拥有哪些工具、指令、skill 和模型�
 
 ## 编写插件
 
-插件在不改变 Delorun 所发布的任何内容的情况下增加行为：一个工具、studio 的一部分、其他插件使用的服务，或针对现有插件的一组设置 bundle。[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个已安装的插件。你也可以从“设置”→“插件”→“Create a plugin”开始，或在 chat 中让 agent 在你的工作区中制作一个（[在 studio 中](plugins.zh.md#from-the-studio)，[在 chat 中](plugins.zh.md#in-a-chat)）；两种方式中，开启它都是你在电脑上要做的一步。变更保护默认是关闭的，所以对你所链接的插件的编辑（包括 agent 的编辑）会实时重新加载，并被记录为未经审阅而加载；开启保护之后，它们会等待你的批准（见[修改你的 harness](changing-your-harness.zh.md)）。请声明 `engines.dsh` 和 `engines.delorun`：更新时，Delorun 会关闭其范围不包含新发布版本的插件，并在这样做之前告诉你，而 [Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.md)说明了每个发布版本可能改变什么。
+插件在不改变 Delorun 所发布的任何内容的情况下增加行为：一个工具、studio 的一部分、其他插件使用的服务，或针对现有插件的一组设置 bundle。[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个已安装的插件。你也可以从“设置”→“插件”→“Create a plugin”开始，或在 chat 中让 agent 在你的工作区中制作一个（[在 studio 中](plugins.zh.md#from-the-studio)，[在 chat 中](plugins.zh.md#in-a-chat)）；两种方式中，开启它都是你在电脑上要做的一步。变更保护默认是关闭的，所以对你所链接的插件的编辑（包括 agent 的编辑）会实时重新加载，并被记录为未经审阅而加载；开启保护之后，它们会等待你的批准（见[修改你的 harness](changing-your-harness.zh.md)）。请声明 `engines.dsh` 和 `engines.delorun`：更新时，Delorun 会关闭其范围不包含新发布版本的插件，并在这样做之前告诉你，而 [Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.zh.md)说明了每个发布版本可能改变什么。
 
 ## fork 已发布的插件
 

@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-cost-meter/README.md
+/delorun-plugin-cost-meter:
+  en: 18e5c18fd6331fce
+  zh: 8e8866efb030efff
+/delorun-plugin-cost-meter/what-it-shows:
+  en: 3772c5be76168a17
+  zh: aa5e4c5d05b29691
+/delorun-plugin-cost-meter/prices:
+  en: 3686ffd70249810e
+  zh: 47241c27f17b82cc
+/delorun-plugin-cost-meter/the-projection:
+  en: 331981bca7d9ad9d
+  zh: ef22f56a86882360
+/delorun-plugin-cost-meter/configuration:
+  en: c968776e7c674aaa
+  zh: af0b7438ac0e108b
+/delorun-plugin-cost-meter/what-it-does-not-model:
+  en: 7679a85fbaf1c921
+  zh: eeee41e33884df80

@@ -81,7 +81,7 @@ DeepSeek Harness 不接受外部 pull request。对上游自身代码的修复�
 
 - 新增或修改的源文件，其语句、分支、函数和行的覆盖率均为 100%。
 - 任何强制拒绝或要求授权的逻辑，都有在移除该检查后会失败的拒绝测试。
-- 变更必须保持[安全基本原则](delorun/docs/security/fundamentals.md)成立；实现某个[设计](delorun/docs/design/README.md)的变更，要把它的规则移入对应的契约页面。
+- 变更必须保持[安全基本原则](delorun/docs/security/fundamentals.zh.md)成立；实现某个[设计](delorun/docs/design/README.zh.md)的变更，要把它的规则移入对应的契约页面。
 - 可见的变更要有录制。对于小修复，由维护者在合并时录制，因此你不需要模型密钥。
 - 文档只用英文编写。维护者的翻译环节会写出中文对应版本。
 
