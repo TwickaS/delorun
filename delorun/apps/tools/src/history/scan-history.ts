@@ -133,6 +133,23 @@ export function readinessValues(findings: readonly HistoryFinding[]): string[] {
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([key, count]) => `${key}\t${String(count)}`)
 }
 
+/** Blobs per secrets run: the scanner's JSON report of a larger set exceeds the string length limit. */
+const BLOB_BATCH = 300
+
+/**
+ * Run the secrets gate over distinct blobs, in batches.
+ * @param root - the repository.
+ * @param blobs - blob id and path keys to the first commit that added them.
+ * @param pin - the pinned upstream commit.
+ * @returns the secrets findings.
+ */
+async function scanBlobs(root: string, blobs: ReadonlyMap<string, { commit: string; path: string }>, pin: string): Promise<HistoryFinding[]> {
+  const entries = [...blobs]
+  const found: HistoryFinding[] = []
+  for (let start = 0; start < entries.length; start += BLOB_BATCH) found.push(...await scanBlobBatch(root, new Map(entries.slice(start, start + BLOB_BATCH)), pin))
+  return found
+}
+
 /**
  * Run the secrets gate over distinct blobs written to a scratch directory.
  * @param root - the repository.
@@ -140,7 +157,7 @@ export function readinessValues(findings: readonly HistoryFinding[]): string[] {
  * @param pin - the pinned upstream commit.
  * @returns the secrets findings.
  */
-async function scanBlobs(root: string, blobs: ReadonlyMap<string, { commit: string; path: string }>, pin: string): Promise<HistoryFinding[]> {
+async function scanBlobBatch(root: string, blobs: ReadonlyMap<string, { commit: string; path: string }>, pin: string): Promise<HistoryFinding[]> {
   const dir = mkdtempSync(join(tmpdir(), 'delorun-history-scan-'))
   try {
     const paths: string[] = []
