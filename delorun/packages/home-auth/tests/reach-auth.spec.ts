@@ -294,6 +294,32 @@ describe('admitting a session token', () => {
     }
   })
 
+  it('a roll decided before a rotation does not write its new token unrotated', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      const hour = 60 * 60 * 1000
+      for (const hours of [11, 11, 2]) {
+        home.clock.advance(hours * hour)
+        if (hours === 11) expect(home.auth.admitToken(session.token, 'reach-tailscale-private').kind).toBe('admitted')
+      }
+      // The removal is queued first and rotates every session before the roll's write runs.
+      const removal = home.auth.revokeDevice(device().id)
+      const rolled = home.auth.admitToken(session.token, 'reach-tailscale-private', { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      await removal
+      await home.auth.stop()
+      // Pins the rotation mark the store carries to the new record, and the roll's place in the change queue.
+      const file = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, { rotated?: boolean }> }
+      expect(Object.values(file.sessions).map(record => record.rotated)).toEqual([true, true])
+      expect(home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'ROTATION_REQUIRED' })
+    } finally {
+      await home.dispose()
+    }
+  })
+
   it('a rotation needs a fresh device-key proof', async () => {
     const home = await served()
     try {

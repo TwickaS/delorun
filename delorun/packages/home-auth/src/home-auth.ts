@@ -921,7 +921,9 @@ export class HomeAuth {
     // The old token's connections close when its grace ends; the new token's at its own limits.
     this.arm(oldId, deadlineOf(graced))
     this.arm(newId, deadlineOf(record))
-    void this.serial(() => this.sessions.roll(oldId, graceUntil, newId, record)).catch(() => undefined)
+    // Inside the change queue and refreshed after, like every write `admit` must see: a rotation that ran meanwhile has
+    // marked the old record, and the store carries that mark to the new one.
+    void this.changing(() => this.sessions.roll(oldId, graceUntil, newId, record)).catch(() => undefined)
     return { kind: 'admitted', sessionId: brandString<SessionId>(newId), session: record, rolled: { token, expiresAt: record.expiresAt } }
   }
 

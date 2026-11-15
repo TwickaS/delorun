@@ -266,8 +266,10 @@ export class SessionStore {
   async roll(oldId: string, graceUntil: number, newId: string, record: SessionRecord): Promise<void> {
     const sessions = await this.read()
     const old = sessions[oldId]
-    if (old !== undefined) sessions[oldId] = { ...old, graceUntil }
-    sessions[newId] = record
+    // The old record keeps the use that triggered the roll, which the lazy touch write may not have stored yet.
+    if (old !== undefined) sessions[oldId] = { ...old, graceUntil, lastUsedAt: Math.max(old.lastUsedAt, record.lastUsedAt) }
+    // A rotation written after this roll was decided marked the old record; the new token must not outlive it unrotated.
+    sessions[newId] = old?.rotated === true ? { ...record, rotated: true } : record
     await this.write(sessions)
   }
 
