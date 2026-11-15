@@ -2,33 +2,42 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
-/deepseek-harness:
-  en: f68c4f080ce55ff2
-  zh: 88a76d7f7f0b260e
-/deepseek-harness/developer-preview:
-  en: 4ef4d8a71ac143f0
-  zh: 1bfc3149ba8e5543
-/deepseek-harness/run:
-  en: 4e0248e4c6474fc6
-  zh: eb2fb8d78c7d6bc0
-/deepseek-harness/run/run-from-npm:
-  en: e22005cd42e6cbad
-  zh: 0f536f4208df1d60
-/deepseek-harness/run/run-from-source:
-  en: 819e3f7c144d0d64
-  zh: de815f040975dba7
-/deepseek-harness/community-and-support:
-  en: 20acf6451fdc869b
-  zh: d06246dd019ecef7
-/deepseek-harness/contributing:
-  en: cabc2d3e9f8898bd
-  zh: 83b6d238bae29ce3
-/deepseek-harness/development:
-  en: 803ca2b11b497bed
-  zh: 8b4071eb0e7783ef
-/deepseek-harness/citation:
-  en: 6704e9e5a8d49a91
-  zh: 85c9cdd8d56f8e9d
-/deepseek-harness/license:
-  en: 926995344fc1c72b
-  zh: c92fab5abf85932f
+/delorun:
+  en: 721a7bd3bad979b2
+  zh: c8efdc26d2d4e378
+/delorun/status:
+  en: 9762527bd8ee81f5
+  zh: 8987bcd03d203f1f
+/delorun/what-delorun-provides:
+  en: 96a2e8c9cbe5e017
+  zh: 4d9b36368113bd02
+/delorun/run:
+  en: 418c752757d0fb74
+  zh: 7e4c5e814cf79fdf
+/delorun/run/run-from-source:
+  en: 5184490ceabaf11d
+  zh: 675aebc10d2f50a7
+/delorun/known-issues-and-questions:
+  en: af73d732b975032c
+  zh: 556892e1c7d544f4
+/delorun/how-delorun-is-built:
+  en: e2a77071411ca380
+  zh: ac37c1baf332a28d
+/delorun/for-teams:
+  en: cb6e580a65a39d92
+  zh: 5879e2d916b788fa
+/delorun/compatibility-with-stock:
+  en: 6450aff22767dc8f
+  zh: c9a8ac54f7d263ac
+/delorun/relationship-to-upstream:
+  en: 5ec7ad4628d75d55
+  zh: 4e0d3b257d8825fd
+/delorun/documentation:
+  en: 64e3d97ced6c22db
+  zh: 16b49c81cd94e557
+/delorun/community:
+  en: 75f991423f3bd351
+  zh: 45023aad5434c6ef
+/delorun/licence:
+  en: fb29a9651eaf46b1
+  zh: c9dc204a741c0218
