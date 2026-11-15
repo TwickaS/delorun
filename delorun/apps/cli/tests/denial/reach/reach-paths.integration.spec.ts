@@ -117,6 +117,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunVersions.changes': { device: 'read', reason: 'the setup versions screen compares a saved version with the running one, which a signed-in studio reads; the history\'s admission keeps secret fields out; the probe names no version, so the route answers 400 BAD_REQUEST', answers: 400 },
   '/api/delorunVersions.save': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
   '/api/delorunVersions.switch': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/delorunUpdateCheck.channel': { device: 'read', reason: 'the Settings copy on a signed-in device names the release host this installation contacts, which is the channel origin\'s host alone; it names no secret and changes nothing' },
   '/api/delorunUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
   '/api/delorunUpdateCheck.notes': { device: 'refused', reason: 'the release notes of the update that would run, which is read where the update notice is, at the computer that runs the update' },
   '/api/delorunTrash.list': { device: 'refused', reason: TRASH },
