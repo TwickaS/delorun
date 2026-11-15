@@ -229,9 +229,12 @@ export function rowItems(layers: readonly LayerFact[], disabled: ReadonlyMap<str
  * to name it. A row both releases disable is not new, and a row the target stops disabling is not reported.
  * @param target - the target's bundle layers.
  * @param running - the running release's bundle layers.
- * @returns one `row-disabled` item with `detail.bundlePatch` per newly disabled row id, in layer and patch order.
+ * @param released - the target Delorun version, which the row's plugin subject carries.
+ * @returns one `row-disabled` item with `detail.bundlePatch` per newly disabled row id, in layer and patch order. The
+ *   item's `detail.plugin` names the plugin the row loads, or the row id when the layer's rows do not list it, because
+ *   readers before rc.4 print that name in their "loads …, which the update disables" sentence.
  */
-export function bundleRowItems(target: readonly LayerFact[], running: readonly LayerFact[]): readonly ReportItem[] {
+export function bundleRowItems(target: readonly LayerFact[], running: readonly LayerFact[], released: SemanticVersion): readonly ReportItem[] {
   const before = new Set(running.flatMap(layer => layer.disabledRows ?? []))
   const seen = new Set<string>()
   const items: ReportItem[] = []
@@ -239,7 +242,7 @@ export function bundleRowItems(target: readonly LayerFact[], running: readonly L
     for (const id of layer.disabledRows ?? []) {
       if (before.has(id) || seen.has(id)) continue
       seen.add(id)
-      items.push({ kind: 'row', subject: { id, name: id, layer: layer.layer }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true }, actions: [] })
+      items.push({ kind: 'row', subject: { id, name: id, layer: layer.layer }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true, plugin: { name: layer.rows.find(row => row.id === id)?.plugins?.[0] ?? id, version: released } }, actions: [] })
     }
   }
   return items

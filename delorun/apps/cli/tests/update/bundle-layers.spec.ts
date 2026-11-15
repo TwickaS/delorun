@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
+import { bundleRowItems } from '@delorun/update'
 import { BundleReadError, bundleAnchors, readBundleLayers, type BundleLayerOptions } from '../../src/update/bundle-layers.ts'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'dbl-')))
@@ -137,6 +138,18 @@ describe('readBundleLayers', () => {
       })
 
       expect((await readBundleLayers(['off'], OPTIONS)).layers).toEqual([{ layer: 'off', rows: [], disabledRows: ['llm-deepseek-account', 'inserted-off'] }])
+    })
+
+    it('lets the report name nothing for a row the running and the target release both disable through their patches', async () => {
+      const patch = '- id: llm-deepseek-account\n  disabled: true\n'
+      writeBundle('target', 'shared', bundle('shared'), { 'cordis.patch.yml': patch })
+      writeBundle('profile', 'shared', bundle('shared'), { 'cordis.patch.yml': patch })
+      const target = (await readBundleLayers(['shared'], OPTIONS)).layers
+      const running = (await readBundleLayers(['shared'], { ...OPTIONS, anchors: bundleAnchors(join(base, 'no-runtime'), profileDir) })).layers
+
+      expect(target[0]?.disabledRows).toEqual(['llm-deepseek-account'])
+      expect(running[0]?.disabledRows).toEqual(['llm-deepseek-account'])
+      expect(bundleRowItems(target, running, v('1.1.0'))).toEqual([])
     })
 
     it('reads every patch file a list declares, in order', async () => {

@@ -131,7 +131,7 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
     ...bundleItems(profile.bundles, target.bundles),
     // The bundles' layers apply first, then the person's patch layers, as upstream composes them.
     ...rowItems([...target.bundles.layers, ...profile.layers], plugins.disabled),
-    ...bundleRowItems(target.bundles.layers, target.bundles.runningLayers),
+    ...bundleRowItems(target.bundles.layers, target.bundles.runningLayers, target.versions.delorun),
     ...dataItems(input.data),
     ...harnessItems(input.harness),
   ])

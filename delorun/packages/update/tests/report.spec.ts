@@ -133,7 +133,7 @@ describe('rows a bundle patch disables', () => {
   it('names a row the target\'s bundle patch disables and the running release\'s did not', () => {
     const report = buildUpdateReport(input({ target: target({ bundles: bundles([layer('@delorun/bundle-local', ['deepseek-account', 'llm-deepseek-account'])], [layer('@delorun/bundle-local', ['deepseek-account'])]) }) }))
     expect(report.items.filter(item => item.detail.bundlePatch === true)).toEqual([
-      { kind: 'row', subject: { id: 'llm-deepseek-account', name: 'llm-deepseek-account', layer: '@delorun/bundle-local' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true }, actions: [] },
+      { kind: 'row', subject: { id: 'llm-deepseek-account', name: 'llm-deepseek-account', layer: '@delorun/bundle-local' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { bundlePatch: true, plugin: { name: 'llm-deepseek-account', version: TO.delorun } }, actions: [] },
     ])
     expect(report.counts.disabled).toBeGreaterThanOrEqual(1)
   })
@@ -143,8 +143,14 @@ describe('rows a bundle patch disables', () => {
     expect(report.items.filter(item => item.detail.bundlePatch === true)).toEqual([])
   })
 
+  it('carries the row\'s plugin name where releases before rc.4 read it, so their sentence has a plugin', () => {
+    const rows = [{ id: 'row-x', name: 'plugin-x-row', plugins: ['dsh-x'] }]
+    const [item] = bundleRowItems([{ layer: 'a', rows, disabledRows: ['row-x'] }], [], version('1.0.0'))
+    expect(item?.detail.plugin).toEqual({ name: 'dsh-x', version: version('1.0.0') })
+  })
+
   it('names a row once when two layers disable it', () => {
-    expect(bundleRowItems([layer('a', ['x']), layer('b', ['x'])], [])).toHaveLength(1)
+    expect(bundleRowItems([layer('a', ['x']), layer('b', ['x'])], [], version('1.0.0'))).toHaveLength(1)
   })
 })
 
