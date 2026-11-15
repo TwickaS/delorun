@@ -53,7 +53,6 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/devices': HOME_AUTH,
   'exact /auth/devices/remove': HOME_AUTH,
   'exact /auth/sign-in': HOME_AUTH,
-  'exact /auth/branding/icon': HOME_AUTH,
   'exact /auth/device/request': HOME_AUTH,
   'prefix /auth/device/request': HOME_AUTH,
   'exact /auth/device/challenge': HOME_AUTH,

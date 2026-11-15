@@ -49,7 +49,7 @@ export function pickedIconSvg(stored: string, size: number): string | undefined 
   let content: string
   switch (icon.kind) {
     case 'glyph':
-      content = `<g transform="translate(2.7 2.7) scale(0.66)" color="${ink}" stroke="${ink}">${GLYPH_SVG[icon.glyph].replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</g>`
+      content = `<g transform="translate(2.7 2.7) scale(0.66)" color="${ink}" stroke="${ink}">${GLYPH_SVG[icon.glyph].replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</g>` // us-spelling: quoted output (the SVG attribute)
       break
     case 'emoji':
       content = `<text x="8" y="11.5" text-anchor="middle" font-size="9">${escapeText(icon.emoji)}</text>`

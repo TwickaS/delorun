@@ -9,5 +9,15 @@
     "declarationMap": false,
     "types": []
   },
-  "include": ["src", "tests/components.client.spec.tsx", "tests/settings-cards.client.spec.tsx", "tests/settings-choice-group.client.spec.tsx"]
+  "include": [
+    "src",
+    "tests/components.client.spec.tsx",
+    "tests/settings-cards.client.spec.tsx",
+    "tests/settings-choice-group.client.spec.tsx"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/schemastery"
+    }
+  ]
 }
