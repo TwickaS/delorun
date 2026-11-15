@@ -8,11 +8,15 @@
  * @module @delorun/plugin-theme
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-app-boot'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-settings'
 import { resolveBranding, STUDIO_ICON_PATH, writeIcon } from '@delorun/brand/branding'
+import { admitApprovedDevice, ICON_FILE_SEGMENTS, readIcon } from '@delorun/home-auth'
 import { BOOT_SETTINGS_GLOBAL } from './boot-settings.ts'
 import type { Config as ThemeConfig, ThemeSettings } from './config.ts'
+import { receiveIcon } from './icon-upload.ts'
 import { bootStyle } from './palette/layers.ts'
 
 export { BOOT_SETTINGS_GLOBAL } from './boot-settings.ts'
@@ -52,13 +56,28 @@ export function currentSettings(config: ThemeConfig): ThemeSettings {
 export function apply(ctx: Context, config: ThemeConfig): void {
   // The Appearance section is this plugin's own page, so the settings service builds no form for it.
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
-  // The icon is read from the live settings on every request, so a changed upload shows at once and an invalid one is a 404.
+  const iconPath = (): string | undefined => ctx.get('dshHomePath')?.(...ICON_FILE_SEGMENTS)
+  // The icon is read from the live settings on every request, so a changed hash shows at once; a hash no file matches, or an invalid record, is a 404.
   ctx.inject(['webServer'], (scope) => {
     scope.effect(() => scope.webServer.register({
       kind: 'exact',
       path: STUDIO_ICON_PATH,
-      handler: (request, response) => { writeIcon(resolveBranding(config.branding.get()), request.method, response); return Promise.resolve() },
+      handler: (request, response) => {
+        writeIcon(resolveBranding(config.branding.get(), { readImage: hash => readIcon(iconPath(), hash) }), request.method, response)
+        return Promise.resolve()
+      },
     }), 'theme: branding icon route')
+  })
+  // The write check: the bytes are checked here by their first bytes and size, never trusting the page, and stored as the
+  // home's one icon file. An approved device writes it as it writes any everyday setting, with no unlock.
+  ctx.inject(['connection'], (scope) => {
+    scope.effect(() => scope.connection.fetch.register({
+      path: STUDIO_ICON_PATH,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      admitPeer: admitApprovedDevice(),
+      fetch: request => receiveIcon(request, iconPath()),
+    }), 'theme: branding icon upload route')
   })
   ctx.on('webserver/index-inject', (table) => {
     const settings = currentSettings(config)

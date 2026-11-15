@@ -15,7 +15,6 @@ import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delorun/contract-admission'
 import type { Base64Url, DevicePublicKeyJwk } from '@delorun/contract-device-approval'
-import { BRANDING_ICON_PATH } from '../src/branding.ts'
 import type { HomeAuth } from '../src/home-auth.ts'
 import { Config, HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
@@ -27,7 +26,7 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', DEVICES_PATH],
   ['exact', DEVICE_REMOVE_PATH],
   ['exact', REACH_PATHS.signIn],
-  ['exact', BRANDING_ICON_PATH],
+  ['exact', REACH_PATHS.brandingIcon],
   ['prefix', REACH_PATHS.assets],
   ['exact', REACH_PATHS.request],
   ['prefix', REACH_PATHS.request],

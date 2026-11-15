@@ -50,6 +50,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",
     "@deepseek-ai/dsh-client-store": "workspace:*",
     "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
@@ -76,6 +78,7 @@
   },
   "dependencies": {
     "@delorun/brand": "workspace:*",
+    "@delorun/home-auth": "workspace:*",
     "@delorun/settings-controls": "workspace:*"
   }
 }

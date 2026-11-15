@@ -98,6 +98,7 @@ export {
   type RouteHandler,
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
+export { hashImage, ICON_FILE_SEGMENTS, readIcon, storeIcon } from './icon-file.ts'
 export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,

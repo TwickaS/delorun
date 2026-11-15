@@ -6,7 +6,7 @@ import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, Notice, TextField } from '@delorun/brand'
-import { checkGreeting, checkName, checkUpload, DEFAULT_GREETING, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
+import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_PATH, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
 import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-controls'
 import { useState, type ChangeEvent } from 'react'
 import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
@@ -30,15 +30,22 @@ type IconChoice = StoredBranding['icon']
 const PICKER_PREVIEW = 48
 
 /**
- * Read a file as base64.
- * @param file - the file.
- * @returns its bytes as base64.
+ * Send image bytes to the host, which checks them again and stores them as the home's icon file.
+ * @param bytes - the image.
+ * @param type - the image's type, which the host compares with the first bytes.
+ * @returns the stored image's hash, or undefined when the host refused it or could not be reached.
  */
-async function base64Of(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
+async function storeImage(bytes: Uint8Array, type: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(STUDIO_ICON_PATH, { method: 'POST', headers: { 'content-type': type }, body: bytes as BodyInit, credentials: 'same-origin' })
+    if (!response.ok) return undefined
+    const answer: unknown = await response.json()
+    const hash = typeof answer === 'object' && answer !== null ? Reflect.get(answer, 'hash') : undefined
+    return typeof hash === 'string' ? hash : undefined
+  } catch (_unreachable) {
+    // The studio shows the same plain problem for a refusal and for no answer.
+    return undefined
+  }
 }
 
 /**
@@ -57,6 +64,17 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
     const merged: StoredBranding = { ...stored, ...next }
     publishBranding(merged)
     track(settings.set('branding', merged))
+    // A home that stored the image in the row moves it to the icon file on this save.
+    if (merged.upload !== '' && merged.uploadHash === '') track(moveToFile(merged))
+  }
+  const moveToFile = async (record: StoredBranding): Promise<boolean> => {
+    const checked = checkUpload(record.upload)
+    if (!checked.ok) return false
+    const hash = await storeImage(checked.bytes, checked.type)
+    if (hash === undefined) return false
+    const moved: StoredBranding = { ...record, upload: '', uploadHash: hash }
+    publishBranding(moved)
+    return await settings.set('branding', moved)
   }
   const saveName = (text: string): void => {
     if (text.trim() === '') { setProblem(undefined); write({ name: '' }); return }
@@ -76,11 +94,12 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (file === undefined) return
-    const base64 = await base64Of(file)
-    const checked = checkUpload(base64, file.type === '' ? undefined : file.type)
-    if (!checked.ok) { setProblem({ field: 'icon', text: t('icon.problem') }); return }
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const checked = checkImageBytes(bytes, file.type === '' ? undefined : file.type)
+    const hash = checked.ok ? await storeImage(bytes, checked.type) : undefined
+    if (hash === undefined) { setProblem({ field: 'icon', text: t('icon.problem') }); return }
     setProblem(undefined)
-    write({ icon: 'upload', upload: base64 })
+    write({ icon: 'upload', uploadHash: hash, upload: '' })
   }
   const bridge = sidebarBridge()
   const pickedName = resolveBranding(stored).name
@@ -117,7 +136,7 @@ export function BrandingSection({ t, settings }: BrandingSectionProps) {
             options={[{ value: 'mark', label: t('icon.mark') }, { value: 'picked', label: t('icon.picked') }, { value: 'upload', label: t('icon.upload') }]}
             onChange={(next) => {
               if (next === 'picked') setPicking(true)
-              else if (next === 'mark' || stored.upload !== '') write({ icon: next })
+              else if (next === 'mark' || stored.uploadHash !== '' || stored.upload !== '') write({ icon: next })
             }}
           />
         </div>

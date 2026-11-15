@@ -94,7 +94,7 @@ describe('the host half', () => {
 
 describe('the branding setting', () => {
   it('defaults to the mark shown with no own name, icon or greeting', () => {
-    expect(Config({}).branding.get()).toEqual({ showMark: true, name: '', greeting: '', icon: 'mark', pickedIcon: '', upload: '' })
+    expect(Config({}).branding.get()).toEqual({ showMark: true, name: '', greeting: '', icon: 'mark', pickedIcon: '', uploadHash: '', upload: '' })
   })
 
   it('prints the branding into the page without its upload', async () => {

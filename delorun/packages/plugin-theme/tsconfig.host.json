@@ -9,6 +9,7 @@
     "src/index.ts",
     "src/boot-settings.ts",
     "src/config.ts",
+    "src/icon-upload.ts",
     "src/palette/color.ts",
     "src/palette/generate.ts",
     "src/palette/layers.ts",
@@ -25,6 +26,12 @@
     },
     {
       "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/boot/app-boot"
     },
     {
       "path": "../../../packages/host/webserver"

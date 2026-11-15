@@ -30,6 +30,7 @@ import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
 import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
 import { BRANDING_SETTINGS } from './branding.ts'
+import { ICON_FILE_SEGMENTS, readIcon } from './icon-file.ts'
 import { DangerousSettingsLedger, type LiftField, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
 import type { ElevationState } from '@delorun/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
@@ -231,14 +232,15 @@ export class HomeAuthService extends Service {
     const credential = loopbackCredentialOf(this.ctx)
     // The same record the studio edits, read from the one settings store on every request.
     const branding = (): unknown => this.settingsFields().read(BRANDING_SETTINGS.ns, BRANDING_SETTINGS.field)
+    const readImage = (hash: string): Uint8Array | undefined => readIcon(this.ctx.get('dshHomePath')?.(...ICON_FILE_SEGMENTS), hash)
     this.ctx.effect(() => {
       const server = this.ctx.webServer
       const registered = [
         server.register({ kind: 'exact', path: OWNER_CLAIM_PATH, handler: claimHandler(core) }),
         server.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core, credential) }),
         server.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core, credential) }),
-        server.register({ kind: 'exact', path: REACH_PATHS.signIn, handler: signInPageHandler(core, branding) }),
-        server.register({ kind: 'exact', path: REACH_PATHS.brandingIcon, handler: brandingIconHandler(core, branding) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.signIn, handler: signInPageHandler(core, branding, readImage) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.brandingIcon, handler: brandingIconHandler(core, branding, readImage) }),
         server.register({ kind: 'prefix', path: REACH_PATHS.assets, handler: assetHandler(core) }),
         server.register({ kind: 'exact', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
         server.register({ kind: 'prefix', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),

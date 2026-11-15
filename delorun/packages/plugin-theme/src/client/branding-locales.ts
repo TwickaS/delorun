@@ -34,5 +34,31 @@ export const en = {
 export type BrandingLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
-// A309: the Chinese copy waits for the translation pass; English stands in meanwhile.
-export const zh: Record<BrandingLocaleKey, string> = { ...en }
+export const zh: Record<BrandingLocaleKey, string> = {
+  nav: '品牌',
+  title: '品牌',
+  show: '显示标志',
+  'show.lead': '在空白聊天页和侧边栏顶部显示图标和名称。',
+  name: '名称',
+  'name.lead': '替换侧边栏顶部、空白聊天页和浏览器标签页标题中的“Delorun”。',
+  'name.placeholder': 'Delorun',
+  'name.problem': '名称为 1 至 40 个纯文本字符。',
+  icon: '图标',
+  'icon.lead': '替换上述位置和浏览器标签页图标。可用 Delorun 标志、选择图标，或上传不超过 256 KB 的 PNG、JPEG 或 WebP 图片。',
+  'icon.mark': 'Delorun 标志',
+  'icon.picked': '选择的图标',
+  'icon.upload': '上传的图片',
+  'icon.pick': '选择图标',
+  'icon.choose': '选择图片',
+  'icon.problem': '图标须为不超过 256 KB 的 PNG、JPEG 或 WebP 图片，不支持 SVG。',
+  greeting: '问候语',
+  'greeting.lead': '空白聊天页输入框上方的一行字。',
+  'greeting.custom': '自己写一句',
+  'greeting.placeholder': 'What are we working on?',
+  'greeting.problem': '问候语为 1 至 80 个纯文本字符。',
+  signin: '登录页面',
+  'signin.lead': '其他设备的登录和配对页面会显示此名称和图标；隐藏标志时则不显示。这些页面在登录前可见，能访问此地址的人都能看到。',
+  reset: '使用 Delorun 默认设置',
+  notice: '已保存的品牌设置有一部分无法使用，现显示 Delorun 默认设置。',
+  saveFailed: '无法保存品牌设置，请重试。',
+}

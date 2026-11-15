@@ -37,8 +37,11 @@ export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 /** One accepted image type. */
 export type ImageType = typeof IMAGE_TYPES[number]
 
-/** The fixed path of the studio's icon route. */
+/** The fixed path of the studio's icon route; a GET answers with the image, a POST stores a new one. */
 export const STUDIO_ICON_PATH = '/delorun/branding/icon'
+
+/** The content hash of a stored image: 64 lowercase hex digits of its SHA-256. */
+export const IMAGE_HASH = /^[0-9a-f]{64}$/
 
 /** The branding as stored in the theme row. An empty `name` or `greeting` means the default. */
 export interface StoredBranding {
@@ -52,12 +55,14 @@ export interface StoredBranding {
   icon: IconSource
   /** The picked workspace icon as JSON, used when {@link icon} is `picked`; the studio validates it with the workspace icon schema. */
   pickedIcon: string
-  /** The uploaded image as base64, used when {@link icon} is `upload`. */
+  /** The SHA-256 hash of the uploaded image in the home's icon file, used when {@link icon} is `upload`. */
+  uploadHash: string
+  /** An uploaded image as base64, as homes before the icon file stored it; it still reads, and the next save moves it to the file. */
   upload: string
 }
 
 /** The stored branding of a studio whose person changed nothing. */
-export const DEFAULT_STORED_BRANDING: StoredBranding = { showMark: true, name: '', greeting: '', icon: 'mark', pickedIcon: '', upload: '' }
+export const DEFAULT_STORED_BRANDING: StoredBranding = { showMark: true, name: '', greeting: '', icon: 'mark', pickedIcon: '', uploadHash: '', upload: '' }
 
 /** The branding every page shows, after validation. */
 export interface Branding {
@@ -71,7 +76,7 @@ export interface Branding {
   icon: IconSource
   /** The picked workspace icon as JSON; empty unless {@link icon} is `picked`. */
   pickedIcon: string
-  /** The validated upload, when {@link icon} is `upload`. */
+  /** The validated upload, when {@link icon} is `upload` and the host could read it; its `version` is the start of its hash. */
   image: { readonly type: ImageType; readonly bytes: Uint8Array; readonly version: string } | undefined
   /** Whether the person changed the name or the icon, so a page draws the own branding instead of its built-in mark. */
   custom: boolean
@@ -127,7 +132,22 @@ export function sniffImage(bytes: Uint8Array): ImageType | undefined {
 }
 
 /**
- * Decode and check an uploaded image.
+ * Check image bytes: their size and first bytes decide, never a name.
+ * @param bytes - the file.
+ * @param declaredType - the type the browser declared, if any; it must agree with the signature.
+ * @returns the image type, or a problem in plain words.
+ */
+export function checkImageBytes(bytes: Uint8Array, declaredType?: string): { readonly ok: true; readonly type: ImageType } | { readonly ok: false; readonly problem: string } {
+  if (bytes.length === 0) return { ok: false, problem: 'The icon is not a readable image.' }
+  if (bytes.length > ICON_MAX_BYTES) return { ok: false, problem: `The icon is larger than ${String(ICON_MAX_BYTES / 1024)} KB.` }
+  const type = sniffImage(bytes)
+  if (type === undefined) return { ok: false, problem: 'The icon is a PNG, JPEG or WebP image; SVG is not accepted.' }
+  if (declaredType !== undefined && declaredType !== type) return { ok: false, problem: 'The icon\'s contents do not match its type.' }
+  return { ok: true, type }
+}
+
+/**
+ * Decode and check an uploaded image held as base64 (the form homes stored before the icon file).
  * @param base64 - the image as base64.
  * @param declaredType - the type the browser declared, if any; it must agree with the signature.
  * @returns the image, or a problem in plain words.
@@ -136,15 +156,43 @@ export function checkUpload(base64: string, declaredType?: string): { readonly o
   if (base64.length > Math.ceil((ICON_MAX_BYTES * 4) / 3) + 4) return { ok: false, problem: `The icon is larger than ${String(ICON_MAX_BYTES / 1024)} KB.` }
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64) || base64.length === 0) return { ok: false, problem: 'The icon is not a readable image.' }
   const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0))
-  if (bytes.length > ICON_MAX_BYTES) return { ok: false, problem: `The icon is larger than ${String(ICON_MAX_BYTES / 1024)} KB.` }
-  const type = sniffImage(bytes)
-  if (type === undefined) return { ok: false, problem: 'The icon is a PNG, JPEG or WebP image; SVG is not accepted.' }
-  if (declaredType !== undefined && declaredType !== type) return { ok: false, problem: 'The icon\'s contents do not match its type.' }
-  return { ok: true, type, bytes }
+  const checked = checkImageBytes(bytes, declaredType)
+  return checked.ok ? { ok: true, type: checked.type, bytes } : checked
 }
 
 /**
- * A short version tag of an image, which makes the icon address change when the image does.
+ * Check a branding record where it is written, strictly: every field present must be valid, unlike {@link resolveBranding},
+ * which tolerates a bad stored value so a page still loads.
+ * @param value - the record a write sets.
+ * @returns a problem in plain words, or undefined when the record is acceptable.
+ */
+export function checkStoredBranding(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'The branding must be a record.'
+  const record: Record<string, unknown> = { ...value }
+  const known = ['showMark', 'name', 'greeting', 'icon', 'pickedIcon', 'uploadHash', 'upload']
+  const stray = Object.keys(record).find(key => !known.includes(key))
+  if (stray !== undefined) return 'The branding holds a field this studio does not know.'
+  if (record.showMark !== undefined && typeof record.showMark !== 'boolean') return 'The choice to show or hide the mark must be on or off.'
+  for (const [key, check] of [['name', checkName], ['greeting', checkGreeting]] as const) {
+    const field = record[key]
+    if (field === undefined || field === '') continue
+    if (typeof field !== 'string') return `The ${key} must be text.`
+    const checked = check(field)
+    if (!checked.ok) return checked.problem
+  }
+  if (record.icon !== undefined && !(ICON_SOURCES as readonly unknown[]).includes(record.icon)) return 'The icon must be the mark, a picked icon or an upload.'
+  if (record.pickedIcon !== undefined && (typeof record.pickedIcon !== 'string' || record.pickedIcon.length > 2048)) return 'The picked icon could not be read.'
+  if (record.uploadHash !== undefined && record.uploadHash !== '' && (typeof record.uploadHash !== 'string' || !IMAGE_HASH.test(record.uploadHash))) return 'The icon\'s hash could not be read.'
+  if (record.upload !== undefined && record.upload !== '') {
+    if (typeof record.upload !== 'string') return 'The icon could not be read.'
+    const checked = checkUpload(record.upload)
+    if (!checked.ok) return checked.problem
+  }
+  return undefined
+}
+
+/**
+ * A short version tag of base64-stored image, which makes the icon address change when the image does.
  * @param bytes - the image.
  * @returns eight hex digits of an FNV-1a hash.
  */
@@ -159,10 +207,12 @@ function versionOf(bytes: Uint8Array): string {
  * adds to the notice, and a record that is not an object shows all defaults.
  * @param raw - the stored value, of any type.
  * @param options - `uploadElided`: the upload was left out of the record on purpose, as in the studio's page, so an
- *   `upload` icon is kept without its bytes and the page loads the image from the icon route.
+ *   `upload` icon is kept without its bytes and the page loads the image from the icon route. `readImage`: reads the
+ *   icon file for a hash and returns its bytes only when they hash to it, so a stored hash that no file matches shows the
+ *   default.
  * @returns the branding to show.
  */
-export function resolveBranding(raw: unknown, options: { readonly uploadElided?: boolean } = {}): Branding {
+export function resolveBranding(raw: unknown, options: { readonly uploadElided?: boolean; readonly readImage?: (hash: string) => Uint8Array | undefined } = {}): Branding {
   const problems: string[] = []
   const record: Record<string, unknown> = typeof raw === 'object' && raw !== null ? { ...raw } : {}
   if (raw !== undefined && (typeof raw !== 'object' || raw === null)) problems.push('The saved branding could not be read.')
@@ -183,7 +233,16 @@ export function resolveBranding(raw: unknown, options: { readonly uploadElided?:
   let icon: IconSource = 'mark'
   let image: Branding['image']
   let pickedIcon = ''
-  if (record.icon === 'upload' && options.uploadElided === true && record.upload === '') icon = 'upload'
+  const hash = typeof record.uploadHash === 'string' && record.uploadHash !== '' ? record.uploadHash : undefined
+  if (record.icon === 'upload' && hash !== undefined) {
+    const bytes = IMAGE_HASH.test(hash) && options.uploadElided !== true ? options.readImage?.(hash) : undefined
+    const checked = bytes === undefined ? undefined : checkImageBytes(bytes)
+    if (options.uploadElided === true && IMAGE_HASH.test(hash)) icon = 'upload'
+    else if (checked?.ok === true && bytes !== undefined) {
+      icon = 'upload'
+      image = { type: checked.type, bytes, version: hash.slice(0, 12) }
+    } else problems.push('The saved icon was ignored. Its image could not be found.')
+  } else if (record.icon === 'upload' && options.uploadElided === true && record.upload === '') icon = 'upload'
   else if (record.icon === 'upload') {
     const checked = typeof record.upload === 'string' ? checkUpload(record.upload) : { ok: false as const, problem: 'The saved icon could not be read.' }
     if (checked.ok) {

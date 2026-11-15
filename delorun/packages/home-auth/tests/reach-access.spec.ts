@@ -739,6 +739,19 @@ describe('the everyday settings and shipped plugin toggles of an approved device
     expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-sidebar', section: { workspaceIcons: { w1: '<x>' } } } })).toEqual(DENY('settings/replace'))
   })
 
+  it('admits only a branding record that passes the write check to the theme row without an unlock', () => {
+    const good = { showMark: true, name: 'Acme', greeting: 'Hello', icon: 'upload', pickedIcon: '', uploadHash: 'c'.repeat(64), upload: '' }
+    const update = (branding: unknown) => approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-theme', patch: { branding } } })
+    expect(update(good)).toEqual(ALLOW)
+    for (const bad of [{ ...good, name: 'x'.repeat(41) }, { ...good, name: 'a\u0007' }, { ...good, greeting: 'g'.repeat(81) }, { ...good, icon: 'svg' }, { ...good, uploadHash: '../x' }, { ...good, upload: btoa('<svg/>') }, 'text']) {
+      expect(update(bad), JSON.stringify(bad)).toEqual(DENY('settings/update'))
+    }
+    const mutate = (op: unknown) => approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns: 'delorun-theme', ops: [op] } })
+    expect(mutate({ op: 'set', path: ['branding', 'name'], value: 'Acme' })).toEqual(ALLOW)
+    expect(mutate({ op: 'set', path: ['branding', 'name'], value: 'x'.repeat(41) })).toEqual(DENY('settings/mutate'))
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-theme', patch: { palette: 'soft' } } })).toEqual(ALLOW)
+  })
+
   it('admits a replace of an everyday namespace whose every field is everyday, by the same field rules as a mutate', () => {
     const replace = (ns: string, section: unknown) => approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns, section } })
     expect(replace('delorun-theme', { palette: 'soft' })).toEqual(ALLOW)

@@ -33,7 +33,7 @@ import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
-import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH, type BrandingSource } from './branding.ts'
+import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH, type BrandingSource, type IconReader } from './branding.ts'
 import { plainPathname } from './reach-paths.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
@@ -164,9 +164,10 @@ export function signInLocation(target: string): string {
  * page's script reads only a landing this route accepted.
  * @param auth - the home-auth instance.
  * @param branding - reads the stored branding record; none means the Delorun defaults.
+ * @param readImage - reads the icon file for a stored hash.
  * @returns the handler.
  */
-export function signInPageHandler(auth: HomeAuth, branding: BrandingSource = () => undefined): RouteHandler {
+export function signInPageHandler(auth: HomeAuth, branding: BrandingSource = () => undefined, readImage?: IconReader): RouteHandler {
   return async (request, response) => {
     if (reachArrival(auth, request, response) === undefined || !method(request, response, 'GET')) return
     const next = new URL(targetOf(request), 'http://route.invalid').searchParams.getAll(NEXT_PARAMETER)
@@ -179,7 +180,7 @@ export function signInPageHandler(auth: HomeAuth, branding: BrandingSource = () 
     }
     response.statusCode = 200
     response.setHeader('content-type', 'text/html; charset=utf-8')
-    response.end(brandedSignInPage(SIGN_IN_PAGE, branding()))
+    response.end(brandedSignInPage(SIGN_IN_PAGE, branding(), readImage))
   }
 }
 
@@ -187,12 +188,13 @@ export function signInPageHandler(auth: HomeAuth, branding: BrandingSource = () 
  * Build the branding icon route: the person's uploaded icon, or 404.
  * @param auth - the home-auth instance.
  * @param branding - reads the stored branding record.
+ * @param readImage - reads the icon file for a stored hash.
  * @returns the handler.
  */
-export function brandingIconHandler(auth: HomeAuth, branding: BrandingSource): RouteHandler {
+export function brandingIconHandler(auth: HomeAuth, branding: BrandingSource, readImage?: IconReader): RouteHandler {
   return async (request, response) => {
     if (reachArrival(auth, request, response) === undefined) return
-    answerIcon(branding(), request.method, response)
+    answerIcon(branding(), request.method, response, readImage)
   }
 }
 

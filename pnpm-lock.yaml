@@ -1817,6 +1817,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.3
@@ -3434,6 +3437,9 @@ importers:
       '@delorun/brand':
         specifier: workspace:*
         version: link:../brand
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
@@ -3441,6 +3447,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale

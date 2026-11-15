@@ -90,3 +90,23 @@ describe('the icon route', () => {
     expect(state.statusCode).toBe(405)
   })
 })
+
+describe('a picked icon on the sign-in page', () => {
+  it('draws the glyph from the shipped set and the Delorun mark for an invalid icon', () => {
+    const template = '<html><head><title>Delorun</title></head><body><!--brand--><svg class="mark"></svg><span class="wordmark">Delorun</span><!--/brand--></body></html>'
+    const picked = JSON.stringify({ kind: 'glyph', glyph: 'folder', color: 'blue', shape: 'rounded', style: 'soft' })
+    const page = brandedSignInPage(template, { name: 'Acme', icon: 'picked', pickedIcon: picked })
+    expect(page).toContain('viewBox="0 0 16 16"')
+    expect(page).not.toContain('class="mark"')
+    const unknown = brandedSignInPage(template, { name: 'Acme', icon: 'picked', pickedIcon: JSON.stringify({ kind: 'glyph', glyph: '"><script>' }) })
+    expect(unknown).toContain('class="mark"')
+    expect(unknown).not.toContain('<script>')
+  })
+
+  it('shows the default for an uploaded icon whose hash matches no file', () => {
+    const template = '<html><head><title>Delorun</title></head><body><!--brand--><svg class="mark"></svg><span class="wordmark">Delorun</span><!--/brand--></body></html>'
+    const page = brandedSignInPage(template, { name: 'Acme', icon: 'upload', uploadHash: 'd'.repeat(64) }, () => undefined)
+    expect(page).toContain('class="mark"')
+    expect(page).not.toContain('/auth/branding/icon')
+  })
+})

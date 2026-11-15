@@ -30,6 +30,8 @@ import type {
 import { parseCommand } from '@deepseek-ai/dsh-commands'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { Workspace } from '@deepseek-ai/dsh-workspace/types'
+import { checkStoredBranding } from '@delorun/brand/branding'
+import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/workspace-icon'
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
 
@@ -325,26 +327,16 @@ function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string,
   return fields
 }
 
-/** An icon field that names a choice: a short word, a named colour or a `#RRGGBB` value, never markup. */
-const ICON_CHOICE = /^[A-Za-z0-9#_-]{1,32}$/
-const ICON_KEYS: ReadonlySet<string> = new Set(['kind', 'letters', 'glyph', 'emoji', 'seed', 'color', 'shape', 'style']) // us-spelling: quoted output (the wire key)
-const ICON_TEXT_KEYS: ReadonlySet<string> = new Set(['letters', 'emoji'])
-
 /**
- * Whether a value is a workspace icon the sidebar's picker can write: an object of the picker's fields only, its choices
- * short words, its text free of markup characters, its seed a number. The sidebar validates each icon it reads with
- * `WorkspaceIconSchema`; this check keeps a device from storing anything else.
+ * Whether a value is a workspace icon the sidebar's picker can write: one the workspace icon schema accepts, whose text
+ * is also free of markup characters, because the studio draws the letters and the emoji as text.
  * @param icon - the value.
  * @returns whether it is.
  */
 function isWorkspaceIcon(icon: unknown): boolean {
-  if (!isObject(icon) || typeof icon.kind !== 'string') return false
-  return Object.entries(icon).every(([key, value]) => {
-    if (!ICON_KEYS.has(key)) return false
-    if (key === 'seed') return typeof value === 'number'
-    if (typeof value !== 'string') return false
-    return ICON_TEXT_KEYS.has(key) ? value.length <= 16 && !/[<>&"'`\\]/.test(value) : ICON_CHOICE.test(value)
-  })
+  const parsed = parseWorkspaceIcon(icon)
+  if (parsed === undefined || !isObject(icon)) return false
+  return Object.keys(icon).every(key => key in DEFAULT_WORKSPACE_ICON) && !/[<>&"'`\\]/.test(parsed.letters + parsed.emoji)
 }
 
 /**
@@ -368,6 +360,28 @@ function writesOnlyValidIcons(action: RemoteAccessAction, args: Readonly<Record<
 }
 
 /**
+ * Whether a settings write to the theme row sets `branding` only to a record that passes the strict write check: a name
+ * or greeting of the allowed length without control characters, a known icon source, a well-formed hash and an upload that
+ * is a PNG, JPEG or WebP image within the size limit. A write that leaves the field alone passes.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns whether every branding record the write sets is acceptable.
+ */
+function writesOnlyValidBranding(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  const ok = (value: unknown): boolean => checkStoredBranding(value) === undefined
+  if (action === 'settings/update') return !isObject(args.patch) || !('branding' in args.patch) || ok(args.patch.branding)
+  if (action === 'settings/replace') return !isObject(args.section) || !('branding' in args.section) || ok(args.section.branding)
+  if (!Array.isArray(args.ops)) return false
+  // A write at a path under `branding` replaces a field of the stored record, so it is checked as a record of that field.
+  return (args.ops as unknown[]).every((op) => {
+    if (!isObject(op) || !Array.isArray(op.path) || op.path[0] !== 'branding') return true
+    if (op.op === 'unset') return true
+    if (op.path.length === 1) return ok(op.value)
+    return op.path.length === 2 && typeof op.path[1] === 'string' && ok({ [op.path[1]]: op.value })
+  })
+}
+
+/**
  * Whether a settings write stays inside the fields an approved device writes without an unlock.
  * @param action - the settings write.
  * @param args - the call's arguments, naming a namespace of {@link REACH_EVERYDAY_SETTINGS}.
@@ -375,6 +389,7 @@ function writesOnlyValidIcons(action: RemoteAccessAction, args: Readonly<Record<
  */
 function touchesOnlyEverydayFields(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
   if (args.ns === 'delorun-sidebar' && !writesOnlyValidIcons(action, args)) return false
+  if (args.ns === 'delorun-theme' && !writesOnlyValidBranding(action, args)) return false
   const allowed = REACH_EVERYDAY_FIELDS[String(args.ns)]
   if (allowed === undefined) return true
   const touched = fieldsTouched(action, args)

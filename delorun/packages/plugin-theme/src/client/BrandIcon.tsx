@@ -3,6 +3,7 @@
  * uploaded. Nothing is drawn while the mark is hidden.
  */
 import { STUDIO_ICON_PATH } from '@delorun/brand/branding'
+import { pickedIconSvg } from '@delorun/brand/picked-icon'
 import { MARK } from '@delorun/brand/mark'
 import { sidebarBridge } from './sidebar-bridge.ts'
 import type { BrandingView } from './branding-store.ts'
@@ -25,6 +26,8 @@ export function BrandIcon({ branding, size }: { readonly branding: BrandingView;
     const Badge = bridge.service.IconBadge
     return <span data-delorun-brand-icon="picked"><Badge title={branding.name} icon={picked} size={size} /></span>
   }
+  const drawn = branding.icon === 'picked' ? pickedIconSvg(branding.pickedIcon, size) : undefined
+  if (drawn !== undefined) return <img className={css.image} src={`data:image/svg+xml,${encodeURIComponent(drawn)}`} width={size} height={size} alt="" data-delorun-brand-icon="picked" />
   return (
     <svg className={css.mark} width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false" data-delorun-brand-icon="mark">
       <path d={MARK.nut} fill="currentColor" fillRule="evenodd" />

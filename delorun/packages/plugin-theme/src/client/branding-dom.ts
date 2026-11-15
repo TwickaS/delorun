@@ -3,6 +3,7 @@
  * @module @delorun/plugin-theme/client/branding-dom
  */
 import { DEFAULT_BRAND_NAME, STUDIO_ICON_PATH } from '@delorun/brand/branding'
+import { pickedIconSvg } from '@delorun/brand/picked-icon'
 import { currentBranding, subscribeBranding } from './branding-store.ts'
 
 const FAVICON_ATTRIBUTE = 'data-delorun-branding'
@@ -25,10 +26,13 @@ export function followBrandingInDocument(doc: Document): () => void {
   const applyIcon = (): void => {
     for (const link of doc.head.querySelectorAll(`link[${FAVICON_ATTRIBUTE}]`)) link.remove()
     const branding = currentBranding()
-    if (branding.icon !== 'upload' || !branding.showMark) return
+    if (!branding.showMark) return
+    // A picked icon is drawn from the shipped glyph set by id, so the tab icon needs no sidebar.
+    const picked = branding.icon === 'picked' ? pickedIconSvg(branding.pickedIcon, 32) : undefined
+    if (branding.icon !== 'upload' && picked === undefined) return
     const link = doc.createElement('link')
     link.rel = 'icon'
-    link.href = `${STUDIO_ICON_PATH}?v=${String(branding.revision)}`
+    link.href = picked === undefined ? `${STUDIO_ICON_PATH}?v=${String(branding.revision)}` : `data:image/svg+xml,${encodeURIComponent(picked)}`
     link.setAttribute(FAVICON_ATTRIBUTE, '')
     doc.head.append(link)
   }

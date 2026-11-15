@@ -11,10 +11,14 @@
     "./tokens.css": "./src/tokens.css",
     "./fonts.css": "./src/fonts.css",
     "./mark": "./src/mark.tsx",
-    "./branding": "./src/branding.ts"
+    "./branding": "./src/branding.ts",
+    "./workspace-icon": "./src/workspace-icon.ts",
+    "./workspace-glyphs": "./src/workspace-glyphs.ts",
+    "./picked-icon": "./src/picked-icon.ts"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*"
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0"

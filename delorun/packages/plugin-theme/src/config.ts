@@ -117,6 +117,7 @@ export const Config = z.object({
     greeting: z.string().default(''),
     icon: z.union([...ICON_SOURCES]).default('mark'),
     pickedIcon: z.string().default(''),
+    uploadHash: z.string().default(''),
     upload: z.string().default(''),
   }).default(DEFAULT_STORED_BRANDING).volatile(),
   contrast: z.number().min(CONTRAST.min).max(CONTRAST.max).step(CONTRAST.step).default(CONTRAST.default).volatile(),
