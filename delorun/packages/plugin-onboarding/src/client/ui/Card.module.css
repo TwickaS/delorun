@@ -14,8 +14,7 @@
 
 .row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--onb-gap-1);
 }
 
@@ -41,7 +40,7 @@
 }
 
 .text {
-  flex: 1 1 12rem;
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -77,17 +76,11 @@
   display: flex;
   flex: none;
   align-items: center;
+  max-width: 50%;
+  text-align: right;
   min-height: var(--onb-target);
 }
 
 .action button {
   min-height: var(--onb-target);
-}
-
-/* On a phone the action sits under the text, aligned with it. */
-@media (max-width: 767px) {
-  .action {
-    flex: 1 1 100%;
-    padding-left: calc(32px + var(--onb-gap-1));
-  }
 }
