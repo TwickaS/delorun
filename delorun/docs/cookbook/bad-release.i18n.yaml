@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for bad-release.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/cookbook/bad-release.md
+/:
+  en: 482574706caa99d8
+  zh: 4f52b4353bd0dff6
+/handle-a-bad-release:
+  en: c769f36f765fa685
+  zh: 07563533b938896d
+/handle-a-bad-release/summary:
+  en: e09f1ea3ff052ba0
+  zh: e5f21c62b0d8b402
+/handle-a-bad-release/contents:
+  en: 440794117b1521f0
+  zh: 709889a2c76a2d08
+/handle-a-bad-release/what-people-already-have:
+  en: 55a1e573afc715a0
+  zh: e3c1897eb5395835
+/handle-a-bad-release/the-steps:
+  en: 1fd55b1af91cd10e
+  zh: ba848e856a232e87
+/handle-a-bad-release/the-command-for-people:
+  en: d658db5b7fefb45c
+  zh: 260bb701bd7f47ee
+/handle-a-bad-release/rehearse-on-a-test-channel:
+  en: a69d66260bd243f7
+  zh: c0c85a8828c2e887

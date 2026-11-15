@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/cookbook/README.md
 /:
-  en: b31aaf9e972847ca
-  zh: 549352c49f563e18
+  en: c4c0496ab54e5a4a
+  zh: c57161fa38e6dbfe
 /delorun-cookbook:
-  en: 76c7477f301b979f
-  zh: 7860f5bca4740da7
+  en: 7894820a8048ee27
+  zh: 32b9ec820ea74828
