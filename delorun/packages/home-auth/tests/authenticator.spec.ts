@@ -698,7 +698,7 @@ describe('the authenticator provider', () => {
       const server = createServer()
       server.on('upgrade', (upgrade: IncomingMessage, socket: Duplex) => {
         // The admission reads the request as the Connection hands it over: real headers, the token stripped on admit.
-        const admission = provider().admit(upgrade as unknown as ConnectionIndexRequest, PRIVATE)
+        const admission = provider().admit(upgrade, PRIVATE)
         admissions.push(admission)
         if (admission.kind !== 'admitted') {
           socket.end('HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n')

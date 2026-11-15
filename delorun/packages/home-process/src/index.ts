@@ -10,7 +10,7 @@
 export { listenUpdateChannel, updateSocketPath, type UpdateChannelOptions, type UpdateRequestHandler } from './channel.ts'
 export { CountingChatGate } from './chat-gate.ts'
 export { acceptServer, declineServer, listServers, reloadPermissions, revokeServer, type AcceptedMcpServer, type LocalConsents, type McpEnvVariable, type McpPinnedFile, type McpServerChange, type McpServerState, type PendingMcpServer } from './consents.ts'
-export { approveDevices, changePin, elevateDevices, PENDING_POLL_MS, removeDevice, type ChannelCaller, type ElevationsAtComputer, type InternalErrorReport, type LocalDeviceApproval, type PendingDevice, type PendingElevationRequest, type RunningElevation } from './devices-approve.ts'
+export { approveDevices, changePin, elevateDevices, PENDING_POLL_MS, removeDevice, type ChannelCaller, type ElevationsAtComputer, type InternalErrorReport, type LocalDeviceApproval, type PendingDevice, type PinApproval, type PendingElevationRequest, type RunningElevation } from './devices-approve.ts'
 export { reachApply, reachStatus, type LocalReach } from './reach.ts'
 export { ChannelTokenCheck } from './studio-link.ts'
 export { exchangeLines, queryHomeStatus, sendHomeRequest, updateChannelProbe, type ExchangeOptions, type ResponseLine, type UnsignedRequest } from './client.ts'

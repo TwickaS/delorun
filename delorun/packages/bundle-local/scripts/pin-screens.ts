@@ -136,7 +136,10 @@ try {
         await page.waitForTimeout(2500)
         await page.addStyleTag({ content: preview.style })
         await page.addScriptTag({ content: preview.script })
-        await page.evaluate((shown) => { (globalThis as unknown as { mountPinLock(view: object): void }).mountPinLock(shown) }, scenario.view)
+        await page.evaluate((shown) => {
+          const mount: unknown = Reflect.get(globalThis, 'mountPinLock')
+          if (typeof mount === 'function') mount(shown)
+        }, scenario.view)
         await page.waitForTimeout(300)
         for (let key = 0; key < (scenario.typed ?? 0); key++) await page.getByRole('button', { name: String(2 + key) }).first().click()
         await page.waitForTimeout(300)

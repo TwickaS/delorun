@@ -69,6 +69,9 @@ export type ElevationsAtComputer = {
   readonly running: readonly RunningElevation[]
 }
 
+/** The PIN operations of {@link LocalDeviceApproval}, the only ones `changePin` calls. */
+export type PinApproval = Pick<LocalDeviceApproval, 'setPin' | 'setPinOptions' | 'turnPinOff' | 'resumePin'>
+
 /** The Host's half of the local approval: `@delorun/home-auth`'s window, pending requests and approval. */
 export interface LocalDeviceApproval {
   /**
@@ -305,7 +308,7 @@ export async function elevateDevices(request: DevicesElevateRequest, caller: Cha
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
  *   `PIN_FAILED` naming home-auth's code for a refused secret; the message never holds the secret.
  */
-export async function changePin(request: PinSetRequest | PinOffRequest | PinOptionsRequest | PinResumeRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined, report?: InternalErrorReport): Promise<Readonly<Record<string, unknown>>> {
+export async function changePin(request: PinSetRequest | PinOffRequest | PinOptionsRequest | PinResumeRequest, caller: ChannelCaller, devices: PinApproval | undefined, report?: InternalErrorReport): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'changing the PIN needs you at your computer: run delorun there')
   }

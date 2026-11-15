@@ -204,13 +204,13 @@
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. It also covers the client's refused-answer path: a result the Host refuses with LOOPBACK_REQUIRED emits `remote/answer-refused` and keeps the event stream, while any other refusal still ends the generation. Covers `remote/call-denied`: emitted with the endpoint and reason on `remote-access/denied`, not on other failures, and a throwing listener leaves the call result unchanged. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The fixture's ConnectionHandle mocks also carry `registerRequestExtras`, which the PIN mode page unlock requires.",
-      "sha256": "26543531a242244b16cd570dd46a25378918fa2aa1fe50b3e8fbfc6b3690ddd6"
+      "sha256": "67140ab70c8e96459be611a2b5e1ca040e0822fe6a25b76d7ce244b6b7dea942"
     },
     {
       "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the job controller's client fixture carries `remoteMedia: 'load'` on its ConnectionHandle, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. The fixture also carries `registerRequestExtras` on its ConnectionHandle, which the PIN mode page unlock requires.",
-      "sha256": "6599823c411dade5a50346cb002955a9dff8a01551cab71f29d4be00c7507415"
+      "sha256": "b88fcdbb9b4deef949addf27aa28fbc7c80949f877952784e787eb2bf535a0c6"
     },
     {
       "path": "packages/api/remotes/src/client/index.ts",
@@ -2425,6 +2425,13 @@
       "class": "delorun-feature",
       "feature": "brand-icons",
       "reason": "The icon is the Delorun hex mark in the brand colours, rendered from @delorun/brand by delorun/packages/brand/scripts/render-icon.ts, in place of the upstream mark."
+    },
+    {
+      "path": "apps/web/scripts/render-app-icons.ts",
+      "class": "delorun-feature",
+      "feature": "brand-icons",
+      "reason": "The tile source is now the full-canvas Delorun hex mark with no drop shadow, so the script keeps the whole tile and scales only the mark group for the maskable variant."
+
     }
   ],
   "retired": []

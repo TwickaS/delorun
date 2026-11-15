@@ -159,7 +159,7 @@ export class PinModeStore {
   private record: PinModeRecord | undefined
   private attempts: PinAttempts = { v: PIN_FILE_VERSION, devices: {}, home: [], paused: false }
   /** The tail of the writes, so two files never interleave. */
-  private writes: Promise<unknown> = Promise.resolve()
+  private writes: Promise<void> = Promise.resolve()
   /** The tail of each device's tries. */
   private readonly tries = new Map<string, Promise<unknown>>()
   private hashing = 0
@@ -399,7 +399,7 @@ export class PinModeStore {
    * @returns a promise that settles once the write queue is empty.
    */
   async settled(): Promise<void> {
-    let queue: Promise<void>
+    let queue: Promise<unknown>
     do {
       queue = this.writes
       await queue
