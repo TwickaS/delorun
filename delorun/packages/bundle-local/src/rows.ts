@@ -76,6 +76,15 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
+    id: 'llm-deepseek-account',
+    kind: 'changed',
+    reason: 'DeepSeek\'s account model route is removed from Delorun\'s CLI profiles, because the first release has no DeepSeek account service; mounted, it would list a "DeepSeek Account" provider that nobody can sign in to.',
+    parity: {
+      kind: 'upstream',
+      reason: 'C16\'s changed default takes upstream\'s value: the replay signs no account in, and the overlay does not restate the row.',
+    },
+  },
+  {
     id: 'product-analytics',
     kind: 'changed',
     reason: 'The desktop app\'s analytics is off until the person turns it on, as contract C11 requires; upstream turns it on.',

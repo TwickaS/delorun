@@ -16,9 +16,14 @@
 
 # DeepSeek's account and Platform sign-in (browser PKCE to platform.deepseek.com, account details, Usage and Top-up pages)
 # is removed from Delorun's CLI profiles: the first release has no DeepSeek account service. The row stays in upstream's
-# composition for parity, and llm-deepseek-account, which needs a signed-in account, stays inert without it. The
-# DeepSeek API-key provider is unaffected.
+# composition for parity, and so is its model route `llm-deepseek-account`, disabled below. The DeepSeek API-key
+# provider is unaffected.
 - id: deepseek-account
+  disabled: true
+
+# The account's model route is its own row: it registers the `deepseek-account` provider, which setup would list with
+# the API-key provider ("DeepSeek Account", no free test) even though nobody can sign in to it.
+- id: llm-deepseek-account
   disabled: true
 
 # Feedback goes nowhere outside the machine. Upstream's feedback telemetry exporter sends a session-log prefix to

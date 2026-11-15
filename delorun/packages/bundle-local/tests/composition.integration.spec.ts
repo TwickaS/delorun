@@ -232,6 +232,11 @@ describe('a Delorun CLI profile', () => {
     expect([...hosts].filter(entry => !entry.endsWith(' api.deepseek.com'))).toEqual([])
   })
 
+  it('mounts no DeepSeek account model route, so setup lists no account provider', () => {
+    const rows = home.rows(DELORUN_PROFILE)
+    expect(rows.filter(row => row.id === 'llm-deepseek-account').map(row => row.disabled)).toEqual([true])
+  })
+
   it('mounts no enabled row that requires the account service the disabled account row no longer provides', () => {
     const rows = home.rows(DELORUN_PROFILE)
     // The disabled row is the only provider of the service in the composition.
