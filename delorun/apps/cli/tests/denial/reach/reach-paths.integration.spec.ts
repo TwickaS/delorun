@@ -88,7 +88,7 @@ interface FetchDecision {
   readonly device: 'refused' | 'per-call' | 'read' | 'admitted'
   readonly reason: string
   readonly refusal?: string
-  /** The status a `read` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
+  /** The status a `read` or `admitted` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
   readonly answers?: number
 }
 
@@ -117,7 +117,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunOnboarding.cloneStatus': { device: 'refused', reason: 'reports a clone the computer started', refusal: 'LOOPBACK_ONLY' },
   '/api/delorunOnboarding.readiness': { device: 'refused', reason: 'whether the coding agents are signed in and how far Tailscale is set up serves onboarding at the computer' },
   '/api/delorunOnboarding.keyTest': { device: 'admitted', reason: 'A380: an approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted' },
-  '/api/delorunOnboarding.recommend': { device: 'refused', reason: 'the recommended plugins\' connections serve onboarding at the computer, and asking the registry is a network request the computer makes' },
+  '/api/delorunOnboarding.recommend': { device: 'admitted', answers: 400, reason: 'A381: an approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only' },
   '/api/delorunMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/delorunMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
   '/api/delorunTrust.bill': { device: 'read', reason: 'the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret' },
@@ -333,7 +333,7 @@ describe('the routes a signed-in device reaches', () => {
       }
       if (decision?.device === 'admitted') {
         const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
-        expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: 200 })
+        expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: decision.answers ?? 200 })
         continue
       }
       if (decision?.device !== 'refused') continue

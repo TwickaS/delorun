@@ -43,6 +43,9 @@ export {
   REACH_DENIED_ACTIONS,
   REACH_ELEVATED_ACTIONS,
   REACH_KEY_ACTIONS,
+  REACH_EVERYDAY_SETTINGS,
+  REACH_SHIPPED_BUNDLES,
+  REACH_SHIPPED_ROWS,
   REACH_DEVICE,
   REACH_DEVICE_COMMANDS,
   DANGEROUS_LIFTABLE_SWITCHES,
@@ -93,7 +96,7 @@ export {
   type RouteHandler,
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
-export { admitKeyDevice, admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
+export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

@@ -17,6 +17,9 @@ import {
   REACH_DANGEROUS_ACTIONS,
   REACH_DENIED_ACTIONS,
   REACH_KEY_ACTIONS,
+  REACH_EVERYDAY_SETTINGS,
+  REACH_SHIPPED_BUNDLES,
+  REACH_SHIPPED_ROWS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
   CREATE_OUTSIDE_WORKSPACES,
@@ -634,5 +637,47 @@ describe('the tables', () => {
     for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_KEY_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
       expect(reason).toMatch(/^[^\n]{8,}$/)
     }
+  })
+})
+
+describe('the everyday settings and shipped plugin toggles of an approved device (A381)', () => {
+  const approved = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts(overrides), DEVICE)
+  const ALLOW = { kind: 'allow' }
+  const DENY = (action: string) => ({ kind: 'deny', reason: `elevation-required: ${action}` })
+
+  it('admits a write to an everyday namespace without an unlock, PIN mode on or off', () => {
+    // Pins isEverydayCall: without it the Look step's write is refused `elevation-required` and the phone says it could not save.
+    for (const ns of Object.keys(REACH_EVERYDAY_SETTINGS)) {
+      expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { palette: 'soft' } } })).toEqual(ALLOW)
+      expect(approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns, ops: [{ op: 'set', path: ['x'], value: 1 }] } })).toEqual(ALLOW)
+      // The PIN rule: everyday settings follow ordinary device writes, so a locked page is admitted.
+      expect(approved({ pinEnabled: () => true })({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: {} } })).toEqual(ALLOW)
+    }
+  })
+
+  it('refuses a write to any other namespace, and arguments that name none, without an unlock', () => {
+    // Pins the namespace list: a plugin's own configuration stays behind an unlock.
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delorun-mcp-consent', patch: {} } })).toEqual(DENY('settings/update'))
+    expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'plugin-manager', section: {} } })).toEqual(DENY('settings/replace'))
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { patch: {} } })).toEqual(DENY('settings/update'))
+    expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns: '__proto__', patch: {} } })).toEqual(DENY('settings/update'))
+  })
+
+  it('admits turning a shipped row or package on or off, and refuses any other, an install and a removal', () => {
+    for (const id of Object.keys(REACH_SHIPPED_ROWS)) {
+      expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id, enabled: true } })).toEqual(ALLOW)
+    }
+    for (const name of Object.keys(REACH_SHIPPED_BUNDLES)) {
+      expect(approved()({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name, enabled: true } })).toEqual(ALLOW)
+    }
+    expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'include:delorun-trash', enabled: false } })).toEqual(DENY('pluginManager/setPluginEnabled'))
+    expect(approved()({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name: 'left-pad', enabled: true } })).toEqual(DENY('pluginManager/setBundleEnabled'))
+    // A registry install and a removal stay at an unlock, even for a shipped package's name.
+    expect(approved()({ action: 'pluginManager/installBundle', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter' } })).toEqual(DENY('pluginManager/installBundle'))
+    expect(approved()({ action: 'pluginManager/removeBundle', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter' } })).toEqual(DENY('pluginManager/removeBundle'))
+  })
+
+  it('still refuses a protected row and a computer-only switch', () => {
+    expect(approved()({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: PROTECTED_ROW, enabled: false } })).toEqual({ kind: 'deny', reason: PROTECTED_ROW_REFUSAL })
   })
 })

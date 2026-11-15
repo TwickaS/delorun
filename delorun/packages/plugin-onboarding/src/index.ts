@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitKeyDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -128,6 +128,8 @@ export function apply(ctx: Context, config: Config): void {
     path: RECOMMEND_PATH,
     methods: ['POST'],
     requestBody: 'buffered',
+    // A381: an approved phone reads what the recommended plugins are for; the answer names packages and connections only.
+    admitPeer: admitApprovedDevice(),
     fetch: async (request) => {
       let body: unknown
       try {

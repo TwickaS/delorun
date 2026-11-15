@@ -257,6 +257,66 @@ export const REACH_KEY_ACTIONS = {
 } as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
 const KEY_SET: ReadonlySet<string> = new Set(Object.keys(REACH_KEY_ACTIONS))
 
+/**
+ * The settings namespaces an approved device writes without an unlock (A381): the everyday settings the computer's
+ * Settings pages change, each with what it holds. A write to any other namespace stays in
+ * {@link REACH_ELEVATED_ACTIONS}. The computer-only switches, the protected rows and the default permission still
+ * refuse a write to these namespaces first, and an approved device on a locked PIN page writes them as it sends a
+ * message: PIN mode does not gate them.
+ */
+export const REACH_EVERYDAY_SETTINGS = {
+  'ui-theme': 'the colour scheme',
+  'ui-chat': 'the composer and chat display',
+  'ui-conversation': 'the conversation display',
+  'ui-settings-general': 'general display settings',
+  'locale': 'the language',
+  'delorun-theme': 'the palette, accent and studio look',
+  'delorun-onboarding': 'how far the first-run guide has got',
+  'delorun-sidebar': 'the sidebar',
+  'delorun-chat-states': 'snooze and settle options',
+  'delorun-cost-meter': 'the cost meter',
+  'delorun-thinking-rsvp': 'the Thinking tab',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * The plugin rows of Delorun's own profile an approved device turns on or off through `pluginManager/setPluginEnabled`
+ * without an unlock (A381), by row id: the optional rows onboarding offers. The plugin manager still refuses a
+ * protected row (see {@link PROTECTED_ROW_REFUSAL}).
+ */
+export const REACH_SHIPPED_ROWS = {
+  'delorun-thinking-rsvp': 'the Thinking tab',
+  'delorun-cost-meter': 'the cost meter',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * The installed packages an approved device turns on or off through `pluginManager/setBundleEnabled` without an
+ * unlock (A381), by package name: the plugins onboarding recommends. Installing a package that is not on the
+ * computer, and removing one, stay unlocked-only.
+ */
+export const REACH_SHIPPED_BUNDLES = {
+  '@delorun/plugin-thinking-rsvp': 'the Thinking tab',
+  '@delorun/plugin-cost-meter': 'the cost meter',
+  '@deepseek-ai/dsh-experimental-session-search': 'chat search',
+  '@deepseek-ai/dsh-experimental-terminal-bundle': 'the terminal',
+  '@deepseek-ai/dsh-experimental-tool-worktree': 'worktrees',
+  '@deepseek-ai/dsh-experimental-session-titles-bundle': 'chat titles',
+  '@deepseek-ai/dsh-deepseek-chat-import': 'importing chats from the DeepSeek website',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * Whether an elevated call is an everyday one a device makes without an unlock: a settings write to a namespace of
+ * {@link REACH_EVERYDAY_SETTINGS}, or a plugin toggle of {@link REACH_SHIPPED_ROWS} or {@link REACH_SHIPPED_BUNDLES}.
+ * @param action - the call's action.
+ * @param args - the call's arguments.
+ * @returns whether the call needs no unlock.
+ */
+function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  if (SETTINGS_WRITES.has(action)) return typeof args.ns === 'string' && Object.hasOwn(REACH_EVERYDAY_SETTINGS, args.ns)
+  if (action === 'pluginManager/setPluginEnabled') return typeof args.id === 'string' && Object.hasOwn(REACH_SHIPPED_ROWS, args.id)
+  if (action === 'pluginManager/setBundleEnabled') return typeof args.name === 'string' && Object.hasOwn(REACH_SHIPPED_BUNDLES, args.name)
+  return false
+}
+
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
 const SETTINGS_WRITE = 'change a setting of the home'
@@ -860,7 +920,7 @@ export function createCondition(
       if (refused !== undefined) return refused
     }
     if (KEY_SET.has(action) && facts.pinEnabled() && !pageUnlocked) return { kind: 'deny', reason: `elevation-required: ${action}` }
-    if (ELEVATED_SET.has(action)) {
+    if (ELEVATED_SET.has(action) && !(args !== undefined && isEverydayCall(action, args))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
