@@ -13,6 +13,25 @@ export interface Feature {
   readonly linkText: string
 }
 
+/** The package managers the install command is shown for. */
+export const PACKAGE_MANAGERS = ['pnpm', 'npm', 'bun'] as const
+
+/** One of {@link PACKAGE_MANAGERS}. */
+export type PackageManager = typeof PACKAGE_MANAGERS[number]
+
+/** The manager shown before a visitor chooses, and on the server. */
+export const DEFAULT_PACKAGE_MANAGER: PackageManager = 'pnpm'
+
+/**
+ * The install command for each package manager. `bunx` starts the launcher with Node, as its `#!/usr/bin/env node`
+ * line asks, unless `--bun` is passed, so no flag is needed.
+ */
+export const INSTALL_COMMANDS: Readonly<Record<PackageManager, string>> = {
+  pnpm: 'pnpm dlx delorun',
+  npm: 'npx delorun',
+  bun: 'bunx delorun',
+}
+
 /** Every string the home page shows, with the documentation link each claim points to. */
 export const COPY = {
   siteTitle: 'Delorun',
@@ -21,7 +40,7 @@ export const COPY = {
   heroTitle: 'Your harness. No limits.',
   heroText: 'Delorun is an open-source agent harness on your own computer. Theme it, extend it with your own plugins, use it from your phone, and go back whenever a change is not right. One command installs it and checks that the download is genuine.',
   installLabel: 'Install and first run',
-  installCommand: 'npx delorun',
+  packageManagerLabel: 'Package manager',
   copyLabel: 'Copy command',
   copiedLabel: 'Copied',
   /** Shown beside the install command; `linkText` is the part that links to `href`. */
@@ -33,8 +52,8 @@ export const COPY = {
   },
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
-  /** What `npx delorun` asks first on a new home, as the setup prints it. */
-  terminal: `$ npx delorun
+  /** What the install command asks first on a new home, as the setup prints it. */
+  terminal: (command: string) => `$ ${command}
 ? How will you use Delorun?
 > Just me, on this computer (recommended)
   Also from my phone or another device

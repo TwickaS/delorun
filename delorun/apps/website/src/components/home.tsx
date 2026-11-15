@@ -5,20 +5,22 @@
  */
 import view from 'virtual:delorun-changelog'
 import { DOCS_URL } from '@/site/config.ts'
-import { COPY } from '@/site/copy.ts'
+import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
 import { CopyButton } from '@/components/copy-button.tsx'
+import { PackageManagerPicker, usePackageManager } from '@/components/package-manager.tsx'
 import { Frame, LINK } from '@/components/layout.tsx'
 import { SignupSection } from '@/components/signup.tsx'
 
 /**
  * The install command and the first setup question, as a terminal would print them.
+ * @param props.command - the install command on the first line.
  * @returns the block, which a screen reader reads as plain text.
  */
-function Terminal() {
+function Terminal({ command }: { command: string }) {
   return (
     <figure className="min-w-0">
       <figcaption className="mb-2 text-sm text-fd-muted-foreground">{COPY.terminalLabel}</figcaption>
-      <pre tabIndex={0} aria-label={COPY.terminalLabel} className="whitespace-pre-wrap break-words rounded-xl border border-fd-border bg-fd-card p-4 font-mono text-[13px] leading-6 text-fd-card-foreground focus-visible:outline-2 focus-visible:outline-fd-foreground sm:p-5 sm:text-sm"><code>{COPY.terminal}</code></pre>
+      <pre tabIndex={0} aria-label={COPY.terminalLabel} className="whitespace-pre-wrap break-words rounded-xl border border-fd-border bg-fd-card p-4 font-mono text-[13px] leading-6 text-fd-card-foreground focus-visible:outline-2 focus-visible:outline-fd-foreground sm:p-5 sm:text-sm"><code>{COPY.terminal(command)}</code></pre>
     </figure>
   )
 }
@@ -47,6 +49,8 @@ function WhatsNew() {
  * @returns the page.
  */
 export function Home() {
+  const [manager, setManager] = usePackageManager()
+  const command = INSTALL_COMMANDS[manager]
   return (
     <Frame signup={false}>
       <main>
@@ -55,12 +59,13 @@ export function Home() {
             <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
             <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
-            <p className="mt-2"><CopyButton text={COPY.installCommand} /></p>
+            <PackageManagerPicker value={manager} onChange={setManager} />
+            <p className="mt-2"><CopyButton text={command} /></p>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
             <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<a href={COPY.platformNote.href} className={LINK}>{COPY.platformNote.linkText}</a>{COPY.platformNote.after}</p>
             <p className="mt-5"><a href={`${DOCS_URL}/guide/install`} className={`font-medium ${LINK}`}>{COPY.guideLink}</a></p>
           </div>
-          <Terminal />
+          <Terminal command={command} />
         </section>
         <section aria-labelledby="features" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
           <h2 id="features" className="text-2xl font-semibold tracking-tight">{COPY.featuresTitle}</h2>

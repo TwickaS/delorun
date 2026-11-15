@@ -40,6 +40,13 @@ Run this in a terminal:
 npx delorun
 ```
 
+Prefer another package manager? These run the same launcher, with Node:
+
+```sh
+pnpm dlx delorun
+bunx delorun
+```
+
 The first run downloads and installs Delorun, then starts setup. Delorun prints the checks described below, then asks the first setup question. Every later `npx delorun` starts the installed Delorun and downloads nothing.
 
 At the end of setup, Delorun offers `Install the delorun command? (runs npm install -g delorun)`. Say yes, and you can type `delorun` instead of `npx delorun` from then on.

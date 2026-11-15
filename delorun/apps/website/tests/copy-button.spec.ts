@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CopyButton, copyText } from '../src/components/copy-button.tsx'
-import { COPY } from '../src/site/copy.ts'
+import { COPY, INSTALL_COMMANDS } from '../src/site/copy.ts'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -24,12 +24,12 @@ describe('the copy button', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const root = createRoot(host)
-    await act(async () => root.render(createElement(CopyButton, { text: COPY.installCommand })))
+    await act(async () => root.render(createElement(CopyButton, { text: INSTALL_COMMANDS.pnpm })))
     const button = host.querySelector('button')!
     expect(button.getAttribute('aria-label')).toBe('Copy command')
     expect(host.querySelector('[aria-live="polite"]')!.textContent).toBe('')
     await act(async () => button.click())
-    expect(writeText).toHaveBeenCalledWith('npx delorun')
+    expect(writeText).toHaveBeenCalledWith('pnpm dlx delorun')
     expect(host.querySelector('[aria-live="polite"]')!.textContent).toBe('Copied')
     await act(async () => { vi.advanceTimersByTime(2500) })
     expect(host.querySelector('[aria-live="polite"]')!.textContent).toBe('')
