@@ -648,7 +648,7 @@
       "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "The Send circle reads `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`, falling back to upstream's info fill, hover and white arrow, so a theme can restyle the circle and the default is unchanged. At phone widths the attach and send circles carry a 44px hit area (a pseudo-element) without changing their size or place. Offer upstream."
+      "reason": "The Send circle reads `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`, falling back to upstream's info fill, hover and white arrow, so a theme can restyle the circle and the default is unchanged. At phone widths the attach and send circles carry a 44px hit area (a pseudo-element) without changing their size or place. The placeholder reads the secondary label colour instead of the caption colour (at least 4.5:1). Offer upstream."
     },
     {
       "path": "packages/client/ui-conversation/src/client/stores.ts",
@@ -2653,6 +2653,12 @@
       "class": "delorun-feature",
       "feature": "key-status",
       "reason": "New file: the `modelKeyStatus` service type, its Context merge and the hook that reads it. Its snapshot also lists routes whose test could not finish (`unverified`), which the Models page shows as a neutral line with Try again."
+    },
+    {
+      "path": "packages/client/ui-model-selection/src/client/ModelSelect.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The composer's reasoning-effort label reads the secondary label colour instead of the caption colour, so it is at least 4.5:1 on the composer in Soft and Stock, light and dark."
     }
   ],
   "retired": []
