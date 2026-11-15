@@ -17,7 +17,7 @@ import { COPY_RECORD_SCHEMA, DELORUN_RECORDS, RESTORE_JOURNAL_SCHEMA } from '@de
 import { z } from 'zod'
 
 /**
- * rc.3's update journal schema, copied from `packages/home-process/src/journal.ts` at 905b01c33c. An earlier release
+ * rc.3's update journal schema, copied from `packages/home-process/src/journal.ts` as rc.3 shipped it. An earlier release
  * parses the journal with it and rejects any unknown key, so the current journal must pass it.
  */
 const RC3_JOURNAL_SCHEMA = z.strictObject({

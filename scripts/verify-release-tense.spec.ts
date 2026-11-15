@@ -40,7 +40,7 @@ describe('release-status policy', () => {
 
   it.each([
     'delorun/docs/guide/roadmap.md',
-    'delorun/docs/plans/v5-rc-final-plan.md',
+    'delorun/docs/plans/example-plan.md',
     'delorun/changelog/0.1.0/entry.md',
     'delorun/docs/guide/install.zh.md',
     'docs/guide/install.md',

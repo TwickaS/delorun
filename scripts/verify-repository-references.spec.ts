@@ -142,7 +142,7 @@ describe('maintained repository reference policy', () => {
     }
   })
 
-  it('exempts only the pinned upstream commit field of the divergence ledger', () => {
+  it('exempts only the pinned upstream commit field of the divergence ledger and the changelog data file', () => {
     const pinned = 'ab'.repeat(20)
     const ledger = JSON.stringify({
       upstream: { repository: 'https://example.invalid/upstream.git', ref: 'v1', commit: pinned },
@@ -151,6 +151,9 @@ describe('maintained repository reference policy', () => {
     const reasonLine = ledger.split('\n').findIndex(line => line.includes('cites')) + 1
     expect(findRepositoryReferences('delorun/upstream-patches.json', ledger, new Set([pinned]))).toEqual([
       { file: 'delorun/upstream-patches.json', line: reasonLine, kind: 'commit-hash' },
+    ])
+    expect(findRepositoryReferences('delorun/changelog/changelog.json', ledger, new Set([pinned]))).toEqual([
+      { file: 'delorun/changelog/changelog.json', line: reasonLine, kind: 'commit-hash' },
     ])
     expect(findRepositoryReferences('delorun/other.json', ledger, new Set([pinned]))).toHaveLength(2)
   })

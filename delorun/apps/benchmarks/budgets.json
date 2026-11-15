@@ -1,7 +1,7 @@
 {
   "schema": "delorun.benchmark-budgets/1",
   "rule": "Each ceiling is four times the median measured on the recorded machine and load, at least one second, rounded up to two significant digits; see delorun/docs/performance/README.md.",
-  "measured": "Provisional: from the runs of 2026-11-11 between 03:48 and 05:50 UTC at commits 382ea85a5e and 69d5dd2342 on the trunk's 5fb7c934ed, three repetitions each (two for update/changed-format-large), on a 22-CPU WSL2 machine shared with other lanes (load average 4 to 16, storage pressure at most 16%). The studio suite and the stock scenario of the turn suite have no ceilings: they did not complete. A quiet machine replaces them.",
+  "measured": "Provisional: from the runs of 2026-11-11 between 03:48 and 05:50 UTC on the trunk before the first preview, three repetitions each (two for update/changed-format-large), on a 22-CPU WSL2 machine shared with other lanes (load average 4 to 16, storage pressure at most 16%). The studio suite and the stock scenario of the turn suite have no ceilings: they did not complete. A quiet machine replaces them.",
   "suites": {
     "update": {
       "same-format": {

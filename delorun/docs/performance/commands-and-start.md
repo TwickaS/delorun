@@ -30,7 +30,7 @@ These suites time what a person waits for outside an update: the everyday comman
 
 ## Record of 2026-11-11
 
-Three repetitions of each scenario, 2026-11-11 between 03:48 and 05:50 UTC, on the trunk's commit 5fb7c934ed with this branch's benchmark code: 22 CPUs (Intel Core Ultra 9 185H), 21.5 GiB, WSL2 kernel 6.6, Node 24.22.0, ext4 without clones, a machine shared with other lanes (load average 4 to 16, storage pressure at most 16%). Medians, with the range of the samples:
+Three repetitions of each scenario, 2026-11-11 between 03:48 and 05:50 UTC, on the trunk before the first preview with this branch's benchmark code: 22 CPUs (Intel Core Ultra 9 185H), 21.5 GiB, WSL2 kernel 6.6, Node 24.22.0, ext4 without clones, a machine shared with other lanes (load average 4 to 16, storage pressure at most 16%). Medians, with the range of the samples:
 
 | Item | Median | Range |
 | --- | --- | --- |

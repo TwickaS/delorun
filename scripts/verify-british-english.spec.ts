@@ -68,7 +68,7 @@ describe('British English policy', () => {
   })
 
   it.each([
-    'delorun/docs/plans/v5-rc-final-plan.md',
+    'delorun/docs/plans/example-plan.md',
     'delorun/docs/guide/install.zh.md',
     'delorun/apps/cli/tests/import-home/fixtures/terminal-home/.dsh/AGENTS.md',
     'docs/guide/install.md',

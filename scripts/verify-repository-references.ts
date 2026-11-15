@@ -16,8 +16,8 @@ const commitCandidate = /(?<![a-z0-9])(?=[\da-f]{0,39}[a-f])[\da-f]{7,40}(?![a-z
 const excludedPrefixes = ['vendor/', '.agents/notes/archived/']
 // Generated lockfiles hold content hashes whose hexadecimal runs can match a commit prefix by chance.
 const excludedNames = ['pnpm-lock.yaml']
-// The divergence ledger pins the upstream commit it is measured against. Only that field is exempt.
-const pinnedCommitFile = 'delorun/upstream-patches.json'
+// The divergence ledger pins the upstream commit it is measured against; the changelog data file copies it. Only that field is exempt.
+const pinnedCommitFiles = ['delorun/upstream-patches.json', 'delorun/changelog/changelog.json']
 const pinnedCommitField = /"upstream"\s*:\s*\{[^}]*?"commit"\s*:\s*"([\da-f]{40})"/
 const gitOutputLimit = 64 * 1024 * 1024
 // One 41-byte line per object; 1.2 million objects produce about 49 MiB.
@@ -38,13 +38,13 @@ function isMaintained(file: string): boolean {
 }
 
 /**
- * Locate the line that holds the divergence ledger's pinned upstream commit.
+ * Locate the line that holds a pinned upstream commit: the divergence ledger's, or the changelog data file's copy of it.
  * @param file - Repository-relative path of the scanned file.
  * @param source - File text.
- * @returns the zero-based line index, or undefined when the file is not the ledger or pins no commit.
+ * @returns the zero-based line index, or undefined when the file is neither a pin file or pins no commit.
  */
 function pinnedCommitLine(file: string, source: string): number | undefined {
-  if (file !== pinnedCommitFile) return undefined
+  if (!pinnedCommitFiles.includes(file)) return undefined
   const match = pinnedCommitField.exec(source)
   if (match === null) return undefined
   return source.slice(0, match.index + match[0].length).split('\n').length - 1

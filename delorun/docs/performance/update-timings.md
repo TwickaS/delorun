@@ -59,7 +59,7 @@ Three repetitions of `changed-format-large` before and after the update ran the 
 
 ## Record of 2026-11-11
 
-Three repetitions of each scenario (two of `changed-format-large`, whose third failed as described below), 2026-11-11 between 03:48 and 04:35 UTC, on the trunk's commit 5fb7c934ed with this branch's benchmark code: 22 CPUs (Intel Core Ultra 9 185H), 21.5 GiB, WSL2 kernel 6.6, Node 24.22.0, ext4 without clones, a machine shared with other lanes (load average 9 to 16, storage pressure at most 16%). The closure is the trunk's recipe output with no local change. Medians in seconds; the small chat set is 20 chats, the large one 400 (125 MiB):
+Three repetitions of each scenario (two of `changed-format-large`, whose third failed as described below), 2026-11-11 between 03:48 and 04:35 UTC, on the trunk before the first preview with this branch's benchmark code: 22 CPUs (Intel Core Ultra 9 185H), 21.5 GiB, WSL2 kernel 6.6, Node 24.22.0, ext4 without clones, a machine shared with other lanes (load average 9 to 16, storage pressure at most 16%). The closure is the trunk's recipe output with no local change. Medians in seconds; the small chat set is 20 chats, the large one 400 (125 MiB):
 
 | Item | `same-format` | `changed-format` | `changed-format-large` | `many-plugins` (20) | `warm-store` |
 | --- | --- | --- | --- | --- | --- |
