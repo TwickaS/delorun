@@ -6,6 +6,7 @@
  * @module @delorun/website/signup
  */
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Button, Link, TextField } from '@brand'
 import { SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import { CONSENT_TEXT, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
@@ -120,19 +121,12 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
     void start()
   }
 
-  const field = 'w-full rounded-lg border border-fd-border bg-fd-background px-3 py-2.5 text-base text-fd-foreground placeholder:text-fd-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-foreground'
   return (
     <form ref={formRef} method="post" action={SUBSCRIBE_PATH} onSubmit={onSubmit} className="flex flex-col gap-4">
       <input type="hidden" name={FIELDS.page} value={page} />
       <div className={compact ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4 sm:grid-cols-[1fr_1.4fr]'}>
-        <div>
-          <label htmlFor={`${id}-name`} className="mb-1.5 block text-sm font-medium">{copy.nameLabel} <span className="font-normal text-fd-muted-foreground">{copy.optional}</span></label>
-          <input id={`${id}-name`} name={FIELDS.firstName} type="text" autoComplete="given-name" maxLength={MAX_NAME_LENGTH} className={field} />
-        </div>
-        <div>
-          <label htmlFor={`${id}-email`} className="mb-1.5 block text-sm font-medium">{copy.emailLabel}</label>
-          <input id={`${id}-email`} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} className={field} />
-        </div>
+        <TextField label={`${copy.nameLabel} ${copy.optional}`} name={FIELDS.firstName} type="text" autoComplete="given-name" maxLength={MAX_NAME_LENGTH} />
+        <TextField label={copy.emailLabel} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} />
       </div>
       <div className="flex items-start gap-3">
         <input id={`${id}-consent`} name={FIELDS.consent} type="checkbox" value="yes" required className="mt-1 size-5 shrink-0 accent-fd-foreground" />
@@ -140,8 +134,8 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
       </div>
       <div ref={widgetRef} />
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={status.kind === 'working'} className="rounded-lg bg-fd-foreground px-5 py-2.5 font-medium text-fd-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-foreground disabled:opacity-60">{copy.submit}</button>
-        <p className="text-sm text-fd-muted-foreground">{copy.privacyNote.before}<a href="/privacy#updates" className="underline underline-offset-4">{copy.privacyNote.link}</a>{copy.privacyNote.after}</p>
+        <Button type="submit" variant="primary" disabled={status.kind === 'working'}>{copy.submit}</Button>
+        <p className="text-sm text-fd-muted-foreground">{copy.privacyNote.before}<Link href="/privacy#updates">{copy.privacyNote.link}</Link>{copy.privacyNote.after}</p>
       </div>
       <p role="status" aria-live="polite" className={`text-sm font-medium ${status.kind === 'error' ? 'text-red-700 dark:text-red-400' : ''}`}>{status.kind === 'idle' ? '' : status.text}</p>
       <noscript><p className="text-sm text-fd-muted-foreground">{copy.noScript(SUPPORT_EMAIL)}</p></noscript>

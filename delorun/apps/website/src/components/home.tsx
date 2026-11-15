@@ -8,7 +8,8 @@ import { DOCS_URL } from '@/site/config.ts'
 import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
 import { CopyButton } from '@/components/copy-button.tsx'
 import { PackageManagerPicker, usePackageManager } from '@/components/package-manager.tsx'
-import { Frame, LINK } from '@/components/layout.tsx'
+import { Link } from '@brand'
+import { Frame } from '@/components/layout.tsx'
 import { SignupSection } from '@/components/signup.tsx'
 
 /**
@@ -39,7 +40,7 @@ function WhatsNew() {
       <ul className="mt-4 list-disc space-y-1.5 pl-5">
         {latest.headlines.map(headline => <li key={headline}>{headline}</li>)}
       </ul>
-      <p className="mt-4"><a href={`${DOCS_URL}/changelog`} className={LINK}>{COPY.whatsNew.full}</a></p>
+      <p className="mt-4"><Link href={`${DOCS_URL}/changelog`}>{COPY.whatsNew.full}</Link></p>
     </section>
   )
 }
@@ -62,8 +63,8 @@ export function Home() {
             <PackageManagerPicker value={manager} onChange={setManager} />
             <p className="mt-2"><CopyButton text={command} /></p>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
-            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<a href={COPY.platformNote.href} className={LINK}>{COPY.platformNote.linkText}</a>{COPY.platformNote.after}</p>
-            <p className="mt-5"><a href={`${DOCS_URL}/guide/install`} className={`font-medium ${LINK}`}>{COPY.guideLink}</a></p>
+            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
+            <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
           </div>
           <Terminal command={command} />
         </section>
@@ -74,7 +75,7 @@ export function Home() {
               <li key={feature.title}>
                 <h3 className="font-semibold">{feature.title}</h3>
                 <p className="mt-2 leading-7 text-fd-muted-foreground">{feature.text}</p>
-                <p className="mt-2 text-sm"><a href={feature.href} className={LINK}>{feature.linkText}</a></p>
+                <p className="mt-2 text-sm"><Link href={feature.href}>{feature.linkText}</Link></p>
               </li>
             ))}
           </ul>
@@ -97,7 +98,7 @@ export function NotFound() {
       <main className="mx-auto w-full max-w-5xl px-5 pt-16 sm:px-8">
         <h1 className="text-3xl font-semibold tracking-tight">{COPY.notFound.title}</h1>
         <p className="mt-4 text-fd-muted-foreground">{COPY.notFound.text}</p>
-        <p className="mt-6"><a href="/" className={LINK}>{COPY.notFound.home}</a></p>
+        <p className="mt-6"><Link href="/">{COPY.notFound.home}</Link></p>
       </main>
     </Frame>
   )

@@ -26,7 +26,7 @@ English | [中文](README.zh.md)
 The package exports its source, as [`@delorun/settings-controls`](../settings-controls/README.md) does.
 
 - **A studio plugin** lists `@delorun/brand` in `dependencies` and inlines it into its browser bundle with aliases for `@delorun/brand` and, when it imports the mark alone, `@delorun/brand/mark` in its `tsdown.config.ts`; `@delorun/bundle-local` and `@delorun/plugin-theme` show both.
-- **The website and the docs** import `@brand` and `@design/mark` through their tsconfig `paths`, and `@delorun/site-design`'s `tokens.css` imports the brand's `tokens.css` and `fonts.css`. Both sites resolve `#upstream` to `src/upstream.web.tsx` in their Vite config and tsconfig `paths`.
+- **The website and the docs** import `@brand` and `@design/mark` through their tsconfig `paths`, and `@delorun/site-design`'s `tokens.css` imports the brand's `tokens.css` and `fonts.css`. The website's links, sign-up fields and buttons are the brand's `Link`, `TextField` and `Button`. Both sites resolve `#upstream` to `src/upstream.web.tsx` in their Vite config and tsconfig `paths`.
 
 | Export | Holds |
 | --- | --- |

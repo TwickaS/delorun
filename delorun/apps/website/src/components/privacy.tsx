@@ -4,7 +4,8 @@
  * @module @delorun/website/privacy
  */
 import { COPY } from '@/site/copy.ts'
-import { Frame, LINK } from '@/components/layout.tsx'
+import { Link } from '@brand'
+import { Frame } from '@/components/layout.tsx'
 
 /**
  * The privacy page.
@@ -29,12 +30,12 @@ export function Privacy() {
         </ul>
         <p className="mt-3 leading-7">{copy.updatesRights}</p>
         <ul className="mt-3 list-disc space-y-2 pl-5 leading-7">
-          {copy.updatesLinks.map(link => <li key={link.href}><a href={link.href} className={LINK}>{link.text}</a></li>)}
+          {copy.updatesLinks.map(link => <li key={link.href}><Link href={link.href}>{link.text}</Link></li>)}
         </ul>
         <h2 className="mt-12 text-xl font-semibold">{copy.programHeading}</h2>
         <p className="mt-3 leading-7">{copy.program}</p>
         <ul className="mt-3 list-disc space-y-2 pl-5 leading-7">
-          {copy.programLinks.map(link => <li key={link.href}><a href={link.href} className={LINK}>{link.text}</a></li>)}
+          {copy.programLinks.map(link => <li key={link.href}><Link href={link.href}>{link.text}</Link></li>)}
         </ul>
         <h2 className="mt-12 text-xl font-semibold">{copy.contactHeading}</h2>
         <p className="mt-3 leading-7">{copy.contact}</p>

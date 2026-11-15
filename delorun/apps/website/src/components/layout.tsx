@@ -5,7 +5,7 @@
  * @module @delorun/website/layout
  */
 import type { ReactNode } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link as TextLink } from '@brand'
 import { Mark } from '@design/mark.tsx'
 import { DOCS_URL, GITHUB_URL, UPSTREAM_URL, SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
@@ -13,9 +13,6 @@ import { SignupForm } from '@/components/signup.tsx'
 
 /** Focus ring for every link and button on the site. */
 const FOCUS = 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fd-foreground'
-
-/** The classes of a quiet text link. */
-export const LINK = `underline decoration-fd-border decoration-2 underline-offset-4 hover:decoration-fd-foreground ${FOCUS}`
 
 /**
  * The page frame.
@@ -49,20 +46,20 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
           )}
           <nav aria-label={COPY.footer.footerNav}>
             <ul className="flex flex-wrap gap-x-6 gap-y-2">
-              <li><a href={DOCS_URL} className={LINK}>{COPY.footer.docs}</a></li>
-              <li><a href={`${DOCS_URL}/changelog`} className={LINK}>{COPY.footer.changelog}</a></li>
-              <li><a href={`${DOCS_URL}/guide/roadmap`} className={LINK}>{COPY.footer.roadmap}</a></li>
-              <li><a href={GITHUB_URL} className={LINK}>{COPY.footer.github}</a></li>
-              <li><Link to="/privacy" className={LINK}>{COPY.footer.privacy}</Link></li>
-              <li><a href={`mailto:${SUPPORT_EMAIL}`} className={LINK}>{SUPPORT_EMAIL}</a></li>
+              <li><TextLink href={DOCS_URL}>{COPY.footer.docs}</TextLink></li>
+              <li><TextLink href={`${DOCS_URL}/changelog`}>{COPY.footer.changelog}</TextLink></li>
+              <li><TextLink href={`${DOCS_URL}/guide/roadmap`}>{COPY.footer.roadmap}</TextLink></li>
+              <li><TextLink href={GITHUB_URL}>{COPY.footer.github}</TextLink></li>
+              <li><TextLink href="/privacy">{COPY.footer.privacy}</TextLink></li>
+              <li><TextLink href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</TextLink></li>
             </ul>
           </nav>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <p>
-              {COPY.footer.owner} &middot; <a href={`${GITHUB_URL}/blob/v5/LICENSE`} className={LINK}>{COPY.footer.licence}</a>
+              {COPY.footer.owner} &middot; <TextLink href={`${GITHUB_URL}/blob/v5/LICENSE`}>{COPY.footer.licence}</TextLink>
             </p>
             <p className="self-end text-xs opacity-75 sm:self-auto">
-              <a href={UPSTREAM_URL} className={LINK}>{COPY.footer.upstream}</a>
+              <TextLink href={UPSTREAM_URL}>{COPY.footer.upstream}</TextLink>
             </p>
           </div>
         </div>
