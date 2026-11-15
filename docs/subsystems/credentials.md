@@ -238,7 +238,7 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
  * round trip keeps those rows from settling separately.
  * @param refs - reference names, at most {@link MAX_DESCRIBE_REFS}; a name outside the grammar
  *   rejects the whole call as `gateway/bad-request`.
- * @returns one view per requested name, keyed by that name.
+ * @returns one view per requested name, keyed by that name; a caller that is not the owner gets no `masked` text.
  * @throws RemoteError when the request is invalid or no credential provider is mounted.
  */
 @Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>

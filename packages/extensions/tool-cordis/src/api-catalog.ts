@@ -874,7 +874,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>',
         description: 'Describe several references for one configuration surface. Batched because a settings page describes every reference its rows name at once, and one round trip keeps those rows from settling separately.',
         parameters: [{ name: 'refs', description: 'reference names, at most {@link MAX_DESCRIBE_REFS}; a name outside the grammar rejects the whole call as `gateway/bad-request`.' }],
-        returns: 'one view per requested name, keyed by that name.',
+        returns: 'one view per requested name, keyed by that name; a caller that is not the owner gets no `masked` text.',
         throws: ['RemoteError when the request is invalid or no credential provider is mounted.'],
       },
       {

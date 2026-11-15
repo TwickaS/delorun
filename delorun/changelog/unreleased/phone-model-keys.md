@@ -1,5 +1,5 @@
 ---
-area: Using a home from other devices
+area: Reach
 section: Changed
 ---
 
