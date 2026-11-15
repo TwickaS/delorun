@@ -15,8 +15,10 @@ export const SUMMARY_LIMIT = 72
 export interface CardProps {
   /** The title. */
   readonly title: string
-  /** The icon's address; a neutral glyph when absent. */
+  /** The icon's address; a monogram or a neutral glyph when absent. */
   readonly icon?: string | undefined
+  /** The letters of a monogram tile, shown in the icon slot when there is no icon address. */
+  readonly monogram?: string | undefined
   /** The description: its first line is the summary. */
   readonly description?: string | undefined
   /** Labels of the disclosure. */
@@ -40,18 +42,30 @@ function Glyph(): ReactNode {
 }
 
 /**
+ * A tile with one or two letters, for a provider that has no logo here.
+ * @param props - the letters.
+ * @returns the tile, hidden from assistive technology because the title says the same.
+ */
+export function Monogram({ letters }: { readonly letters: string }): ReactNode {
+  return <span className={css.monogram} aria-hidden="true">{letters}</span>
+}
+
+/**
  * The card.
  * @param props - the title, icon, description, action and what sits under the row.
  * @returns the card.
  */
-export function Card({ title, icon, description, labels, action, children, selected = false }: CardProps): ReactNode {
+export function Card({ title, icon, monogram, description, labels, action, children, selected = false }: CardProps): ReactNode {
   const [open, setOpen] = useState(false)
   const id = useId()
   const long = description !== undefined && description.length > SUMMARY_LIMIT
   return (
     <div className={css.card} data-selected={selected || undefined}>
       <div className={css.row}>
-        <span className={css.icon}>{icon === undefined ? <Glyph /> : <img className={css.image} src={icon} alt="" />}</span>
+        <span className={css.icon}>
+          {icon !== undefined ? <img className={css.image} src={icon} alt="" />
+            : monogram !== undefined ? <Monogram letters={monogram} /> : <Glyph />}
+        </span>
         <div className={css.text}>
           <h4 className={css.title}>{title}</h4>
           {description !== undefined && <p id={id} className={css.summary} data-open={open || undefined}>{description}</p>}

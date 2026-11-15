@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardsOf, CUSTOM_PROVIDER, deriveKeyRef, KEY_PAGES, routeIdOf, usableKey } from '../src/client/providers.ts'
+import { cardsOf, CUSTOM_PROVIDER, deriveKeyRef, KEY_PAGES, monogramOf, routeIdOf, usableKey } from '../src/client/providers.ts'
 import type { KeyTestAnswer } from '../src/wire.ts'
 import { DIRECTORY } from './directory.fixture.ts'
 
@@ -56,6 +56,15 @@ describe('the provider cards', () => {
     expect(by['gateway']?.needsBaseURL).toBe(true)
     expect(by['openai']?.needsBaseURL).toBe(false)
     for (const url of Object.values(KEY_PAGES)) expect(url).toMatch(/^https:\/\//)
+  })
+})
+
+describe('a provider\'s tile', () => {
+  it('takes the first letter of the name, and a plus for the endpoint offer', () => {
+    expect(monogramOf({ name: 'Google Gemini' })).toBe('G')
+    expect(monogramOf({ name: 'xAI' })).toBe('X')
+    expect(monogramOf({ name: '—' })).toBe('·')
+    expect(monogramOf({ name: 'OpenAI-compatible endpoint', custom: true })).toBe('+')
   })
 })
 

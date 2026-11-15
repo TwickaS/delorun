@@ -108,13 +108,16 @@ describe('the walk', () => {
 
   it('shows k of N, one provider at a time, with Skip and Next', async () => {
     await start()
-    expect(screen.getByText('DeepSeek · 1 of 2')).toBeTruthy()
+    expect(screen.getByText('1 of 2')).toBeTruthy()
+    // The name is said once, in the heading, which carries the provider's letter.
+    expect(screen.getAllByText('DeepSeek')).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' }).textContent).toBe('DDeepSeek')
     expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' })).toBeTruthy()
     // A found key is never echoed: the field is empty and the status says so.
     expect((screen.getByLabelText(en['providers.key']) as HTMLInputElement).value).toBe('')
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['providers.next'] }))
-    expect(screen.getByText('OpenAI · 2 of 2')).toBeTruthy()
+    expect(screen.getByText('2 of 2')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 3, name: 'OpenAI' })).toBeTruthy()
     expect(screen.getByRole('button', { name: en['providers.next'] }).hasAttribute('disabled')).toBe(true)
     await click(screen.getByRole('button', { name: en['providers.skipOne'] }))
@@ -302,7 +305,7 @@ describe('the summary', () => {
     await flush(TEST_DELAY_MS)
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('summary')
-    expect(within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem').map(item => item.textContent)).toEqual([`DeepSeek✓ ${en['providers.outcome.connected']}`, `OpenAI✓ ${en['providers.outcome.connected']}`])
+    expect(within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem').map(item => item.textContent)).toEqual([`DDeepSeek✓ ${en['providers.outcome.connected']}`, `OOpenAI✓ ${en['providers.outcome.connected']}`])
     await click(screen.getByRole('button', { name: en['providers.addAnother'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('landing')
     // The ticks stay, and connecting again walks only what has not ended.

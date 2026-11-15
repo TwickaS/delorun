@@ -8,11 +8,11 @@ import { FooterPortal } from '../frame/StepFrame.tsx'
 import { StepFooter } from '../frame/StepFooter.tsx'
 import type { Guide } from '../guide.ts'
 import { couldNotTest, didNotPass } from '../key-status.ts'
-import { cardsOf, TEST_DELAY_MS, usableKey, type DirectoryEntry, type KeyProbe, type ProviderCard } from '../providers.ts'
+import { cardsOf, monogramOf, TEST_DELAY_MS, usableKey, type DirectoryEntry, type KeyProbe, type ProviderCard } from '../providers.ts'
 import type { StepServices } from '../types.ts'
 import type { LocalServer } from '../../wire.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Card } from '../ui/Card.tsx'
+import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { useStore } from './shared.ts'
 import css from './models.module.css'
@@ -119,7 +119,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
         <ul className={shared.cards} aria-label={t('providers.summary.label')}>
           {rows.map(({ card, outcome }) => (
             <li key={card.provider}>
-              <Card title={card.name} labels={labels} action={<span className={outcome === 'connected' ? shared.added : css.skipped}>{outcome === 'connected' ? <span aria-hidden="true">✓ </span> : null}{t(`providers.outcome.${outcome}`)}</span>}>
+              <Card title={card.name} monogram={monogramOf(card)} labels={labels} action={<span className={outcome === 'connected' ? shared.added : css.skipped}>{outcome === 'connected' ? <span aria-hidden="true">✓ </span> : null}{t(`providers.outcome.${outcome}`)}</span>}>
                 {outcome === 'failed' && (
                   <StateLine tone="error" action={{ label: t('providers.tryAgain'), onClick: () => { setOnly(card.provider); setIndex(0); guide.setProvidersPhase('walk') } }}>
                     {t('providers.failedHelp', { name: card.name })}
@@ -152,7 +152,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
   const present = (card: ProviderCard): ReactNode => (
     <li key={card.provider}>
-      <Card title={card.name} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
+      <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
         action={(
           <label className={css.tickLabel}>
             <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
@@ -327,8 +327,8 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const incomplete = custom && (endpointName.trim() === '' || !addressUsable)
   return (
     <div className={shared.stack}>
-      {place.n > 1 && <p className={css.place}>{t('providers.place', { name: card.name, k: String(place.k), n: String(place.n) })}</p>}
-      <h3 className={css.provider}>{card.name}</h3>
+      {place.n > 1 && <p className={css.place}>{t('providers.place', { k: String(place.k), n: String(place.n) })}</p>}
+      <h3 className={css.provider}><Monogram letters={monogramOf(card)} />{card.name}</h3>
       {custom && (
         <>
           <div className={css.field}>

@@ -171,6 +171,16 @@ export const CUSTOM_PROVIDER = 'custom-endpoint'
 /** The settings namespace that holds hand-declared routes, and the wire protocol an endpoint is declared with. */
 export const DECLARED_NAMESPACE = 'llm-pi-ai'
 
+/**
+ * The letter on a provider's tile: the first letter or digit of its name, or a plus for the endpoint offer.
+ * @param card - the provider card.
+ * @returns the letter, upper-cased.
+ */
+export function monogramOf(card: Pick<ProviderCard, 'name' | 'custom'>): string {
+  if (card.custom === true) return '+'
+  return card.name.match(/[\p{L}\p{N}]/u)?.[0]?.toUpperCase() ?? '·'
+}
+
 /** Results that mean a key is stored or found in the environment. */
 const HELD: ReadonlySet<KeyResult> = new Set(['works', 'rejected', 'unreachable', 'failed', 'untested'])
 

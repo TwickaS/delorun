@@ -84,3 +84,17 @@
 .action button {
   min-height: var(--onb-target);
 }
+
+.monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--dsw-radius-md);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-brand-primary);
+  font-size: var(--onb-body-size);
+  font-weight: 600;
+  line-height: 1;
+}

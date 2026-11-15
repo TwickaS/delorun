@@ -7,6 +7,9 @@
 }
 
 .provider {
+  display: flex;
+  align-items: center;
+  gap: var(--onb-gap-1);
   margin: 0;
   font-size: var(--onb-body-size);
   font-weight: 500;
