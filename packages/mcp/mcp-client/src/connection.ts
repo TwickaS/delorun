@@ -113,6 +113,12 @@ export interface ConnectionOptions {
    * every attempt connects with the config the connection started with.
    */
   readonly beforeReconnect?: () => Promise<Config>
+  /**
+   * Runs immediately before every attempt, the first included, spawns its
+   * transport. A rejection fails that attempt like a failed connection: the
+   * reconnect policy applies, and a `beforeReconnect` that refuses ends it.
+   */
+  readonly beforeSpawn?: () => Promise<void>
 }
 
 /** Handle for one plugin instance's supervised connection. */
@@ -371,6 +377,7 @@ export function startConnection(
       const templated = await record.wire.run(signal => binding.resolve(signal), remaining())
       const resolved = withReviewedStart(templated, reviewedStart)
       bindingValue = { config: resolved }
+      await options.beforeSpawn?.()
       await record.wire.connect(resolved, remaining())
       if (!isCurrent(record)) return
       const text = client.getInstructions()?.trimEnd() ?? ''

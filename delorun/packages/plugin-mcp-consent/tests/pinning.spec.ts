@@ -205,10 +205,12 @@ describe('the add-time consent of a pinned start', () => {
     // The link is pointed elsewhere after the review allowed the start, before the mcp-client spawns it.
     rmSync(link)
     symlinkSync('../evil/cli.js', link)
-    expect(decision).toEqual({ allow: true, spawnCommand: join(root, 'work', 'node_modules', 'tool', 'cli.js') })
+    expect(decision).toMatchObject({ allow: true, spawnCommand: join(root, 'work', 'node_modules', 'tool', 'cli.js'), spawnArgs: [], verify: expect.any(Function) })
+    // The recheck pins the canonical file again, which the retargeted link does not change.
+    await expect(decision.allow ? decision.verify?.() : undefined).resolves.toBeUndefined()
     await expect(consent.review(startOf())).resolves.toMatchObject({ allow: false })
     await consent.accept(startOf())
-    await expect(consent.review(startOf())).resolves.toEqual({ allow: true, spawnCommand: join(root, 'bin', 'node') })
+    await expect(consent.review(startOf())).resolves.toMatchObject({ allow: true, spawnCommand: join(root, 'bin', 'node') })
   })
 
   it('names the working directory and the pinned files that lie in a workspace or a temporary directory chats can write', async () => {

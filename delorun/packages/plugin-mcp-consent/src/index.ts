@@ -52,7 +52,7 @@ import {
 } from './store.ts'
 import type { AcceptanceStore, AcceptanceStoreRead, SetAsideState } from './store.ts'
 import { acceptHint, McpReviewError, pendingReviewOf, showsEnvValue, type McpReviews, type PendingReview, type RefusedStart } from './review.ts'
-import { pinsOf, type PinnedStart } from './pins.ts'
+import { changedPin, pinsOf, spawnArgsOf, type PinnedStart } from './pins.ts'
 import { chatWritableRoots, writableByChats } from './writable.ts'
 import type { AcceptedServer, EnvVariable, PendingServer, PinnedFile } from './wire.ts'
 import { registerMcpConsentRoutes } from './routes.ts'
@@ -144,7 +144,9 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
    *   environment's keys were written in, and these pinned files, with the
    *   canonical path of the pinned executable as the `spawnCommand`, so a
    *   symbolic link retargeted after the review does not change the file that
-   *   runs; and `allow: false` with the reason it
+   *   runs, the arguments with each pinned file written by its canonical path,
+   *   and a `verify` that pins the files again for the mcp-client to run just
+   *   before it spawns the server; and `allow: false` with the reason it
    *   does not — the server is not accepted, its start or what it resolves to
    *   differs from its acceptance, the person set this
    *   start aside, or the store is missing, unreadable or not this version's
@@ -155,7 +157,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
     const { start, verdict } = await this.judge(command)
     if (verdict.allow) {
       this.reviews.delete(command.serverName)
-      return { allow: true, spawnCommand: verdict.spawnCommand }
+      return { allow: true, spawnCommand: verdict.spawnCommand, spawnArgs: await spawnArgsOf(start), verify: () => changedPin(start.files) }
     }
     if (verdict.staleSetAside) await this.clearSetAside(command.serverName, verdict.staleSetAside)
     this.reviews.set(command.serverName, pendingReviewOf(start, verdict.refused, Date.now(), await this.chatWritablePaths(start)))

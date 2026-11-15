@@ -81,6 +81,21 @@ export type McpConsentDecision =
      * runs. Absent, the server is spawned with `resolvedCommand`.
      */
     readonly spawnCommand?: string
+    /**
+     * The arguments the server is spawned with instead of the configured
+     * ones: the same list, each argument that names a file the provider
+     * pinned written with that file's canonical path, so a link retargeted
+     * after the review cannot change the file the program opens. Absent, the
+     * configured arguments are used.
+     */
+    readonly spawnArgs?: readonly string[]
+    /**
+     * Checks the files the review pinned again, and resolves to the reason one
+     * no longer matches, or `undefined` when all do. The connection calls it
+     * immediately before every spawn; a reason fails that attempt, and the
+     * next attempt is reviewed again.
+     */
+    readonly verify?: () => Promise<string | undefined>
   }
   | { readonly allow: false; readonly reason: string }
 

@@ -190,6 +190,40 @@ describe('the add-time consent before a reconnect', () => {
     expect(spawns()).toEqual([[join(root, 'bin', 'tool'), root], [join(root, 'bin', 'tool'), root]])
   })
 
+  it('spawns the arguments an allowing decision names, so a pinned file is opened by its canonical path', async () => {
+    new StubConsent(ctx, [() => Promise.resolve({ allow: true, spawnArgs: [join(root, 'real', 'server.js')] })])
+    await apply(ctx, config())
+
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => params.args)).toEqual([[join(root, 'real', 'server.js')]])
+  })
+
+  it('checks the pinned files immediately before the spawn, and does not spawn a start whose file changed', async () => {
+    const order: string[] = []
+    const verify = vi.fn(() => { order.push('verify'); return Promise.resolve('the file "/x/server.js" changed after the review') })
+    vi.mocked(StdioClientTransport).mockImplementationOnce(function () {
+      order.push('spawn')
+      const transport = { start: () => Promise.resolve(), send: () => Promise.resolve(), close: () => Promise.resolve() }
+      return transport as never
+    })
+    new StubConsent(ctx, [() => Promise.resolve({ allow: true, verify })])
+    await apply(ctx, { ...config(), reconnect: { initialDelayMs: 1, maxDelayMs: 4, maxAttempts: 1 } })
+    await vi.waitFor(() => { expect(errors.join('\n')).toContain('reconnect stopped before the attempt') })
+
+    // Pins the recheck: a file swapped between the review and the spawn is never run.
+    expect(verify).toHaveBeenCalledTimes(1)
+    expect(order).toEqual(['verify'])
+    expect(spawns()).toEqual([])
+  })
+
+  it('lets a start whose pinned files still match spawn', async () => {
+    const verify = vi.fn(() => Promise.resolve(undefined))
+    new StubConsent(ctx, [() => Promise.resolve({ allow: true, verify })])
+    await apply(ctx, config())
+
+    expect(verify).toHaveBeenCalledTimes(1)
+    expect(spawns()).toHaveLength(1)
+  })
+
   it('spawns the executable path an allowing decision names, at boot and at each reconnect', async () => {
     const pinned = (path: string) => (): Promise<McpConsentDecision> => Promise.resolve({ allow: true, spawnCommand: path })
     new StubConsent(ctx, [pinned(join(root, 'pinned', 'tool-1')), pinned(join(root, 'pinned', 'tool-2'))])

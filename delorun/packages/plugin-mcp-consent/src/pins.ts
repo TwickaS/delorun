@@ -144,3 +144,43 @@ async function digestOf(canonical: string): Promise<string> {
     await handle.close()
   }
 }
+
+/**
+ * The arguments a pinned start is spawned with: each argument that names a pinned file, by itself or as the value of
+ * an `--option=value` argument, with that file's canonical path in place of the path the configuration wrote, so a
+ * link retargeted after the review cannot change the file the program opens.
+ * @param start - the pinned start.
+ * @returns the arguments in order; those that name no pinned file are unchanged.
+ */
+export async function spawnArgsOf(start: PinnedStart): Promise<string[]> {
+  const args = [...start.args]
+  for (const file of start.files) {
+    if (file.argument === undefined) continue
+    const argument = args[file.argument] as string
+    const whole = await realpath(resolve(start.resolvedCwd, argument)).catch(() => undefined)
+    if (whole === file.path) {
+      args[file.argument] = file.path
+    } else {
+      const equals = argument.indexOf('=')
+      if (equals > 0) args[file.argument] = `${argument.slice(0, equals + 1)}${file.path}`
+    }
+  }
+  return args
+}
+
+/**
+ * Pin the files of a start again and compare them with the pins the review judged.
+ * @param files - the pins the review judged.
+ * @returns the reason a file no longer matches, or `undefined` when every file does.
+ */
+export async function changedPin(files: readonly PinnedFile[]): Promise<string | undefined> {
+  for (const file of files) {
+    try {
+      const now = await pinFile(file.path)
+      if (now.path !== file.path || now.sha256 !== file.sha256) return `the file ${JSON.stringify(file.path)} changed after the review`
+    } catch (error) {
+      return error instanceof FilePinError ? error.message : `the file ${JSON.stringify(file.path)} could not be read again`
+    }
+  }
+  return undefined
+}

@@ -225,16 +225,26 @@ export const Config = z.union([
  * @throws {McpServerStartUnresolvedError} when the start cannot be resolved.
  * @throws {McpConsentRefusedError} when the consent refuses the start.
  */
-async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promise<StdioConfig> {
+async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promise<ReviewedStart> {
   const start = await resolveServerStart(config)
   const decision = await consent.review(start)
   if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
   return {
-    ...config,
-    command: decision.spawnCommand ?? start.resolvedCommand,
-    ...start.resolvedShell === undefined ? { argv0: config.command } : {},
-    cwd: start.resolvedCwd,
+    config: {
+      ...config,
+      command: decision.spawnCommand ?? start.resolvedCommand,
+      ...decision.spawnArgs === undefined ? {} : { args: [...decision.spawnArgs] },
+      ...start.resolvedShell === undefined ? { argv0: config.command } : {},
+      cwd: start.resolvedCwd,
+    },
+    verify: decision.verify,
   }
+}
+
+/** A start the consent allowed: the configuration to spawn, and the check of its pinned files to run just before the spawn. */
+interface ReviewedStart {
+  readonly config: StdioConfig
+  readonly verify: (() => Promise<string | undefined>) | undefined
 }
 
 /**
@@ -244,16 +254,23 @@ async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promi
  * refuses the reconnect.
  * @param ctx - the mcp-client plugin's context.
  * @param config - the server's stdio configuration.
- * @returns the connection options.
+ * @param first - the start the first review allowed.
+ * @returns the connection options, whose `beforeSpawn` rechecks the files of the latest allowed start just before each spawn.
  */
-function reviewEachReconnect(ctx: Context, config: StdioConfig): ConnectionOptions {
+function reviewEachReconnect(ctx: Context, config: StdioConfig, first: ReviewedStart): ConnectionOptions {
+  let latest = first
   return {
     beforeReconnect: async () => {
       const consent = await findMcpAddConsent(ctx, config.serverName)
       if (consent === undefined) {
         throw new Error(`mcp-client(${config.serverName}): the add-time consent that allowed this server is no longer mounted, so the server stays stopped`)
       }
-      return reviewedStart(consent, config)
+      latest = await reviewedStart(consent, config)
+      return latest.config
+    },
+    beforeSpawn: async () => {
+      const changed = await latest.verify?.()
+      if (changed !== undefined) throw new Error(`mcp-client(${config.serverName}): ${changed}, so the server was not started`)
     },
   }
 }
@@ -311,8 +328,9 @@ export async function apply(ctx: Context, configured: Config): Promise<void> {
   if (config.transport === 'stdio') {
     const consent = await findMcpAddConsent(ctx, config.serverName)
     if (consent !== undefined) {
-      spawned = await reviewedStart(consent, config)
-      connectionOptions = reviewEachReconnect(ctx, config)
+      const first = await reviewedStart(consent, config)
+      spawned = first.config
+      connectionOptions = reviewEachReconnect(ctx, config, first)
     }
   }
 
