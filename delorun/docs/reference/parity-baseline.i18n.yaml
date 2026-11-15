@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/parity-baseline.md
 /parity-baseline:
-  en: 623b853dac9df9c2
-  zh: 4e2b3885e2e647b6
+  en: 98eb767184067f95
+  zh: c7a3a9738c1d5bc2
 /parity-baseline/contents:
-  en: e8237c4986bb6587
-  zh: 126716a48218b627
+  en: 2c84af45b12e69df
+  zh: 1dac3646ecd92a0f
 /parity-baseline/reference-host-and-tree:
   en: f1f8538e6362f4b9
   zh: d5d822db0e264066
@@ -30,8 +30,8 @@
   en: e9b31bade8e3be48
   zh: 6edfa0b8d09edd7d
 /parity-baseline/environment-as-upstream-ci-sets-it/wsl-confinement:
-  en: 10899ea448c0b13f
-  zh: fa677f76acd8acd2
+  en: 2f0dd745d5de7f61
+  zh: 29bb2d9c3f2974f9
 /parity-baseline/node-24-check:
   en: 1031f44d6a638bb8
   zh: c5952ec190dc29ac
@@ -48,26 +48,32 @@
   en: 632633e5363ace8c
   zh: 5a3f92bbc88ebe80
 /parity-baseline/classification-of-the-remaining-failures/d-other:
-  en: 0f92dd025ceed19e
-  zh: 26189b3d18892ba5
+  en: 964208ec37d36d88
+  zh: a570f045b97d5540
+/parity-baseline/web-e2e-after-the-rc-5-drift-fixes:
+  en: 5417309917ea70de
+  zh: 0cfc62deb543cc1c
 /parity-baseline/host-state:
-  en: 5aae3acbc13a5714
-  zh: 7a5c07696e2815fa
-/parity-baseline/green-base-on-v5:
-  en: 34f640ba3056b852
-  zh: 8096341ce42156d0
-/parity-baseline/green-base-on-v5/procedure:
+  en: f814a39c0a6f85cb
+  zh: a1c10cdfae9d195e
+/parity-baseline/green-base-on-main:
+  en: 4d09defb10939767
+  zh: 5a02b23ce29e04b7
+/parity-baseline/green-base-on-main/procedure:
   en: df5ebfa1f24ac485
   zh: 7583bc10593eacf3
-/parity-baseline/green-base-on-v5/prerequisites:
-  en: 9e5c5c7d4c7dcaa2
-  zh: 32752353a2342cae
-/parity-baseline/green-base-on-v5/results:
-  en: 834241568d7d1a31
-  zh: 71e49a1e5fa8c8b0
-/parity-baseline/green-base-on-v5/exclusion:
-  en: edb139e53f91074e
-  zh: 665e490201ae75ab
-/parity-baseline/green-base-on-v5/contention:
-  en: 4a9788c432404ee7
-  zh: 2edc8c481895b4ae
+/parity-baseline/green-base-on-main/prerequisites:
+  en: f6fcbadd81f44fab
+  zh: b9b9944d7caf268a
+/parity-baseline/green-base-on-main/results:
+  en: 5e5896aa69d6eb47
+  zh: 3a7d08211efa094b
+/parity-baseline/green-base-on-main/exclusion:
+  en: 4c17ea6ba8655195
+  zh: de7c6a400c1e77b1
+/parity-baseline/green-base-on-main/contention:
+  en: 15c6548c894a0519
+  zh: 07c27f8e9156cce3
+/parity-baseline/where-to-go-next:
+  en: 2daec0bae87e2464
+  zh: 30c5791a3d847f84

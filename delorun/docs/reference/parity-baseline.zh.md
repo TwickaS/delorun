@@ -2,7 +2,7 @@
 
 [English](parity-baseline.md) | 中文
 
-本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delo 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。本页还记录 `v5` 上的绿色基线：运行步骤、前置条件、唯一的排除项，以及使每个失败文件通过的修复。术语遵循 [Delo 术语表](glossary.zh.md)。
+本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delo 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。本页还记录 `main` 上的绿色基线：运行步骤、前置条件、唯一的排除项，以及使每个失败文件通过的修复。术语遵循 [Delo 术语表](glossary.zh.md)。
 
 ## 目录
 
@@ -12,7 +12,7 @@
 - [Node 24 核对](#node-24-check)
 - [剩余失败的分类](#classification-of-the-remaining-failures)
 - [主机状态](#host-state)
-- [v5 上的绿色基线](#green-base-on-v5)
+- [main 上的绿色基线](#green-base-on-main)
 
 <a id="reference-host-and-tree"></a>
 ## 参考主机与代码树
@@ -191,6 +191,25 @@ WebKit 浏览器启动失败，因为主机缺少 WebKit 的 GTK 与 WPE 系统�
 - `apps/cli/tests/profiles/web/tests/public-url.expected.e2e.ts`："serves the bound address and a declared authority, refusing any other name"（报 `HTTP request timed out`），以及 "warns about the plain-HTTP bind even when an HTTPS root is advertised"（报 `expected 'SIGKILL' to be undefined`），共 2 个测试。
 - `packages/session/session-persistence-jsonl/tests/generation.spec.ts`："accepts a valid append on a zstd target created by another migration"（1 个测试）。追加失败，因为当前会话 generation 已存在，且其目标字节不以迁移后的 generation 开头。未发现 WSL 特有的原因。
 
+<a id="web-e2e-rc5"></a>
+## rc.5 漂移修复后的 Web e2e
+
+完整的 Web 套件（`vitest.web.config.ts`）在 rc.5 分支上运行，旁边没有其他重负载任务：共 1,098 个测试，1,058 个通过、29 个跳过、11 个文件中的 11 个失败。完成下列修复后，这 11 个文件加上预览启动文件在重跑中全部通过（16 个文件，30 个测试）。29 个跳过的测试是套件自身的跳过。本次运行未出现 WebKit 启动失败，因此上文 (a) 类中的 WebKit 条目不适用于在该主机上运行的 Web 通道。
+
+| 文件 | 类别 | 原因与处理 |
+| --- | --- | --- |
+| `built-boot.expected.e2e.ts`、`hmr-live.e2e.ts` | 构建记录 | 一次预览构建重写了 `dist/`，使产物与 `.dsh-build/client-build-environment.json` 不再一致。完整的 `pnpm run build` 将其恢复；两者均通过。 |
+| `delorun-allow-for-chat`、`delorun-dangerous-mode`、`delorun-full-access-consent`、`delorun-pairing`、`delorun-privacy-consent`、`delorun-setup-versions`、`delorun-update-notice` | 构建记录 | Delorun 插件库（`@delorun/plugin-trash`）尚未在工作树中构建。完整构建修复了它们；全部通过。 |
+| `chat-fold-opened-group.e2e.ts` | 负载下不稳定 | 仅在主机负载较高时，一次滚动步骤朝错误方向移动；单独运行 3 次均通过。 |
+| `ptc-round.e2e.ts` | 测试支持 | 黄金文件中包含了真实命令的墙钟耗时。aria 规范化器现在将带空格的秒数（`0.1 s`）替换为 `{{duration}}`，并刷新了四个黄金文件。 |
+
+rc.4 的分诊类别解决如下。
+
+- **过期的黄金文件（复制命令按钮与耗时）：** 已刷新 `clickable-links-gallery`、`ptc-round`、`live-job-stream`、`plugin-install-registry`、`plugin-install-silent-failure`。
+- **Delorun 差异，规格已更新：** `deepseek-messages-settings`、`models-settings`、`onboarding-native`、`onboarding-usable-provider` 中的密钥占位符（“Paste your key”）；`plugin-config` 中插件的“History”按钮；`plugin-config` 中本地抓取提供方的描述；`lifecycle-chrome` 中忽略浏览器离线状态的环回页面；`window-drag-coverage` 中悬停预览的侧边栏；`pwa-manifest` 中的十六进制应用图标、由构建得出的标题与 Delorun 图标集；`smoke-real` 中插件资源现在需要的会话 cookie。
+- **回归，已在产品代码中修复：** `preview-boot`（预览工作进程的 `node:fs` 缺少数值形式的打开标志、读取流的 `fd` 选项、`readlink` 与 `rmdir`，而加固后的本地文件读取器需要它们）和 `deepseek-chat-import`（上传路由未声明 `application/octet-stream`，因此精确路由的媒体类型门禁拒绝了该归档）。每项都有变更日志片段。
+- **不是回归：** `sidebar-terminal`。受限的调用是变更文件卡片在 `workspace-write` 默认值下执行的 `git rev-parse`；规格现在禁止对终端本身做任何限制，并允许该 git 探测。同一文件中有一次运行还出现颜色测试失败，重跑后通过（负载下不稳定）。
+
 <a id="host-state"></a>
 ## 主机状态
 
@@ -199,10 +218,10 @@ WebKit 浏览器启动失败，因为主机缺少 WebKit 的 GTK 与 WPE 系统�
 - **负责人决定。** 负责人于 2026-11-06 推迟了这两项主机修复。(a) 类的失败属于主机状态的结果，本页按主机现状记录。[议题 #58](https://github.com/Delo-Run/delorun/issues/58) 跟踪这两项修复。
 - **负载。** 两轮运行期间主机上还有其他任务，如[参考主机与代码树](#reference-host-and-tree)所述。第一轮的单独重跑以及 (c) 类文件显示出与负载相关的失败。
 
-<a id="green-base-on-v5"></a>
-## v5 上的绿色基线
+<a id="green-base-on-main"></a>
+## main 上的绿色基线
 
-绿色基线是 `v5`：上游单元测试套件、上游录制会话回放与 Delo 完整门禁均通过，且不带入任何已知失败：无法通过的测试要么被修复，要么按名称排除并在本页记录原因。下列运行于 Node `v24.22.0` 上、在 `v5` 提交 `2eb9c53b03` 处进行；修复是在 `0b651c0d32` 之上完成的。
+绿色基线是 `main`：上游单元测试套件、上游录制会话回放与 Delo 完整门禁均通过，且不带入任何已知失败：无法通过的测试要么被修复，要么按名称排除并在本页记录原因。下列运行于 Node `v24.22.0` 上、在 `main` 的某一提交（本次运行的提交）处进行；修复是在更早的一个提交之上完成的。
 
 ### 运行步骤
 
@@ -236,7 +255,7 @@ P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重
 
 ### 结果
 
-| 套件 | `2eb9c53b03` 上的结果 |
+| 套件 | 结果 |
 | --- | --- |
 | `pnpm check:full` | 44 通过，0 失败 |
 | 经检查运行器的录制会话回放 | 9 个文件；260 个测试通过，2 个跳过 |
@@ -276,5 +295,9 @@ P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重
 主机与其他智能体的测试套件共享，因此这些结果取决于运行时的负载。
 
 - 单独通过的 26 个文件，是在至少另有一个 vitest 进程运行时重跑的。
-- `packages/subagent/subagent/tests/continuation.spec.ts` 与 `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` 各自在完整运行中失败，并在其他 vitest 进程运行期间开始的重跑中失败。在 `2eb9c53b03` 上单独运行时，两者各通过 3 次中的 3 次（分别为 164 与 17 个测试）；在 `0b651c0d32` 上单独运行时，两者各通过一次。这些运行期间，主机的平均负载在 7 至 15 之间。两个提交都不失败，因此无需二分查找；标签与 `v5` 之间没有提交触及这两个包，且两个文件在标签处都属于 (c) 类。
-- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` 在完整运行中有两个失败，单独运行时均通过；在与另一个 vitest 进程同时开始的重跑中，出现一次 90000 ms 超时。在 `0b651c0d32` 上、主机另有四个 vitest 进程运行时单独运行，它通过了全部 118 个测试。该文件在标签处属于 (c) 类。
+- `packages/subagent/subagent/tests/continuation.spec.ts` 与 `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` 各自在完整运行中失败，并在其他 vitest 进程运行期间开始的重跑中失败。在本次运行的提交上单独运行时，两者各通过 3 次中的 3 次（分别为 164 与 17 个测试）；在更早的提交上单独运行时，两者各通过一次。这些运行期间，主机的平均负载在 7 至 15 之间。两个提交都没有失败，因此无需二分查找；标签与 `main` 之间没有提交触及这两个包，且两个文件在标签处都属于 (c) 类。
+- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` 在完整运行中有两个失败，单独运行时均通过；在与另一个 vitest 进程同时开始的重跑中，出现一次 90000 ms 超时。在更早的提交上、主机另有四个 vitest 进程运行时单独运行，它通过了全部 118 个测试。该文件在标签处属于 (c) 类。
+
+## 下一步
+
+[对等清单](parity.zh.md)记录与原版 DeepSeek Harness 的每项差异的状态。[套件反馈日志](harness-feedback.zh.md)记录运行这些套件时遇到的问题。[参考索引](README.zh.md)列出其他开发者页面。

@@ -2,7 +2,7 @@
 
 English | [中文](parity-baseline.zh.md)
 
-This page records the parity baseline: upstream DeepSeek Harness's own test suites, run on Delorun's reference host at the upstream tag `dsh-v0.2.2-rc.1`. It holds two passes, a Node 24 check, the classification of each failure that remains, and the environment and host state those results depend on. It also records the green base on `v5`: the procedure, its prerequisites, its one exclusion and the fixes that made each failing file pass. Terms follow the [Delorun glossary](glossary.md).
+This page records the parity baseline: upstream DeepSeek Harness's own test suites, run on Delorun's reference host at the upstream tag `dsh-v0.2.2-rc.1`. It holds two passes, a Node 24 check, the classification of each failure that remains, and the environment and host state those results depend on. It also records the green base on `main`: the procedure, its prerequisites, its one exclusion and the fixes that made each failing file pass. Terms follow the [Delorun glossary](glossary.md).
 
 ## Contents
 
@@ -12,7 +12,7 @@ This page records the parity baseline: upstream DeepSeek Harness's own test suit
 - [Node 24 check](#node-24-check)
 - [Classification of the remaining failures](#classification-of-the-remaining-failures)
 - [Host state](#host-state)
-- [Green base on v5](#green-base-on-v5)
+- [Green base on main](#green-base-on-main)
 
 <a id="reference-host-and-tree"></a>
 ## Reference host and tree
@@ -218,10 +218,10 @@ The rc.4 triage classes resolved as follows.
 - **Owner decision.** The owner deferred the host fixes for both items on 2026-11-06. The class (a) failures are host-state results, and this page records them as the host stands. [Issue #58](https://github.com/Delo-Run/delorun/issues/58) tracks both fixes.
 - **Load.** Other jobs shared the host during both passes, as described in [Reference host and tree](#reference-host-and-tree). The solo reruns of pass 1 and the class (c) files show load-dependent failures.
 
-<a id="green-base-on-v5"></a>
-## Green base on v5
+<a id="green-base-on-main"></a>
+## Green base on main
 
-The green base is `v5` with upstream's unit suite, upstream's recorded-session replay and Delorun's full gate passing, and no known failure carried forward: a test that cannot pass is fixed, or excluded by name with its reason recorded here. The run below was taken at `v5` commit `2eb9c53b03` on Node `v24.22.0`; the fixes were made on top of `0b651c0d32`.
+The green base is `main` with upstream's unit suite, upstream's recorded-session replay and Delorun's full gate passing, and no known failure carried forward: a test that cannot pass is fixed, or excluded by name with its reason recorded here. The run below was taken on Node `v24.22.0` at one commit of `main`, the run's commit; the fixes were made on top of an earlier one.
 
 ### Procedure
 
@@ -255,7 +255,7 @@ The procedure above provides all four: `pnpm run test` gives P1, P3 and P4, and 
 
 ### Results
 
-| Suite | Result at `2eb9c53b03` |
+| Suite | Result |
 | --- | --- |
 | `pnpm check:full` | 44 passed, 0 failed |
 | Recorded-session replay through the check runner | 9 files; 260 tests passed, 2 skipped |
@@ -295,8 +295,8 @@ One test is excluded by name: `mock LLM server wire behaviors > formats an IPv6 
 The host is shared with other agents' suites, so these results depend on the load at the time of the run.
 
 - The 26 files that passed alone were rerun while at least one other vitest process was running.
-- `packages/subagent/subagent/tests/continuation.spec.ts` and `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` each failed in the full run and in a rerun that started while other vitest processes were running. Run alone at `2eb9c53b03`, each passed three times out of three (164 and 17 tests); run alone at `0b651c0d32`, each passed once. The host's load average was between 7 and 15 during these runs. Neither commit fails, so there was nothing to bisect; no commit between the tag and `v5` touches either package, and both files are in class (c) at the tag.
-- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` had two failures in the full run, both of which passed alone, and one 90000 ms timeout in a rerun that started beside another vitest process. Run alone at `0b651c0d32`, with four other vitest processes on the host, it passed 118 tests of 118. It is in class (c) at the tag.
+- `packages/subagent/subagent/tests/continuation.spec.ts` and `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` each failed in the full run and in a rerun that started while other vitest processes were running. Run alone at the run's commit, each passed three times out of three (164 and 17 tests); run alone at the earlier commit, each passed once. The host's load average was between 7 and 15 during these runs. Neither fails, so there was nothing to bisect; no commit between the tag and `main` touches either package, and both files are in class (c) at the tag.
+- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` had two failures in the full run, both of which passed alone, and one 90000 ms timeout in a rerun that started beside another vitest process. Run alone at the earlier commit, with four other vitest processes on the host, it passed 118 tests of 118. It is in class (c) at the tag.
 
 ## Where to go next
 
