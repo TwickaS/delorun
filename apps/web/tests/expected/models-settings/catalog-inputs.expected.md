@@ -22,7 +22,7 @@
       - text: openai API 密钥
       - button "认证说明": "?"
       - textbox "API 密钥":
-        - /placeholder: 留空使用环境认证（OPENAI_API_KEY）
+        - /placeholder: 粘贴你的密钥
       - paragraph: 已检测到环境变量（OPENAI_API_KEY）
       - group:
         - text: 自定义设置 API 地址

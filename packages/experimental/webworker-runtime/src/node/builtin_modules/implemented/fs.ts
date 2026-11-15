@@ -101,6 +101,7 @@ export const constants = {
   O_WRONLY: 1,
   O_RDWR: 2,
   O_CREAT: 64,
+  O_EXCL: 128,
   O_TRUNC: 512,
   O_APPEND: 1024,
 }
@@ -329,16 +330,25 @@ let nextFd = 3
  * Open a file descriptor.
  * @param path - file path.
  * @param flags - Node flag string: 'r', 'w', 'a', with optional '+' and the
- * exclusive 'x' (create-only) modifier.
+ * exclusive 'x' (create-only) modifier, or an `O_*` bit mask.
  * @param mode - creation permission bits.
  * @returns the descriptor.
  */
-export function openSync(path: PathArg, flags = 'r', mode?: number): number {
+export function openSync(path: PathArg, flags: string | number = 'r', mode?: number): number {
   const target = asPath(path)
-  const file = vfs().openFileSync(target, flags, mode)
+  const file = vfs().openFileSync(target, flagString(flags), mode)
   const fd = nextFd++
   openFiles.set(fd, { file, position: 0 })
   return fd
+}
+
+/** Throw the errno-shaped error Node reports for `code` on `path`. */
+const errnoFailure = (code: string, syscall: string, path: string): never => {
+  const error = new Error(`${code}: ${syscall} '${path}'`) as Error & { code: string; syscall: string; path: string }
+  error.code = code
+  error.syscall = syscall
+  error.path = path
+  throw error
 }
 
 const badFileDescriptor = (syscall: string): never => {
@@ -352,6 +362,22 @@ const fileOf = (fd: number, syscall: string): OpenFile => {
   const file = openFiles.get(fd)
   if (file === undefined) return badFileDescriptor(syscall)
   return file
+}
+
+/**
+ * Translate numeric `open` flags to the flag string the VFS takes. Flag bits this module's
+ * `constants` do not define (`O_NOFOLLOW`, `O_DIRECTORY`, `O_NONBLOCK`) arrive as 0 and are ignored.
+ * @param flags - a Node flag string, returned unchanged, or an `O_*` bit mask.
+ * @returns the equivalent flag string.
+ */
+function flagString(flags: string | number): string {
+  if (typeof flags === 'string') return flags
+  const access = flags & 3
+  if (access === constants.O_RDONLY) return 'r'
+  const letter = (flags & constants.O_APPEND) !== 0 ? 'a' : (flags & constants.O_TRUNC) !== 0 ? 'w' : 'r'
+  const exclusive = letter !== 'r' && (flags & constants.O_CREAT) !== 0 && (flags & constants.O_EXCL) !== 0 ? 'x' : ''
+  const plus = access === constants.O_RDWR || letter === 'r' ? '+' : ''
+  return `${letter}${exclusive}${plus}`
 }
 
 /**
@@ -433,11 +459,11 @@ export interface FileHandle {
  * Open a file handle. Directories open read-only, which is what the durability
  * helpers do before an fsync.
  * @param path - file or directory path.
- * @param flags - Node flag string.
+ * @param flags - Node flag string or `O_*` bit mask.
  * @param mode - creation permission bits.
  * @returns the handle.
  */
-export function openHandleSync(path: PathArg, flags = 'r', mode?: number): FileHandle {
+export function openHandleSync(path: PathArg, flags: string | number = 'r', mode?: number): FileHandle {
   const target = asPath(path)
   const directory = vfs().existsSync(target) && vfs().statSync(target).isDirectory()
   const fd = directory ? -1 : openSync(target, flags, mode)
@@ -489,6 +515,8 @@ export function openHandleSync(path: PathArg, flags = 'r', mode?: number): FileH
 
 /** Options supported by the VFS-backed read stream. */
 export interface ReadStreamOptions {
+  /** An open descriptor, or a handle carrying one: read from its cursor unless `start` is set, closed on destroy. */
+  fd?: number | { readonly fd: number }
   flags?: string
   encoding?: BufferEncoding | null
   autoClose?: boolean
@@ -588,7 +616,8 @@ export class ReadStream extends Readable {
   private readonly flags: string
   private readonly signal: AbortSignal | undefined
   private readonly onAbort: (() => void) | undefined
-  private position: number
+  private position: number | null
+  private readonly inheritedFd: number | undefined
 
   constructor(path: PathArg, options: ReadStreamOptions = {}) {
     super({
@@ -596,11 +625,13 @@ export class ReadStream extends Readable {
       emitClose: options.emitClose ?? true,
       highWaterMark: options.highWaterMark ?? 64 * 1024,
     })
-    this.path = asPath(path)
+    this.inheritedFd = options.fd === undefined ? undefined : typeof options.fd === 'number' ? options.fd : options.fd.fd
+    this.path = this.inheritedFd === undefined ? asPath(path) : ''
     this.start = options.start ?? 0
     this.end = options.end ?? Number.POSITIVE_INFINITY
     this.flags = options.flags ?? 'r'
-    this.position = this.start
+    // An inherited descriptor continues at its own cursor, as Node does, unless `start` is given.
+    this.position = this.inheritedFd !== undefined && options.start === undefined ? null : this.start
     this.signal = options.signal
     this.onAbort = options.signal === undefined ? undefined : () => { this.destroy(abortError(options.signal?.reason)) }
     if (options.encoding !== undefined && options.encoding !== null) this.setEncoding(options.encoding)
@@ -614,6 +645,14 @@ export class ReadStream extends Readable {
     }
     if (this.signal?.aborted === true) {
       callback(abortError(this.signal.reason))
+      return
+    }
+    if (this.inheritedFd !== undefined) {
+      this.fd = this.inheritedFd
+      this.pending = false
+      callback()
+      this.emit('open', this.fd)
+      this.emit('ready')
       return
     }
     // A file a lazy archive supplies opens once its archive arrived.
@@ -630,7 +669,8 @@ export class ReadStream extends Readable {
 
   override _read(size: number): void {
     if (this.fd === null) return
-    const remaining = this.end === Number.POSITIVE_INFINITY ? size : Math.min(size, this.end - this.position + 1)
+    const consumed = this.position === null ? this.bytesRead : this.position - this.start
+    const remaining = this.end === Number.POSITIVE_INFINITY ? size : Math.min(size, this.end - this.start - consumed + 1)
     if (remaining <= 0) {
       this.push(null)
       return
@@ -647,7 +687,7 @@ export class ReadStream extends Readable {
       this.push(null)
       return
     }
-    this.position += count
+    if (this.position !== null) this.position += count
     this.bytesRead += count
     this.push(buffer.subarray(0, count))
   }
@@ -840,6 +880,18 @@ export const promises = {
   realpath: async (path: PathArg): Promise<string> => realpathSync(path),
   rm: async (path: PathArg, options?: { recursive?: boolean; force?: boolean }): Promise<void> => { rmSync(path, options) },
   unlink: async (path: PathArg): Promise<void> => { unlinkSync(path) },
+  // The VFS holds no symbolic links, so an existing path is never one and a missing path is absent.
+  readlink: async (path: PathArg): Promise<string> => {
+    const target = asPath(path)
+    return errnoFailure(vfs().existsSync(target) ? 'EINVAL' : 'ENOENT', 'readlink', target)
+  },
+  rmdir: async (path: PathArg): Promise<void> => {
+    const target = asPath(path)
+    if (!vfs().existsSync(target)) errnoFailure('ENOENT', 'rmdir', target)
+    if (!vfs().statSync(target).isDirectory()) errnoFailure('ENOTDIR', 'rmdir', target)
+    if (vfs().readdirSync(target).length > 0) errnoFailure('ENOTEMPTY', 'rmdir', target)
+    vfs().rmSync(target, { recursive: true })
+  },
   rename: async (from: PathArg, to: PathArg): Promise<void> => { renameSync(from, to) },
   access: async (path: PathArg): Promise<void> => { accessSync(path) },
   chmod: async (path: PathArg, mode: number | string): Promise<void> => { chmodSync(path, mode) },
@@ -857,7 +909,7 @@ export const promises = {
   },
   // The VFS keeps both names attached to one file identity until either name is removed.
   link: async (from: PathArg, to: PathArg): Promise<void> => { linkSync(from, to) },
-  open: async (path: PathArg, flags?: string, mode?: number): Promise<FileHandle> => {
+  open: async (path: PathArg, flags?: string | number, mode?: number): Promise<FileHandle> => {
     await vfs().whenReadable(asPath(path))
     return openHandleSync(path, flags, mode)
   },

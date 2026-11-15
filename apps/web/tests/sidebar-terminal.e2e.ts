@@ -280,7 +280,8 @@ describe.skipIf(process.platform === 'win32')('Web sidebar terminal', () => {
     expect(scaffold.ctx.terminalController.list(agent.id).map(terminal => terminal.cwd)).toEqual([selected, returned])
     expect(alive(firstProcess)).toBe(true)
     expect(sandboxPolicy.resolve({ session: agent.session })).toEqual(policy)
-    expect(confine).not.toHaveBeenCalled()
+    // Delorun's default policy confines the changed-files card's git probe; terminals must never be confined again.
+    expect(confine.mock.calls.filter(([argv]) => !/(^|\/)git$/u.test(argv[0] ?? ''))).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
   })
 

@@ -191,6 +191,25 @@ The causes below were not diagnosed further. Each file fails 3 of 3 when run alo
 - `apps/cli/tests/profiles/web/tests/public-url.expected.e2e.ts`: "serves the bound address and a declared authority, refusing any other name" (`HTTP request timed out`), and "warns about the plain-HTTP bind even when an HTTPS root is advertised" (`expected 'SIGKILL' to be undefined`), 2 tests.
 - `packages/session/session-persistence-jsonl/tests/generation.spec.ts`: "accepts a valid append on a zstd target created by another migration" (1 test). The append fails because the current session generation already exists and its target bytes do not begin with the migrated generation. No WSL-specific cause was found.
 
+<a id="web-e2e-rc5"></a>
+## Web e2e after the rc.5 drift fixes
+
+The full web suite (`vitest.web.config.ts`) ran on the rc.5 branch with nothing else heavy beside it: 1,098 tests, 1,058 passed, 29 skipped and 11 failed in 11 files. After the fixes below, the 11 files plus the preview boot file passed on a rerun (16 files, 30 tests). The 29 skipped tests are the suite's own skips. The run showed no WebKit launch failure, so the WebKit entries of class (a) above do not apply to the web lane on the host that ran it.
+
+| File | Class | Reason and resolution |
+| --- | --- | --- |
+| `built-boot.expected.e2e.ts`, `hmr-live.e2e.ts` | Build record | A preview build rewrote `dist/`, so the artifacts no longer matched `.dsh-build/client-build-environment.json`. A complete `pnpm run build` restored it; both pass. |
+| `delorun-allow-for-chat`, `delorun-dangerous-mode`, `delorun-full-access-consent`, `delorun-pairing`, `delorun-privacy-consent`, `delorun-setup-versions`, `delorun-update-notice` | Build record | The Delorun plugin libraries (`@delorun/plugin-trash`) had not been built in the worktree. A complete build fixed them; all pass. |
+| `chat-fold-opened-group.e2e.ts` | Flaky under load | A scroll step moved the wrong way only while the host was loaded; it passed 3 of 3 alone. |
+| `ptc-round.e2e.ts` | Test support | The golden held a real command's wall-clock duration. The aria normaliser now replaces spaced seconds (`0.1 s`) with `{{duration}}`, and four goldens were refreshed. |
+
+The rc.4 triage classes resolved as follows.
+
+- **Stale goldens (Copy command button and duration):** `clickable-links-gallery`, `ptc-round`, `live-job-stream`, `plugin-install-registry`, `plugin-install-silent-failure` refreshed.
+- **Delorun divergence, specs updated:** the key placeholder ("Paste your key") in `deepseek-messages-settings`, `models-settings`, `onboarding-native`, `onboarding-usable-provider`; the Plugins "History" button in `plugin-config`; the local fetch provider's description in `plugin-config`; a loopback page ignoring the browser's offline state in `lifecycle-chrome`; the hover-peek sidebar in `window-drag-coverage`; the hex app icon, the build-derived title and the Delorun icon set in `pwa-manifest`; the session cookie that plugin assets now require in `smoke-real`.
+- **Regressions, fixed in product code:** `preview-boot` (the preview worker's `node:fs` lacked numeric open flags, the `fd` option of read streams, `readlink` and `rmdir`, which the hardened local file reader needs) and `deepseek-chat-import` (the upload route did not declare `application/octet-stream`, so the exact-route media-type gate refused the archive). Each has a changelog fragment.
+- **Not a regression:** `sidebar-terminal`. The confined call is the changed-files card's `git rev-parse` under the `workspace-write` default; the spec now forbids any confinement of the terminal itself and allows the git probe. One run also failed a colour test in the same file and passed on rerun (flaky under load).
+
 <a id="host-state"></a>
 ## Host state
 

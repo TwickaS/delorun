@@ -84,7 +84,7 @@ it.skipIf(webSnapshotMode() === 'record').each(['deepseek-official', 'google', '
       await edit.click()
       const key = dialog.getByLabel('API 密钥', { exact: true })
       await key.press('Delete')
-      expect(await key.getAttribute('placeholder')).toBe(`留空使用环境认证（${envRef}）`)
+      expect(await key.getAttribute('placeholder')).toBe('粘贴你的密钥')
       await dialog.getByText(`保存以清除已保存的 API key。之后使用环境认证（${envRef}）。`, { exact: true }).waitFor()
       expect((await runtime.credentials.resolve(ref))?.source).toBe('file')
       if (messages) await compareOrRefreshGolden(join(EXPECTED, 'clear-key.expected.md'),
@@ -141,7 +141,7 @@ it.each([{ name: 'Chromium', engine: chromium }, { name: 'WebKit', engine: webki
       expect(await page.locator('body').innerHTML()).not.toContain('fixture-protected-old-key')
       await key.press('Backspace')
       await dialog.getByText('保存以清除已保存的 API key。之后使用环境认证（DEEPSEEK_API_KEY）。', { exact: true }).waitFor()
-      expect(await key.getAttribute('placeholder')).toBe('留空使用环境认证（DEEPSEEK_API_KEY）')
+      expect(await key.getAttribute('placeholder')).toBe('粘贴你的密钥')
       await dialog.getByRole('button', { name: '取消', exact: true }).click()
       await edit.click()
       expect(await key.getAttribute('placeholder')).toBe(`fixture-prote${'•'.repeat(8)}-key`)

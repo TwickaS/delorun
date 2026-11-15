@@ -158,7 +158,7 @@ it('imports an uploaded archive through the registered route into a chosen Works
   expect(as({ kind: 'owner' }).limits(signal)).toEqual({ maxUploadBytes: 4096 })
   expect(() => as({ kind: 'test-guest', guest: 'viewer' }).limits(signal))
     .toThrow(expect.objectContaining({ code: 'deepseekChatImport/owner-only', message: 'only the owner may import DeepSeek chat exports' }))
-  expect(routes.get(UPLOAD_PATH)).toMatchObject({ methods: ['POST'], requestBody: 'streaming' })
+  expect(routes.get(UPLOAD_PATH)).toMatchObject({ methods: ['POST'], requestBody: 'streaming', requestMediaType: 'application/octet-stream' })
 
   // An unsupported image type exercises the Host log: it stays a placeholder.
   const pictured = chat('new', 2_000)

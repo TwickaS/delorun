@@ -67,13 +67,15 @@
 - button "Glob **/*.css"
 - button "Bash List the built site"
 - button "Failed Bash Run the lint gate exit code 1" [expanded]
-- text: Failed site pnpm run lint exit code 1
+- text: Failed site pnpm run lint exit code 1 {{duration}}
+- button "Copy command"
 - button "Copy"
 - text: "style.css: unexpected hex literal"
 - button "Inspect"
 - button "Failed Bash Check every generated stylesheet and component theme against the shared design tokens, inspect the application pages for inconsistent colors, and report all remaining lint failures before publishing the production build exit code 1"
 - button "Failed Bash Build the site no exit code" [expanded]
-- text: Failed site pnpm run build no exit code
+- text: Failed site pnpm run build no exit code {{duration}}
+- button "Copy command"
 - button "Copy"
 - text: (no output) [timed out after {{duration}}]
 - button "Inspect"

@@ -1636,6 +1636,8 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
       duration => duration.startsWith('~') ? duration : '{{duration}}',
     )
     .replace(/\b\d[\d,]*(?:\.\d+)? ms\b/g, '{{duration}}')
+    // The terminal block's spaced seconds, measured from a real command's wall clock.
+    .replace(/\b\d+(?:\.\d+)? s\b/g, '{{duration}}')
     .replace(
       /约\d+(?:年(?:\d+个月)?|个月(?:\d+天)?)|\d+(?:天(?:\d+小时(?:\d+分\d+秒)?)?|小时\d+分\d+秒|分\d+秒|(?:\.\d+)?秒)/g,
       duration => duration.startsWith('约') ? duration : '{{duration}}',

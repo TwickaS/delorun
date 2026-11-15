@@ -374,10 +374,12 @@ describe('dsh web keyless CLI smoke', () => {
         'public, max-age=31536000, immutable',
         'public, max-age=31536000, immutable',
       ])
+      // The web server refuses plugin assets without the session cookie that the printed token buys.
+      const { cookie } = await authenticatedWeb(readyUrl)
       for (const path of batchPaths) {
         const [scriptResponse, mapResponse] = await Promise.all([
-          fetch(`${readyOrigin}${path}`),
-          fetch(`${readyOrigin}${comboMapUrl(path)}`),
+          fetch(`${readyOrigin}${path}`, { headers: { cookie } }),
+          fetch(`${readyOrigin}${comboMapUrl(path)}`, { headers: { cookie } }),
         ])
         expect(scriptResponse.status).toBe(200)
         expect(mapResponse.status).toBe(200)
