@@ -417,6 +417,25 @@ describe('the recommended plugins step', () => {
     expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Claude only', 'Unread'])
   })
 
+  it('never leaves blank cards when the plugin manager is slow: after a wait it names the plugins and offers Try again', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = installerFake(Object.fromEntries(plugins.map(name => [name, { state: 'checking' as const }])))
+      render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+      await act(async () => { await vi.advanceTimersByTimeAsync(7000) })
+      expect(screen.queryByText(en['plugins.slow'])).toBeNull()
+      expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(screen.getByText(en['plugins.slow'])).toBeTruthy()
+      expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(plugins.length)
+      fake.refresh.mockClear()
+      await click(screen.getByRole('button', { name: en['bundle.retry'] }))
+      expect(fake.refresh).toHaveBeenCalledWith(plugins)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('names a connection as the person knows it', () => {
     const { t } = stepServices()
     const providers = new Map([['deepseek-official', 'DeepSeek']])

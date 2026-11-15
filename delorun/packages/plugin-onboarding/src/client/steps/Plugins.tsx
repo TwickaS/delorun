@@ -4,7 +4,7 @@
  * read from the registry only when the person asks.
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { fits, presentConnections } from '../guide.ts'
 import type { StepServices } from '../types.ts'
@@ -30,6 +30,23 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 
 export { readableName }
 
+/** How long the plugin manager may take to answer before the step says so and offers Try again. */
+const SLOW_AFTER_MS = 8000
+
+/**
+ * @param waiting - whether some card still waits for its answer.
+ * @returns true once the wait has lasted longer than {@link SLOW_AFTER_MS}; false again when it ends.
+ */
+function useSlow(waiting: boolean): boolean {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!waiting) { setSlow(false); return undefined }
+    const timer = setTimeout(() => { setSlow(true) }, SLOW_AFTER_MS)
+    return () => { clearTimeout(timer) }
+  }, [waiting])
+  return slow
+}
+
 /**
  * @param props - the services and the guide.
  * @returns the step body.
@@ -48,6 +65,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
   useEffect(() => { if (rowKey !== '') bundles.refreshRows(rowKey.split('\n')) }, [bundles, rowKey])
   const views = useSyncExternalStore(useCallback(listener => bundles.views.subscribe(listener), [bundles]), () => bundles.views.getSnapshot())
   const rows = useSyncExternalStore(useCallback(listener => bundles.rows.subscribe(listener), [bundles]), () => bundles.rows.getSnapshot())
+  const pending = (state: string | undefined): boolean => state === undefined || state === 'checking'
+  const slow = useSlow(shown.some(each => pending(views[each.name]?.state)) || optionalRows.some(id => pending(rows[id]?.state)))
   const names = new Map(keys.status === 'ready' ? keys.value.providers.map(each => [each.provider, each.name]) : [])
   const unread = answer?.plugins.some(each => each.source === 'unknown') === true && answer.registry === 'not-asked'
   const added = (state: string | undefined): boolean => state === 'installed' || state === 'restart'
@@ -56,6 +75,9 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
     <div className={css.stack}>
       {recommendations?.status === 'failed' && <Notice tone="warning">{t('plugins.unread')}</Notice>}
       {answer?.registry === 'unreachable' && <Notice tone="warning">{t('plugins.registry.unreachable')}</Notice>}
+      {slow && (
+        <Notice tone="warning">{t('plugins.slow')}</Notice>
+      )}
       <p className={css.lead}>{t('plugins.lead')}</p>
       {count > 0 && <p className={css.status} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
       <ul className={css.cards}>
@@ -63,7 +85,7 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
           const view = views[name]
           return (
             <BundleCard key={name} name={name} services={services}
-              title={view?.title !== undefined ? resolveText(view.title) : view === undefined || view.state === 'checking' ? undefined : readableName(name)}
+              title={view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
               description={view?.description === undefined ? undefined : resolveText(view.description)}>
               {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
             </BundleCard>
@@ -76,6 +98,10 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
         {shown.length === 0 && optionalRows.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}
       </div>
       {unread && <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target}`} onClick={() => { guide.recommend(true) }}>{t('plugins.registry')}</Button>}
+      {slow && (
+        <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target}`}
+          onClick={() => { bundles.refresh(shown.map(each => each.name)); if (optionalRows.length > 0) bundles.refreshRows(optionalRows) }}>{t('bundle.retry')}</Button>
+      )}
       <button type="button" className={css.linkRow} onClick={() => { bundles.openPlugins() }}>{t('plugins.later')}</button>
     </div>
   )
