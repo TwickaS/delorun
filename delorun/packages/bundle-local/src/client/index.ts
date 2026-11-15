@@ -62,7 +62,7 @@ import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.ts
 import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.tsx'
 import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
-import { ReportFooterAction, studioSurface } from './ReportFooterAction.tsx'
+import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -451,14 +451,14 @@ export function apply(ctx: Context): void {
     order: ABOUT_SECTION_ORDER,
     label: () => t('about.nav'),
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx) }),
+    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
   }, AboutSection))
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
     id: REPORT_ACTION.id,
     order: REPORT_ACTION.order,
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx) }),
+    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
   }, ReportFooterAction))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)

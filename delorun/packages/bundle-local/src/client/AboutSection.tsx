@@ -35,7 +35,7 @@ export type AboutSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'
  * @param props - the copy.
  * @returns the section.
  */
-export function AboutSection({ t, surface = 'computer', fetchImpl }: AboutSectionProps): ReactNode {
+export function AboutSection({ t, surface = 'computer', fetchImpl, startChat }: AboutSectionProps): ReactNode {
   const [reporting, setReporting] = useState(false)
   return <div className={css.section}>
     <h2 className={css.title}>{t('about.title')}</h2>
@@ -54,7 +54,7 @@ export function AboutSection({ t, surface = 'computer', fetchImpl }: AboutSectio
         </div>
         <Button size="sm" className={reportCss.action} aria-haspopup="dialog" onClick={() => { setReporting(true) }}>{t('about.report.button')}</Button>
       </div>
-      <ReportDialog open={reporting} onClose={() => { setReporting(false) }} t={t} surface={surface} fetchImpl={fetchImpl} />
+      <ReportDialog open={reporting} onClose={() => { setReporting(false) }} t={t} surface={surface} fetchImpl={fetchImpl} startChat={startChat} />
     </SettingsCard>
     <SettingsCard title={t('about.links.heading')} group="links">
       {PROJECT_LINKS.map(link => <div key={link.href} className={rowCss.row}>

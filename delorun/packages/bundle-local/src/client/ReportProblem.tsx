@@ -23,6 +23,8 @@ export interface ReportFace {
   readonly surface: StudioSurface
   /** The request function for the details route; the browser's `fetch` when absent. */
   readonly fetchImpl?: HostFetch | undefined
+  /** Opens a chat with the report skill's command pre-filled and never sent; absent hides the button. */
+  readonly startChat?: (() => void) | undefined
 }
 
 /** The dialog's props. */
@@ -39,7 +41,7 @@ type Load = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly de
  * @param props - whether it is open, how to close it, the copy and the surface.
  * @returns the dialog.
  */
-export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDialogProps): ReactNode {
+export function ReportDialog({ open, onClose, t, surface, fetchImpl, startChat }: ReportDialogProps): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')
   const [includeErrors, setIncludeErrors] = useState(true)
@@ -94,6 +96,7 @@ export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDia
       {copied === 'failed' && <p className={css.status} role="status">{t('report.copyFailed')}</p>}
       <p className={css.status}>{t('report.nothingSent')}</p>
     </>}
+    {startChat !== undefined && <div className={css.help}><Button size="sm" className={css.action} onClick={() => { onClose(); startChat() }}>{t('report.help')}</Button></div>}
   </Dialog>
 }
 
@@ -105,7 +108,7 @@ export type ReportFooterProps = ReportFace & { readonly t: ReportTranslate }
  * @param props - the surface and the copy.
  * @returns the button.
  */
-export function ReportFooterButton({ t, surface, fetchImpl }: ReportFooterProps): ReactNode {
+export function ReportFooterButton({ t, surface, fetchImpl, startChat }: ReportFooterProps): ReactNode {
   const [open, setOpen] = useState(false)
   return <>
     <Tooltip label={t('report.action')} side="top" delayMs={500}>
@@ -113,6 +116,6 @@ export function ReportFooterButton({ t, surface, fetchImpl }: ReportFooterProps)
         <IconWarningOutlineRegular size={16} />
       </button>
     </Tooltip>
-    <ReportDialog open={open} onClose={() => { setOpen(false) }} t={t} surface={surface} fetchImpl={fetchImpl} />
+    <ReportDialog open={open} onClose={() => { setOpen(false) }} t={t} surface={surface} fetchImpl={fetchImpl} startChat={startChat} />
   </>
 }
