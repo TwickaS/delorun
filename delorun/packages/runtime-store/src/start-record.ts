@@ -34,6 +34,11 @@ export interface StartCheckHandoff extends StartCheckSummary {
   readonly at: number
   /** The launcher that ran it: its package version, `null` when it does not read, and its package directory. */
   readonly launcher: { readonly version: string | null, readonly path: string }
+  /**
+   * `runtime` when the runtime made the record from a start check of its own files, because the process that started it
+   * could not hand one over; absent in the launcher's record, which never writes this key.
+   */
+  readonly checkedBy?: 'runtime'
 }
 
 /**
@@ -42,8 +47,8 @@ export interface StartCheckHandoff extends StartCheckSummary {
  * @returns its JSON text.
  */
 export function startCheckHandoffText(handoff: StartCheckHandoff): string {
-  const { schema, release, at, full, hashed, files, fullCheckAt, launcher } = handoff
-  return JSON.stringify({ schema, release, at, full, hashed, files, fullCheckAt, launcher: { version: launcher.version, path: launcher.path } })
+  const { schema, release, at, full, hashed, files, fullCheckAt, launcher, checkedBy } = handoff
+  return JSON.stringify({ schema, release, at, full, hashed, files, fullCheckAt, launcher: { version: launcher.version, path: launcher.path }, ...checkedBy === undefined ? {} : { checkedBy } })
 }
 
 /**
@@ -71,13 +76,15 @@ export function parseStartCheckHandoff(text: string | undefined): StartCheckHand
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
-  if (Object.keys(record).sort().join(',') !== 'at,files,full,fullCheckAt,hashed,launcher,release,schema') return undefined
-  const { schema, release, at, full, hashed, files, fullCheckAt, launcher } = record
+  const keys = Object.keys(record).sort().join(',')
+  if (keys !== 'at,files,full,fullCheckAt,hashed,launcher,release,schema' && keys !== 'at,checkedBy,files,full,fullCheckAt,hashed,launcher,release,schema') return undefined
+  const { schema, release, at, full, hashed, files, fullCheckAt, launcher, checkedBy } = record
+  if (checkedBy !== undefined && checkedBy !== 'runtime') return undefined
   if (schema !== START_CHECK_SCHEMA || typeof release !== 'string' || typeof full !== 'boolean') return undefined
   if (!isWhole(at) || !isWhole(hashed) || !isWhole(files) || (fullCheckAt !== null && !isWhole(fullCheckAt))) return undefined
   if (hashed > files) return undefined
   if (typeof launcher !== 'object' || launcher === null || Array.isArray(launcher)) return undefined
   const { version, path } = launcher as Record<string, unknown>
   if (Object.keys(launcher).sort().join(',') !== 'path,version' || (version !== null && typeof version !== 'string') || typeof path !== 'string') return undefined
-  return { schema, release, at, full, hashed, files, fullCheckAt, launcher: { version, path } }
+  return { schema, release, at, full, hashed, files, fullCheckAt, launcher: { version, path }, ...checkedBy === undefined ? {} : { checkedBy } }
 }

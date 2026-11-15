@@ -22,7 +22,19 @@ describe('the start-check record', () => {
     expect(parseStartCheckHandoff(startCheckHandoffText(unknown))).toEqual(unknown)
   })
 
+  it('reads a record without checkedBy, as every launcher writes it, and writes none for it', () => {
+    const text = startCheckHandoffText(RECORD)
+    expect(text).not.toContain('checkedBy')
+    expect(parseStartCheckHandoff(text)).not.toHaveProperty('checkedBy')
+  })
+
+  it('reads the runtime\'s own record back with its mark', () => {
+    const own: StartCheckHandoff = { ...RECORD, checkedBy: 'runtime' }
+    expect(parseStartCheckHandoff(startCheckHandoffText(own))).toEqual(own)
+  })
+
   it.each<[string, string | undefined]>([
+    ['with a checkedBy that is not runtime', JSON.stringify({ ...RECORD, checkedBy: 'launcher' })],
     ['unset', undefined],
     ['empty', ''],
     ['not JSON', 'not json'],

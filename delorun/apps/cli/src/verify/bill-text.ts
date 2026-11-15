@@ -54,7 +54,7 @@ function releaseLines(bill: TrustBill): string[] {
     : `version ${String(release.root.version)}, root key ${release.root.keyIds.map(key => printable(key.slice(0, 16))).join(', ')}, anchored on ${release.root.anchored === 'shipped' ? 'the launcher\'s shipped roots' : 'the stored root only'}`
   const start = release.startCheck === null
     ? 'none handed over by the launcher'
-    : `${release.startCheck.at}, ${release.startCheck.full ? 'every file hashed' : 'files the identity record vouched for were not hashed'}: ${String(release.startCheck.hashed)} of ${String(release.startCheck.files)} files hashed`
+    : `${release.startCheck.checkedBy === 'runtime' ? 'the updated release checked its own files, ' : ''}${release.startCheck.at}, ${release.startCheck.full ? 'every file hashed' : 'files the identity record vouched for were not hashed'}: ${String(release.startCheck.hashed)} of ${String(release.startCheck.files)} files hashed`
   return [
     `  Release: ${shown(release.version, 'unknown version')}, commit ${shown(release.commit, 'unknown')}; signature ${RESULT_WORDS[release.signature]}, files ${RESULT_WORDS[release.files]}${release.detail === undefined ? '' : ` (${printable(release.detail)})`}`,
     `    manifest SHA-256 ${shown(release.manifestSha256, 'unknown')}; file list SHA-256 ${shown(release.fileListSha256, 'unknown')}`,

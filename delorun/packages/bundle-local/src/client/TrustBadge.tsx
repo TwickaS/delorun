@@ -399,6 +399,8 @@ function ReleaseDetails({ t, bill }: DetailsProps) {
       <Field label={t('release.startCheck')}>
         {start === null
           ? t('release.startCheck.none')
+          : start.checkedBy === 'runtime'
+            ? t('release.startCheck.runtime', { time: formatTime(t, start.at), hashed: start.hashed, files: start.files })
           : start.full
             ? t('release.startCheck.full', { time: formatTime(t, start.at), files: start.files })
             : t('release.startCheck.partial', { time: formatTime(t, start.at), hashed: start.hashed, files: start.files })}

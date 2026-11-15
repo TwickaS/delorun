@@ -560,7 +560,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
 
 /**
  * The request a successor boots with: its environment carries the record of the start check the successor ran on its own
- * release, unless the environment already holds one for it.
+ * release.
  * @param request - the start.
  * @param running - the release this process runs.
  * @param logger - the home process's logger.
@@ -570,7 +570,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
  */
 export async function successorRequest(request: StartRequest, running: RuntimeVersion, logger: DelorunLogger, check: typeof successorStartCheckRecord): Promise<StartRequest> {
   const record = await check(request.home, running, logger, request.env, Date.now())
-  return record === undefined ? request : { ...request, env: { ...request.env, [DELORUN_START_CHECK_ENV]: record } }
+  return { ...request, env: { ...request.env, [DELORUN_START_CHECK_ENV]: record } }
 }
 
 /**
