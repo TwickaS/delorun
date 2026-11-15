@@ -3,38 +3,47 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/trust.md
 /:
-  en: 8496b7f8fe371ee7
-  zh: dba08e519731f312
+  en: 266aaf157f524bfa
+  zh: 2efbb5ff32a5f277
 /what-you-trust-when-you-use-delorun:
-  en: db0edd173fde4d3c
-  zh: eda464267d2ad89e
+  en: 6381eb554883a1c9
+  zh: 193cf82724a6e231
 /what-you-trust-when-you-use-delorun/summary:
-  en: 49d5311f1f88bb6f
-  zh: e07b1149d8d18fc9
+  en: 0e15086b445e53cd
+  zh: d2ab5e83fc6fb934
 /what-you-trust-when-you-use-delorun/contents:
-  en: 66ff87299e47b167
-  zh: 2dc4adbbf2dff0d2
+  en: b8c23de6bfca0117
+  zh: 51dce95376c014a2
 /what-you-trust-when-you-use-delorun/what-runs-on-your-computer:
-  en: 9c8e8739e5473751
-  zh: 4314ea33131c35b5
+  en: e5d2a58428b2304b
+  zh: 8d571a3a943f94fb
 /what-you-trust-when-you-use-delorun/what-delo-run-can-and-cannot-do:
-  en: c7f12e3f5df1564c
-  zh: 1a0772136b7238e8
+  en: cdaa8e830a58aaaf
+  zh: f3cfe05306bb2d05
+/what-you-trust-when-you-use-delorun/how-releases-are-signed-in-the-preview:
+  en: 53d22f370d352483
+  zh: 0fc6427605ee3ceb
+/what-you-trust-when-you-use-delorun/outside-security-review:
+  en: 7f34cc02d1e748ba
+  zh: 0a6ddc4d0263fd2f
 /what-you-trust-when-you-use-delorun/what-each-reach-option-shows-its-provider:
-  en: a741a418bd486390
-  zh: d0a6e95dff326bfb
+  en: 9a1f07f672ee73fe
+  zh: 1a0ed9bc2047d020
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine:
   en: a6089958da26ed66
   zh: d80a0461dc19e07b
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine/by-default:
-  en: 712abd2ae1abde99
-  zh: 4dfddaced3ac6388
+  en: ee24efefa8423469
+  zh: ed50bccfd82e963e
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine/only-when-you-opt-in:
-  en: c3b1f5568cb0401b
-  zh: 501ab829a5e0c597
+  en: 5860957cdb66afef
+  zh: 688b75297645ec42
 /what-you-trust-when-you-use-delorun/checking-it-yourself:
-  en: 49be891779de6aae
-  zh: 26b956fd31a80bb9
+  en: ccbd79b25625a05c
+  zh: 8f3f5ea76b4d5edb
 /what-you-trust-when-you-use-delorun/reporting-a-problem:
-  en: 181c3fee2389be2f
-  zh: c8ce58ac5be1608d
+  en: 79f2f39ce580ba4f
+  zh: 63950edade82dea1
+/what-you-trust-when-you-use-delorun/for-the-technically-curious:
+  en: cc6a68263a13b02c
+  zh: ce1450ef086532aa

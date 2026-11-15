@@ -10,13 +10,14 @@ English | [中文](trust.zh.md)
 
 This page helps you decide what you are comfortable with. It says, party by party, what each one can see and do when you use Delorun, and how to check it yourself. You need nothing first, but it reads best after [Install and first run](install.md).
 
-Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run, the project that publishes it, has no way into your [studio](../reference/glossary.md#studio). Delorun has no telemetry: it sends nothing about you. Two small checks that keep your installation honest talk to the internet by default. Everything else leaves your computer only when you turn it on.
+Delorun is a preview. Its releases are signed with preview keys, and no outside security review has happened yet; the sections on [signing](#how-releases-are-signed-in-the-preview) and [review](#outside-security-review) say what that means and when it changes. Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run, the project that publishes it, has no way into your [studio](../reference/glossary.md#studio). Delorun has no telemetry: it sends nothing about you. Two small checks that keep your installation honest talk to the internet by default. Everything else leaves your computer only when you turn it on.
 
 ## Contents
 
 - [What runs on your computer](#what-runs-on-your-computer)
 - [What Delo Run can and cannot do](#what-delo-run-can-and-cannot-do)
-- [How releases are signed before 1.0](#how-releases-are-signed-before-10)
+- [How releases are signed in the preview](#how-releases-are-signed-in-the-preview)
+- [Outside security review](#outside-security-review)
 - [What each reach option shows its provider](#what-each-reach-option-shows-its-provider)
 - [What leaves your machine](#what-leaves-your-machine)
 - [Checking it yourself](#checking-it-yourself)
@@ -27,12 +28,12 @@ Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run
 
 - **Delorun itself.** The studio and its [plugins](../reference/glossary.md#plugin) run as your user, with your user's access. Any other program you run as yourself can read everything in your [home](../reference/glossary.md#home), the folder `~/.delorun`, and Delorun cannot stop that.
 - **Commands the model runs.** They run with your access too, inside the [sandbox](../reference/glossary.md#sandbox): a set of operating-system rules that limits what a command can touch. The sandbox keeps commands from writing into Delorun's home. Where your system supports it, it also keeps them from reading Delorun's secrets or reaching Docker. The one part of Delorun's home they can read besides installed releases, skills and runtimes is the approved copies of your profile's plugins; they cannot change those. Commands can still use other local services and the network, unless you set the workspace's [network setting](../reference/glossary.md#network-setting) to Allowlist or Off ([Prompt injection and data exfiltration](prompt-injection.md)). [What Delorun protects](safety.md#the-sandbox) lists the rules on each system, and on Linux `delorun doctor` shows whether the sandbox can run.
-- **Every workspace** runs on your computer directly. Delorun has no Docker workspaces, which would run a workspace's commands in a container ([Roadmap and vision](roadmap.md)).
+- **Every workspace** runs on your computer directly. Delorun has no Docker workspaces, which would run a workspace's commands in a container ([Roadmap](roadmap.md)).
 - **Plugins** run with the same full access as Delorun. When you install a plugin and each time Delorun starts, it checks that the plugin says it works with your versions. It does not check the plugin's files again after the install: if a plugin you installed from npm, git or a tarball changes on disk, the changed version loads at the next start.
 
 ## What Delo Run can and cannot do
 
-Delo Run publishes Delorun's releases, this documentation and the waitlist. It publishes no plugin catalogue and no list of revoked plugins ([Roadmap and vision](roadmap.md)).
+Delo Run publishes Delorun's releases and this documentation. It publishes no plugin catalogue and no list of revoked plugins ([Roadmap](roadmap.md)).
 
 Delo Run can:
 
@@ -52,9 +53,11 @@ What you still trust:
 - each plugin you install, and the place you installed it from;
 - DeepSeek Harness's code, which Delorun runs at a named release.
 
-## How releases are signed before 1.0
+## How releases are signed in the preview
 
-Every release before 1.0 is signed with a key kept on a development computer. No key ceremony has happened yet: the keys were made on that computer, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. Anyone who gains access to that computer could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it.
+Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. Until `1.0.0`, the signing keys are preview keys: they were made on the computer where the maintainer and his agents work, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
+
+This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. With `1.0.0` the keys are made in a key ceremony on an offline machine, and the maintainer publishes every release by hand with a physical second factor until then, so that no long-lived publishing credential sits where agents can use it.
 
 The release root that these releases are signed under:
 
@@ -66,13 +69,17 @@ The release root that these releases are signed under:
 | Timestamp key id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
 | Catalogue key id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
 
-At 1.0 the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delorun/release/production-keys.json`.
+With `1.0.0` the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delorun/release/production-keys.json`.
+
+## Outside security review
+
+No outside security review of Delorun has happened yet. The maintainer's own reviews, the denial tests that fail when a protection is removed, and the checks that replay recorded sessions are real, and they are the maintainer's and his agents' own work. An outside review is a person or firm that does not work on Delorun reading its security-critical code and reporting what they find. It comes with `1.0.0`, together with the key ceremony, and the review's report is published. Until then, treat Delorun as a preview: do not rely on it to confine an agent you would not otherwise trust ([What Delorun protects](safety.md)).
 
 ## What each reach option shows its provider
 
 [Reach](../reference/glossary.md#reach) means opening your studio from another device, such as your phone. It is off until you turn it on, and it uses nothing of Delo Run's. Delorun offers one option: Tailscale on your own [tailnet](../reference/glossary.md#tailnet) ([Reach the studio from your phone](reach.md)). `delorun reach on tailscale` refuses while Tailscale Funnel, which would publish your address on the internet, is on.
 
-The table also describes two options that Delorun does not offer, so you can compare ([Roadmap and vision](roadmap.md)).
+The table also describes two options that Delorun does not offer, so you can compare ([Roadmap](roadmap.md)).
 
 | Reach option | What the provider can see or do |
 | --- | --- |
@@ -106,7 +113,7 @@ Each file these checks download is checked against its signature, so a server th
 `delorun setup --yes` and `--config` never turn on reach or DeepSeek's session-log upload.
 
 - **DeepSeek's session-log upload** is off until you turn it on in Settings, Safety, Privacy. When it is on, each request to DeepSeek's official API also carries the part of your chat's log not sent yet: your messages, the replies, tool calls with their results, workspace paths and feedback.
-- **Desktop analytics** belong to DeepSeek Harness's desktop app. The [profile](../reference/glossary.md#profile) `delorun` runs collects none, and Settings, Privacy says so.
+- **Analytics.** DeepSeek Harness's own analytics are switched off in the preview. The [profile](../reference/glossary.md#profile) `delorun` runs collects none, and Settings, Privacy says so. Delorun's own opt-in telemetry is not part of the preview.
 - **Feedback.** The profile `delorun` runs has no feedback dialog, so it sends no feedback.
 - **Model requests** go to the [model provider](../reference/glossary.md#provider) you set up, and carry what the model receives for each turn.
 - **Reach** sends traffic through the provider you choose, as the table above says.

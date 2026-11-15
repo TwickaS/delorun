@@ -1,105 +1,160 @@
 ---
-description: "你使用 Delo 时信任什么：什么在你的电脑上运行，Delo Run 能看到和做到什么、不能做什么，每个远程访问选项向其提供方展示什么，默认离开你机器的内容与仅在你选择时才离开的内容，以及如何自行核查。"
+description: "你使用 Delorun 时信任什么：什么在你的电脑上运行，Delo Run 能做什么、不能做什么，每个远程访问选项向其提供方展示什么，默认离开你机器的内容与仅在你选择时才离开的内容，以及如何自行核查。"
 ---
 
-# 你使用 Delo 时信任什么
+# 你使用 Delorun 时信任什么
 
 [English](trust.md) | 中文
 
-Delo 尚无正式发布；本页描述首个发布版本。
-
 ## 摘要
 
-Delo 在你的电脑上、以你自己的用户账户运行。Delo 的约定要求 Delo Run（即背后的项目）不能自行访问你的 studio。Delo 也没有自身的遥测。Delo 的约定要求默认运行的完整性检查不发送个人数据，并要求其他所有网络功能只有在你选择后才会开启。本页说明每一方能看到什么、能做什么；[威胁模型](../security/threat-model.zh.md)给出每项防护、其约定与限制。
+本页帮助你判断自己能接受什么。它逐方说明你使用 Delorun 时每一方能看到什么、能做什么，以及如何自行核查。你不需要任何前置知识，但在读过[安装与首次运行](install.md)之后读起来最顺。
+
+Delorun 是预览版。它的发布版本使用预览密钥签名，尚未经过外部安全评审；[签名](#how-releases-are-signed-in-the-preview)和[评审](#outside-security-review)两节说明这意味着什么，以及何时会改变。Delorun 在你的电脑上、以你自己的身份运行。没有别人替你运行它，发布它的项目 Delo Run 也无法进入你的 [studio](../reference/glossary.zh.md#studio)。Delorun 没有遥测：它不发送任何关于你的信息。有两项让你的安装保持可信的小检查默认会访问互联网。其他一切只有在你开启时才会离开你的电脑。
 
 ## 目录
 
 - [什么在你的电脑上运行](#what-runs-on-your-computer)
 - [Delo Run 能做什么、不能做什么](#what-delo-run-can-and-cannot-do)
+- [预览版中发布版本如何签名](#how-releases-are-signed-in-the-preview)
+- [外部安全评审](#outside-security-review)
 - [每个远程访问选项向其提供方展示什么](#what-each-reach-option-shows-its-provider)
 - [什么会离开你的机器](#what-leaves-your-machine)
 - [自行核查](#checking-it-yourself)
 - [报告问题](#reporting-a-problem)
+- [给想深入了解的人](#for-the-technically-curious)
 
 <a id="what-runs-on-your-computer"></a>
 ## 什么在你的电脑上运行
 
-- studio、harness 与其插件以你的操作系统用户身份运行，拥有该用户的访问权限。以同一用户运行的任何程序都能读取 `~/.delorun` 下的全部内容，Delo 不防范此类程序。
-- 原生工作区中模型运行的命令，以你自己的访问权限运行。Delo 的约定要求：在你的系统能够强制执行的范围内，这些命令不能写入 Delo 的 home，不能读取 Delo 的密钥和令牌，也不能连接其控制套接字与 Docker 套接字。`delorun verify` 会报告你的系统实际强制执行了哪些规则。其他 Unix 套接字对命令保持开放；除非你把工作区的网络设为 `allowlist` 或 `off`，网络也同样开放（[提示词注入与数据外泄](prompt-injection.zh.md)）。
-- Docker 工作区运行在容器中。Delo 的约定提供两种形式：每个工作区一个容器，使每个工作区与你的电脑及其他工作区相互隔离；或所有工作区共用一个容器，使你的电脑与工作区相互隔离，但工作区之间不隔离。
+- **Delorun 本身。** studio 及其[插件](../reference/glossary.zh.md#plugin)以你的用户身份运行，拥有该用户的访问权限。你以自己身份运行的任何其他程序都能读取你的 [home](../reference/glossary.zh.md#home)（即文件夹 `~/.delorun`）中的全部内容，Delorun 无法阻止这一点。
+- **模型运行的命令。** 它们同样以你的访问权限运行，但处在[沙箱](../reference/glossary.zh.md#sandbox)之内：沙箱是一组操作系统规则，限制命令能触及的范围。沙箱阻止命令写入 Delorun 的 home。在你的系统支持的情况下，它还阻止命令读取 Delorun 的密钥或访问 Docker。除已安装的版本、skill 和运行时之外，命令唯一能读取的 Delorun home 内容是你的 profile 中插件的已批准副本；它们无法修改这些副本。命令仍然可以使用其他本地服务和网络，除非你把工作区的[网络设置](../reference/glossary.zh.md#network-setting)设为白名单或关闭（[提示词注入与数据外泄](prompt-injection.zh.md)）。[Delorun 保护什么](safety.md#the-sandbox)列出了各系统上的规则；在 Linux 上，`delorun doctor` 会显示沙箱能否运行。
+- **每个工作区**都直接在你的电脑上运行。Delorun 没有 Docker 工作区，也就是在容器中运行工作区命令的工作区（[路线图](roadmap.zh.md)）。
+- **插件**拥有与 Delorun 相同的完全访问权限。安装插件时，以及每次 Delorun 启动时，它都会检查该插件是否声明与你的版本兼容。安装之后，它不会再次检查插件的文件：如果你从 npm、git 或压缩包安装的插件在磁盘上发生变化，变化后的版本会在下次启动时加载。
 
 <a id="what-delo-run-can-and-cannot-do"></a>
 ## Delo Run 能做什么、不能做什么
 
-Delo Run 发布 Delo 的版本、插件索引及其撤销列表、文档网站和候补名单。
+Delo Run 发布 Delorun 的版本和本文档。它不发布插件索引，也不发布被撤销插件的列表（[路线图](roadmap.zh.md)）。
 
 Delo Run 能够：
 
-- 发布一个你可以安装的版本。在你确认更新前，没有客户端会安装它；也没有客户端会自行降级。
-- 对每个版本签名并将其记入公开日志，对插件索引及其撤销列表签名。
-- 通过撤销列表停用某个插件版本。Delo 的约定要求：被撤销的版本在下次加载时被停用，附带原因，并记入 profile 历史。已经在运行的插件会继续运行，直到 Delo 再次加载它。
+- 发布一个版本。你的安装只有在你确认更新后才会安装它，也绝不会自行回到更旧的版本；
+- 对每个版本签名并将其记入公开日志，使任何人都能核查每个安装得到的是同一个版本。
 
-根据 Delo 的约定，Delo Run 不能：
+Delo Run 不能：
 
-- 自行访问你的 studio。Tailscale 远程访问与自托管中继不经过 Delo 的基础设施，Delo 不持有 studio 的 TLS 密钥，也不持有设备密钥。
-- 替你批准设备、指挥你的机器，或更改你电脑上固定的插件版本。
-- 审计插件。插件索引条目所列的发现，是其作者或审阅者的主张，Delo 不予核实。
+- 进入你的 studio。通过 Tailscale 的远程访问不使用 Delo Run 的任何东西，Delo Run 不持有你 studio 的密钥，也不持有你设备的密钥；
+- 替你批准设备、向你的电脑发送命令，或更改你已安装的插件；
+- 停用或撤销你安装的插件；
+- 为插件背书：它不审阅插件。
 
 你仍然需要信任：
 
-- Delo Run 的版本、插件索引与撤销列表，以及提供这些内容的 `delorun.com` 域名。
-- 上游 DeepSeek Harness 的代码，Delo 在指定版本上运行它。
-- 你的身份提供方（如果你通过它登录）。控制你在该提供方账户的一方可以通过身份检查，但设备批准仍然适用。
+- Delo Run 的版本，以及提供这些版本的 `delorun.com` 地址；
+- 你安装的每个插件，以及你安装它的来源；
+- DeepSeek Harness 的代码，Delorun 在指定版本上运行它。
+
+<a id="how-releases-are-signed-in-the-preview"></a>
+## 预览版中发布版本如何签名
+
+每个发布版本都有签名，`delorun update` 和 `delorun verify` 会在任何东西运行之前检查签名。在 `1.0.0` 之前，签名密钥是预览密钥：它们生成于维护者及其 agent 工作的那台电脑上，而不是专门为此保持离线的机器上，也没有其他人见证或备份过它们。那台电脑同时也是 agent 运行的地方。因此，任何人或任何 agent 一旦获得对它的访问权限，就能签出一个你的安装会接受的版本。公开发布日志仍会记录每个版本，所以这样签出的版本会让每个核查的人看到，但没有任何机制阻止它被签出。
+
+这是预览版的主要限制，也是 README 称 Delorun 为预览版的原因。签名告诉你，一个版本来自持有预览密钥的人；发布日志告诉你，所有人拿到的是同一个版本。两者都不是离线密钥所提供的保护。到 `1.0.0`，密钥会在离线机器上的密钥仪式中生成；在那之前，维护者用实体第二因素手动发布每个版本，使 agent 能够使用的地方不存放任何长期有效的发布凭据。
+
+这些版本所使用的发布根：
+
+| | 值 |
+| --- | --- |
+| 发布根 1，`1.root.json` 的 SHA-256 | `e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746` |
+| 根密钥 id | `d8cb882168a05fe18b7139ad904de8634bcac2e8b3bebad3776b7efb008be734` |
+| 目标密钥 id | `cd269895db6714d341b1fe23e6d290e42e141da44789d754f3729543fdc9d769` |
+| 时间戳密钥 id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
+| 索引密钥 id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
+
+到 `1.0.0`，根会换成在离线机器上的密钥仪式中生成的新根。携带新根的版本由旧根签名，因此沿更新链走的安装无需任何操作就会迁移过去。新根的 SHA-256 和密钥 id 随后取代此表，Delo Run 会把它们列在 `delorun/release/production-keys.json` 中。
+
+<a id="outside-security-review"></a>
+## 外部安全评审
+
+Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护就会失败的拒绝测试，以及回放录制会话的检查都是真实的，但它们是维护者及其 agent 自己的工作。外部评审是指不参与 Delorun 的人或机构阅读其对安全至关重要的代码，并报告发现。它随 `1.0.0` 一起到来，与密钥仪式同时进行，评审报告会公开发布。在那之前，请把 Delorun 当作预览版：不要依赖它去约束一个你原本就不信任的 agent（[Delorun 保护什么](safety.md)）。
 
 <a id="what-each-reach-option-shows-its-provider"></a>
 ## 每个远程访问选项向其提供方展示什么
 
-Delo 的约定要求没有任何远程访问选项使用 Delo 的基础设施。远程访问在你开启前处于关闭状态，Delo 的约定要求每个选项在开启前显示其说明。
+[远程访问](../reference/glossary.zh.md#reach)是指从另一台设备（例如你的手机）打开你的 studio。它在你开启前处于关闭状态，并且不使用 Delo Run 的任何东西。Delorun 提供一个选项：你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 上的 Tailscale（[用手机访问 studio](reach.md)）。当 Tailscale Funnel（会把你的地址发布到互联网上）开启时，`delorun reach on tailscale` 会拒绝执行。
+
+下表还描述了 Delorun 不提供的两个选项，方便你比较（[路线图](roadmap.zh.md)）。
 
 | 远程访问选项 | 提供方能看到或做到什么 |
 | --- | --- |
-| Tailscale 私有 | 只有你 tailnet 中的设备能打开该地址。Tailscale 的协调服务能看到你的 home 名称、你的 home 与每台设备的 IP 地址、连接时间与流量大小。除非开启 Tailnet Lock，Tailscale 可以向你的 tailnet 添加设备。Tailscale 控制 `ts.net` 并为该地址获取证书，因此任何应用都无法固定其 TLS 密钥。 |
-| Tailscale Funnel | 互联网上任何人都能打开该地址。Tailscale 的 Funnel 服务器与协调服务能看到你的 home 名称、你的 home 与每台连接设备的 IP 地址、连接时间与流量大小。Funnel 把加密流量转交给你的 home，由 Tailscale 的软件在那里终止 TLS。除非开启 Tailnet Lock，Tailscale 可以向你的 tailnet 添加设备，并为该地址获取证书。 |
-| 你自己域名上的自托管中继 | 你的中继能看到该地址的名称、你的 home 与每台连接设备的 IP 地址、连接时间与流量大小。它可以拒绝或断开连接，并强制重新绑定某个名称。它转交其无法读取的加密流量，TLS 在你的 home 上终止。只有当你域名的 CAA 记录仅允许你的 home 的 Let's Encrypt 账户获取证书、且你的 home 自行应答证书挑战时，流量才保持端到端加密。Let's Encrypt 与你的 DNS 提供方仍可能影响你域名的证书。你的 home 会查询公开证书日志，这些日志能看到你的 home 的 IP 地址与域名。 |
+| 你的 tailnet 上的 Tailscale（可用） | 只有你 tailnet 中的设备能打开该地址。Tailscale 的协调服务能看到你电脑的名称、你的电脑与每台设备的 IP 地址、连接时间与流量大小。除非开启 Tailnet Lock，Tailscale 可以向你的 tailnet 添加设备。Tailscale 控制 `ts.net` 并为你的地址获取证书。 |
+| Tailscale Funnel（不提供） | 互联网上任何人都能打开该地址。Tailscale 的 Funnel 服务器与协调服务能看到你电脑的名称、你的电脑与每台连接设备的 IP 地址、连接时间与流量大小。Funnel 把加密流量转交给你的电脑，由 Tailscale 的软件在那里解密。除非开启 Tailnet Lock，Tailscale 可以向你的 tailnet 添加设备，并为该地址获取证书。 |
+| 你自己域名上的自托管中继（不提供） | 你的中继能看到该地址、你的电脑与每台设备的 IP 地址、连接时间与流量大小。它可以拒绝或断开连接。只要你域名的 DNS 仅允许你的电脑为其获取证书，且你的电脑自行应答证书挑战，它转交的就是它无法读取、只有你的电脑才能解密的加密流量。Let's Encrypt 与你的 DNS 提供方仍可能影响你域名的证书。 |
 
-Delo 的约定要求每个选项还需要你的通行密钥或登录提供方，并且每台新设备都需要获得你已信任的设备的批准。
+无论哪个选项，设备都只有在你于电脑上批准之后才能打开你的聊天。Delorun 也不提供通行密钥或自带登录提供方的登录方式。
+
+<details>
+<summary>边界情况</summary>
+
+- 如果 Tailscale Funnel 已开启，那么 `delorun reach on tailscale` 会拒绝执行——请用它打印的命令关闭 Funnel，然后再次运行。
+- 如果在远程访问运行期间开启了 Funnel，那么 Delorun 会在一分钟内发现并停止提供该地址——请用 `delorun reach on tailscale` 拒绝时打印的命令关闭 Funnel。
+
+</details>
 
 <a id="what-leaves-your-machine"></a>
 ## 什么会离开你的机器
 
 ### 默认情况
 
-Delo 的约定要求以下完整性检查默认运行。它们不含个人数据，但每个请求都会向其所访问的主机透露你的 IP 地址、请求时间和 Delo 版本。
+默认会运行两项检查。它们不携带任何关于你的信息，但它们所访问的每个服务器都会看到你的 IP 地址和请求时间。
 
-- 每次启动时进行的发布日志检查，访问 Sigstore 的公开发布日志及其检查点分发服务。
-- 插件撤销列表，来自 `catalogue.delorun.com`，在 home 每次启动时以及运行期间每 6 小时获取一次。
-- 更新检查，获取 Delo 的已签名发布元数据。
+- **发布日志检查**，每次启动时进行。它向 Sigstore 的公开发布日志以及发布其状态的服务询问，你运行的版本是否就是 Delo Run 公开记录的那个版本。没有任何设置能关闭它。当无法访问日志时，Delorun 仍会启动，并向你发出警告。
+- **更新检查**，每天一次。它从 releases.delorun.com 或备用主机获取 Delorun 已签名的发布文件，以查看是否有更新的版本（[更新](updates.md#the-update-notice)）。可在设置 → 通用 → 更新中关闭，或使用 `delorun setup privacy`。
 
-这些检查所获取的每个文件都经签名验证，因此提供被篡改文件的主机会导致检查失败。
-
-Delo 的约定要求 `integrity.mode: off` 关闭发布日志检查与撤销列表。已安装版本的离线检查仍会在每次启动时运行，失败时仍会阻止启动。撤销列表关闭后，它会在 24 小时后过期：插件索引的安装暂停，已安装的插件继续加载。
-
-Docker 工作区会拉取镜像，自有域名远程访问会查询公开证书日志。Delo 的约定要求这些仅在你选择该功能时发生。
+这些检查下载的每个文件都经签名验证，因此提供被篡改文件的服务器会导致检查失败。Delorun 不下载被撤销插件的列表，因为 Delo Run 不发布这样的列表。
 
 ### 仅在你选择时
 
-Delo 的约定要求 Setup 的 `--yes` 与 `--config` 形式从不开启远程访问或上游的任一可选开关。
+`delorun setup --yes` 与 `--config` 从不开启远程访问或 DeepSeek 的会话日志上传。
 
-- **上游的桌面分析**在首个发布版本中默认关闭。开启后，桌面应用会把产品使用事件发送到上游配置所指定的收集端。
-- **DeepSeek 的会话日志上传**在首个发布版本中默认关闭。开启后，每个发往 DeepSeek 官方 API 的请求都会在 `dsh_session_log` 字段中携带你会话日志的一段增量内容。
-- **反馈**仅在你发送时离开你的机器。反馈对话框在你发送前会显示其内容（包括会话日志前缀）及其目的地。
-- **模型请求**发往你配置的模型提供方，携带每个回合中模型所接收的内容。
+- **DeepSeek 的会话日志上传**在你于设置 → 安全 → 隐私中开启之前保持关闭。开启后，每个发往 DeepSeek 官方 API 的请求还会携带你聊天日志中尚未发送的部分：你的消息、回复、带结果的工具调用、工作区路径和反馈。
+- **分析。** DeepSeek Harness 自己的分析在预览版中已关闭。[profile](../reference/glossary.zh.md#profile) `delorun` 运行时不收集任何数据，设置 → 隐私中也这样说明。Delorun 自己的可选遥测不属于预览版。
+- **反馈。** `delorun` 所运行的 profile 没有反馈对话框，因此不会发送反馈。
+- **模型请求**发往你设置的[模型提供方](../reference/glossary.zh.md#provider)，携带每个回合中模型所接收的内容。
 - **远程访问**按上表所述，向你选择的提供方发送流量。
+
+<details>
+<summary>边界情况</summary>
+
+- 如果无法访问发布日志，那么 Delorun 会启动并显示警告——无需处理；它会在下次启动时再次检查。
+- 如果你关闭了更新检查，那么你只有在运行 `delorun update` 时才会得知新版本——请时不时运行一下。
+
+</details>
 
 <a id="checking-it-yourself"></a>
 ## 自行核查
 
-- Delo 的约定要求 `delorun verify` 检查 home 的发布版本、文件、隔离、暴露、登录、插件与数据共享，并报告你的系统无法强制执行的项目。每份报告都会说明，以你身份运行的程序可以更改这些检查。
-- Delo 的约定要求 `delorun logs` 显示每个运行日志、其位置与记录。Delo 自身的记录不含密钥、聊天文本、提示、模型输出、工具参数或文件内容。命令的捕获输出仍可能包含聊天与文件文本，直到保留期限将其删除。Delo 运行期间，日志在写入 14 天后被删除。
-- npm 在任何 Delo 检查运行之前就提供 `delorun` 启动器，因此请通过带外方式核查它。`delorun verify` 会打印一行 `Launcher`，给出已安装发布版本的签名清单为你所运行的启动器记录的完整性值；请将其与 `npm view delorun@<version> dist.integrity` 的输出比较。Delo Run 在 README、本页、每个发布版本的说明以及 `delorun/release/production-keys.json` 中公布每个发布根文件的 SHA-256 及其密钥 id；请将它们与启动器包 `roots/` 目录下的根文件比较。目前尚未公布任何发布根。Setup 按你所运行的版本安装 `delorun` 命令，从不安装 npm 提供的最新版本。
-- [威胁模型](../security/threat-model.zh.md)列出每个边界、其防护，以及 Delo 不防范的内容。
+- **`delorun verify`** 检查已安装的版本是否已签名、是否在公开发布日志中，以及其文件是否就是已签名的文件。它不检查隔离、暴露、登录、插件或数据共享：报告将其逐项列为 `not run`，并以 `this is not a full verification of this Delorun` 结尾。这些检查以你的身份运行，因此以你身份运行的程序可以篡改它们。
+- **`delorun logs`** 显示每个日志、其位置与记录的内容（[Delorun 把日志放在哪里](logs.zh.md)）。
+
+<details>
+<summary>进一步了解</summary>
+
+- **核查启动器。** npm 在任何 Delorun 检查运行之前就提供 `delorun` [启动器](../reference/glossary.zh.md#launcher)，因此请单独核查它。`delorun verify` 会打印一行 `Launcher`，给出已安装版本的签名清单为你所运行的启动器记录的完整性值。请将其与 `npm view delorun@<version> dist.integrity` 的输出比较。
+- **比较发布根。** Delo Run 在本页和每个版本的说明中公布每个发布根文件的 SHA-256 及其密钥 id。请将它们与启动器包 `roots/` 目录下的根文件比较。
+- Setup 按你所运行的版本安装 `delorun` 命令，从不安装 npm 提供的最新版本。
+
+</details>
 
 <a id="reporting-a-problem"></a>
 ## 报告问题
 
 请按 [SECURITY.md](../../../SECURITY.md) 所述私下报告疑似漏洞，不要公开提交 issue。其他问题请发送至 support@delorun.com。
+
+**下一步。** 要了解保护措施本身，请阅读 [Delorun 保护什么](safety.md)。要用手机访问你的 studio，请阅读[用手机访问 studio](reach.md)。如果出了问题，请在[故障排查](troubleshooting.md)中找到对应的信息。
+
+<a id="for-the-technically-curious"></a>
+## 给想深入了解的人
+
+[威胁模型](../security/threat-model.zh.md)列出每个边界、其防护，以及 Delorun 不防范的内容。[验证检查契约](../contracts/c15-verification-checks.zh.md)定义了每项 `delorun verify` 检查，[远程访问提供方契约](../contracts/c07-reach-providers.zh.md)定义了每个远程访问选项可以使用什么。
