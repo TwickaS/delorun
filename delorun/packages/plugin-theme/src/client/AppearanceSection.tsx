@@ -125,13 +125,13 @@ export function AppearanceSection({ t, settings, scheme }: AppearanceSectionProp
 
       <section className={cardCss.block}>
         <SettingHeading id="delorun-appearance-palette" title={t('palette')} lead={t('palette.lead')} />
-        <ThemePicker label={t('palette')} value={current.palette} disabled={disabled} onChange={(value) => { save('palette', value) }}
+        <ThemePicker label={t('palette')} hideLabel value={current.palette} disabled={disabled} onChange={(value) => { save('palette', value) }}
           themes={PALETTES.map(value => ({ value, label: t(`palette.${value}`), light: paletteColours[value].light, dark: paletteColours[value].dark }))} />
       </section>
 
       <section className={cardCss.block} data-muted={current.palette !== 'soft'}>
         <SettingHeading id="delorun-appearance-accent" title={t('accent')} lead={t(current.palette === 'soft' ? 'accent.lead' : 'accent.byTheme')} />
-        <AccentPicker label={t('accent')} value={current.accent} disabled={disabled || current.palette !== 'soft'} onChange={(value) => { save('accent', value) }}
+        <AccentPicker label={t('accent')} hideLabel value={current.accent} disabled={disabled || current.palette !== 'soft'} onChange={(value) => { save('accent', value) }}
           accents={ACCENT_CHOICES.map(choice => ({
             value: choice,
             label: t(`accent.${choice}`),

@@ -29,6 +29,8 @@ export interface ThemePickerProps<Value extends string> {
   readonly themes: readonly ThemeChoice<Value>[]
   readonly onChange: (next: Value) => void
   readonly disabled?: boolean
+  /** Whether the label only names the group for assistive technology, because a heading beside it already shows it. */
+  readonly hideLabel?: boolean
 }
 
 /** A theme's two schemes side by side, each with a line in its text colour and a dot in its accent. */
@@ -49,9 +51,9 @@ function ThemeSwatch({ light, dark }: { readonly light: SwatchColours; readonly 
  * @param props - see {@link ThemePickerProps}.
  * @returns the group.
  */
-export function ThemePicker<Value extends string>({ label, value, themes, onChange, disabled }: ThemePickerProps<Value>) {
+export function ThemePicker<Value extends string>({ label, value, themes, onChange, disabled, hideLabel }: ThemePickerProps<Value>) {
   return (
-    <ChipGroup label={label} value={value} onChange={onChange} disabled={disabled === true}
+    <ChipGroup label={label} value={value} onChange={onChange} disabled={disabled === true} hideLabel={hideLabel === true}
       options={themes.map(theme => ({ value: theme.value, label: theme.label, mark: <ThemeSwatch light={theme.light} dark={theme.dark} /> }))} />
   )
 }
@@ -74,6 +76,8 @@ export interface AccentPickerProps<Value extends string> {
   readonly onChange: (next: Value) => void
   /** Whether the accents cannot be chosen, as while a theme brings its own. */
   readonly disabled?: boolean
+  /** Whether the label only names the group for assistive technology. */
+  readonly hideLabel?: boolean
 }
 
 /**
@@ -81,9 +85,9 @@ export interface AccentPickerProps<Value extends string> {
  * @param props - see {@link AccentPickerProps}.
  * @returns the group.
  */
-export function AccentPicker<Value extends string>({ label, value, accents, onChange, disabled }: AccentPickerProps<Value>) {
+export function AccentPicker<Value extends string>({ label, value, accents, onChange, disabled, hideLabel }: AccentPickerProps<Value>) {
   return (
-    <ChipGroup label={label} value={value} onChange={onChange} disabled={disabled === true}
+    <ChipGroup label={label} value={value} onChange={onChange} disabled={disabled === true} hideLabel={hideLabel === true}
       options={accents.map(accent => ({
         value: accent.value,
         label: accent.label,

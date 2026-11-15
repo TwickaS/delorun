@@ -68,6 +68,19 @@ describe('the edge controller', () => {
     edges.dispose()
   })
 
+  it('sets aside a theme-color tag that another script adds later, so one tag carries the top colour', () => {
+    tokens('rgb(250 250 248)', 'rgb(240 240 238)')
+    const edges = new EdgeController(document, window)
+    const late = document.createElement('meta')
+    late.name = 'theme-color'
+    late.content = 'red'
+    document.head.appendChild(late)
+    edges.refresh()
+    expect([...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].map(meta => meta.content)).toEqual(['rgb(250 250 248)'])
+    edges.dispose()
+    expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(2)
+  })
+
   it('restores the page on dispose: strips, tag, backgrounds, padding, viewport and listeners', () => {
     tokens('rgb(250 250 248)', 'rgb(240 240 238)')
     const edges = new EdgeController(document, window)
