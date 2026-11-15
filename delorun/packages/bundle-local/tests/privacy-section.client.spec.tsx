@@ -152,6 +152,7 @@ describe('the Privacy section', () => {
   it('says why desktop analytics has no switch in a profile that does not serve it', () => {
     renderSection('unavailable')
     expect(screen.getByText(en['analytics.unavailable'])).toBeTruthy()
+    expect(screen.queryByText(en['analytics.description'])).toBeNull()
     expect(screen.queryByRole('switch', { name: en['analytics.title'] })).toBeNull()
     expect(switchOf(en['sessionLog.title'])).toBeTruthy()
   })

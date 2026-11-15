@@ -62,6 +62,7 @@ import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.ts
 import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.tsx'
 import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
+import { overridePluginCopy } from './plugin-copy.ts'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -349,6 +350,7 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
   ctx.provide('delorunNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DelorunNoticeService)
   ctx.effect(() => overrideTitle(ctx.locale), 'delorun-privacy: the product name as the document title')
+  ctx.effect(() => overridePluginCopy(ctx.locale), 'delorun-privacy: Delorun\'s name in the Add plugin dialog')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, DelorunBrandMark)
