@@ -3,53 +3,77 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/apps/release/README.md
 /delorun-release-tooling:
-  en: 3fd9b702c8b52d02
-  zh: 4fa1c63010d72591
+  en: 6541877cff7807e5
+  zh: 5d847b99b9b8102e
 /delorun-release-tooling/modules:
-  en: ac91169ea6c9bcdd
-  zh: a47ec00b2cd2c2e6
+  en: 9fc021fc7dc82c6c
+  zh: 205e5582f7983d40
 /delorun-release-tooling/the-gate:
-  en: 2291e5ca1bbe97c7
-  zh: 2d7664c91c232c43
+  en: 31588d8d146f4b6f
+  zh: 177b7b23e5ff9e49
 /delorun-release-tooling/assembly:
-  en: 57a0222a3f275c94
-  zh: 58bffe5e61245365
+  en: 7935302235a47ee7
+  zh: 998c60fc146d8576
 /delorun-release-tooling/runtime-closures:
-  en: e1316bee26166743
-  zh: b9c4fc7e3487f0ba
+  en: 83d728135adee2bb
+  zh: 509c129311d517d3
+/delorun-release-tooling/runtime-closures/native-code:
+  en: 5a3d34eb402364d0
+  zh: 62d66bf6d81380d4
 /delorun-release-tooling/runtime-closures/archive-format:
-  en: a50683c600975c1b
-  zh: bf76c5a17f6de190
+  en: 5b0d3c1b582731ee
+  zh: 218da2c15a4adef4
+/delorun-release-tooling/local-release:
+  en: 9991c53f3268bbc2
+  zh: 8154347a2a8651e7
+/delorun-release-tooling/the-journey:
+  en: 53de860bbfea7581
+  zh: 9baa16bc1fafddb0
+/delorun-release-tooling/the-rehearsal:
+  en: 818c14ca83cbe21b
+  zh: 1bcf2767c4928064
+/delorun-release-tooling/the-local-rc-channel:
+  en: db23179c572c00e2
+  zh: 985b645c070af310
+/delorun-release-tooling/cutting-a-preview-or-release-candidate:
+  en: 0f203431878738b2
+  zh: a852bf739c0657fb
 /delorun-release-tooling/rebuild-comparison:
-  en: 755aef7566a6439f
-  zh: ec5d3fc7f037c6a8
+  en: bab5fceea4a6cc24
+  zh: 007fad2daa923cad
 /delorun-release-tooling/sbom:
-  en: b178b177467d8778
-  zh: 86b49932f0b136c9
+  en: bb94e130c73601dc
+  zh: 9a4bcc195d8c4e53
 /delorun-release-tooling/dependency-advisory-check:
-  en: f0aff0c6b0305cf4
-  zh: 660bc46a5f1c13b1
+  en: 7578b674e5061da7
+  zh: 6e86ef8a20694617
 /delorun-release-tooling/signing:
-  en: d7282cb808557024
-  zh: b7c8f1fac6bc989f
+  en: a316f5a1d3cb0bb0
+  zh: c85e68647dd5a6c3
+/delorun-release-tooling/signing/release-tag-signers:
+  en: 01eaf2ac7cd9ee6c
+  zh: 9d5d6bc028d54ef2
+/delorun-release-tooling/signing/production-keys:
+  en: 6a39632e7d5b3b8e
+  zh: 54a5e4b7b1a0ebed
 /delorun-release-tooling/signing/the-targets-key:
-  en: 7f3ce2e4d30c2ea4
-  zh: e379b60ddf0a540b
+  en: f2b4bc21efa76c50
+  zh: e67163715c409af7
 /delorun-release-tooling/signing/the-rebuild-attestation-key:
-  en: 18752b9e116caf5c
-  zh: bff0105fcf8f111b
+  en: f695af662d03d7a0
+  zh: b8d7a913fb7237ef
 /delorun-release-tooling/signing/root-and-timestamp-metadata:
-  en: fdf2d8ea05a1f6de
-  zh: a43e0f266f318444
+  en: 50ff7812bb4e4eb6
+  zh: 46f38e706d31d22e
 /delorun-release-tooling/verification:
-  en: a7f1e334f1ec809e
-  zh: 0ff7172c0a3d97db
+  en: 2b5ebc4341cee1ac
+  zh: ede43a725fba8a65
 /delorun-release-tooling/images:
-  en: 2e9702e01b439a58
-  zh: 125d79b9babb5f63
+  en: d68ea1c262d3d4b0
+  zh: 171355848f7a50c8
 /delorun-release-tooling/release-log:
-  en: 3204de86a474de62
-  zh: f4b4d67d37782e29
+  en: 1d08b539fa9107a5
+  zh: ad081969a16eb01a
 /delorun-release-tooling/open-items:
-  en: 3c8293fba3c12694
-  zh: fcfbbf3641a4649e
+  en: 62a7034ab04d9e35
+  zh: ca3d16f6c3659042
