@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
+import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
@@ -56,7 +57,7 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
 
 /** Delorun's look with its defaults, as the theme's host half stores it. */
 export const THEME: ThemeSettings = {
-  accent: 'peach', customAccent: '#E5734A', typeface: 'delorun', density: 'comfortable', studioAdditions: true, palette: 'soft', contrast: 100, effort: 'label',
+  accent: 'peach', customAccent: '#E5734A', typeface: 'delorun', density: 'comfortable', studioAdditions: true, palette: 'soft', contrast: 100, effort: 'label', branding: THEME_DEFAULTS.branding,
 }
 
 /** The row's settings with some fields changed. */

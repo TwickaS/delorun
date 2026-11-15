@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createProvidersFace } from '../src/client/providers-face.ts'
 import { DIRECTORY } from './directory.fixture.ts'
 
-const ok = <T>(value: T) => Promise.resolve({ ok: true as const, value })
+const ok = <T,>(value: T) => Promise.resolve({ ok: true as const, value })
 const refused = Promise.resolve({ ok: false as const, error: { message: 'no' } })
 
 /** A context whose remote namespaces answer what the specs give. */
@@ -21,7 +21,7 @@ function remote(change: { readonly settings?: unknown; readonly mutate?: unknown
       settings: { describe: vi.fn(() => ('settings' in change ? change.settings : ok(view))), mutate },
       credentials: { set },
     },
-  } as unknown as Context
+  } as never as Context
   return { face: createProvidersFace(ctx), set, mutate, discoverModels }
 }
 

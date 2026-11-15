@@ -6,7 +6,7 @@ import { StepFrame } from '../src/client/frame/StepFrame.tsx'
 import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { TEST_DELAY_MS } from '../src/client/providers.ts'
-import type { KeyTestAnswer } from '../src/wire.ts'
+import type { KeyTestAnswer, LocalServer } from '../src/wire.ts'
 import { hostFake, providersFake, stepServices } from './fixtures.client.ts'
 
 afterEach(cleanup)
@@ -157,7 +157,7 @@ describe('the walk', () => {
     await flush(wait)
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     const row = within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem')[1]
-    expect(row?.textContent).toContain(en[`providers.outcome.${verdict}`])
+    expect(row?.textContent).toContain(en[`providers.outcome.${verdict}` as keyof typeof en])
   })
 
   it('offers a base URL under More settings for a declared route only', async () => {
@@ -192,9 +192,9 @@ describe('the summary', () => {
 })
 
 describe('local model servers', () => {
-  const OLLAMA = { kind: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', models: ['llama3', 'qwen3'] } as const
+  const OLLAMA: LocalServer = { kind: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', models: ['llama3', 'qwen3'] }
 
-  const mountLocal = async (servers: readonly (typeof OLLAMA)[], remote = false, declareLocal = true) => {
+  const mountLocal = async (servers: readonly LocalServer[], remote = false, declareLocal = true) => {
     const providers = providersFake({ declareLocal })
     const host = hostFake({ localModels: servers })
     render(
