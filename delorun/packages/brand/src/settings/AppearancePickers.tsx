@@ -1,9 +1,10 @@
 /**
- * The three appearance pickers built on {@link ChipGroup}: the theme with its light and dark swatch, the accent with
- * its dot, and the studio look. Settings → Appearance and onboarding's Look step both render these, with their own text.
+ * The appearance pickers built on {@link ChipGroup}, and the look switch: the theme with its light and dark swatch, the accent with
+ * its dot, and the Delorun look switch. Settings → Appearance and onboarding's Look step both render these, with their own text.
  * @module @delorun/brand/settings/AppearancePickers
  */
 import type { CSSProperties } from 'react'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ChipGroup } from './ChipGroup.tsx'
 import css from './ChipGroup.module.css'
 
@@ -121,23 +122,19 @@ export type StudioLook = 'delorun' | 'stock'
 
 /** The props of {@link StudioLookSwitch}. */
 export interface StudioLookSwitchProps {
+  /** The switch's accessible name. */
   readonly label: string
-  /** The chosen look; Settings and onboarding only ever show Delorun chosen, since the stock look unloads them. */
-  readonly value: StudioLook
-  readonly delorunLabel: string
-  readonly stockLabel: string
+  /** Called with `'stock'` when the switch is turned off; Settings only shows the switch on, since the stock look unloads the row. */
   readonly onChange: (next: StudioLook) => void
   readonly disabled?: boolean
 }
 
 /**
- * The Delorun or Stock chips. The arrow keys only move focus: choosing Stock unloads the Delorun studio plugins.
+ * The Delorun look switch, on while the Delorun look is in use. Turning it off chooses the stock look, which unloads the
+ * Delorun studio plugins.
  * @param props - see {@link StudioLookSwitchProps}.
- * @returns the group.
+ * @returns the switch.
  */
-export function StudioLookSwitch({ label, value, delorunLabel, stockLabel, onChange, disabled }: StudioLookSwitchProps) {
-  return (
-    <ChipGroup<StudioLook> label={label} hideLabel value={value} onChange={onChange} disabled={disabled === true} manual
-      options={[{ value: 'delorun', label: delorunLabel }, { value: 'stock', label: stockLabel }]} />
-  )
+export function StudioLookSwitch({ label, onChange, disabled }: StudioLookSwitchProps) {
+  return <Switch checked label={label} disabled={disabled === true} onChange={(next) => { if (!next) onChange('stock') }} />
 }

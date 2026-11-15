@@ -62,7 +62,7 @@ Each is a function component with a documented props interface. "Upstream" means
 | `ConfirmAction` | `Button` | A destructive action with one inline confirmation |
 | `Link` | none | Text-safe peach, underlined |
 | `Mark` | none | The hex mark; the nut takes the text colour and the plug takes `--dl-accent` |
-| `ChipGroup`, `ThemePicker`, `AccentPicker`, `StudioLookSwitch` | none | The chip radio group (44 px targets, one tab stop, arrow keys) and the theme, accent and studio-look pickers built on it, which Settings → Appearance and onboarding's Look step share; `@delorun/plugin-theme/controls` re-exports them |
+| `ChipGroup`, `ThemePicker`, `AccentPicker`, `StudioLookSwitch` | none | The chip radio group (44 px targets, one tab stop, arrow keys) and the theme and accent pickers built on it, which Settings → Appearance and onboarding's Look step share, and the Delorun look switch (on; turning it off chooses Stock) that Settings → General uses; `@delorun/plugin-theme/controls` re-exports them |
 | `SettingsCard`, `SettingHeading`, `SettingRow`, `ChoiceGroup`, `RadioList`, `TileGroup` | none | The Settings sections' controls. Their CSS (and the chip controls') reads the studio's `--dsw-*` and `--delorun-space-*` properties with a `--dl-*` or pixel fallback, so they also render outside the studio, as the website's package-manager picker does. `ChoiceGroup` takes the arrow keys, Home and End, and `fill` and `mono` for a full-width group set in the brand's monospace face. [`@delorun/settings-controls`](../settings-controls/README.md) re-exports them |
 
 ## Contract

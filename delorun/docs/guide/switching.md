@@ -130,7 +130,7 @@ Each of these returns one difference to DeepSeek Harness's behaviour, and you ca
 | Switch | Where | What it changes |
 | --- | --- | --- |
 | Prompts: **Ask less (like DeepSeek Harness)** | `delorun setup prompts`, or the prompts question in setup | Turns off the full-access consent, the instruction-file consent, the MCP server consent and the scheduled-task consent. The `web_fetch` guard stays on. |
-| Look: **Stock** | Settings → General → Look, or onboarding's studio look | The original look, without Delorun's theme, sidebar, chat states, settings layout and onboarding. **Delorun look** in Settings → General switches back. |
+| Look: **Delorun look** off | Settings → General → Look, or onboarding's studio look | The original look, without Delorun's theme, sidebar, chat states, settings layout and onboarding. Turning **Delorun look** on again in Settings → General switches back. |
 | **Check for new releases** off | Settings → General → Updates, or `delorun setup privacy` | No release check request; `delorun update` still works when you run it. |
 | **DeepSeek session-log upload** on | Settings → Safety → Privacy | Each request to DeepSeek's API carries part of your session log, as in DeepSeek Harness. |
 

@@ -26,24 +26,22 @@ const click = async (element: HTMLElement) => { await act(async () => { fireEven
 const group = (name: string) => screen.getByRole('radiogroup', { name })
 
 describe('the Look row', () => {
-  it('offers Delorun and Stock as a radio group with Delorun chosen, and turns the studio additions off from Stock', async () => {
+  it('shows an on switch titled Delorun look, and turning it off takes the Stock path', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     open(StudioLookRow, themeForm(STUDIO_ON), useStockLook)
-    // One visible "Studio look": the row's title. The control's label stays for assistive technology only.
-    const labels = screen.getAllByText(en.look)
-    expect(labels).toHaveLength(2)
-    expect(labels.filter(each => /srOnly/.test(each.className))).toHaveLength(1)
+    expect(screen.getByText(en.look)).toBeTruthy()
     expect(screen.getByText(en['look.lead'])).toBeTruthy()
-    const radios = within(group(en.look)).getAllByRole('radio')
-    expect(radios.map(radio => [radio.textContent, radio.getAttribute('aria-checked')])).toEqual([['Delorun', 'true'], ['Stock', 'false']])
-    await click(screen.getByRole('radio', { name: en['look.stock'] }))
+    expect(screen.queryByRole('radio')).toBeNull()
+    const toggle = screen.getByRole('switch', { name: en.look })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    await click(toggle)
     expect(useStockLook).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('reports a refused way back to the stock look', async () => {
     open(StudioLookRow, themeForm(STUDIO_ON), () => Promise.resolve(false))
-    await click(screen.getByRole('radio', { name: en['look.stock'] }))
+    await click(screen.getByRole('switch', { name: en.look }))
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
 
@@ -113,7 +111,8 @@ describe('every row', () => {
     const form = themeForm(STUDIO_ON)
     form.publish({ writable: false })
     open(Row, form)
-    for (const radio of screen.getAllByRole('radio')) expect(radio.hasAttribute('disabled')).toBe(true)
+    for (const control of [...screen.queryAllByRole('radio'), ...screen.queryAllByRole('switch')]) expect(control.hasAttribute('disabled')).toBe(true)
+    expect(screen.queryAllByRole('radio').length + screen.queryAllByRole('switch').length).toBeGreaterThan(0)
   })
 
   it('draws the defaults before the settings arrive', () => {

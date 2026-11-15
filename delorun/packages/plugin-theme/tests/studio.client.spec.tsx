@@ -318,7 +318,7 @@ describe('turning the studio additions off', () => {
     const form = themeForm(STUDIO_ON)
     const { ctx, fiber, slots } = await mount(form)
     renderStudioRow(slots, STUDIO_ROWS.look.id)
-    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: en['look.stock'] })) })
+    await act(async () => { fireEvent.click(screen.getByRole('switch', { name: en.look })) })
     expect(form.writes).toEqual([['studioAdditions', false]])
     expect(ctx.get('delorunStudio')).toBeUndefined()
     expect(slots.get(LOOK_ROW.id)?.options.locale).toBe(LOOK_ROW.ns)

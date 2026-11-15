@@ -82,7 +82,7 @@ Delorun 遵守以下规则：
 - 如果你在 Windows 上运行，那么命令可以读取 Delorun 的 home、其密钥与其令牌，但不能写入——请把模型的命令视为能够读取它们（[Delorun 保护什么](safety.md#the-sandbox)）。
 - 如果你在桌面版 Linux 上运行且没有 bubblewrap，那么 Delorun 会完全拒绝运行沙箱中的命令——请安装 bubblewrap。
 - 如果你在 setup 中选择了 [**Ask less (like DeepSeek Harness)**](../reference/glossary.zh.md#ask-less)，那么完全访问、指令文件、MCP 服务器与计划任务的同意都是关闭的，网络设置也不可用——运行 `delorun setup prompts` 可重新选择 Ask me first。
-- 如果你想要 stock 外观，那么在 Settings → General → Look 中选择 Stock——同一位置的 **Delorun look** 可切换回来。
+- 如果你想要 stock 外观，那么在 Settings → General → Look 中关闭 **Delorun look**——同一开关可再次打开。
 
 </details>
 

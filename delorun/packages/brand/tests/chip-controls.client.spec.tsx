@@ -69,12 +69,12 @@ describe('the pickers', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('offers Delorun and Stock, with arrow keys that never choose Stock by themselves', async () => {
+  it('is an on switch for the Delorun look, and turning it off chooses Stock', async () => {
     const onChange = vi.fn()
-    render(<StudioLookSwitch label="Look" value="delorun" delorunLabel="Delorun" stockLabel="Stock" onChange={onChange} />)
-    await press(screen.getByRole('radio', { name: 'Delorun' }), 'ArrowRight')
-    expect(onChange).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: 'Stock' })) })
+    render(<StudioLookSwitch label="Delorun look" onChange={onChange} />)
+    const toggle = screen.getByRole('switch', { name: 'Delorun look' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    await act(async () => { fireEvent.click(toggle) })
     expect(onChange).toHaveBeenCalledWith('stock')
   })
 })

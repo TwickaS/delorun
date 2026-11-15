@@ -54,7 +54,7 @@ While the switch is on, the browser half ([`src/client/index.ts`](src/client/ind
 
   | Id | Order | Title | Control | Writes |
   | --- | --- | --- | --- | --- |
-  | `delorun-look` | 1 | Studio look | Delorun / Stock | `studioAdditions: false` through `useStockLook()` |
+  | `delorun-look` | 1 | Delorun look | An on switch | Turning it off writes `studioAdditions: false` through `useStockLook()` |
   | `delorun-typeface` | 10.5 | Typeface | tiles with a specimen | `typeface` |
   | `delorun-density` | 11.5 | Density | tiles with rows at each spacing | `density` |
   | `delorun-effort-labels` | 20.5 | Reasoning effort labels | Name / Bars | `effort` |
@@ -68,7 +68,7 @@ The CSS of the sections and rows uses upstream's tokens (`--dsw-alias-*`, `--dsw
 
 ## The stock look
 
-While the switch is off, nothing of Delorun's look applies: no token layer, no font faces, no style element, no first-paint style, no sections, no headline, no vocabulary and no service. The plugin registers one row in `settings.general.item` (`delorun-look`, after Language) with a switch labelled "Delorun look" and a one-line description; turning it on writes `studioAdditions: true`, and the studio comes up without a reload. It also sets `data-delorun-stock` on `<html>` and removes the first-paint style element the page was served with (found by `FIRST_PAINT_MARK`, the start of its text), so upstream's colours return at once. Disposing the browser half removes that element too. The studio half's Look row is the same switch from the other side: Stock calls `useStockLook()`.
+While the switch is off, nothing of Delorun's look applies: no token layer, no font faces, no style element, no first-paint style, no sections, no headline, no vocabulary and no service. The plugin registers one row in `settings.general.item` (`delorun-look`, after Language) with a switch labelled "Delorun look" and a one-line description; turning it on writes `studioAdditions: true`, and the studio comes up without a reload. It also sets `data-delorun-stock` on `<html>` and removes the first-paint style element the page was served with (found by `FIRST_PAINT_MARK`, the start of its text), so upstream's colours return at once. Disposing the browser half removes that element too. The studio half's Look row is the same switch from the other side: it is on, and turning it off calls `useStockLook()`.
 
 ## Palettes and attribution
 
@@ -97,4 +97,4 @@ Soft is Delorun's. T3 Code's six themes are seeded from [`src/palette/t3-themes.
 
 ## Shared controls and Safari edges
 
-The chip controls (`ChipGroup`, `ThemePicker`, `AccentPicker`, `StudioLookSwitch`) that Settings → Appearance and onboarding's Look step share live in [`@delorun/brand`](../brand/README.md), the one control set; [`src/client/controls`](src/client/controls) only re-exports them as `@delorun/plugin-theme/controls`. [`src/client/edges.ts`](src/client/edges.ts) paints two fixed, `aria-hidden` edge strips, the `html` and `body` backgrounds and one `theme-color` tag from the active theme's tokens, so mobile Safari's status bar and toolbar continue the studio. It adds `viewport-fit=cover` to the page's viewport tag and restores every change on dispose.
+The chip controls (`ChipGroup`, `ThemePicker`, `AccentPicker`) and the `StudioLookSwitch` that Settings → Appearance and onboarding's Look step share live in [`@delorun/brand`](../brand/README.md), the one control set; [`src/client/controls`](src/client/controls) only re-exports them as `@delorun/plugin-theme/controls`. [`src/client/edges.ts`](src/client/edges.ts) paints two fixed, `aria-hidden` edge strips, the `html` and `body` backgrounds and one `theme-color` tag from the active theme's tokens, so mobile Safari's status bar and toolbar continue the studio. It adds `viewport-fit=cover` to the page's viewport tag and restores every change on dispose.

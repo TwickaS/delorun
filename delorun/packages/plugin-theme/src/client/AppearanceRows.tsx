@@ -1,6 +1,6 @@
 /**
  * The `settings.general.item` rows the studio half registers beside the
- * Appearance section: the studio look (Delorun's or the stock look), the
+ * Appearance section: the Delorun look switch, the
  * typeface and the density as preview tiles, and how the composer's model
  * picker labels reasoning effort. Each writes one field of the theme row's
  * settings, and the Look row turns the studio additions off.
@@ -48,15 +48,15 @@ function useTheme(settings: ConfigForm<ThemeSettings>, t: AppearanceRowProps['t'
 }
 
 /**
- * Render the Look row: Delorun chosen, Stock turns the studio additions off.
+ * Render the Look row: a switch that is on, and turning it off turns the studio additions off.
  * @param props - the dictionary and the services.
  * @returns the row.
  */
 export function StudioLookRow({ t, settings, useStockLook }: AppearanceRowProps) {
   const { disabled, failure, track } = useTheme(settings, t)
   return (
-    <SettingRow stackOnPhone title={t('look')} description={t('look.lead')} failure={failure}>
-      <StudioLookSwitch label={t('look')} value="delorun" delorunLabel={t('look.delorun')} stockLabel={t('look.stock')} disabled={disabled}
+    <SettingRow title={t('look')} description={t('look.lead')} failure={failure}>
+      <StudioLookSwitch label={t('look')} disabled={disabled}
         onChange={() => { track(useStockLook()) }} />
     </SettingRow>
   )
