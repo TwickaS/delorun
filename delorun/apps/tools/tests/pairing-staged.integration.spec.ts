@@ -117,7 +117,7 @@ describe('the staged pairing hook', () => {
     repo.write({ 'docs/guide.md': `${EN}\n`, 'docs/other.txt': 'x' })
     repo.run(['add', '-A'])
     const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
-    expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
+    expect(lines.join('\n')).toContain('existing drift, not blocking')
     expect(status).toBe(0)
   })
 
@@ -138,7 +138,7 @@ describe('the staged pairing hook', () => {
     repo.run(['mv', 'docs/guide.zh.md', 'docs/moved/guide.zh.md'])
     repo.run(['mv', 'docs/guide.i18n.yaml', 'docs/moved/guide.i18n.yaml'])
     const { status, lines } = hook(repo, ['docs/moved/guide.i18n.yaml'])
-    expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
+    expect(lines.join('\n')).toContain('existing drift, not blocking')
     expect(status).toBe(0)
   })
 
@@ -162,7 +162,7 @@ describe('the staged pairing hook', () => {
     it('passes when re-recording exposes only the structural drift HEAD already hid', (test) => {
       const repo = staleThenRerecorded(test, TABLE_ZH)
       const { status, lines } = hook(repo, ['docs/guide.i18n.yaml'])
-      expect(lines.join('\n')).toContain('existing drift (A309), not blocking')
+      expect(lines.join('\n')).toContain('existing drift, not blocking')
       expect(status).toBe(0)
     })
 

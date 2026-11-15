@@ -298,7 +298,7 @@ describe('with protection off', () => {
     expect(approval).not.toHaveBeenCalled()
   })
 
-  it('keeps holding a chat\'s install and turn-on in dangerous mode: full access, every approval allowed and the default protection record change nothing (A330)', async () => {
+  it('keeps holding a chat\'s install and turn-on in dangerous mode: full access, every approval allowed and the default protection record change nothing', async () => {
     // Dangerous mode gives the chat danger-full-access with approvals the person never answers; neither reaches the hold on a plugin that is not on yet.
     const { manager, approval, profile, call } = await harness(true, true, false, 'none', 'danger-full-access')
     for (const target of ['link:/work/plugins/new-plugin', 'registry-plugin@2.0.0']) {

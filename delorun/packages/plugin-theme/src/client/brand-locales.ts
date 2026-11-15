@@ -10,7 +10,7 @@ export const en = {
 export type BrandLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
-// A309: the Chinese wordmark keeps Delorun until the translation pass.
+// The Chinese wordmark keeps Delorun until the translation pass.
 export const zh: Record<BrandLocaleKey, string> = {
   'hero.mark': 'Delorun',
   'hero.headline': '想做点什么？',

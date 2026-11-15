@@ -223,7 +223,7 @@ export const zh: typeof en = {
   'action.unlocks': '读取解锁请求',
   'action.unlockApprove': '批准解锁',
   'action.unlockRevoke': '结束解锁',
-  // A309: the pairing entries below are English until the Chinese copy is written.
+  // The pairing entries below are English until the Chinese copy is written.
   'pairing.notice': 'A device asks to connect: {user} · {label} · {platform}',
   'pairing.notice.enter': 'Enter code',
   'pairing.notice.decline': 'Decline',

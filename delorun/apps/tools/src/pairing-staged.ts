@@ -3,8 +3,8 @@
  * `HEAD` already carries.
  *
  * Upstream's `scripts/verify-translation-pairing.ts --cached` refuses any staged record whose pair has a violation.
- * About 43 pairs already drift on the train (A309, left for the translation pass), so a commit that re-records
- * them, such as the fork directory rename (A353), would be refused for drift it did not cause. This wrapper runs
+ * About 43 pairs already drift on the train (left for the translation pass), so a commit that re-records
+ * them, such as the fork directory rename, would be refused for drift it did not cause. This wrapper runs
  * the upstream checker twice, as a child process, because the checker exports nothing: once on the staged records
  * (`--cached`), and once on the same pairs as `HEAD` holds them, read through a temporary index file selected with
  * `GIT_INDEX_FILE`. A pair that a staged rename moved is looked up under its old path.
@@ -237,7 +237,7 @@ export function main(records: readonly string[], root: string): number {
   }
   const { added, existing } = compareViolations(staged.violations, headViolations(root, anchors), pathMap)
   if (existing.length > 0) {
-    console.error(`pairing: existing drift (A309), not blocking: ${existing.length} violation(s)`)
+    console.error(`pairing: existing drift, not blocking: ${existing.length} violation(s)`)
     for (const line of existing.slice(0, LISTED_EXISTING)) console.error(`  ${line}`)
     if (existing.length > LISTED_EXISTING) console.error(`  … and ${existing.length - LISTED_EXISTING} more`)
   }

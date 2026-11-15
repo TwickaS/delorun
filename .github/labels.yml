@@ -80,18 +80,18 @@
 - name: area/docs-site
   color: "bfdadc"
   description: "Delorun's documentation website."
-- name: wave/0
+- name: batch/0
   color: "fef2c0"
-  description: "Work package in wave 0 of the v5 plan."
-- name: wave/1
+  description: "Work package in batch 0 of the build."
+- name: batch/1
   color: "fef2c0"
-  description: "Work package in wave 1 of the v5 plan."
-- name: wave/2
+  description: "Work package in batch 1 of the build."
+- name: batch/2
   color: "fef2c0"
-  description: "Work package in wave 2 of the v5 plan."
-- name: wave/3
+  description: "Work package in batch 2 of the build."
+- name: batch/3
   color: "fef2c0"
-  description: "Work package in wave 3 of the v5 plan."
+  description: "Work package in batch 3 of the build."
 - name: security
   color: "b60205"
   description: "Moves a trust boundary: needs a denial test and the lead's line-by-line review."

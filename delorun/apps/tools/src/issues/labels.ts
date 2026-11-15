@@ -1,7 +1,7 @@
 /**
  * Delorun's label set, read from `.github/labels.yml`. Each entry gives a label's name, colour and description. The names
  * follow the unified label taxonomy: a closed set of `kind/*` labels, `area/*` labels in lowercase kebab case, the
- * `wave/0` to `wave/3` labels, and Delorun's own plain labels. The aliases the taxonomy retired never reappear here.
+ * `batch/0` to `batch/3` labels, and Delorun's own plain labels. The aliases the taxonomy retired never reappear here.
  *
  * @module @delorun/tools/issues/labels
  */
@@ -44,7 +44,7 @@ const RETIRED_LABELS: readonly string[] = [
 const MAX_DESCRIPTION_LENGTH = 100
 
 const AREA_NAME = /^area\/[a-z0-9]+(?:-[a-z0-9]+)*$/u
-const WAVE_NAME = /^wave\/[0-3]$/u
+const BATCH_NAME = /^batch\/[0-3]$/u
 
 /** A text field of a label entry: a missing key is reported as missing, and a non-string value as not text. */
 const entryText = (notText: string): z.ZodString => z.string({ error: issue => (issue.input === undefined ? 'is missing' : notText) })
@@ -76,7 +76,7 @@ function nameProblem(name: string): string | undefined {
   if (RETIRED_LABELS.includes(name)) return 'is a retired alias'
   if (name.startsWith('kind/')) return KINDS.includes(name) ? undefined : 'is not one of the kind labels'
   if (name.startsWith('area/')) return AREA_NAME.test(name) ? undefined : 'is not area/ followed by a lowercase kebab-case name'
-  if (name.startsWith('wave/')) return WAVE_NAME.test(name) ? undefined : 'is not wave/0, wave/1, wave/2 or wave/3'
+  if (name.startsWith('batch/')) return BATCH_NAME.test(name) ? undefined : 'is not batch/0, batch/1, batch/2 or batch/3'
   return PLAIN_LABELS.includes(name) ? undefined : 'is not a label in Delorun\'s label set'
 }
 

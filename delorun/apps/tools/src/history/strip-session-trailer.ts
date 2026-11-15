@@ -1,5 +1,5 @@
 /**
- * History rewrite tool for the one-time removal of `Claude-Session:` trailer lines (A209). It rewrites only the
+ * History rewrite tool for the one-time removal of `Claude-Session:` trailer lines. It rewrites only the
  * commits of a branch that no upstream ref reaches, so upstream's signed commits keep their hashes and the pinned
  * upstream commit stays an ancestor of the new tip. Each rewritten commit is rebuilt from its raw object with only
  * the message changed, so authors, committers, dates, other headers, trees and merge structure carry over exactly.

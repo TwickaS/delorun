@@ -3,7 +3,7 @@
     "Package": "WP0.0 fixture: the work-brief generator's example brief",
     "Size and review": "S; standard review",
     "Model": "Haiku at max effort",
-    "Repository and branch": "delorun-run-wt/issues, branch wave0/issues, base main",
+    "Repository and branch": "delorun-run-wt/issues, branch batch0/issues, base main",
     "Read first": "The root `AGENTS.md`, the contract index `delorun/docs/contracts/README.md`, and the tools README `delorun/apps/tools/README.md`, by path.",
     "Goal": "Show one brief as the issue body that the generator renders.",
     "You own": "`delorun/apps/tools/tests/issues/fixtures/`. Change nothing else; if you must, stop and report.",
@@ -17,7 +17,7 @@
     "Report": "Files changed, the commands run with their results, open questions.",
     "Never": "Push to a shared branch, merge, deploy, contact a live provider, add secrets, or skip a hook.",
     "title": "Fixture: a brief that passes the generator",
-    "labels": ["brief", "area/tools", "wave/0"],
-    "milestone": "Wave 0"
+    "labels": ["brief", "area/tools", "batch/0"],
+    "milestone": "Batch 0"
   }
 ]

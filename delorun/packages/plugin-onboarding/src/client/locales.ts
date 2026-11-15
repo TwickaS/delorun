@@ -312,7 +312,7 @@ export const en = {
 /** A key of the dictionary. */
 export type OnboardingLocaleKey = keyof typeof en
 
-/** Chinese dictionary; its strings still say Delorun until the A309 translation pass. */
+/** Chinese dictionary; its strings still say Delorun until the translation pass. */
 export const zh: Record<OnboardingLocaleKey, string> = {
   'steps': '引导步骤',
   'skip': '跳过',

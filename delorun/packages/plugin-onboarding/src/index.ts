@@ -121,7 +121,7 @@ export function apply(ctx: Context, config: Config): void {
     path: KEY_TEST_PATH,
     methods: ['POST'],
     requestBody: 'buffered',
-    // A380: an approved phone tests keys; the answer names each provider's result, never a key.
+    // An approved phone tests keys; the answer names each provider's result, never a key.
     admitPeer: admitKeyDevice(() => ctx.get('homeAuth')),
     fetch: async () => json(await testKeys(keyTestDeps(ctx, config.keyTestTimeoutMs, config.hiddenProviders))),
   })
@@ -135,7 +135,7 @@ export function apply(ctx: Context, config: Config): void {
     path: RECOMMEND_PATH,
     methods: ['POST'],
     requestBody: 'buffered',
-    // A381: an approved phone reads what the recommended plugins are for; the answer names packages and connections only.
+    // An approved phone reads what the recommended plugins are for; the answer names packages and connections only.
     admitPeer: admitApprovedDevice(),
     fetch: async (request) => {
       let body: unknown

@@ -49,7 +49,7 @@ export const Config: z<Partial<DelegationConsentSettings>, Config> = z.object({
 export const providesDelegationConsent = true
 
 /**
- * The consent's `enabled` field as a switch only the home's own computer turns off (A299). While the plugin is mounted
+ * The consent's `enabled` field as a switch only the home's own computer turns off. While the plugin is mounted
  * it registers the switch with `@delorun/home-auth`, whose reach policy then refuses a device's settings write that could
  * turn it off, unlocked or not; the run time limit and turning it on stay ordinary settings writes.
  */

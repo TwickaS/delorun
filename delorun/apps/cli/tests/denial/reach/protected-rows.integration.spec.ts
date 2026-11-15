@@ -12,7 +12,7 @@
  * - `commands/execute` runs only a command `REACH_DEVICE_COMMANDS` lists, and the list names exactly the commands the
  *   composition registers for a chat.
  * - A settings write that would turn the external-agent consent off is refused through the switch the consent's own
- *   plugin registers (A299), while its run time limit is admitted; the terminal switch (A300) stays off through every
+ *   plugin registers, while its run time limit is admitted; the terminal switch stays off through every
  *   writer the device reaches.
  *
  * Each test's comment names the check whose removal makes that test fail.
@@ -236,7 +236,7 @@ describe('an unlocked device and the computer-only switches', () => {
   it('never turns the external-agent consent off, through the switch the consent\'s own plugin registers', async () => {
     const ns = DELEGATION_CONSENT_ROW
     const off = switchOffRefusal(EXTERNAL_AGENT_CONSENT_SWITCH.label)
-    // Pins the plugin's registration and the policy's read of it (A299).
+    // Pins the plugin's registration and the policy's read of it.
     expect(off).toBe('loopback-required: turning the external-agent consent off')
     await expectDenied('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: false }] }, off)
     await expectDenied('settings/update', { ns, patch: { enabled: false } }, off)

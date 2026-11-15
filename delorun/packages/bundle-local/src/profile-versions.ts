@@ -6,7 +6,7 @@
  *
  * Reading (`list`, `changes`) answers any signed-in studio. Saving and switching answer only a request that arrived on
  * the loopback listener from the studio's own origin: any other request is answered `403` before its body is read, so a
- * reach device can look at versions and cannot change the profile (A299, C14 "Tailnet membership").
+ * reach device can look at versions and cannot change the profile (C14 "Tailnet membership").
  *
  * @module @delorun/bundle-local/profile-versions
  */

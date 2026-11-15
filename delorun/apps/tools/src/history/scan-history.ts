@@ -1,5 +1,5 @@
 /**
- * History scan for the A209 pass: runs the personal-data, secrets and infrastructure gates over every non-merge
+ * History scan for the one-time history rewrite: runs the personal-data, secrets and infrastructure gates over every non-merge
  * commit of a branch that no upstream ref reaches. Personal-data and infrastructure read the lines each commit adds,
  * the personal-data gate also reads each commit's identities and message; the secrets gate scans the union of the
  * distinct blobs the commits add or change. A line upstream's pinned copy holds word for word is upstream's and

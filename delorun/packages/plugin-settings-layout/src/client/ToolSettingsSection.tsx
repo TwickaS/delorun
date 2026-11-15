@@ -1,5 +1,5 @@
 /**
- * Settings → Tools → Tool settings (V4.5 decision K33): every official plugin
+ * Settings → Tools → Tool settings: every official plugin
  * with its own settings page, by its plain name, each opening that page on the
  * Plugins panel and closing Settings. The list is upstream's `plugins.item`
  * ledger, so a tool that gains settings appears without a change here.

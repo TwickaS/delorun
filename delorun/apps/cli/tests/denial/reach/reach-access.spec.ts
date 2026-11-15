@@ -298,7 +298,7 @@ describe('a reach device through the Gateway', () => {
     const namespaces = described.namespaces.map(view => view.ns)
     expect(namespaces.length).toBeGreaterThan(0)
     for (const ns of namespaces) {
-      // A381: the everyday namespaces are written without an unlock; the pairing is pinned in home-auth's reach-access spec.
+      // The everyday namespaces are written without an unlock; the pairing is pinned in home-auth's reach-access spec.
       if (Object.hasOwn(REACH_EVERYDAY_SETTINGS, ns)) {
         // Decided through remote access, not called, so the test writes no setting.
         expect(studio.ctx.remoteAccess.decide({ principal: reachDevicePrincipal(deviceId, LISTENER), action: 'settings/update', resources: [GLOBAL], args: { ns, patch: {} } }), ns).toEqual({ kind: 'allow' })
@@ -313,7 +313,7 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('settings/openSettingsDocument', {})
   })
 
-  it('admits the model key actions (A380) to an approved device', () => {
+  it('admits the model key actions to an approved device', () => {
     // Decided through remote access, not called, so the test saves no key.
     const principal = reachDevicePrincipal(deviceId, LISTENER)
     for (const action of Object.keys(REACH_KEY_ACTIONS)) {
@@ -549,7 +549,7 @@ describe('a reach device and the exact Fetch routes', () => {
     // The routes this rule is about: a file read by path, deliverable actions and change reads.
     expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
     for (const [path, methods] of routes) {
-      // The upload route, the key test (A380), the recommended plugins' purposes (A381) and the branding icon upload (A382) admit an approved device.
+      // The upload route, the key test, the recommended plugins' purposes and the branding icon upload admit an approved device.
       if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.

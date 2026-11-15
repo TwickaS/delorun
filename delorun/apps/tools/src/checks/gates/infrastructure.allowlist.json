@@ -44,87 +44,87 @@
     {
       "path": "delorun/packages/plugin-fetch-guard/src/guard.ts",
       "value": "192.168.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/src/guard.ts",
       "value": "0.0.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "169.254.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "10.0.0.5",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "10.255.255.255",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "172.16.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "172.31.255.255",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "192.168.1.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "fc00::1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "fd12:3456:789a::1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/provider-guard.spec.ts",
       "value": "10.0.0.5",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/provider-guard.spec.ts",
       "value": "10.1.2.3",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/service.spec.ts",
       "value": "10.0.0.5",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these fixtures are the refusal matrix itself, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these fixtures are the refusal matrix itself, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "172.15.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "172.32.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "192.169.0.1",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "10.0.0.9",
-      "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
+      "reason": "The web_fetch guard refuses private, loopback and link-local ranges; these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
     },
     {
       "path": "delorun/packages/plugin-fetch-guard/src/guard.ts",

@@ -205,14 +205,14 @@ describe('the tree pass record', () => {
 
   it('covers a fast-forward of main to the commit that passed on its branch, whatever the branch was called', async () => {
     const root = makeRepo()
-    git(root, ['checkout', '-q', '-b', 'wave0/feature'])
+    git(root, ['checkout', '-q', '-b', 'batch0/feature'])
     writeFileSync(join(root, 'src', 'a.txt'), 'feature\n')
     git(root, ['commit', '-q', '-am', 'feature'])
     const plan = [check('a', PASS), check('boundary', PASS, { history: true })]
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
     git(root, ['checkout', '-q', 'main'])
-    git(root, ['merge', '-q', '--ff-only', 'wave0/feature'])
+    git(root, ['merge', '-q', '--ff-only', 'batch0/feature'])
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
   })
 

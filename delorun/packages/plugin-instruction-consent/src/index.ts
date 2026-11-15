@@ -12,7 +12,7 @@
  * target that is no instruction-layer file never asks.
  *
  * The `@deepseek-ai/dsh-sandbox-policy` session-mode seam's one provider is
- * the full-access consent of `@delorun/plugin-permission-defaults` (A135): this
+ * the full-access consent of `@delorun/plugin-permission-defaults`: this
  * plugin takes no part of that slot, because a guard that refuses no switch
  * would prove nothing the seam's own spec does not already prove.
  *
@@ -161,7 +161,7 @@ export class InstructionConsent extends Service implements WriteConsentService {
  * one into the profile's active directories; off, it registers nothing for
  * them. With both off every write commits exactly as upstream does. The
  * session-mode guard is not this plugin's to provide: its one slot belongs to
- * the full-access consent of `@delorun/plugin-permission-defaults` (A135).
+ * the full-access consent of `@delorun/plugin-permission-defaults`.
  * @param ctx - the plugin context.
  * @param config - the switches, defaulted by the schema above.
  */

@@ -138,7 +138,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delorun-permission-defaults',
     kind: 'added',
-    reason: 'The C16 switch `permission_defaults` on: a new workspace starts on the safer preset, and full access needs one consent per workspace, whose `sandboxModeGuard` is the one provider of that seam (A135); the plugin\'s own default, off, is the parity value.',
+    reason: 'The C16 switch `permission_defaults` on: a new workspace starts on the safer preset, and full access needs one consent per workspace, whose `sandboxModeGuard` is the one provider of that seam; the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the deployment default reaches every new chat and every mode switch is recorded, as upstream records it.' },
   },
   {

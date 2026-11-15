@@ -266,7 +266,7 @@ export function apply(ctx: Context, config: Config): void {
     } catch (error) {
       return protectionUnreadable(action, messageOf(error))
     }
-    // A plugin that is not on yet starts only at the computer, whatever the level (A330); protection decides the rest.
+    // A plugin that is not on yet starts only at the computer, whatever the level; protection decides the rest.
     if (level === 'off' && !startsPlugin(exec, held)) return next()
     if (held === undefined) return atComputer(action)
     if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')

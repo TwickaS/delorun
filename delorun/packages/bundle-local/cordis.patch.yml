@@ -128,7 +128,7 @@
 # without asking. The Loader starts rows concurrently, so row order does not
 # order their startup: an mcp-client row waits for the `delorun-mcp-consent` row,
 # which declares itself the `mcpAddConsent` provider, before it starts a stdio
-# server. `permission_defaults` alone provides the sandbox-mode guard (A135):
+# server. `permission_defaults` alone provides the sandbox-mode guard:
 # `instruction-consent` takes no part of that slot.
 - insert:
     - id: delorun-instruction-consent

@@ -263,7 +263,7 @@ describe('admitUnlockedDevice', () => {
   })
 })
 
-describe('admitKeyDevice (A380)', () => {
+describe('admitKeyDevice', () => {
   const principal = { kind: 'reach-device', deviceId: 'device-1', listener: LISTENER }
   const admits = (service: ReturnType<typeof home> | undefined, who: object): boolean => admitKeyDevice(() => service)({} as never, { principal: who as never })
 

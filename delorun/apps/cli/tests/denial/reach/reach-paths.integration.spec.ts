@@ -118,8 +118,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunOnboarding.cloneStatus': { device: 'refused', reason: 'reports a clone the computer started', refusal: 'LOOPBACK_ONLY' },
   '/api/delorunOnboarding.localModels': { device: 'refused', reason: 'probes this computer\'s loopback model servers (Ollama, LM Studio), which only the computer can add as providers' },
   '/api/delorunOnboarding.readiness': { device: 'refused', reason: 'whether the coding agents are signed in and how far Tailscale is set up serves onboarding at the computer' },
-  '/api/delorunOnboarding.keyTest': { device: 'admitted', reason: 'A380: an approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted' },
-  '/api/delorunOnboarding.recommend': { device: 'admitted', answers: 400, reason: 'A381: an approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only' },
+  '/api/delorunOnboarding.keyTest': { device: 'admitted', reason: 'An approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted' },
+  '/api/delorunOnboarding.recommend': { device: 'admitted', answers: 400, reason: 'An approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only' },
   '/api/delorunBranding.icon': { device: 'admitted', answers: 415, reason: 'an approved phone uploads the Branding icon as it writes any everyday setting; the host checks the bytes (PNG, JPEG or WebP, at most 256 KB, never SVG), and the probe sends none, so the route answers 415 past its admission' },
   '/api/delorunMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/delorunMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
@@ -353,7 +353,7 @@ describe('the routes a signed-in device reaches', () => {
     }
   })
 
-  it('lets an approved phone test model keys (A380) but not an unauthenticated or locked one, and sends no key back', async () => {
+  it('lets an approved phone test model keys but not an unauthenticated or locked one, and sends no key back', async () => {
     const path = '/api/delorunOnboarding.keyTest'
     const fakeKey = 'sk-a380-known-fake-key-0123456789'
     const saved = process.env['DEEPSEEK_API_KEY']

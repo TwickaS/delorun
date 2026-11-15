@@ -76,7 +76,7 @@ export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId
 
 /**
  * Every action a device takes over a reach listener without an unlock, with what it lets the person do from it. The
- * owner's rule for a phone (A297): an approved device is the person, and it can already prompt the agent, so every
+ * owner's rule for a phone: an approved device is the person, and it can already prompt the agent, so every
  * action no riskier than a prompt is allowed. That covers reading chats, workspaces, the redacted settings, the plugins
  * and the files of a chat's own workspace; starting a chat in a known workspace with any preset; replying, stopping a
  * run and answering ordinary prompts; organizing chats and workspaces, the trash included; goals, scheduled follow-ups,
@@ -245,18 +245,18 @@ export const REACH_DANGEROUS_ACTIONS = {
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
 
 /**
- * The actions that add, remove and check a model provider's key from an approved device (A380). Each is allowed to a
+ * The actions that add, remove and check a model provider's key from an approved device. Each is allowed to a
  * device without an unlock and, while PIN mode is on, only to a Peer of an unlocked page; a locked page's Peer is refused
  * with `elevation-required: <action>`. A stored key is never sent to a device: `credentials/describe` answers presence
  * and writability only, and the events name the key, never its value. A call may name only the references the model
  * providers declare ({@link ReachAccessFacts.keyRefs}); any other is refused with {@link UNDECLARED_KEY_REFUSAL}.
  */
 export const REACH_KEY_ACTIONS = {
-  'credentials/describe': 'read whether a provider key is saved, never its value (A380)',
-  'credentials/set': 'save or change a provider key, which the device never reads back (A380)',
-  'credentials/unset': 'remove a saved provider key (A380)',
-  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value (A380)',
-  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value (A380)',
+  'credentials/describe': 'read whether a provider key is saved, never its value',
+  'credentials/set': 'save or change a provider key, which the device never reads back',
+  'credentials/unset': 'remove a saved provider key',
+  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value',
+  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value',
 } as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
 const KEY_SET: ReadonlySet<string> = new Set(Object.keys(REACH_KEY_ACTIONS))
 
@@ -278,7 +278,7 @@ function namesOnlyDeclaredRefs(action: RemoteAccessAction, args: Readonly<Record
 }
 
 /**
- * The settings namespaces an approved device writes without an unlock (A381): the everyday settings the computer's
+ * The settings namespaces an approved device writes without an unlock: the everyday settings the computer's
  * Settings pages change, each with what it holds. A write to any other namespace stays in
  * {@link REACH_ELEVATED_ACTIONS}. The computer-only switches, the protected rows and the default permission still
  * refuse a write to these namespaces first, and an approved device on a locked PIN page writes them as it sends a
@@ -398,7 +398,7 @@ function touchesOnlyEverydayFields(action: RemoteAccessAction, args: Readonly<Re
 
 /**
  * The plugin rows of Delorun's own profile an approved device turns on or off through `pluginManager/setPluginEnabled`
- * without an unlock (A381), by row id: the optional rows onboarding offers. The plugin manager still refuses a
+ * without an unlock, by row id: the optional rows onboarding offers. The plugin manager still refuses a
  * protected row (see {@link PROTECTED_ROW_REFUSAL}).
  */
 export const REACH_SHIPPED_ROWS = {
@@ -408,7 +408,7 @@ export const REACH_SHIPPED_ROWS = {
 
 /**
  * The installed packages an approved device turns on or off through `pluginManager/setBundleEnabled` without an
- * unlock (A381), by package name: the plugins onboarding recommends. Installing a package that is not on the
+ * unlock, by package name: the plugins onboarding recommends. Installing a package that is not on the
  * computer, and removing one, stay unlocked-only.
  */
 export const REACH_SHIPPED_BUNDLES = {
@@ -668,7 +668,7 @@ type ReachCondition = (request: {
 }) => RemoteAccessDecision
 
 /**
- * A boolean setting only the home's own computer turns off, such as the external-agent consent (A299): a device's
+ * A boolean setting only the home's own computer turns off, such as the external-agent consent: a device's
  * settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal `true`. The plugin
  * that owns the field registers it with `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
  */
@@ -970,7 +970,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
  * call an unlock admits with the unlock's id. Every `terminal/*` action needs an unlock, always: no switch, workspace grant or
- * dangerous mode waives it (A345).
+ * dangerous mode waives it.
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a

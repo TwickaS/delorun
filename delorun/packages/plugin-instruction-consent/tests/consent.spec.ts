@@ -244,7 +244,7 @@ describe('the instruction_layer_consent switch', () => {
     try {
       apply(ctx, { enabled: true, approvedPluginWrites: false })
       expect(ctx.get('writeConsent')).toBeInstanceOf(InstructionConsent)
-      // A135: the session-mode seam keeps one provider, the full-access consent
+      // The session-mode seam keeps one provider, the full-access consent
       // of @delorun/plugin-permission-defaults, so this plugin mounts no guard. The
       // seam itself is proven by sandbox-policy's own spec.
       expect(ctx.get('sandboxModeGuard')).toBeUndefined()

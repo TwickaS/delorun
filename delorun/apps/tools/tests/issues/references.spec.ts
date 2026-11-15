@@ -105,7 +105,7 @@ describe('backticked paths', () => {
 
   it('does not treat branch names, commands, labels, scoped package names and identifiers as paths', () => {
     expect(referenceErrors('`node_modules/.bin/tsx`', context)).toEqual([])
-    expect(referenceErrors('`origin/main` and `wave0/issues` and `kind/feature` and `area/tools`', context)).toEqual([])
+    expect(referenceErrors('`origin/main` and `batch0/issues` and `kind/feature` and `area/tools`', context)).toEqual([])
     expect(referenceErrors('`pnpm --filter @delorun/tools check` and `@delorun/tools/src/x.ts`', context)).toEqual([])
     expect(referenceErrors('`ctx.effect()` and `Branded<B>`', context)).toEqual([])
   })

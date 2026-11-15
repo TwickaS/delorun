@@ -16,11 +16,11 @@ function oneEntry(entry: string): string {
 }
 
 describe('the label file', () => {
-  it('parses with no problem, and defines brief, the six kinds, the areas, the waves and the plain labels', () => {
+  it('parses with no problem, and defines brief, the six kinds, the areas, the batches and the plain labels', () => {
     const parsed = parseLabels(LABELS_TEXT)
     expect(parsed.errors).toEqual([])
     const names = parsed.labels.map(label => label.name)
-    expect(names).toEqual(expect.arrayContaining(['brief', 'security', 'upstream-merge', 'parity', 'wave/0', 'wave/1', 'wave/2', 'wave/3']))
+    expect(names).toEqual(expect.arrayContaining(['brief', 'security', 'upstream-merge', 'parity', 'batch/0', 'batch/1', 'batch/2', 'batch/3']))
     expect(names.filter(name => name.startsWith('kind/'))).toEqual([...KINDS])
     expect(names.filter(name => name.startsWith('area/')).length).toBeGreaterThan(0)
   })
@@ -34,15 +34,15 @@ describe('the label file', () => {
     ])
   })
 
-  it('refuses a plain retired alias, an area that is not kebab case, a wave outside 0 to 3, and a label outside the set', () => {
+  it('refuses a plain retired alias, an area that is not kebab case, a batch outside 0 to 3, and a label outside the set', () => {
     expect(parseLabels(oneEntry('name: feature\n  color: "0e8a16"\n  description: "Old alias."')).errors).toEqual([
       `${LABELS_PATH} labels[0] "feature" is a retired alias`,
     ])
     expect(parseLabels(oneEntry('name: area/Web\n  color: "bfdadc"\n  description: "Upper case."')).errors).toEqual([
       `${LABELS_PATH} labels[0] "area/Web" is not area/ followed by a lowercase kebab-case name`,
     ])
-    expect(parseLabels(oneEntry('name: wave/4\n  color: "fef2c0"\n  description: "Too late."')).errors).toEqual([
-      `${LABELS_PATH} labels[0] "wave/4" is not wave/0, wave/1, wave/2 or wave/3`,
+    expect(parseLabels(oneEntry('name: batch/4\n  color: "fef2c0"\n  description: "Too late."')).errors).toEqual([
+      `${LABELS_PATH} labels[0] "batch/4" is not batch/0, batch/1, batch/2 or batch/3`,
     ])
     expect(parseLabels(oneEntry('name: team/core\n  color: "fef2c0"\n  description: "A team."')).errors).toEqual([
       `${LABELS_PATH} labels[0] "team/core" is not a label in Delorun's label set`,

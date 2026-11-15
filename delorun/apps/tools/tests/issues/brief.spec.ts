@@ -21,7 +21,7 @@ const UNTRACKED_DIRECTORIES: ReadonlySet<string> = new Set(['scratch'])
 
 const CONTEXT: BriefContext = {
   ...referenceContext(TRACKED, directory => UNTRACKED_DIRECTORIES.has(directory)),
-  labels: new Set(['brief', 'area/tools', 'area/cli', 'wave/0', 'kind/feature']),
+  labels: new Set(['brief', 'area/tools', 'area/cli', 'batch/0', 'kind/feature']),
 }
 
 const FIXTURE_TEXT = readFileSync(new URL('./fixtures/briefs.valid.json', import.meta.url), 'utf8')

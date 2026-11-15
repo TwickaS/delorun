@@ -246,7 +246,7 @@ describe('issues.ts --create', () => {
     const create = calls.find(call => call[0] === 'issue' && call[1] === 'create')
     expect(create).toEqual([
       'issue', 'create', '--repo', REPOSITORY, '--title', 'New brief', '--body-file', expect.any(String),
-      '--label', 'brief', '--label', 'area/tools', '--label', 'wave/0', '--milestone', 'Wave 0',
+      '--label', 'brief', '--label', 'area/tools', '--label', 'batch/0', '--milestone', 'Batch 0',
     ])
     expect(calls.filter(call => call[1] === 'create')).toHaveLength(1)
     expect(calls.at(-1)).toEqual(['issue', 'lock', '101', '--repo', REPOSITORY])

@@ -1,7 +1,7 @@
 /**
  * The `reach-device` policy over plain facts: what an admitted device is bound to on its listener, the refusal reasons,
  * the unlock that admits an elevated action on one listener only, and the three tables it is built from, each action in
- * the class the owner's rule (A297) gives it. The denial suite under `denial/reach/` decides the same policy through the Gateway.
+ * the class the owner's rule gives it. The denial suite under `denial/reach/` decides the same policy through the Gateway.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -550,7 +550,7 @@ describe('an elevated action', () => {
   })
 })
 
-describe('the model key actions (A380)', () => {
+describe('the model key actions', () => {
   const locked = reachDevicePrincipal('device-1', LISTENER)
   const unlockedPage = { ...locked, unlockId: 'page-1' }
   const KEY_CALLS = [
@@ -578,7 +578,7 @@ describe('the model key actions (A380)', () => {
   })
 })
 
-describe('the references a key action may name (A380)', () => {
+describe('the references a key action may name', () => {
   const condition = createCondition(facts(), reachDevicePrincipal('device-1', LISTENER))
   const deny = { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
 
@@ -628,7 +628,7 @@ describe('the refusal reasons', () => {
   })
 })
 
-/** The owner's classification (A297), stated as families, which every table entry is checked against. */
+/** The owner's classification, stated as families, which every table entry is checked against. */
 const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettingsDocument$/, /^session\/openWorkspacePath$/, /^session\/workspacePathApplications$/]
 const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
@@ -638,7 +638,7 @@ const UNLOCK = [
 ]
 
 /**
- * The class A297 gives an action.
+ * The class the owner's rule gives an action.
  * @param action - the action.
  * @returns its class.
  */
@@ -684,7 +684,7 @@ describe('the tables', () => {
   })
 })
 
-describe('the everyday settings and shipped plugin toggles of an approved device (A381)', () => {
+describe('the everyday settings and shipped plugin toggles of an approved device', () => {
   const approved = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts(overrides), DEVICE)
   const ALLOW = { kind: 'allow' }
   const DENY = (action: string) => ({ kind: 'deny', reason: `elevation-required: ${action}` })
