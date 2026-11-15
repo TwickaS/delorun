@@ -275,3 +275,19 @@ describe('the switch in Settings', () => {
     expect(Config.dict?.enabled.meta.volatile).toBe(true)
   })
 })
+
+describe('who may turn the check off', () => {
+  it('update-check-switch-refuses-devices: the row registers its switch as computer-only, so the reach policy refuses a device that turns it off', async () => {
+    const ctx = new Context()
+    const registered: object[] = []
+    let removed = 0
+    ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
+    ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: object) => { registered.push(target); return () => { removed += 1 } } } as never)
+    await ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false }).await()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(registered).toEqual([{ ns: 'delorun-update-check', field: 'enabled', label: 'the release check' }])
+    expect(registered[0]).toBe(UpdateCheck.UPDATE_CHECK_SWITCH)
+    await ctx.fiber.dispose()
+    expect(removed).toBe(1)
+  })
+})

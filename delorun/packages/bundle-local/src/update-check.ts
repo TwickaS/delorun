@@ -17,7 +17,7 @@ import { Service, type Context, type Fiber, type Volatile } from '@deepseek-ai/c
 // Type-only: the ctx.connection merge.
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { REACH_DEVICE } from '@delorun/home-auth'
+import { REACH_DEVICE, type ComputerOnlySwitch } from '@delorun/home-auth'
 import { readChannelRecord } from '@delorun/install'
 import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateChannelResponse, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
 
@@ -27,6 +27,12 @@ declare module '@deepseek-ai/cordis' {
     delorunUpdateCheck: UpdateCheckService
   }
 }
+
+/**
+ * The release check's switch as the reach policy reads it: a signed-in device, unlocked or not, cannot turn the check off,
+ * as the volatile field would otherwise let it; only the home's own computer does.
+ */
+export const UPDATE_CHECK_SWITCH: ComputerOnlySwitch = Object.freeze({ ns: 'delorun-update-check', field: 'enabled', label: 'the release check' })
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'delorun-update-check'
@@ -201,6 +207,9 @@ export function apply(ctx: Context, config: Config): void {
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
       },
     }), `${name}: the channel route`)
+  })
+  ctx.inject(['homeAuth'], (scope) => {
+    scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(UPDATE_CHECK_SWITCH), `${name}: computer-only switch`)
   })
   let mounted: Fiber | undefined
   const follow = (): void => {
