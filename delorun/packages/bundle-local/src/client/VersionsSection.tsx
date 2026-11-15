@@ -13,6 +13,7 @@ import {
   readSetupChanges, readSetupVersions, saveSetupVersion, switchSetupVersion,
   type VersionChanges, type VersionEntry, type VersionsAnswer,
 } from './versions-api.ts'
+import { groupVersions, settingsEditName } from './version-rows.ts'
 import css from './VersionsSection.module.css'
 
 /** What the plugin supplies the section. */
@@ -144,7 +145,7 @@ function VersionList({ t, fetch, computer, answer, onSwitched }: {
   return <>
     {answer.unsaved ? <p className={css.line}>{t('unsaved')}</p> : null}
     <ul className={css.list}>
-      {answer.versions.map(version => <VersionRow key={version.id} t={t} fetch={fetch} computer={computer} version={version} onSwitched={onSwitched} />)}
+      {groupVersions(answer.versions).map(({ version, count }) => <VersionRow key={version.id} t={t} fetch={fetch} computer={computer} version={version} count={count} onSwitched={onSwitched} />)}
     </ul>
   </>
 }
@@ -157,7 +158,8 @@ function VersionList({ t, fetch, computer, answer, onSwitched }: {
  */
 function titleOf(t: Translate, version: VersionEntry): string {
   if (version.origin === 'saved') return version.name ?? t('version.saved')
-  return version.summary
+  const edited = settingsEditName(version.summary)
+  return edited === undefined ? version.summary : t('version.settings', { name: edited })
 }
 
 /**
@@ -165,8 +167,8 @@ function titleOf(t: Translate, version: VersionEntry): string {
  * @param props - the copy, the request function, where the studio runs, the version and what runs after a switch.
  * @returns the row.
  */
-function VersionRow({ t, fetch, computer, version, onSwitched }: {
-  t: Translate; fetch: HostFetch; computer: boolean; version: VersionEntry; onSwitched: (text: string) => Promise<void>
+function VersionRow({ t, fetch, computer, version, count, onSwitched }: {
+  t: Translate; fetch: HostFetch; computer: boolean; version: VersionEntry; count: number; onSwitched: (text: string) => Promise<void>
 }): ReactNode {
   const [changes, setChanges] = useState<Loaded<VersionChanges> | undefined>()
   const [busy, setBusy] = useState(false)
@@ -200,7 +202,7 @@ function VersionRow({ t, fetch, computer, version, onSwitched }: {
     <div className={css.head}>
       <div className={css.details}>
         <div className={css.title}>{titleOf(t, version)}{version.current ? <span className={css.badge}>{t('current')}</span> : null}</div>
-        <div className={css.description}>{time} · {t(`origin.${version.origin}`)}</div>
+        <div className={css.description}>{time} · {t(`origin.${version.origin}`)}{count > 1 ? ` · ${t('version.repeated', { count: String(count) })}` : ''}</div>
       </div>
       <div className={css.actions}>
         <Button variant="outline" size="sm" aria-expanded={changes !== undefined} onClick={() => { void toggle() }}>

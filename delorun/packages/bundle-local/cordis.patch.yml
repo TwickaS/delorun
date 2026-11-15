@@ -294,6 +294,10 @@
       - '@delorun/home-auth'
       - '@deepseek-ai/dsh-sandbox-local'
       - '@deepseek-ai/dsh-sandbox-policy'
+    # Onboarding writes its progress (done, step, starter chat) on every step; those edits are not setup
+    # versions a person would switch back to.
+    unversionedEntries:
+      - delorun-onboarding
 
 # The plugin install check: before plugin management selects, enables or
 # restores a bundle, it checks the bundle and every package its installation

@@ -107,6 +107,8 @@ export interface Config {
    * carries a `diagnostic` listing those names.
    */
   protectedPlugins?: string[]
+  /** Entry ids whose configuration edits save no profile version, such as a plugin that writes its own progress on every step. */
+  unversionedEntries?: string[]
 }
 
 /** The Fetch route serving images beside bundle detail documents. */
@@ -381,9 +383,12 @@ export class PluginManager extends TypertRemoteService {
     detailFetchTimeoutMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(15000),
     detailNpmFileSources: z.array(z.union(NPM_FILE_SOURCES)).min(1).default([...NPM_FILE_SOURCES]),
     protectedPlugins: z.array(z.string().min(1)).default([]),
+    unversionedEntries: z.array(z.string().min(1)).default([]),
   })
   /** `PROTECTED_PLUGINS` and the configured `protectedPlugins`. */
   private readonly protectedPlugins: ReadonlySet<string>
+  /** The configured `unversionedEntries`. */
+  private readonly unversionedEntries: ReadonlySet<string>
   /** Management bundles remain protected if their files become unreadable. */
   private readonly managementBundles = new Set<string>()
   /**
@@ -417,6 +422,7 @@ export class PluginManager extends TypertRemoteService {
     this.ownerContext = ctx
     this.profile = ctx.profileContext
     this.protectedPlugins = new Set([...PROTECTED_PLUGINS, ...(config as Required<Config>).protectedPlugins])
+    this.unversionedEntries = new Set((config as Required<Config>).unversionedEntries)
     for (const name of this.profile.startedBundles) this.protectsManager(name)
     this.outputBytes = (config as Required<Config>).outputBytes
     this.lockWaitMs = (config as Required<Config>).lockWaitMs
@@ -445,6 +451,7 @@ export class PluginManager extends TypertRemoteService {
     }, 'plugin-manager: package cancellation')
     // A configuration edit, from a settings form or the agent, is a version of its own, named by whoever made it.
     ctx.on('config-editor/edited', ({ entryId }) => {
+      if (this.unversionedEntries.has(entryId)) return
       const task = this.recordEdit(entryId, this.changedBy())
       this.packageOperations.add(task)
       void task.finally(() => { this.packageOperations.delete(task) })

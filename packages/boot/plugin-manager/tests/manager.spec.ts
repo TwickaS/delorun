@@ -2246,6 +2246,14 @@ it('saves a settings edit the configuration editor announces as its own version,
   expect(await manager.history(1)).toMatchObject({ versions: [{ summary: 'Changed the settings of extra-row', changedBy: { kind: 'agent', sessionId: 'session-8' } }] })
 })
 
+it('saves no version for an edit of an entry the configuration lists as unversioned', async () => {
+  const { manager, ctx, dir } = await fixture('live', false, undefined, { unversionedEntries: ['quiet-row'] })
+  writeFileSync(join(dir, 'cordis.patch.yml'), `${readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')}- id: quiet-row\n  config:\n    step: 2\n`)
+  ctx.emit('config-editor/edited', { entryId: 'quiet-row' })
+  await new Promise(resolve => setTimeout(resolve, 200))
+  expect((await manager.history(10) as { versions: { summary: string }[] }).versions.map(entry => entry.summary)).not.toContain('Changed the settings of quiet-row')
+})
+
 it('leaves a settings edit saved when git cannot keep the history', async () => {
   const { manager, ctx } = await fixture('live', false, undefined, { gitCommand: 'dsh-no-such-git' })
   const changed = vi.fn()

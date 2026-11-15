@@ -20,7 +20,7 @@ type Answer = { status: number; body?: unknown } | 'unreachable'
 
 const ID = (letter: string): string => letter.repeat(40)
 const entry = (letter: string, over: Partial<VersionEntry> = {}): VersionEntry =>
-  ({ id: ID(letter), at: Date.UTC(2026, 10, 13, 9, 30), summary: 'Install @me/alpha', origin: 'other', current: false, ...over })
+  ({ id: ID(letter), at: Date.UTC(2026, 10, 13, 9, 30), summary: `Install @me/alpha-${letter}`, origin: 'other', current: false, ...over })
 const NONE: VersionChanges = { plugins: [], bundles: [], exemptions: [], builds: [], patchChanged: false, homePatchChanged: false, lockfileChanged: false, disabled: [], same: true }
 const CHANGED: VersionChanges = {
   ...NONE,
