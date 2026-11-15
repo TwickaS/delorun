@@ -27,7 +27,7 @@ kind: "package-library"
 本包导出源码，与 [`@delorun/settings-controls`](../settings-controls/README.zh.md) 相同。
 
 - **工作室插件**在 `dependencies` 中列出 `@delorun/brand`，并在自己的 `tsdown.config.ts` 中用 `@delorun/brand` 的别名把它内联进浏览器包；只导入标志时，再加 `@delorun/brand/mark` 的别名。`@delorun/bundle-local` 和 `@delorun/plugin-theme` 各示范了一种。
-- **网站和文档**通过各自 tsconfig 的 `paths` 导入 `@brand` 和 `@design/mark`，`@delorun/site-design` 的 `tokens.css` 导入本包的 `tokens.css` 与 `fonts.css`。两个网站都在 Vite 配置和 tsconfig `paths` 中把 `#upstream` 解析到 `src/upstream.web.tsx`。
+- **网站和文档**通过各自 tsconfig 的 `paths` 导入 `@brand` 和 `@design/mark`，`@delorun/site-design` 的 `tokens.css` 导入本包的 `tokens.css` 与 `fonts.css`。网站的链接、注册字段和按钮就是本包的 `Link`、`TextField` 和 `Button`。两个网站都在 Vite 配置和 tsconfig `paths` 中把 `#upstream` 解析到 `src/upstream.web.tsx`。
 
 | 导出 | 内容 |
 | --- | --- |
@@ -65,7 +65,8 @@ kind: "package-library"
 | `ConfirmAction` | `Button` | 带一次行内确认的破坏性操作 |
 | `Link` | 无 | 文字安全的桃色，带下划线 |
 | `Mark` | 无 | 六角插头标志；螺母取文字颜色，插头取 `--dl-accent` |
-| `SettingsCard`、`SettingHeading`、`SettingRow`、`ChoiceGroup`、`TileGroup` | 无 | 设置分区的控件，仅供 studio 使用：它们读取 studio 的 `--dsw-*` 与 `--delorun-space-*` 属性。[`@delorun/settings-controls`](../settings-controls/README.zh.md) 会重新导出它们 |
+| `ChipGroup`、`ThemePicker`、`AccentPicker`、`StudioLookSwitch` | 无 | 芯片单选组（44 px 目标、一个 Tab 停靠点、方向键）以及建立在其上的主题、强调色和 studio 外观选择器，设置 → 外观与新手引导的“外观”步骤共用它们；`@delorun/plugin-theme/controls` 会重新导出它们 |
+| `SettingsCard`、`SettingHeading`、`SettingRow`、`ChoiceGroup`、`RadioList`、`TileGroup` | 无 | 设置分区的控件。它们（以及芯片控件）的 CSS 读取 studio 的 `--dsw-*` 与 `--delorun-space-*` 属性，并带有 `--dl-*` 或像素回退值，因此在 studio 之外也能渲染，网站的包管理器选择器就是如此。`ChoiceGroup` 支持方向键、Home 和 End，以及用于以品牌等宽字体显示的全宽组的 `fill` 和 `mono`。[`@delorun/settings-controls`](../settings-controls/README.zh.md) 会重新导出它们 |
 
 <a id="contract"></a>
 ## 约定
