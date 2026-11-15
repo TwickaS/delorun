@@ -15,12 +15,18 @@ export interface DelorunVersions {
   readonly dsh: string
 }
 
+/** The version an unstamped checkout's CLI package carries; only a release stamps a real one. */
+const UNSTAMPED = '0.0.0'
+
+/** What the pages show for Delorun's version when the harness runs from a source checkout rather than a release. */
+export const SOURCE_BUILD = 'source build'
+
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
 /**
  * Read the versions the harness printed into the page.
  * @param scope - the object holding the page global; `globalThis` by default.
- * @returns both versions, or `undefined` when the page carries none or carries anything other than two version strings.
+ * @returns both versions, with {@link SOURCE_BUILD} for Delorun's when the version is the unstamped `0.0.0`, or `undefined` when the page carries none or carries anything other than two version strings.
  */
 export function readVersions(scope: object = globalThis): DelorunVersions | undefined {
   const value: unknown = Reflect.get(scope, VERSIONS_GLOBAL)
@@ -28,5 +34,5 @@ export function readVersions(scope: object = globalThis): DelorunVersions | unde
   const delorun: unknown = Reflect.get(value, 'delorun')
   const dsh: unknown = Reflect.get(value, 'dsh')
   if (typeof delorun !== 'string' || typeof dsh !== 'string' || !VERSION.test(delorun) || !VERSION.test(dsh)) return undefined
-  return { delorun, dsh }
+  return { delorun: delorun === UNSTAMPED ? SOURCE_BUILD : delorun, dsh }
 }
