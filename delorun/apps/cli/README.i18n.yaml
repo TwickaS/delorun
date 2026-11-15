@@ -4,43 +4,43 @@
 #   pnpm run verify-translation-pairing --write delorun/apps/cli/README.md
 /:
   en: 2f60a20fc2bdd5af
-  zh: 7553b14405a7c832
+  zh: b79bb59bc32fcd6c
 /delorun-cli:
   en: 577872206f2283aa
   zh: b822fae1a98295ad
 /delorun-cli/summary:
   en: 1943af928e78be5f
-  zh: 7d0bfc60669e68bb
+  zh: a15bcd0ae2581276
 /delorun-cli/contents:
   en: cbfa723e5a1b301d
-  zh: 637af744541b8a7d
+  zh: 8194fcee638add02
 /delorun-cli/commands:
   en: 9ade358827de634a
-  zh: 62d15800e643ee7f
+  zh: be7286b793fddce6
 /delorun-cli/the-home:
   en: 847fb2699c2367a2
-  zh: ffde1a214bc0ea26
+  zh: 69f93164a9b24c37
 /delorun-cli/profiles:
   en: 8c0ad048e217b39d
-  zh: 41f17eb61565957a
+  zh: 9471e5fe113de8ca
 /delorun-cli/setup:
-  en: c95e2e2bee241abf
-  zh: 2879e1b52e5f01d4
+  en: ce9c84c8baf9ae22
+  zh: 4cd7d0ea56fb4a97
 /delorun-cli/the-home-process:
   en: 174f51a390bfd947
-  zh: e4c56e512eb62476
+  zh: 1453c4df0b5c4d3c
 /delorun-cli/opening-the-studio:
   en: 3f9e7ccc2550c4d1
-  zh: 380d189bcf7ed9b3
+  zh: c1d8889686fdc5cf
 /delorun-cli/how-delorun-runs-upstream:
   en: d58b27fb03d67575
-  zh: 3ae458e465597da9
+  zh: ad272e827c8cf3d0
 /delorun-cli/extension-points:
   en: 0a6630dc46113852
-  zh: d7ec59fd355f34d9
+  zh: 00c939d7d8d59173
 /delorun-cli/not-implemented:
-  en: 1ac67a46a3cd1671
-  zh: b203631e30db99f4
+  en: 8daced9799d76136
+  zh: 85dca149d8dfa51a
 /delorun-cli/development:
   en: 9f9f61288fc6c407
-  zh: 711e1afa3f1cf103
+  zh: 72fc5ec72f60b481
