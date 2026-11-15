@@ -95,9 +95,10 @@ export interface UpdateCheckSource {
   /**
    * Run one check and record it; a check that fails is recorded as failed and resolves.
    * @param timeoutMs - how long the check may take in all.
+   * @param signal - aborts when the check is detached or the row is switched off; the check then stops its requests and records nothing.
    * @returns the state after it.
    */
-  check(timeoutMs: number): Promise<UpdateCheckState>
+  check(timeoutMs: number, signal: AbortSignal): Promise<UpdateCheckState>
   /**
    * The release notes of the notice's release, as the check verified them.
    * @returns the plain-text notes and the release they belong to, or `undefined` when there are none or the stored file no longer matches what was verified.
@@ -125,7 +126,7 @@ export class UpdateCheckService extends Service {
    * hourly wake that checks when the wall clock shows the interval has passed since the last check, or, after a failed
    * check, one hour, two, four and so on up to the interval. Nothing waits for a check.
    * @param source - the check.
-   * @returns the disposer, which stops the schedule and detaches the source; a check in flight finishes unobserved.
+   * @returns the disposer, which stops the schedule and detaches the source; a check in flight is aborted and its result discarded.
    * @throws {Error} when a source is already attached; one Host runs one check.
    */
   attach(source: UpdateCheckSource): () => void {
@@ -134,6 +135,7 @@ export class UpdateCheckService extends Service {
     const intervalMs = this.config.intervalHours * HOUR_MS
     let timer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
+    const cancelled = new AbortController()
     let checked: number | undefined
     let failures = 0
     const note = (state: UpdateCheckState): void => {
@@ -146,7 +148,7 @@ export class UpdateCheckService extends Service {
     const tick = async (first: boolean): Promise<void> => {
       try {
         if (first) note(await source.read())
-        if (!stopped && due()) note(await source.check(this.config.timeoutSeconds * 1000))
+        if (!stopped && due()) note(await source.check(this.config.timeoutSeconds * 1000, cancelled.signal))
       } catch (error) {
         // The source records its own failures; one that escapes is logged and counts as a failed check.
         this.ctx.logger.warn(`${name}: the update check failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -161,6 +163,7 @@ export class UpdateCheckService extends Service {
     void tick(true)
     const dispose = (): void => {
       stopped = true
+      cancelled.abort()
       if (timer !== undefined) clearTimeout(timer)
       this.source = undefined
     }

@@ -353,6 +353,22 @@ describe('the check', { timeout: 60_000 }, () => {
     }
   })
 
+  it('stops at once when its signal aborts, and records nothing', async () => {
+    const cancel = new AbortController()
+    let started = 0
+    const hanging: typeof globalThis.fetch = (_input, init) => new Promise<Response>((_resolve, reject) => {
+      started++
+      // The channel tries its next host with the same, already aborted signal.
+      if (init?.signal?.aborted === true) reject(new Error('aborted'))
+      init?.signal?.addEventListener('abort', () => { reject(new Error('aborted')) })
+    })
+    const running = checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 600_000, fetch: hanging, signal: cancel.signal })
+    await vi.waitFor(() => { expect(started).toBeGreaterThan(0) })
+    cancel.abort()
+    await running
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+  })
+
   it('update-notice-regressed: refuses a channel that names an older timestamp or an older release than an earlier check verified, and keeps it', async () => {
     const verified = await check()
     await writeUpdateCheck(home, PROFILE, { ...verified, timestamp: 5 })

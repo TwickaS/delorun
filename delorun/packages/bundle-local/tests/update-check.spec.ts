@@ -251,6 +251,25 @@ describe('switching the check off and on again', () => {
   })
 })
 
+describe('a check in flight when the switch turns off', () => {
+  it('is told to stop: its signal aborts when the row is switched off or the check is detached', async () => {
+    const { ctx, fiber } = await mount({ enabled: true, intervalHours: 1 })
+    const signals: AbortSignal[] = []
+    const hanging: UpdateCheckSource = {
+      read: async () => ({}),
+      check: (_timeoutMs, signal) => { signals.push(signal); return new Promise<UpdateCheckState>(() => {}) },
+      notes: async () => undefined,
+    }
+    ctx.inject(['delorunUpdateCheck'], (scope) => { scope.effect(() => scope.delorunUpdateCheck.attach(hanging)) })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(false)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(signals[0]?.aborted).toBe(true)
+  })
+})
+
 describe('the notice route', () => {
   it('serves the attached check\'s notice uncached, and null without one', async () => {
     const { ctx, routes } = await mount({ enabled: true })
