@@ -3054,6 +3054,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers

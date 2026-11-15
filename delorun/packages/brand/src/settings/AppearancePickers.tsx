@@ -1,11 +1,11 @@
 /**
  * The three appearance pickers built on {@link ChipGroup}: the theme with its light and dark swatch, the accent with
  * its dot, and the studio look. Settings → Appearance and onboarding's Look step both render these, with their own text.
- * @module @delorun/plugin-theme/client/controls/pickers
+ * @module @delorun/brand/settings/AppearancePickers
  */
 import type { CSSProperties } from 'react'
 import { ChipGroup } from './ChipGroup.tsx'
-import css from './controls.module.css'
+import css from './ChipGroup.module.css'
 
 /** One scheme of a theme swatch: the page, primary text and the accent, as CSS colours. */
 export interface SwatchColours {

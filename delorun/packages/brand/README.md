@@ -62,7 +62,8 @@ Each is a function component with a documented props interface. "Upstream" means
 | `ConfirmAction` | `Button` | A destructive action with one inline confirmation |
 | `Link` | none | Text-safe peach, underlined |
 | `Mark` | none | The hex mark; the nut takes the text colour and the plug takes `--dl-accent` |
-| `SettingsCard`, `SettingHeading`, `SettingRow`, `ChoiceGroup`, `TileGroup` | none | The Settings sections' controls, for the studio only: they read the studio's `--dsw-*` and `--delorun-space-*` properties. [`@delorun/settings-controls`](../settings-controls/README.md) re-exports them |
+| `ChipGroup`, `ThemePicker`, `AccentPicker`, `StudioLookSwitch` | none | The chip radio group (44 px targets, one tab stop, arrow keys) and the theme, accent and studio-look pickers built on it, which Settings → Appearance and onboarding's Look step share; `@delorun/plugin-theme/controls` re-exports them. They read the studio's `--dsw-*` and `--delorun-space-*` properties |
+| `SettingsCard`, `SettingHeading`, `SettingRow`, `ChoiceGroup`, `RadioList`, `TileGroup` | none | The Settings sections' controls, for the studio only: they read the studio's `--dsw-*` and `--delorun-space-*` properties. [`@delorun/settings-controls`](../settings-controls/README.md) re-exports them |
 
 ## Contract
 

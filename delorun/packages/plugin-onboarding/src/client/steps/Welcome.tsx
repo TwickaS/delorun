@@ -4,7 +4,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { NoticeFace } from '../types.ts'
-import { ChipGroup } from '@delorun/plugin-theme/controls'
+import { ChipGroup } from '@delorun/brand'
 import { Notice } from '../ui/Notice.tsx'
 import type { StepProps } from './shared.ts'
 import css from './steps.module.css'

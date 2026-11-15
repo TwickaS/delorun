@@ -14,8 +14,7 @@ import { FONT_FAMILIES } from '../palette/soft.ts'
 import { STOCK_FONT_STACKS } from '../palette/stock.ts'
 import css from './AppearanceRows.module.css'
 import { useFormWrites, type FormWrites } from './form-writes.ts'
-import { ChoiceGroup, SettingRow, TileGroup } from '@delorun/settings-controls'
-import { StudioLookSwitch } from './controls/index.ts'
+import { ChoiceGroup, SettingRow, StudioLookSwitch, TileGroup } from '@delorun/brand'
 
 /** What the rows read and write. */
 export interface AppearanceRowInjected {

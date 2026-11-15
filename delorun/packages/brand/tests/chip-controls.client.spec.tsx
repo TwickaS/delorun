@@ -2,7 +2,7 @@
 /** The shared appearance chips: one selected state, a single tab stop, radio-group keys, and 44px targets. */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AccentPicker, ChipGroup, StudioLookSwitch, ThemePicker } from '../src/client/controls/index.ts'
+import { AccentPicker, ChipGroup, StudioLookSwitch, ThemePicker } from '../src/index.ts'
 
 afterEach(cleanup)
 

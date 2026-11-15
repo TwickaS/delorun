@@ -1,7 +1,7 @@
 /**
  * The Appearance section, one card headed "Colours": the colour scheme and
  * the theme (Soft or one of Delorun's themes), the accent with a custom colour, and contrast on a slider. The choices
- * are the shared chips of `./controls`, which onboarding's Look step also renders.
+ * are the shared chips of `@delorun/brand`, which onboarding's Look step also renders.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -12,9 +12,8 @@ import { previewColors } from '../palette/layers.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
-import { cardCss, SettingHeading, SettingsCard } from '@delorun/settings-controls'
+import { AccentPicker, cardCss, ChipGroup, SettingHeading, SettingsCard, ThemePicker } from '@delorun/brand'
 import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
-import { AccentPicker, ChipGroup, ThemePicker } from './controls/index.ts'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
 export type SchemePreference = 'light' | 'dark' | 'system'

@@ -27,3 +27,8 @@ export { cardCss, SettingHeading, SettingsCard, type SettingsCardProps } from '.
 export { RadioList, type RadioListProps, type RadioRow } from './settings/RadioList.tsx'
 export { SettingRow, type SettingRowProps } from './settings/SettingRow.tsx'
 export { TileGroup, type Tile, type TileGroupProps } from './settings/TileGroup.tsx'
+export { ChipGroup, type ChipGroupProps, type ChipOption } from './settings/ChipGroup.tsx'
+export {
+  AccentPicker, StudioLookSwitch, ThemePicker,
+  type AccentChoice, type AccentPickerProps, type StudioLook, type StudioLookSwitchProps, type SwatchColours, type ThemeChoice, type ThemePickerProps,
+} from './settings/AppearancePickers.tsx'

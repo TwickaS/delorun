@@ -2,11 +2,11 @@
  * The chip radio group every appearance choice shares (theme, accent, studio look, colour scheme): one chip style, one
  * selected state, 44px touch targets and radio-group keyboard behaviour. The chips take their text and decoration as
  * props, so the group runs in Settings and in onboarding without either one's dictionaries.
- * @module @delorun/plugin-theme/client/controls/ChipGroup
+ * @module @delorun/brand/settings/ChipGroup
  */
 import { useId } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import css from './controls.module.css'
+import css from './ChipGroup.module.css'
 
 /** One chip of a {@link ChipGroup}. */
 export interface ChipOption<Value extends string> {

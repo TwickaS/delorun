@@ -1,10 +1,9 @@
 /**
- * The appearance controls Settings → Appearance and onboarding's Look step share. This entry imports nothing from the
- * studio, so a browser bundle can inline it.
+ * The appearance controls Settings → Appearance and onboarding's Look step share. They live in `@delorun/brand`, which
+ * is their one source; this entry re-exports them so an importer of `@delorun/plugin-theme/controls` keeps working.
  * @module @delorun/plugin-theme/client/controls
  */
-export { ChipGroup, type ChipGroupProps, type ChipOption } from './ChipGroup.tsx'
 export {
-  AccentPicker, StudioLookSwitch, ThemePicker,
-  type AccentChoice, type AccentPickerProps, type StudioLook, type StudioLookSwitchProps, type SwatchColours, type ThemeChoice, type ThemePickerProps,
-} from './pickers.tsx'
+  AccentPicker, ChipGroup, StudioLookSwitch, ThemePicker,
+  type AccentChoice, type AccentPickerProps, type ChipGroupProps, type ChipOption, type StudioLook, type StudioLookSwitchProps, type SwatchColours, type ThemeChoice, type ThemePickerProps,
+} from '@delorun/brand'
