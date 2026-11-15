@@ -96,14 +96,10 @@ export class EdgeController {
       body.appendChild(strip)
       this.strips.push(strip)
     }
-    // One theme-color tag carries the top colour; the page's own, which may be per colour scheme, are set aside.
-    for (const meta of doc.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-      this.removed.push({ meta, parent: meta.parentNode as Node, next: meta.nextSibling })
-      meta.remove()
-    }
     this.ownThemeColor = doc.createElement('meta')
     this.ownThemeColor.name = 'theme-color'
     this.ownThemeColor.setAttribute(EDGE_ATTRIBUTE, 'theme-color')
+    this.claimThemeColor()
     doc.head.appendChild(this.ownThemeColor)
     const refresh = (): void => { this.refresh() }
     const listen = (target: EventTarget | null | undefined, type: string): void => {
@@ -118,8 +114,18 @@ export class EdgeController {
     this.refresh()
   }
 
+  /** Set aside every other theme-color tag, such as the page's per-scheme ones or the theme service's, so the one carrying the top colour is the only one. */
+  private claimThemeColor(): void {
+    for (const meta of this.doc.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      if (meta === this.ownThemeColor) continue
+      this.removed.push({ meta, parent: meta.parentNode as Node, next: meta.nextSibling })
+      meta.remove()
+    }
+  }
+
   /** Read the tokens again and apply the colours everywhere; call it after a theme, accent or colour-scheme change. */
   refresh(): void {
+    this.claimThemeColor()
     const style = this.win.getComputedStyle(this.doc.body)
     const phone = this.win.innerWidth <= PHONE_WIDTH
     const colours = edgeColours(token => style.getPropertyValue(token).trim(), phone)
@@ -136,7 +142,7 @@ export class EdgeController {
     for (const stop of this.listeners) stop()
     this.listeners.length = 0
     // The set-aside tags go back before the nodes this controller added, which some of them may precede.
-    for (const { meta, parent, next } of this.removed) parent.insertBefore(meta, next)
+    for (const { meta, parent, next } of this.removed) parent.insertBefore(meta, next?.parentNode === parent ? next : null)
     for (const strip of this.strips) strip.remove()
     this.sheet.remove()
     this.ownThemeColor.remove()
