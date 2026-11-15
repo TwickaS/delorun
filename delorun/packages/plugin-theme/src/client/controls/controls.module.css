@@ -24,7 +24,7 @@
 
 .chips {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--chip-min, 112px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--delorun-chip-min, 152px), 1fr));
   gap: var(--delorun-space-4);
 }
 
