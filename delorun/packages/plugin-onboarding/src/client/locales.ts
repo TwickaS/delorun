@@ -35,7 +35,7 @@ export const en = {
   'providers.none': 'No model provider can connect with a key here.',
   'providers.found': 'Key found',
   'providers.connect': 'Connect {n} →',
-  'providers.skip': 'Skip for now',
+  'providers.skip': 'Skip',
   'providers.skipOne': 'Skip',
   'providers.next': 'Next',
   'providers.place': '{k} of {n}',
