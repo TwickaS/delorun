@@ -11,7 +11,7 @@ import css from './SettingsSection.module.css'
 import rowCss from './SettingsRow.module.css'
 
 /** The switches the section shows, in screen order. */
-export const PRIVACY_OPT_INS = ['sessionLog', 'analytics'] as const
+export const PRIVACY_OPT_INS = ['sessionLog'] as const
 
 /** One switch of {@link PRIVACY_OPT_INS}. */
 export type PrivacyOptInId = (typeof PRIVACY_OPT_INS)[number]

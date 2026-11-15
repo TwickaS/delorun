@@ -4,7 +4,7 @@
 export const en = {
   'nav': 'Network',
   'title': 'Network',
-  'intro': 'Choose which hosts each workspace\'s sandboxed commands and web_fetch can reach. Commands that run with full access run outside the sandbox and are not limited, and neither are plugins or MCP servers.',
+  'intro': 'Choose which hosts each workspace\'s sandboxed commands and the web fetch tool can reach. Commands that run with full access run outside the sandbox and are not limited, and neither are plugins or MCP servers.',
   'unavailable': 'The network setting is not available in this profile.',
   'loopback': 'The network setting can be read and changed only in the studio on the home\'s own computer.',
   'loopbackUnlock': 'Dangerous mode is on: unlock this device to read and change the network setting here.',

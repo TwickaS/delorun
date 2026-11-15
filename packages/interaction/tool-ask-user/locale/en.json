@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Ask-user tool"
+    "title": "Ask-user tool",
+    "description": "Lets the agent ask you a question and wait for your answer."
   }
 }

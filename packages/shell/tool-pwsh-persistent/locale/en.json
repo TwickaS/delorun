@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Persistent PowerShell tool (Windows)"
+    "title": "Persistent PowerShell tool (Windows)",
+    "description": "Lets the agent keep a PowerShell terminal open across steps (Windows)."
   }
 }

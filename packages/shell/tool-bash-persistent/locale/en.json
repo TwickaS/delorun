@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Persistent Bash tool"
+    "title": "Persistent Bash tool",
+    "description": "Lets the agent keep a Bash terminal open across steps."
   }
 }

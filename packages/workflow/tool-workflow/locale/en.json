@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Workflow tool"
+    "title": "Workflow tool",
+    "description": "Lets the agent run a multi-step script that coordinates several agents."
   }
 }

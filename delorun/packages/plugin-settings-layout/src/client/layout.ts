@@ -9,7 +9,7 @@
  */
 import {
   IconAgentPresetOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
-  IconGlobeOutlineMedium, IconInfoOutlineMedium, IconInspectOutlineMedium, IconNewChatOutlineMedium, IconPanelLeftOutlineMedium,
+  IconEyeOutlineMedium, IconGlobeOutlineMedium, IconInfoOutlineMedium, IconNewChatOutlineMedium, IconPanelLeftOutlineMedium,
   IconSettingsOutlineMedium, IconShieldOutlineMedium, IconSlidersTwoOutlineMedium, IconSparkleMedium, IconUserOutlineMedium,
   IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -34,6 +34,7 @@ export const SECTIONS = {
   network: 'delorun-network',
   privacy: 'delorun-privacy',
   devices: 'delorun-devices',
+  pinMode: 'delorun-pin-mode',
   trash: 'delorun-trash',
   setupVersions: 'delorun-setup-versions',
   changes: 'delorun-changes',
@@ -101,8 +102,8 @@ export function delorunSettingsLayout(
   const item = (name: ItemName): SettingsLayoutItem => ({
     id: ITEMS[name], label: text(`item.${name}`), keywords: text(`item.${name}.keywords`),
   })
-  const card = (id: string, heading: SettingsLayoutLocaleKey, names: readonly ItemName[]) =>
-    ({ kind: 'items', id, heading: text(heading), items: names.map(item) }) as const
+  const card = (id: string, heading: SettingsLayoutLocaleKey | undefined, names: readonly ItemName[]) =>
+    ({ kind: 'items', id, ...heading === undefined ? {} : { heading: text(heading) }, items: names.map(item) }) as const
   const section = (id: string) => ({ kind: 'section', id }) as const
   const placed = new Set<string>(Object.values(SECTIONS))
   const pluginGroups = plugins.map((plugin): SettingsLayoutGroup => ({
@@ -119,10 +120,10 @@ export function delorunSettingsLayout(
           {
             id: 'studio-general', label: text('page.general'), icon: IconSettingsOutlineMedium, keywords: text('page.general.keywords'),
             blocks: [
-              card('language', 'card.language', ['language']),
+              card('language', undefined, ['language']),
               card('look', 'card.look', ['look']),
               card('updates', 'card.updates', ['updateCheck', 'versions']),
-              card('shortcuts', 'card.shortcuts', ['shortcuts']),
+              card('shortcuts', undefined, ['shortcuts']),
               card('getting-started', 'card.gettingStarted', ['onboarding']),
               card('advanced', 'card.advanced', ['developerTools']),
             ],
@@ -185,9 +186,11 @@ export function delorunSettingsLayout(
             blocks: [section(SECTIONS.network)],
           },
           {
-            id: 'privacy', label: text('page.privacy'), icon: IconInspectOutlineMedium, keywords: text('page.privacy.keywords'),
+            id: 'privacy', label: text('page.privacy'), icon: IconEyeOutlineMedium, keywords: text('page.privacy.keywords'),
             blocks: [section(SECTIONS.privacy)],
           },
+          // No icon here: the PIN mode section registers its own lock under its id.
+          { id: SECTIONS.pinMode, label: text('page.pinMode'), keywords: text('page.pinMode.keywords'), blocks: [section(SECTIONS.pinMode)] },
         ],
       },
       {

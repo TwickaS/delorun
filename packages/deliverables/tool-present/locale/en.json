@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Present tool"
+    "title": "Present tool",
+    "description": "Lets the agent hand you finished files from the workspace."
   }
 }

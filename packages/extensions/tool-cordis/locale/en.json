@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Plugin editing tool"
+    "title": "Plugin editing tool",
+    "description": "Lets the agent look up how Delorun plugins work while it writes or edits one."
   }
 }

@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "PowerShell tool (Windows)"
+    "title": "PowerShell tool (Windows)",
+    "description": "Lets the agent run PowerShell commands (Windows)."
   }
 }

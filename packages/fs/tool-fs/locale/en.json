@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "File tools"
+    "title": "File tools",
+    "description": "Lets the agent read, write and edit files in your workspace."
   }
 }

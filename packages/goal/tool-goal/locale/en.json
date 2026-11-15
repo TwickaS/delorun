@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Goal tool"
+    "title": "Goal tool",
+    "description": "Lets the agent keep a goal for the chat and report when it is done."
   }
 }

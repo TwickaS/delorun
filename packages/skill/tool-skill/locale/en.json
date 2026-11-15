@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Skill tool"
+    "title": "Skill tool",
+    "description": "Lets the agent load a skill when a task calls for one."
   }
 }

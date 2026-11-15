@@ -43,6 +43,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 // Type-only: the 'sidebar.brand.mark' and 'sidebar.brand.name' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { PinModeIcon } from './PinModeIcon.tsx'
 import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SETUP_OPT_IN_ROWS, SETUP_UPDATE_CHECK_ROW } from '@delorun/contract-setup-answers'
 import { DelorunBrandMark, DelorunBrandName } from './brand.tsx'
@@ -62,7 +63,7 @@ import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.ts
 import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.tsx'
 import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
-import { overridePluginCopy } from './plugin-copy.ts'
+import { overridePluginCopy, overrideSettingsCopy } from './plugin-copy.ts'
 import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
@@ -355,6 +356,7 @@ export function apply(ctx: Context): void {
   ctx.provide('delorunNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DelorunNoticeService)
   ctx.effect(() => overrideTitle(ctx.locale), 'delorun-privacy: the product name as the document title')
   ctx.effect(() => overridePluginCopy(ctx.locale), 'delorun-privacy: Delorun\'s name in the Add plugin dialog')
+  ctx.effect(() => overrideSettingsCopy(ctx.locale), 'delorun-privacy: Delorun\'s wording on the Agent presets, Plugins, Chat and Permissions settings pages')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, DelorunBrandMark)
@@ -540,6 +542,7 @@ export function apply(ctx: Context): void {
   }, VersionsSection))
   // A link glyph stands in for a device glyph, which the icon library lacks; without this Settings draws the generic gear.
   ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineMedium))
+  ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: PIN_MODE_SECTION_ID }, PinModeIcon))
   applyRemoteNotice(ctx)
   applyTrustBadge(ctx, trustApi(browserFetch))
   applyConsents(ctx, browserFetch)

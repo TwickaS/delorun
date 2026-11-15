@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Subagent tool"
+    "title": "Subagent tool",
+    "description": "Lets the agent hand part of a task to a helper agent."
   }
 }

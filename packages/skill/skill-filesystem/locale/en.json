@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Skills from files"
+    "title": "Skills from files",
+    "description": "Finds skills stored as files on your computer for the agent to use."
   }
 }

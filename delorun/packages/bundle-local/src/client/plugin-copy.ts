@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 
 import { PLUGIN_COPY, PLUGIN_MANAGER_NS } from './plugin-copy-text.ts'
+import { SETTINGS_COPY } from './settings-copy-text.ts'
 
 export { PLUGIN_COPY, PLUGIN_MANAGER_NS }
 
@@ -16,5 +17,15 @@ export { PLUGIN_COPY, PLUGIN_MANAGER_NS }
  */
 export function overridePluginCopy(locale: Context['locale']): () => void {
   const removers = Object.entries(PLUGIN_COPY).map(([id, copy]) => locale.override(PLUGIN_MANAGER_NS, id, copy))
+  return () => { for (const remove of removers) remove() }
+}
+
+/**
+ * Override Delorun's English wording for the Agent presets, Plugins, Chat and Permissions settings pages.
+ * @param locale - the locale service.
+ * @returns the disposer, which removes every override.
+ */
+export function overrideSettingsCopy(locale: Context['locale']): () => void {
+  const removers = SETTINGS_COPY.map(layer => locale.override(layer.ns, 'en', layer.en))
   return () => { for (const remove of removers) remove() }
 }

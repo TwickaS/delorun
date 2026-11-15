@@ -2605,6 +2605,150 @@
       "class": "delorun-feature",
       "feature": "device-key-privacy",
       "reason": "Write-only keys for approved devices (A380): `credentials/describe` leaves out `masked`, which carries the key's prefix, suffix and length, for any caller that is not the owner; the owner's page keeps its view."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx",
+      "class": "delorun-feature",
+      "feature": "settings-plain-copy",
+      "reason": "Settings \u2192 Modes shows the preset id on custom modes only; the ids of the built-in modes (standard, ptc, cordis) mean nothing to a person."
+    },
+    {
+      "path": "packages/context/agent-instructions/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/deliverables/tool-present/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/experimental/deepseek-chat-import/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/experimental/session-search/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/experimental/session-titles-bundle/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/extensions/tool-cordis/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/fs/tool-fs/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/goal/tool-goal/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/interaction/tool-ask-user/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/jobs/tool-jobs/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/preset/persona/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-bash-persistent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-bash/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-pwsh-persistent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/skill/skill-filesystem/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/skill/tool-skill/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/subagent/tool-subagent-control/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/todo/tool-todo/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/web/tool-web/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/workflow/tool-workflow/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     }
   ],
   "retired": []

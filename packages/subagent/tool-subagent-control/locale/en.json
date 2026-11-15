@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Subagent control tools"
+    "title": "Subagent control tools",
+    "description": "Lets the agent message, interrupt and list the helper agents it started."
   }
 }

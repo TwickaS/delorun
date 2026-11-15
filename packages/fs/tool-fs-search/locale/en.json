@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "File search tools"
+    "title": "File search tools",
+    "description": "Lets the agent find files by name and search inside them."
   }
 }

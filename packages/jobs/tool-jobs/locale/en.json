@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Background job tools"
+    "title": "Background job tools",
+    "description": "Lets the agent check on, read the output of and stop commands running in the background."
   }
 }

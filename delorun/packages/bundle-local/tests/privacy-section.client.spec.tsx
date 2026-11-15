@@ -88,21 +88,21 @@ function renderUpdateCheck(status: ConfigFormSnapshot<OptInSettings>['status'] =
 const switchOf = (name: string): HTMLElement => screen.getByRole('switch', { name })
 
 describe('the Privacy section', () => {
-  it('opens with one sentence, shows the two opt-ins off under their heading, states how feedback is sent, and leaves the release check to General and the npm mirror to Plugins', () => {
+  it('opens with one sentence, shows the session-log opt-in off under its heading and no analytics row, states how feedback is sent, and leaves the release check to General and the npm mirror to Plugins', () => {
     renderSection()
     expect(screen.getByText(en.intro)).toBeTruthy()
     const group = screen.getByRole('region', { name: en['sharing.heading'] })
     expect(within(group).getByText(en['statement.feedback'])).toBeTruthy()
     expect(within(group).getByRole('switch', { name: en['sessionLog.title'] }).getAttribute('aria-checked')).toBe('false')
-    expect(switchOf(en['analytics.title']).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('switch', { name: en['analytics.title'] })).toBeNull()
+    expect(screen.queryByText(en['analytics.unavailable'])).toBeNull()
     for (const key of ['statement.delorun', 'statement.optIns', 'statement.updateCheck', 'updateCheck.title', 'npmMirror.title'] as const) expect(screen.queryByText(en[key])).toBeNull()
-    expect(screen.queryAllByRole('switch')).toHaveLength(2)
+    expect(screen.queryAllByRole('switch')).toHaveLength(1)
   })
 
   it.each([
-    { id: 'sessionLog', other: 'analytics' },
-    { id: 'analytics', other: 'sessionLog' },
-  ] as const)('turns $id on alone after consent and off again from the same screen', async ({ id, other }) => {
+    { id: 'sessionLog' },
+  ] as const)('turns $id on alone after consent and off again from the same screen', async ({ id }) => {
     const forms = renderSection()
     const toggle = switchOf(en[`${id}.title`])
     fireEvent.click(toggle)
@@ -118,14 +118,11 @@ describe('the Privacy section', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
     expect(forms[id].set.mock.calls).toEqual([['enabled', true]])
-    expect(forms[other].set).not.toHaveBeenCalled()
-    expect(switchOf(en[`${other}.title`]).getAttribute('aria-checked')).toBe('false')
     // Turning it off asks nothing.
     fireEvent.click(toggle)
     expect(screen.queryByRole('dialog')).toBeNull()
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
     expect(forms[id].set.mock.calls).toEqual([['enabled', true], ['enabled', false]])
-    expect(forms[other].set).not.toHaveBeenCalled()
   })
 
   it('turns the npm mirror on after consent by writing npmMirror of the install check\'s row, and off at once', async () => {
@@ -147,14 +144,6 @@ describe('the Privacy section', () => {
   it('shows nothing where the profile does not load the plugin install check', () => {
     const { view } = renderInstalls('unavailable')
     expect(view.container.textContent).toBe('')
-  })
-
-  it('says why desktop analytics has no switch in a profile that does not serve it', () => {
-    renderSection('unavailable')
-    expect(screen.getByText(en['analytics.unavailable'])).toBeTruthy()
-    expect(screen.queryByText(en['analytics.description'])).toBeNull()
-    expect(screen.queryByRole('switch', { name: en['analytics.title'] })).toBeNull()
-    expect(switchOf(en['sessionLog.title'])).toBeTruthy()
   })
 
   it('writes a switch once while its first write is still crossing the wire', async () => {

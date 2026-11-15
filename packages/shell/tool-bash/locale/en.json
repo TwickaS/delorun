@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Bash tool"
+    "title": "Bash tool",
+    "description": "Lets the agent run Bash commands, with background jobs and approval for riskier ones."
   }
 }

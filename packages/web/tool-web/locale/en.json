@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Web tools"
+    "title": "Web tools",
+    "description": "Lets the agent search the web and fetch pages."
   }
 }

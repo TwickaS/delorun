@@ -40,7 +40,7 @@ describe("Delorun's layout", () => {
     expect(nav.groups.map(group => [group.label, group.pages.map(page => page.label)])).toEqual([
       ['General', ['General', 'Appearance', 'Sidebar', 'Conversation', 'Chat', 'Account']],
       ['Agent', ['Models', 'Modes', 'Tools', 'Plugins']],
-      ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy']],
+      ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy', 'PIN mode']],
       ['Devices', ['Devices']],
       ['Data', ['Trash', 'Setup versions', 'Changes', 'About']],
     ])
@@ -52,7 +52,7 @@ describe("Delorun's layout", () => {
   it('stacks each pane\'s sections and headed cards in the spec\'s order', () => {
     expect(pages(projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS))).toEqual({
       General: [
-        'Language: language', 'Look: delorun-look', 'Updates: delorun-update-check, delorun-versions', 'Keyboard shortcuts: shortcuts',
+        ': language', 'Look: delorun-look', 'Updates: delorun-update-check, delorun-versions', ': shortcuts',
         'Getting started: delorun-onboarding', 'Advanced: developer-tools',
       ],
       Appearance: ['delorun-appearance', 'Text and density: delorun-typeface, font-size, delorun-density'],
@@ -68,6 +68,7 @@ describe("Delorun's layout", () => {
       'External agents': ['delorun-external-agents'],
       Network: ['delorun-network'],
       Privacy: ['delorun-privacy'],
+      'PIN mode': ['delorun-pin-mode'],
       Devices: ['delorun-devices'],
       Trash: ['delorun-trash'],
       'Setup versions': ['delorun-setup-versions'],
@@ -79,16 +80,16 @@ describe("Delorun's layout", () => {
   it('leaves out External agents and Network where their sections are not registered', () => {
     const absent: readonly string[] = [SECTIONS.externalAgents, SECTIONS.network]
     const nav = projectLayout(layout, SECTION_ROWS.filter(row => !absent.includes(row.id)), REGISTERED_ITEMS)
-    expect(nav.groups.find(group => group.id === 'safety')?.pages.map(page => page.label)).toEqual(['Permissions', 'Privacy'])
+    expect(nav.groups.find(group => group.id === 'safety')?.pages.map(page => page.label)).toEqual(['Permissions', 'Privacy', 'PIN mode'])
   })
 
   it('gives every pane a heading of its own and a distinct icon, and leaves Devices and Trash to their sections\' icons', () => {
     const icons = layout.groups.flatMap(group => group.pages.map(page => page.icon))
     const drawn = icons.filter(icon => icon !== undefined)
     expect(new Set(drawn).size).toBe(drawn.length)
-    expect(layout.groups.flatMap(group => group.pages.filter(page => page.icon === undefined).map(page => page.id))).toEqual([SECTIONS.devices, SECTIONS.trash])
+    expect(layout.groups.flatMap(group => group.pages.filter(page => page.icon === undefined).map(page => page.id))).toEqual([SECTIONS.pinMode, SECTIONS.devices, SECTIONS.trash])
     const headings = layout.groups.flatMap(group => group.pages.flatMap(page => page.blocks.flatMap(block => (block.kind === 'items' ? [block.heading?.()] : []))))
-    expect(headings.every(heading => heading !== undefined && /^[A-Z][a-z]/.test(heading))).toBe(true)
+    expect(headings.every(heading => heading === undefined || /^[A-Z][a-z]/.test(heading))).toBe(true)
   })
 
   it('names only ids in its exported lists, and every listed id', () => {

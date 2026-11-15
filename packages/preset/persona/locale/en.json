@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Persona"
+    "title": "Persona",
+    "description": "Gives the agent a short description of who it is working for and where."
   }
 }

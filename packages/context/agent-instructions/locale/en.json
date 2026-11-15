@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "Project instructions"
+    "title": "Project instructions",
+    "description": "Reads AGENTS.md and CLAUDE.md files in your workspace so the agent follows your project instructions."
   }
 }

@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "To-do list tool"
+    "title": "To-do list tool",
+    "description": "Lets the agent keep a to-do list for the task it is working on."
   }
 }
