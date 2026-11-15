@@ -32,7 +32,6 @@ import { HeroHeadline, HeroWordmark } from './brand.tsx'
 import { followBrandingInDocument } from './branding-dom.ts'
 import { en as brandingEn, zh as brandingZh, type BrandingLocaleKey } from './branding-locales.ts'
 import { publishBranding } from './branding-store.ts'
-import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
 import { en as pickerEn, zh as pickerZh, type IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
 import { SidebarBrandMark, SidebarBrandName } from './SidebarBrand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
@@ -109,8 +108,8 @@ export const SECTION_ID = 'delorun-appearance'
 /** Its place in Settings: right after General (0). */
 export const SECTION_ORDER = 1
 
-/** The Branding section's id, dictionary namespace and place, after Appearance and before Conversation. */
-export const BRANDING = { id: 'delorun-branding', ns: 'settings.delorunBranding', order: 1.5 } as const
+/** The Branding block's dictionary namespace; the block sits in the Appearance section, after the colours. */
+export const BRANDING = { ns: 'settings.delorunBranding' } as const
 
 /** The Conversation section's id, its dictionary namespace and its place, after Appearance. */
 export const CONVERSATION = { id: 'delorun-conversation', ns: 'settings.delorunConversation', order: 2 } as const
@@ -252,10 +251,11 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
   const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
-  const brandingT = ctx.locale.bind(BRANDING.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
   const appearance: AppearanceInjected = {
     settings: form,
+    brandingT: ctx.locale.bind(BRANDING.ns),
+    pickerT: ctx.locale.bind(PICKER_NS),
     scheme: {
       get: () => ctx.theme.getTheme().preference as SchemePreference,
       subscribe: listener => ctx.on('theme/change', () => { listener() }),
@@ -271,7 +271,6 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     [STUDIO_ROWS.density, DensityRow],
     [STUDIO_ROWS.effortLabels, EffortLabelsRow],
   ]
-  const branding: BrandingInjected = { settings: form, pickerT: ctx.locale.bind(PICKER_NS) }
   publishBranding(initial.branding)
   controller.update(initial)
   const edges = new EdgeController(document, window)
@@ -291,9 +290,6 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     }, ConversationSection))),
     ctx.locale.register(BRANDING.ns, { en: brandingEn, zh: brandingZh }),
     ctx.locale.register(PICKER_NS, { en: pickerEn, zh: pickerZh }),
-    ctx.slots.inject('settings.section', () => ctx.slots.register({
-      name: 'settings.section', id: BRANDING.id, order: BRANDING.order, label: () => brandingT('nav'), locale: BRANDING.ns, inject: () => branding,
-    }, BrandingSection)),
     // Priority -2 shadows the Delorun bundle's own brand occupants, which register at -1.
     ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -2 }, SidebarBrandMark)),
     ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -2 }, SidebarBrandName)),

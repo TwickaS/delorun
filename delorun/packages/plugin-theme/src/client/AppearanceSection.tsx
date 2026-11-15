@@ -10,9 +10,11 @@ import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors } from '../palette/layers.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
+import type { BrandingLocaleKey } from './branding-locales.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
 import { cardCss, SettingHeading, SettingsCard } from '@delorun/settings-controls'
+import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
 import { AccentPicker, ChipGroup, ThemePicker } from './controls/index.ts'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
@@ -22,6 +24,10 @@ export type SchemePreference = 'light' | 'dark' | 'system'
 export interface AppearanceInjected {
   /** The theme settings, stored by the host half. */
   readonly settings: ConfigForm<ThemeSettings>
+  /** The Branding block's translate function. */
+  readonly brandingT: (key: BrandingLocaleKey) => string
+  /** The icon picker's translate function. */
+  readonly pickerT: BrandingInjected['pickerT']
   /** Upstream's colour-scheme preference. */
   readonly scheme: {
     /** @returns the current preference. */
@@ -116,6 +122,7 @@ export function AppearanceSection({ t, settings, scheme }: AppearanceSectionProp
   const customColour = parseHex(current.customAccent) === undefined ? DEFAULT_SETTINGS.customAccent : current.customAccent
 
   return (
+    <>
     <SettingsCard id="delorun-appearance-colours" title={t('colours')} className={css.section}>
       <section className={cardCss.block}>
         <SettingHeading id="delorun-appearance-mode" title={t('mode')} lead={t('mode.lead')} />
@@ -171,5 +178,7 @@ export function AppearanceSection({ t, settings, scheme }: AppearanceSectionProp
 
       {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
     </SettingsCard>
+    <BrandingSection t={brandingT} settings={settings} pickerT={pickerT} />
+    </>
   )
 }

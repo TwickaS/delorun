@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BOOT_SETTINGS_GLOBAL } from '../src/boot-settings.ts'
 import { DEFAULT_SETTINGS, THEME_ROW_ID } from '../src/config.ts'
 import {
-  apply, BRAND_NS, BRANDING, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE, STUDIO_ROWS,
+  apply, BRAND_NS, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE, STUDIO_ROWS,
 } from '../src/client/index.ts'
 import { en as brandEn, zh as brandZh } from '../src/client/brand-locales.ts'
 import { bootStyle } from '../src/palette/layers.ts'
@@ -161,7 +161,7 @@ describe('with the studio additions on', () => {
     expect(document.head.querySelector(`style[data-plugin-css="${PLUGIN_ID}/fonts.css"]`)).not.toBeNull()
     expect(faces()?.textContent).toContain("[data-effort-levels='3']")
     expect(faces()?.textContent).toContain('[data-composer-card]:has([data-composer-input]:focus-visible)')
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', 'sidebar.brand.mark', 'sidebar.brand.name', BRANDING.id, CONVERSATION.id, SECTION_ID, ...ROW_IDS].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', 'sidebar.brand.mark', 'sidebar.brand.name', CONVERSATION.id, SECTION_ID, ...ROW_IDS].sort())
     expect(slots.get(SECTION_ID)?.options).toMatchObject({ name: 'settings.section', order: 1, locale: NS })
     expect(Object.values(STUDIO_ROWS).map(row => slots.get(row.id)?.options)).toEqual(Object.values(STUDIO_ROWS).map(row => expect.objectContaining({ name: 'settings.general.item', id: row.id, order: row.order, locale: NS })))
     expect(slots.get(CONVERSATION.id)?.options).toMatchObject({ order: 2, locale: CONVERSATION.ns })
@@ -184,7 +184,7 @@ describe('with the studio additions on', () => {
 
   it('leaves the Conversation section out while the Host does not serve upstream\'s chat settings', async () => {
     const { slots, fiber } = await mount(themeForm(STUDIO_ON), [])
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', 'sidebar.brand.mark', 'sidebar.brand.name', BRANDING.id, SECTION_ID, ...ROW_IDS].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', 'sidebar.brand.mark', 'sidebar.brand.name', SECTION_ID, ...ROW_IDS].sort())
     await fiber.dispose()
   })
 
