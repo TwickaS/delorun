@@ -62,6 +62,9 @@ async function sandbox(config: Config = {}): Promise<LocalSandboxProvider> {
   return ctx.sandbox as LocalSandboxProvider
 }
 
+/** The host's own network, with the abstract-socket risk accepted, so the host's sockets do not decide these specs. */
+const HOST: SandboxNetwork = { mode: 'host', abstractSockets: 'accepted' }
+
 /** Run a Node program confined, without blocking this process's listeners. */
 async function runConfined(program: string, network: SandboxNetwork | undefined, input = '', config: Config = {}): Promise<{ status: number | null; stdout: string; stderr: string }> {
   const confined = await (await sandbox(config)).confine([process.execPath, '-e', program], { mode: 'read-only', workspaceRoot: '/', ...network === undefined ? {} : { network } })
@@ -85,7 +88,7 @@ function connectProgram(host: string, port: number): string {
 describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap network rules', () => {
   it('an `off` command cannot reach the host\'s loopback listener, which the same command reaches without a rule', async () => {
     const port = await lineServer('127.0.0.1')
-    expect((await runConfined(connectProgram('127.0.0.1', port), undefined)).stdout).toBe('reached\n')
+    expect((await runConfined(connectProgram('127.0.0.1', port), HOST)).stdout).toBe('reached\n')
     const off = await runConfined(connectProgram('127.0.0.1', port), { mode: 'off' })
     expect(off.stdout).toBe('error ECONNREFUSED\n')
   })
@@ -93,7 +96,7 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap network rules', () => {
   it.skipIf(outsideAddress === undefined)('an `off` command cannot reach an address outside loopback, which the same command reaches without a rule', async () => {
     const address = outsideAddress as string
     const port = await lineServer(address)
-    expect((await runConfined(connectProgram(address, port), undefined)).stdout).toBe('reached\n')
+    expect((await runConfined(connectProgram(address, port), HOST)).stdout).toBe('reached\n')
     const off = await runConfined(connectProgram(address, port), { mode: 'off' })
     expect(off.stdout).toMatch(/^error (ENETUNREACH|EHOSTUNREACH|EACCES)\n$/u)
   })

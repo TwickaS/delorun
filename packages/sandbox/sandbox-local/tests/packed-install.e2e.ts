@@ -114,7 +114,7 @@ describe.skipIf(!packable)('sandbox-local: packed-tarball distribution (publish-
       const ctx = new Context()
       await ctx.plugin(LocalSandboxProvider, {})
       const sandbox = ctx.sandbox
-      sandbox.internals = { probeBwrap: () => false }
+      sandbox.internals = { probeBwrap: () => false, readUnixSockets: () => '' }
       const launcher = launcherPath()
       const probe = spawnSync(launcher, ['--probe'], { encoding: 'utf8', timeout: 5000 })
       const out = { launcher, launcherExists: existsSync(launcher), enforcing: probe.status === 0 }

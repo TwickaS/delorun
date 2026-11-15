@@ -36,7 +36,7 @@ async function setup(config: Config = {}, internals: LocalSandboxProvider['inter
   await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
   // Whether this host offers vsock decides bwrap's filter; each spec states it, the host does not.
-  sandbox.internals = { vsockOffered: () => false, ...internals }
+  sandbox.internals = { vsockOffered: () => false, readUnixSockets: () => '', ...internals }
   return { ctx, sandbox }
 }
 

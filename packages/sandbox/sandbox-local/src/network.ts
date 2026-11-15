@@ -123,11 +123,11 @@ export function bridgedArgv(socket: string, argv: readonly string[], node: strin
 /**
  * The bwrap arguments that confine one execution's network: a network namespace of its own, and under `proxy` the
  * proxy environment. The socket's bind is placed by the profile builder, which knows the mounts it must follow.
- * @param network - the policy's network, or `undefined` for the host's network.
+ * @param network - the policy's network, or `undefined` or the `host` form for the host's network.
  * @returns the arguments, none for the host's network.
  */
 export function bwrapNetworkArgs(network: SandboxNetwork | undefined): string[] {
-  if (network === undefined) return []
+  if (network === undefined || network.mode === 'host') return []
   const args = ['--unshare-net']
   if (network.mode === 'proxy') {
     for (const [name, value] of Object.entries(PROXY_ENVIRONMENT)) args.push('--setenv', name, value)
@@ -141,7 +141,7 @@ export function bwrapNetworkArgs(network: SandboxNetwork | undefined): string[] 
  * @param network - the requested network.
  * @returns the refusal's detail.
  */
-export function networkRefusal(runner: LocalSandboxRunner, network: SandboxNetwork): string {
+export function networkRefusal(runner: LocalSandboxRunner, network: Exclude<SandboxNetwork, { readonly mode: 'host' }>): string {
   const wanted = network.mode === 'off' ? 'no network' : 'network through a proxy only'
   const fix = runner === 'windows-acl'
     ? 'the Windows sandbox has no per-command network rule'

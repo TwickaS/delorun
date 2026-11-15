@@ -57,7 +57,7 @@ async function provider(config: Config = {}): Promise<LocalSandboxProvider> {
   ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
-  sandbox.internals = { probeBwrap: () => false }
+  sandbox.internals = { probeBwrap: () => false, readUnixSockets: () => '' }
   return sandbox
 }
 

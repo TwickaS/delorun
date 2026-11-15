@@ -52,6 +52,8 @@ import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
 import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
 import { vsockOffered, withSeccompFilter } from './seccomp.ts'
+import { checkAbstractSockets, refuseAbstractSockets } from './abstract-sockets.ts'
+import type { AbstractSocketCheck } from './abstract-sockets.ts'
 import { BRIDGE_DIAGNOSTIC, RUNNER_NETWORK, bridgedArgv, networkRefusal } from './network.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
@@ -277,6 +279,8 @@ export interface SandboxInternals {
   platform?: string
   /** Replaces the platform's chain wholesale (walk mechanics — e.g. probing a rung the product chains only reach unprobed). */
   chain?: readonly SelectedRunner['runner'][]
+  /** Replaces the read of `/proc/net/unix`, whose abstract listeners a wrap on the host's network refuses or reports. */
+  readUnixSockets?: () => string
   /** Replaces the check whether the kernel offers virtual-machine sockets, which decides bwrap's seccomp filter. */
   vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
@@ -541,6 +545,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly toolReadable: readonly string[]
   /** The configured {@link Config.escapeSocketDirectories}, checked for existence at every wrap. */
   private readonly escapeSocketDirectories: readonly string[]
+  /** The last accepted abstract-socket finding that was logged. */
+  private lastAcceptedSockets: string | undefined
   /** Cached chain verdict; undefined until the first confined wrap needs it. */
   private selectedRunner: SelectedRunner | 'unavailable' | undefined
   /** The chain walk's `bwrap` probe verdict, which the Landlock escape refusal's advice names; undefined when unprobed. */
@@ -645,7 +651,9 @@ export class LocalSandboxProvider extends SandboxProvider {
    *   `SANDBOX_UNAVAILABLE` error when the platform has no usable runner,
    *   `HOME_IN_WRITABLE_ROOT` when a writable root overlaps the protected home, and
    *   `SANDBOX_UNSUPPORTED_POLICY` when the policy restricts the network on a runner that cannot
-   *   ({@link RUNNER_NETWORK}).
+   *   ({@link RUNNER_NETWORK}), or when it shares the host's network, the risk is not accepted, and an abstract Unix
+   *   socket listens on the host or `/proc/net/unix` cannot be read (Linux runners). Where the risk is accepted and
+   *   such a socket exists, the wrap runs with `partial` enforcement.
    */
   async confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv> {
     signal?.throwIfAborted()
@@ -659,9 +667,10 @@ export class LocalSandboxProvider extends SandboxProvider {
     const command = policy.network?.mode === 'proxy' ? bridgedArgv(policy.network.socket, argv) : [...argv]
     const bridgeRules: readonly RunnerFailureRule[] = policy.network?.mode === 'proxy' ? [{ fatalSignatures: [BRIDGE_DIAGNOSTIC] }] : []
     if (this.runnerCommand !== undefined) {
+      const open = (this.internals.platform ?? process.platform) === 'linux' && this.hostNetworkOpen(policy)
       return Promise.resolve<ConfinedArgv>({
         argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, this.restricted(policy, protection)), '--', ...command],
-        enforcement: 'full',
+        enforcement: open ? 'partial' : 'full',
         denialSignatures: DENIAL_SIGNATURES.runnerCommand,
         runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }, ...bridgeRules],
       })
@@ -675,16 +684,17 @@ export class LocalSandboxProvider extends SandboxProvider {
         : ''
       throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here${advice}`)
     }
-    if (policy.network !== undefined && !RUNNER_NETWORK[selected.runner]) {
+    if (policy.network !== undefined && policy.network.mode !== 'host' && !RUNNER_NETWORK[selected.runner]) {
       throw new SandboxUnsupportedPolicyError(networkRefusal(selected.runner, policy.network))
     }
+    const open = (selected.runner === 'bwrap' || selected.runner === 'landlock') && this.hostNetworkOpen(policy)
     const profileArgv = this.runnerArgv(selected.runner, policy, this.restricted(policy, protection))
     // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.
     const filtered = selected.runner === 'bwrap' && (escape !== undefined || (this.internals.vsockOffered ?? vsockOffered)())
     const runnerArgv = filtered ? withSeccompFilter(profileArgv) : profileArgv
     return Promise.resolve<ConfinedArgv>({
       argv: [...runnerArgv, '--', ...command],
-      enforcement: selected.enforcement,
+      enforcement: open ? 'partial' : selected.enforcement,
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
       runnerFailureRules: [...RUNNER_FAILURE_RULES[selected.runner], ...bridgeRules],
     })
@@ -698,7 +708,35 @@ export class LocalSandboxProvider extends SandboxProvider {
    * @returns the protection to express.
    */
   private restricted(policy: SandboxPolicy, protection: Protection): Protection {
-    return policy.network === undefined ? protection : resolveProtection(this.networkProtection)
+    return policy.network === undefined || policy.network.mode === 'host' ? protection : resolveProtection(this.networkProtection)
+  }
+
+  /**
+   * The abstract-socket check of a wrap that shares the host's network namespace. Without an accepted risk, a
+   * listening abstract Unix socket, or a table that cannot be read, refuses the wrap; with it, the wrap runs, and the
+   * sockets are logged and the wrap's enforcement is `partial`.
+   * @param policy - the policy being wrapped.
+   * @returns whether the command runs with an abstract socket reachable or unchecked, which weakens the sandbox.
+   * @throws {SandboxUnsupportedPolicyError} when the risk is not accepted and the check finds a socket or cannot read.
+   */
+  private hostNetworkOpen(policy: SandboxPolicy): boolean {
+    if (policy.network !== undefined && policy.network.mode !== 'host') return false
+    const check = checkAbstractSockets(this.internals.readUnixSockets)
+    if (policy.network === undefined) {
+      refuseAbstractSockets(check)
+      return false
+    }
+    if (check.kind === 'names' && check.names.length === 0) return false
+    this.warnAcceptedSockets(check)
+    return true
+  }
+
+  /** Log an accepted abstract-socket gap once for each distinct finding, not at every wrap. */
+  private warnAcceptedSockets(check: AbstractSocketCheck): void {
+    const finding = check.kind === 'names' ? `abstract Unix sockets ${check.names.join(', ')}` : `an unreadable socket table (${check.reason})`
+    if (finding === this.lastAcceptedSockets) return
+    this.lastAcceptedSockets = finding
+    this.ctx.logger.warn(`sandbox-local: a command runs on the host's network with the risk accepted, so it can reach ${finding}; the sandbox does not cover them`)
   }
 
   /** The selected rung's runner invocation (program + profile arguments) for one policy and protection. */

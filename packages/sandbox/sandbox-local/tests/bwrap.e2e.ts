@@ -67,7 +67,10 @@ async function provider(config: Config = {}): Promise<LocalSandboxProvider> {
   await ctx?.fiber.dispose()
   ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, config)
-  return ctx.sandbox as LocalSandboxProvider
+  const sandbox = ctx.sandbox as LocalSandboxProvider
+  // The host's own abstract sockets must not decide these specs; abstract-sockets.e2e.ts covers the check itself.
+  sandbox.internals = { readUnixSockets: () => '' }
+  return sandbox
 }
 
 /** Confine a shell command under `policy` and run it for real; returns the spawn result and the wrap's facts. */

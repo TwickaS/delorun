@@ -44,7 +44,7 @@ async function sandboxOutcome(ctx: Context, signal: AbortSignal): Promise<Doctor
   const confined = await sandbox.confine(['true'], { ...policy, mode }, signal)
   return confined.enforcement === 'full'
     ? { status: 'pass', detail: `Commands are confined in full under ${mode}.` }
-    : { status: 'warn', detail: `This machine enforces ${mode} only in part, such as on a kernel with an older Landlock ABI; a newer kernel enforces it in full.` }
+    : { status: 'warn', detail: `This machine enforces ${mode} only in part, such as on a kernel with an older Landlock ABI (a newer kernel enforces it in full) or on the host's network with the abstract-socket risk accepted.` }
 }
 
 /**

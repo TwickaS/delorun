@@ -8918,12 +8918,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    network?: SandboxNetwork;\n    sessionId?: SessionId;\n}',
   },
   {
+    name: 'SandboxHostNetwork',
+    declaration: 'export interface SandboxHostNetwork {\n    readonly mode: \'host\';\n    readonly abstractSockets: \'accepted\';\n}',
+  },
+  {
     name: 'SandboxMode',
     declaration: 'export type SandboxMode = \'read-only\' | \'workspace-write\' | \'danger-full-access\';',
   },
   {
     name: 'SandboxNetwork',
-    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork;',
+    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork | SandboxHostNetwork;',
   },
   {
     name: 'SandboxPolicy',

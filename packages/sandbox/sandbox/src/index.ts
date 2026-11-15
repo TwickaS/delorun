@@ -60,10 +60,25 @@ export type ConfinedSandboxMode = Exclude<SandboxMode, 'danger-full-access'>
  *   outside the sandbox. The runner serves that socket to the command on a loopback port and names the port in the
  *   command's proxy environment variables; a program that ignores them reaches nothing.
  *
+ * - `host`: the host's network, with the risk of abstract Unix sockets accepted ({@link SandboxHostNetwork}).
+ *
  * A runner that cannot express the requested network refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than
  * running the command with the host's network.
  */
-export type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork
+export type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork | SandboxHostNetwork
+
+/**
+ * The `host` form of {@link SandboxNetwork}: the command shares the host's network namespace, and a person has accepted
+ * that abstract Unix sockets of the host stay reachable. A policy without a network also shares the host's namespace,
+ * but a local runner refuses that wrap while the host has a listening abstract socket, because Linux ties abstract
+ * socket names to the network namespace and no mount rule hides them.
+ */
+export interface SandboxHostNetwork {
+  /** Share the host's network namespace. */
+  readonly mode: 'host'
+  /** The person accepted the abstract-socket risk, so the wrap runs and reports the gap as partial enforcement. */
+  readonly abstractSockets: 'accepted'
+}
 
 /** The `proxy` form of {@link SandboxNetwork}. */
 export interface SandboxProxyNetwork {
@@ -97,7 +112,8 @@ export interface SandboxExecutionPolicy {
    */
   additionalWritableRoots?: readonly string[]
   /**
-   * The network this execution may reach. Absent means the host's network, as the runner shares it. Ignored under
+   * The network this execution may reach. Absent means the host's network, as the runner shares it, and a local Linux
+   * runner then refuses the wrap while a host abstract Unix socket listens. Ignored under
    * `danger-full-access`, which bypasses confinement.
    */
   network?: SandboxNetwork

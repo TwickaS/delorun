@@ -33,7 +33,7 @@ async function provider(config: Config = {}, internals: LocalSandboxProvider['in
   const ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
-  sandbox.internals = { vsockOffered: () => false, ...internals }
+  sandbox.internals = { vsockOffered: () => false, readUnixSockets: () => '', ...internals }
   return sandbox
 }
 
