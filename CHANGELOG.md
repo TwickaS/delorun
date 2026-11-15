@@ -87,6 +87,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** Setup's last step no longer tells you to install a version from npm that npm does not have. A launcher built for a local release channel says to install the package file it came from, and the release-check note names that channel's host instead of releases.delorun.com and GitHub.
 - **Fixed:** When remote access is off, setup's last step says how to turn it on later and no longer points to a note that may not have been printed.
 - **Fixed:** Settings → General → Updates, and the dialog that asks before the release check turns on, name the host this installation actually contacts when its launcher was built for another release channel. The production wording is unchanged.
+- **Fixed:** The first setup step no longer lists "DeepSeek Account" among your model providers. Delorun has no DeepSeek account sign-in, so the row could only ever say there was no free test for it. Your own DeepSeek API key is still listed and tested.
 - **Security:** `delorun setup` installs the `delorun` command at the exact version of the launcher you ran, `npm install -g delorun@<version>`, never whatever version npm serves as newest, and offers no install when that version is unknown. `delorun verify` prints the launcher's version with the integrity the signed release lists for it, which you compare with `npm view delorun@<version> dist.integrity` as the Trust page describes.
 
 ### Studio
@@ -135,6 +136,8 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** The guide's option chips are one labelled group you move through with the arrow keys, and its two "Add" buttons have distinct names. The page has a `main` landmark, "Search chats" and the message box show a focus ring, "Reconnecting..." is announced politely, and Escape closes the phone-width sidebar drawer.
 - **Fixed:** The studio you open on the computer that runs it no longer reads "Disconnected" when that computer has no network, such as with Wi-Fi off. It stays connected, because it never needed the network, and it no longer makes a request that only a phone or other device could use, which showed as a failed request in the browser's console.
 - **Fixed:** The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface.
+- **Fixed:** The trust badge in the sidebar no longer reads "Unknown" for a release that verifies. The studio now reads your plugins and your changes when it starts, as `delorun verify` does, so the badge shows what was checked at start until you choose Check now.
+- **Fixed:** The sidebar shows the update notice when a newer release exists, and the Check for new releases switch in Settings works, instead of both staying idle.
 - **Removed:** Delorun's setup no longer offers DeepSeek account sign-in, the account entry in the menu is gone, and so are the account's Usage and Top-up pages. Use your own DeepSeek API key, which Delorun's model settings still accept. The account pages stay in upstream's code and are not reachable from Delorun's default setup.
 
 ### Chats and workspaces
@@ -328,6 +331,18 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A script that changes something through a Host's HTTP API over plain HTTP at an address other than this computer's, such as a name in `trustedHosts` or the address the Host listens on, must send an `Origin` header naming that address, such as `Origin: http://192.0.2.5:3080`; without one the Host answers "forbidden", because a web page could send the same request. Requests on this computer, over HTTPS and from the studio itself are unaffected.
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-rc.3 (2026-11-15)
+
+### Setup
+- **Fixed:** The first setup step no longer lists "DeepSeek Account" among your model providers. Delorun has no DeepSeek account sign-in, so the row could only ever say there was no free test for it. Your own DeepSeek API key is still listed and tested.
+
+### Studio
+- **Fixed:** The trust badge in the sidebar no longer reads "Unknown" for a release that verifies. The studio now reads your plugins and your changes when it starts, as `delorun verify` does, so the badge shows what was checked at start until you choose Check now.
+- **Fixed:** The sidebar shows the update notice when a newer release exists, and the Check for new releases switch in Settings works, instead of both staying idle.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-rc.2 (2026-11-15)
 

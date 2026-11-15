@@ -407,6 +407,11 @@
     },
     {
       "area": "Setup",
+      "section": "Fixed",
+      "text": "The first setup step no longer lists \"DeepSeek Account\" among your model providers. Delorun has no DeepSeek account sign-in, so the row could only ever say there was no free test for it. Your own DeepSeek API key is still listed and tested."
+    },
+    {
+      "area": "Setup",
       "section": "Security",
       "text": "`delorun setup` installs the `delorun` command at the exact version of the launcher you ran, `npm install -g delorun@<version>`, never whatever version npm serves as newest, and offers no install when that version is unknown. `delorun verify` prints the launcher's version with the integrity the signed release lists for it, which you compare with `npm view delorun@<version> dist.integrity` as the Trust page describes."
     },
@@ -634,6 +639,16 @@
       "area": "Studio",
       "section": "Fixed",
       "text": "The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The trust badge in the sidebar no longer reads \"Unknown\" for a release that verifies. The studio now reads your plugins and your changes when it starts, as `delorun verify` does, so the badge shows what was checked at start until you choose Check now."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The sidebar shows the update notice when a newer release exists, and the Check for new releases switch in Settings works, instead of both staying idle."
     },
     {
       "area": "Studio",
@@ -1542,6 +1557,40 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-rc.3",
+      "date": "2026-11-15",
+      "preview": false,
+      "areas": [
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The first setup step no longer lists \"DeepSeek Account\" among your model providers. Delorun has no DeepSeek account sign-in, so the row could only ever say there was no free test for it. Your own DeepSeek API key is still listed and tested."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The trust badge in the sidebar no longer reads \"Unknown\" for a release that verifies. The studio now reads your plugins and your changes when it starts, as `delorun verify` does, so the badge shows what was checked at start until you choose Check now."
+            },
+            {
+              "section": "Fixed",
+              "text": "The sidebar shows the update notice when a newer release exists, and the Check for new releases switch in Settings works, instead of both staying idle."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-rc.2",
       "date": "2026-11-15",
