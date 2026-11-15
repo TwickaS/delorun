@@ -242,6 +242,7 @@ const samePlan = (plan: SectionPlan): Readonly<Record<SetupUseCase, SectionPlan>
 
 /**
  * The statements setup makes about privacy, from the Privacy section's copy.
+ * @param channelOrigin - the recorded channel origin of a launcher built for another release channel; absent for production.
  * @returns one line per statement.
  */
 export function statementLines(channelOrigin?: string): string[] {
