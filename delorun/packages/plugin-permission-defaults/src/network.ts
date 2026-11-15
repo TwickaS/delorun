@@ -23,6 +23,12 @@ export interface WorkspaceNetwork {
   readonly access: NetworkAccess
   /** Normalized host entries ({@link normalizeHostEntry}), sorted and without duplicates. */
   readonly hosts: readonly string[]
+  /**
+   * Under `open` only: the person accepted that abstract Unix sockets of the host (the display server, the session bus)
+   * stay reachable to the workspace's commands, so they run while such a socket listens. Absent, a command on the
+   * host's network is refused while one listens.
+   */
+  readonly acceptAbstractSockets?: true
 }
 
 /** The network a workspace without a setting of its own gets, and every workspace gets in the parity composition. */
@@ -211,8 +217,8 @@ function covers(old: string, entry: string): boolean {
 }
 
 /**
- * Whether a change of a workspace's network reaches anything the old setting did not: a less restrictive access, or
- * under `allowlist` an entry no old entry admits. Such a change needs the person to confirm it; any other change,
+ * Whether a change of a workspace's network reaches anything the old setting did not: a less restrictive access,
+ * accepting the abstract-socket risk under `open`, or under `allowlist` an entry no old entry admits. Such a change needs the person to confirm it; any other change,
  * tightening or keeping the reach, applies at once.
  * @param previous - the setting in effect.
  * @param next - the requested setting.
@@ -221,6 +227,7 @@ function covers(old: string, entry: string): boolean {
 export function loosens(previous: WorkspaceNetwork, next: WorkspaceNetwork): boolean {
   const rank = (access: NetworkAccess): number => NETWORK_ACCESSES.indexOf(access)
   if (rank(next.access) !== rank(previous.access)) return rank(next.access) > rank(previous.access)
+  if (next.access === 'open') return next.acceptAbstractSockets === true && previous.acceptAbstractSockets !== true
   if (next.access !== 'allowlist') return false
   return next.hosts.some(entry => !previous.hosts.some(old => covers(old, entry)))
 }

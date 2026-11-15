@@ -5,7 +5,8 @@
  *
  * A workspace's setting is its entry in the network store ([`./network-store.ts`](./network-store.ts)) or, without
  * one, the deployment's default from the row's configuration. `open` leaves the policy without a network, exactly as
- * stock; `off` asks the sandbox for no network; `allowlist` asks it for the proxy whose list is the workspace's, which
+ * stock, so a local runner refuses a command while a host abstract Unix socket listens, unless the setting accepts that
+ * risk, which makes the policy's network `host`; `off` asks the sandbox for no network; `allowlist` asks it for the proxy whose list is the workspace's, which
  * listens on a socket under the home's `secrets/permission-defaults/proxy/<pid>/` before any policy names it. A store
  * that exists but cannot be read counts every workspace as `off`, so a restriction the person set is never lifted by a
  * damaged file.
@@ -196,7 +197,9 @@ export class CommandNetwork extends Service {
       if (this.problem !== undefined) throw new NetworkChangeError('STORE', `the network store is refused, so no setting is recorded until it is fixed: ${this.problem}`)
       const parsed = next === undefined ? undefined : parseHostList(next.hosts)
       if (parsed !== undefined && 'problem' in parsed) throw new NetworkChangeError('INVALID', parsed.problem)
-      const wanted = next === undefined || parsed === undefined ? this.settings.defaultNetwork : { access: next.access, hosts: parsed.hosts }
+      const wanted: WorkspaceNetwork = next === undefined || parsed === undefined
+        ? this.settings.defaultNetwork
+        : { access: next.access, hosts: parsed.hosts, ...next.access === 'open' && next.acceptAbstractSockets === true ? { acceptAbstractSockets: true } : {} }
       const current = this.networkOf(workspace)
       if (loosens(current, wanted) && !confirmed) {
         throw new NetworkChangeError('UNCONFIRMED', 'this change lets the workspace\'s commands reach more of the network, so the person confirms it first')
@@ -238,7 +241,7 @@ export class CommandNetwork extends Service {
     return (request: SandboxNetworkRequest): SandboxNetwork | undefined => {
       const network = this.networkOf(request.session?.header.cwd ?? request.workspaceRoot)
       switch (network.access) {
-        case 'open': return undefined
+        case 'open': return network.acceptAbstractSockets === true ? { mode: 'host', abstractSockets: 'accepted' } : undefined
         case 'off': return { mode: 'off' }
         case 'allowlist': {
           const listening = this.proxies.get(listKey(network.hosts))
@@ -464,9 +467,10 @@ function changeRequestOf(text: string): { path: string, network: WorkspaceNetwor
   if (typeof path !== 'string' || (confirmed !== undefined && typeof confirmed !== 'boolean')) return undefined
   if (network === undefined) return { path, network: undefined, confirmed: confirmed === true }
   if (typeof network !== 'object' || network === null) return undefined
-  const { access, hosts } = network as Record<string, unknown>
+  const { access, hosts, acceptAbstractSockets } = network as Record<string, unknown>
   if (!isNetworkAccess(access) || !Array.isArray(hosts) || !hosts.every(host => typeof host === 'string')) return undefined
-  return { path, network: { access, hosts }, confirmed: confirmed === true }
+  if (acceptAbstractSockets !== undefined && acceptAbstractSockets !== true && acceptAbstractSockets !== false) return undefined
+  return { path, network: { access, hosts, ...acceptAbstractSockets === true ? { acceptAbstractSockets } : {} }, confirmed: confirmed === true }
 }
 
 /**

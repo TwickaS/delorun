@@ -17,6 +17,8 @@ export interface WorkspaceNetwork {
   readonly access: NetworkAccess
   /** The hosts `allowlist` admits, normalized and sorted by the Host; the other accesses keep them for later. */
   readonly hosts: readonly string[]
+  /** Under `open` only: the person accepted that the host's abstract Unix sockets stay reachable to commands. Absent otherwise. */
+  readonly acceptAbstractSockets?: true
 }
 
 /** One workspace as `GET /api/delorunNetwork.list` names it. */
@@ -73,6 +75,7 @@ export type CommonHostGroup = keyof typeof COMMON_HOSTS
 const isWorkspaceNetwork: Check = fields({
   access: value => (NETWORK_ACCESSES as readonly unknown[]).includes(value),
   hosts: listOf(isString),
+  acceptAbstractSockets: optional(value => value === true),
 })
 const isNetworkList: Check = fields({
   default: isWorkspaceNetwork,
@@ -132,10 +135,10 @@ export function comparableHosts(hosts: readonly string[]): string[] {
  * Whether one setting is the same as another, hosts compared in {@link comparableHosts} form.
  * @param a - one setting.
  * @param b - the other.
- * @returns whether both have the same access and hosts.
+ * @returns whether both have the same access, hosts and abstract-socket acceptance.
  */
 export function sameNetwork(a: WorkspaceNetwork, b: WorkspaceNetwork): boolean {
-  return a.access === b.access && comparableHosts(a.hosts).join('\n') === comparableHosts(b.hosts).join('\n')
+  return a.access === b.access && (a.acceptAbstractSockets === true) === (b.acceptAbstractSockets === true) && comparableHosts(a.hosts).join('\n') === comparableHosts(b.hosts).join('\n')
 }
 
 /**

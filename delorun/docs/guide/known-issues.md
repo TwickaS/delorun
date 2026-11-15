@@ -18,6 +18,7 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 - [The key check](#the-key-check)
 - [Phone-width spacing](#phone-width-spacing)
 - [The right sidebar button on a touch screen](#the-right-sidebar-button-on-a-touch-screen)
+- [Commands refused with an open network](#commands-refused-with-an-open-network)
 - [Installing a plugin](#installing-a-plugin)
 - [Documentation languages](#documentation-languages)
 
@@ -60,6 +61,12 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 **What happens.** On a touch screen, the button that opens the right sidebar has a small tap area, so a tap near its edge can miss.
 
 **What to do.** Tap the centre of the button.
+
+## Commands refused with an open network
+
+**What happens.** On a Linux desktop, commands with open network are refused; set the workspace's network to an allowlist or off, or accept the risk in Settings. The refusal names the sockets (the display server, the session bus) that a command could use to act outside the sandbox. The check runs when a command starts.
+
+**What to do.** In Settings, Safety, Network, choose Allowlist or Off for the workspace. To run the command anyway, switch on **Run commands even when desktop sockets are reachable** beside Open ([Safety](safety.md#the-network-setting)).
 
 ## Installing a plugin
 

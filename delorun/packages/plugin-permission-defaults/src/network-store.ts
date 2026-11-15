@@ -1,7 +1,7 @@
 /**
  * The per-workspace network store: one JSON file beside the permission store in the Delorun home's protected state, at
  * mode 0600, so a confined command can neither read a workspace's allowlist nor widen it. One entry per workspace,
- * keyed by the workspace key ([`./workspace.ts`](./workspace.ts)): its access and its allowlist. A workspace without
+ * keyed by the workspace key ([`./workspace.ts`](./workspace.ts)): its access, its allowlist and, under `open`, whether the abstract-socket risk is accepted. A workspace without
  * an entry has the deployment's default network.
  *
  * Free of Cordis, so the format, its refusals and its file handling are testable without a mounted plugin.
@@ -60,7 +60,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function workspaceNetworkOf(workspace: string, value: unknown): WorkspaceNetwork {
   const named = `the network of the workspace ${JSON.stringify(workspace)}`
   if (!isRecord(value)) throw new NetworkStoreError(`${named} is not an object`)
-  const extra = Object.keys(value).filter(key => key !== 'access' && key !== 'hosts')
+  const extra = Object.keys(value).filter(key => key !== 'access' && key !== 'hosts' && key !== 'acceptAbstractSockets')
   if (extra.length > 0) throw new NetworkStoreError(`${named} sets ${extra.join(', ')}`)
   const access = value['access']
   if (!isNetworkAccess(access)) throw new NetworkStoreError(`${named} does not hold the access off, allowlist or open`)
@@ -68,7 +68,11 @@ function workspaceNetworkOf(workspace: string, value: unknown): WorkspaceNetwork
   if (!Array.isArray(hosts) || !hosts.every(host => typeof host === 'string')) throw new NetworkStoreError(`${named} does not hold a list of hosts`)
   const parsed = parseHostList(hosts)
   if ('problem' in parsed) throw new NetworkStoreError(`${named}: ${parsed.problem}`)
-  return { access, hosts: parsed.hosts }
+  const accepted = value['acceptAbstractSockets']
+  if (accepted === undefined) return { access, hosts: parsed.hosts }
+  if (accepted !== true) throw new NetworkStoreError(`${named} sets acceptAbstractSockets to something other than true`)
+  if (access !== 'open') throw new NetworkStoreError(`${named} accepts the abstract-socket risk, which only the access open can`)
+  return { access, hosts: parsed.hosts, acceptAbstractSockets: true }
 }
 
 /**
@@ -109,7 +113,7 @@ export function serializeNetworkStore(entries: ReadonlyMap<string, WorkspaceNetw
   const workspaces: Record<string, WorkspaceNetwork> = {}
   for (const workspace of [...entries.keys()].sort()) {
     const entry = entries.get(workspace)
-    if (entry !== undefined) workspaces[workspace] = { access: entry.access, hosts: [...entry.hosts] }
+    if (entry !== undefined) workspaces[workspace] = { access: entry.access, hosts: [...entry.hosts], ...entry.acceptAbstractSockets === true ? { acceptAbstractSockets: true } : {} }
   }
   return `${JSON.stringify({ v: NETWORK_STORE_VERSION, workspaces }, null, 2)}\n`
 }

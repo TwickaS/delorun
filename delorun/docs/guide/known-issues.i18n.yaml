@@ -12,8 +12,8 @@
   en: 4cfcd84d83903165
   zh: af888c428bbd00cb
 /known-issues/contents:
-  en: 2b963332cdc04b22
-  zh: 81a8f368ceba98d5
+  en: e5b7b776584bda79
+  zh: 1f2586a253238058
 /known-issues/where-delorun-runs:
   en: 3b558c1809beffab
   zh: 8706ea6cb8937a55
@@ -31,7 +31,10 @@
   zh: 151928ae7e25be02
 /known-issues/the-right-sidebar-button-on-a-touch-screen:
   en: edb2b7836275e6e6
-  zh: 6f0181beb83c8f9c
+  zh: afb0a3d8b414a13e
+/known-issues/commands-refused-with-an-open-network:
+  en: 68f80b5f4a75e8c4
+  zh: 68a7eaa3492dd55a
 /known-issues/installing-a-plugin:
   en: e2725152050aece5
   zh: 144143fff4ccab79

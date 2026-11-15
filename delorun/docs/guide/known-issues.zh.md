@@ -18,6 +18,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 - [密钥检查](#the-key-check)
 - [手机宽度下的间距](#phone-width-spacing)
 - [触摸屏上的右侧边栏按钮](#the-right-sidebar-button-on-a-touch-screen)
+- [开放网络下命令被拒绝](#commands-refused-with-an-open-network)
 - [安装插件](#installing-a-plugin)
 - [文档语言](#documentation-languages)
 
@@ -66,6 +67,13 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 **会发生什么。** 在触摸屏上，打开右侧边栏的按钮点击区域很小，所以点在其边缘附近可能点不中。
 
 **该怎么做。** 点按该按钮的中心。
+
+<a id="commands-refused-with-an-open-network"></a>
+## 开放网络下命令被拒绝
+
+**会发生什么。** 在 Linux 桌面上，网络为开放的命令会被拒绝；请把工作区的网络设为白名单或关闭，或在设置中接受风险。拒绝信息会指出命令可能借以在沙箱之外执行操作的套接字（显示服务器、会话总线）。检查在命令启动时进行。
+
+**该怎么做。** 在“设置”→“安全”→“网络”中，为该工作区选择白名单或关闭。若仍要运行命令，请打开“开放”旁的“即使桌面套接字可被访问也运行命令”（[安全](safety.md#the-network-setting)）。
 
 <a id="installing-a-plugin"></a>
 ## 安装插件

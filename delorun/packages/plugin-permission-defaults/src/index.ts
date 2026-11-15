@@ -189,6 +189,13 @@ export interface Config {
    * A device's settings write, the plugin manager and the model cannot set it: the row is protected.
    */
   readonly fullAccessEverywhere: boolean
+  /**
+   * Whether a workspace without its own setting accepts the abstract-socket risk while {@link network} is `open`.
+   * With the host's network, abstract Unix sockets (the display server, the session bus) stay reachable to a sandboxed
+   * command, and a Linux runner refuses the command while one listens. True runs it anyway, and the sandbox reports
+   * its enforcement as partial. Ignored under `allowlist` and `off`.
+   */
+  readonly acceptAbstractSockets: boolean
 }
 
 /** Validated configuration. The default is the parity value. */
@@ -200,6 +207,7 @@ export const Config: z<Config> = z.object({
   proxyMaxConnections: z.natural().default(256),
   proxyIdleTimeoutMs: z.natural().default(300_000),
   fullAccessEverywhere: z.boolean().default(false),
+  acceptAbstractSockets: z.boolean().default(false),
 })
 
 /** Stable failure code for a full-access consent the person refused, or no channel could carry. */
@@ -1168,7 +1176,7 @@ async function mountServices(ctx: Context, config: Config, hosts: readonly strin
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'permissionDefaults'], (child) => { registerPermissionRoutes(child) })
   await ctx.plugin(CommandNetwork, {
-    defaultNetwork: { access: config.network, hosts },
+    defaultNetwork: { access: config.network, hosts, ...config.network === 'open' && config.acceptAbstractSockets ? { acceptAbstractSockets: true } : {} },
     proxyConnectTimeoutMs: config.proxyConnectTimeoutMs,
     proxyMaxConnections: config.proxyMaxConnections,
     proxyIdleTimeoutMs: config.proxyIdleTimeoutMs,

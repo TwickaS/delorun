@@ -92,6 +92,34 @@ describe('the network a workspace\'s policy carries', () => {
     expect(ctx.sandboxNetwork({ session: session(work), workspaceRoot: work })).toBeUndefined()
   })
 
+  it('carries the host form for an open workspace that accepted the abstract-socket risk, and not for the default alone', async () => {
+    const { ctx, network, work, other } = await mounted()
+    await network.set(work, { access: 'open', hosts: [], acceptAbstractSockets: true }, true)
+    expect(ctx.sandboxNetwork({ workspaceRoot: work })).toEqual({ mode: 'host', abstractSockets: 'accepted' })
+    expect(ctx.sandboxNetwork({ workspaceRoot: other })).toBeUndefined()
+  })
+
+  it('applies a default that accepts the risk to a workspace without its own setting, and only while the default is open', async () => {
+    const { ctx, work } = await mounted({ defaultNetwork: { access: 'open', hosts: [], acceptAbstractSockets: true } })
+    expect(ctx.sandboxNetwork({ workspaceRoot: work })).toEqual({ mode: 'host', abstractSockets: 'accepted' })
+  })
+
+  it('drops the acceptance when a setting is not open, and asks to confirm accepting it', async () => {
+    const { network, work } = await mounted()
+    await expect(network.set(work, { access: 'open', hosts: [], acceptAbstractSockets: true }, false)).rejects.toMatchObject({ code: 'UNCONFIRMED' })
+    expect(network.networkOf(work)).toEqual({ access: 'open', hosts: [] })
+    await network.set(work, { access: 'open', hosts: [], acceptAbstractSockets: true }, true)
+    expect(network.networkOf(work)).toEqual({ access: 'open', hosts: [], acceptAbstractSockets: true })
+    expect(await network.set(work, { access: 'off', hosts: [], acceptAbstractSockets: true }, false)).toEqual({ access: 'off', hosts: [] })
+    await network.set(work, { access: 'open', hosts: [], acceptAbstractSockets: true }, true)
+    expect(await network.set(work, { access: 'open', hosts: [] }, false)).toEqual({ access: 'open', hosts: [] })
+  })
+
+  it('reads the acceptance from the store at start', async () => {
+    const { ctx, work } = await mounted({}, paths => serializeNetworkStore(new Map([[paths.work, { access: 'open', hosts: [], acceptAbstractSockets: true }]])))
+    expect(ctx.sandboxNetwork({ workspaceRoot: work })).toEqual({ mode: 'host', abstractSockets: 'accepted' })
+  })
+
   it('carries `off`, and for an allowlist the socket of a proxy that already listens under the home', async () => {
     const { ctx, network, home, work, other } = await mounted()
     await network.set(work, { access: 'off', hosts: [] }, false)
@@ -219,7 +247,9 @@ describe('the routes', () => {
     expect({ status: unconfirmed.status, body: await unconfirmed.json() }).toMatchObject({ status: 409, body: { error: 'NETWORK_UNCONFIRMED' } })
     expect((await set.fetch(post({ path: work, network: { access: 'allowlist', hosts: ['10.0.0.1'] }, confirmed: true }))).status).toBe(422)
     expect((await set.fetch(post({ path: work, confirmed: true }))).status).toBe(200)
-    for (const bad of ['not json', 'null', { path: 1 }, { path: work, confirmed: 'yes' }, { path: work, network: 1 }, { path: work, network: { access: 'x', hosts: [] } }, { path: work, network: { access: 'off', hosts: [1] } }, 'x'.repeat(70_000)]) {
+    expect((await set.fetch(post({ path: work, network: { access: 'open', hosts: [], acceptAbstractSockets: true }, confirmed: true }))).status).toBe(200)
+    expect((await set.fetch(post({ path: work, network: { access: 'open', hosts: [], acceptAbstractSockets: false } }))).status).toBe(200)
+    for (const bad of [{ path: work, network: { access: 'open', hosts: [], acceptAbstractSockets: 'yes' } }, 'not json', 'null', { path: 1 }, { path: work, confirmed: 'yes' }, { path: work, network: 1 }, { path: work, network: { access: 'x', hosts: [] } }, { path: work, network: { access: 'off', hosts: [1] } }, 'x'.repeat(70_000)]) {
       expect((await set.fetch(post(bad))).status).toBe(400)
     }
   })
@@ -311,7 +341,7 @@ describe('the route hook', () => {
 
 describe('the plugin\'s network configuration', () => {
   it('defaults to the parity value and an open network', () => {
-    expect(Config()).toEqual({ enabled: false, fullAccessEverywhere: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
+    expect(Config()).toEqual({ enabled: false, fullAccessEverywhere: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000, acceptAbstractSockets: false })
   })
 
   it('refuses an invalid default allowlist, a zero timeout and a second resolver at load', async () => {

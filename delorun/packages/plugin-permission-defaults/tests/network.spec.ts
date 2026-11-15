@@ -135,6 +135,15 @@ describe('which changes loosen the network', () => {
     expect(loosens(open, off)).toBe(false)
   })
 
+  it('counts accepting the abstract-socket risk under open as loosening, and withdrawing it as not', () => {
+    const accepted: WorkspaceNetwork = { access: 'open', hosts: [], acceptAbstractSockets: true }
+    expect(loosens(open, accepted)).toBe(true)
+    expect(loosens(accepted, open)).toBe(false)
+    expect(loosens(accepted, accepted)).toBe(false)
+    expect(loosens(open, open)).toBe(false)
+    expect(loosens(off, accepted)).toBe(true)
+  })
+
   it('counts an added host the old list did not admit, and nothing else, as loosening', () => {
     expect(loosens(list('a.example'), list('a.example', 'b.example'))).toBe(true)
     expect(loosens(list('a.example', 'b.example'), list('a.example'))).toBe(false)
@@ -208,8 +217,18 @@ describe('the network store', () => {
     ['{"v":1,"workspaces":{"/w":{"access":"closed","hosts":[]}}}', 'access off, allowlist or open'],
     ['{"v":1,"workspaces":{"/w":{"access":"off","hosts":[1]}}}', 'list of hosts'],
     ['{"v":1,"workspaces":{"/w":{"access":"allowlist","hosts":["10.0.0.1"]}}}', 'private address'],
+    ['{"v":1,"workspaces":{"/w":{"access":"open","hosts":[],"acceptAbstractSockets":false}}}', 'something other than true'],
+    ['{"v":1,"workspaces":{"/w":{"access":"off","hosts":[],"acceptAbstractSockets":true}}}', 'only the access open can'],
   ])('refuses %s', (text, reason) => {
     expect(() => parseNetworkStore(text)).toThrow(reason)
+  })
+
+  it('round-trips the abstract-socket acceptance and omits it when absent', () => {
+    const entries = new Map<string, WorkspaceNetwork>([['/a', { access: 'open', hosts: [], acceptAbstractSockets: true }], ['/b', { access: 'open', hosts: [] }]])
+    const text = serializeNetworkStore(entries)
+    expect(text).toContain('"acceptAbstractSockets": true')
+    expect(text.match(/acceptAbstractSockets/gu)).toHaveLength(1)
+    expect(parseNetworkStore(text)).toEqual(entries)
   })
 
   it('refuses a store whose text is not this format through the read', async () => {

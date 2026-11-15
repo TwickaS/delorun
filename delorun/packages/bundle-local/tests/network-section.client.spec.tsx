@@ -154,6 +154,29 @@ describe('the Network section', () => {
     await vi.waitFor(() => { expect(host.count(`GET ${NETWORK_ROUTES.list}`)).toBe(2) })
   })
 
+  it('offers the abstract-socket switch under open only, sends it after the person confirms what it opens, and shows it on when accepted', async () => {
+    const accepted: WorkspaceNetwork = { access: 'open', hosts: [], acceptAbstractSockets: true }
+    const host = fakeHost({
+      [`GET ${NETWORK_ROUTES.list}`]: [LIST, { status: 200, body: { default: OPEN, workspaces: [{ ...ALPHA, network: accepted, own: true }, BETA] } }],
+      [`POST ${NETWORK_ROUTES.set}`]: [UNCONFIRMED, saved(accepted)],
+    })
+    renderSection(host)
+    const alpha = await rowOf('Alpha')
+    const toggle = within(alpha).getByRole('switch', { name: en['abstract.title'] })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
+    expect(within(alpha).queryByRole('switch', { name: en['abstract.title'] })).toBeNull()
+    fireEvent.click(within(alpha).getByRole('tab', { name: en['access.open'] }))
+    fireEvent.click(within(alpha).getByRole('switch', { name: en['abstract.title'] }))
+    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(en['confirm.abstract'].replace('{workspace}', 'Alpha'))).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
+    await vi.waitFor(() => { expect(host.posts()).toHaveLength(2) })
+    expect(host.posts()).toEqual([{ path: ALPHA.path, network: accepted }, { path: ALPHA.path, network: accepted, confirmed: true }])
+    await vi.waitFor(async () => { expect(within(await rowOf('Alpha')).getByRole('switch', { name: en['abstract.title'] }).getAttribute('aria-checked')).toBe('true') })
+  })
+
   it.each([
     { how: 'Cancel', control: en['confirm.cancel'] },
     { how: 'the close button', control: en['confirm.close'] },
@@ -284,6 +307,7 @@ describe('the network requests', () => {
     expect(comparableHosts(['B.example.com', 'a.example.com', 'b.example.com'])).toEqual(['a.example.com', 'b.example.com'])
     expect(sameNetwork({ access: 'allowlist', hosts: ['A.example.com'] }, { access: 'allowlist', hosts: ['a.example.com'] })).toBe(true)
     expect(sameNetwork({ access: 'allowlist', hosts: [] }, { access: 'off', hosts: [] })).toBe(false)
+    expect(sameNetwork({ access: 'open', hosts: [] }, { access: 'open', hosts: [], acceptAbstractSockets: true })).toBe(false)
   })
 
   it('name the hosts an allowlist adds, a wildcard admitting the names below it', () => {

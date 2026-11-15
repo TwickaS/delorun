@@ -50,7 +50,7 @@ On Linux, run `delorun doctor` to see which sandbox your computer runs. Its `san
 
 | Where you run Delorun | What the sandbox enforces |
 | --- | --- |
-| Linux with bubblewrap installed, WSL2 included | Every rule above. It also hides your login session's sockets, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux or screen, or use your ssh-agent, gpg-agent or keyring. Under WSL2 it also stops commands from starting Windows programs. A few sockets stay reachable, such as the X server's on a Linux desktop. |
+| Linux with bubblewrap installed, WSL2 included | Every rule above. It also hides your login session's sockets, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux or screen, or use your ssh-agent, gpg-agent or keyring. Under WSL2 it also stops commands from starting Windows programs. Abstract sockets, such as the X server's and the session bus's on a Linux desktop, are tied to the network, so with the network setting on Open a command is refused while any of them is listening ([The network setting](#the-network-setting)). |
 | Linux without bubblewrap | The write and read rules only. It cannot hide your session's sockets, so on a computer with a desktop or login session Delorun refuses to run commands at all until you install bubblewrap. |
 | Windows | Writes only. Commands can read your Delorun home, its secrets and the token included. |
 
@@ -203,12 +203,15 @@ Delorun asks before each run, at the computer that runs Delorun, whichever promp
 
 ## The network setting
 
-Each workspace has a network setting, **Open**, **Allowlist** or **Off**, that limits which hosts its sandboxed commands and `web_fetch` can reach. It starts on Open, as in DeepSeek Harness, so a fresh install changes nothing until you choose. Choose it in Settings, Safety, Network, at the computer that runs Delorun. Tightening applies at once. Letting a workspace reach more asks you to confirm. [Prompt injection and data exfiltration](prompt-injection.md#the-network-setting) explains what each choice closes and leaves open.
+Each workspace has a network setting, **Open**, **Allowlist** or **Off**, that limits which hosts its sandboxed commands and `web_fetch` can reach. It starts on Open, as in DeepSeek Harness, so a fresh install changes nothing until you choose. Choose it in Settings, Safety, Network, at the computer that runs Delorun. Tightening applies at once. Letting a workspace reach more asks you to confirm.
+
+On Linux, Open also shares your computer's network, where programs such as the display server and the session bus listen on sockets the sandbox cannot hide. A command could use them to act outside the sandbox. So when you run Delorun on a Linux desktop with the workspace on Open, Delorun checks when each command starts and refuses it while any such socket is listening, naming the socket. Choose Allowlist or Off for the workspace, or switch on **Run commands even when desktop sockets are reachable** beside Open in Settings, Safety, Network to run the command anyway. With it on, commands run, the sandbox reports itself as partly confining, and Delorun logs the sockets. The check happens when a command starts, so a socket that starts listening later is not caught. [Prompt injection and data exfiltration](prompt-injection.md#the-network-setting) explains what each choice closes and leaves open.
 
 <details>
 <summary>Edge cases</summary>
 
 - If your sandbox cannot enforce Allowlist or Off (anything but bubblewrap on Linux, WSL2 included), then the workspace's commands are refused rather than run with your network — set it back to Open to run them.
+- If you are on a Linux desktop with Open and a command is refused with a message about abstract Unix sockets, then choose Allowlist or Off for the workspace, or accept the risk with **Run commands even when desktop sockets are reachable**.
 - If the command has full access, then the setting does not apply — it runs outside the sandbox.
 - If the setting's file cannot be read, then every workspace counts as Off and changes are refused — repair or remove the file Settings names.
 - If you are on a phone, then the page cannot be opened — use the computer that runs Delorun.

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal, SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
@@ -56,6 +56,7 @@ export function networkFailureText(t: Translate, error: unknown, dangerous = fal
  * @returns the sentence for any host, for the added hosts, or for more of the network when no added host is known.
  */
 export function looseningText(t: Translate, workspace: string, previous: WorkspaceNetwork, next: WorkspaceNetwork): string {
+  if (next.access === 'open' && next.acceptAbstractSockets === true) return t('confirm.abstract', { workspace })
   if (next.access === 'open') return t('confirm.open', { workspace })
   const added = next.access === 'allowlist' ? addedHosts(previous, next.hosts) : []
   return added.length === 0 ? t('confirm.more', { workspace }) : t('confirm.hosts', { workspace, hosts: added.join(', ') })
@@ -129,12 +130,13 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
 }): ReactNode {
   const [access, setAccess] = useState<NetworkAccess>(workspace.network.access)
   const [hostsText, setHostsText] = useState(workspace.network.hosts.join('\n'))
+  const [accept, setAccept] = useState(workspace.network.acceptAbstractSockets === true)
   const [offering, setOffering] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
   const dangerous = useDangerousMode(fetch)
   const [confirming, setConfirming] = useState<PendingLoosening | undefined>()
-  const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText) }
+  const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText), ...access === 'open' && accept ? { acceptAbstractSockets: true } : {} }
   const id = useId()
 
   const save = async (network: WorkspaceNetwork | undefined, confirmed: boolean): Promise<void> => {
@@ -177,6 +179,13 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
     </div>
     <div className={css.panel} role="tabpanel" id={`${id}-${access}-panel`} aria-labelledby={`${id}-${access}`}>
       <p className={css.description}>{t(`access.${access}.description`)}</p>
+      {access === 'open' ? <div className={css.accept}>
+        <div className={css.details}>
+          <div className={css.title}>{t('abstract.title')}</div>
+          <div className={css.description}>{t('abstract.description')}</div>
+        </div>
+        <Switch checked={accept} label={t('abstract.title')} disabled={locked || busy} onChange={setAccept} />
+      </div> : null}
       {access === 'allowlist' ? <>
         <label className={css.hostsLabel} htmlFor={`${id}-hosts`}>{t('hosts.label', { workspace: workspace.title })}</label>
         <textarea id={`${id}-hosts`} className={css.hosts} rows={5} value={hostsText} disabled={locked || busy}
