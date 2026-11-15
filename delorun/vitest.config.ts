@@ -45,9 +45,16 @@ const INTEGRATION_HOOK_TIMEOUT_MS = 120_000
 
 const SPEC_DIRS = ['apps/*/tests/**', 'packages/*/tests/**']
 
-/** The unit project: `*.spec.ts` specs that start no process; `@design` is the sites' shared design package, as in the docs and website tsconfigs. */
+/** The unit project: `*.spec.ts` specs that start no process; `@design` is the sites' shared design package, and `@brand` is the brand package, as in the docs and website tsconfigs. */
 export const forkUnitProject = {
-  resolve: { alias: { '@design': fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) } },
+  resolve: {
+    alias: [
+      { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
+      { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
+      // The brand package resolves its own React; the website's spec renders it, so both use the website's copy.
+      { find: /^(react|react-dom)(\/.*)?$/, replacement: `${fileURLToPath(new URL('./apps/website/node_modules', import.meta.url))}/$1$2` },
+    ],
+  },
   test: {
     name: 'fork',
     include: SPEC_DIRS.map(dir => `${dir}/*.spec.ts`),

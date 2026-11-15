@@ -333,7 +333,7 @@ function routesOver(listener: string, dangerous = false) {
   const routes = new Map<string, Route>()
   registerMcpConsentRoutes({
     on: (_name: string, registered: typeof hook) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
     connection: { fetch: { register: (route: Route) => { routes.set(route.path, route) } } },
   } as never, consent)
   return {

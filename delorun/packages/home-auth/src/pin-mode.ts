@@ -395,6 +395,18 @@ export class PinModeStore {
   }
 
   /**
+   * Wait until every write queued so far has finished, whether it succeeded or failed.
+   * @returns a promise that settles once the write queue is empty.
+   */
+  async settled(): Promise<void> {
+    let queue: Promise<void>
+    do {
+      queue = this.writes
+      await queue
+    } while (queue !== this.writes)
+  }
+
+  /**
    * Write both files after the writes already queued, with the state as it is when this write runs.
    */
   private persist(): Promise<void> {

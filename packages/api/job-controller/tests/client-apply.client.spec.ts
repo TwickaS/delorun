@@ -30,6 +30,7 @@ async function mount(): Promise<{ ctx: Context; observeCalls: unknown[]; rowsCal
     rpc: { call: () => Promise.reject(new Error('unexpected generic RPC call')) },
     reconnect: () => {},
     registerGenerationSource: () => () => {},
+    registerRequestExtras: () => () => {},
     start: () => ({ stop: () => {} }),
   }
   const job = {

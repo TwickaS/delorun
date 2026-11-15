@@ -359,6 +359,7 @@ async function benchFiber(
     reconnect: () => {},
     rpc,
     registerGenerationSource: generation.register,
+    registerRequestExtras: () => () => {},
     start,
   } satisfies ConnectionHandle)
   const client = ctx.plugin({ inject, apply })
@@ -469,6 +470,7 @@ async function loaderReadinessBench(
     rpc: carrier === 'web' ? { call } : { call, open: () => unexpectedInProcessStream() },
     remoteMedia: 'load',
     registerGenerationSource: generation.register,
+    registerRequestExtras: () => () => {},
     start,
   } satisfies ConnectionHandle)
   ctx.provide('loader', { await: () => readiness })
@@ -616,6 +618,7 @@ describe('Client Remote transport readiness', () => {
         open: () => unexpectedInProcessStream(),
       },
       registerGenerationSource: generation.register,
+      registerRequestExtras: () => () => {},
       start: () => ({ stop: () => {} }),
     }
     const withdraw = ctx.provide('connection', handle)
