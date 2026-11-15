@@ -327,7 +327,7 @@ function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string,
 
 /** An icon field that names a choice: a short word, a named colour or a `#RRGGBB` value, never markup. */
 const ICON_CHOICE = /^[A-Za-z0-9#_-]{1,32}$/
-const ICON_KEYS: ReadonlySet<string> = new Set(['kind', 'letters', 'glyph', 'emoji', 'seed', 'color', 'shape', 'style'])
+const ICON_KEYS: ReadonlySet<string> = new Set(['kind', 'letters', 'glyph', 'emoji', 'seed', 'color', 'shape', 'style']) // us-spelling: quoted output (the wire key)
 const ICON_TEXT_KEYS: ReadonlySet<string> = new Set(['letters', 'emoji'])
 
 /**

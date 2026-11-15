@@ -73,7 +73,7 @@ describe('Settings → Devices writing the pairing section', () => {
   it('refuses the same write from a reach device, under the switches the mounted service registered', () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: 'https://home.example.ts.net' as never, factor: 'tailnet-membership' })
     const policy = createReachAccessPolicy({
-      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: home,
+      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: home, pinEnabled: () => false, keyRefs: () => new Set<string>(),
       elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
       protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false, pageUnlockOf: () => undefined, pinLiftedSettings: () => undefined,
