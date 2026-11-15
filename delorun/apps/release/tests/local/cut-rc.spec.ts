@@ -16,8 +16,10 @@ describe('cut-rc arguments', () => {
     }
   })
 
-  it('refuses a version that is not a release candidate, an unknown platform and an unknown flag', () => {
-    expect(() => parseCutArgs(['--version', '0.1.0', ...BASE.slice(2)])).toThrow('not a release candidate')
+  it('refuses a version that is not a preview or release candidate, an unknown platform and an unknown flag', () => {
+    expect(() => parseCutArgs(['--version', '0.1.0', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-preview.0', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-beta.1', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
     expect(() => parseCutArgs([...BASE, '--platform', 'plan9-x64'])).toThrow('not one of')
     expect(() => parseCutArgs([...BASE, '--artifacts', 'maybe'])).toThrow('build or existing')
     expect(() => parseCutArgs([...BASE, '--nope'])).toThrow()
@@ -36,9 +38,17 @@ describe('cut-rc arguments', () => {
 })
 
 describe('cut-rc plan', () => {
-  it('signs notes from rc.2 and not for rc.1', () => {
+  it('reads previews and release candidates, and names each series in the default summary', () => {
+    const preview = parseCutArgs(['--version', '0.1.0-preview.3', ...BASE.slice(2)])
+    expect(preview).toMatchObject({ kind: 'preview', number: 3, summary: 'Preview 3.', highlights: '/c/notes-0.1.0-preview.3.txt' })
+    expect(parseCutArgs(BASE)).toMatchObject({ kind: 'rc', number: 2 })
+  })
+
+  it('signs notes for every candidate but the first preview', () => {
     expect(signsNotes(parseCutArgs(BASE))).toBe(true)
-    const first = parseCutArgs(['--version', '0.1.0-rc.1', ...BASE.slice(2)])
+    expect(signsNotes(parseCutArgs(['--version', '0.1.0-preview.2', ...BASE.slice(2)]))).toBe(true)
+    expect(signsNotes(parseCutArgs(['--version', '0.1.0-rc.1', ...BASE.slice(2)]))).toBe(true)
+    const first = parseCutArgs(['--version', '0.1.0-preview.1', ...BASE.slice(2)])
     expect(signsNotes(first)).toBe(false)
     expect(localReleaseArgs(first)).not.toContain('--notes')
     expect(localReleaseArgs(parseCutArgs(BASE))).toContain('--notes')

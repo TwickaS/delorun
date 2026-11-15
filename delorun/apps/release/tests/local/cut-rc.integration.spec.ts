@@ -62,17 +62,17 @@ describe('cutting two candidates', () => {
       return outcome.code
     }
 
-    expect(await cut('0.1.0-rc.1', '')).toBe(0)
-    const first = verifyChannel(join(directory, 'channel'), '0.1.0-rc.1', Math.floor(Date.now() / 1000))
+    expect(await cut('0.1.0-preview.1', '')).toBe(0)
+    const first = verifyChannel(join(directory, 'channel'), '0.1.0-preview.1', Math.floor(Date.now() / 1000))
     expect(first.notes).toBeUndefined()
 
-    expect(await cut('0.1.0-rc.2', '\n// rc.2\n')).toBe(0)
-    const second = verifyChannel(join(directory, 'channel'), '0.1.0-rc.2', Math.floor(Date.now() / 1000))
+    expect(await cut('0.1.0-preview.2', '\n// preview.2\n')).toBe(0)
+    const second = verifyChannel(join(directory, 'channel'), '0.1.0-preview.2', Math.floor(Date.now() / 1000))
     expect(second.notes?.toString()).toBe(NOTES)
-    expect(second.others).toEqual(['0.1.0-rc.1'])
+    expect(second.others).toEqual(['0.1.0-preview.1'])
     expect(second.timestampVersion).toBeGreaterThan(first.timestampVersion)
-    expect(existsSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0-rc.2', 'delorun-0.1.0-rc.2.notes.txt'))).toBe(true)
-    expect(readFileSync(join(directory, 'work', 'cut-rc-0.1.0-rc.2.log'), 'utf8')).not.toContain('PRIVATE KEY')
+    expect(existsSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0-preview.2', 'delorun-0.1.0-preview.2.notes.txt'))).toBe(true)
+    expect(readFileSync(join(directory, 'work', 'cut-rc-0.1.0-preview.2.log'), 'utf8')).not.toContain('PRIVATE KEY')
     expect(lines.join('\n')).toContain('signed notes')
   }, 120_000)
 

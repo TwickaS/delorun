@@ -1,16 +1,16 @@
 /**
  * Cuts the next release candidate in one command: checks the tree, assembles the changelog, builds the runtime closure,
  * signs and logs the release into the local channel with `local-release.ts`, and verifies the channel as a client does.
- * See "Cutting a release candidate" in `delorun/apps/release/README.md`.
+ * See "Cutting a preview or release candidate" in `delorun/apps/release/README.md`.
  *
- * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-rc.N> --channel <dir> --state <signer state file> --keys <dir>
+ * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N|0.1.0-rc.N> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
  * [--log-poll-seconds <n>] [--dry-run]`
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
  * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
- * `<work>/notes-<version>.txt`); candidates from rc.2 on sign it into the manifest as `notes`, rc.1 carries none.
+ * `<work>/notes-<version>.txt`); every candidate but the first preview signs it into the manifest as `notes`.
  * `--work` (default: the channel's parent directory) holds the closure, the build cache and `cut-rc-<version>.log`, to
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
  * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
@@ -42,14 +42,16 @@ const REKOR = {
   tiles: 'https://log2025-1.rekor.sigstore.dev/api/v2/',
 } as const
 
-/** A release candidate version and its number. */
-const CANDIDATE = /^(\d+\.\d+\.\d+)-rc\.([1-9]\d*)$/u
+/** A preview or release candidate version: group 1 the core, group 2 `preview` or `rc`, group 3 the number. */
+const CANDIDATE = /^(\d+\.\d+\.\d+)-(preview|rc)\.([1-9]\d*)$/u
 
 /** What the command needs. */
 export interface CutRequest {
-  /** The candidate's version, `<x.y.z>-rc.<n>`. */
+  /** The candidate's version, `<x.y.z>-preview.<n>` or `<x.y.z>-rc.<n>`. */
   readonly version: string
-  /** The candidate's number. */
+  /** Which series the version belongs to. */
+  readonly kind: 'preview' | 'rc'
+  /** The candidate's number within its series. */
   readonly number: number
   /** The channel directory `local-release.ts` writes. */
   readonly channel: string
@@ -118,17 +120,19 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
   }
   const version = required('version')
   const match = CANDIDATE.exec(version)
-  if (match === null) throw new Error(`--version ${version} is not a release candidate such as 0.1.0-rc.2`)
+  if (match === null) throw new Error(`--version ${version} is not a preview or release candidate such as 0.1.0-preview.2 or 0.1.0-rc.2`)
   if (values.artifacts !== 'build' && values.artifacts !== 'existing') throw new Error(`--artifacts is build or existing, not ${values.artifacts}`)
   const platforms = [...new Set(values.platform ?? ['linux-x64'])].map((platform) => {
     if (!(RUNTIME_PLATFORMS as readonly string[]).includes(platform)) throw new Error(`--platform ${platform} is not one of ${RUNTIME_PLATFORMS.join(', ')}`)
     return platform as RuntimePlatform
   })
   const channel = resolve(required('channel'))
-  const number = Number(match[2])
+  const kind = match[2] as 'preview' | 'rc'
+  const number = Number(match[3])
   const work = resolve(values.work ?? dirname(channel))
   return {
     version,
+    kind,
     number,
     channel,
     state: resolve(required('state')),
@@ -136,7 +140,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
     root: resolve(required('root')),
     commit: required('commit'),
     highlights: resolve(values.highlights ?? join(work, `notes-${version}.txt`)),
-    summary: values.summary ?? `Release candidate ${String(number)}.`,
+    summary: values.summary ?? `${kind === 'preview' ? 'Preview' : 'Release candidate'} ${String(number)}.`,
     work,
     closuresFrom: values['closures-from'] === undefined ? undefined : resolve(values['closures-from']),
     artifacts: values.artifacts,
@@ -157,9 +161,9 @@ export interface PlannedStep {
   readonly commands: readonly string[]
 }
 
-/** Whether a candidate signs release notes: rc.2 onward (A360). */
-export function signsNotes(request: Pick<CutRequest, 'number'>): boolean {
-  return request.number >= 2
+/** Whether a candidate signs release notes: every one but the first preview, which has no earlier release to update from. */
+export function signsNotes(request: Pick<CutRequest, 'kind' | 'number'>): boolean {
+  return request.kind === 'rc' || request.number >= 2
 }
 
 /** The closure directory of a candidate. */
@@ -356,7 +360,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   const logFile = join(request.work, `cut-rc-${request.version}.log`)
   const steps = planSteps(request)
   const tsx = join(deps.repository, 'node_modules/.bin/tsx')
-  const previous = `${CANDIDATE.exec(request.version)![1]}-rc.${String(request.number - 1)}`
+  const previous = `${CANDIDATE.exec(request.version)![1]}-${request.kind}.${String(request.number - 1)}`
   /** Run a step's command; true when it exits 0. */
   const command = async (executable: string, args: readonly string[]): Promise<RunResult> => deps.run(executable, args, logFile)
   let stepNumber = 0

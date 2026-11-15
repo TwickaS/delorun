@@ -30,6 +30,11 @@ describe('version order', () => {
     expect([...shuffled].sort(compareVersions)).toEqual(['0.0.9', '0.1.0-preview.1', '0.1.0-preview.2', '0.1.0-preview.10', '0.1.0', '0.1.1', '0.2.0-preview.1'])
   })
 
+  it('orders the public series preview.1, preview.2, rc.1 and then the release', () => {
+    const series = ['0.1.0', '0.1.0-rc.1', '0.1.0-preview.2', '0.1.0-preview.1']
+    expect([...series].sort(compareVersions)).toEqual(['0.1.0-preview.1', '0.1.0-preview.2', '0.1.0-rc.1', '0.1.0'])
+  })
+
   it('orders the pre-release tags alphabetically and finds equal versions equal', () => {
     expect(compareVersions('0.1.0-alpha.3', '0.1.0-beta.1')).toBeLessThan(0)
     expect(compareVersions('0.1.0-rc.1', '0.1.0-preview.9')).toBeGreaterThan(0)

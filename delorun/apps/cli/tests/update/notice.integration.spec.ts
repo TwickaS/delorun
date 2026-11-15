@@ -486,6 +486,8 @@ describe('what the notice says', () => {
     expect(updateKind(semantic('0.1.0'), semantic('0.2.0-rc.1'))).toBe('minor')
     expect(updateKind(semantic('0.1.0'), semantic('0.1.1'))).toBe('patch')
     expect(updateKind(semantic('0.1.0'), semantic('0.1.1-rc.1'))).toBe('patch')
+    expect(updateKind(semantic('0.1.0-preview.1'), semantic('0.1.0-preview.2'))).toBe('patch')
+    expect(updateKind(semantic('0.1.0-preview.2'), semantic('0.1.0-rc.1'))).toBe('patch')
   })
 
   it('shows nothing for a release that is not newer than the running one', async () => {
