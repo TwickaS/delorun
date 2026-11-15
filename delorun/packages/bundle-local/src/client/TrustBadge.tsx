@@ -159,7 +159,7 @@ export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeP
   const button = (
     <button
       type="button"
-      className={wide ? css.badge : css.rail}
+      className={css.badge}
       data-state={badge.state}
       data-tone={badge.tone}
       aria-label={t('badge.aria', { state: label })}
@@ -167,12 +167,11 @@ export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeP
       onClick={() => { setOpen(true) }}
     >
       <IconShieldOutlineRegular size={16} className={css.icon} />
-      {wide && <span className={css.label}>{label}</span>}
     </button>
   )
   return (
     <>
-      <Tooltip label={label}>{button}</Tooltip>
+      <Tooltip label={label} side={wide ? 'top' : 'right'} align="end" portal delayMs={500}>{button}</Tooltip>
       {open && <TrustPanel t={t} bill={bill} rows={rows} useChecking={useChecking} check={check} onClose={() => { setOpen(false) }} />}
     </>
   )

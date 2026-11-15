@@ -942,7 +942,7 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off. The peek draws its edge with the level-two shadow only, without a separate border."
+      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off. The peek draws its edge with the level-two shadow only, without a separate border. On the rail the footer actions stack in one column of 36px icon buttons, and the foot panel icons are 44px on phone widths and coarse pointers. A foot too narrow for one row wraps its actions onto a second row."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",

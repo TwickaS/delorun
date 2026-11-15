@@ -910,6 +910,24 @@
   width: auto;
 }
 
+/* On the rail every footer action takes its own row, one column like the panel icons, and each icon button has the
+   panel icons' 36px box. */
+.collapsed .footerActions {
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapsed .footerActions + .settingsArea {
+  margin-top: 4px;
+}
+
+.collapsed .footerActions button,
+.collapsed .settingsArea button {
+  width: 36px;
+  height: 36px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :global([data-animating]:not([data-dragging])) .root,
   .wide,
@@ -947,9 +965,14 @@
   flex: none;
 }
 
+/* A foot too narrow for one row (a phone drawer with 44px buttons) wraps the actions onto a second row that they end. */
+.footRow:has(> .footerActionsInline) {
+  flex-wrap: wrap;
+}
+
 .footerActionsInline {
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
@@ -978,6 +1001,15 @@
   border-inline: 0;
   background-clip: border-box;
   color: var(--dsw-alias-label-secondary);
+}
+
+/* The foot's icon buttons are 44px on phone widths and coarse pointers; the panel icons follow. */
+@media (max-width: 767px), (pointer: coarse) {
+  .footPanels .panelRow {
+    width: 44px;
+    min-height: 44px;
+    height: 44px;
+  }
 }
 
 @media (hover: hover) {

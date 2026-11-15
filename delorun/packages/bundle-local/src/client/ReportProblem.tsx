@@ -101,17 +101,17 @@ export function ReportDialog({ open, onClose, t, surface, fetchImpl, startChat }
 }
 
 /** The footer button's props. */
-export type ReportFooterProps = ReportFace & { readonly t: ReportTranslate }
+export type ReportFooterProps = ReportFace & { readonly t: ReportTranslate, readonly wide: boolean }
 
 /**
  * Render the sidebar footer's icon button and the dialog it opens.
  * @param props - the surface and the copy.
  * @returns the button.
  */
-export function ReportFooterButton({ t, surface, fetchImpl, startChat }: ReportFooterProps): ReactNode {
+export function ReportFooterButton({ t, wide, surface, fetchImpl, startChat }: ReportFooterProps): ReactNode {
   const [open, setOpen] = useState(false)
   return <>
-    <Tooltip label={t('report.action')} side="top" delayMs={500}>
+    <Tooltip label={t('report.action')} side={wide ? 'top' : 'right'} align="end" portal delayMs={500}>
       <button type="button" className={css.button} aria-label={t('report.action')} aria-haspopup="dialog" aria-expanded={open} onClick={() => { setOpen(true) }}>
         <IconWarningOutlineRegular size={16} />
       </button>

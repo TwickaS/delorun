@@ -5,8 +5,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--report-control, 32px);
+  height: var(--report-control, 32px);
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);
@@ -14,6 +14,12 @@
   color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
   cursor: pointer;
   outline: none;
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .button {
+    --report-control: 44px;
+  }
 }
 
 @media (hover: hover) {

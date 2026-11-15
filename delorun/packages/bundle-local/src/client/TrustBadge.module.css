@@ -1,96 +1,64 @@
 /*
  * The trust badge at the sidebar's foot and its panel. The icon's colour is the badge's tone, from the theme's state
  * roles: success for `ok`, warn for `amber`, error for `red` and the neutral idle role for `neutral`. The lengths are the foot's
- * own geometry: a 32px control like the foot's icon buttons, with a 16px icon.
+ * own geometry: a square icon button like the foot's others (32px, 44px on phone widths and coarse pointers), with a 16px icon; the label is the tooltip and accessible name.
  */
-.badge,
-.rail {
+.badge {
   --trust-control: 32px;
-  --trust-touch: 44px;
   --trust-state: var(--dsw-alias-state-idle-primary);
 
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
+  width: var(--trust-control);
   height: var(--trust-control);
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
   cursor: pointer;
   outline: none;
 }
 
-.badge {
-  /*
-   * Shows its label whole or not at all: the label wraps onto a second line that the fixed height clips, so a foot too
-   * narrow for the full label shows the shield alone, and the tooltip and accessible name carry the label.
-   */
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  column-gap: 6px;
-  min-width: var(--trust-control);
-  overflow: hidden;
-  max-width: 100%;
-  padding: 0 8px;
-  font-size: 12px;
-  line-height: 16px;
+/* The foot's other icon buttons grow to 44px on phone widths and coarse pointers; so does the badge. */
+@media (max-width: 767px), (pointer: coarse) {
+  .badge {
+    --trust-control: 44px;
+  }
 }
 
-.badge > * {
-  /* Each line is the control's height, so the shield stays centred on the first. */
-  height: var(--trust-control);
-  display: inline-flex;
-  align-items: center;
-}
-
-.rail {
-  width: var(--trust-control);
-}
-
-.badge[data-tone='ok'],
-.rail[data-tone='ok'] {
+.badge[data-tone='ok'] {
   --trust-state: var(--dsw-alias-state-success-primary);
 }
 
-.badge[data-tone='amber'],
-.rail[data-tone='amber'] {
+.badge[data-tone='amber'] {
   --trust-state: var(--dsw-alias-state-warn-primary);
 }
 
-.badge[data-tone='red'],
-.rail[data-tone='red'] {
+.badge[data-tone='red'] {
   --trust-state: var(--dsw-alias-state-error-primary);
 }
 
 @media (hover: hover) {
-  .badge:hover,
-  .rail:hover {
+  .badge:hover {
     background: var(--dsw-alias-interactive-bg-hover);
     color: var(--dsw-alias-label-primary);
   }
 }
 
-.badge:active,
-.rail:active {
+.badge:active {
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.badge:focus-visible,
-.rail:focus-visible {
+.badge:focus-visible {
   box-shadow: inset 0 0 0 var(--dsw-focus-ring-width) var(--dsw-alias-brand-primary);
 }
 
 .icon {
   flex: none;
   color: var(--trust-state);
-}
-
-.label {
-  white-space: nowrap;
 }
 
 /* The panel: wider than a confirmation, never wider than the window, and its content scrolls inside it. */

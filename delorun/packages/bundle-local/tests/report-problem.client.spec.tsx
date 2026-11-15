@@ -148,7 +148,7 @@ describe('Help me report this', () => {
 
 describe('the entries', () => {
   it('the footer icon button has an accessible name and opens the dialog', async () => {
-    render(<ReportFooterButton t={t} surface="computer" fetchImpl={fakeHome()} />)
+    render(<ReportFooterButton t={t} wide surface="computer" fetchImpl={fakeHome()} />)
     fireEvent.click(screen.getByRole('button', { name: en['report.action'] }))
     expect(await screen.findByRole('dialog', { name: en['report.title'] })).toBeTruthy()
   })

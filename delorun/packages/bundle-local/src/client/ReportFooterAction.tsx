@@ -11,7 +11,7 @@ import { ReportFooterButton, type ReportFace } from './ReportProblem.tsx'
 import type { StudioSurface } from './report-url.ts'
 
 /** The footer button's props: the copy and the surface it injects. */
-export type ReportFooterActionProps = PropsLocale<'delorunPrivacy'> & InjectFace<ReportFace>
+export type ReportFooterActionProps = PropsLocale<'delorunPrivacy'> & InjectFace<ReportFace> & { readonly wide: boolean }
 
 /**
  * Where this page runs: a page a reach listener served is on an approved device.
@@ -40,6 +40,6 @@ export function reportChatStarter(ctx: Context): () => void {
  * @param props - the copy and the surface.
  * @returns the button.
  */
-export function ReportFooterAction({ t, surface, fetchImpl, startChat }: ReportFooterActionProps): ReactNode {
-  return <ReportFooterButton t={t} surface={surface} fetchImpl={fetchImpl} startChat={startChat} />
+export function ReportFooterAction({ t, wide, surface, fetchImpl, startChat }: ReportFooterActionProps): ReactNode {
+  return <ReportFooterButton t={t} wide={wide} surface={surface} fetchImpl={fetchImpl} startChat={startChat} />
 }

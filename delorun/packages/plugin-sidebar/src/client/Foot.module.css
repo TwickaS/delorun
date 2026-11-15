@@ -108,8 +108,8 @@
   }
 }
 
-/* Phone widths get 44px targets whatever the pointer reports. */
-@media (max-width: 767px) {
+/* Phone widths and coarse pointers get 44px targets. */
+@media (max-width: 767px), (pointer: coarse) {
   .utility,
   .undo {
     --foot-button: 44px;

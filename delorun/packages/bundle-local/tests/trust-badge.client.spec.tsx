@@ -177,15 +177,15 @@ describe('the badge', () => {
       renderBadge(storeOf(entry.bill).store)
       const badge = screen.getByRole('button', { name: `Trust: ${entry.label}` })
       expect({ text: badge.textContent, tone: badge.getAttribute('data-tone'), state: badge.getAttribute('data-state') })
-        .toEqual({ text: entry.label, tone: entry.tone, state: entry.state })
+        .toEqual({ text: '', tone: entry.tone, state: entry.state })
     })
   }
 
   it('reads "Verified" only when every row is verified', () => {
     for (const entry of CASES) {
       const { unmount } = renderBadge(storeOf(entry.bill).store)
-      const text = screen.getByRole('button', { name: /^Trust: / }).textContent ?? ''
-      expect({ name: entry.name, verified: text.startsWith('Verified') }).toEqual({ name: entry.name, verified: entry.state === 'verified' })
+      const name = screen.getByRole('button', { name: /^Trust: / }).getAttribute('aria-label') ?? ''
+      expect({ name: entry.name, verified: name.startsWith('Trust: Verified') }).toEqual({ name: entry.name, verified: entry.state === 'verified' })
       unmount()
     }
   })
@@ -198,7 +198,8 @@ describe('the badge', () => {
     }))
     renderBadge(storeOf(many).store)
     const badge = screen.getByRole('button', { name: /^Trust: / })
-    expect({ text: badge.textContent, tone: badge.getAttribute('data-tone') }).toEqual({ text: 'Changes to review · 43 of your changes', tone: 'neutral' })
+    expect({ text: badge.textContent, tone: badge.getAttribute('data-tone') }).toEqual({ text: '', tone: 'neutral' })
+    expect(badge.getAttribute('aria-label')).toBe('Trust: Changes to review · 43 of your changes')
   })
 
   it('shows the shield alone on the rail, named and with its tooltip', () => {
@@ -209,7 +210,14 @@ describe('the badge', () => {
     expect(screen.getByRole('tooltip').textContent).toContain('Verified')
   })
 
-  it('names the full label in a tooltip on the wide badge, for a foot too narrow to show it', () => {
+  it('is the same square icon button, with no text label, in the wide foot', () => {
+    renderBadge(storeOf(verifiedBill()).store, { wide: true })
+    const badge = screen.getByRole('button', { name: 'Trust: Verified' })
+    expect(badge.textContent).toBe('')
+    expect(badge.querySelector('svg')).not.toBeNull()
+  })
+
+  it('names the full label in a tooltip on the wide badge', () => {
     renderBadge(storeOf(null).store, { wide: true })
     const badge = screen.getByRole('button', { name: 'Trust: Not checked' })
     fireEvent.focus(badge)
