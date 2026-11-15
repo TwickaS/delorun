@@ -1,0 +1,10 @@
+.image {
+  display: block;
+  object-fit: contain;
+  border-radius: var(--dsw-radius-s, 6px);
+}
+
+.mark {
+  display: block;
+  color: var(--dsw-color-text-primary, currentColor);
+}

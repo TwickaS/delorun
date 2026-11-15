@@ -16,6 +16,7 @@ You can reshape Delorun at six levels, from a setting in the studio to the harne
 
 - [The levels](#the-levels)
 - [Change a plugin's settings](#change-a-plugins-settings)
+- [Give the studio your own name and icon](#give-the-studio-your-own-name-and-icon)
 - [Make an agent preset](#make-an-agent-preset)
 - [Write a plugin](#write-a-plugin)
 - [Fork a shipped plugin](#fork-a-shipped-plugin)
@@ -35,6 +36,12 @@ You can reshape Delorun at six levels, from a setting in the studio to the harne
 ## Change a plugin's settings
 
 Most plugins have a settings page in the studio, which saves into your profile. For what a page does not offer, your profile's `cordis.patch.yml`, under `~/.delorun/profiles/<profile>/`, patches any plugin's row by its id. A patch replaces the row's whole `config`, so restate every key the plugin needs, and `disabled: true` turns a row off. DeepSeek Harness's [loading order](../../../docs/user/develop/basic/publish.md#the-loading-order) explains which layer wins. Delorun refuses to start with a patch that turns off one of its protections, and names the file.
+
+## Give the studio your own name and icon
+
+Settings → Branding changes how the studio presents itself. You can hide the icon and name on the empty chat screen and in the sidebar header, replace "Delorun" with your own name, replace the mark with an icon you pick from the workspace icon set or with a PNG, JPEG or WebP image of up to 256 KB, and replace "What are we working on?" with one of the preset lines or your own. The name also shows in the browser tab, and an uploaded image becomes the tab's icon. The name is 1 to 40 characters of plain text and the greeting 1 to 80.
+
+The sign-in and pairing pages that other devices open show the same name and icon, or neither when you hide the mark. Those pages appear before anyone signs in, so anyone who can reach your address sees them. A picked icon appears in the studio only; the sign-in pages keep the Delorun mark for it. If a saved name, greeting or image cannot be used, the studio shows the Delorun defaults and the Branding section says so. The Branding settings are in your profile, so a phone you have approved can change them once it holds an unlock.
 
 ## Make an agent preset
 

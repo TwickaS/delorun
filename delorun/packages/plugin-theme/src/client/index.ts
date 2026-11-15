@@ -29,6 +29,12 @@ import { FIRST_PAINT_MARK, STOCK_ATTRIBUTE } from '../palette/layers.ts'
 import { AppearanceSection, type AppearanceInjected, type SchemePreference } from './AppearanceSection.tsx'
 import { DensityRow, EffortLabelsRow, StudioLookRow, TypefaceRow, type AppearanceRowInjected } from './AppearanceRows.tsx'
 import { HeroHeadline, HeroWordmark } from './brand.tsx'
+import { followBrandingInDocument } from './branding-dom.ts'
+import { en as brandingEn, zh as brandingZh, type BrandingLocaleKey } from './branding-locales.ts'
+import { publishBranding } from './branding-store.ts'
+import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
+import { watchSidebar } from './sidebar-bridge.ts'
+import { SidebarBrandMark, SidebarBrandName } from './SidebarBrand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
 import { effortBarsCss } from './effort.ts'
@@ -83,6 +89,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'settings.delorunConversation': ConversationLocaleKey
     /** The General row's copy. */
     'settings.delorunLook': LookLocaleKey
+    /** The Branding section's copy. */
+    'settings.delorunBranding': BrandingLocaleKey
     /** The New Session headline's copy. */
     'delorunBrand': BrandLocaleKey
   }
@@ -96,6 +104,9 @@ export const SECTION_ID = 'delorun-appearance'
 
 /** Its place in Settings: right after General (0). */
 export const SECTION_ORDER = 1
+
+/** The Branding section's id, dictionary namespace and place, after Appearance and before Conversation. */
+export const BRANDING = { id: 'delorun-branding', ns: 'settings.delorunBranding', order: 1.5 } as const
 
 /** The Conversation section's id, its dictionary namespace and its place, after Appearance. */
 export const CONVERSATION = { id: 'delorun-conversation', ns: 'settings.delorunConversation', order: 2 } as const
@@ -234,6 +245,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
   const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
+  const brandingT = ctx.locale.bind(BRANDING.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
   const appearance: AppearanceInjected = {
     settings: form,
@@ -252,6 +264,9 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     [STUDIO_ROWS.density, DensityRow],
     [STUDIO_ROWS.effortLabels, EffortLabelsRow],
   ]
+  const branding: BrandingInjected = { settings: form }
+  watchSidebar(ctx)
+  publishBranding(initial.branding)
   controller.update(initial)
   const disposers = [
     ctx.locale.register(NS, { en, zh }),
@@ -266,6 +281,14 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     ctx.configForms.whileServed([CHAT_NAMESPACE], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section', id: CONVERSATION.id, order: CONVERSATION.order, label: () => conversationT('title'), locale: CONVERSATION.ns, inject: () => chat,
     }, ConversationSection))),
+    ctx.locale.register(BRANDING.ns, { en: brandingEn, zh: brandingZh }),
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section', id: BRANDING.id, order: BRANDING.order, label: () => brandingT('nav'), locale: BRANDING.ns, inject: () => branding,
+    }, BrandingSection)),
+    // Priority -2 shadows the Delorun bundle's own brand occupants, which register at -1.
+    ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -2 }, SidebarBrandMark)),
+    ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -2 }, SidebarBrandName)),
+    followBrandingInDocument(document),
     ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', locale: BRAND_NS }, HeroWordmark)),
     ctx.slots.inject('conversation.hero.headline', () => ctx.slots.register({ name: 'conversation.hero.headline', locale: BRAND_NS }, HeroHeadline)),
     ...Object.entries(VOCABULARY).flatMap(([ns, { en: english, zh: chinese }]) => [ctx.locale.override(ns, 'en', english), ctx.locale.override(ns, 'zh', chinese)]),
@@ -276,7 +299,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     markMainLandmark(document),
   ]
   return {
-    update: (stored) => { controller.update(stored) },
+    update: (stored) => { publishBranding(stored.branding); controller.update(stored) },
     dispose: () => {
       for (const dispose of disposers) dispose()
       controller.dispose()

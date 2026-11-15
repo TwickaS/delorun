@@ -1,0 +1,49 @@
+.section {
+  --preview-size: 72px;
+}
+
+.iconRow {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-4, 16px);
+  flex-wrap: wrap;
+}
+
+.preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--preview-size);
+  height: var(--preview-size);
+  border-radius: var(--dsw-radius-m, 8px);
+  background: var(--dsw-color-layer-secondary, transparent);
+}
+
+.iconActions {
+  display: flex;
+  gap: var(--dsw-space-2, 8px);
+  flex-wrap: wrap;
+  margin-top: var(--dsw-space-3, 12px);
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--dsw-space-3, 12px);
+  border: 1px solid var(--dsw-color-border-default, currentColor);
+  border-radius: var(--dsw-radius-m, 8px);
+  cursor: pointer;
+}
+
+.file input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.file:focus-within {
+  outline: 2px solid var(--dsw-alias-brand-primary, currentColor);
+  outline-offset: 2px;
+}

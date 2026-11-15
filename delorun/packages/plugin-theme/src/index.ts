@@ -10,6 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-settings'
+import { resolveBranding, STUDIO_ICON_PATH, writeIcon } from '@delorun/brand/branding'
 import { BOOT_SETTINGS_GLOBAL } from './boot-settings.ts'
 import type { Config as ThemeConfig, ThemeSettings } from './config.ts'
 import { bootStyle } from './palette/layers.ts'
@@ -38,6 +39,7 @@ export function currentSettings(config: ThemeConfig): ThemeSettings {
     palette: config.palette.get(),
     contrast: config.contrast.get(),
     effort: config.effort.get(),
+    branding: config.branding.get(),
   }
 }
 
@@ -50,11 +52,21 @@ export function currentSettings(config: ThemeConfig): ThemeSettings {
 export function apply(ctx: Context, config: ThemeConfig): void {
   // The Appearance section is this plugin's own page, so the settings service builds no form for it.
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+  // The icon is read from the live settings on every request, so a changed upload shows at once and an invalid one is a 404.
+  ctx.inject(['webServer'], (scope) => {
+    scope.effect(() => scope.webServer.register({
+      kind: 'exact',
+      path: STUDIO_ICON_PATH,
+      handler: (request, response) => { writeIcon(resolveBranding(config.branding.get()), request.method, response); return Promise.resolve() },
+    }), 'theme: branding icon route')
+  })
   ctx.on('webserver/index-inject', (table) => {
     const settings = currentSettings(config)
     const text = bootStyle(settings)
     if (text !== '') table.push({ kind: 'style', text })
     if (!settings.studioAdditions) return
-    table.push({ kind: 'global', name: BOOT_WORDMARK_GLOBAL, value: BOOT_WORDMARK }, { kind: 'global', name: BOOT_SETTINGS_GLOBAL, value: settings })
+    // The upload stays out of the page: the studio fetches it from the icon route.
+    const printed = { ...settings, branding: { ...settings.branding, upload: '' } }
+    table.push({ kind: 'global', name: BOOT_WORDMARK_GLOBAL, value: BOOT_WORDMARK }, { kind: 'global', name: BOOT_SETTINGS_GLOBAL, value: printed })
   })
 }

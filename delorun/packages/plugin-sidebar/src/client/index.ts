@@ -15,6 +15,7 @@
  * @module @delorun/plugin-sidebar/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { createElement, type ComponentType } from 'react'
 // Type-only: the 'connection/reset' event merge and the connection service's type.
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.locale Context merge.
@@ -40,7 +41,9 @@ import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '
 
 /** The row of the release check, whose `enabled` switch mounts the notice route. */
 const UPDATE_CHECK_ROW_ID = 'delorun-update-check'
-import { pruneWorkspaceIcons, withWorkspaceIcon } from '../workspace-icon.ts'
+import { pruneWorkspaceIcons, withWorkspaceIcon, type WorkspaceIcon } from '../workspace-icon.ts'
+import { IconPicker } from './IconPicker.tsx'
+import { WorkspaceBadge } from './WorkspaceBadge.tsx'
 import type { RowStateActions } from './ChatRow.tsx'
 import { FootLauncher } from './FootLauncher.tsx'
 import { HeaderArt, type HeaderArtInjected } from './HeaderArt.tsx'
@@ -89,6 +92,15 @@ export interface DelorunSidebar {
   canAddWorkspace(): boolean
   /** Start the owner's add-workspace flow, as the list's Add workspace button does. */
   addWorkspace(): void
+  /** Draws a workspace icon as the list does; other Delorun plugins use it for the icon a person picks as the studio's own. */
+  IconBadge: ComponentType<{ readonly icon: WorkspaceIcon | undefined; readonly title: string; readonly size: number }>
+  /** The workspace icon picker, opened for an icon that belongs to no workspace. */
+  IconPickerDialog: ComponentType<{
+    readonly title: string
+    readonly icon: WorkspaceIcon | undefined
+    readonly onSave: (icon: WorkspaceIcon | null) => void
+    readonly onClose: () => void
+  }>
 }
 
 /** Dictionary namespace owned by this plugin. */
@@ -331,6 +343,8 @@ export function applyStudio(ctx: Context): void {
     attach: latest => ctx.provide('delorunSidebar', {
       canAddWorkspace: () => latest.current.canAddWorkspace,
       addWorkspace: () => { latest.current.addWorkspace() },
+      IconBadge: ({ icon, title, size }) => createElement(WorkspaceBadge, { title, color: 'blue', icon, size }),
+      IconPickerDialog: ({ title, icon, onSave, onClose }) => createElement(IconPicker, { t: ctx.locale.bind(NS), target: { workspaceId: 'branding', title, color: 'blue', icon }, onSave, onClose }),
     }),
     pruneIcons: (liveIds) => {
       const pruned = pruneWorkspaceIcons(settings.getSnapshot().workspaceIcons, liveIds)
