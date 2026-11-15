@@ -3,7 +3,7 @@
  * disappears once the guide is finished.
  */
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { OnboardingSettings } from '../config.ts'
@@ -36,7 +36,7 @@ export type FinishSetupChipProps = PropsLocale<'delorunOnboarding'> & InjectFace
  */
 function useChipVisible(later: LaterStore, progress: FinishSetupInjected['progress']): boolean {
   const aside = useSyncExternalStore(later.subscribe, later.getSnapshot)
-  const snapshot = useSyncExternalStore(progress.subscribe, () => progress.getSnapshot())
+  const snapshot = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
   return aside && snapshot.status === 'ready' && snapshot.value !== undefined && !snapshot.value.done
 }
 

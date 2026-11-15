@@ -49,7 +49,12 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
   })
   const form: ConfigForm<T> = {
     getSnapshot: () => snapshot,
-    subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    // The real form is a class instance whose subscribe reads `this`, so a call that detaches it fails here too.
+    subscribe(this: ConfigForm<T>, listener) {
+      if (this !== form) throw new TypeError('subscribe was called without its form')
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
     set, unset: () => Promise.resolve(true), mutate: () => Promise.resolve(true),
   }
   return { form, set, publish, listeners, value: () => snapshot.value }
