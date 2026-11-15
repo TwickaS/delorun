@@ -33,6 +33,8 @@ import { parseStartCheckHandoff } from '@delorun/runtime-store'
 import { printable } from '../terminal-text.ts'
 import { runVerifyStage, startBill, type BillContext, type ChangesReader, type PluginInstallCheck } from './bill.ts'
 import { boundedDetail, utcText } from './checks.ts'
+import { processChangesReader } from './changes.ts'
+import { processPluginsCheck } from './plugin-bill.ts'
 
 /** What the Host's bill needs. */
 export interface TrustWatchOptions {
@@ -334,6 +336,16 @@ export function billOfVerifyOutput(stdout: string): TrustBill | undefined {
  */
 function routeOf(command: LauncherVerify | TrustHostCheckReason): TrustCheckRoute {
   return typeof command === 'string' ? { via: 'host', reason: command } : { via: 'launcher' }
+}
+
+/**
+ * The options of a running Host with the readers `delorun verify` uses: without the plugin install check and Changes the
+ * start bill's plugins and changes are `unknown`, and the studio's badge reads Unknown for a release that verifies.
+ * @param base - the options other than the readers.
+ * @returns the options with the plugin install check and Changes.
+ */
+export function hostTrustOptions(base: Omit<TrustWatchOptions, 'plugins' | 'changes'>): TrustWatchOptions {
+  return { ...base, plugins: processPluginsCheck, changes: processChangesReader }
 }
 
 /**
