@@ -10,6 +10,16 @@ import { MARK } from './mark.tsx'
 /** The stylesheets the page loads, relative to `apps/website/scripts/`. */
 const BRAND_CSS = '../../../packages/brand/src'
 
+/** The card's rules; CSS property names are American spelling. */
+const STYLE = [
+  'html, body { margin: 0; width: 1200px; height: 630px; color-scheme: light; background: var(--dl-surface); color: var(--dl-text); font-family: var(--dl-font-sans); }', // us-spelling: quoted output
+  'main { box-sizing: border-box; height: 630px; padding: 84px 96px; display: flex; flex-direction: column; justify-content: space-between; }', // us-spelling: quoted output
+  '.brand { display: flex; align-items: center; gap: 28px; font-size: 64px; font-weight: 500; letter-spacing: -0.02em; }', // us-spelling: quoted output
+  'h1 { margin: 0; font-size: 72px; line-height: 1.08; font-weight: 500; letter-spacing: -0.025em; max-width: 960px; }', // us-spelling: quoted output
+  '.foot { display: flex; justify-content: space-between; align-items: center; font-size: 30px; color: var(--dl-text-muted); }', // us-spelling: quoted output
+  'code { font-family: var(--dl-font-mono); background: var(--dl-text); color: var(--dl-surface); padding: 10px 22px; border-radius: var(--dl-radius-md); font-size: 34px; }', // us-spelling: quoted output
+].map(rule => `  ${rule}`).join('\n')
+
 /**
  * The social card's source page.
  * @returns the HTML document, ending in one newline.
@@ -23,12 +33,7 @@ export function ogHtml(): string {
 <link rel="stylesheet" href="${BRAND_CSS}/fonts.css">
 <link rel="stylesheet" href="${BRAND_CSS}/tokens.css">
 <style>
-  html, body { margin: 0; width: 1200px; height: 630px; color-scheme: light; background: var(--dl-surface); color: var(--dl-text); font-family: var(--dl-font-sans); }
-  main { box-sizing: border-box; height: 630px; padding: 84px 96px; display: flex; flex-direction: column; justify-content: space-between; }
-  .brand { display: flex; align-items: center; gap: 28px; font-size: 64px; font-weight: 500; letter-spacing: -0.02em; }
-  h1 { margin: 0; font-size: 72px; line-height: 1.08; font-weight: 500; letter-spacing: -0.025em; max-width: 960px; }
-  .foot { display: flex; justify-content: space-between; align-items: center; font-size: 30px; color: var(--dl-text-muted); }
-  code { font-family: var(--dl-font-mono); background: var(--dl-text); color: var(--dl-surface); padding: 10px 22px; border-radius: var(--dl-radius-md); font-size: 34px; }
+${STYLE}
 </style>
 <main>
   <div class="brand">

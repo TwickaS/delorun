@@ -21,7 +21,7 @@ import { stampListener } from '../../../home-auth/src/index.ts'
 import { deviceIdOf } from '../../../home-auth/src/records.ts'
 import { HomeAuthService } from '../../../home-auth/src/service.ts'
 import { claimOf, keyOf } from '../../../home-auth/tests/fixtures/home.ts'
-import { changePin, openHomeLog, type HomeLog, type LocalDeviceApproval, type ResponseLine, type UnsignedRequest } from '../../../home-process/src/index.ts'
+import { changePin, openHomeLog, type HomeLog, type PinApproval, type ResponseLine, type UnsignedRequest } from '../../../home-process/src/index.ts'
 import { encodings, filesUnder, logTexts, tempHome, type TempHome } from '../support.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -74,7 +74,7 @@ describe('PIN mode on the production path of the home process', () => {
     if (service === undefined) throw new Error('home-auth did not mount')
 
     // The CLI over the real service, answering as the home process does.
-    const approval = { setPin: (secret, options) => service.setPin(secret, options), setPinOptions: o => service.setPinOptions(o), turnPinOff: () => service.turnPinOff(), resumePin: () => service.resumePin() } as unknown as LocalDeviceApproval
+    const approval: PinApproval = service
     const out = { stdout: '', stderr: '' }
     const commandContext: CommandContext = { env: { ...process.env, DELORUN_HOME: home, HOME: home }, stdout: (t) => { out.stdout += t }, stderr: (t) => { out.stderr += t } }
     const responses: string[] = []
