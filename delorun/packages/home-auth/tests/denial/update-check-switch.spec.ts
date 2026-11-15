@@ -43,7 +43,7 @@ async function mounted(withRow: boolean, facts: { unlocked?: boolean, dangerous?
   ctx.provide('webServer', { host: '127.0.0.1', port: 3080, protocol: 'http:', getOrigin: () => 'http://127.0.0.1:3080', register: () => () => undefined } as never)
   ctx.provide('connection', { authenticatedUrl: (url: string) => url, oneTimeLaunchTokens: false, closeReachConnections: () => 0, fetch: { register: () => () => undefined } } as never)
   await ctx.plugin(HomeAuthService, { secretsDirectory: join(home, 'secrets', 'home-auth') }).await()
-  if (withRow) await ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false }).await()
+  if (withRow) await ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false } as never).await()
   const homeAuth = ctx.get('homeAuth')
   if (homeAuth === undefined) throw new Error('home-auth did not mount')
   // A second context holds the remote access service, so the home's own policy (which admits only live Peers) does not register.

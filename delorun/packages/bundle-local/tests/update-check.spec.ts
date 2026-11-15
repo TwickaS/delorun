@@ -17,12 +17,15 @@ const HOUR = 3_600_000
 /** A semantic version as the notice's types brand it. */
 type SemanticVersion = UpdateNotice['release']['delorun']
 const semantic = (text: string): SemanticVersion => text as SemanticVersion
+/** A row's configuration as written: plain values, before the Loader wraps `enabled` as a volatile. */
+interface ConfigInput { readonly enabled?: boolean; readonly intervalHours?: number; readonly timeoutSeconds?: number }
+
 /**
  * Validate a configuration as the Loader does, with the fields the row leaves out.
  * @param value - the row's configuration.
  * @returns the validated configuration.
  */
-const parse = (value: Partial<UpdateCheck.Config>): UpdateCheck.Config => Config(value as UpdateCheck.Config)
+const parse = (value: ConfigInput): UpdateCheck.Config => Config(value as never) as UpdateCheck.Config
 const NOTICE: UpdateNotice = {
   running: { delorun: semantic('0.1.0'), dsh: semantic('0.2.2') },
   release: { delorun: semantic('0.1.1'), dsh: semantic('0.2.2'), channel: 'stable', security: true },
@@ -43,7 +46,7 @@ interface Route {
  * @param config - the row's configuration.
  * @returns the context and the routes it registered.
  */
-async function mount(config: Partial<UpdateCheck.Config>) {
+async function mount(config: ConfigInput) {
   return mountIn(new Context(), config)
 }
 
@@ -53,7 +56,7 @@ async function mount(config: Partial<UpdateCheck.Config>) {
  * @param config - the row's configuration.
  * @returns the context and the routes it registered.
  */
-async function mountIn(ctx: Context, config: Partial<UpdateCheck.Config>) {
+async function mountIn(ctx: Context, config: ConfigInput) {
   const routes = new Map<string, Route>()
   ctx.provide('connection', {
     fetch: {
@@ -63,7 +66,7 @@ async function mountIn(ctx: Context, config: Partial<UpdateCheck.Config>) {
       },
     },
   } as never)
-  const fiber = ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config })
+  const fiber = ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config } as never)
   await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   return { ctx, routes, fiber }
@@ -328,7 +331,7 @@ describe('the channel route', () => {
 
 describe('the switch in Settings', () => {
   it('update-check-switch-is-served-to-the-studio: the switch is a volatile field, so the Host describes the row and the sidebar reads it', () => {
-    expect(Config.dict?.enabled.meta.volatile).toBe(true)
+    expect(Config.dict?.enabled?.meta.volatile).toBe(true)
   })
 })
 

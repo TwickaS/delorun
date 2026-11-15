@@ -500,7 +500,7 @@ describe('in a running Host', { timeout: 60_000 }, () => {
     const lines: string[] = []
     const source = updateCheckSource({ home, profile: PROFILE, platform, running: RUNNING, anchor, line: (text) => { lines.push(text) }, publication, now: clock })
     expect(await source.read()).toEqual({})
-    const state = await source.check(10_000)
+    const state = await source.check(10_000, new AbortController().signal)
     expect(state.checked).toBe(NOW * 1000)
     expect(state.notice?.release.delorun).toBe('0.2.0')
     expect(await source.read()).toEqual(state)
@@ -516,7 +516,7 @@ describe('in a running Host', { timeout: 60_000 }, () => {
 
     await check()
     const on = new Context()
-    await on.plugin(UpdateCheck, { enabled: true, intervalHours: 24, timeoutSeconds: 15 })
+    await on.plugin(UpdateCheck, { enabled: true, intervalHours: 24, timeoutSeconds: 15 } as never)
     await watchUpdates(on, { home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock })
     expect((await on.delorunUpdateCheck.notice())?.release.delorun).toBe('0.2.0')
     await on.fiber.dispose()
