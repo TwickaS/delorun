@@ -1,6 +1,6 @@
 ---
 area: Setup
-section: Fixed
+section: Added
 ---
 
-- An agent that this installation does not include no longer also says "Signed in on this computer". The card says only that it is not included.
+- An agent that this installation does not include says only that it is not included, never also "Signed in on this computer".

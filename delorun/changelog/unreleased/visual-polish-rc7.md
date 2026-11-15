@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
 - Settings → Appearance shows the theme's own accent as the chosen one while a theme sets the accent, and the theme and accent chips sit in an even grid.

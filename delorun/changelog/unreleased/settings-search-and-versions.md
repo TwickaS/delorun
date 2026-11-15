@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
 - Settings search finds Branding (name, icon, greeting, sign-in pages), Report a problem, Tailscale and remote access, Run setup again and PIN mode.

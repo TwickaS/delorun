@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
 - The setup guide keeps your current workspace when you skip the Workspace step after running setup again, and Continue adds the folder you highlighted instead of leaving two filled buttons on screen.
