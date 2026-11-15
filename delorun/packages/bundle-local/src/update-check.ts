@@ -15,8 +15,9 @@
  */
 import { Service, type Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
-import type {} from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
+import { REACH_DEVICE } from '@delorun/home-auth'
 import { readChannelRecord } from '@delorun/install'
 import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateChannelResponse, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
 
@@ -177,6 +178,9 @@ export class UpdateCheckService extends Service {
   }
 }
 
+/** Admits a signed-in reach device to the channel route: it names the release host alone, no secret, and changes nothing. */
+const admitsReachDevice: NonNullable<ConnectionFetchRoute['admitPeer']> = (_request, peer) => peer.principal.kind === REACH_DEVICE
+
 /**
  * Serve the channel route, then, with the `update_check` switch on, mount the `delorunUpdateCheck` service and serve its notice. Off, mount nothing else.
  * @param ctx - the plugin context.
@@ -188,6 +192,7 @@ export function apply(ctx: Context, config: Config): void {
       path: UPDATE_CHANNEL_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
+      admitPeer: admitsReachDevice,
       fetch: async () => {
         const home = scope.get('profileContext')?.home
         // A record that cannot be read is reported by `delorun doctor`; the copy then names the production hosts.
