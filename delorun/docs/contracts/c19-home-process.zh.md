@@ -140,8 +140,8 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `changes.reload` | 无 | 一行 `reload`：Host 运行了 profile 文件所指定的内容时为 `{"ok":true}`；热重载关闭、插件加载或启动失败，或该更改需要重启时为 `{"ok":false,"error":"<原因>"}`；更新或回滚正在运行，或进程不处于 `running` 时为 `UPDATE_IN_PROGRESS` |
 | `devices.approve` | 无；`requestId` 与 `typedCode` 一起；或单独的 `cancelRequestId` | 不带参数时：打开 [C5](c05-device-approval.zh.md#approval-request) 的批准窗口，为本地的本人认领没有所有者的 home，并在有请求待处理或窗口关闭后回答一行 `closesAt` 与 `pending`；带 `requestId` 与 `typedCode` 时：[C5](c05-device-approval.zh.md#approval) 的本地批准，回答一行已批准的 `device`；带 `cancelRequestId` 时：取消该待处理请求，回答一行 `cancelled` |
 | `devices.remove` | `deviceId` | 移除一台受信任的设备（[C5](c05-device-approval.zh.md)），立即结束其会话并关闭其远程访问连接，回答一行 `removed`、`sessions` 与 `connections` |
-| `pin.set` | `secret`；可选的 `idleMinutes`（1 到 60）与 `lockWhenHidden` | 设置或替换 PIN 或口令并开启 PIN 模式（[C14](c14-oidc-passkeys.zh.md#pin-mode)）；每个页面解锁都会结束；回答一行 `enabled` 与 `secret` 的种类 `pin` 或 `passcode`；密钥绝不会在拒绝中回显，也不会被记入日志 |
-| `pin.options` | `idleMinutes`（1 到 60）与 `lockWhenHidden`，至少一个 | 只更改已开启的 PIN 模式的空闲分钟数与隐藏时锁定，无需密钥（[C14](c14-oidc-passkeys.zh.md#pin-mode)）；哈希与页面解锁保持不变；回答一行 `enabled: true`、`idleMinutes` 与 `lockWhenHidden`；模式关闭时为 `PIN_FAILED`（`PIN_MODE_OFF`） |
+| `pin.set` | `secret`；可选的 `idleMinutes`（1 到 60）与 `lockWhenHidden` | 设置或替换 PIN 或口令并开启 PIN 模式（C14）；每个页面解锁都会结束；回答一行 `enabled` 与 `secret` 的种类 `pin` 或 `passcode`；密钥绝不会在拒绝中回显，也不会被记入日志 |
+| `pin.options` | `idleMinutes`（1 到 60）与 `lockWhenHidden`，至少一个 | 只更改已开启的 PIN 模式的空闲分钟数与隐藏时锁定，无需密钥（C14）；哈希与页面解锁保持不变；回答一行 `enabled: true`、`idleMinutes` 与 `lockWhenHidden`；模式关闭时为 `PIN_FAILED`（`PIN_MODE_OFF`） |
 | `pin.off` | 无 | 关闭 PIN 模式并丢弃 PIN；回答一行 `enabled: false` |
 | `pin.resume` | 无 | 恢复因全 home 十次错误尝试而暂停的 PIN 解锁；回答一行 `paused: false` |
 | `devices.elevate` | 无；`requestId` 与 `typedCode` 一起；或单独的 `revokeId` | 答复设备解锁敏感操作的请求（[C14](c14-oidc-passkeys.zh.md#elevation)）；无参数时：回答一行 `pending`，即等待中的请求，带 `requestId`、`deviceId`、`label`、`platform`、`requestedAt` 与 `expiresAt`，但从不带验证码，以及 `running`，即正在进行的提权，带 `id`、`deviceId`、`label`、`platform` 与 `endsAt`；带 `requestId` 与 `typedCode` 时：用设备显示的验证码批准该请求，回答一行已开始的 `elevation`（`id`、`deviceId`、`endsAt`）；带 `revokeId` 时：拒绝该请求或结束该提权，回答一行 `revoked`，即是否找到其中之一 |
@@ -151,7 +151,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `mcp.decline` | `serverName`、`reviewId` | 把该审查搁置为已拒绝，不记录任何接受；服务器保持停止，直到其启动变化或本人接受它；一行 `declined` |
 | `mcp.revoke` | `acceptanceId`（32 位小写十六进制数字） | 撤回 `mcp.list` 以该 id 显示的接受，并停止该服务器运行中的行，这些行以已撤销状态保持停止，直到其启动变化或本人再次接受它；其他每项接受不变；一行 `stopped`，即停止了多少行 |
 
-`delorun devices pin set | options | off | resume` 用令牌文件中的令牌发送这四个请求。`options` 接受 `--idle-minutes <1-60>` 与 `--lock-when-hidden` 或 `--no-lock-when-hidden`，至少需要一个，不要求密钥，并在发送之前检查范围。`set` 从隐藏的终端提示读取 PIN 或口令（询问两次），或用 `--stdin` 读取标准输入的一行（标准输入是终端时被拒绝，因为那会显示密钥），绝不从参数或环境变量读取，并在发送之前检查 [C14](c14-oidc-passkeys.zh.md#pin-mode) 的 PIN 与口令规则；这四个命令中任何一个不接受的参数或选项都会被拒绝，消息不重复该参数。`delorun devices pin status` 读取 home 中的 PIN 文件，写明哪些设置正等待恢复，并且不发送任何内容。
+`delorun devices pin set | options | off | resume` 用令牌文件中的令牌发送这四个请求。`options` 接受 `--idle-minutes <1-60>` 与 `--lock-when-hidden` 或 `--no-lock-when-hidden`，至少需要一个，不要求密钥，并在发送之前检查范围。`set` 从隐藏的终端提示读取 PIN 或口令（询问两次），或用 `--stdin` 读取标准输入的一行（标准输入是终端时被拒绝，因为那会显示密钥），绝不从参数或环境变量读取，并在发送之前检查 C14 的 PIN 与口令规则；这四个命令中任何一个不接受的参数或选项都会被拒绝，消息不重复该参数。`delorun devices pin status` 读取 home 中的 PIN 文件，写明哪些设置正等待恢复，并且不发送任何内容。
 
 - **响应行。** 每行都有 `ok`（布尔值）；失败行带有 `error`，即[错误](#errors)中的代码；进度行带有 `phase`，或在 `update.prepare` 安装目标期间带有 `line`：安装进度中带换行符的一行，与启动器安装发布时打印的文本相同。报告在 `update.prepare` 返回后 600 秒过期；以过期或未知的 `reportId` 调用 `update.apply` 会以 `REPORT_EXPIRED` 失败。若请求以 home 进程不在通道上报告的方式失败，则该请求在没有最终行的情况下结束，失败记录在 home 进程的日志中；请求方将该请求的结果视为未知，`delorun update` 会说明这一点并指出 `delorun logs home`。
 - **`failed`。** 以 `failed` 结束的 `update.apply` 或 `rollback` 留下一个 home 进程可能无法自行完成的回滚；home 进程在发送最后一行后停止，更新记录保留到下次启动（[被中断的更新](#interrupted-updates)）。
@@ -265,9 +265,9 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `VERIFY_FAILED` | 目标的元数据、日志条目或文件无法获取，或未通过 [C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md) 或 [C18](c18-release-log.zh.md) 的检查；该行的 `detail` 是启动器对同一失败的拒绝说明及其补救办法 |
 | `CHANNEL_UNREACHABLE` | `update.prepare` 的某次下载未能完成：连接失败、停滞，或对方以 200 以外的状态应答；未安装任何内容，该行的 `detail` 是启动器对同一失败的拒绝说明 |
 | `GIT_UNAVAILABLE` | 保存与恢复 profile 历史所用的 git 无法运行；`update.prepare` 与每次回滚都在任何步骤之前以它拒绝，因此回滚绝不会因此半途停止 |
-| `HARNESS_CHANGES_PENDING` | 对运行中的运行时的 harness 所作的更改在其可写副本中等待审阅（[C21](c21-changes.zh.md#harness-edits)），更新会把它们丢在后面；`update.prepare` 在获取任何内容之前拒绝，`update.apply` 在切换之前拒绝且不切换任何内容 |
+| `HARNESS_CHANGES_PENDING` | 对运行中的运行时的 harness 所作的更改在其可写副本中等待审阅（C21），更新会把它们丢在后面；`update.prepare` 在获取任何内容之前拒绝，`update.apply` 在切换之前拒绝且不切换任何内容 |
 | `HARNESS_COPY_UNREADABLE` | 运行中的运行时的可写副本无法扫描（超出扫描限制、条目不可读、文件在读取期间发生变化），因此不知道是否有更改在等待审阅；在与 `HARNESS_CHANGES_PENDING` 相同的位置被拒绝，detail 写明失败之处、`delorun changes edit-harness --discard` 与 `delorun changes list` |
-| `HARNESS_REPORT_STALE` | 切换之前重新规划的、本人已批准的 harness 文件的合并结果，与本人确认的报告中的 `harness` 项不同（[C3](c03-update-report.zh.md#harness-files-across-an-update)）；`update.apply` 拒绝且不切换任何内容，本人需再次运行 `delorun update` |
+| `HARNESS_REPORT_STALE` | 切换之前重新规划的、本人已批准的 harness 文件的合并结果，与本人确认的报告中的 `harness` 项不同（C3）；`update.apply` 拒绝且不切换任何内容，本人需再次运行 `delorun update` |
 | `NO_PREVIOUS` | 请求了回滚，但不存在 `previous` 指针 |
 | `NO_UPDATE_RECORD` | 请求了回滚，但没有记录到正在运行版本的已提交更新 |
 | `DATA_COPY_NO_SPACE` | 本人选择的会话数据副本在 home 的文件系统上放不下（[C3](c03-update-report.zh.md#data-formats)） |
