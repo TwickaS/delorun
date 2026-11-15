@@ -84,6 +84,9 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** Setup ends by saying once that Delorun is running in the background, and the review screen says when the key check failed and the key is not verified.
 - **Fixed:** In a source checkout, the package manager's output while Delorun links its parts into the profile goes to the home process's log, and the terminal shows one progress line.
 - **Fixed:** `delorun status` prints the studio's address, without any token, and "Run delorun open to open the studio in your browser."
+- **Fixed:** Setup's last step no longer tells you to install a version from npm that npm does not have. A launcher built for a local release channel says to install the package file it came from, and the release-check note names that channel's host instead of releases.delorun.com and GitHub.
+- **Fixed:** When remote access is off, setup's last step says how to turn it on later and no longer points to a note that may not have been printed.
+- **Fixed:** Settings → General → Updates, and the dialog that asks before the release check turns on, name the host this installation actually contacts when its launcher was built for another release channel. The production wording is unchanged.
 - **Security:** `delorun setup` installs the `delorun` command at the exact version of the launcher you ran, `npm install -g delorun@<version>`, never whatever version npm serves as newest, and offers no install when that version is unknown. `delorun verify` prints the launcher's version with the integrity the signed release lists for it, which you compare with `npm view delorun@<version> dist.integrity` as the Trust page describes.
 
 ### Studio
@@ -124,10 +127,14 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - On a touch screen the Settings tabs, the Close and Open configuration file buttons and the API key field are 44 px tall, and text fields use a 16 px font so the page does not zoom when one is focused. Desktop sizes are unchanged.
 - Settings: the Modes captions are sentence-case headings, the opening sentences of Devices and Network line up with the other panes, and the Devices terminal switch sits beside its label.
 - The plugins step of onboarding names a plugin in words, never by its package id, while its title is still loading.
+- The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon.
+- The website's install button and the studio's preview notice use Delorun's shared buttons: peach, with Schibsted Grotesk as the typeface on the website as in the studio.
+- The documentation site and the website use Delorun's brand colours and typefaces: Schibsted Grotesk for text, JetBrains Mono for code, a peach accent, and a darker peach for text that must stay readable on white.
 - **Fixed:** The browser tab is titled "Delorun", not "DSH Local Build", and the studio's stored look is applied before the first paint, with no flash of the stock sidebar.
 - **Fixed:** After you trash the chat that is open, the main pane shows a new chat and the keyboard returns to the message box.
 - **Fixed:** The guide's option chips are one labelled group you move through with the arrow keys, and its two "Add" buttons have distinct names. The page has a `main` landmark, "Search chats" and the message box show a focus ring, "Reconnecting..." is announced politely, and Escape closes the phone-width sidebar drawer.
 - **Fixed:** The studio you open on the computer that runs it no longer reads "Disconnected" when that computer has no network, such as with Wi-Fi off. It stays connected, because it never needed the network, and it no longer makes a request that only a phone or other device could use, which showed as a failed request in the browser's console.
+- **Fixed:** The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface.
 - **Removed:** Delorun's setup no longer offers DeepSeek account sign-in, the account entry in the menu is gone, and so are the account's Usage and Top-up pages. Use your own DeepSeek API key, which Delorun's model settings still accept. The account pages stay in upstream's code and are not reachable from Delorun's default setup.
 
 ### Chats and workspaces
@@ -167,6 +174,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - Delorun's log labels messages from upstream and other code it does not own as captured, because they can quote your chats. Delorun's log now also removes the elevation codes you type at the computer and the keys in your `.env` files, and it keeps a replaced or deleted provider key hidden, since the provider still accepts it until you revoke it.
 - DeepSeek's session-log upload and DeepSeek Harness's desktop analytics are off until you turn them on.
 - The threat model, the execution-vectors page, the contracts and the package READMEs now state only the protections the code provides, and where each applies: Delorun's confinement, consents, fetch guard and privacy defaults apply to the profile that `delorun` and `delorun start` run, not to `delorun headless`, `delorun plugin` or the desktop app, and on Windows the sandbox confines writes only. Each contract page opens with what is built, and protections that are not built, such as reach, Docker workspaces, the plugin revocation list and most `delorun verify` checks, are described as design pages instead.
+- The Trust page says that releases before 1.0 are signed with a key kept on a development computer, that no key ceremony has happened, and lists the release root's SHA-256 and key ids. The root changes at 1.0.
 - **Fixed:** A chat never turns a plugin on at any protection level: with protection off, `undo` and `restore` in the plugin manager, and a turn-on whose `enabled` is not the boolean `false`, now wait for you at the computer, as an install already did.
 - **Security:** Programs the agent starts no longer inherit a web address that carries a token, such as `https://<token>@host` or an error-reporting address with its key, or the variables that point at Kubernetes or Kerberos credentials, a MySQL password or a passphrase. An agent socket listed in `PATH` or a similar search list now drops only that entry, so the rest of `PATH` still reaches the program. An address that names only a user, such as `postgres://user@db/app`, is not passed on either, because a token in that place looks the same; pass such a value to the program explicitly.
 - **Security:** A model-authored write to a skill, a preset, or a workspace's `AGENTS.md` asks for an approval that names the instruction-layer effect, because these instructions load in every future chat, and shows the diff, on every permission preset including full access. It also asks for a write through a linked folder or file, through a hard link to the file itself, for a differently capitalised name on a disk that ignores letter case, and for a write to the profile and home configuration files that hold presets.
@@ -238,6 +246,10 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A few sensitive actions on a phone need a short unlock you approve at your computer: changing settings, running the slash commands that change only the chat (`/compact`, `/export`, `/goal`, `/permission` and `/plan`), installing or changing plugins other than Delorun's own guards, opening a terminal, starting a chat in a folder that is not one of your workspaces and adding a workspace. The phone says the action needs a quick unlock and shows an 8-digit code; type it in Settings → Devices on your computer or with `delorun devices elevate`. While unlocked the phone shows until when, with Lock now; an unlock lasts 15 minutes, never extends, and ends early when you lock it on either side or the phone's session ends. Even unlocked, a phone cannot loosen the permission new chats start in, for example toward full access; it can still make it stricter.
 - `delorun reach on tailscale` refuses while Tailscale Funnel is on for the address, and Delorun stops serving if Funnel is turned on later.
 - A phone signed in to Tailscale as the same user as your computer can now ask to pair without an approval window. The studio at your computer shows the request with **Enter code** and **Decline**; you type the 8-digit code the phone shows, as before, and the code is still required. `delorun setup reach` lets any device on your tailnet ask instead, and `delorun reach status` says who may ask. The `pairing` settings in the `@delorun/home-auth` row also set how the request is shown, the approval window and request lifetimes, and how many requests one Tailscale user may have waiting. Settings → Devices shows and changes these choices at your computer.
+- PIN mode lets a phone or another computer you have already approved unlock its Delorun page with a PIN or passcode, so you do not need to walk to the home computer for a code. It works on the private Tailscale address, and you turn it on at the home computer only: `delorun devices pin set` asks for a PIN of at least 6 digits, or a passcode of at least 10 characters, and says what the mode allows.
+- An unlocked page can change the settings that otherwise wait for the computer, and each one goes back to its earlier value when the mode is turned off. Only that one page is unlocked, so a reload starts locked again.
+- An unlock ends after 15 idle minutes by default (change it with `delorun devices pin options --idle-minutes`, from 1 to 60), after 12 hours at most, when you lock the page, and when the PIN changes. `--lock-when-hidden` locks a page whenever it is hidden.
+- Five wrong tries on one device remove that device, and it needs your approval at the computer again. Ten wrong tries across the home pause PIN unlocks until you resume them with `delorun devices pin resume`. `delorun devices pin status` shows the state, and Settings has a PIN mode section at the computer that lists any setting waiting to be put back.
 - Turning remote access on or off applies to the Delorun that is running, which says whether the address is ready instead of asking you to restart; `delorun reach status` shows the live state.
 - `delorun reach on` checks that your Tailscale user may serve before it turns anything on, and names the one command to run when it may not.
 - `delorun start --background` starts Delorun detached from the terminal whatever setup answered, and a start that stays in the terminal says how to run it in the background next time.
@@ -316,6 +328,31 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A script that changes something through a Host's HTTP API over plain HTTP at an address other than this computer's, such as a name in `trustedHosts` or the address the Host listens on, must send an `Origin` header naming that address, such as `Origin: http://192.0.2.5:3080`; without one the Host answers "forbidden", because a web page could send the same request. Requests on this computer, over HTTPS and from the studio itself are unaffected.
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-rc.2 (2026-11-15)
+
+### Setup
+- **Fixed:** Setup's last step no longer tells you to install a version from npm that npm does not have. A launcher built for a local release channel says to install the package file it came from, and the release-check note names that channel's host instead of releases.delorun.com and GitHub.
+- **Fixed:** When remote access is off, setup's last step says how to turn it on later and no longer points to a note that may not have been printed.
+- **Fixed:** Settings → General → Updates, and the dialog that asks before the release check turns on, name the host this installation actually contacts when its launcher was built for another release channel. The production wording is unchanged.
+
+### Studio
+- The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon.
+- The website's install button and the studio's preview notice use Delorun's shared buttons: peach, with Schibsted Grotesk as the typeface on the website as in the studio.
+- The documentation site and the website use Delorun's brand colours and typefaces: Schibsted Grotesk for text, JetBrains Mono for code, a peach accent, and a darker peach for text that must stay readable on white.
+- **Fixed:** The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface.
+
+### Safety and privacy
+- The Trust page says that releases before 1.0 are signed with a key kept on a development computer, that no key ceremony has happened, and lists the release root's SHA-256 and key ids. The root changes at 1.0.
+
+### Reach
+- PIN mode lets a phone or another computer you have already approved unlock its Delorun page with a PIN or passcode, so you do not need to walk to the home computer for a code. It works on the private Tailscale address, and you turn it on at the home computer only: `delorun devices pin set` asks for a PIN of at least 6 digits, or a passcode of at least 10 characters, and says what the mode allows.
+- An unlocked page can change the settings that otherwise wait for the computer, and each one goes back to its earlier value when the mode is turned off. Only that one page is unlocked, so a reload starts locked again.
+- An unlock ends after 15 idle minutes by default (change it with `delorun devices pin options --idle-minutes`, from 1 to 60), after 12 hours at most, when you lock the page, and when the PIN changes. `--lock-when-hidden` locks a page whenever it is hidden.
+- Five wrong tries on one device remove that device, and it needs your approval at the computer again. Ten wrong tries across the home pause PIN unlocks until you resume them with `delorun devices pin resume`. `delorun devices pin status` shows the state, and Settings has a PIN mode section at the computer that lists any setting waiting to be put back.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-rc.1 (2026-11-14)
 

@@ -392,6 +392,21 @@
     },
     {
       "area": "Setup",
+      "section": "Fixed",
+      "text": "Setup's last step no longer tells you to install a version from npm that npm does not have. A launcher built for a local release channel says to install the package file it came from, and the release-check note names that channel's host instead of releases.delorun.com and GitHub."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "When remote access is off, setup's last step says how to turn it on later and no longer points to a note that may not have been printed."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "Settings → General → Updates, and the dialog that asks before the release check turns on, name the host this installation actually contacts when its launcher was built for another release channel. The production wording is unchanged."
+    },
+    {
+      "area": "Setup",
       "section": "Security",
       "text": "`delorun setup` installs the `delorun` command at the exact version of the launcher you ran, `npm install -g delorun@<version>`, never whatever version npm serves as newest, and offers no install when that version is unknown. `delorun verify` prints the launcher's version with the integrity the signed release lists for it, which you compare with `npm view delorun@<version> dist.integrity` as the Trust page describes."
     },
@@ -582,6 +597,21 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The website's install button and the studio's preview notice use Delorun's shared buttons: peach, with Schibsted Grotesk as the typeface on the website as in the studio."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The documentation site and the website use Delorun's brand colours and typefaces: Schibsted Grotesk for text, JetBrains Mono for code, a peach accent, and a darker peach for text that must stay readable on white."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "The browser tab is titled \"Delorun\", not \"DSH Local Build\", and the studio's stored look is applied before the first paint, with no flash of the stock sidebar."
     },
@@ -599,6 +629,11 @@
       "area": "Studio",
       "section": "Fixed",
       "text": "The studio you open on the computer that runs it no longer reads \"Disconnected\" when that computer has no network, such as with Wi-Fi off. It stays connected, because it never needed the network, and it no longer makes a request that only a phone or other device could use, which showed as a failed request in the browser's console."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface."
     },
     {
       "area": "Studio",
@@ -774,6 +809,11 @@
       "area": "Safety and privacy",
       "section": "Changed",
       "text": "The threat model, the execution-vectors page, the contracts and the package READMEs now state only the protections the code provides, and where each applies: Delorun's confinement, consents, fetch guard and privacy defaults apply to the profile that `delorun` and `delorun start` run, not to `delorun headless`, `delorun plugin` or the desktop app, and on Windows the sandbox confines writes only. Each contract page opens with what is built, and protections that are not built, such as reach, Docker workspaces, the plugin revocation list and most `delorun verify` checks, are described as design pages instead."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "The Trust page says that releases before 1.0 are signed with a key kept on a development computer, that no key ceremony has happened, and lists the release root's SHA-256 and key ids. The root changes at 1.0."
     },
     {
       "area": "Safety and privacy",
@@ -1119,6 +1159,26 @@
       "area": "Reach",
       "section": "Added",
       "text": "A phone signed in to Tailscale as the same user as your computer can now ask to pair without an approval window. The studio at your computer shows the request with **Enter code** and **Decline**; you type the 8-digit code the phone shows, as before, and the code is still required. `delorun setup reach` lets any device on your tailnet ask instead, and `delorun reach status` says who may ask. The `pairing` settings in the `@delorun/home-auth` row also set how the request is shown, the approval window and request lifetimes, and how many requests one Tailscale user may have waiting. Settings → Devices shows and changes these choices at your computer."
+    },
+    {
+      "area": "Reach",
+      "section": "Added",
+      "text": "PIN mode lets a phone or another computer you have already approved unlock its Delorun page with a PIN or passcode, so you do not need to walk to the home computer for a code. It works on the private Tailscale address, and you turn it on at the home computer only: `delorun devices pin set` asks for a PIN of at least 6 digits, or a passcode of at least 10 characters, and says what the mode allows."
+    },
+    {
+      "area": "Reach",
+      "section": "Added",
+      "text": "An unlocked page can change the settings that otherwise wait for the computer, and each one goes back to its earlier value when the mode is turned off. Only that one page is unlocked, so a reload starts locked again."
+    },
+    {
+      "area": "Reach",
+      "section": "Added",
+      "text": "An unlock ends after 15 idle minutes by default (change it with `delorun devices pin options --idle-minutes`, from 1 to 60), after 12 hours at most, when you lock the page, and when the PIN changes. `--lock-when-hidden` locks a page whenever it is hidden."
+    },
+    {
+      "area": "Reach",
+      "section": "Added",
+      "text": "Five wrong tries on one device remove that device, and it needs your approval at the computer again. Ten wrong tries across the home pause PIN unlocks until you resume them with `delorun devices pin resume`. `delorun devices pin status` shows the state, and Settings has a PIN mode section at the computer that lists any setting waiting to be put back."
     },
     {
       "area": "Reach",
@@ -1482,6 +1542,86 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-rc.2",
+      "date": "2026-11-15",
+      "preview": false,
+      "areas": [
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "Setup's last step no longer tells you to install a version from npm that npm does not have. A launcher built for a local release channel says to install the package file it came from, and the release-check note names that channel's host instead of releases.delorun.com and GitHub."
+            },
+            {
+              "section": "Fixed",
+              "text": "When remote access is off, setup's last step says how to turn it on later and no longer points to a note that may not have been printed."
+            },
+            {
+              "section": "Fixed",
+              "text": "Settings → General → Updates, and the dialog that asks before the release check turns on, name the host this installation actually contacts when its launcher was built for another release channel. The production wording is unchanged."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
+            },
+            {
+              "section": "Changed",
+              "text": "The website's install button and the studio's preview notice use Delorun's shared buttons: peach, with Schibsted Grotesk as the typeface on the website as in the studio."
+            },
+            {
+              "section": "Changed",
+              "text": "The documentation site and the website use Delorun's brand colours and typefaces: Schibsted Grotesk for text, JetBrains Mono for code, a peach accent, and a darker peach for text that must stay readable on white."
+            },
+            {
+              "section": "Fixed",
+              "text": "The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The Trust page says that releases before 1.0 are signed with a key kept on a development computer, that no key ceremony has happened, and lists the release root's SHA-256 and key ids. The root changes at 1.0."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Added",
+              "text": "PIN mode lets a phone or another computer you have already approved unlock its Delorun page with a PIN or passcode, so you do not need to walk to the home computer for a code. It works on the private Tailscale address, and you turn it on at the home computer only: `delorun devices pin set` asks for a PIN of at least 6 digits, or a passcode of at least 10 characters, and says what the mode allows."
+            },
+            {
+              "section": "Added",
+              "text": "An unlocked page can change the settings that otherwise wait for the computer, and each one goes back to its earlier value when the mode is turned off. Only that one page is unlocked, so a reload starts locked again."
+            },
+            {
+              "section": "Added",
+              "text": "An unlock ends after 15 idle minutes by default (change it with `delorun devices pin options --idle-minutes`, from 1 to 60), after 12 hours at most, when you lock the page, and when the PIN changes. `--lock-when-hidden` locks a page whenever it is hidden."
+            },
+            {
+              "section": "Added",
+              "text": "Five wrong tries on one device remove that device, and it needs your approval at the computer again. Ten wrong tries across the home pause PIN unlocks until you resume them with `delorun devices pin resume`. `delorun devices pin status` shows the state, and Settings has a PIN mode section at the computer that lists any setting waiting to be put back."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-rc.1",
       "date": "2026-11-14",
