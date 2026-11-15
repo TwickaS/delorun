@@ -3,32 +3,38 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/home-auth/README.md
 /:
-  en: ba788f35bae17c99
+  en: aa5388fc40eb9e27
   zh: 521ebb74e3fe3673
 /delorun-home-auth:
-  en: 1b3021e6d8bf195b
-  zh: 994c8d4269c69ba6
+  en: 50063bab0ef743ba
+  zh: 80379b4ce3d7993d
 /delorun-home-auth/summary:
-  en: d13b954a7aa50b8c
-  zh: 79810c23c36a7f77
+  en: 337ba6cb76aac5a3
+  zh: 8d6d749e7bffe884
 /delorun-home-auth/contents:
-  en: 82bc741ff73da4ed
-  zh: 9c455eeb7d8c972c
+  en: 2812305b7c348f8a
+  zh: 5143fb0858452e5e
 /delorun-home-auth/the-owner-claim-and-device-list:
-  en: 2bfae07e33eb06b5
-  zh: 09383c5f14cd8041
+  en: 159d074ea9ec20ab
+  zh: fbec04abd778f6ec
 /delorun-home-auth/reach-sign-in:
-  en: c6564ba0df5abb1d
-  zh: 5498076bde921442
+  en: c23ec9604a7adda0
+  zh: 796d246115f03174
 /delorun-home-auth/the-admission-denial-suite:
-  en: 5e2d7f1cfdeca380
-  zh: e33fe53d12f5e344
+  en: 158ff271168e9fed
+  zh: 32ce754ee9bcf5fe
 /delorun-home-auth/the-reach-access-denial-suite:
-  en: 76668d968b8b7bcc
-  zh: 4cb59290d8ff896f
+  en: af84381bb0d02831
+  zh: 91d543a534b6ba1e
+/delorun-home-auth/dangerous-mode:
+  en: ea29e6941f329c12
+  zh: 27ba3cb7ebc7631a
+/delorun-home-auth/pin-mode:
+  en: 044546fda4a2a6e8
+  zh: 5078d010011aaf91
 /delorun-home-auth/notes-for-the-provider:
   en: d670eede8687ab13
   zh: a29a1c520d60df0f
 /delorun-home-auth/tests:
-  en: 54b55fd1a4339c98
-  zh: fac53c2b54e58731
+  en: 6e035fdb093146b8
+  zh: 61e2364851f4567f
