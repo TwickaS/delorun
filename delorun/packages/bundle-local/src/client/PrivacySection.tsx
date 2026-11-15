@@ -17,7 +17,7 @@ export const PRIVACY_OPT_INS = ['sessionLog'] as const
 export type PrivacyOptInId = (typeof PRIVACY_OPT_INS)[number]
 
 /** The switches whose rows a profile may not serve, which then say why instead of showing a switch. */
-const UNAVAILABLE: Readonly<Partial<Record<PrivacyOptInId, PrivacyLocaleKey>>> = { analytics: 'analytics.unavailable' }
+const UNAVAILABLE: Readonly<Partial<Record<PrivacyOptInId, PrivacyLocaleKey>>> = {}
 
 /** Hooks and writers the plugin supplies for each opt-in. */
 export interface PrivacySectionInjected {

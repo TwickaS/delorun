@@ -257,7 +257,7 @@ async function stub(page: Page, origin: string, scenario: Scenario): Promise<Stu
     },
   }))
   await page.route(`${origin}${DEVICE_ROUTES.reachStatus}`, route => answer(route, {
-    status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: ADDRESS }] },
+    status: 200, body: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: ADDRESS }] },
   }))
   await page.route(`${origin}${DEVICE_ROUTES.devices}`, route => answer(route, scenario.computer === true
     ? {

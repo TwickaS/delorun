@@ -56,7 +56,7 @@ const REQUEST = {
   identity: null, windowless: false, wrongCodes: 0,
 }
 const VIEW = { mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMinutes: 5, requestExpiryMinutes: 5, pendingPerIdentity: 1 } as const
-const READY = { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] } }
+const READY = { status: 200, body: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] } }
 const refusal = (status: number, error: string, message = `${error} sentence`) => ({ status, body: { error, message } })
 const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs you at your computer: open the studio on the home\'s own computer')
 
@@ -110,6 +110,20 @@ describe('the Devices section', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('does not ask for the device list while the reach status says nobody has claimed the home', async () => {
+    const unclaimed = { status: 200, body: { ...READY.body, hasOwner: false } }
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: unclaimed, [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER') })
+    renderSection(host)
+    expect(await screen.findByText(en['devices.none'])).toBeTruthy()
+    expect(host.count(`GET ${DEVICE_ROUTES.devices}`)).toBe(0)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reads the owner flag of the reach status', async () => {
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { ...READY.body, hasOwner: false } } })
+    expect((await readReachStatus(host.fetch))?.hasOwner).toBe(false)
+  })
+
   it('shows no devices yet for an owner whose list is empty', async () => {
     const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [] } } })
     renderSection(host)
@@ -141,7 +155,7 @@ describe('the Devices section', () => {
     { state: 'ready', shown: en['reach.readyNoAddress'] },
   ])('states the reach state $state', async ({ state, shown }) => {
     const host = fakeHost({
-      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state }] } },
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state }] } },
       [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
     })
     const { container } = renderSection(host)
@@ -153,7 +167,7 @@ describe('the Devices section', () => {
   it.each(['blocked', 'failed'])('states the Host\'s sentence for a %s option', async (state) => {
     const detail = 'Tailscale is not signed in on this computer.'
     const host = fakeHost({
-      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state, cause: 'TAILSCALE_LOGGED_OUT', detail }] } },
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state, cause: 'TAILSCALE_LOGGED_OUT', detail }] } },
       [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
     })
     renderSection(host)
@@ -407,7 +421,7 @@ describe('the Devices section', () => {
   it.each([
     { name: 'an unreachable home', answer: 'unreachable' as const, shown: en['failed.unreachable'] },
     { name: 'an answer that is not JSON', answer: { status: 200, text: '<html>' }, shown: en['failed.unreadable'] },
-    { name: 'an answer of the wrong form', answer: { status: 200, body: { available: true, options: [{ option: 'x', state: 'asleep' }] } }, shown: en['failed.unreadable'] },
+    { name: 'an answer of the wrong form', answer: { status: 200, body: { available: true, hasOwner: true, options: [{ option: 'x', state: 'asleep' }] } }, shown: en['failed.unreadable'] },
     { name: 'a refusal of the wrong form', answer: { status: 500, body: { problem: true } }, shown: en['failed.unreadable'] },
     { name: 'another refusal', answer: refusal(500, 'INTERNAL', 'The home could not read its reach state.'), shown: 'The home could not read its reach state.' },
   ])('says what failed for $name', async ({ answer, shown }) => {
@@ -503,7 +517,7 @@ describe('the plugin', () => {
       expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
       for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
       await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
-      expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
+      expect(slots.entries('settings.section.icon').filter(entry => entry.options.id === DEVICES_SECTION_ID).map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[2]

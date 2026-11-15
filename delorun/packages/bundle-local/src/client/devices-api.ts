@@ -42,6 +42,8 @@ export interface ReachOptionStatus {
 /** What `GET /delorun/reach/status` answers in a profile with reach. */
 export interface ReachStatus {
   readonly available: true
+  /** Whether the owner has claimed this home; before that the device list is not asked for. */
+  readonly hasOwner: boolean
   readonly options: readonly ReachOptionStatus[]
 }
 
@@ -131,6 +133,7 @@ export const DEVICE_ROUTES = {
 
 const isReachStatus = fields({
   available: value => value === true,
+  hasOwner: isBoolean,
   options: listOf(fields({
     option: isString,
     state: value => (REACH_STATES as readonly unknown[]).includes(value),

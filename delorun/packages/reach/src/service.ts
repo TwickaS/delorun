@@ -95,6 +95,8 @@ export const REACH_STATUS_PATH = '/delorun/reach/status' as const
 export interface ReachSummary {
   /** Always true: the route exists only where the reach service runs. */
   readonly available: true
+  /** Whether the owner has claimed this home; the device list refuses with `NO_OWNER` until then. */
+  readonly hasOwner: boolean
   /** Each option this home builds, with its state; `ready` means it is set up and reachable. */
   readonly options: readonly ReachStatus[]
 }
@@ -220,7 +222,7 @@ export class ReachService extends Service {
    */
   protected async [Service.init](): Promise<void> {
     if (!this.config.enabled) return
-    this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { this.answerStatus(request, response) } }), 'reach status route')
+    this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { void this.answerStatus(request, response) } }), 'reach status route')
     this.ctx.effect(() => this.register(new TailscalePrivateProvider(this.tailscale())), 'reach tailscale-private provider')
     this.ctx.effect(() => async () => { await this.serialize(() => this.stopAll()) }, 'reach options')
     const rows: ReachConfigRows = {
@@ -244,7 +246,7 @@ export class ReachService extends Service {
    * @param request - the request.
    * @param response - the response.
    */
-  private answerStatus(request: IncomingMessage, response: ServerResponse): void {
+  private async answerStatus(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const arrival = this.ctx.homeAuth.arrivalOf(request)
     const loopback = arrival.listener === 'loopback' && isLoopbackHost(arrival.host)
     response.setHeader('content-type', 'application/json; charset=utf-8')
@@ -267,7 +269,7 @@ export class ReachService extends Service {
       response.end(JSON.stringify({ error: 'METHOD_NOT_ALLOWED', message: 'Read the reach status with a GET' }))
       return
     }
-    const summary: ReachSummary = { available: true, options: this.status() }
+    const summary: ReachSummary = { available: true, hasOwner: await this.ctx.homeAuth.owner() !== undefined, options: this.status() }
     response.statusCode = 200
     response.end(JSON.stringify(summary))
   }

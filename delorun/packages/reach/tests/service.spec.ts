@@ -42,6 +42,8 @@ interface World {
 }
 
 /** The routes the fake web server holds. */
+/** What the faked `homeAuth.owner()` answers: undefined for an unclaimed home. */
+const OWNER: { current: object | undefined } = { current: { claimedAt: 1 } }
 const routes = new Map<string, (request: object, response: object) => void>()
 
 /** Servers a test holds a port with. */
@@ -65,6 +67,7 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
     },
   } as never)
   ctx.provide('homeAuth', {
+    owner: () => Promise.resolve(OWNER.current),
     arrivalOf: (request: { readonly headers: { readonly host?: string } }) => ({
       listener: request.headers.host === HOST ? 'reach-tailscale-private' : request.headers.host === 'rebind.example' ? undefined : 'loopback',
       host: request.headers.host,
@@ -366,28 +369,32 @@ describe('the reach service', () => {
   it('answers the reach status to the studio on loopback and on the reach address, and to nothing else', async () => {
     const w = world()
     const fiber = await mount(w, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
-    const answer = (host: string, method = 'GET', cookie: string | null = 'studio'): { status: number; body: unknown } => {
+    const answer = (host: string, method = 'GET', cookie: string | null = 'studio'): Promise<{ status: number; body: unknown }> => {
       const handler = routes.get('/delorun/reach/status')
       if (handler === undefined) throw new Error('no status route')
-      const reply: { status: number; body: unknown; headers: Map<string, string> } = { status: 0, body: undefined, headers: new Map() }
-      handler({ method, headers: { host, ...(cookie === null ? {} : { cookie }) } }, {
-        setHeader: (name: string, value: string) => { reply.headers.set(name, value) },
-        set statusCode(value: number) { reply.status = value },
-        end: (text: string) => { reply.body = JSON.parse(text) },
+      return new Promise((resolve) => {
+        const reply: { status: number; headers: Map<string, string> } = { status: 0, headers: new Map() }
+        handler({ method, headers: { host, ...(cookie === null ? {} : { cookie }) } }, {
+          setHeader: (name: string, value: string) => { reply.headers.set(name, value) },
+          set statusCode(value: number) { reply.status = value },
+          end: (text: string) => { resolve({ status: reply.status, body: JSON.parse(text) }) },
+        })
       })
-      return { status: reply.status, body: reply.body }
     }
-    expect(answer('127.0.0.1:3080')).toEqual({ status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: ADDRESS }] } })
-    expect(answer(HOST).status).toBe(200)
+    expect(await answer('127.0.0.1:3080')).toEqual({ status: 200, body: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: ADDRESS }] } })
+    expect((await answer(HOST)).status).toBe(200)
     // Pins the arrival check: a rebinding name reaches the loopback port and reads nothing.
-    expect(answer('rebind.example')).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
-    expect(answer('127.0.0.1:3080', 'POST').status).toBe(405)
+    expect(await answer('rebind.example')).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
+    expect((await answer('127.0.0.1:3080', 'POST')).status).toBe(405)
     // Pins the credential: a local program without the studio's cookie, and a phone that has not signed in, read
     // neither the tailnet address nor any option's state.
-    expect(answer('127.0.0.1:3080', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
-    expect(answer('home.example.ts.net', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
-    expect(answer('127.0.0.1:3080', 'GET', 'foreign')).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
-    for (const refused of [answer('127.0.0.1:3080', 'GET', null), answer('home.example.ts.net', 'GET', null)]) expect(JSON.stringify(refused.body)).not.toContain('example.ts.net')
+    expect(await answer('127.0.0.1:3080', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
+    expect(await answer('home.example.ts.net', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
+    expect(await answer('127.0.0.1:3080', 'GET', 'foreign')).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
+    OWNER.current = undefined
+    expect(await answer('127.0.0.1:3080')).toMatchObject({ status: 200, body: { hasOwner: false } })
+    OWNER.current = { claimedAt: 1 }
+    for (const refused of [await answer('127.0.0.1:3080', 'GET', null), await answer('home.example.ts.net', 'GET', null)]) expect(JSON.stringify(refused.body)).not.toContain('example.ts.net')
     await fiber.dispose()
     expect(routes.size).toBe(0)
   })

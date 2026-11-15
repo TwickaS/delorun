@@ -135,7 +135,7 @@ export function DevicesSection({
         {reach.kind === 'ready' ? reach.value?.options.map(option => <ReachLine key={option.option} t={t} status={option} />) : null}
         {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
           mutation={pairingMutation} set={setPairing} openCode={openPairingCode} decline={declinePairing} />}
-        {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} />}
+        {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} hasOwner={reach.kind !== 'ready' || reach.value?.hasOwner !== false} />}
       </>}
   </div>
 }
@@ -191,10 +191,10 @@ function ReachLine({ t, status }: { t: Translate; status: ReachOptionStatus }): 
 
 /**
  * The device list, its removal, and the approval window.
- * @param props - the copy and the request function.
+ * @param props - the copy, the request function, and whether the home has an owner; without one the list is not requested.
  * @returns the list and the approval controls.
  */
-function DeviceManager({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactNode {
+function DeviceManager({ t, fetch, hasOwner }: { t: Translate; fetch: HostFetch; hasOwner: boolean }): ReactNode {
   const [devices, setDevices] = useState<Loaded<DeviceList | undefined>>({ kind: 'loading' })
   const [removing, setRemoving] = useState<Device | undefined>()
   const [removeFailure, setRemoveFailure] = useState<{ deviceId: Device['id']; text: string } | undefined>()
@@ -204,12 +204,16 @@ function DeviceManager({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactN
   const [approveFailure, setApproveFailure] = useState<{ requestId: ApprovalRequestId; text: string } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
+    if (!hasOwner) {
+      setDevices({ kind: 'ready', value: undefined })
+      return
+    }
     try {
       setDevices({ kind: 'ready', value: await readDevices(fetch) })
     } catch (error) {
       setDevices({ kind: 'failed', text: failureText(t, error, 'list') })
     }
-  }, [fetch, t])
+  }, [fetch, t, hasOwner])
   useEffect(() => { void refresh() }, [refresh])
 
   const closeWindow = useCallback((): void => {

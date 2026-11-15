@@ -457,7 +457,7 @@ const DEVICE = {
   id: 'a'.repeat(43), label: 'Pixel 9', platform: 'Android', address: 'https://home.example.ts.net',
   approvedAt: NOW - 86_400_000, approvedBy: 'local', lastSignInAt: NOW - 3_600_000,
 }
-const READY = ok({ available: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] })
+const READY = ok({ available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] })
 
 /** The computer's home: one approved device and the scripted unlock list. */
 function computerHost(list: unknown) {
