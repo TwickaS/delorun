@@ -192,6 +192,11 @@ export class HomeProcess implements HandshakeSubject {
     return journalPath(this.options.home, this.options.profile)
   }
 
+  /** Logs an error home-auth threw without a code, under the id its refusal carries. */
+  private readonly reportInternal = (error: unknown, id: string): void => {
+    this.logger.error('home-auth failed with an uncoded error', { err: error, data: { logId: id } })
+  }
+
   /** @inheritdoc */
   get logger(): DelorunLogger {
     return this.options.logger
@@ -598,16 +603,16 @@ export class HomeProcess implements HandshakeSubject {
         if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')
         return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, request.args.profileOnly, progress)
       case 'devices.approve':
-        return approveDevices(request, check.callerOf(request.token), this.host?.devices)
+        return approveDevices(request, check.callerOf(request.token), this.host?.devices, undefined, this.reportInternal)
       case 'devices.remove':
-        return removeDevice(request, check.callerOf(request.token), this.host?.devices)
+        return removeDevice(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
       case 'devices.elevate':
-        return elevateDevices(request, check.callerOf(request.token), this.host?.devices)
+        return elevateDevices(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
       case 'pin.set':
       case 'pin.options':
       case 'pin.off':
       case 'pin.resume':
-        return changePin(request, check.callerOf(request.token), this.host?.devices)
+        return changePin(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
       case 'permission.reload':
         return reloadPermissions(this.host?.consents)
       case 'mcp.list':
