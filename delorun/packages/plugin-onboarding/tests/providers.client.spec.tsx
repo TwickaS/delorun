@@ -146,6 +146,20 @@ describe('the walk', () => {
     expect(screen.getAllByText(en['providers.outcome.connected'])).toHaveLength(2)
   })
 
+  it.each([
+    ['a key that works', { kind: 'works', models: 3, defaultModel: undefined } as const, TEST_DELAY_MS, 'connected'],
+    ['a key that fails its test', { kind: 'failed' } as const, TEST_DELAY_MS, 'failed'],
+    ['a key saved before its test ran', { kind: 'works', models: 3, defaultModel: undefined } as const, 0, 'untested'],
+  ])('summarises %s with its own verdict, never only "Key saved"', async (_, probe, wait, verdict) => {
+    await start({ probe })
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await flush(wait)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    const row = within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem')[1]
+    expect(row?.textContent).toContain(en[`providers.outcome.${verdict}`])
+  })
+
   it('offers a base URL under More settings for a declared route only', async () => {
     const mounted = await mount()
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))

@@ -9,7 +9,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { isCloneAddress, isFolderName, suggestedName } from '../../clone-address.ts'
 import type { CloneProblem } from '../../wire.ts'
 import { Card } from '../ui/Card.tsx'
-import { Choices } from '../ui/ChoiceChip.tsx'
+import { ChipGroup } from '@delorun/plugin-theme/controls'
 import { StateLine } from '../ui/StateLine.tsx'
 import { FolderChooser, problemText, type FolderProblem } from '../FolderChooser.tsx'
 import type { CloneView, Store, WorkspaceMode } from '../guide.ts'
@@ -216,13 +216,13 @@ export function WorkspaceStep({ services, guide, target }: StepProps & { readonl
       {target.kind === 'checking' && <StateLine tone="loading">{t('start.lead.checking')}</StateLine>}
       {target.kind === 'none' && <StateLine tone="warning">{t('start.lead.none')}</StateLine>}
       {target.kind === 'other' && workspace === undefined && <StateLine tone="info">{t('workspace.other')}</StateLine>}
-      <Choices label={t('workspace.how')} options={[
-        ...target.kind === 'default' ? [{ key: 'default', checked: shown === 'default', content: t('workspace.mode.default'), onSelect: () => {
-          guide.setMode('default')
-          guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
-        } }] : [],
-        { key: 'folder', checked: shown === 'folder', onSelect: () => { guide.setMode('folder') }, content: t('workspace.mode.folder') },
-        { key: 'clone', checked: shown === 'clone', onSelect: () => { guide.setMode('clone') }, content: t('workspace.mode.clone') },
+      <ChipGroup label={t('workspace.how')} value={shown} onChange={(next) => {
+        guide.setMode(next)
+        if (next === 'default' && target.kind === 'default') guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
+      }} options={[
+        ...target.kind === 'default' ? [{ value: 'default' as WorkspaceMode, label: t('workspace.mode.default') }] : [],
+        { value: 'folder' as WorkspaceMode, label: t('workspace.mode.folder') },
+        { value: 'clone' as WorkspaceMode, label: t('workspace.mode.clone') },
       ]} />
       {shown === 'default' && target.kind === 'default' && (
         <FolderCard path={target.path} note={t('workspace.default')} t={t} />

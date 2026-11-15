@@ -5,9 +5,8 @@ import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { ACCENT_PRESETS, ACCENT_PREVIEWS, PALETTE_CHOICES, PALETTE_PREVIEWS } from '../previews.ts'
 import type { SchemePreference, StepServices } from '../types.ts'
-import { AccentPicker, ThemePicker } from '@delorun/plugin-theme/controls'
+import { AccentPicker, ChipGroup, ThemePicker } from '@delorun/plugin-theme/controls'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Choices } from '../ui/ChoiceChip.tsx'
 import type { StepProps } from './shared.ts'
 import css from './steps.module.css'
 
@@ -81,9 +80,8 @@ export function LookStep({ services }: StepProps): ReactNode {
     <div className={css.lookGrid}>
       <div className={css.stack}>
         <p className={css.lead}>{t('look.lead')}</p>
-        <Choices label={appearance('mode')} options={SCHEMES.map(value => ({
-          key: value, checked: preference === value, onSelect: () => { scheme.set(value) }, content: appearance(`mode.${value}`),
-        }))} />
+        <ChipGroup label={appearance('mode')} value={preference} onChange={(value) => { scheme.set(value) }}
+          options={SCHEMES.map(value => ({ value, label: appearance(`mode.${value}`) }))} />
         <ThemePicker label={appearance('palette')} value={palette} disabled={disabled}
           onChange={(value) => { save(look.settings.set('palette', value)) }}
           themes={PALETTE_CHOICES.map(value => ({ value, label: appearance(`palette.${value}`), light: PALETTE_PREVIEWS[value].light, dark: PALETTE_PREVIEWS[value].dark }))} />

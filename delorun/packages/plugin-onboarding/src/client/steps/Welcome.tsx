@@ -4,7 +4,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { NoticeFace } from '../types.ts'
-import { Choices } from '../ui/ChoiceChip.tsx'
+import { ChipGroup } from '@delorun/plugin-theme/controls'
 import { Notice } from '../ui/Notice.tsx'
 import type { StepProps } from './shared.ts'
 import css from './steps.module.css'
@@ -20,9 +20,8 @@ export function WelcomeStep({ services, notice }: StepProps & { readonly notice:
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('welcome.lead')}</p>
-      <Choices label={t('welcome.language')} options={locale.locales.map(each => ({
-        key: each.id, checked: locale.active === each.id, onSelect: () => { language.setLocale(each.id) }, content: each.label,
-      }))} />
+      <ChipGroup label={t('welcome.language')} value={locale.active} onChange={(id) => { language.setLocale(id) }}
+        options={locale.locales.map(each => ({ value: each.id, label: each.label }))} />
       {first !== undefined && (
         <Notice title={notice?.title() ?? ''} moreLabel={t('readMore')}
           more={rest.length === 0 ? undefined : rest.map(paragraph => <p key={paragraph}>{paragraph}</p>)}>

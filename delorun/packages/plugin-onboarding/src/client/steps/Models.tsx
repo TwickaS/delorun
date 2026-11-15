@@ -15,8 +15,11 @@ import { useStore } from './shared.ts'
 import css from './models.module.css'
 import shared from './steps.module.css'
 
-/** How a provider ended: its key is stored (tested or not), it already had one, or it was passed over. */
-type Outcome = 'connected' | 'saved' | 'skipped'
+/**
+ * How a provider ended: connected (a key that works, or one already stored), saved with the test's failed verdict, saved
+ * without a test result, or passed over.
+ */
+type Outcome = 'connected' | 'failed' | 'untested' | 'skipped'
 
 /** The props of the step. */
 interface ModelsStepProps {
@@ -96,7 +99,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
         <ul className={shared.cards} aria-label={t('providers.summary.label')}>
           {rows.map(({ card, outcome }) => (
             <li key={card.provider}>
-              <Card title={card.name} labels={labels} action={<span className={outcome === 'skipped' ? css.skipped : shared.added}>{outcome === 'skipped' ? null : <span aria-hidden="true">✓</span>}{outcome === 'skipped' ? '' : ' '}{t(`providers.outcome.${outcome}`)}</span>} />
+              <Card title={card.name} labels={labels} action={<span className={outcome === 'connected' ? shared.added : css.skipped}>{outcome === 'connected' ? <span aria-hidden="true">✓ </span> : null}{t(`providers.outcome.${outcome}`)}</span>} />
             </li>
           ))}
         </ul>
@@ -200,7 +203,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
     void providers.save(card.entry, typed, address).then((saved) => {
       setSaving(false)
       if (!saved) { setProblem(true); return }
-      onDone(test.state === 'done' && test.probe.kind === 'works' ? 'connected' : 'saved')
+      onDone(test.state !== 'done' ? 'untested' : test.probe.kind === 'works' ? 'connected' : 'failed')
     })
   }
   const works = test.state === 'done' && test.probe.kind === 'works' ? test.probe : undefined
