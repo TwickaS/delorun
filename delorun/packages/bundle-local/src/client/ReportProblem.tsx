@@ -65,9 +65,9 @@ export function ReportDialog({ open, onClose, t, surface, fetchImpl }: ReportDia
   }
   return <Dialog open={open} onClose={onClose} title={t('report.title')} closeLabel={t('report.close')} description={t('report.description')}
     actions={<>
-      <Button variant="ghost" onClick={onClose}>{t('report.cancel')}</Button>
-      <Button disabled={report === undefined} onClick={copy}>{t('report.copy')}</Button>
-      <Button variant="primary" disabled={report === undefined} data-modal-autofocus onClick={() => {
+      <Button variant="ghost" size="sm" className={css.action} onClick={onClose}>{t('report.cancel')}</Button>
+      <Button size="sm" className={css.action} disabled={report === undefined} onClick={copy}>{t('report.copy')}</Button>
+      <Button variant="primary" size="sm" className={css.action} disabled={report === undefined} data-modal-autofocus onClick={() => {
         if (report !== undefined) window.open(report.url, '_blank', 'noopener,noreferrer')
       }}>{t('report.open')}</Button>
     </>}>

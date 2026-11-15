@@ -6,6 +6,7 @@ import { Button } from '@delorun/brand'
 import { SettingsCard } from '@delorun/settings-controls'
 import { ReportDialog, type ReportFace } from './ReportProblem.tsx'
 import css from './SettingsSection.module.css'
+import reportCss from './ReportProblem.module.css'
 import rowCss from './SettingsRow.module.css'
 
 /** Delorun's licence file. */
@@ -51,7 +52,7 @@ export function AboutSection({ t, surface = 'computer', fetchImpl }: AboutSectio
         <div className={rowCss.text}>
           <div className={rowCss.title}>{t('about.report.body')}</div>
         </div>
-        <Button aria-haspopup="dialog" onClick={() => { setReporting(true) }}>{t('about.report.button')}</Button>
+        <Button size="sm" className={reportCss.action} aria-haspopup="dialog" onClick={() => { setReporting(true) }}>{t('about.report.button')}</Button>
       </div>
       <ReportDialog open={reporting} onClose={() => { setReporting(false) }} t={t} surface={surface} fetchImpl={fetchImpl} />
     </SettingsCard>
