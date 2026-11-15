@@ -167,8 +167,6 @@ WantedBy=default.target
 
 Every step is logged with its duration; all command output goes to `<work>/cut-rc-<version>.log`. A failure names the step and the next action, and the channel still serves what it served. If the log submission succeeded but the wait timed out, run `log-release.ts` with the same endpoints rather than submitting again. The command never tags, pushes or touches an installed home. It ends by printing those commands: the tag and its push, keeping the [local channel](#the-local-rc-channel) served, and `rc update --check` / `rc update` in the installed `~/delorun-rc` home with the runbook's wrapper. `tests/local/cut-rc.integration.spec.ts` cuts two candidates with throwaway keys into a scratch channel and checks that the second signs its notes and that the first stays offered as the release to update from.
 
-Pairing debt: `README.zh.md` has no counterpart of this section yet.
-
 ## Rebuild comparison
 
 `node_modules/.bin/tsx delorun/apps/release/src/compare-rebuild.ts <first> <second>` compares two output directories of the same release, such as the release workflow's and the targets-key holder's rebuild. It exits 0 when the two hold the same file names and every file matches, printing each difference that an entry of `rebuild-exceptions.json` accepts with that entry's id. It exits 1 on any other difference, printing each one, and signing refuses such a rebuild. It exits 2 on a usage error, an unreadable directory or an exceptions file that does not validate.
