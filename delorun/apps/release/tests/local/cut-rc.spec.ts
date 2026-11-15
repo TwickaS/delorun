@@ -1,9 +1,8 @@
 /**
- * The `cut-rc.ts` command line and plan: which flags it requires, how a candidate number decides whether notes are
- * signed, what `--dry-run` prints, and that key material never reaches the plan.
+ * The `cut-rc.ts` command line and plan: which flags it requires, that every candidate signs its notes, what `--dry-run` prints, and that key material never reaches the plan.
  */
 import { describe, expect, it } from 'vitest'
-import { localReleaseArgs, parseCutArgs, planSteps, printPlan, signsNotes } from '../../scripts/cut-rc.ts'
+import { localReleaseArgs, parseCutArgs, planSteps, printPlan } from '../../scripts/cut-rc.ts'
 
 const BASE = ['--version', '0.1.0-rc.2', '--channel', '/c/channel', '--state', '/k/state.json', '--keys', '/k', '--root', '/k/1.root.json', '--commit', 'abc123']
 
@@ -44,15 +43,12 @@ describe('cut-rc plan', () => {
     expect(parseCutArgs(BASE)).toMatchObject({ kind: 'rc', number: 2 })
   })
 
-  it('signs notes for every candidate but the first preview', () => {
-    expect(signsNotes(parseCutArgs(BASE))).toBe(true)
-    expect(signsNotes(parseCutArgs(['--version', '0.1.0-preview.2', ...BASE.slice(2)]))).toBe(true)
-    expect(signsNotes(parseCutArgs(['--version', '0.1.0-rc.1', ...BASE.slice(2)]))).toBe(true)
-    const first = parseCutArgs(['--version', '0.1.0-preview.1', ...BASE.slice(2)])
-    expect(signsNotes(first)).toBe(false)
-    expect(localReleaseArgs(first)).not.toContain('--notes')
-    expect(localReleaseArgs(parseCutArgs(BASE))).toContain('--notes')
-    expect(planSteps(first).map(step => step.id)).toEqual(['tree', 'changelog', 'clear-stages', 'closure', 'sign', 'verify'])
+  it('signs notes for every candidate, the first preview included', () => {
+    for (const version of ['0.1.0-preview.1', '0.1.0-preview.2', '0.1.0-rc.1']) {
+      const request = parseCutArgs(['--version', version, ...BASE.slice(2)])
+      expect(localReleaseArgs(request)).toContain('--notes')
+      expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify'])
+    }
   })
 
   it('plans the highlights step and drops the build steps with --closures-from', () => {

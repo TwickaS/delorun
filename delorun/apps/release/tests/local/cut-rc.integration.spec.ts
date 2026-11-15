@@ -1,6 +1,6 @@
 /**
  * Cuts two release candidates into a scratch channel with throwaway keys, a stand-in log and fixture closures: the
- * second candidate's manifest signs its notes, the channel verifies as a client verifies it, and the first candidate
+ * each candidate's manifest signs its notes, the channel verifies as a client verifies it, and the first candidate
  * stays in the channel as the release the second updates from. Git and the closure build are stood in; the signing runs
  * the real `local-release.ts`.
  */
@@ -15,7 +15,7 @@ import { fixtureClosure, keyFile, serveLog, trust } from './support.ts'
 const NOTES = 'What is new in this candidate:\n- The studio opens faster.\n'
 
 describe('cutting two candidates', () => {
-  it('signs the second candidate\'s notes and offers the update from the first', async (test) => {
+  it('signs each candidate\'s notes and offers the update from the first', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
     const log = await serveLog(test, trusted)
@@ -64,7 +64,7 @@ describe('cutting two candidates', () => {
 
     expect(await cut('0.1.0-preview.1', '')).toBe(0)
     const first = verifyChannel(join(directory, 'channel'), '0.1.0-preview.1', Math.floor(Date.now() / 1000))
-    expect(first.notes).toBeUndefined()
+    expect(first.notes?.toString()).toBe(NOTES)
 
     expect(await cut('0.1.0-preview.2', '\n// preview.2\n')).toBe(0)
     const second = verifyChannel(join(directory, 'channel'), '0.1.0-preview.2', Math.floor(Date.now() / 1000))

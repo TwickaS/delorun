@@ -10,7 +10,7 @@
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
  * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
- * `<work>/notes-<version>.txt`); every candidate but the first preview signs it into the manifest as `notes`.
+ * `<work>/notes-<version>.txt`); every candidate signs it into the manifest as `notes`.
  * `--work` (default: the channel's parent directory) holds the closure, the build cache and `cut-rc-<version>.log`, to
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
  * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
@@ -161,11 +161,6 @@ export interface PlannedStep {
   readonly commands: readonly string[]
 }
 
-/** Whether a candidate signs release notes: every one but the first preview, which has no earlier release to update from. */
-export function signsNotes(request: Pick<CutRequest, 'kind' | 'number'>): boolean {
-  return request.kind === 'rc' || request.number >= 2
-}
-
 /** The closure directory of a candidate. */
 function closureDirectory(request: CutRequest): string {
   return request.closuresFrom ?? join(request.work, `closure-${request.version}`)
@@ -183,14 +178,14 @@ export function localReleaseArgs(request: CutRequest): string[] {
     '--state', request.state, '--closures-from', closureDirectory(request),
     ...request.platforms.flatMap(platform => ['--platform', platform]),
     '--log-submit', request.log.submit, '--log-checkpoint', request.log.checkpoint, '--log-tiles', request.log.tiles, '--log-poll-seconds', request.logPollSeconds,
-    ...signsNotes(request) ? ['--notes', request.highlights] : [],
+    '--notes', request.highlights,
   ]
 }
 
 /**
  * The plan for a request.
  * @param request - the request.
- * @returns the steps in order; the highlights step exists from rc.2, the clearing and building steps only without `--closures-from`.
+ * @returns the steps in order; the clearing and building steps only without `--closures-from`.
  */
 export function planSteps(request: CutRequest): PlannedStep[] {
   const tsx = 'node_modules/.bin/tsx'
@@ -198,7 +193,7 @@ export function planSteps(request: CutRequest): PlannedStep[] {
   return [
     { id: 'tree', title: `check a clean tracked tree at ${request.commit}`, commands: [`git rev-parse --verify ${request.commit}^{commit}`, 'git rev-parse HEAD', 'git status --porcelain --untracked-files=no'] },
     { id: 'changelog', title: `assemble the changelog for ${request.version} when it has no entry`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version}`] },
-    ...signsNotes(request) ? [{ id: 'highlights', title: `write the release notes to ${request.highlights}`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version} --highlights ${request.highlights}`] } as const] : [],
+    { id: 'highlights', title: `write the release notes to ${request.highlights}`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version} --highlights ${request.highlights}`] },
     ...request.closuresFrom === undefined
       ? [
           { id: 'clear-stages', title: 'clear stale closure build stages', commands: [`remove <build root>-* directories that carry ${BUILD_ROOT_MARKER}, and a build-root lock whose process no longer runs`] } as const,
@@ -401,12 +396,10 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
     return failed(`the assembly changed:\n${changed}`, 'review and commit these files (git add delorun/changelog CHANGELOG.md), then run again with --commit <new sha>', 3)
   }
 
-  if (signsNotes(request)) {
-    started = begin('highlights')
-    const written = await command(tsx, ['delorun/apps/release/src/changelog/assemble.ts', '--version', request.version, '--highlights', request.highlights])
-    if (written.status !== 0) return failed('the release notes were not written', `read ${logFile}`)
-    done(started)
-  }
+  started = begin('highlights')
+  const written = await command(tsx, ['delorun/apps/release/src/changelog/assemble.ts', '--version', request.version, '--highlights', request.highlights])
+  if (written.status !== 0) return failed('the release notes were not written', `read ${logFile}`)
+  done(started)
 
   if (request.closuresFrom === undefined) {
     started = begin('clear-stages')
@@ -433,7 +426,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   let verified: VerifiedChannel
   try {
     verified = verifyChannel(request.channel, request.version, Math.floor(deps.now() / 1000))
-    if (signsNotes(request) && (verified.notes === undefined || !verified.notes.equals(readFileSync(request.highlights)))) throw new Error('the manifest does not sign the release notes written for this candidate')
+    if ((verified.notes === undefined || !verified.notes.equals(readFileSync(request.highlights)))) throw new Error('the manifest does not sign the release notes written for this candidate')
     if (!verified.others.includes(previous) && request.number > 1) throw new Error(`${previous} is no longer in the channel`)
   } catch (error) {
     return failed((error as Error).message, 'do not tag; inspect the channel and the log')
