@@ -45,27 +45,29 @@ describe('the providers landing', () => {
       ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false],
     ])
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Connect 1 →' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['providers.connect'] })).toBeTruthy()
     await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
-    expect(screen.getByRole('button', { name: 'Connect 2 →' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['providers.connect'] }).hasAttribute('disabled')).toBe(false)
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
     await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
-    expect(screen.getByRole('button', { name: 'Connect 0 →' }).hasAttribute('disabled')).toBe(true)
+    // With nothing ticked the button leaves the step instead of showing a disabled count.
+    expect(screen.queryByRole('button', { name: en['providers.connect'] })).toBeNull()
   })
 
-  it('leaves the step when skipped', async () => {
+  it('continues without a key when nothing is ticked', async () => {
     const { next } = await mount()
-    await click(screen.getByRole('button', { name: en['providers.skip'] }))
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('button', { name: en['providers.continueNoKey'] }))
     expect(next).toHaveBeenCalledOnce()
   })
 
-  it.each<readonly [string, Parameters<typeof providersFake>[0], string]>([
-    ['the directory cannot be read', { directory: undefined }, en['providers.unread']],
-    ['no provider connects with a key', { directory: [] }, en['providers.none']],
-  ])('says so when %s', async (_, change, text) => {
+  it.each<readonly [string, Parameters<typeof providersFake>[0], string, string]>([
+    ['the directory cannot be read', { directory: undefined }, en['providers.unread'], en.continue],
+    ['no provider connects with a key', { directory: [] }, en['providers.none'], en['providers.continueNoKey']],
+  ])('says so when %s', async (_, change, text, label) => {
     const { next } = await mount(change)
     expect(screen.getByText(text)).toBeTruthy()
-    await click(screen.getByRole('button', { name: en['providers.skip'] }))
+    await click(screen.getByRole('button', { name: label }))
     expect(next).toHaveBeenCalledOnce()
   })
 })
@@ -74,19 +76,19 @@ describe('the walk', () => {
   const start = async (change: Parameters<typeof providersFake>[0] = {}) => {
     const mounted = await mount(change)
     await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
-    await click(screen.getByRole('button', { name: 'Connect 2 →' }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
     return mounted
   }
 
   it('shows k of N, one provider at a time, with Skip and Next', async () => {
     await start()
-    expect(screen.getByText('1 of 2')).toBeTruthy()
+    expect(screen.getByText('DeepSeek · 1 of 2')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' })).toBeTruthy()
     // A found key is never echoed: the field is empty and the status says so.
     expect((screen.getByLabelText(en['providers.key']) as HTMLInputElement).value).toBe('')
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['providers.next'] }))
-    expect(screen.getByText('2 of 2')).toBeTruthy()
+    expect(screen.getByText('OpenAI · 2 of 2')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 3, name: 'OpenAI' })).toBeTruthy()
     expect(screen.getByRole('button', { name: en['providers.next'] }).hasAttribute('disabled')).toBe(true)
     await click(screen.getByRole('button', { name: en['providers.skipOne'] }))
@@ -171,14 +173,16 @@ describe('the walk', () => {
     expect(screen.getByRole('alert').textContent).toContain(en['providers.failedHelp'].replace('{name}', 'OpenAI').slice(0, 20))
     await click(screen.getByRole('button', { name: en['providers.tryAgain'] }))
     expect(screen.getByRole('heading', { level: 3, name: 'OpenAI' })).toBeTruthy()
-    expect(screen.getByText('1 of 1')).toBeTruthy()
+    // A single provider has no counter of its own.
+    expect(screen.queryByText(/ of 1$/)).toBeNull()
+    expect(document.activeElement).toBe(screen.getByLabelText(en['providers.key']))
   })
 
   it('offers a base URL under More settings for a declared route only', async () => {
     const mounted = await mount()
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
     await click(screen.getByRole('checkbox', { name: /Gateway/ }))
-    await click(screen.getByRole('button', { name: 'Connect 1 →' }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
     await click(screen.getByText(en['providers.more']))
     await type(screen.getByLabelText(en['providers.baseURL']), ' http://127.0.0.1:9 ')
     await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
@@ -193,7 +197,7 @@ describe('the summary', () => {
   it('lists each provider as connected, saved or skipped, tests the keys again and goes back to the cards on request', async () => {
     const { guide } = await mount()
     await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
-    await click(screen.getByRole('button', { name: 'Connect 2 →' }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
     await flush(TEST_DELAY_MS)

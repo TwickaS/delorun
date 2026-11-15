@@ -21,7 +21,7 @@
  * post-apply reload.
  */
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconPlusOutlineRegular, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -35,6 +35,7 @@ import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
 import type { en } from './locales.ts'
+import { useModelKeyStatus, type ModelKeyStatus } from './key-status.ts'
 import styles from './ModelsSection.module.css'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
@@ -51,6 +52,8 @@ export interface ModelsSectionInjected {
   schema: SettingsSchemaOperations
   /** Section copy. */
   t: (key: keyof typeof en) => string
+  /** A product shell's key tests; the page marks a failed key and offers a re-test when it is present. */
+  keyStatus?: ModelKeyStatus
 }
 
 /**
@@ -119,6 +122,7 @@ interface ProviderEditorRenderProps extends Pick<
 > {
   target: EditorTarget
   row: ProviderRow
+  keyStatus?: ModelKeyStatus
 }
 
 /** Render an editor for either the setup posture or an expanded provider row. */
@@ -236,17 +240,21 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, operations, schema, t, renderSlot } = props
+  const { controller, useSnapshot, operations, schema, t, keyStatus, renderSlot } = props
   if (
     controller === undefined || useSnapshot === undefined || operations === undefined
     || schema === undefined || t === undefined
   ) return null
-  return <Loaded injected={{ controller, useSnapshot, operations, schema, t }} renderSlot={renderSlot} />
+  const injected: ModelsSectionFace = { controller, useSnapshot, operations, schema, t, ...keyStatus === undefined ? {} : { keyStatus } }
+  return <Loaded injected={injected} renderSlot={renderSlot} />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
-  const { controller, operations, schema, t } = injected
+  const { controller, operations, schema, t, keyStatus } = injected
   const snapshot = injected.useSnapshot(value => value)
+  const keyState = useModelKeyStatus(keyStatus)
+  // Opening the page reads the key tests once, so a failed key is marked without a click.
+  useEffect(() => { keyStatus?.test() }, [keyStatus])
   const state = { ...snapshot, rows: snapshot.rows.map(row => row.entry.provider === 'deepseek-account'
     ? { ...row, entry: { ...row.entry, displayName: t('deepSeekAccount') } } : row) }
   /** A new or failed surface waits for a current snapshot; background refreshes preserve its drafts. */
@@ -445,6 +453,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  ...keyStatus === undefined ? {} : { keyStatus },
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
                 {renderSlot(
@@ -480,25 +489,32 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       </span>
                     )
                     : null}
-                  {credentialConfigured
+                  {credentialConfigured && keyState.failed.has(row.entry.provider) && keyStatus !== undefined
                     ? (
-                      <span
-                        className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                        role="img"
-                        aria-label={t('credentialConfigured')}
-                        title={t('credentialConfigured')}
-                      />
+                      <span className={styles['keyFailed']}>
+                        <span className={`${styles['credentialDot']} ${styles['credentialDotFailed']}`} aria-hidden="true" />
+                        {keyStatus.copy().failed}
+                      </span>
                     )
-                    : credentialMissing
+                    : credentialConfigured
                       ? (
                         <span
-                          className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                          className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
                           role="img"
-                          aria-label={t('credentialMissing')}
-                          title={t('credentialMissing')}
+                          aria-label={t('credentialConfigured')}
+                          title={t('credentialConfigured')}
                         />
                       )
-                      : null}
+                      : credentialMissing
+                        ? (
+                          <span
+                            className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                            role="img"
+                            aria-label={t('credentialMissing')}
+                            title={t('credentialMissing')}
+                          />
+                        )
+                        : null}
                 </span>
                 <span className={styles['rowActions']}>
                   {/* The account catalog comes from the account listing; its model overrides live in cordis.patch.yml. */}
@@ -558,6 +574,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  ...keyStatus === undefined ? {} : { keyStatus },
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}

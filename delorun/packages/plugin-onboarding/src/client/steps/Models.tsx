@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import { FooterPortal } from '../frame/StepFrame.tsx'
 import { StepFooter } from '../frame/StepFooter.tsx'
 import type { Guide } from '../guide.ts'
+import { didNotPass } from '../key-status.ts'
 import { cardsOf, TEST_DELAY_MS, usableKey, type DirectoryEntry, type KeyProbe, type ProviderCard } from '../providers.ts'
 import type { StepServices } from '../types.ts'
 import type { LocalServer } from '../../wire.ts'
@@ -65,6 +66,10 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     setTicked(new Set(cards.filter(card => card.found).map(card => card.provider)))
     setSeeded(true)
   }, [cards, seeded])
+  // The summary replaces the walk's key field, so focus returns to the step's heading rather than the page.
+  useEffect(() => {
+    if (phase === 'summary') document.querySelector<HTMLElement>('h2[data-modal-autofocus]')?.focus({ preventScroll: true })
+  }, [phase])
   const walk = cards?.filter(card => ticked.has(card.provider)) ?? []
   const queue = only === undefined ? walk : walk.filter(card => card.provider === only)
 
@@ -84,7 +89,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     return (
       <div className={shared.stack}>
         <StateLine tone="loading">{t('providers.loading')}</StateLine>
-        <FooterPortal><StepFooter back={{ label: t('back'), onClick: back }} next={{ label: t('providers.skip'), onClick: next }} /></FooterPortal>
+        <FooterPortal><StepFooter back={{ label: t('back'), onClick: back }} next={{ label: t('continue'), onClick: next }} /></FooterPortal>
       </div>
     )
   }
@@ -92,7 +97,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     return (
       <div className={shared.stack}>
         <StateLine tone="error" action={{ label: t('key.again'), onClick: () => { guide.testKeys() } }}>{t('providers.unread')}</StateLine>
-        <FooterPortal><StepFooter back={{ label: t('back'), onClick: back }} next={{ label: t('providers.skip'), onClick: next }} /></FooterPortal>
+        <FooterPortal><StepFooter back={{ label: t('back'), onClick: back }} next={{ label: t('continue'), onClick: next }} /></FooterPortal>
       </div>
     )
   }
@@ -148,7 +153,9 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
                     }} />
                   </label>
                 )}>
-                {card.found && <StateLine tone="success">{t('providers.found')}</StateLine>}
+                {card.found && (didNotPass(card.result)
+                  ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
+                  : <StateLine tone="success">{t('providers.found')}</StateLine>)}
               </Card>
             </li>
           ))}
@@ -157,8 +164,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       <LocalServers services={services} taken={new Set(cards.map(card => card.provider))} />
       <p className={shared.hint}>{t('welcome.model.hint')}</p>
       <FooterPortal>
-        <StepFooter skip={{ label: t('providers.skip'), onClick: next }} back={{ label: t('back'), onClick: back }}
-          next={{ label: t('providers.connect', { n: String(walk.length) }), onClick: connect, disabled: walk.length === 0 }} />
+        <StepFooter back={{ label: t('back'), onClick: back }}
+          next={walk.length === 0 ? { label: t('providers.continueNoKey'), onClick: next } : { label: t('providers.connect'), onClick: connect }} />
       </FooterPortal>
     </div>
   )
@@ -250,6 +257,9 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const [problem, setProblem] = useState(false)
   const latest = useRef(0)
   const id = useId()
+  const keyField = useRef<HTMLInputElement>(null)
+  // Each provider's screen mounts fresh, so its key field takes focus when it appears.
+  useEffect(() => { keyField.current?.focus({ preventScroll: true }) }, [])
   const address = baseURL.trim() === '' ? undefined : baseURL.trim()
   useEffect(() => {
     const request = ++latest.current
@@ -277,11 +287,11 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const invalid = test.state === 'invalid'
   return (
     <div className={shared.stack}>
-      <p className={css.place}>{t('providers.place', { k: String(place.k), n: String(place.n) })}</p>
+      {place.n > 1 && <p className={css.place}>{t('providers.place', { name: card.name, k: String(place.k), n: String(place.n) })}</p>}
       <h3 className={css.provider}>{card.name}</h3>
       <div className={css.field}>
         <label htmlFor={`${id}-key`} className={css.label}>{t('providers.key')}</label>
-        <input id={`${id}-key`} className={css.input} type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
+        <input id={`${id}-key`} ref={keyField} className={css.input} type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
           value={key} aria-describedby={`${id}-state`} aria-invalid={invalid || undefined}
           placeholder={card.found ? t('providers.key.keep') : ''} onChange={(event) => { setKey(event.currentTarget.value) }} />
         <div id={`${id}-state`} className={css.keyState}>

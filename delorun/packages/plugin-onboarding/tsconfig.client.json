@@ -53,6 +53,9 @@
       "path": "../../../packages/client/ui-settings/tsconfig.client.json"
     },
     {
+      "path": "../../../packages/client/ui-settings-models"
+    },
+    {
       "path": "../../../packages/client/ui-slots"
     },
     {

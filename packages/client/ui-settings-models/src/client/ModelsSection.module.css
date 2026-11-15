@@ -110,6 +110,19 @@
   background: var(--dsw-alias-state-success-primary);
 }
 
+.credentialDotFailed {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.keyFailed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-state-warn-label);
+}
+
 .credentialDotMissing {
   background: var(--dsw-alias-state-error-primary);
 }
@@ -343,6 +356,11 @@
 .editorActions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.editorCommit {
+  display: inline-flex;
   gap: 8px;
 }
 

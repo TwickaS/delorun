@@ -31,6 +31,7 @@ import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
 import { Config, ONBOARDING_CONFIG_GLOBAL } from '../onboarding-config.ts'
 
 export type { ModelsSectionInjected, ModelsSectionProps } from './ModelsSection.tsx'
+export type { ModelKeyStatus, ModelKeyStatusSnapshot } from './key-status.ts'
 export type { ModelsFooterOwnerProps, ProviderCardExtrasOwnerProps } from './slot-contract.ts'
 export type { ModelsKey } from './locales.ts'
 
@@ -90,13 +91,17 @@ export function apply(ctx: ClientContext): void {
   // Registration-time text (the nav label thunk) and the inject faces share
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
-  const injected = (): ModelsSectionInjected => ({
-    controller,
-    hooks: { snapshot: controller.store },
-    operations,
-    schema,
-    t,
-  })
+  const injected = (): ModelsSectionInjected => {
+    const keyStatus = ctx.get('modelKeyStatus')
+    return {
+      controller,
+      hooks: { snapshot: controller.store },
+      operations,
+      schema,
+      t,
+      ...keyStatus === undefined ? {} : { keyStatus },
+    }
+  }
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
     automatic: credentialOnboarding,
     track: (name, attributes) => ctx.get('productAnalytics')?.track(name, attributes),

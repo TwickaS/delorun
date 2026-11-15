@@ -67,11 +67,14 @@ async function mountEntry(options: Options = {}) {
 const BASE = [en['step.welcome'], en['step.providers'], en['step.look'], en['step.agents'], en['step.workspace'], en['step.ready']]
 
 /** Press Continue a number of times. */
-// The Models step has its own buttons until its summary: leaving it by Skip for now stands in for Continue.
+// The Models landing has its own button: with every card unticked it reads "Continue without a key" and stands in for Continue.
 const forward = async (times: number) => {
   for (let n = 0; n < times; n++) {
     await settle()
-    await click(screen.queryByRole('button', { name: en.continue }) ?? button(en['providers.skip']))
+    const next = screen.queryByRole('button', { name: en.continue })
+    if (next !== null) { await click(next); continue }
+    for (const box of screen.queryAllByRole('checkbox')) if ((box as HTMLInputElement).checked) await click(box)
+    await click(button(en['providers.continueNoKey']))
   }
 }
 

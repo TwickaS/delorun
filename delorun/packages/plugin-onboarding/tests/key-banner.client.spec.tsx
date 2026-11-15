@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
-import { hasNoWorkingKey, KEY_RECHECK_MS, KeyBanner, type KeyBannerProps } from '../src/client/KeyBanner.tsx'
+import { bannerState, hasNoWorkingKey, KEY_RECHECK_MS, KeyBanner, type KeyBannerProps } from '../src/client/KeyBanner.tsx'
 import type { KeyResult, KeyTestAnswer } from '../src/wire.ts'
 import { t } from './fixtures.client.ts'
 
@@ -85,5 +85,24 @@ describe('the banner', () => {
     resolve(answer('no-key'))
     await settle()
     expect(document.body.textContent).toBe('')
+  })
+})
+
+describe('what the banner says', () => {
+  it('names the provider whose saved key was refused, preferring DeepSeek, and offers to check it', async () => {
+    const refused: KeyTestAnswer = { providers: [{ provider: 'openai', name: 'OpenAI', result: 'rejected' }, { provider: 'deepseek-official', name: 'DeepSeek', result: 'rejected' }] }
+    expect(bannerState(refused)).toEqual({ kind: 'failed', name: 'DeepSeek' })
+    const { openModels } = mount(refused)
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(`Your DeepSeek key did not pass its test${en['keyBanner.check']}`)
+    fireEvent.click(screen.getByRole('button', { name: en['keyBanner.check'] }))
+    expect(openModels).toHaveBeenCalledOnce()
+  })
+
+  it('asks to add a key when none is saved, and says nothing when a key might work', () => {
+    expect(bannerState(answer('no-key'))).toEqual({ kind: 'add' })
+    expect(en['keyBanner.open']).toBe('Add a key')
+    expect(bannerState(answer('works'))).toEqual({ kind: 'none' })
+    expect(bannerState(undefined)).toEqual({ kind: 'none' })
   })
 })

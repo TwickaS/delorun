@@ -35,6 +35,8 @@ export interface ProviderCard {
   readonly entry: DirectoryEntry
   /** True while a key is stored or found in the environment. */
   readonly found: boolean
+  /** What the key test answered for the route. */
+  readonly result: KeyResult
   /** The provider's official API-key page, when {@link KEY_PAGES} has one. */
   readonly keyPage: string | undefined
   /** True when the route needs a base URL because a person declared it. */
@@ -107,7 +109,7 @@ export function cardsOf(answer: KeyTestAnswer, directory: readonly DirectoryEntr
   for (const each of answer.providers) {
     const entry = directory.find(candidate => candidate.provider === each.provider)
     if (entry === undefined || !connectsWithKey(entry)) continue
-    cards.push({ provider: each.provider, name: each.name, entry, found: HELD.has(each.result), keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
+    cards.push({ provider: each.provider, name: each.name, entry, found: HELD.has(each.result), result: each.result, keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
   }
   const rank = (card: ProviderCard): number => {
     const place = (FIRST as readonly string[]).indexOf(card.provider)

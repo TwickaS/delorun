@@ -35,6 +35,8 @@ export interface EditorFooterProps {
   onCancel: () => void
   /** Run the card's commit. */
   onSubmit: () => void
+  /** A secondary action shown beside the commit, such as a key test. */
+  beside?: ReactNode
 }
 
 /**
@@ -54,14 +56,17 @@ export function EditorFooter(props: EditorFooterProps): ReactNode {
       >
         {t(props.cancelLabelKey ?? 'cancel')}
       </button>
-      <button
-        type="button"
-        className={styles['primaryButton']}
-        disabled={props.submitDisabled}
-        onClick={props.onSubmit}
-      >
-        {props.busy ? t(props.submitBusyLabelKey) : t(props.submitLabelKey)}
-      </button>
+      <span className={styles['editorCommit']}>
+        {props.beside}
+        <button
+          type="button"
+          className={styles['primaryButton']}
+          disabled={props.submitDisabled}
+          onClick={props.onSubmit}
+        >
+          {props.busy ? t(props.submitBusyLabelKey) : t(props.submitLabelKey)}
+        </button>
+      </span>
     </div>
   )
 }

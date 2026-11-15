@@ -876,13 +876,13 @@
       "path": "packages/client/ui-settings-models/src/client/ModelsSection.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections. Under a coarse primary pointer its text fields are 44px tall with a 16px font, so API key fields meet the touch target size."
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections. Under a coarse primary pointer its text fields are 44px tall with a 16px font, so API key fields meet the touch target size. Key status (2026-11-15): The amber failed-key dot and its label, and the grouped commit buttons."
     },
     {
       "path": "packages/client/ui-settings-models/src/client/index.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Shows the Web welcome notice only while welcomeNotice is on, so a composition with its own onboarding can drop it."
+      "reason": "Shows the Web welcome notice only while welcomeNotice is on, so a composition with its own onboarding can drop it. Key status (2026-11-15): Hands the optional `modelKeyStatus` service to the Models page and exports its types."
     },
     {
       "path": "packages/client/ui-settings-models/src/index.ts",
@@ -2749,6 +2749,30 @@
       "class": "delorun-feature",
       "feature": "plugin-titles",
       "reason": "Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/ModelsSection.tsx",
+      "class": "delorun-feature",
+      "feature": "key-status",
+      "reason": "One key status everywhere (rc.7): the Models page reads an optional `modelKeyStatus` service, marks a stored key that failed its test with an amber dot and \"Key did not pass its test\", and tests once when it opens."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/ProviderEditor.tsx",
+      "class": "delorun-feature",
+      "feature": "key-status",
+      "reason": "A Test key button beside Apply, shown for a route that holds a key when the shell supplies `modelKeyStatus`; runs the same free model-list test."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/EditorFooter.tsx",
+      "class": "delorun-feature",
+      "feature": "key-status",
+      "reason": "A `beside` seat next to the commit button, filled by the Test key button."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/key-status.ts",
+      "class": "delorun-feature",
+      "feature": "key-status",
+      "reason": "New file: the `modelKeyStatus` service type, its Context merge and the hook that reads it."
     }
   ],
   "retired": []

@@ -250,7 +250,7 @@ describe('the harness\'s routes', () => {
   it('are the guide\'s requests over the page\'s fetch', async () => {
     const { entries, served } = await harness()
     served.on()
-    expect(face<OnboardingInjected>(entries, STEP_KEY).services.host).toBe(hostApi)
+    expect(face<OnboardingInjected>(entries, STEP_KEY).services.host).toMatchObject({ readiness: hostApi.readiness, localModels: hostApi.localModels })
   })
 })
 
@@ -498,10 +498,13 @@ describe('a fresh home with no default workspace', () => {
     const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
     const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} completeStep={vi.fn()} renderSection={() => null} />)
     await act(async () => { await flush() })
-    // The Models step has its own Skip for now until its summary.
+    // With every card unticked the Models landing's button reads "Continue without a key".
     for (let n = 0; n < 4; n++) {
       await act(async () => { await flush() })
-      await act(async () => { fireEvent.click(screen.queryByRole('button', { name: en.continue }) ?? screen.getByRole('button', { name: en['providers.skip'] })) })
+      await act(async () => {
+        for (const box of screen.queryAllByRole('checkbox')) if ((box as HTMLInputElement).checked) fireEvent.click(box)
+      })
+      await act(async () => { fireEvent.click(screen.queryByRole('button', { name: en.continue }) ?? screen.getByRole('button', { name: en['providers.continueNoKey'] })) })
     }
     expect(document.body.textContent).toContain(en['start.lead.none'])
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['workspace.folder.choose'] })) })

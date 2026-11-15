@@ -14,6 +14,7 @@ import {
   ModelsSection, needsSetup, providerCopy, providerTargetLabel, removeProviderProfile,
 } from '../src/client/ModelsSection.tsx'
 import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/ModelsSection.tsx'
+import type { ModelKeyStatus } from '../src/client/key-status.ts'
 import { ApiKeyInput } from '../src/client/ApiKeyInput.tsx'
 import { ProviderEditor, pathOps } from '../src/client/ProviderEditor.tsx'
 import type { ProviderEditorProps } from '../src/client/ProviderEditor.tsx'
@@ -314,7 +315,7 @@ function cardSeatCalls(
     ])
 }
 
-async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
+async function mountFace(scripted: ReturnType<typeof scriptedFace>, keyStatus?: ModelKeyStatus) {
   const { face, update, mutate, set, unset } = scripted
   const ctx = ctxWith(face)
   const mirror = new SettingsDescribeMirror(ctx)
@@ -328,13 +329,14 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
     schema: settingsSchema,
     t,
     renderSlot: renderSlot as unknown as ModelsSectionProps['renderSlot'],
+    ...keyStatus === undefined ? {} : { keyStatus },
   }
   const view = render(<ModelsSection {...injected} />)
   return { view, ctx, face, update, mutate, set, unset, controller, mirror, renderSlot }
 }
 
-async function mountSection(overrides: Parameters<typeof scriptedFace>[0] = {}) {
-  return mountFace(scriptedFace(overrides))
+async function mountSection(overrides: Parameters<typeof scriptedFace>[0] = {}, keyStatus?: ModelKeyStatus) {
+  return mountFace(scriptedFace(overrides), keyStatus)
 }
 
 /**
@@ -726,6 +728,22 @@ describe('ModelsSection', () => {
     expect(screen.queryByText('Active')).toBeNull()
     expect(screen.queryByText('Inactive')).toBeNull()
     expect(screen.getByText(en.add)).toBeTruthy()
+  })
+
+  it('marks a stored key that failed its test, re-tests it from the editor and tests once when opened', async () => {
+    const test = vi.fn()
+    const snapshot = { failed: new Set(['openai']), testing: false }
+    const keyStatus: ModelKeyStatus = {
+      getSnapshot: () => snapshot, subscribe: () => () => undefined, test,
+      copy: () => ({ failed: 'Key did not pass its test', test: 'Test key', testing: 'Testing…' }),
+    }
+    await mountSection({}, keyStatus)
+    expect(test).toHaveBeenCalledOnce()
+    expect(screen.getByText('Key did not pass its test').closest('li')?.textContent).toContain('openai')
+    expect(screen.queryByRole('img', { name: en.credentialConfigured })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`${en.edit}.*openai|openai.*${en.edit}`, 'i') }))
+    fireEvent.click(screen.getByRole('button', { name: 'Test key' }))
+    expect(test).toHaveBeenCalledTimes(2)
   })
 
   it('leaves the unkeyed provider a plain row once another provider is usable', async () => {

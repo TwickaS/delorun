@@ -32,6 +32,7 @@ import {
 import type { DeepSeekModelsValidationFailure } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
+import { useModelKeyStatus, type ModelKeyStatus } from './key-status.ts'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import { validateReasoningEfforts } from './ModelReasoningEfforts.tsx'
 import type { ReasoningEffortsFailure } from './ModelReasoningEfforts.tsx'
@@ -52,6 +53,8 @@ type EditorLayout = 'deepseek' | 'pi-ai' | 'unknown'
 
 /** Props of {@link ProviderEditor}. */
 export interface ProviderEditorProps {
+  /** A product shell's key tests; adds a Test key button beside Apply for a route that holds a key. */
+  keyStatus?: ModelKeyStatus
   /** Provider route id. */
   provider: string
   /** Display name for the card title. */
@@ -204,6 +207,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const keyText = typeof keyDraft === 'string' ? keyDraft : ''
   const keyRemoval = typeof keyDraft === 'object' ? keyDraft : undefined
   const [busy, setBusy] = useState(false)
+  const keyTesting = useModelKeyStatus(props.keyStatus)
   const [listBusy, setListBusy] = useState(false)
   const { onBusyChange } = props
   useEffect(() => { onBusyChange?.(busy || listBusy) }, [busy, listBusy, onBusyChange])
@@ -680,6 +684,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}
         submitBusyLabelKey={props.submitBusyLabelKey ?? 'applying'}
+        beside={props.keyStatus === undefined || props.credential?.configured !== true ? undefined : (
+          <button
+            type="button"
+            className={styles['secondaryButton']}
+            disabled={busy || keyTesting.testing}
+            onClick={() => { props.keyStatus?.test() }}
+          >
+            {props.keyStatus.copy()[keyTesting.testing ? 'testing' : 'test']}
+          </button>
+        )}
         cancelLabelKey={keyRemoval?.removed === true ? 'close' : props.cancelLabelKey ?? 'cancel'}
         onCancel={() => { props.onClose(false) }}
         onSubmit={() => { props.onSubmitCredential?.(); void apply() }}

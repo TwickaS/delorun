@@ -32,6 +32,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the ctx.configForms and ctx.settingsShell merges and the 'settings.onboarding' and 'settings.general.item' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: the ctx.modelKeyStatus merge this plugin provides.
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 // Type-only: the ctx.theme merge.
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 // Type-only: the ctx.uiWorkspace merge.
@@ -46,6 +48,7 @@ import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, S
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, readWorkspaceNotice } from './host-api.ts'
+import { createKeyStatus } from './key-status.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
@@ -200,6 +203,9 @@ export function apply(ctx: Context): void {
 export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-onboarding: dictionaries')
   const progress = ctx.configForms.get<OnboardingSettings>(ONBOARDING_ROW_ID)
+  const keyT = ctx.locale.bind(NS)
+  const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))
+  ctx.effect(() => ctx.provide('modelKeyStatus', keyStatus), 'delorun-onboarding: key status')
   const extra = createSnapshotStore<readonly OnboardingStep[]>([])
   ctx.effect(() => ctx.provide('delorunOnboarding', {
     registerStep: (step) => {
@@ -242,7 +248,7 @@ export function applyStudio(ctx: Context): void {
     },
     appearance: ctx.locale.bind('settings.delorunAppearance'),
     bundles: createBundleInstaller(ctx),
-    host: hostApi,
+    host: { ...hostApi, keyTest: () => keyStatus.refresh() },
     providers: createProvidersFace(ctx),
     start,
     resolveText: text => ctx.locale.resolveText(text),
@@ -365,7 +371,7 @@ export function applyStudio(ctx: Context): void {
     dismiss: () => { writeProgress('starterSession', '') },
   }
   const keyBanner: KeyBannerInjected = {
-    keyTest: () => hostApi.keyTest(),
+    keyTest: () => keyStatus.refresh(),
     openModels: () => { ctx.settingsShell.openSection('models') },
   }
   const dismissedStore = createSnapshotStore(false)
