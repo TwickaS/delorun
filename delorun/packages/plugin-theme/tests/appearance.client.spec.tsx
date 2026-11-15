@@ -4,6 +4,8 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceSection, type AppearanceInjected, type SchemePreference } from '../src/client/AppearanceSection.tsx'
+import { en as brandingEn } from '../src/client/branding-locales.ts'
+import { en as pickerEn } from '@delorun/brand/icon-picker-locales'
 import { en, zh } from '../src/client/locales.ts'
 import { STUDIO_ON, themeForm, type ThemeFormHandle } from './theme-form.client.ts'
 
@@ -19,6 +21,8 @@ function open(form: ThemeFormHandle) {
   const set = vi.fn((next: SchemePreference) => { preference = next; for (const listener of listeners) listener() })
   const face: AppearanceInjected = {
     settings: form.scope,
+    brandingT: makeTranslate(brandingEn),
+    pickerT: makeTranslate(pickerEn),
     scheme: { get: () => preference, subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } }, set },
   }
   render(<AppearanceSection t={makeTranslate(en)} {...face} />)
@@ -73,8 +77,9 @@ describe('the Appearance section', () => {
     open(themeForm(STUDIO_ON))
     const heading = screen.getByRole('heading', { level: 3, name: en.colours })
     expect(heading.closest('section')?.getAttribute('aria-labelledby')).toBe(heading.id)
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en.mode, en.palette, en.accent, en.contrast])
+    // The Branding block follows the Colours card as a second card of the same section.
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual([en.colours, brandingEn.title])
+    expect(within(heading.closest('section') as HTMLElement).getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en.mode, en.palette, en.accent, en.contrast])
     expect(screen.queryByRole('radiogroup', { name: en.look })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: en.typeface })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: en.density })).toBeNull()

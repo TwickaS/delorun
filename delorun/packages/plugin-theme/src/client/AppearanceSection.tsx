@@ -98,7 +98,7 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
  * @param props - the dictionary and the services.
  * @returns the section.
  */
-export function AppearanceSection({ t, settings, scheme }: AppearanceSectionProps) {
+export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: AppearanceSectionProps) {
   const { snapshot, disabled, failed, save } = useFormWrites(settings)
   // A stable subscribe function: a new one per render would resubscribe on every render, including after the plugin is disposed.
   const subscribeScheme = useCallback((listener: () => void) => scheme.subscribe(listener), [scheme])
