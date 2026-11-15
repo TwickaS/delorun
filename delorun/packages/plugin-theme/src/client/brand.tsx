@@ -1,34 +1,42 @@
 /**
- * Delorun's New Session hero: the text wordmark in the hero's brand-mark seat,
- * in place of upstream's whale, and the headline without upstream's Preview
- * badge. The sidebar's brand belongs to `@delorun/bundle-local`.
+ * Delorun's New Session hero: the brand icon above the brand name in the hero's brand-mark seat, in place of
+ * upstream's whale, and the headline without upstream's Preview badge. Both follow the person's branding: the icon and
+ * name can be replaced or hidden, and the greeting replaced. The sidebar's brand is {@link SidebarBrandMark} and
+ * {@link SidebarBrandName}.
  * @module @delorun/plugin-theme/client/brand
  */
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { DEFAULT_GREETING } from '@delorun/brand/branding'
+import { BrandIcon } from './BrandIcon.tsx'
+import { useBranding } from './branding-store.ts'
 import css from './brand.module.css'
 
-/** Height of upstream's whale for a requested edge: the whale is drawn 34 wide and 25 high. */
-const MARK_ASPECT = 25 / 34
+/** The icon's share of the seat's requested edge. */
+const ICON_SHARE = 0.9
 
 /**
- * The wordmark in the hero's brand-mark seat, as wide at least and as high as upstream's mark for the requested edge, so the headline keeps its place.
+ * The icon above the name in the hero's brand-mark seat; nothing while the mark is hidden.
  * @param props - the seat's presentation props and the brand's dictionary.
- * @returns the wordmark.
+ * @returns the icon and name.
  */
-export function HeroWordmark({ t, size, className }: HeroBrandMarkOwnerProps & PropsLocale<'delorunBrand'>) {
+export function HeroWordmark({ size, className }: HeroBrandMarkOwnerProps & PropsLocale<'delorunBrand'>) {
+  const branding = useBranding()
+  if (!branding.showMark) return null
   return (
-    <span className={`${css.mark} ${className ?? ''}`} style={{ minWidth: size, height: Math.round(size * MARK_ASPECT) }}>
-      {t('hero.mark')}
+    <span className={`${css.mark} ${className ?? ''}`}>
+      <BrandIcon branding={branding} size={Math.round(size * ICON_SHARE)} />
+      <span className={css.name}>{branding.name}</span>
     </span>
   )
 }
 
 /**
- * The New Session headline.
+ * The New Session headline: the person's greeting, or the translated default.
  * @param props - the brand's dictionary.
  * @returns the headline.
  */
 export function HeroHeadline({ t }: PropsLocale<'delorunBrand'>) {
-  return <span className={css.headline}>{t('hero.headline')}</span>
+  const { greeting } = useBranding()
+  return <span className={css.headline}>{greeting === DEFAULT_GREETING ? t('hero.headline') : greeting}</span>
 }

@@ -305,7 +305,7 @@ class Screen {
   /** Write every static text and the language, and show the address. */
   prepare(host, defaultLabel) {
     this.document.documentElement.lang = this.copy === COPY.zh ? 'zh-CN' : 'en'
-    this.document.title = this.copy['document.title']
+    this.document.title = this.copy['document.title'].replace('Delorun', this.document.body.dataset.brandName ?? 'Delorun')
     for (const element of this.document.querySelectorAll('[data-copy]')) fill(element, this.copy[element.dataset.copy])
     this.document.getElementById('address').textContent = host
     this.label.value = defaultLabel

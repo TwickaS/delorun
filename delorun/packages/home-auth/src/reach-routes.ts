@@ -33,12 +33,14 @@ import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
+import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH, type BrandingSource } from './branding.ts'
 import { plainPathname } from './reach-paths.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
 export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
   { method: 'GET', path: '/auth/sign-in' },
   { method: 'GET', path: '/auth/assets/<asset>' },
+  { method: 'GET', path: '/auth/branding/icon' },
   { method: 'POST', path: '/auth/device/request' },
   { method: 'GET', path: '/auth/device/request/<request id>' },
   { method: 'POST', path: '/auth/device/challenge' },
@@ -50,6 +52,7 @@ export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
 export const REACH_PATHS = {
   signIn: '/auth/sign-in',
   assets: '/auth/assets',
+  brandingIcon: BRANDING_ICON_PATH,
   request: '/auth/device/request',
   challenge: '/auth/device/challenge',
   session: '/auth/session',
@@ -160,9 +163,10 @@ export function signInLocation(target: string): string {
  * Build the sign-in page route. A `next` the page may not land on is answered with `303` to the page without it, so the
  * page's script reads only a landing this route accepted.
  * @param auth - the home-auth instance.
+ * @param branding - reads the stored branding record; none means the Delorun defaults.
  * @returns the handler.
  */
-export function signInPageHandler(auth: HomeAuth): RouteHandler {
+export function signInPageHandler(auth: HomeAuth, branding: BrandingSource = () => undefined): RouteHandler {
   return async (request, response) => {
     if (reachArrival(auth, request, response) === undefined || !method(request, response, 'GET')) return
     const next = new URL(targetOf(request), 'http://route.invalid').searchParams.getAll(NEXT_PARAMETER)
@@ -175,7 +179,20 @@ export function signInPageHandler(auth: HomeAuth): RouteHandler {
     }
     response.statusCode = 200
     response.setHeader('content-type', 'text/html; charset=utf-8')
-    response.end(SIGN_IN_PAGE)
+    response.end(brandedSignInPage(SIGN_IN_PAGE, branding()))
+  }
+}
+
+/**
+ * Build the branding icon route: the person's uploaded icon, or 404.
+ * @param auth - the home-auth instance.
+ * @param branding - reads the stored branding record.
+ * @returns the handler.
+ */
+export function brandingIconHandler(auth: HomeAuth, branding: BrandingSource): RouteHandler {
+  return async (request, response) => {
+    if (reachArrival(auth, request, response) === undefined) return
+    answerIcon(branding(), request.method, response)
   }
 }
 

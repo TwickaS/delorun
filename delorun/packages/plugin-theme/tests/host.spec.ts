@@ -91,3 +91,20 @@ describe('the host half', () => {
     await fiber.dispose()
   })
 })
+
+describe('the branding setting', () => {
+  it('defaults to the mark shown with no own name, icon or greeting', () => {
+    expect(Config({}).branding.get()).toEqual({ showMark: true, name: '', greeting: '', icon: 'mark', pickedIcon: '', upload: '' })
+  })
+
+  it('prints the branding into the page without its upload', async () => {
+    const ctx = new Context()
+    const fiber = ctx.plugin(host, { studioAdditions: true, branding: { name: 'Orbit', icon: 'upload', upload: 'AAAA' } })
+    await fiber.await()
+    const table: IndexInjection[] = []
+    ctx.emit('webserver/index-inject', table, PAGE_PEER)
+    await fiber.dispose()
+    const printed = table.find(row => row.kind === 'global' && row.name === host.BOOT_SETTINGS_GLOBAL)
+    expect(printed).toMatchObject({ value: { branding: { name: 'Orbit', icon: 'upload', upload: '' } } })
+  })
+})

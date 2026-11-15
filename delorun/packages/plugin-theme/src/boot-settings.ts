@@ -4,6 +4,7 @@
  * boots instead of once the settings form answers. Without them the stock sidebar and texts show until that answer.
  * @module @delorun/plugin-theme/boot-settings
  */
+import { DEFAULT_STORED_BRANDING, type StoredBranding } from '@delorun/brand/branding'
 import { ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TYPEFACES, type ThemeSettings } from './config.ts'
 
 /** The `globalThis` property holding the settings the Host held when it served the page. */
@@ -20,6 +21,16 @@ function oneOf<T extends string>(choices: readonly T[], value: unknown): value i
 }
 
 /**
+ * Read the printed branding as a stored record; each field is checked again where it is read, so a printed value that is
+ * not a record is the default record.
+ * @param value - the printed branding.
+ * @returns the stored record.
+ */
+function storedBranding(value: unknown): StoredBranding {
+  return typeof value === 'object' && value !== null ? { ...DEFAULT_STORED_BRANDING, ...value } : DEFAULT_STORED_BRANDING
+}
+
+/**
  * Validate printed settings: each field present with a value the host half's configuration accepts. The custom accent
  * is any string, because a colour that does not parse already falls back to Peach where the accent is drawn.
  * @param value - the printed value.
@@ -27,11 +38,11 @@ function oneOf<T extends string>(choices: readonly T[], value: unknown): value i
  */
 export function parseBootSettings(value: unknown): ThemeSettings | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort } = value as Record<keyof ThemeSettings, unknown>
+  const { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, branding } = value as Record<keyof ThemeSettings, unknown>
   if (!oneOf(ACCENT_CHOICES, accent) || typeof customAccent !== 'string' || !oneOf(TYPEFACES, typeface) || !oneOf(DENSITIES, density)) return undefined
   if (typeof studioAdditions !== 'boolean' || !oneOf(PALETTES, palette) || !oneOf(EFFORT_DISPLAYS, effort)) return undefined
   if (typeof contrast !== 'number' || !(contrast >= CONTRAST.min && contrast <= CONTRAST.max)) return undefined
-  return { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort }
+  return { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, branding: storedBranding(branding) }
 }
 
 /**

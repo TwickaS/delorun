@@ -8,6 +8,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { DEFAULT_STORED_BRANDING, ICON_SOURCES, type StoredBranding } from '@delorun/brand/branding'
 
 /** The Loader row id, which names the settings namespace the studio edits. */
 export const THEME_ROW_ID = 'delorun-theme'
@@ -69,11 +70,13 @@ export interface ThemeSettings {
   contrast: number
   /** How reasoning effort shows in the model picker. */
   effort: EffortDisplay
+  /** The person's own branding; every field is validated again where it is read. */
+  branding: StoredBranding
 }
 
 /** The settings the Appearance section shows before the stored ones arrive, and the `Config` defaults. */
 export const DEFAULT_SETTINGS: ThemeSettings = {
-  accent: 'peach', customAccent: DEFAULT_CUSTOM_ACCENT, typeface: 'delorun', density: 'comfortable', studioAdditions: false, palette: 'soft', contrast: CONTRAST.default, effort: 'label',
+  accent: 'peach', customAccent: DEFAULT_CUSTOM_ACCENT, typeface: 'delorun', density: 'comfortable', studioAdditions: false, palette: 'soft', contrast: CONTRAST.default, effort: 'label', branding: DEFAULT_STORED_BRANDING,
 }
 
 /** The host half's live configuration: one field per setting. */
@@ -94,6 +97,8 @@ export interface Config {
   contrast: Volatile<number>
   /** How reasoning effort shows. */
   effort: Volatile<EffortDisplay>
+  /** The own branding: mark, name, icon and greeting. */
+  branding: Volatile<StoredBranding>
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -105,5 +110,14 @@ export const Config = z.object({
   studioAdditions: z.boolean().volatile().default(false),
   palette: z.union([...PALETTES]).default(DEFAULT_SETTINGS.palette).volatile(),
   effort: z.union([...EFFORT_DISPLAYS]).default(DEFAULT_SETTINGS.effort).volatile(),
+  // Lenient on purpose: a stored value that fails the branding checks shows the defaults with a notice instead of failing the load.
+  branding: z.object({
+    showMark: z.boolean().default(true),
+    name: z.string().default(''),
+    greeting: z.string().default(''),
+    icon: z.union([...ICON_SOURCES]).default('mark'),
+    pickedIcon: z.string().default(''),
+    upload: z.string().default(''),
+  }).default(DEFAULT_STORED_BRANDING).volatile(),
   contrast: z.number().min(CONTRAST.min).max(CONTRAST.max).step(CONTRAST.step).default(CONTRAST.default).volatile(),
 })

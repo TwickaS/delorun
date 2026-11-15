@@ -10,7 +10,8 @@
     "./tokens": "./src/tokens.ts",
     "./tokens.css": "./src/tokens.css",
     "./fonts.css": "./src/fonts.css",
-    "./mark": "./src/mark.tsx"
+    "./mark": "./src/mark.tsx",
+    "./branding": "./src/branding.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*"

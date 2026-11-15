@@ -24,6 +24,7 @@
     "@deepseek-ai/dsh-working-directory": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
+    "@delorun/brand": "workspace:*",
     "@delorun/contract-admission": "workspace:*",
     "@delorun/contract-device-approval": "workspace:*",
     "@delorun/contract-home-layout": "workspace:*",
@@ -32,9 +33,6 @@
     "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/logs": "workspace:*"
-  },
-  "devDependencies": {
-    "@delorun/brand": "workspace:*"
   },
   "delorun": {
     "state": "shipped"
