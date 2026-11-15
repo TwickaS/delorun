@@ -129,3 +129,26 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--onb-gap-2);
+}
+
+.later {
+  flex: none;
+  min-height: var(--onb-target);
+  padding: 0 var(--onb-gap-1);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--onb-small-size);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.later:hover {
+  color: var(--dsw-alias-label-primary);
+}

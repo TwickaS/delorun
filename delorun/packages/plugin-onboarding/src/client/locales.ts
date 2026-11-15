@@ -6,7 +6,8 @@
 /** English dictionary. */
 export const en = {
   'steps': 'Onboarding steps',
-  'skip': 'Skip for now',
+  'skip': 'Skip',
+  'later': 'Finish later',
   'back': 'Back',
   'continue': 'Continue',
   'start': 'Start a chat',
@@ -269,7 +270,8 @@ export type OnboardingLocaleKey = keyof typeof en
 /** Chinese dictionary; its strings still say Delorun until the A309 translation pass. */
 export const zh: Record<OnboardingLocaleKey, string> = {
   'steps': '引导步骤',
-  'skip': '暂时跳过',
+  'skip': '跳过',
+  'later': '稍后完成',
   'back': '上一步',
   'continue': '继续',
   'start': '开始对话',

@@ -1,8 +1,8 @@
 /**
  * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the step's name and
- * progress pinned at its top, the current step scrolling beneath and Skip, Back and Continue pinned under it. It shows on a
- * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing or skipping is kept
- * on the profile. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
+ * progress pinned at its top, the current step scrolling beneath with Finish later beside it, and Skip, Back and Continue pinned under it. It shows on a
+ * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing is kept
+ * on the profile. Skip leaves one step and goes on; Finish later closes the guide and keeps the place. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
  * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
  * upstream's steps do.
  */
@@ -41,7 +41,10 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   const decided = snapshot.status !== 'loading'
   // A finished profile, or one whose progress cannot be read, lets upstream's flow go on at once.
   useEffect(() => { if (decided && !show) complete() }, [decided, show, complete])
-  return show ? <Dialog {...props} settings={settings} explicit={explicit} /> : null
+  // "Finish later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
+  const [later, setLater] = useState(false)
+  const leave = useCallback((): void => { setLater(true); complete() }, [complete])
+  return show && !later ? <Dialog {...props} settings={settings} explicit={explicit} later={leave} /> : null
 }
 
 /** Whether the Workspace step told the person there is no default workspace; the flow sets it. */
@@ -69,7 +72,7 @@ interface Loaded {
 }
 
 /** Load what the terminal setup recorded and whether reach is set up, start the guide's reads, then show the flow. */
-function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean }): ReactNode {
+function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly later: () => void }): ReactNode {
   const { loadRecord, services } = props
   const told = useNoticeHold(services.start)
   const [loaded, setLoaded] = useState<Loaded | undefined>()
@@ -106,8 +109,8 @@ function useInertRoot(): void {
 }
 
 /** The steps, the current one and the buttons. */
-function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide }): ReactNode {
-  const { t, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
+function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide; readonly later: () => void }): ReactNode {
+  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
   const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
@@ -175,14 +178,14 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     ? null
     : (
       <StepFooter
-        {...showSkip ? { skip: { label: t('skip'), onClick: finish } } : {}}
+        {...showSkip ? { skip: { label: t('skip'), onClick: () => { go(current + 1) } } } : {}}
         {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
         next={{ label: t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue'), onClick: next }} />
     )
   return (
     <Modal open title={title} onClose={ignoreImplicitDismiss} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} footer={footer}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} later={{ label: t('later'), onClick: later }} footer={footer}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>

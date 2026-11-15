@@ -40,6 +40,8 @@ export interface StepFrameProps {
   readonly stepsLabel: string
   /** The step key, which resets the body's scroll and state when it changes. */
   readonly stepKey: string
+  /** Closes the guide and keeps the progress; drawn quietly beside the heading. */
+  readonly later?: { readonly label: string; readonly onClick: () => void }
   /** The dialog's footer; a step that draws its own passes nothing. */
   readonly footer?: ReactNode
   /** The step's body. */
@@ -51,13 +53,16 @@ export interface StepFrameProps {
  * @param props - the step's name, place, body and footer.
  * @returns the frame.
  */
-export function StepFrame({ title, headingRef, count, place, total, steps, stepsLabel, stepKey, footer, children }: StepFrameProps): ReactNode {
+export function StepFrame({ title, headingRef, count, place, total, steps, stepsLabel, stepKey, later, footer, children }: StepFrameProps): ReactNode {
   const [own, setOwn] = useState<ReactNode>(null)
   return (
     <FooterSlot.Provider value={setOwn}>
       <div className={`${css.frame} ${scale.scale}`}>
         <header className={css.header}>
-          <h2 ref={headingRef} tabIndex={-1} data-modal-autofocus className={css.heading}>{title}</h2>
+          <div className={css.titleRow}>
+            <h2 ref={headingRef} tabIndex={-1} data-modal-autofocus className={css.heading}>{title}</h2>
+            {later !== undefined && <button type="button" className={css.later} onClick={later.onClick}>{later.label}</button>}
+          </div>
           <div className={css.progress}>
             <span className={css.count}>{count}</span>
             <span className={css.bar} role="progressbar" aria-label={count} aria-valuemin={1} aria-valuemax={total} aria-valuenow={place}>

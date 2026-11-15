@@ -540,7 +540,7 @@ describe('Show again', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
   })
 
-  it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished or skipped', async () => {
+  it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
     const { service } = shell()
     const { entries, served, progress } = await harness({ progress: settings({ done: true, step: 'agents' }), late: { settingsShell: service } })
@@ -554,8 +554,14 @@ describe('Show again', () => {
     await act(async () => { await flush() })
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
     expect(complete).not.toHaveBeenCalled()
+    // Skip leaves only this step.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
-    expect(progress.value()).toMatchObject({ done: true, step: '' })
+    expect(progress.value()).toMatchObject({ done: false, step: 'providers' })
+    expect(complete).not.toHaveBeenCalled()
+    // Finish later closes the guide and keeps the place.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.later })) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(progress.value()).toMatchObject({ done: false, step: 'providers' })
     expect(complete).toHaveBeenCalled()
   })
 
