@@ -39,6 +39,7 @@ const journalSchema = z.strictObject({
   health: z.strictObject({
     disabledPlugins: z.array(z.string()),
     namedRows: z.array(z.string()),
+    bundleRows: z.array(z.string()).optional(),
     bundles: z.array(z.string()).optional(),
   }).optional(),
 })
@@ -83,7 +84,7 @@ export interface JournalledUpdate {
   /** Present when C3's table refused the automatic rollback. */
   readonly refused?: true | undefined
   /** What the health check holds the target to; `bundles` may be present as `undefined`. */
-  readonly health?: (Omit<UpdateHealth, 'bundles'> & { readonly bundles?: readonly string[] | undefined }) | undefined
+  readonly health?: (Omit<UpdateHealth, 'bundles' | 'bundleRows'> & { readonly bundles?: readonly string[] | undefined, readonly bundleRows?: readonly string[] | undefined }) | undefined
 }
 
 /**
@@ -102,7 +103,7 @@ export function journalRecord(update: JournalledUpdate, phase: UpdatePhase): Upd
     ...update.refused === true ? { refused: true } : {},
     ...health === undefined
       ? {}
-      : { health: { disabledPlugins: [...health.disabledPlugins], namedRows: [...health.namedRows], ...health.bundles === undefined ? {} : { bundles: [...health.bundles] } } },
+      : { health: { disabledPlugins: [...health.disabledPlugins], namedRows: [...health.namedRows], ...health.bundleRows === undefined ? {} : { bundleRows: [...health.bundleRows] }, ...health.bundles === undefined ? {} : { bundles: [...health.bundles] } } },
   }
 }
 

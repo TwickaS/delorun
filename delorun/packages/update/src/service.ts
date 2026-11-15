@@ -86,6 +86,8 @@ export interface ReportHealth {
   readonly disabledPlugins: readonly string[]
   /** H3, H4: the rows the report names, by id or name. */
   readonly namedRows: readonly string[]
+  /** H3, H4: the rows a bundle patch of the target disables, by id only. */
+  readonly bundleRows: readonly string[]
   /** H5: the bundle list the report predicts. */
   readonly bundles: readonly string[]
 }
@@ -142,7 +144,8 @@ export function builtReport(input: ReportInput): BuiltUpdateReport {
     report,
     health: {
       disabledPlugins: disabledPluginNames(report),
-      namedRows: report.items.flatMap(item => item.kind === 'row' ? [item.subject.id ?? item.subject.name] : []),
+      namedRows: report.items.flatMap(item => item.kind === 'row' && item.detail.bundlePatch !== true ? [item.subject.id ?? item.subject.name] : []),
+      bundleRows: report.items.flatMap(item => item.kind === 'row' && item.detail.bundlePatch === true ? [item.subject.id ?? item.subject.name] : []),
       bundles: predictBundleList(profile.bundles, target.bundles),
     },
     dataDiffers: report.items.some(item => item.kind === 'data'),

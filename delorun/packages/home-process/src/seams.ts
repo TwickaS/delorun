@@ -33,6 +33,8 @@ export interface HealthExpectations {
   readonly disabledPlugins: readonly string[]
   /** H3, H4: the rows the report names, by id or name. */
   readonly namedRows: readonly string[]
+  /** H3, H4: the rows a bundle patch of the target disables, by id only. */
+  readonly bundleRows?: readonly string[]
   /** H5: the bundle list the report predicts, or `undefined` when the report predicts none. */
   readonly bundles?: readonly string[]
   /** H3, H4: the rows that were disabled or did not load on the previous release. */
