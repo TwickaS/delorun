@@ -2,7 +2,7 @@
 
 English | [中文](CONTRIBUTING.zh.md)
 
-Thank you for contributing to Delorun. Delorun is a community fork of DeepSeek Harness (DSH), an all-plugin agent harness, made for daily use. It welcomes contributions to every part of the project: the studio, the harness, plugins, defaults and documentation.
+Thank you for contributing to Delorun. Delorun is its own product: an agent harness that people shape to their own work, built on DeepSeek Harness (DSH), an all-plugin agent harness. It welcomes contributions to every part of the project: the studio, the harness, plugins, defaults and documentation.
 
 The root [AGENTS.md](AGENTS.md) is the one guide for people and agents. Read it before you change code or documentation. Its rules apply to a change whether a person or an agent writes it.
 
@@ -16,7 +16,7 @@ The root [AGENTS.md](AGENTS.md) is the one guide for people and agents. Read it 
 ## Before you open a pull request
 
 - **Bugs.** Open an issue with the bug report form. It asks for the area, the steps, what you expected, what happened, the impact, your version (`delorun --version`, or Settings → About), your environment and redacted logs. A fix that arrives with its issue is easier to review.
-- **Features.** Start in the Ideas category of GitHub Discussions, or on an issue a maintainer has agreed, before you write code. A pull request for a feature nobody agreed to may close unmerged. A niche feature usually belongs in a plugin: `delorun plugin new` creates one.
+- **Features.** A feature needs an agreed issue before a pull request. Propose it in the Ideas category of GitHub Discussions or on an issue, and write code once a maintainer has agreed. A pull request for a feature nobody agreed to may close unmerged. A niche feature usually belongs in a plugin: `delorun plugin new` creates one.
 - **One problem per pull request.** A pull request that fixes one problem and says how you know is reviewed first. Split unrelated changes.
 - **Evidence.** Say how you found the problem, how you checked the fix and what you saw. A change to what people see includes screenshots from before and after.
 - **Open pull requests.** Keep at most three open at a time. A pull request with merge conflicts and no activity for 7 days is closed; reopen it when the conflicts are resolved.
@@ -25,6 +25,10 @@ The root [AGENTS.md](AGENTS.md) is the one guide for people and agents. Read it 
 ## The vouch list
 
 `.github/VOUCHED.td` lists the people whom maintainers trust to open pull requests without a prior agreed issue. It starts empty. One line holds one GitHub username, optionally followed by a space and a note. A line that starts with `#` is a comment. Maintainers add a name after a contribution has been reviewed and merged; asking for a place on the list is not needed.
+
+## Replies
+
+The maintainer tries to reply as soon as possible, usually within a day or two, and sometimes longer. Delorun promises no response time for issues and pull requests.
 
 ## Conduct and bans
 
@@ -85,13 +89,13 @@ Do not skip the pre-push hook. Real-API tests (`pnpm run test:e2e`) need a `DEEP
 
 - Fill in the pull request template. Reference the issue the change implements with `Fixes #N` or `Refs #N`, and describe the change and its tests.
 - Complete the checklist, including the sign-off and changelog lines.
-- A maintainer reviews the pull request and merges it after approval, by rebase: authors and sign-offs stay, history stays linear, and Delorun makes no merge commits and no squash that loses a contributor's separate commits. [GOVERNANCE.md](GOVERNANCE.md) describes how maintainers make decisions.
+- A maintainer reviews the pull request and merges it after approval. The maintainer's own work arrives the same way, as one pull request for each batch of work with a plain description and its AI usage declared, under these rules. A pull request merges by rebase: authors and sign-offs stay, history stays linear, and Delorun makes no merge commits and no squash that loses a contributor's separate commits. [GOVERNANCE.md](GOVERNANCE.md) describes how maintainers make decisions.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in every project space.
 - Report a vulnerability privately as [SECURITY.md](SECURITY.md) describes. Never report one in a public issue or pull request.
 
 ## Trademarks
 
-Delorun is an independent community project. It is not a DeepSeek product, and nothing in this repository implies DeepSeek's endorsement, cooperation or authorisation. Delorun uses the name DeepSeek Harness only to describe its relationship to DeepSeek Harness, such as "a community fork of DeepSeek Harness", as [BRAND_GUIDELINES.md](BRAND_GUIDELINES.md) allows. Do not use the full DeepSeek Harness name in a project name, and do not use DeepSeek's official brand material in a way that suggests official status. Plugins and projects that describe their relationship to DSH follow the same guidelines.
+Delorun is an independent project. It is not a DeepSeek product, and nothing in this repository implies DeepSeek's endorsement, cooperation or authorisation. Delorun uses the name DeepSeek Harness only to describe its relationship to DeepSeek Harness, such as "built on DeepSeek Harness", as [BRAND_GUIDELINES.md](BRAND_GUIDELINES.md) allows. Do not use the full DeepSeek Harness name in a project name, and do not use DeepSeek's official brand material in a way that suggests official status. Plugins and projects that describe their relationship to DSH follow the same guidelines.
 
 ## Questions
 

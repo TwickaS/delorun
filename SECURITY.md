@@ -2,7 +2,9 @@
 
 ## Reporting a vulnerability
 
-Report a suspected vulnerability privately by email to support@delorun.com with "security" in the subject. Include the version, the steps to reproduce it and what an attacker gains. If GitHub private vulnerability reporting is enabled on this repository, you can use it instead: open the **Security** tab and choose **Report a vulnerability**.
+Report a suspected vulnerability privately by email to security@delorun.com, or with GitHub's private report form: open the repository's **Security** tab and choose **Report a vulnerability**. Include the version, the steps to reproduce it and what an attacker gains.
+
+The maintainer aims to acknowledge a report within three working days and to say when a fix is expected. The promise covers the acknowledgement and that statement, not the fix: how long a fix takes depends on the problem.
 
 Never report a vulnerability in a public issue, discussion or pull request, and do not post exploit details in one. Delorun pays no bounty.
 
@@ -23,11 +25,11 @@ The maintainers report a vulnerability in DeepSeek Harness's code privately to i
 
 ## Outside review
 
-No outside security review of Delorun has happened yet.
+No outside security review of Delorun has happened yet. Releases are signed with preview keys until `1.0.0`; [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means.
 
 ## Supported versions
 
-Only the newest release receives security fixes. Install the newest release to receive them. Delorun does not promise a response time.
+Only the newest release receives security fixes. Install the newest release to receive them. Delorun promises no fix time; a report's acknowledgement is described under [Reporting a vulnerability](#reporting-a-vulnerability).
 
 ## Dependency advisories
 

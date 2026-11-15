@@ -16,7 +16,7 @@ Never report a vulnerability in a public place. Follow [SECURITY.md](SECURITY.md
 
 ## Response times
 
-Delorun is a small project. The maintainers answer as they can and promise no response time ([GOVERNANCE.md](GOVERNANCE.md#response-times)). Only the newest release receives fixes ([SECURITY.md](SECURITY.md#supported-versions)).
+The maintainer tries to reply as soon as possible, usually within a day or two, and sometimes longer. Delorun promises no response time for issues and pull requests ([GOVERNANCE.md](GOVERNANCE.md#response-times)). Only the newest release receives fixes ([SECURITY.md](SECURITY.md#supported-versions)).
 
 ## Conduct
 

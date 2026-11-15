@@ -3,32 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write CONTRIBUTING.md
 /contributing:
-  en: e83837cc86dabb67
-  zh: 4264d19880332ab3
+  en: ef830ca74dc437d7
+  zh: 8eaa77e2b598cb7b
 /contributing/ways-to-contribute:
-  en: 14f2a81fcdc24e7e
-  zh: ea2dbc94b98663e4
+  en: 517eeed4f1741019
+  zh: d496a2d751607f81
+/contributing/before-you-open-a-pull-request:
+  en: 0358768226d9df06
+  zh: 048b80e081714a62
+/contributing/the-vouch-list:
+  en: af639026390f7873
+  zh: ea22963c18552b13
+/contributing/replies:
+  en: 030ac2b156bf9b39
+  zh: 7743a3646be1a81c
+/contributing/conduct-and-bans:
+  en: ed032b43afd7822d
+  zh: 7c68f802c0c0e755
 /contributing/briefs-for-agents:
-  en: ace16e72b5717ed4
-  zh: 42354f3d3b143c2e
+  en: c92705acf2d68da9
+  zh: 54c68de094f12cd8
+/contributing/pull-requests-written-with-an-ai-agent:
+  en: ad6f84e2d55132bb
+  zh: 564bdb09ab7bea80
 /contributing/licence-and-sign-off:
   en: f0a2c7cfe6a13623
-  zh: b686357fa95494ba
+  zh: fc568ec29a175097
 /contributing/commits-and-changelog:
-  en: 300c7fff653d376b
-  zh: 8440d1cf1f4e04b3
-/contributing/fork-boundary-and-the-upstream-ledger:
-  en: 26056f8d72b47a64
-  zh: 350fa82252208794
+  en: b2d4c387c6c643e5
+  zh: 9eff0545f06d1451
+/contributing/divergence-from-upstream:
+  en: 8a5efe37be94dd5c
+  zh: f5be4f8d8fba1260
+/contributing/compatibility-with-stock:
+  en: 424a57a89059dc7e
+  zh: 4a84581a2fe09e6c
 /contributing/run-the-checks:
-  en: 15e9d35df654ae0d
-  zh: 59de6c534d20c26e
+  en: a034da91709e92a9
+  zh: 6af803fa521f3138
+/contributing/quality-bar:
+  en: 6cb37c8fff6321d7
+  zh: 6bcb01a8a7618a24
 /contributing/pull-requests:
-  en: 9a25330f4b953233
-  zh: be9b6070f7e176b5
+  en: 48933ddc98365560
+  zh: 2f8b110693ba6489
 /contributing/trademarks:
-  en: 4c29a71e4fa56b39
-  zh: d25a9564029b4bdb
+  en: eabe5783bdb4151e
+  zh: dced44a0aedda581
 /contributing/questions:
-  en: f10c690210dc855c
-  zh: 4f27ae29035d6b1d
+  en: 6d742393d2e4944b
+  zh: b70245947e4ffe23
