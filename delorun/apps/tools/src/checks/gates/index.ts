@@ -102,6 +102,12 @@ export const GATES: readonly GateCheck[] = withDebt([
     inputs: ['delorun/**/*.ts', 'delorun/**/*.tsx', 'delorun/**/*.mts', 'delorun/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
   },
   {
+    id: 'gates:bundle-patch-literals',
+    title: 'Shipped Delorun bundle patches disable rows only with literal true or false',
+    command: [TSX, `${GATE_DIR}/bundle-patch-literals.ts`],
+    inputs: ['delorun/packages/*/cordis.patch.yml', `${GATE_DIR}/bundle-patch-literals.ts`],
+  },
+  {
     id: 'gates:upstream-src-imports',
     title: 'No Delorun source imports a file from an upstream package\'s src/',
     command: [TSX, `${GATE_DIR}/upstream-src-imports.ts`],
