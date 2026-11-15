@@ -4,31 +4,37 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/bundle-local/README.md
 /:
   en: b200eb4e3cc35102
-  zh: d65fbdc48d726278
+  zh: 5114a38d02753560
 /delorun-bundle-local:
   en: b77cd600d24e6689
   zh: f4505bc79a66ca61
 /delorun-bundle-local/summary:
   en: 07d8c01bebd561d4
-  zh: e045c0287e494c60
+  zh: 22371418688fd26e
 /delorun-bundle-local/contents:
-  en: a6e02f3edcd3df98
-  zh: 87eb97d6d5e877e3
+  en: b3565e767da864af
+  zh: 1f2467623b41d5f5
 /delorun-bundle-local/use-this-bundle:
-  en: bb491ea21c221294
-  zh: 46d758046385b2de
+  en: dd8aa699a60fba10
+  zh: 4dd269aee9c2da33
 /delorun-bundle-local/rows:
-  en: 2a38790d07bcaa30
-  zh: c21d9ee2242f33ca
+  en: a5b3b6fa12a551bd
+  zh: f4d057fc1a5e21f2
 /delorun-bundle-local/the-privacy-section:
-  en: ee7a718df0880774
-  zh: d348068f1dbd46f3
+  en: 35d7ca45f3771157
+  zh: 376532f8bdb251bd
+/delorun-bundle-local/the-pin-lock-screen:
+  en: 800563b3a22a6d06
+  zh: 0bd14012d21d8567
+/delorun-bundle-local/the-pin-mode-section:
+  en: cc7b215aac467494
+  zh: 6c5dacd1f9bbdac4
 /delorun-bundle-local/the-consent-surfaces:
   en: d8b504608b5ecedc
-  zh: 4093ee21bf3d29ef
+  zh: 93ff31a6ccea1dec
 /delorun-bundle-local/tests:
-  en: fd98594480f6bcf2
-  zh: cb0c90217828d4c9
+  en: 9b535f7d1ae8eb43
+  zh: bab0b6bcdad4b705
 /delorun-bundle-local/limits:
   en: ccad5d6ea01b39ea
-  zh: 2397bfad3b3363d3
+  zh: 4c9aaf0c769a7fa6
