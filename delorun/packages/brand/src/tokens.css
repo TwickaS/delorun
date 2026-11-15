@@ -25,8 +25,8 @@
   --dl-warning: var(--dsw-alias-state-warn-primary, light-dark(#A15C07, #F5B14C));
   --dl-error: var(--dsw-alias-state-error-primary, light-dark(#B42318, #F87171));
 
-  --dl-font-sans: var(--dsw-font-family, 'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif);
-  --dl-font-mono: var(--dsw-font-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  --dl-font-sans: 'Schibsted Grotesk', var(--dsw-font-family, ui-sans-serif, system-ui, sans-serif);
+  --dl-font-mono: 'JetBrains Mono', var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 
   --dl-radius-xs: var(--dsw-radius-xs, 4px);
   --dl-radius-sm: var(--dsw-radius-sm, 8px);

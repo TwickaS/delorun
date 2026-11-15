@@ -36,6 +36,13 @@ describe('the brand colours', () => {
     expect(css).toContain(BRAND_FONTS.sans.split(',')[0])
   })
 
+  // The studio theme sets --dsw-font-family to the system stack, so a brand face that comes after it is never reached.
+  it('lead with the brand typefaces, before the studio theme stack', () => {
+    const css = read('../src/tokens.css')
+    expect(css).toContain(`--dl-font-sans: ${BRAND_FONTS.sans.split(',')[0]}, var(--dsw-font-family,`)
+    expect(css).toContain(`--dl-font-mono: ${BRAND_FONTS.mono.split(',')[0]}, var(--dsw-font-mono,`)
+  })
+
   it('are the studio theme plugin default accent', () => {
     expect(read('../../plugin-theme/src/config.ts')).toContain(`DEFAULT_CUSTOM_ACCENT = '${BRAND_COLOURS.peach}'`)
   })
