@@ -161,6 +161,10 @@
     - id: delorun-plugin-authoring
       name: '@delorun/skill-plugin-authoring'
 
+    # "Help me report this": the triage playbook that drafts a GitHub issue for the person to review; it never posts.
+    - id: delorun-report-problem
+      name: '@delorun/skill-report-problem'
+
     - id: delorun-delegation-consent
       name: '@delorun/plugin-delegation-consent'
       config:
@@ -240,6 +244,14 @@
 - insert:
     - id: delorun-profile-versions
       name: '@delorun/bundle-local/profile-versions'
+
+    # Report a problem: the studio's details route (versions, system, redacted recent errors and the issue form's address). The row
+    # makes no request; the person opens the pre-filled issue and sends it.
+    - id: delorun-report
+      name: '@delorun/bundle-local/report'
+      config:
+        issueUrl: https://github.com/Delo-Run/delo/issues/new
+        template: bug_report.yml
 
 # Plugin management protects the guard rows, the update check and the trust bill above, remote
 # access and the home's sign-in (so no chat turns remote access on or points

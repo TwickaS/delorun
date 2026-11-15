@@ -22,6 +22,7 @@
     "./update-check": "./src/update-check.ts",
     "./trust": "./src/trust.ts",
     "./profile-versions": "./src/profile-versions.ts",
+    "./report": "./src/report.ts",
     "./statements": "./src/client/locales.ts",
     "./trust-bill": "./src/client/trust-bill.ts",
     "./trust-schema": "./src/client/trust-schema.ts",
@@ -42,6 +43,10 @@
     "src/update-check.ts",
     "src/trust.ts",
     "src/profile-versions.ts",
+    "src/index.ts",
+    "src/client/versions.ts",
+    "src/report.ts",
+    "src/client/report-api.ts",
     "src/client/versions-api.ts",
     "src/client/host-api.ts",
     "src/client/locales.ts",
@@ -55,7 +60,8 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-sidebar"
       ],
       "platform": "web"
     }
@@ -72,6 +78,7 @@
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/install": "workspace:*",
+    "@delorun/logs": "workspace:*",
     "@delorun/plugin-delegation-consent": "workspace:*",
     "@delorun/plugin-changes": "workspace:*",
     "@delorun/plugin-fetch-guard": "workspace:*",
@@ -83,6 +90,7 @@
     "@delorun/plugin-trash": "workspace:*",
     "@delorun/profile-safety": "workspace:*",
     "@delorun/skill-plugin-authoring": "workspace:*",
+    "@delorun/skill-report-problem": "workspace:*",
     "@delorun/reach": "workspace:*",
     "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*",

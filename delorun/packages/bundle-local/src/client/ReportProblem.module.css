@@ -1,0 +1,57 @@
+/* The report dialog's body and the footer's icon button; the button matches the foot's 32px icon buttons. */
+
+.button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
+  cursor: pointer;
+  outline: none;
+}
+
+@media (hover: hover) {
+  .button:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.button:active {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-focus, currentColor);
+  outline-offset: -2px;
+}
+
+.details {
+  max-height: min(40vh, 320px);
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

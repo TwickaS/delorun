@@ -160,6 +160,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'Recorded scenarios list upstream\'s skills, and a disabled row mounts nothing.' },
   },
   {
+    id: 'delorun-report-problem',
+    kind: 'added',
+    reason: 'The delorun-report-problem skill, behind "Help me report this": it teaches the agent to ask what went wrong, read the version and recent logs through the CLI and draft a GitHub issue in the bug form\'s sections, and that the person reviews and sends it; upstream has no such skill.',
+    parity: { kind: 'disabled', reason: 'Stock has no such skill, and a disabled row mounts nothing: no skill is listed.' },
+  },
+  {
     id: 'delorun-delegation-consent',
     kind: 'added',
     reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, External agents, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',
@@ -200,6 +206,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'Setup versions in Settings: the profile history\'s versions are listed and compared for any signed-in studio, and saving the setup or switching to a version is answered only on the loopback listener, at the home\'s computer; upstream has no such page.',
     parity: { kind: 'disabled', reason: 'Stock offers no version page, and a disabled row mounts nothing: no route.' },
+  },
+  {
+    id: 'delorun-report',
+    kind: 'added',
+    reason: 'Report a problem: one read-only route gives the studio the versions, the system and a redacted excerpt of recent errors, and the address of the issue form, so the person can review a pre-filled GitHub issue and send it themselves; the row makes no request, and upstream has no such page.',
+    parity: { kind: 'disabled', reason: 'Stock has no report route, and a disabled row mounts nothing: no route.' },
   },
   {
     id: 'delorun-plugin-install-check',

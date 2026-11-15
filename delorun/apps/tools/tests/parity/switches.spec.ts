@@ -508,6 +508,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
       { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent', config: { enabled: true }, disabled: true },
       { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard', config: { enabled: true }, disabled: true },
       { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
+      { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
       { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
@@ -519,7 +520,12 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
   const CHECK_INSERT = { insert: [{ id: 'delorun-update-check', name: '@delorun/bundle-local/update-check', config: { enabled: true, intervalHours: 24, timeoutSeconds: 15 }, disabled: true }] }
   /** The trust row in the parity form the overlay's sixth patch restates it. */
   const TRUST_INSERT = { insert: [{ id: 'delorun-trust', name: '@delorun/bundle-local/trust', config: { enabled: true }, disabled: true }] }
-  const VERSIONS_INSERT = { insert: [{ id: 'delorun-profile-versions', name: '@delorun/bundle-local/profile-versions', disabled: true }] }
+  const VERSIONS_INSERT = {
+    insert: [
+      { id: 'delorun-profile-versions', name: '@delorun/bundle-local/profile-versions', disabled: true },
+      { id: 'delorun-report', name: '@delorun/bundle-local/report', config: { issueUrl: 'https://github.com/Delo-Run/delo/issues/new', template: 'bug_report.yml' }, disabled: true },
+    ],
+  }
   /** The plugin install check row in the parity form the overlay's seventh patch restates it. */
   const INSTALL_CHECK_INSERT = { insert: [{ id: 'delorun-plugin-install-check', name: '@delorun/plugin-install-check', config: { enabled: true }, disabled: true }] }
   /** The trash row in the parity form the overlay's eighth patch restates it, with the home paths kept as expressions. */
@@ -559,6 +565,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
           { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent', config: { enabled: true }, disabled: true },
           { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard', config: { enabled: true }, disabled: true },
           { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
+          { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
           { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
           { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
           { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },

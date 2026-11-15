@@ -1887,6 +1887,9 @@ importers:
       '@delorun/install':
         specifier: workspace:*
         version: link:../../apps/install
+      '@delorun/logs':
+        specifier: workspace:*
+        version: link:../logs
       '@delorun/plugin-changes':
         specifier: workspace:*
         version: link:../plugin-changes
@@ -1926,6 +1929,9 @@ importers:
       '@delorun/skill-plugin-authoring':
         specifier: workspace:*
         version: link:../skill-plugin-authoring
+      '@delorun/skill-report-problem':
+        specifier: workspace:*
+        version: link:../skill-report-problem
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -3827,6 +3833,15 @@ importers:
         version: 18.3.1
 
   delorun/packages/skill-plugin-authoring:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../../packages/skill/skill
+
+  delorun/packages/skill-report-problem:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
