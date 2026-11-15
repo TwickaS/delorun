@@ -200,10 +200,27 @@ describe('the agents step', () => {
     ['sign-ins Delorun cannot see', { ...READY, agents: { 'claude-code': 'unknown', 'codex': 'unknown' } }, [en['agents.claude.signIn.unknown'], en['agents.codex.signIn.unknown']]],
     ['a computer that could not be read', undefined, [en['agents.signIn.unread'], en['agents.signIn.unread']]],
   ])('says where each sign-in stands for %s', async (_, readiness, lines) => {
-    render(<AgentsStep services={stepServices()} guide={guideOf(hostFake({ readiness }).host)} />)
+    const [claude, codex] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf(hostFake({ readiness }).host)} />)
     expect(screen.getAllByText(en['agents.signIn.checking'])).toHaveLength(2)
     await settle()
     for (const line of lines) expect(screen.getAllByText(line).length).toBeGreaterThan(0)
+  })
+
+  it.each<readonly [string, 'checking' | 'installing' | 'failed' | 'unavailable']>([
+    ['is being checked', 'checking'],
+    ['is being added', 'installing'],
+    ['could not be added', 'failed'],
+    ['is not included', 'unavailable'],
+  ])('shows one state at a time while a bundle %s: no sign-in line beside it', async (_, state) => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf(hostFake({ readiness: READY }).host)} />)
+    await settle()
+    const card = screen.getByRole('heading', { level: 4, name: 'Claude Code' }).closest('li') as HTMLElement
+    expect(within(card).queryByText(en['agents.claude.signIn.found'])).toBeNull()
+    expect(within(card).queryByText(en['agents.signIn.checking'])).toBeNull()
   })
 
   it('asks before Continue drops an open Add confirmation: Add installs it, Don\'t add leaves it', async () => {

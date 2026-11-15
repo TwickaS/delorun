@@ -35,7 +35,6 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
   const title = t(`agents.${agent.key}.title`)
   const signIn = readiness.status === 'ready' ? readiness.value.agents[agent.agent] : undefined
   const loading = readiness.status === 'loading'
-  // A sign-in beside "Not included in this installation" would read as a contradiction, so an agent that cannot be added shows no sign-in line.
   useEffect(() => {
     if (!confirming) return undefined
     guide.setGate(agent.name, () => { setAsking(true); return false })
@@ -47,10 +46,12 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
     setAsking(false)
     if (add) void bundles.install(agent.name)
   }
-  const included = useBundle(services, agent.name)?.state !== 'unavailable'
+  const bundleState = useBundle(services, agent.name)?.state
+  // One state line at a time: the sign-in shows only once the package's own state (checking, adding, failed, not included) is settled.
+  const showSignIn = bundleState === 'available' || bundleState === 'installed' || bundleState === 'restart'
   return (
     <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services} onAdd={() => { setConfirming(true) }}>
-      {included && (
+      {showSignIn && (
         <StateLine tone={loading ? 'loading' : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
           {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
         </StateLine>

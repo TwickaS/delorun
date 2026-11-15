@@ -26,3 +26,10 @@
   font-size: var(--onb-small-size);
   color: var(--dsw-alias-label-secondary);
 }
+
+@media (pointer: coarse) {
+  .copy {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
