@@ -41,6 +41,8 @@ export interface ProviderCard {
   readonly keyPage: string | undefined
   /** True when the route needs a base URL because a person declared it. */
   readonly needsBaseURL: boolean
+  /** True for the offer to declare an OpenAI-compatible endpoint: it asks for a name and a base URL as well as a key. */
+  readonly custom?: true
 }
 
 /** What the free model-list request answered for a typed key. */
@@ -66,6 +68,35 @@ export const KEY_PAGES: Readonly<Record<string, string>> = {
   'cerebras': 'https://cloud.cerebras.ai/platform',
   'huggingface': 'https://huggingface.co/settings/tokens',
   'nvidia': 'https://build.nvidia.com/settings/api-keys',
+}
+
+/**
+ * Display names for the providers above whose catalogue entry carries only the route id, so that a card reads "Google
+ * Gemini" rather than "google". A route whose entry names itself is shown under that name.
+ */
+const PROVIDER_NAMES: Readonly<Record<string, string>> = {
+  'openai': 'OpenAI',
+  'anthropic': 'Anthropic',
+  'google': 'Google Gemini',
+  'openrouter': 'OpenRouter',
+  'groq': 'Groq',
+  'mistral': 'Mistral',
+  'xai': 'xAI',
+  'moonshotai': 'Moonshot AI',
+  'together': 'Together AI',
+  'fireworks': 'Fireworks AI',
+  'cerebras': 'Cerebras',
+  'huggingface': 'Hugging Face',
+  'nvidia': 'NVIDIA',
+}
+
+/**
+ * @param provider - the route's id.
+ * @param given - the name the harness gave it.
+ * @returns the harness's name, or the display name above when the harness gave only the id.
+ */
+function nameOf(provider: string, given: string): string {
+  return given === provider ? PROVIDER_NAMES[provider] ?? given : given
 }
 
 /** The providers the landing lists first, in order; the rest follow by name. */
@@ -94,28 +125,63 @@ function connectsWithKey(entry: DirectoryEntry): boolean {
   return entry.baseURLEnv.length === 0 && entry.authEnv.some(name => name.endsWith('_API_KEY'))
 }
 
+/** The id of the offer that declares an OpenAI-compatible endpoint; it is not a route until the person saves it. */
+export const CUSTOM_PROVIDER = 'custom-endpoint'
+
+/** The settings namespace that holds hand-declared routes, and the wire protocol an endpoint is declared with. */
+export const DECLARED_NAMESPACE = 'llm-pi-ai'
+
 /** Results that mean a key is stored or found in the environment. */
 const HELD: ReadonlySet<KeyResult> = new Set(['works', 'rejected', 'unreachable', 'failed', 'untested'])
 
 /**
- * The cards the step offers: the usable routes the key test lists (which leaves out hidden ones), joined to the directory
- * entry that says where a key is saved, kept to the routes a key connects.
+ * The cards the step offers: the usable routes the key test lists (which leaves out hidden ones), then every other route in
+ * the directory that a key connects and the profile has not configured yet, which Settings → Models adds the same way,
+ * then the offer to declare an OpenAI-compatible endpoint where the directory has a namespace for declared routes. Each
+ * is joined to the directory entry that says where a key is saved.
  * @param answer - the key test.
  * @param directory - the configurable routes.
- * @returns the cards, the common providers first.
+ * @returns the cards, the common providers first and the endpoint offer last.
  */
 export function cardsOf(answer: KeyTestAnswer, directory: readonly DirectoryEntry[]): readonly ProviderCard[] {
   const cards: ProviderCard[] = []
+  const listed = new Set(answer.providers.map(each => each.provider))
   for (const each of answer.providers) {
     const entry = directory.find(candidate => candidate.provider === each.provider)
     if (entry === undefined || !connectsWithKey(entry)) continue
-    cards.push({ provider: each.provider, name: each.name, entry, found: HELD.has(each.result), result: each.result, keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
+    cards.push({ provider: each.provider, name: nameOf(each.provider, each.name), entry, found: HELD.has(each.result), result: each.result, keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
+  }
+  for (const entry of directory) {
+    if (listed.has(entry.provider) || (answer.hidden ?? []).includes(entry.provider) || !connectsWithKey(entry)) continue
+    cards.push({ provider: entry.provider, name: nameOf(entry.provider, entry.displayName), entry, found: false, result: 'no-key', keyPage: KEY_PAGES[entry.provider], needsBaseURL: entry.declared === true })
   }
   const rank = (card: ProviderCard): number => {
     const place = (FIRST as readonly string[]).indexOf(card.provider)
-    return place === -1 ? FIRST.length : place
+    // After the first five, the providers that have a key page, then the rest.
+    return place !== -1 ? place : card.keyPage === undefined ? FIRST.length + 1 : FIRST.length
   }
-  return cards.toSorted((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  const sorted = cards.toSorted((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  const declared = directory.find(entry => entry.settingsNs === DECLARED_NAMESPACE)
+  if (declared === undefined) return sorted
+  const entry: DirectoryEntry = { provider: CUSTOM_PROVIDER, displayName: 'OpenAI-compatible endpoint', settingsNs: DECLARED_NAMESPACE, settingsPath: [], declared: true, authEnv: [], baseURLEnv: [] }
+  return [...sorted, { provider: CUSTOM_PROVIDER, name: entry.displayName, entry, found: false, result: 'no-key', keyPage: undefined, needsBaseURL: true, custom: true }]
+}
+
+/**
+ * The route id for a typed endpoint name: lower-case letters, digits and single hyphens, starting with a letter, as the
+ * Models page requires of a declared route, made unique with a numeric suffix.
+ * @param name - the typed name.
+ * @param taken - whether a route id already exists.
+ * @returns the id, or undefined when the name has no letter or digit to make one from.
+ */
+export function routeIdOf(name: string, taken: (id: string) => boolean): string | undefined {
+  const stem = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/^[0-9-]+/, '')
+  if (stem === '') return undefined
+  for (let n = 1; n < 100; n++) {
+    const id = n === 1 ? stem : `${stem}-${String(n)}`
+    if (!taken(id) && id !== CUSTOM_PROVIDER) return id
+  }
+  return undefined
 }
 
 /**

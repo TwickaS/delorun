@@ -257,6 +257,23 @@ export interface ProvidersFace {
    * @returns true when the route was written; it never rejects.
    */
   readonly declareLocal: (server: LocalServer) => Promise<boolean>
+  /**
+   * Declare an OpenAI-compatible endpoint a person typed, as the Models page's custom provider card does: it lists the
+   * endpoint's models with the key (the free request), writes a profile under an id made from the name, and stores the key.
+   * @param request - the typed name, base URL and key; the key is never read back.
+   * @returns true when the route and its key were written; it never rejects.
+   */
+  readonly declareCustom: (request: CustomEndpoint) => Promise<boolean>
+}
+
+/** What a person typed to declare an OpenAI-compatible endpoint. */
+export interface CustomEndpoint {
+  /** The display name; the route id is made from it. */
+  readonly name: string
+  /** The endpoint's base URL. */
+  readonly baseURL: string
+  /** The API key. */
+  readonly key: string
 }
 
 /** The services that do not change while the dialog is open. */

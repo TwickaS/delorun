@@ -221,7 +221,7 @@ describe('the route', () => {
     const { routes } = await mount(undefined)
     const call = async (path: string, method: string) => (await routes.get(path)?.fetch(new Request('http://harness.test/api', { method })))?.json()
     expect(Readiness.parse(await call(READINESS_PATH, 'GET'))).toEqual({ agents: { 'claude-code': 'missing', 'codex': 'missing' }, tailscale: { state: 'not-installed' } })
-    expect(await call(KEY_TEST_PATH, 'POST')).toEqual({ providers: [] })
+    expect(await call(KEY_TEST_PATH, 'POST')).toEqual({ hidden: [], providers: [] })
   })
 
   it('serves a record that covers nothing without a profile directory', async () => {

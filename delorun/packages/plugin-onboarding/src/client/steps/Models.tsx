@@ -24,6 +24,9 @@ import shared from './steps.module.css'
  */
 type Outcome = 'connected' | 'failed' | 'untested' | 'skipped'
 
+/** How many providers a key alone connects the landing lists before the rest sit behind "Show all". */
+const ADDABLE_SHOWN = 6
+
 /** The props of the step. */
 interface ModelsStepProps {
   /** The services the body draws with. */
@@ -52,6 +55,9 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   // A provider whose key failed and is tried again on its own; the walk then returns to the summary.
   const [only, setOnly] = useState<string | undefined>()
   const [outcomes, setOutcomes] = useState<Readonly<Record<string, Outcome>>>({})
+  // The providers this walk visits, fixed when it starts so that finishing one does not shorten the queue under the index.
+  const [order, setOrder] = useState<readonly string[]>([])
+  const [expanded, setExpanded] = useState(false)
   // Coming back to the step starts from the cards, whatever phase it was left in.
   useEffect(() => { guide.setProvidersPhase('landing') }, [guide])
   useEffect(() => {
@@ -59,7 +65,9 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     void providers.directory().then((entries) => { if (live) setDirectory(entries) })
     return () => { live = false }
   }, [providers])
-  const cards = keys.status === 'ready' && directory !== 'loading' && directory !== undefined ? cardsOf(keys.value, directory) : undefined
+  const cards = keys.status === 'ready' && directory !== 'loading' && directory !== undefined
+    ? cardsOf(keys.value, directory).map(card => card.custom === true ? { ...card, name: t('providers.custom.name') } : card)
+    : undefined
   // A key found before the step opened starts ticked; later changes are the person's.
   useEffect(() => {
     if (cards === undefined || seeded) return
@@ -71,7 +79,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     if (phase === 'summary') document.querySelector<HTMLElement>('h2[data-modal-autofocus]')?.focus({ preventScroll: true })
   }, [phase])
   const walk = cards?.filter(card => ticked.has(card.provider)) ?? []
-  const queue = only === undefined ? walk : walk.filter(card => card.provider === only)
+  const queue = only === undefined ? walk.filter(card => order.includes(card.provider)) : walk.filter(card => card.provider === only)
 
   const finishWalk = (): void => {
     guide.testKeys()
@@ -84,6 +92,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
 
   const labels = { more: t('more'), less: t('less') }
+  const headingId = useId()
   // Before the summary the step draws its own footer in the frame's pinned footer.
   if (keys.status === 'loading' || directory === 'loading') {
     return (
@@ -121,7 +130,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
             </li>
           ))}
         </ul>
-        <button type="button" className={shared.linkRow} onClick={() => { setIndex(0); guide.setProvidersPhase('landing') }}>{t('providers.change')}</button>
+        <Button variant="outline" className={css.addAnother} onClick={() => { setIndex(0); guide.setProvidersPhase('landing') }}>{t('providers.addAnother')}</Button>
       </div>
     )
   }
@@ -133,35 +142,55 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
         onSkip={() => { settle(card, 'skipped') }} onDone={(outcome) => { settle(card, outcome) }} />
     )
   }
+  // A provider that already ended connected or saved is not walked again when the person comes back to add another.
+  const pending = walk.filter(card => outcomes[card.provider] === undefined || outcomes[card.provider] === 'skipped')
   const connect = (): void => {
     setIndex(0)
+    if (pending.length === 0) { finishWalk(); return }
+    setOrder(pending.map(card => card.provider))
     guide.setProvidersPhase('walk')
   }
+  const present = (card: ProviderCard): ReactNode => (
+    <li key={card.provider}>
+      <Card title={card.name} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
+        action={(
+          <label className={css.tickLabel}>
+            <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
+              const on = event.currentTarget.checked
+              setTicked((held) => { const copy = new Set(held); if (on) copy.add(card.provider); else copy.delete(card.provider); return copy })
+              // Ticking a provider again asks for its key again, even where it ended earlier.
+              setOutcomes((held) => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
+            }} />
+          </label>
+        )}>
+        {card.found && (didNotPass(card.result)
+          ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
+          : couldNotTest(card.result)
+            ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
+            : <StateLine tone="success">{t('providers.found')}</StateLine>)}
+      </Card>
+    </li>
+  )
+  const foundCards = cards.filter(card => card.found)
+  const addable = cards.filter(card => !card.found)
+  const shown = expanded ? addable : addable.filter((card, place) => place < ADDABLE_SHOWN || card.custom === true || ticked.has(card.provider))
   return (
     <div className={shared.stack}>
       <p className={shared.lead}>{t('providers.lead')}</p>
       {cards.length === 0 ? <StateLine tone="warning">{t('providers.none')}</StateLine> : (
-        <ul className={shared.cards}>
-          {cards.map(card => (
-            <li key={card.provider}>
-              <Card title={card.name} labels={labels} selected={ticked.has(card.provider)}
-                action={(
-                  <label className={css.tickLabel}>
-                    <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
-                      const on = event.currentTarget.checked
-                      setTicked((held) => { const copy = new Set(held); if (on) copy.add(card.provider); else copy.delete(card.provider); return copy })
-                    }} />
-                  </label>
-                )}>
-                {card.found && (didNotPass(card.result)
-                  ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
-                  : couldNotTest(card.result)
-                    ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
-                    : <StateLine tone="success">{t('providers.found')}</StateLine>)}
-              </Card>
-            </li>
-          ))}
-        </ul>
+        <>
+          {foundCards.length > 0 && <ul className={shared.cards}>{foundCards.map(present)}</ul>}
+          {addable.length > 0 && (
+            <section className={shared.stack} aria-labelledby={`${headingId}-add`}>
+              <h3 id={`${headingId}-add`} className={css.addHeading}>{t(foundCards.length > 0 ? 'providers.add.heading' : 'providers.add.headingFirst')}</h3>
+              <ul className={shared.cards}>{shown.map(present)}</ul>
+              {addable.length > shown.length || expanded
+                ? <Button variant="ghost" className={css.showAll} aria-expanded={expanded} onClick={() => { setExpanded(!expanded) }}>
+                  {expanded ? t('providers.add.showFewer') : t('providers.add.showAll', { n: String(addable.length) })}
+                </Button> : null}
+            </section>
+          )}
+        </>
       )}
       <LocalServers services={services} taken={new Set(cards.map(card => card.provider))} />
       <p className={shared.hint}>{t('welcome.model.hint')}</p>
@@ -254,6 +283,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const { t, providers } = services
   const [key, setKey] = useState('')
   const [baseURL, setBaseURL] = useState('')
+  const [endpointName, setEndpointName] = useState('')
   const [test, setTest] = useState<Test>({ state: 'idle' })
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState(false)
@@ -263,9 +293,13 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   // Each provider's screen mounts fresh, so its key field takes focus when it appears.
   useEffect(() => { keyField.current?.focus({ preventScroll: true }) }, [])
   const address = baseURL.trim() === '' ? undefined : baseURL.trim()
+  const custom = card.custom === true
+  // An endpoint is tested only once its address is one a request can go to.
+  const addressUsable = address !== undefined && /^https?:\/\/\S+$/.test(address)
+  const addressInvalid = custom && address !== undefined && !addressUsable
   useEffect(() => {
     const request = ++latest.current
-    if (key === '') { setTest({ state: 'idle' }); return }
+    if (key === '' || (custom && !addressUsable)) { setTest({ state: 'idle' }); return }
     const usable = usableKey(key)
     if (usable === undefined) { setTest({ state: 'invalid' }); return }
     setTest({ state: 'testing' })
@@ -273,13 +307,16 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
       void providers.probe(card.entry, usable, address).then((probe) => { if (latest.current === request) setTest({ state: 'done', probe }) })
     }, TEST_DELAY_MS)
     return () => { clearTimeout(timer) }
-  }, [key, address, card.entry, providers])
+  }, [key, address, card.entry, providers, custom, addressUsable])
   const typed = usableKey(key)
   const next = (): void => {
     if (typed === undefined) { onDone(card.found ? 'connected' : 'skipped'); return }
     setSaving(true)
     setProblem(false)
-    void providers.save(card.entry, typed, address).then((saved) => {
+    const write = custom && address !== undefined
+      ? providers.declareCustom({ name: endpointName.trim(), baseURL: address, key: typed })
+      : providers.save(card.entry, typed, address)
+    void write.then((saved) => {
       setSaving(false)
       if (!saved) { setProblem(true); return }
       onDone(test.state !== 'done' ? 'untested' : test.probe.kind === 'works' ? 'connected' : 'failed')
@@ -287,10 +324,26 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   }
   const works = test.state === 'done' && test.probe.kind === 'works' ? test.probe : undefined
   const invalid = test.state === 'invalid'
+  const incomplete = custom && (endpointName.trim() === '' || !addressUsable)
   return (
     <div className={shared.stack}>
       {place.n > 1 && <p className={css.place}>{t('providers.place', { name: card.name, k: String(place.k), n: String(place.n) })}</p>}
       <h3 className={css.provider}>{card.name}</h3>
+      {custom && (
+        <>
+          <div className={css.field}>
+            <label htmlFor={`${id}-name`} className={css.label}>{t('providers.custom.nameField')}</label>
+            <input id={`${id}-name`} className={css.input} type="text" autoComplete="off" spellCheck={false} value={endpointName}
+              onChange={(event) => { setEndpointName(event.currentTarget.value) }} />
+          </div>
+          <div className={css.field}>
+            <label htmlFor={`${id}-url`} className={css.label}>{t('providers.baseURL')}</label>
+            <input id={`${id}-url`} className={css.input} type="url" autoComplete="off" autoCapitalize="none" spellCheck={false} value={baseURL}
+              aria-invalid={addressInvalid || undefined} onChange={(event) => { setBaseURL(event.currentTarget.value) }} />
+            {addressInvalid && <StateLine tone="warning">{t('providers.custom.invalid')}</StateLine>}
+          </div>
+        </>
+      )}
       <div className={css.field}>
         <label htmlFor={`${id}-key`} className={css.label}>{t('providers.key')}</label>
         <input id={`${id}-key`} ref={keyField} className={css.input} type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
@@ -302,13 +355,13 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
           {invalid && <StateLine tone="warning">{t('providers.invalid')}</StateLine>}
           {works !== undefined && <StateLine tone="success">{t('providers.works', { n: String(works.models) })}{works.defaultModel === undefined ? null : <span className={css.defaultModel}>{t('providers.default', { model: works.defaultModel })}</span>}</StateLine>}
           {test.state === 'done' && test.probe.kind === 'failed' && <StateLine tone="error">{t('providers.failed')}</StateLine>}
-          {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t('providers.saveFailed')}</StateLine>}
+          {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
         </div>
         {card.keyPage !== undefined && (
           <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a>
         )}
       </div>
-      {card.needsBaseURL && (
+      {card.needsBaseURL && !custom && (
         <details className={css.more}>
           <summary className={css.moreSummary}>{t('providers.more')}</summary>
           <label htmlFor={`${id}-url`} className={css.label}>{t('providers.baseURL')}</label>
@@ -318,7 +371,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
       )}
       <FooterPortal>
         <StepFooter skip={{ label: t('providers.skipOne'), onClick: onSkip }} back={{ label: t('back'), onClick: onBack }}
-          next={{ label: t('providers.next'), onClick: next, disabled: saving || invalid || (typed === undefined && !card.found) }} />
+          next={{ label: t('providers.next'), onClick: next, disabled: saving || invalid || incomplete || (typed === undefined && !card.found) }} />
       </FooterPortal>
     </div>
   )

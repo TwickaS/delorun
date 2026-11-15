@@ -96,3 +96,16 @@
   display: block;
   color: var(--dsw-alias-label-secondary);
 }
+
+.addHeading {
+  margin: 0;
+  font-size: var(--onb-body-size);
+  font-weight: 500;
+  line-height: var(--onb-body-line);
+}
+
+.addAnother,
+.showAll {
+  align-self: flex-start;
+  min-height: var(--onb-target);
+}

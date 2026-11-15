@@ -128,5 +128,5 @@ async function testRoute(deps: KeyTestDeps, provider: string): Promise<KeyResult
 export async function testKeys(deps: KeyTestDeps): Promise<KeyTestAnswer> {
   const routes = deps.providers().filter(route => !deps.hidden.includes(route.id)).slice(0, MAX_PROVIDERS)
   const results = await Promise.all(routes.map(route => testRoute(deps, route.id).catch((): KeyResult => 'failed')))
-  return { providers: routes.map((route, index) => ({ provider: route.id, name: route.name, result: results[index] as KeyResult })) }
+  return { hidden: [...deps.hidden], providers: routes.map((route, index) => ({ provider: route.id, name: route.name, result: results[index] as KeyResult })) }
 }

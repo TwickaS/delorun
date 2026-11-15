@@ -128,8 +128,12 @@ export type KeyResult = typeof KEY_RESULTS[number]
 /** The most providers one test reports. */
 export const MAX_PROVIDERS = 32
 
-/** Each usable provider route with its name and the test's result, in the order the harness lists them. */
+/**
+ * Each usable provider route with its name and the test's result, in the order the harness lists them, and the route ids
+ * the row's `hiddenProviders` leaves out, so the step does not offer them from the configurable-provider directory. The host always sends it; a reader treats a missing list as empty.
+ */
 export const KeyTestAnswer = z.strictObject({
+  hidden: z.array(z.string().min(1).max(200)).max(MAX_PROVIDERS).optional(),
   providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS) })).max(MAX_PROVIDERS),
 })
 

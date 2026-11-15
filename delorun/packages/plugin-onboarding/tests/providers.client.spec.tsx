@@ -6,6 +6,8 @@ import { StepFrame } from '../src/client/frame/StepFrame.tsx'
 import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { TEST_DELAY_MS } from '../src/client/providers.ts'
+import { DIRECTORY } from './directory.fixture.ts'
+import type { DirectoryEntry } from '../src/client/providers.ts'
 import type { KeyTestAnswer, LocalServer } from '../src/wire.ts'
 import { hostFake, providersFake, stepServices } from './fixtures.client.ts'
 
@@ -42,16 +44,40 @@ describe('the providers landing', () => {
   it('lists the cards, ticks the ones with a key found and counts them on the button', async () => {
     await mount()
     expect(screen.getAllByRole('checkbox').map(box => [box.closest('li')?.querySelector('h4')?.textContent, (box as HTMLInputElement).checked])).toEqual([
-      ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false],
+      ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false], [en['providers.custom.name'], false],
     ])
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
     expect(screen.getByRole('button', { name: en['providers.connect'] })).toBeTruthy()
-    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     expect(screen.getByRole('button', { name: en['providers.connect'] }).hasAttribute('disabled')).toBe(false)
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
-    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     // With nothing ticked the button leaves the step instead of showing a disabled count.
     expect(screen.queryByRole('button', { name: en['providers.connect'] })).toBeNull()
+  })
+
+  it('puts the found providers on top and every other provider a key connects under Add another provider', async () => {
+    const GROQ: DirectoryEntry = { provider: 'groq', displayName: 'Groq', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'groq'], authEnv: ['GROQ_API_KEY'], baseURLEnv: [] }
+    const HIDDEN: DirectoryEntry = { provider: 'quiet', displayName: 'Quiet', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'quiet'], authEnv: ['QUIET_API_KEY'], baseURLEnv: [] }
+    await mount({ directory: [...DIRECTORY, GROQ, HIDDEN] }, { ...KEYS, hidden: ['quiet'] })
+    const names = (list: HTMLElement | undefined) => [...list?.querySelectorAll('h4') ?? []].map(heading => heading.textContent)
+    expect(names(screen.getByText('DeepSeek').closest('ul') ?? undefined)).toEqual(['DeepSeek'])
+    const heading = screen.getByRole('heading', { level: 3, name: en['providers.add.heading'] })
+    const section = heading.closest('section')
+    // A route the directory knows but the profile has not configured is offered; a hidden route is not.
+    expect(names(section?.querySelector('ul') ?? undefined)).toEqual(['OpenAI', 'Groq', 'Gateway', 'Typesafe', en['providers.custom.name']])
+    expect(screen.queryByRole('checkbox', { name: /Quiet/ })).toBeNull()
+  })
+
+  it('keeps the longer list behind Show all providers, and keeps a ticked provider in view', async () => {
+    const many = Array.from({ length: 9 }, (_, n): DirectoryEntry => ({ provider: `extra${String(n)}`, displayName: `Extra ${String(n)}`, settingsNs: 'llm-pi-ai', settingsPath: ['providers', `extra${String(n)}`], authEnv: [`EXTRA${String(n)}_API_KEY`], baseURLEnv: [] }))
+    await mount({ directory: [...DIRECTORY, ...many] })
+    expect(screen.queryByRole('checkbox', { name: /Extra 8/ })).toBeNull()
+    await click(screen.getByRole('button', { name: /^Show all \d+ providers$/ }))
+    await click(screen.getByRole('checkbox', { name: /Extra 8/ }))
+    await click(screen.getByRole('button', { name: en['providers.add.showFewer'] }))
+    expect((screen.getByRole('checkbox', { name: /Extra 8/ }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByRole('checkbox', { name: /Extra 7/ })).toBeNull()
   })
 
   it('continues without a key when nothing is ticked', async () => {
@@ -75,7 +101,7 @@ describe('the providers landing', () => {
 describe('the walk', () => {
   const start = async (change: Parameters<typeof providersFake>[0] = {}) => {
     const mounted = await mount(change)
-    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     await click(screen.getByRole('button', { name: en['providers.connect'] }))
     return mounted
   }
@@ -193,10 +219,61 @@ describe('the walk', () => {
   })
 })
 
+describe('adding a provider the profile has not configured', () => {
+  const GROQ: DirectoryEntry = { provider: 'groq', displayName: 'Groq', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'groq'], authEnv: ['GROQ_API_KEY'], baseURLEnv: [] }
+
+  it('walks to its key field and saves the key through the same save as Settings', async () => {
+    const mounted = await mount({ directory: [...DIRECTORY, GROQ] })
+    await click(screen.getByRole('checkbox', { name: /Groq/ }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(screen.getByRole('heading', { level: 3, name: 'Groq' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: en['providers.getKey'] }).getAttribute('href')).toBe('https://console.groq.com/keys')
+    await type(screen.getByLabelText(en['providers.key']), 'gsk-abc')
+    await flush(TEST_DELAY_MS)
+    expect(mounted.probe.mock.calls[0]?.[0].provider).toBe('groq')
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(mounted.save.mock.calls[0]?.slice(0, 2)).toEqual([expect.objectContaining({ provider: 'groq', settingsPath: ['providers', 'groq'] }), 'gsk-abc'])
+    expect(mounted.guide.providersPhase.getSnapshot()).toBe('summary')
+  })
+
+  it('declares an OpenAI-compatible endpoint from a name, an address and a key', async () => {
+    const mounted = await mount()
+    await click(screen.getByRole('checkbox', { name: new RegExp(en['providers.custom.name']) }))
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    const next = screen.getByRole('button', { name: en['providers.next'] })
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    expect(next.hasAttribute('disabled')).toBe(true)
+    await type(screen.getByLabelText(en['providers.custom.nameField']), 'Company gateway')
+    await type(screen.getByLabelText(en['providers.baseURL']), 'gateway.example')
+    expect(screen.getByText(en['providers.custom.invalid'])).toBeTruthy()
+    expect(next.hasAttribute('disabled')).toBe(true)
+    await type(screen.getByLabelText(en['providers.baseURL']), 'https://gateway.example/v1')
+    await flush(TEST_DELAY_MS)
+    expect(mounted.probe.mock.calls[0]?.[2]).toBe('https://gateway.example/v1')
+    await click(next)
+    expect(mounted.declareCustom).toHaveBeenCalledWith({ name: 'Company gateway', baseURL: 'https://gateway.example/v1', key: 'sk-abc' })
+    expect(mounted.save).not.toHaveBeenCalled()
+  })
+
+  it('says so when the endpoint was not added', async () => {
+    await mount({ declareCustom: false })
+    await click(screen.getByRole('checkbox', { name: new RegExp(en['providers.custom.name']) }))
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
+    await type(screen.getByLabelText(en['providers.custom.nameField']), 'Gateway')
+    await type(screen.getByLabelText(en['providers.baseURL']), 'https://gateway.example/v1')
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(screen.getByText(en['providers.custom.failed'])).toBeTruthy()
+  })
+})
+
 describe('the summary', () => {
   it('lists each provider as connected, saved or skipped, tests the keys again and goes back to the cards on request', async () => {
     const { guide } = await mount()
-    await click(screen.getByRole('checkbox', { name: /OpenAI/ }))
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     await click(screen.getByRole('button', { name: en['providers.connect'] }))
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     await type(screen.getByLabelText(en['providers.key']), 'sk-abc')
@@ -204,8 +281,12 @@ describe('the summary', () => {
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('summary')
     expect(within(screen.getByRole('list', { name: en['providers.summary.label'] })).getAllByRole('listitem').map(item => item.textContent)).toEqual([`DeepSeek✓ ${en['providers.outcome.connected']}`, `OpenAI✓ ${en['providers.outcome.connected']}`])
-    await click(screen.getByRole('button', { name: en['providers.change'] }))
+    await click(screen.getByRole('button', { name: en['providers.addAnother'] }))
     expect(guide.providersPhase.getSnapshot()).toBe('landing')
+    // The ticks stay, and connecting again walks only what has not ended.
+    expect((screen.getByRole('checkbox', { name: 'Use OpenAI' }) as HTMLInputElement).checked).toBe(true)
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    expect(guide.providersPhase.getSnapshot()).toBe('summary')
   })
 })
 

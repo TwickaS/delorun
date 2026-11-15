@@ -69,4 +69,35 @@ describe('the providers service', () => {
     expect(await remote({ settings: refused }).face.save(DIRECTORY[1]!, 'k', undefined)).toBe(false)
     expect(await remote({ settings: Promise.reject(new Error('down')) }).face.save(DIRECTORY[1]!, 'k', undefined)).toBe(false)
   })
+
+  it('asks an endpoint offer\'s models over the OpenAI protocol without naming a route', async () => {
+    const { face, discoverModels } = remote()
+    const offer = { provider: 'custom-endpoint', displayName: 'Endpoint', settingsNs: 'llm-pi-ai', settingsPath: [], declared: true, authEnv: [], baseURLEnv: [] }
+    expect(await face.probe(offer, 'sk-abc', 'https://gw.example/v1')).toMatchObject({ kind: 'works' })
+    expect(discoverModels).toHaveBeenCalledWith('llm-pi-ai', { api: 'openai-completions', apiKey: 'sk-abc', baseURL: 'https://gw.example/v1' })
+  })
+
+  it('declares an endpoint under an id made from its name, with the models it listed, and then stores the key', async () => {
+    const { face, set, mutate } = remote()
+    expect(await face.declareCustom({ name: 'Company gateway', baseURL: 'https://gw.example/v1', key: 'sk-abc' })).toBe(true)
+    expect(mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'company-gateway'],
+      value: { displayName: 'Company gateway', apiKeyEnv: 'COMPANY_GATEWAY_API_KEY', api: 'openai-completions', baseURL: 'https://gw.example/v1', models: [{ id: 'm1', name: 'Model one' }, { id: 'm2', name: 'm2' }] },
+    }], 7)
+    expect(set).toHaveBeenCalledWith('COMPANY_GATEWAY_API_KEY', 'sk-abc')
+  })
+
+  it('does not declare an endpoint that listed no models, whose profile write is refused, or whose name makes no id', async () => {
+    const request = { name: 'Gateway', baseURL: 'https://gw.example/v1', key: 'k' }
+    const empty = remote({ discover: ok([]) })
+    expect(await empty.face.declareCustom(request)).toBe(false)
+    expect(empty.mutate).not.toHaveBeenCalled()
+    expect(await remote({ discover: refused }).face.declareCustom(request)).toBe(false)
+    expect(await remote({ settings: refused }).face.declareCustom(request)).toBe(false)
+    expect(await remote().face.declareCustom({ ...request, name: '###' })).toBe(false)
+    const written = remote({ mutate: refused })
+    expect(await written.face.declareCustom(request)).toBe(false)
+    expect(written.set).not.toHaveBeenCalled()
+    expect(await remote({ discover: Promise.reject(new Error('down')) }).face.declareCustom(request)).toBe(false)
+  })
 })

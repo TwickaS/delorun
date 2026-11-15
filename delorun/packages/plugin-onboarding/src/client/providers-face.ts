@@ -6,15 +6,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.remote merge.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { deriveKeyRef, type DirectoryEntry, type KeyProbe } from './providers.ts'
+import { CUSTOM_PROVIDER, DECLARED_NAMESPACE, deriveKeyRef, routeIdOf, type DirectoryEntry, type KeyProbe } from './providers.ts'
 import { isLoopbackBaseURL, type LocalServer } from '../wire.ts'
 import type { ProvidersFace } from './types.ts'
 
 /** The route ids and names a found local server is declared under. */
 const LOCAL_ROUTES = { 'ollama': 'Ollama', 'lm-studio': 'LM Studio' } as const
 
+/** The wire protocol an endpoint a person declares speaks. */
+const CUSTOM_PROTOCOL = 'openai-completions'
+
 /** The settings namespace whose profiles name a credential reference only once a key is stored. */
-const PI_AI_NAMESPACE = 'llm-pi-ai'
+const PI_AI_NAMESPACE = DECLARED_NAMESPACE
 
 /**
  * @param value - a settings value.
@@ -56,8 +59,10 @@ export function createProvidersFace(ctx: Context): ProvidersFace {
     probe: async (entry, key, baseURL): Promise<KeyProbe> => {
       try {
         const endpoint = baseURL ?? entry.defaultBaseURL
+        // The endpoint offer names no route yet, so discovery asks the endpoint itself over the protocol it will be declared with.
+        const named = entry.provider === CUSTOM_PROVIDER ? { api: CUSTOM_PROTOCOL } : { provider: entry.provider }
         const response = await ctx.remote.llm.discoverModels(entry.settingsNs, {
-          provider: entry.provider, apiKey: key, ...endpoint === undefined ? {} : { baseURL: endpoint },
+          ...named, apiKey: key, ...endpoint === undefined ? {} : { baseURL: endpoint },
         })
         if (!response.ok) return { kind: 'failed' }
         const first = response.value[0]
@@ -82,6 +87,29 @@ export function createProvidersFace(ctx: Context): ProvidersFace {
         return written.ok
       } catch (error) {
         console.warn('delorun onboarding: the local server was not declared', error)
+        return false
+      }
+    },
+    declareCustom: async ({ name, baseURL, key }) => {
+      try {
+        const models = await ctx.remote.llm.discoverModels(PI_AI_NAMESPACE, { api: CUSTOM_PROTOCOL, apiKey: key, baseURL })
+        if (!models.ok || models.value.length === 0) return false
+        const described = await ctx.remote.settings.describe()
+        if (!described.ok) return false
+        const namespace = described.value.namespaces.find(each => each.ns === PI_AI_NAMESPACE)
+        const taken = at(namespace?.value, ['providers'])
+        const route = routeIdOf(name, id => typeof taken === 'object' && taken !== null && Reflect.has(taken, id))
+        if (route === undefined) return false
+        const ref = deriveKeyRef(route)
+        const profile = {
+          displayName: name, apiKeyEnv: ref, api: CUSTOM_PROTOCOL, baseURL,
+          models: models.value.map(each => ({ id: each.id, name: each.name ?? each.id })),
+        }
+        const written = await ctx.remote.settings.mutate(PI_AI_NAMESPACE, [{ op: 'set' as const, path: ['providers', route], value: profile }], namespace?.revision)
+        if (!written.ok) return false
+        return (await ctx.remote.credentials.set(ref, key)).ok
+      } catch (error) {
+        console.warn('delorun onboarding: the endpoint was not declared', error)
         return false
       }
     },

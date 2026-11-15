@@ -33,7 +33,7 @@ function deps(change: Partial<KeyTestDeps> = {}): KeyTestDeps {
 describe('the key test', () => {
   it('asks a configurable route\'s discovery and the official DeepSeek route\'s own listing, all at once', async () => {
     const parts = deps()
-    expect(await testKeys(parts)).toEqual({ providers: [
+    expect(await testKeys(parts)).toEqual({ hidden: [], providers: [
       { provider: 'openai', name: 'OpenAI', result: 'works' },
       { provider: DEEPSEEK_ROUTE, name: 'DeepSeek', result: 'works' },
     ] })
