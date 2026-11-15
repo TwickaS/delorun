@@ -9,6 +9,7 @@
   - button "重试"
   - paragraph: 安装位置：{{cwd}}/.dsh-home/profiles/scaffold
   - text: 失败 $ pnpm add silent-package 退出码 1
+  - button "复制命令"
   - button "复制"
   - text: "Command failed with exit code 1: {{node}} add silent-package"
   - paragraph: 完整日志：{{cwd}}/.dsh-home/profiles/scaffold/.plugin-manager/logs/operation-{{suffix}}/pnpm.log

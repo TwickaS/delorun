@@ -18,7 +18,8 @@
 - 'button "思考 The user wants me to write a single `run_code` program that:"'
 - button "コード Run bash echo and catch missing file read"
 - button "Bash Echo CODE_ROUND_OK" [expanded]
-- text: 完了 workspace echo CODE_ROUND_OK
+- text: 完了 workspace echo CODE_ROUND_OK {{duration}}
+- button "コマンドをコピー"
 - button "コピー"
 - text: CODE_ROUND_OK
 - button "検査"
