@@ -2871,6 +2871,8 @@ export interface Config {
    * carries a `diagnostic` listing those names.
    */
   protectedPlugins?: string[]
+  /** Entry ids whose configuration edits save no profile version, such as a plugin that writes its own progress on every step. */
+  unversionedEntries?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-plugin-manager -->

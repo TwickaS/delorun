@@ -217,6 +217,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   commandUi: 'client-side interface-typed browser service — packages/client/ui-commands/README.md owns the API',
   fileDrag: 'client-side file preparation and transfer service — packages/client/ui-file-drag/README.md owns the API',
   feedbackUi: 'client-side feedback dialog service — packages/client/ui-message-feedback/README.md owns the API',
+  modelKeyStatus: 'client-side key-test status store that @delorun/plugin-onboarding provides and Settings → Models reads — delorun/packages/plugin-onboarding/README.md owns the API',
   accountUi: 'client-side shared account state — packages/client/ui-settings-account/README.md owns the API',
   conversation: 'client-side interface-typed browser service — packages/client/ui-conversation/README.md owns the API',
   layout: 'client-side interface-typed browser service — packages/client/ui-layout/README.md owns the API',
