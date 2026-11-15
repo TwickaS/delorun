@@ -38,7 +38,7 @@ kind: "package-bundle"
 
 ## The first-run key dialog
 
-- **Off.** The bundle's `ui-settings-models` patch sets `credentialOnboarding: false` (and restates `welcomeNotice: false` from `@delorun/bundle-local`, because a patch replaces the row's whole config), so upstream's "Add an API key" dialog never opens, also after a reload. The no-key banner of `@delorun/plugin-onboarding` replaces it; Settings → Models and the model picker still add a key. The stock look keeps the patch, so upstream's dialog does not return there.
+- **Off.** The bundle's `ui-settings-models` patch sets `credentialOnboarding: false` (and restates `welcomeNotice: false` from `@delorun/bundle-local`, because a patch replaces the row's whole config), so upstream's "Add an API key" dialog never opens, also after a reload. The no-key banner of `@delorun/plugin-onboarding` replaces it; Settings → Agent → Models and the model picker still add a key. The stock look keeps the patch, so upstream's dialog does not return there.
 
 ## The stock look
 

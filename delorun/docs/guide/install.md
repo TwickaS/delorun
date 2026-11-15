@@ -30,7 +30,7 @@ Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock
 - **A supported computer.** Linux on x64 or arm64, or Windows through WSL2 ([Windows through WSL2](#windows-through-wsl2)). Delorun 0.1.0 does not run on native Windows, and macOS joins in a later release ([Roadmap and vision](roadmap.md)).
 - **[Node.js](https://nodejs.org) 24.9 or newer.** Only the install command needs it. Check with `node --version`.
 - **A model key.** A key is a secret text that lets Delorun use an AI model on your account. The company or server that runs the model is the [model provider](../reference/glossary.md#provider). The default is a DeepSeek API key. Other providers work too ([Model providers](providers.md)). You can skip the key during setup and add it later.
-- **git**, which Delorun uses to save your settings before an update ([Updates](updates.md)).
+- **git**, which `delorun update` uses to save your settings before an update ([Updates](updates.md)). First-run setup does not need it.
 
 ## Install
 
@@ -185,7 +185,7 @@ Step 1 appears only while the key variable you chose is not set. The steps diffe
 - If the provider refuses your key, then setup does not store it unless you choose **Continue without a successful check**. The review screen then says the key is not verified.
 - If you press Ctrl-C at any question, then setup prints `Setup cancelled. Nothing was saved. Run delorun to start again.` and exits with code 130. Closing the terminal before you save also writes nothing.
 - If you choose **← Back** at the dangerous-mode confirmation, then you return to the prompts question.
-- If you did not choose More settings and port 3080 is already used by another program, then setup does not ask about the port, and the start fails. `delorun start` prints `the home process exited with code 1 before it was running; see its log` and the log's path. `delorun doctor` shows `fail port` and the fix. Run `delorun setup profile` to choose another port, then `delorun start`.
+- If you did not choose More settings and port 3080 is already used by another program, then setup does not ask about the port, and the start fails. `delorun start` prints `Delorun did not start. Delorun stopped with exit code 1 before it was running.` and then `Run delorun logs to see why, then delorun doctor to check your setup.` `delorun doctor` shows `fail port` and the fix. Run `delorun setup profile` to choose another port, then `delorun start`.
 - If `~/.dsh` does not exist, or your Delorun home already has chats, then the import question is skipped.
 - If setup runs without a terminal, then it cannot ask; use `delorun setup --yes` or `--config` (see Go further below).
 - If you run setup with `--yes` and no `--provider`, then it sets up no model provider and prints how to add one. A script that runs `delorun headless` needs the key variable set in its own environment, because setup never stores a key it did not ask for.
@@ -200,7 +200,24 @@ Step 1 appears only while the key variable you chose is not set. The steps diffe
 - **More settings** on the review screen asks the rest: whether to check for new releases (Yes by default), whether Delorun keeps running in the background, remote access, and the [profile](../reference/glossary.md#profile) name and the studio's port (3080 by default). Setup says when the port is in use, and asks again. Run setup with another profile name for several setups side by side ([Your Delorun home](home.md#profiles)).
 - To change your mind, run `delorun setup` again. On a finished setup in a terminal it says what it will do, then asks every question again with your current choices selected. Your saved key stays: the key question offers **Keep the saved key** first and never shows it. The review marks the answers you changed, and only those are written; the rest are reported as kept. Turning dangerous mode on asks both confirmations again. Staying on it asks nothing more. With `--yes` or `--config`, a finished setup is left unchanged.
 - Change one answer later with `delorun setup <section>`. `delorun setup --list` lists the sections: `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`.
-- For scripts, `delorun setup --yes` takes every default and reads the key from `DEEPSEEK_API_KEY`. `delorun setup --config <file>` reads the answers from a JSON file, which may name `"useCase": "local" | "remote" | "automation"`. Neither turns on remote access or imports `~/.dsh`, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.md#set-up-without-questions)).
+- For scripts, `delorun setup --yes --provider deepseek-official` reads the key from `DEEPSEEK_API_KEY`. Without `--provider`, `--yes` accepts the other defaults and sets up no model provider; add one afterwards with `delorun setup key`. `delorun setup --config <file>` reads every answer from a JSON file that holds a complete answers document. A file with only `useCase` is refused. Neither form turns on remote access or imports `~/.dsh`, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.md#set-up-without-questions)).
+- A complete answers document that reads the key from `DEEPSEEK_API_KEY` looks like this. [Answer schema](../contracts/c11-setup-answers.md#answer-schema) explains each field.
+
+  ```json setup-answers-example
+  {
+    "schemaVersion": 4,
+    "useCase": "local",
+    "modelProvider": { "id": "deepseek-official", "credential": { "source": "environment", "name": "DEEPSEEK_API_KEY" }, "baseURL": null, "model": null },
+    "prompts": "safer",
+    "background": true,
+    "profile": { "name": null, "port": null },
+    "reach": { "option": "none", "identityFactor": null },
+    "importStockHome": false,
+    "protectChanges": false,
+    "updateCheck": true,
+    "sections": []
+  }
+  ```
 
 </details>
 

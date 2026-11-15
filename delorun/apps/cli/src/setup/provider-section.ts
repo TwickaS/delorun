@@ -36,7 +36,7 @@ const MORE_PROVIDERS = 'more'
 export function noProviderNote(selection: ModelSelection): string {
   const known = isSetupProviderId(selection.provider) ? SETUP_PROVIDERS[selection.provider] : undefined
   const key = known === undefined ? '' : `, which reads its key from ${known.keyVariable} unless the profile names another variable`
-  return `No model provider was set up now, and no provider setting changed. New chats still start on ${selection.model} from ${known?.label ?? selection.provider}${key}. Choose a provider with delorun setup key, in a terminal or with --provider <id> and its flags; the studio's Settings → Models adds one too.`
+  return `No model provider was set up now, and no provider setting changed. New chats still start on ${selection.model} from ${known?.label ?? selection.provider}${key}. Choose a provider with delorun setup key, in a terminal or with --provider <id> and its flags; the studio's Settings → Agent → Models adds one too.`
 }
 
 /** The section's answers while it asks. */
@@ -233,7 +233,7 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
     case 'model': {
       const models = catalog.models(provider.id)
       const [first] = models
-      if (first === undefined) throw new CliError(EXIT.failed, `delorun setup: the installed catalogue lists no model of ${provider.label}; set it up in the studio's Settings → Models`)
+      if (first === undefined) throw new CliError(EXIT.failed, `delorun setup: the installed catalogue lists no model of ${provider.label}; set it up in the studio's Settings → Agent → Models`)
       const picked = await io.select(`Which ${provider.label} model should new chats start on?`, models.map(model => ({
         value: model.id, label: model.id, hint: model.name === model.id ? undefined : model.name,
       })), [choice.model, provider.defaultModel].find(candidate => models.some(model => model.id === candidate)) ?? first.id)

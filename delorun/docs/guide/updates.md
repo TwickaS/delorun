@@ -127,7 +127,7 @@ A rollback does not merge. When the data format changed, the chat data as the ne
 
 ## Try another setup in the studio
 
-Settings → Setup versions lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
+Settings → General → Updates lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
 
 - **Save this setup** keeps the setup as it is now, with a name if you give one. If the latest version already holds it, nothing new is saved and the page says so.
 - **What changes** on a version shows, in plain words, which plugins would come back, change version or be removed, which bundles would join or leave your bundle list, whether your plugin rows and settings change, and which version exemptions and build decisions change. It writes nothing.

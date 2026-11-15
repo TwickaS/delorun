@@ -3,6 +3,9 @@ contact_links:
   - name: Report a vulnerability
     url: https://github.com/Delo-Run/delo/blob/HEAD/SECURITY.md
     about: Report a vulnerability privately as SECURITY.md describes. Never report one in a public issue.
+  - name: Request a feature
+    url: https://github.com/Delo-Run/delo/discussions/categories/ideas
+    about: Propose a feature in the Ideas category of GitHub Discussions. A maintainer agrees it before a pull request. A niche feature usually belongs in a plugin (delorun plugin new).
   - name: Ask a question
     url: https://github.com/Delo-Run/delo/discussions
     about: Ask questions and discuss ideas in GitHub Discussions.

@@ -14,10 +14,10 @@ export const DELEGATION_CONSENT_ROUTES = {
   revoke: '/api/delorunDelegationConsent.revoke',
 } as const
 
-/** The row id `@delorun/bundle-local` inserts for the plugin, whose fields Settings → External agents writes. */
+/** The row id `@delorun/bundle-local` inserts for the plugin, whose fields Settings → Safety → External agents writes. */
 export const DELEGATION_CONSENT_ROW = 'delorun-delegation-consent'
 
-/** The fields of the plugin's row that Settings → External agents writes. */
+/** The fields of the plugin's row that Settings → Safety → External agents writes. */
 export interface DelegationConsentSettings {
   /** Whether the consent asks before each external agent run ([`Config`](./index.ts)). */
   readonly enabled: boolean

@@ -20,7 +20,7 @@ import { readPatchRow, setPatchRow } from './writes.ts'
  * mounts each. Several switches can share one row, as `instruction_layer_consent` and `approved_plugin_write_consent`
  * share `delorun-instruction-consent`. `fetch_guard` is a refusal and `plugin_changes_pending` holds a plugin change for
  * review instead of asking, so both stay on whichever answer the person gives; `external_agent_consent` is the person's
- * own switch in Settings → External agents, which no answer changes.
+ * own switch in Settings → Safety → External agents, which no answer changes.
  */
 export const PROMPT_SWITCH_ROWS = {
   permission_defaults: 'delorun-permission-defaults',

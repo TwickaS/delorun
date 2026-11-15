@@ -36,7 +36,7 @@ export const en = {
   'consent.reach.files': 'your files, outside this workspace too',
   'consent.reach.keys': 'Delorun\'s home folder, with its keys and tokens',
   'consent.reach.channels': 'the Docker supervisor and Delorun\'s update channel',
-  'consent.scope': 'This covers this workspace only. Revoke it in Settings → Permissions.',
+  'consent.scope': 'This covers this workspace only. Revoke it in Settings → Safety → Permissions.',
   'consent.acknowledge': 'I understand the risks and want to continue',
   'switch.title': 'Switch this chat to full access?',
   'switch.risk': 'Full access lets this chat run commands outside the sandbox and change files anywhere on this computer without asking each time, including sensitive operations and external commands. Use it only for work you trust.',

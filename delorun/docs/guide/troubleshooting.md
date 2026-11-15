@@ -92,15 +92,17 @@ A `.env` file in the folder you run `delorun` from, or in your Delorun home, may
 - **`UNAUTHENTICATED`.** The running Delorun refused a command that did not carry the token of its current start, which usually means another Delorun is running for the profile. Run `delorun status` to see which one.
 - **`STUDIO_UNAVAILABLE`.** `delorun open` could not get a sign-in link from the running Delorun. Run `delorun status` to see whether it runs and where the studio listens; if it does not run, start it with `delorun start`.
 - **`Delorun started no new turn: its start check did not finish`.** Delorun's check of its release at start has not finished. `delorun status` and `delorun logs` show what the start is doing; start Delorun with `delorun start`, then send the message again.
-- **`delorun start: the home process exited with code 1 before it was running; see its log: …`.** The background process stopped while starting. A busy studio port is the most common cause; see [The studio port is busy](#the-studio-port-is-busy).
-- **`delorun start: the home process did not report running within … seconds; see its log: …`.** The background process is still starting or is stuck. Read the log the message names, or run `delorun logs home`, then run `delorun doctor`.
+- **`delorun start: Delorun did not start. Delorun stopped with exit code 1 before it was running.`** The background process stopped while starting. A busy studio port is the most common cause; see [The studio port is busy](#the-studio-port-is-busy).
+- **`delorun start: Delorun did not start. Delorun was not running after … seconds.`** The background process is still starting or is stuck. Run `delorun logs` to see why, then `delorun doctor`.
 
 ### The studio port is busy
 
 The studio listens on one port on your own computer, 3080 unless your profile sets another. When another program already uses that port, the background process cannot start. You see:
 
 ```text
-delorun start: the home process exited with code 1 before it was running; see its log: <path>
+delorun start: Delorun did not start. Delorun stopped with exit code 1 before it was running.
+Another program is using the studio's port. Choose another port with delorun setup profile, or set the port to 0 in the profile so Delorun picks a free one.
+Run delorun logs to see why, then delorun doctor to check your setup.
 ```
 
 To confirm the cause, run `delorun doctor`. It prints a failing `port` line that ends with "is in use by another process, so the studio cannot listen on it; stop that process, or choose another port with delorun setup profile". If your own Delorun already runs for the profile, the line instead says the port is in use by Delorun's studio and passes.
