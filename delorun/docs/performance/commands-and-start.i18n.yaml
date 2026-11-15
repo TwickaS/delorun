@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for commands-and-start.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/performance/commands-and-start.md
+/:
+  en: f0dd310a8e58c477
+  zh: b69170c64bb039ae
+/commands-and-start:
+  en: b05b9bbfbe8897db
+  zh: 99b9965a3b298663
+/commands-and-start/summary:
+  en: bd7c67871d1d929c
+  zh: 7b6a94b7aba129d2
+/commands-and-start/contents:
+  en: 3f28bad8a6d33350
+  zh: c41a722b60414367
+/commands-and-start/what-each-suite-measures:
+  en: c45e5bd399e8fc15
+  zh: 0c228ecd8ccf6a6f
+/commands-and-start/record-of-2026-11-11:
+  en: 41f10ceb235fd7ac
+  zh: 28ed454b0f3d9c9b
+/commands-and-start/where-the-time-goes:
+  en: af1da46a7aab0c88
+  zh: 5e1b5f3ecd01009b
+/commands-and-start/record-of-2026-11-10:
+  en: f146c8ba2b09a3e5
+  zh: 2b3e263d46d02def

@@ -4,7 +4,7 @@ description: "How long delorun update, update --check and a rollback take, step 
 
 # Update timings
 
-English
+English | [中文](update-timings.zh.md)
 
 ## Summary
 

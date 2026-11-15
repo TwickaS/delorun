@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for update-timings.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/performance/update-timings.md
+/:
+  en: 1e26c2adcda3271a
+  zh: 379a46b5fbed4900
+/update-timings:
+  en: 643608cda93f31b6
+  zh: 90d03c042b419d91
+/update-timings/summary:
+  en: fac796b63868cc32
+  zh: 6e17a4d7f7f8ae9e
+/update-timings/contents:
+  en: cb9c511a000d6ec6
+  zh: fa022895b6680054
+/update-timings/scenarios:
+  en: 0fd9bf6726043026
+  zh: e2537217e212724d
+/update-timings/how-the-steps-are-timed:
+  en: 66f458ccddaabd4d
+  zh: 4f5114e9ec447df2
+/update-timings/running-the-suite:
+  en: e47ecee0c34bcab1
+  zh: 59ce7965512e9625
+/update-timings/start-checks-and-parallel-unpacking:
+  en: 6bc21866e4af0c11
+  zh: 3bf2d1a251cc94fc
+/update-timings/record-of-2026-11-11:
+  en: 578a04a9af7afd8c
+  zh: ead865550e06519c
+/update-timings/record-of-2026-11-11/what-failed-or-surprised:
+  en: 5fc15ba82e670d18
+  zh: 32806dc27e7e1505
+/update-timings/record-of-2026-11-10:
+  en: e89533e33dc335bd
+  zh: 4f5a3ef321f687a7
+/update-timings/the-slowest-steps:
+  en: cc722fffe4b00e4e
+  zh: 1d7f0ffd6ea5238b

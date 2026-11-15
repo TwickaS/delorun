@@ -4,7 +4,7 @@ description: "How long Delorun's everyday commands, a start and a stop take, and
 
 # Commands and start
 
-English
+English | [中文](commands-and-start.zh.md)
 
 ## Summary
 

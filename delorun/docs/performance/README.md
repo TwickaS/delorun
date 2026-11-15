@@ -4,7 +4,7 @@ description: "Delorun's wait-time benchmarks: what each suite measures, how to r
 
 # Performance
 
-English
+English | [中文](README.zh.md)
 
 ## Summary
 

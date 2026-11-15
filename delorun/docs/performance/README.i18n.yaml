@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/performance/README.md
+/:
+  en: fe2a5af4db10a060
+  zh: 2b4ac71d9dfed7ff
+/performance:
+  en: 791f78bb4867c41d
+  zh: 3b6fc285347e1b7d
+/performance/summary:
+  en: eebc5b5667fcdcec
+  zh: 51d7c31773a2a809
+/performance/contents:
+  en: 5f77a194e94201e9
+  zh: b0d5e89ec9da3953
+/performance/suites:
+  en: 0d372a9aff804920
+  zh: d90d2829df100e2b
+/performance/running-the-benchmarks:
+  en: 77f0e8f61501cfa9
+  zh: 57bb6b4fdf73e47f
+/performance/what-a-run-does:
+  en: 7b152e0994ae9f7b
+  zh: 185cc1b7da6108dc
+/performance/reading-a-result:
+  en: 3b31ebd517f8355a
+  zh: ebb0eb15f98e14b7
+/performance/budgets:
+  en: a7d022a61e59208e
+  zh: 527403f3d004a9dd
+/performance/adding-a-suite:
+  en: ee4680fc57d1c15d
+  zh: c52e83706a0da95c
