@@ -900,7 +900,7 @@
       "path": "packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Reads the grouped Settings page section properties with fallbacks, so the plugin inventory tab matches the other sections."
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the plugin inventory tab matches the other sections. Gives the cards an even bottom padding."
     },
     {
       "path": "packages/client/ui-settings-plugins/src/client/PluginsSettingsSection.module.css",

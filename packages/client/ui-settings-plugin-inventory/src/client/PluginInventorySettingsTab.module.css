@@ -131,7 +131,7 @@
   width: 100%;
   min-height: 52px;
   border: 0;
-  padding: 12px 14px;
+  padding: 12px 14px 14px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -204,7 +204,7 @@
 .cardMeta {
   display: flex;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 8px;
 }
 
 /* The Loader entry id keeps one size in the card chip and the row it expands into;
