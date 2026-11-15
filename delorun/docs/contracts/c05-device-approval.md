@@ -186,7 +186,7 @@ A challenge is single-use. A device id with no record for the listener's address
 <a id="removal"></a>
 ### Removal
 
-A trusted device in a live session, or the person through `delorun devices remove <device id>` while the home runs, removes a device. Removal deletes its record, passkeys enrolled from it and sessions, disposes its Peers, rotates every other session and raises a `device-removed` alert, all before it returns.
+A trusted device in a live session, or the person through `delorun devices remove <device id>` while the home runs, removes a device. Removal deletes its record, passkeys enrolled from it and sessions, disposes its Peers, rotates every other session and raises a `device-removed` alert, all before it returns. A device that makes five wrong PIN tries while [PIN mode](c14-oidc-passkeys.md#pin-mode) is on is removed the same way, by the home.
 
 <a id="reset"></a>
 ### Reset

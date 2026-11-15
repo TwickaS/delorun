@@ -46,6 +46,7 @@
   "dependencies": {
     "@delorun/contract-release-manifest": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
+    "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*",
     "zod": "4.6.6"
   },

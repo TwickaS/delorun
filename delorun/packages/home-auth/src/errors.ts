@@ -30,7 +30,7 @@ export type HomeAuthErrorCode =
   | DeviceApprovalErrorCode
   | AdmissionRefusalCode
   | HomeAuthLocalCode
-  | Extract<IdentityErrorCode, 'TAILNET_IDENTITY_UNAVAILABLE' | 'LOOPBACK_REQUIRED'>
+  | Extract<IdentityErrorCode, 'TAILNET_IDENTITY_UNAVAILABLE' | 'LOOPBACK_REQUIRED' | 'PIN_INVALID' | 'PIN_WEAK' | 'PIN_MODE_OFF' | 'PIN_NOT_ALLOWED_ON_ADDRESS' | 'PIN_UNLOCKS_PAUSED' | 'UNLOCK_INVALID'>
 
 /**
  * The HTTP status of each code this package answers over HTTP. C5's table gives the first group, C4's refusal table the
@@ -56,6 +56,12 @@ export const HOME_AUTH_HTTP_STATUS = {
   APPROVALS_CLOSED: 403,
   TAILNET_IDENTITY_UNAVAILABLE: 403,
   LOOPBACK_REQUIRED: 403,
+  PIN_INVALID: 403,
+  PIN_WEAK: 400,
+  PIN_MODE_OFF: 409,
+  PIN_NOT_ALLOWED_ON_ADDRESS: 403,
+  PIN_UNLOCKS_PAUSED: 429,
+  UNLOCK_INVALID: 401,
   NOT_SIGNED_IN: ADMISSION_REFUSAL_STATUS.NOT_SIGNED_IN,
   SESSION_EXPIRED: ADMISSION_REFUSAL_STATUS.SESSION_EXPIRED,
   ROTATION_REQUIRED: ADMISSION_REFUSAL_STATUS.ROTATION_REQUIRED,
@@ -109,11 +115,15 @@ export class HomeAuthError extends Error {
  * The body a refusal answers with: the code a caller branches on and the sentence a person reads.
  * @param code - the refusal code.
  * @param message - the sentence.
+ * @param fields - structured fields that sit beside the code and the sentence; never a secret.
  * @returns the JSON body text.
  */
-export function refusalBody(code: HomeAuthErrorCode, message: string): string {
-  return JSON.stringify({ error: code, message })
+export function refusalBody(code: HomeAuthErrorCode, message: string, fields: Readonly<Record<string, unknown>> = {}): string {
+  return JSON.stringify({ error: code, message, ...fields })
 }
+
+/** The codes whose `details` are answered as structured fields: the PIN refusals a client reads without parsing the sentence. */
+export const STRUCTURED_REFUSALS: ReadonlySet<HomeAuthErrorCode> = new Set<HomeAuthErrorCode>(['PIN_INVALID', 'PIN_UNLOCKS_PAUSED'])
 
 /** Compile-time: the two refusals C4 adds to this package's answers are mapped, so a route never answers an unmapped code. */
 export const CLAIM_REFUSAL_STATUS = {

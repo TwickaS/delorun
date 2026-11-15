@@ -104,7 +104,7 @@ export function presetFromHex(value: string): AccentSpec {
   return accentFromColor(color)
 }
 
-/** The accents a person can pick from; Peach, the site's #E5734A, is the default, and Mono is near-black in light and near-white in dark. */
+/** The accents a person can pick from; Peach, the brand colour, is the default, and Mono is near-black in light and near-white in dark. */
 export const ACCENTS = {
   peach: { hue: 40, chroma: 0.152, fill: { light: 0.681, dark: 0.681 } },
   cobalt: presetFromHex('#3A5EE8'),

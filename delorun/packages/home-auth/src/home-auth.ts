@@ -31,6 +31,8 @@ import {
   type ApprovalRequestState, type DevicePublicKeyJwk,
 } from '@delorun/contract-device-approval'
 import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type IdentityFactor } from '@delorun/contract-oidc-passkeys'
+import { PinModeStore } from './pin-mode.ts'
+import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delorun/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
@@ -253,6 +255,12 @@ export class HomeAuth {
   private readonly elevationListeners = new Set<(change: ElevationChange) => void>()
   /** The elevations of this home and the requests waiting for the person at the computer (C14, "Elevation"). */
   private readonly elevations: Elevations
+  /** PIN mode: the PIN store and the page unlocks it mints (C14, "PIN mode"). */
+  readonly pin: PinUnlocks
+  private readonly pinStore: PinModeStore
+  private readonly pinListeners = new Set<(event: PinEvent) => void>()
+  /** Each rolled session id to the id that continues it, for the 30 seconds its predecessor still admits requests. */
+  private readonly successors = new Map<string, string>()
   /** The tail of the queue that serialises a claim and a revocation against each other. */
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -277,10 +285,31 @@ export class HomeAuth {
         // The Gateway decides a stream once, when it opens, so a terminal or another elevated stream opened under an
         // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects
         // without it.
-        if (change.kind === 'ended') this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        // A page unlock closes the connections of its session only: the device's other pages reconnect with their own
+        // tokens, or locked.
+        if (change.kind === 'ended') {
+          if (change.elevation.page === true) this.closeSessionConnections(change.elevation.sessionId)
+          else this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        }
+        this.pin.elevationChanged(change)
         for (const listener of this.elevationListeners) listener(change)
       },
     })
+    this.pinStore = new PinModeStore({ directory: options.directory, now: this.now, secrets: options.secrets })
+    this.pin = new PinUnlocks({
+      store: this.pinStore,
+      elevations: this.elevations,
+      now: this.now,
+      random: this.random,
+      secrets: options.secrets,
+      removeDevice: deviceId => this.revokeDevice(deviceId),
+      currentSession: presented => this.successors.get(presented) ?? presented,
+      sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
+      stillAdmitted: asker => this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
+        && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener),
+      report: (event) => { for (const listener of this.pinListeners) listener(event) },
+    })
+    this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), secrets: options.secrets, ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
@@ -299,6 +328,7 @@ export class HomeAuth {
   async start(): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     this.homeKey = await loadHomeKey(this.directory, this.secrets)
+    await this.pinStore.load()
     await this.refresh()
   }
 
@@ -540,6 +570,16 @@ export class HomeAuth {
   }
 
   /**
+   * Call a listener for each PIN mode event: a wrong try, a lockout, a pause or resume, a PIN set, the mode turned off.
+   * @param listener - called with the event, which never carries the PIN.
+   * @returns the disposer.
+   */
+  onPinEvent(listener: (event: PinEvent) => void): () => void {
+    this.pinListeners.add(listener)
+    return () => { this.pinListeners.delete(listener) }
+  }
+
+  /**
    * Call a listener for each elevation that starts or ends, after the change; the provider logs it and recomputes the
    * device's access.
    * @param listener - called with the change.
@@ -580,6 +620,15 @@ export class HomeAuth {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     return this.elevations.of(deviceId, listener)
+  }
+
+  /**
+   * The running PIN mode page unlock one Peer was admitted under, which the reach-device policy reads.
+   * @param unlockId - the id in the Peer's principal.
+   * @returns the unlock, or undefined once it ended.
+   */
+  pageUnlockOf(unlockId: string): ElevationRecord | undefined {
+    return this.pin.pageUnlock(unlockId)
   }
 
   /**
@@ -833,6 +882,17 @@ export class HomeAuth {
   }
 
   /**
+   * Close the reach connections of one session and of the sessions it rolled from.
+   * @param sessionId - the session id.
+   */
+  private closeSessionConnections(sessionId: string): void {
+    this.closeReachConnections?.({ sessionId })
+    for (const [oldId, newId] of this.successors) {
+      if (newId === sessionId) this.closeReachConnections?.({ sessionId: oldId })
+    }
+  }
+
+  /**
    * Roll a session (C4, "Sessions"): mint a new token with the same creation time and absolute expiry, keep the old one
    * for 30 seconds for requests in flight, and write both within the store's persistence delay.
    * @param view - the in-memory copy.
@@ -853,6 +913,8 @@ export class HomeAuth {
     view.sessions.set(newId, record)
     // The new token continues the session, so its elevation and its waiting request follow it.
     this.elevations.moveSession(oldId, newId)
+    this.successors.set(oldId, newId)
+    setTimeout(() => { this.successors.delete(oldId) }, SESSION_LIMITS.reach.rollGraceMs).unref()
     // The old token's connections close when its grace ends; the new token's at its own limits.
     this.arm(oldId, deadlineOf(graced))
     this.arm(newId, deadlineOf(record))

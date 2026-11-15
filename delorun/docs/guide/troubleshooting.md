@@ -272,6 +272,7 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 | `APPROVAL_FAILED` | The approval or cancellation did not happen. | Run `delorun devices approve` and ask from the device again. |
 | `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
 | `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
+| `PIN_FAILED` | PIN mode did not change, for example because the PIN was too weak. | Choose a PIN of at least 6 digits that is not a repeat or a run, or a passcode of at least 10 characters. |
 
 These entries come from `delorun reach` and `delorun devices` at your computer. [Reach the studio from your phone](reach.md) explains what remote access needs.
 
@@ -298,6 +299,7 @@ If `delorun reach on tailscale` says "the running Delorun did not make the addre
 | `APPROVAL_FAILED` | The approval or cancellation did not happen. | Run `delorun devices approve` and ask from the device again. |
 | `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
 | `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
+| `PIN_FAILED` | PIN mode did not change, for example because the PIN was too weak. | Choose a PIN of at least 6 digits that is not a repeat or a run, or a passcode of at least 10 characters. |
 
 These messages come from `delorun devices`:
 

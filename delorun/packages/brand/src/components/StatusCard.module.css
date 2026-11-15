@@ -1,0 +1,25 @@
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-3);
+  font-family: var(--dl-font-sans);
+}
+
+.disc {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dl-surface-sunken);
+  color: var(--dl-text-muted);
+}
+
+.disc[data-on] { background: color-mix(in oklab, var(--dl-accent) 16%, var(--dl-surface-raised)); color: var(--dl-accent-text); }
+.disc svg { width: 20px; height: 20px; }
+.text { flex: 1; min-width: 0; }
+.title { margin: 0; color: var(--dl-text); font-size: 14px; font-weight: 500; line-height: 20px; }
+.detail { margin: 0; color: var(--dl-text-muted); font-size: 12px; line-height: 16px; }

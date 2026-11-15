@@ -18,8 +18,15 @@
  *
  * @module @delorun/home-process/devices-approve
  */
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delorun/contract-home-process'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOffRequest, PinOptionsRequest, PinResumeRequest, PinSetRequest } from '@delorun/contract-home-process'
+import { randomBytes } from 'node:crypto'
 import { HomeProcessError } from './errors.ts'
+
+/**
+ * Receives an error home-auth threw without a code, with the id the refusal carries. The caller routes it to the
+ * operational log, whose redactor sees the message and stack.
+ */
+export type InternalErrorReport = (error: unknown, id: string) => void
 
 /** A pending approval request as the person's command shows it. */
 export interface PendingDevice {
@@ -119,6 +126,29 @@ export interface LocalDeviceApproval {
    * @returns whether either was found.
    */
   revokeElevation(id: string): boolean
+  /**
+   * Set or replace the PIN and turn PIN mode on.
+   * @param secret - the PIN or passcode.
+   * @param options - the idle minutes and the lock-when-hidden choice.
+   * @returns the kind of secret.
+   * @throws an error with a `code` property, such as `PIN_WEAK`, for a refused secret.
+   */
+  setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'>
+  /**
+   * Change the idle minutes and lock-when-hidden of PIN mode that is on, without the secret.
+   * @param options - the new values; a missing one stays.
+   * @returns the settings now in force.
+   * @throws an error with a `code` property, such as `PIN_MODE_OFF` while the mode is off.
+   */
+  setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }>
+  /**
+   * Turn PIN mode off.
+   */
+  turnPinOff(): Promise<void>
+  /**
+   * Resume PIN unlocks after a home-wide pause.
+   */
+  resumePin(): Promise<void>
 }
 
 /** Which credential a request carried. */
@@ -144,6 +174,7 @@ export async function approveDevices(
   caller: ChannelCaller,
   devices: LocalDeviceApproval | undefined,
   wait: (ms: number) => Promise<void> = ms => new Promise((resolve) => { setTimeout(resolve, ms) }),
+  report?: InternalErrorReport,
 ): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'approving a device needs you at your computer: run delorun devices approve there')
@@ -158,7 +189,7 @@ export async function approveDevices(
     try {
       devices.cancel(cancelRequestId)
     } catch (error) {
-      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the cancel failed')
+      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the cancel failed', report)
     }
     return { cancelled: cancelRequestId }
   }
@@ -166,7 +197,7 @@ export async function approveDevices(
     try {
       return { device: await devices.approve(requestId, typedCode) }
     } catch (error) {
-      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the approval failed')
+      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the approval failed', report)
     }
   }
   const closesAt = await devices.openWindow()
@@ -179,16 +210,39 @@ export async function approveDevices(
 }
 
 /**
- * A refusal naming home-auth's code and sentence.
+ * A refusal naming home-auth's code and sentence. An error without a string `code` is not home-auth's own refusal: the
+ * reply stays the generic sentence plus a log id, and the full error goes to `report` under that id.
  * @param refusal - the operation's refusal code.
  * @param error - what home-auth threw.
  * @param fallback - the sentence for an error without one.
+ * @param report - where an uncoded error is logged, with the id the reply carries.
+ * @param secrets - values that must not reach the log, such as a PIN; they are removed from the error's message and stack.
  * @returns the refusal.
  */
-function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVATION_FAILED', error: unknown, fallback: string): HomeProcessError {
-  const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
-  const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : fallback
-  return new HomeProcessError(refusal, `${code}: ${detail}`)
+function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVATION_FAILED' | 'PIN_FAILED', error: unknown, fallback: string, report?: InternalErrorReport, secrets: readonly string[] = []): HomeProcessError {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    const detail = 'detail' in error && typeof error.detail === 'string' ? error.detail : fallback
+    return new HomeProcessError(refusal, `${error.code}: ${detail}`)
+  }
+  const id = randomBytes(4).toString('hex')
+  report?.(withoutSecrets(error, secrets), id)
+  return new HomeProcessError(refusal, `INTERNAL_ERROR: ${fallback} (log id ${id})`)
+}
+
+/**
+ * A copy of an error whose message and stack no longer hold the given secrets.
+ * @param error - what was thrown.
+ * @param secrets - values to remove.
+ * @returns the error itself when there is nothing to remove or it is not an Error.
+ */
+function withoutSecrets(error: unknown, secrets: readonly string[]): unknown {
+  const present = secrets.filter(secret => secret !== '')
+  if (!(error instanceof Error) || present.length === 0) return error
+  const scrub = (text: string): string => present.reduce((out, secret) => out.split(secret).join('[removed]'), text)
+  const copy = new Error(scrub(error.message))
+  copy.name = error.name
+  if (error.stack !== undefined) copy.stack = scrub(error.stack)
+  return copy
 }
 
 /**
@@ -200,7 +254,7 @@ function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVAT
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
  *   `REMOVAL_FAILED` naming home-auth's code for a refused removal.
  */
-export async function removeDevice(request: DevicesRemoveRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+export async function removeDevice(request: DevicesRemoveRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined, report?: InternalErrorReport): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'removing a device needs you at your computer: run delorun devices remove there')
   }
@@ -208,7 +262,7 @@ export async function removeDevice(request: DevicesRemoveRequest, caller: Channe
   try {
     return await devices.remove(request.args.deviceId)
   } catch (error) {
-    throw homeAuthRefusal('REMOVAL_FAILED', error, 'the removal failed')
+    throw homeAuthRefusal('REMOVAL_FAILED', error, 'the removal failed', report)
   }
 }
 
@@ -223,7 +277,7 @@ export async function removeDevice(request: DevicesRemoveRequest, caller: Channe
  *   `SCHEMA_VIOLATION` for a request id without a code or the reverse, or a revoke with either; `ELEVATION_FAILED`
  *   naming home-auth's code for a refused approval or listing.
  */
-export async function elevateDevices(request: DevicesElevateRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+export async function elevateDevices(request: DevicesElevateRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined, report?: InternalErrorReport): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'unlocking sensitive actions on a device needs you at your computer: run delorun devices elevate there')
   }
@@ -238,6 +292,58 @@ export async function elevateDevices(request: DevicesElevateRequest, caller: Cha
     if (requestId !== undefined && typedCode !== undefined) return { elevation: devices.approveElevation(requestId, typedCode) }
     return await devices.elevations()
   } catch (error) {
-    throw homeAuthRefusal('ELEVATION_FAILED', error, 'the unlock did not change')
+    throw homeAuthRefusal('ELEVATION_FAILED', error, 'the unlock did not change', report)
   }
+}
+
+/**
+ * Run `pin.set`, `pin.options`, `pin.off` or `pin.resume`.
+ * @param request - the request.
+ * @param caller - the credential it carried.
+ * @param devices - the Host's local approval, or undefined when the profile does not load `@delorun/home-auth`.
+ * @returns whether PIN mode is on and, for a set, the kind of secret; a resume answers `paused: false`.
+ * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
+ *   `PIN_FAILED` naming home-auth's code for a refused secret; the message never holds the secret.
+ */
+export async function changePin(request: PinSetRequest | PinOffRequest | PinOptionsRequest | PinResumeRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined, report?: InternalErrorReport): Promise<Readonly<Record<string, unknown>>> {
+  if (caller !== 'person') {
+    throw new HomeProcessError('LOOPBACK_REQUIRED', 'changing the PIN needs you at your computer: run delorun there')
+  }
+  if (devices === undefined) throw new HomeProcessError('APPROVALS_UNAVAILABLE', 'this profile does not load @delorun/home-auth')
+  try {
+    switch (request.op) {
+      case 'pin.set':
+        return { enabled: true, secret: await devices.setPin(request.args.secret, request.args) }
+      case 'pin.options':
+        return { enabled: true, ...await devices.setPinOptions(request.args) }
+      case 'pin.off':
+        await devices.turnPinOff()
+        return { enabled: false }
+      case 'pin.resume':
+        await devices.resumePin()
+        return { paused: false }
+      default:
+        return assertNever(request)
+    }
+  } catch (error) {
+    throw homeAuthRefusal('PIN_FAILED', error, 'PIN mode did not change', report, pinSecrets(request))
+  }
+}
+
+/**
+ * The secret a PIN request carries.
+ * @param request - the request.
+ * @returns the PIN or passcode, or nothing.
+ */
+function pinSecrets(request: PinSetRequest | PinOffRequest | PinOptionsRequest | PinResumeRequest): readonly string[] {
+  return request.op === 'pin.set' ? [request.args.secret] : []
+}
+
+/**
+ * Fail at compile time when an operation is not handled.
+ * @param value - the value no case handled.
+ * @throws {Error} always.
+ */
+function assertNever(value: never): never {
+  throw new Error(`unhandled PIN operation ${JSON.stringify(value)}`)
 }

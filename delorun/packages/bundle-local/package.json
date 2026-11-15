@@ -84,6 +84,7 @@
     "@delorun/profile-safety": "workspace:*",
     "@delorun/skill-plugin-authoring": "workspace:*",
     "@delorun/reach": "workspace:*",
+    "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*",
     "zod": "4.6.6"
   },

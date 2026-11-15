@@ -1,0 +1,31 @@
+.keypad { display: grid; grid-template-columns: repeat(3, 72px); justify-content: center; gap: 14px 20px; margin: var(--dl-space-2) 0 var(--dl-space-1); }
+
+.key {
+  box-sizing: border-box;
+  width: 72px;
+  height: 72px;
+  border: 0.5px solid var(--dl-border);
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dl-surface-sunken);
+  color: var(--dl-text);
+  font: inherit;
+  font-family: var(--dl-font-sans);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: background-color var(--dl-motion), transform var(--dl-motion);
+}
+
+.erase { border-color: transparent; background: transparent; font-size: 22px; }
+.key:active:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 20%, var(--dl-surface-sunken)); transform: scale(0.94); }
+.key:disabled { opacity: 0.5; }
+.key:focus-visible { outline: var(--dl-focus-ring); outline-offset: 2px; }
+
+@media (hover: hover) {
+  .key:hover:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 12%, var(--dl-surface-sunken)); }
+}

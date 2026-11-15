@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delorun/settings-controls` holds the controls every Delorun Settings section is drawn with, so the sections of different plugins look and behave alike: the card with its sentence-case heading, a setting's title and help, the frame of a General row, the radio segmented control and the preview tiles. Plugin-specific controls, such as the header-art strip or the contrast slider, stay in their plugin. The entry is `src/index.ts`, exported as `.` from source.
+`@delorun/settings-controls` re-exports from [`@delorun/brand`](../brand/README.md), the one source, the controls every Delorun Settings section is drawn with, so the sections of different plugins look and behave alike: the card with its sentence-case heading, a setting's title and help, the frame of a General row, the radio segmented control and the preview tiles. Plugin-specific controls, such as the header-art strip or the contrast slider, stay in their plugin. The entry is `src/index.ts`, exported as `.` from source.
 
 ## Contents
 
@@ -19,7 +19,7 @@ English | [中文](README.zh.md)
 
 ## Use this package
 
-A Delorun plugin with a Settings face imports the controls from `@delorun/settings-controls`, lists the package in `dependencies` and inlines it into its browser bundle with an alias in its `tsdown.config.ts`, as it inlines the contract packages: the page's module table does not provide Delorun's packages at run time. `@delorun/plugin-theme`, `@delorun/plugin-sidebar`, `@delorun/plugin-chat-states` and `@delorun/bundle-local` use it.
+A Delorun plugin with a Settings face imports the controls from `@delorun/settings-controls`, lists the package in `dependencies` and inlines it into its browser bundle with aliases for this package and for `@delorun/brand` in its `tsdown.config.ts`, as it inlines the contract packages: the page's module table does not provide Delorun's packages at run time. `@delorun/plugin-theme`, `@delorun/plugin-sidebar`, `@delorun/plugin-chat-states` and `@delorun/bundle-local` use it.
 
 | Export | What it draws |
 | --- | --- |
@@ -38,4 +38,4 @@ A Delorun plugin with a Settings face imports the controls from `@delorun/settin
 
 ## Tests
 
-`node_modules/.bin/vitest run --config delorun/vitest.config.ts packages/settings-controls/` runs the specs: [`tests/choice-group.client.spec.tsx`](tests/choice-group.client.spec.tsx) checks the radio semantics and arrow keys, and [`tests/cards.client.spec.tsx`](tests/cards.client.spec.tsx) the card, the setting heading, the row frame and the tiles.
+The specs live with the source: `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/brand` runs [`settings-choice-group.client.spec.tsx`](../brand/tests/settings-choice-group.client.spec.tsx), which checks the radio semantics and arrow keys, and [`settings-cards.client.spec.tsx`](../brand/tests/settings-cards.client.spec.tsx), which checks the card, the setting heading, the row frame and the tiles.

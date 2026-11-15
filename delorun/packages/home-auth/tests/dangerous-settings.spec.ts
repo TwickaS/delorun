@@ -55,6 +55,24 @@ describe('the dangerous-mode settings record', () => {
     expect(ledger.pending()).toBe(false)
   })
 
+  it('keeps a lift whose settings row is not described instead of dropping it unwritten', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    let described = false
+    const access: SettingsFieldAccess = { ...settings, described: () => described }
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    // Pins the described check: an absent row reads as unset, which would pass for the person's change and drop the lift.
+    await ledger.revert(access, () => false)
+    expect(ledger.pending()).toBe(true)
+    expect(settings.writes).toEqual([])
+    described = true
+    await ledger.revert(access, () => false)
+    expect(values['permission.defaultPreset']).toBe('workspace-write')
+    expect(ledger.pending()).toBe(false)
+  })
+
   it('keeps what the person set at the computer since the device wrote', async () => {
     const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write', 'delorun-delegation-consent.enabled': true }
     const settings = fakeSettings(values)
@@ -114,6 +132,58 @@ describe('the dangerous-mode settings record', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ v: 1, lifts: [] })
   })
 
+  it('reports each failed set-back by namespace and field, never by value, and lists what still waits', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write', 'delorun-delegation-consent.enabled': true }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    values['delorun-delegation-consent.enabled'] = false
+    settings.failing = true
+    const failed: unknown[] = []
+    await ledger.revert(settings, () => false, lift => failed.push(lift))
+    // Pins the report: one entry per failed lift, naming the field only.
+    expect(failed).toEqual([PRESET, CONSENT])
+    expect(ledger.waiting()).toEqual([PRESET, CONSENT])
+    settings.failing = false
+    await ledger.revert(settings, () => false, lift => failed.push(lift))
+    expect(failed).toHaveLength(2)
+    expect(ledger.waiting()).toEqual([])
+  })
+
+  it('does not revert on a retry while the mode holds again, and keeps the lift', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    settings.failing = true
+    await ledger.revert(settings, () => false)
+    settings.failing = false
+    // Pins the re-check on every pass: the person turned the mode back on before the retry.
+    await ledger.revert(settings, () => true)
+    expect(settings.writes).toEqual([])
+    expect(values['permission.defaultPreset']).toBe('danger-full-access')
+    expect(ledger.pending()).toBe(true)
+  })
+
+  it('keeps what the person set after a failed set-back when the retry runs', async () => {
+    const values: Record<string, unknown> = { 'permission.defaultPreset': 'workspace-write' }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...PRESET, written: 'danger-full-access' }], settings.read)
+    values['permission.defaultPreset'] = 'danger-full-access'
+    settings.failing = true
+    await ledger.revert(settings, () => false)
+    values['permission.defaultPreset'] = 'read-only'
+    settings.failing = false
+    await ledger.revert(settings, () => false)
+    // Pins the override rule on a retry: the person's later choice is not written over.
+    expect(settings.writes).toEqual([])
+    expect(values['permission.defaultPreset']).toBe('read-only')
+    expect(ledger.pending()).toBe(false)
+  })
+
   it('keeps a value the person set after a device unset the field, and unsets a field still left unset', async () => {
     const values: Record<string, unknown> = { 'delorun-delegation-consent.enabled': true }
     const settings = fakeSettings(values)
@@ -158,9 +228,9 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
    * @param seen - the lifts the policy recorded.
    * @returns the facts.
    */
-  function facts(mode: boolean, unlocked: boolean, seen: unknown[]): ReachAccessFacts {
+  function facts(mode: boolean, unlocked: boolean, seen: unknown[], pinSeen: unknown[] = [], pageUnlocked = false): ReachAccessFacts {
     return {
-      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined), pinLiftedSettings: (lifts) => { pinSeen.push(...lifts); return undefined }, admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
@@ -199,5 +269,45 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
     expect(createCondition(facts(true, true, seen), device)(call({ ns: 'permission', patch: { defaultPreset: 'workspace-write' } }))).toEqual({ kind: 'allow' })
     expect(createCondition(facts(true, true, seen), device)(call({ ns: CONSENT.ns, patch: { enabled: true } }))).toEqual({ kind: 'allow' })
     expect(seen).toEqual([])
+  })
+
+  describe('under PIN mode', () => {
+    const page = { kind: REACH_DEVICE, deviceId: 'device-1', listener: 'reach-tailscale-private', unlockId: 'page-1' } as never
+    const loosenPreset = call({ ns: 'permission', patch: { defaultPreset: 'danger-full-access' } })
+    const consentOff = call({ ns: CONSENT.ns, patch: { enabled: false } })
+
+    it('records an unlocked page\'s loosening in the PIN file\'s ledger, never dangerous mode\'s', () => {
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const condition = createCondition(facts(false, false, seen, pinSeen, true), page)
+      expect(condition(loosenPreset)).toEqual({ kind: 'allow' })
+      expect(condition(consentOff)).toEqual({ kind: 'allow' })
+      // Pins the destination: a lift in dangerous mode's record would be set back by that mode, not by PIN mode.
+      expect(pinSeen).toEqual([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }])
+      expect(seen).toEqual([])
+    })
+
+    it('refuses a locked page\'s settings write and records nothing', () => {
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const locked = createCondition(facts(false, false, seen, pinSeen, false), page)
+      expect(locked(loosenPreset)).toMatchObject({ kind: 'deny' })
+      expect(locked(consentOff)).toMatchObject({ kind: 'deny' })
+      expect(pinSeen).toEqual([])
+    })
+
+    it('keeps the computer-only switch on for a device that holds a code unlock but no page unlock', () => {
+      // Pins the lift's condition: only dangerous mode or a PIN page lifts the switch, a code unlock alone does not.
+      const seen: unknown[] = []
+      const pinSeen: unknown[] = []
+      const elevated = createCondition(facts(false, true, seen, pinSeen, false), page)
+      expect(elevated(consentOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
+      expect(pinSeen).toEqual([])
+    })
+
+    it('refuses the write when the PIN record is not saved', () => {
+      const refusing: ReachAccessFacts = { ...facts(false, false, [], [], true), pinLiftedSettings: () => 'pin-record-refused' }
+      expect(createCondition(refusing, page)(consentOff)).toEqual({ kind: 'deny', reason: 'pin-record-refused' })
+    })
   })
 })

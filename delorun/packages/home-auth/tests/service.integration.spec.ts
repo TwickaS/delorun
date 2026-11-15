@@ -5,7 +5,7 @@
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
 import { generateKeyPairSync } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { IncomingMessage } from 'node:http'
 import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -41,8 +41,18 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', ELEVATION_PATHS.pending],
   ['exact', ELEVATION_PATHS.approve],
   ['exact', ELEVATION_PATHS.revoke],
+  ['exact', PIN_PATHS.state],
+  ['exact', PIN_PATHS.unlock],
+  ['exact', PIN_PATHS.touch],
+  ['exact', PIN_PATHS.lock],
+  ['exact', PIN_PATHS.mode],
+  ['exact', PIN_PATHS.set],
+  ['exact', PIN_PATHS.off],
+  ['exact', PIN_PATHS.options],
+  ['exact', PIN_PATHS.resume],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
+import { PIN_PATHS } from '../src/pin-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 
@@ -291,6 +301,167 @@ describe('the homeAuth service', () => {
       expect(values.enabled).toBe(true)
     } finally {
       await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('sets back what an unlocked PIN page loosened when PIN mode turns off, and keeps the record at 0600', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      const calls: unknown[] = []
+      ctx.provide('settings', {
+        describe: () => [{ ns: 'delorun-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => { calls.push(patch); Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      const file = join(directory, 'secrets', 'home-auth', 'reach-pin-settings.json')
+      // Pins the file and its mode: the record is a protected write like the other reach files.
+      expect((await stat(file)).mode & 0o777).toBe(0o600)
+      expect(calls).toEqual([])
+      await ctx.homeAuth.turnPinOff()
+      await vi.waitFor(() => { expect(calls).toEqual([{ enabled: true }]) })
+      expect(values.enabled).toBe(true)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a PIN lift whose settings row is not described, and sets it back when the row appears', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 1 } })
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      let rows: { ns: string; value: unknown }[] = [{ ns: 'delorun-delegation-consent', value: values }]
+      ctx.provide('settings', {
+        describe: () => rows,
+        update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      rows = []
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      // Pins the kept lift: an absent row cannot show the person's change, so the lift is not dropped unwritten.
+      expect(values.enabled).toBe(false)
+      rows = [{ ns: 'delorun-delegation-consent', value: values }]
+      // Pins the timer: once the row is described, the next tick writes the value back with no request to read the mode.
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) }, { timeout: 5000 })
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('retries a failed PIN set-back on a timer, warns per failed lift without the value, and reports it as waiting', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 1 } })
+    const warnings: string[] = []
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation((...args: unknown[]) => { warnings.push(args.map(String).join(' ')) })
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      let failing = true
+      const settings = {
+        describe: () => [{ ns: 'delorun-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => {
+          if (failing) return Promise.reject(new Error('plugin reloading'))
+          Object.assign(values, patch)
+          return Promise.resolve()
+        },
+      }
+      ctx.provide('settings', settings as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      expect(values.enabled).toBe(false)
+      // Pins the report: the computer sees what waits, by field, and the log names the field and no value.
+      expect(ctx.homeAuth.pinSetBackWaiting()).toEqual([{ ns: 'delorun-delegation-consent', field: 'enabled' }])
+      expect(warnings.some(line => line.includes('delorun-delegation-consent.enabled'))).toBe(true)
+      expect(warnings.join('\n')).not.toContain('plugin reloading')
+      failing = false
+      // Pins the timer: no request reads the mode, and the failed write still retries.
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) }, { timeout: 5000 })
+      await vi.waitFor(() => { expect(ctx.homeAuth.pinSetBackWaiting()).toEqual([]) })
+    } finally {
+      warn.mockRestore()
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('does not describe the settings on a read of the mode while a PIN lift waits', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 3600 } })
+    try {
+      const values = { enabled: true }
+      const describe = vi.fn(() => [{ ns: 'delorun-delegation-consent', value: values }])
+      ctx.provide('settings', { describe, update: () => Promise.reject(new Error('down')) } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      const before = describe.mock.calls.length
+      // Pins P3: a reach request's read of the mode starts no settings pass.
+      for (let i = 0; i < 5; i++) ctx.homeAuth.pinEnabled()
+      await new Promise<void>((resolve) => { setTimeout(resolve, 50) })
+      expect(describe.mock.calls.length).toBe(before)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('arms one unref\'d retry timer while a PIN lift waits and clears it on dispose', async () => {
+    const { ctx, fiber, directory } = await mount({ config: { pinSetBackRetrySeconds: 3600 } })
+    const set = vi.spyOn(globalThis, 'setInterval')
+    const cleared = vi.spyOn(globalThis, 'clearInterval')
+    try {
+      const values = { enabled: true }
+      ctx.provide('settings', { describe: () => [{ ns: 'delorun-delegation-consent', value: values }], update: () => Promise.reject(new Error('down')) } as never)
+      await ctx.homeAuth.setPin('739150', {})
+      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      await ctx.homeAuth.turnPinOff()
+      await ctx.homeAuth.endPinSettings()
+      await ctx.homeAuth.endPinSettings()
+      // Pins the single timer, its period from the config and that it never keeps the process alive.
+      expect(set).toHaveBeenCalledTimes(1)
+      expect(set.mock.calls[0]![1]).toBe(3_600_000)
+      expect(set.mock.results[0]!.value.hasRef()).toBe(false)
+      expect(cleared).not.toHaveBeenCalled()
+      await fiber.dispose()
+      // Pins the disposer: the timer does not outlive the plugin.
+      expect(cleared).toHaveBeenCalledTimes(1)
+    } finally {
+      set.mockRestore()
+      cleared.mockRestore()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('sets back a PIN lift a previous run left once the settings service mounts', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      await fiber.dispose()
+      const secrets = join(directory, 'secrets', 'home-auth')
+      await writeFile(join(secrets, 'reach-pin-settings.json'), JSON.stringify({ v: 1, lifts: [{ ns: 'delorun-delegation-consent', field: 'enabled', previous: true, set: false }] }), { mode: 0o600 })
+      const restarted = await ctx.plugin(HomeAuthService, { secretsDirectory: secrets })
+      try {
+        const values: Record<string, unknown> = { enabled: false }
+        // Pins the start without the service: the lift stays on disk and the later mount of the settings service writes it back.
+        ctx.provide('settings', {
+          describe: () => [{ ns: 'delorun-delegation-consent', value: values }],
+          update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+        } as never)
+        await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+      } finally {
+        await restarted.dispose()
+      }
+    } finally {
       await rm(directory, { recursive: true, force: true })
     }
   })

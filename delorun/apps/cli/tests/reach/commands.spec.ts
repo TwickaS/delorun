@@ -293,6 +293,7 @@ function devices(overrides: Partial<DevicesDependencies> & { readonly lines?: Re
     },
     ask: () => Promise.resolve(answers.shift()),
     terminal: true,
+    pin: { secret: () => Promise.resolve(undefined), stdinLine: () => Promise.resolve(undefined), interactive: false, stdinIsTerminal: false, now: () => 0 },
     ...overrides,
   })
   return { command, sent }

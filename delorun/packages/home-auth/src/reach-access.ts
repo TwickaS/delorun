@@ -54,16 +54,22 @@ export interface ReachDevicePrincipal {
   readonly deviceId: string
   /** The reach listener the device's Peer sits on. */
   readonly listener: ReachListenerId
+  /**
+   * The id of the PIN mode page unlock that this Peer, one page's, was admitted under (C14, "PIN mode"). The Peer of
+   * a locked page, and every Peer without PIN mode, has none.
+   */
+  readonly unlockId?: string
 }
 
 /**
  * The principal of one device on one reach listener.
  * @param deviceId - the device's id in the home's device list.
  * @param listener - the reach listener its Peer sits on.
+ * @param unlockId - the page unlock the Peer was admitted under, none for a locked page.
  * @returns the principal its Peers on that listener speak for.
  */
-export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId): ReachDevicePrincipal {
-  return { kind: REACH_DEVICE, deviceId, listener }
+export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId, unlockId?: string): ReachDevicePrincipal {
+  return unlockId === undefined ? { kind: REACH_DEVICE, deviceId, listener } : { kind: REACH_DEVICE, deviceId, listener, unlockId }
 }
 
 /**
@@ -797,10 +803,15 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinLiftedSettings'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
-  const { deviceId, listener } = principal
+  const { deviceId, listener, unlockId } = principal
+  /**
+   * The running unlock this principal's Peer holds: its page's under PIN mode, otherwise the device's.
+   * @returns the unlock's id, or undefined.
+   */
+  const unlock = (): { readonly id: string } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
   /**
    * Refuse without an unlock on the principal's listener, and log an admitted call.
    * @param action - the action.
@@ -809,7 +820,7 @@ export function createCondition(
    * @returns the refusal, or undefined when an unlock admits it.
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
-    const elevation = facts.elevationOf(deviceId, listener)
+    const elevation = unlock()
     if (elevation === undefined) return { kind: 'deny', reason }
     if (call) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
     return undefined
@@ -818,25 +829,29 @@ export function createCondition(
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
+    // An unlocked PIN page lifts the same refusals as dangerous mode. Its settings writes are recorded in the PIN
+    // file when dangerous mode does not hold, and set back when PIN mode turns off.
+    const pageUnlocked = unlockId !== undefined && facts.pageUnlockOf(unlockId) !== undefined
     if (args !== undefined) {
       const dangerous = facts.dangerousMode()
+      const lifted = dangerous || pageUnlocked
       // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
       // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
-        const off = facts.computerOnlySwitches().find(target => !(dangerous && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
+        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
-        if (!dangerous && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
-        if (dangerous) lifts.push(...liftsOf(facts, action, args, loosens))
+        if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+        if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
       }
-      if (!dangerous) {
+      if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
       }
     }
     if (DANGEROUS_SET.has(action)) {
-      if (!facts.dangerousMode()) return { kind: 'deny', reason: `loopback-required: ${action}` }
+      if (!facts.dangerousMode() && !pageUnlocked) return { kind: 'deny', reason: `loopback-required: ${action}` }
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
@@ -846,7 +861,7 @@ export function createCondition(
     }
     // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
     if (lifts.length > 0) {
-      const unrecorded = facts.liftedSettings(lifts)
+      const unrecorded = facts.dangerousMode() ? facts.liftedSettings(lifts) : facts.pinLiftedSettings(lifts)
       if (unrecorded !== undefined) return { kind: 'deny', reason: unrecorded }
     }
     if (args === undefined) return ALLOW
@@ -859,7 +874,7 @@ export function createCondition(
       if (bounds !== undefined && workspacePathsReachable(bounds, args)) return ALLOW
       const outside = `loopback-required: ${action} with a path outside the chat's workspace`
       // Dangerous mode moves the workspace bound for an unlocked device; the Delorun home stays out of reach.
-      if (bounds !== undefined && facts.dangerousMode() && workspacePathsReachable({ ...bounds, confined: false }, args)) {
+      if (bounds !== undefined && (facts.dangerousMode() || pageUnlocked) && workspacePathsReachable({ ...bounds, confined: false }, args)) {
         return unlocked(action, outside, true) ?? ALLOW
       }
       return { kind: 'deny', reason: outside }
@@ -907,6 +922,12 @@ export interface ReachAccessFacts {
    */
   readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string } | undefined
   /**
+   * The running PIN mode page unlock one Peer was admitted under.
+   * @param unlockId - the id in the Peer's principal.
+   * @returns the unlock, or undefined once it ended.
+   */
+  readonly pageUnlockOf: (unlockId: string) => { readonly id: string } | undefined
+  /**
    * Record one line in the operational log, for each call an unlock admits.
    * @param line - the line.
    */
@@ -918,6 +939,13 @@ export interface ReachAccessFacts {
    * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
    */
   readonly liftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
+  /**
+   * Record the settings an unlocked PIN page is about to loosen, so PIN mode turning off sets them back. Called under the
+   * same conditions as {@link liftedSettings}, when dangerous mode does not hold.
+   * @param lifts - the fields and the values the call sets.
+   * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
+   */
+  readonly pinLiftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
   /**
    * The computer-only switches the mounted plugins registered.
    * @returns the switches.

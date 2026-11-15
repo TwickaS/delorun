@@ -565,6 +565,7 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
         {tailscale?.state === 'ready' && <p className={css.hint}>{t('reach.address', { address: `https://${tailscale.dnsName}` })}</p>}
       </div>
       <p className={css.hint}>{t('reach.limits')}</p>
+      <p className={css.hint}>{t('reach.pin')}</p>
     </div>
   )
 }

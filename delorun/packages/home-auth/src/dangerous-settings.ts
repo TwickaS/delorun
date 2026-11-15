@@ -52,6 +52,12 @@ export interface SettingsFieldAccess {
   read(ns: string, field: string): unknown
   /**
    * @param ns - the settings namespace.
+   * @returns whether the namespace's row is described now; a lift whose row is not described is kept, never dropped,
+   *   because an absent row cannot show whether the person changed the field.
+   */
+  described?(ns: string): boolean
+  /**
+   * @param ns - the settings namespace.
    * @param field - the field.
    * @param value - the value to write; undefined unsets the field.
    * @returns when the settings service has applied it.
@@ -59,18 +65,30 @@ export interface SettingsFieldAccess {
   write(ns: string, field: string, value: unknown): Promise<void>
 }
 
+/** The namespace and field of a lift, never its values, which may be secret. */
+export interface LiftField {
+  readonly ns: string
+  readonly field: string
+}
+
 /** The lifts of one home. */
 export class DangerousSettingsLedger {
   private readonly file: string
+  private readonly label: string
   private lifts: RecordedLift[] = []
   private saving: Promise<void> = Promise.resolve()
   private reverting: Promise<void> | undefined
+  /** The lifts whose last set-back failed, by namespace and field. */
+  private failed: LiftField[] = []
 
   /**
-   * @param file - the absolute path of `reach-dangerous-settings.json`.
+   * @param file - the absolute path of `reach-dangerous-settings.json`, or of `reach-pin-settings.json` for the lifts of
+   *   unlocked PIN pages.
+   * @param label - what the file records, for the failure that names it.
    */
-  constructor(file: string) {
+  constructor(file: string, label = 'dangerous-mode settings') {
     this.file = file
+    this.label = label
   }
 
   /**
@@ -82,7 +100,7 @@ export class DangerousSettingsLedger {
     if (value === undefined) return
     const lifts = isRecord(value) && value.v === DANGEROUS_SETTINGS_VERSION && Array.isArray(value.lifts) ? value.lifts as unknown[] : undefined
     if (lifts === undefined || !lifts.every(lift => isRecord(lift) && typeof lift.ns === 'string' && typeof lift.field === 'string')) {
-      throw new Error(`${this.file} does not hold this version's record of dangerous-mode settings`)
+      throw new Error(`${this.file} does not hold this version's record of ${this.label}`)
     }
     this.lifts = lifts as RecordedLift[]
   }
@@ -93,6 +111,22 @@ export class DangerousSettingsLedger {
    */
   pending(): boolean {
     return this.lifts.length > 0
+  }
+
+  /**
+   * The lifts whose last set-back failed and that still wait for a retry.
+   * @returns their namespaces and fields, never their values.
+   */
+  waiting(): readonly LiftField[] {
+    return this.failed
+  }
+
+  /**
+   * The namespace and field of every recorded lift.
+   * @returns them, never their values.
+   */
+  fields(): readonly LiftField[] {
+    return this.lifts.map(({ ns, field }) => ({ ns, field }))
   }
 
   /**
@@ -137,27 +171,34 @@ export class DangerousSettingsLedger {
    * since the device wrote it. A failed write keeps its lift, so the next call retries it.
    * @param access - the settings fields.
    * @param dangerous - whether dangerous mode holds now.
+   * @param onFailed - called with the namespace and field of each lift whose write failed, once per pass.
    * @returns when the pass is done.
    */
-  revert(access: SettingsFieldAccess, dangerous: () => boolean): Promise<void> {
-    this.reverting ??= this.revertAll(access, dangerous).finally(() => { this.reverting = undefined })
+  revert(access: SettingsFieldAccess, dangerous: () => boolean, onFailed?: (lift: LiftField) => void): Promise<void> {
+    this.reverting ??= this.revertAll(access, dangerous, onFailed).finally(() => { this.reverting = undefined })
     return this.reverting
   }
 
-  private async revertAll(access: SettingsFieldAccess, dangerous: () => boolean): Promise<void> {
+  private async revertAll(access: SettingsFieldAccess, dangerous: () => boolean, onFailed: ((lift: LiftField) => void) | undefined): Promise<void> {
+    const failed: LiftField[] = []
     for (const lift of [...this.lifts]) {
-      if (dangerous()) return
+      if (dangerous()) break
+      if (access.described?.(lift.ns) === false) continue
       const current = access.read(lift.ns, lift.field)
       const deviceOwned = lift.unset === true ? current === undefined : 'set' in lift ? isDeepStrictEqual(current, lift.set) : !isDeepStrictEqual(current, lift.previous)
       try {
         if (deviceOwned) await access.write(lift.ns, lift.field, lift.previous)
       } catch (_unwritable: unknown) {
-        // The field keeps the device's value and its lift, and the next read of the mode retries the write.
+        // The field keeps the device's value and its lift, and the next pass retries the write.
+        const field = { ns: lift.ns, field: lift.field }
+        failed.push(field)
+        onFailed?.(field)
         continue
       }
       this.lifts = this.lifts.filter(entry => entry !== lift)
       this.persist()
     }
+    this.failed = failed.filter(field => this.lifts.some(lift => lift.ns === field.ns && lift.field === field.field))
     await this.saving
   }
 

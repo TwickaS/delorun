@@ -19,6 +19,7 @@
  *
  * @module @delorun/cli/reach/command
  */
+import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
@@ -257,7 +258,8 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
   }
   const address = tailscaleAddress(dnsName, DEFAULT_SERVE_PORT)
   writeReachRow(home, profile, { ...row, enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort })
-  context.stdout([`Remote access is on for the profile ${profile} at ${address}`, '', ...TRUST_STATEMENT, '', ''].join('\n'))
+  const pinHint = await pinOffHint(home)
+  context.stdout([`Remote access is on for the profile ${profile} at ${address}`, '', ...TRUST_STATEMENT, ...(pinHint === undefined ? [] : ['', pinHint]), '', ''].join('\n'))
   if (!running) {
     context.stdout([`It starts with Delorun: delorun start.`, ...addPhoneLines(address), ''].join('\n'))
     return EXIT.ok
@@ -334,6 +336,8 @@ async function status(args: readonly string[], context: CommandContext, dependen
     if (answer.kind === 'options') lines.push(...answer.options.filter(option => row.enabled || option.state !== 'off').map(liveLine))
     else lines.push(`Delorun is running, but its live state could not be read: ${answer.reason}. Settings → Devices in the studio on this computer shows it.`)
   }
+  const pinHint = row.enabled ? await pinOffHint(home) : undefined
+  if (pinHint !== undefined) lines.push(pinHint)
   if (row.enabled) lines.push(`Sign-in address: ${signInAddress(row.address)}`, ...addPhoneLines(row.address), mayAskLine(readPairingAt(profilePatchPath(home, profile))))
   context.stdout(`${lines.join('\n')}\n`)
   return EXIT.ok

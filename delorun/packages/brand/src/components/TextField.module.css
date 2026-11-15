@@ -1,0 +1,5 @@
+.field { display: flex; flex-direction: column; gap: var(--dl-space-1); font-family: var(--dl-font-sans); }
+.label { color: var(--dl-text); font-size: 13px; font-weight: 500; line-height: 20px; }
+.help, .error { margin: 0; font-size: 12px; line-height: 16px; }
+.help { color: var(--dl-text-muted); }
+.error { color: var(--dl-error); }

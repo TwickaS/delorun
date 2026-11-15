@@ -6,7 +6,12 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { once } from 'node:events'
+import { createServer, type IncomingMessage } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -19,7 +24,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delorun/contract-admission'
 import { HOME_AUTH_SWITCH, HomeAuthService, REACH_SWITCH } from '../src/service.ts'
 import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
-import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
+import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { DeviceStore } from '../src/devices.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
@@ -335,7 +340,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pageUnlockOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -550,6 +555,239 @@ describe('the authenticator provider', () => {
       ctx.emit('domain/changed', { domain: 'workspace' } as never)
       // Pins each invalidation: a stale snapshot hides a new chat from the device or keeps a removed one.
       expect(access.invalidated).toEqual([device, device, device])
+    })
+  })
+  describe('PIN mode page unlocks', () => {
+    const PRIVATE = 'reach-tailscale-private'
+    const PIN = '482916'
+    let pinRecord: string | undefined
+
+    /**
+     * Turn PIN mode on with a record derived once for the file, so only the first test pays the scrypt cost: the service
+     * restarts over a secrets directory that holds the record.
+     */
+    async function turnPinOn(): Promise<void> {
+      const file = join(directory, 'secrets', 'home-auth', 'pin-mode.json')
+      if (pinRecord === undefined) {
+        await ctx.homeAuth.setPin(PIN, {})
+        pinRecord = await readFile(file, 'utf8')
+        return
+      }
+      await fiber.dispose()
+      await writeFile(file, pinRecord, { mode: 0o600 })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+      await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
+    }
+
+    /**
+     * A device's session, with the page unlock a correct PIN mints on it.
+     * @param fill - the device's key fill.
+     * @param lifetimeMs - the session's lifetime.
+     * @returns the cookie token, the device and the unlock.
+     */
+    async function unlockedPage(fill: number, lifetimeMs = HOUR): Promise<{ readonly cookie: string; readonly deviceId: string; readonly sessionId: string; readonly unlock: { readonly token: string; readonly unlockId: string } }> {
+      const cookie = await session(fill, lifetimeMs)
+      const admitted = ctx.homeAuth.admitToken(cookie, PRIVATE)
+      if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+      const asker = { deviceId: admitted.session.deviceId, listener: PRIVATE, sessionId: admitted.sessionId } as const
+      const unlock = await ctx.homeAuth['state']().pin.unlock(asker, PIN)
+      return { cookie, deviceId: admitted.session.deviceId, sessionId: admitted.sessionId, unlock }
+    }
+
+    const admitAs = (cookie: string, headers: Record<string, string> = {}, url = '/api/x'): Admission => provider().admit(request({ url, headers: { cookie: `__Host-delorun-session=${cookie}`, ...headers } }), PRIVATE)
+    const peerOf = (admission: Admission): PeerScope => {
+      if (admission.kind !== 'admitted') throw new Error(`not admitted: ${JSON.stringify(admission)}`)
+      return admission.peer
+    }
+
+    /** A remote access double that records the policy, as the principal and policy tests above do. */
+    async function policyOf(): Promise<RemoteAccessPolicy<ReachDevicePrincipal>> {
+      let registered: RemoteAccessPolicy<ReachDevicePrincipal> | undefined
+      ctx.provide('remoteAccess')
+      ctx.set('remoteAccess', { registerPolicy: (_kind: string, policy: RemoteAccessPolicy<ReachDevicePrincipal>) => { registered = policy; return () => {} }, invalidate: () => {} } as never)
+      await new Promise<void>((resolve) => { ctx.inject(['remoteAccess'], () => { resolve() }) })
+      if (registered === undefined) throw new Error('no reach-device policy was registered')
+      return registered
+    }
+
+    it('gives each page its own Peer: a request without the token is locked, the token is stripped, and a sibling tab is not unlocked by it', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const policy = await policyOf()
+      const carried = request({ url: '/api/x', headers: { cookie: `__Host-delorun-session=${page.cookie}`, 'delorun-unlock': page.unlock.token } })
+      const unlocked = provider().admit(carried, PRIVATE)
+      // Pins the strip: no route, upgrade handler or plugin downstream reads the token.
+      expect(JSON.stringify(carried.headers)).not.toContain(page.unlock.token)
+      const idleEnd = (): number | undefined => ctx.homeAuth.elevationsAtComputer().running.find(record => record.id === page.unlock.unlockId)?.endsAt
+      const before = idleEnd()
+      await new Promise<void>((resolve) => { setTimeout(resolve, 25) })
+      admitAs(page.cookie, { 'delorun-unlock': page.unlock.token })
+      // Pins the idle rule: a request that carries the token is a poll, not activity, so it moves no end.
+      expect(idleEnd()).toBe(before)
+      const locked = admitAs(page.cookie)
+      // Pins the per-page Peer: a reload, a new tab or a restored page arrives without the token and gets the locked Peer.
+      expect(peerOf(locked)).not.toBe(peerOf(unlocked))
+      expect(provider().reachPeer(peerOf(unlocked).id)?.unlockId).toBe(page.unlock.unlockId)
+      expect(provider().reachPeer(peerOf(locked).id)?.unlockId).toBeUndefined()
+      expect(peerOf(admitAs(page.cookie))).toBe(peerOf(locked))
+      const create = (unlockId: string | undefined) => policy.bindings(reachDevicePrincipal(page.deviceId, PRIVATE, unlockId))[0]?.condition?.({ action: 'terminal/create', resource: { kind: 'global' }, args: {} } as never)
+      expect(create(page.unlock.unlockId)).toEqual({ kind: 'allow' })
+      // Pins the policy's own lookup: the sibling locked tab holds nothing while this page is unlocked.
+      expect(create(undefined)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      const give = (peer: PeerScope): void => { provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' }) }
+      expect(() => { give(peerOf(unlocked)) }).not.toThrow()
+      // Pins the answer guard: it reads the answering page's Peer, so a locked tab cannot answer what a sibling could.
+      expect(() => { give(peerOf(locked)) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    })
+
+    it('reads the token from the WebSocket subprotocol, strips it and keeps the other protocols', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const upgrade = request({ url: '/api/remote.mux', headers: { cookie: `__Host-delorun-session=${page.cookie}`, upgrade: 'websocket', 'sec-websocket-protocol': `delorun.mux, delorun-unlock.${page.unlock.token}` } })
+      const admission = provider().admit(upgrade, PRIVATE)
+      expect(provider().reachPeer(peerOf(admission).id)?.unlockId).toBe(page.unlock.unlockId)
+      // Pins the strip: the upgrade handler sees only the protocol it answers with.
+      expect(upgrade.headers).toMatchObject({ 'sec-websocket-protocol': 'delorun.mux' })
+      expect(JSON.stringify(upgrade.headers)).not.toContain(page.unlock.token)
+    })
+
+    it.each([
+      { mode: false, unlocked: false },
+      { mode: false, unlocked: true },
+      { mode: true, unlocked: false },
+      { mode: true, unlocked: true },
+    ])('with PIN mode off, a Delorun-Unlock header changes no decision (dangerous mode $mode, device unlocked $unlocked)', async ({ mode, unlocked }) => {
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const cookie = await session(2)
+      const plain = provider().admit(request({ url: '/api/x', headers: { cookie: `__Host-delorun-session=${cookie}` } }), PRIVATE)
+      const carried = provider().admit(request({ url: '/api/x', headers: { cookie: `__Host-delorun-session=${cookie}`, 'delorun-unlock': 'any-token-at-all' } }), PRIVATE)
+      // Pins the ignore: with the mode off the header is stripped and neither refuses nor unlocks the page.
+      expect(carried).toMatchObject({ kind: 'admitted' })
+      const principalOf = (admission: Admission) => provider().reachPeer(peerOf(admission).id)
+      expect(principalOf(carried)).toEqual(principalOf(plain))
+      const decide = (admission: Admission, action: string) => {
+        const peer = principalOf(admission)
+        if (peer === undefined) throw new Error('no principal')
+        const principal = reachDevicePrincipal(peer.deviceId, peer.listener, peer.unlockId)
+        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => mode })
+        return policy.bindings(principal)[0]?.condition?.({ action, resource: { kind: 'global' }, args: {} } as never)
+      }
+      for (const action of [...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS), 'terminal/create']) {
+        expect(decide(carried, action), action).toEqual(decide(plain, action))
+      }
+      vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => mode } : Context.prototype.get.call(ctx, name as never))) as never)
+      vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
+      const give = (admission: Admission, grants: string): boolean => {
+        try {
+          provider().checkAnswer({ peer: peerOf(admission), event: 'approval/request', request: { grants }, value: 'allowed-once' })
+          return true
+        } catch (_refused) {
+          return false
+        }
+      }
+      for (const grants of ['full-access', 'workspace-management', 'external-agent']) expect(give(carried, grants), grants).toBe(give(plain, grants))
+    })
+
+    it('completes a real WebSocket handshake for a browser offering delorun.mux and the unlock subprotocol', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const admissions: Admission[] = []
+      const server = createServer()
+      server.on('upgrade', (upgrade: IncomingMessage, socket: Duplex) => {
+        // The admission reads the request as the Connection hands it over: real headers, the token stripped on admit.
+        const admission = provider().admit(upgrade as unknown as ConnectionIndexRequest, PRIVATE)
+        admissions.push(admission)
+        if (admission.kind !== 'admitted') {
+          socket.end('HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n')
+          return
+        }
+        const accept = createHash('sha1').update(`${String(upgrade.headers['sec-websocket-key'])}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
+        const offered = String(upgrade.headers['sec-websocket-protocol'] ?? '').split(',').map(entry => entry.trim())
+        socket.write(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept}\r\n${offered.includes('delorun.mux') ? 'sec-websocket-protocol: delorun.mux\r\n' : ''}\r\n`)
+      })
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const port = (server.address() as AddressInfo).port
+      // The runtime's own client, as a browser sets the cookie: a header the test adds, since Node has no cookie jar.
+      const connect = (token: string): Promise<{ readonly protocol: string } | 'refused'> => new Promise((resolve) => {
+        const socket = new WebSocket(`ws://127.0.0.1:${String(port)}/api/remote.mux`, { protocols: ['delorun.mux', `delorun-unlock.${token}`], headers: { cookie: `__Host-delorun-session=${page.cookie}` } } as never)
+        socket.addEventListener('open', () => { const { protocol } = socket; socket.close(); resolve({ protocol }) })
+        socket.addEventListener('error', () => { resolve('refused') })
+      })
+      try {
+        // Pins the selection and the binding: delorun.mux is the protocol the server answers with, on an unlocked Peer.
+        expect(await connect(page.unlock.token)).toEqual({ protocol: 'delorun.mux' })
+        const accepted = admissions[0]
+        if (accepted?.kind !== 'admitted') throw new Error('the upgrade was not admitted')
+        expect(provider().reachPeer(accepted.peer.id)?.unlockId).toBe(page.unlock.unlockId)
+        // An unknown token is refused with UNLOCK_INVALID and the handshake does not complete.
+        expect(await connect('not-a-token')).toBe('refused')
+        expect(admissions[1]).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+      } finally {
+        server.closeAllConnections()
+        server.close()
+      }
+    })
+
+    it('ignores a token in a query and refuses a repeated or mismatched one, burning the unlock', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const other = await session(3)
+      const queried = admitAs(page.cookie, {}, `/api/x?delorun-unlock=${page.unlock.token}`)
+      // Pins the carriers: a URL is logged and cached, so it never unlocks.
+      expect(provider().reachPeer(peerOf(queried).id)?.unlockId).toBeUndefined()
+      expect(ctx.homeAuth.pageUnlockOf(page.unlock.unlockId)).toBeDefined()
+      // Pins the binding: another device's cookie with this device's token is refused, and the unlock ends.
+      expect(admitAs(other, { 'delorun-unlock': page.unlock.token })).toMatchObject({ kind: 'refused', status: 401, code: 'UNLOCK_INVALID' })
+      expect(ctx.homeAuth.pageUnlockOf(page.unlock.unlockId)).toBeUndefined()
+      expect(admitAs(page.cookie, { 'delorun-unlock': page.unlock.token })).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+      // Pins the ambiguity rule: two tokens in one request name no unlock.
+      expect(admitAs(page.cookie, { 'delorun-unlock': 'a', 'sec-websocket-protocol': 'delorun-unlock.b' })).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+    })
+
+    it('refuses a token from another session of the same device and ends the unlock', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const second = (await ctx.homeAuth.openSession({ deviceId: recordOf(2, ADDRESS).id, listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })).token
+      // Pins the session binding: a token copied into another browser profile of the same device is refused.
+      expect(admitAs(second, { 'delorun-unlock': page.unlock.token })).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+      expect(ctx.homeAuth.pageUnlockOf(page.unlock.unlockId)).toBeUndefined()
+    })
+
+    it('refuses the token after the PIN changes, and ignores it with the mode off', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      await ctx.homeAuth.setPin('739150', {})
+      // Pins the end at a PIN change: the old token names nothing.
+      expect(admitAs(page.cookie, { 'delorun-unlock': page.unlock.token })).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
+      await ctx.homeAuth.turnPinOff()
+      const header = { 'delorun-unlock': page.unlock.token }
+      const carried = request({ url: '/api/x', headers: { cookie: `__Host-delorun-session=${page.cookie}`, ...header } })
+      const off = provider().admit(carried, PRIVATE)
+      // Pins the mode check: with the mode off the header is stripped and ignored, and the request is a locked page's.
+      expect(provider().reachPeer(peerOf(off).id)?.unlockId).toBeUndefined()
+      expect(JSON.stringify(carried.headers)).not.toContain(page.unlock.token)
+    })
+
+    it('ends the unlock on the server at lock, closes its session\'s connections and disposes its Peer', async () => {
+      await turnPinOn()
+      ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
+      const page = await unlockedPage(2)
+      const closed = vi.spyOn(ctx.connection, 'closeReachConnections')
+      const peer = peerOf(admitAs(page.cookie, { 'delorun-unlock': page.unlock.token }))
+      const index = created.findIndex(candidate => candidate.id === peer.id)
+      ctx.homeAuth['state']().pin.lock(page.unlock.token, { deviceId: page.deviceId as never, listener: PRIVATE, sessionId: page.sessionId })
+      // Pins the server-side end: a page that merely hides its screen is still locked here.
+      expect(ctx.homeAuth.pageUnlockOf(page.unlock.unlockId)).toBeUndefined()
+      expect(closed).toHaveBeenCalledWith({ sessionId: page.sessionId })
+      expect(created[index]?.disposal.disposed).toBe(true)
+      expect(admitAs(page.cookie, { 'delorun-unlock': page.unlock.token })).toMatchObject({ kind: 'refused', code: 'UNLOCK_INVALID' })
     })
   })
 })

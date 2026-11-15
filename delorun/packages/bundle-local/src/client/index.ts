@@ -32,6 +32,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the 'connection/reset' event merge and the connection service's type.
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import { applyUnlockConnection } from './unlock-connection.ts'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -64,6 +65,12 @@ import { AboutSection } from './AboutSection.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
+import { createPinSource, type PinSource } from './pin-lock.ts'
+import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
+import { PinLock } from './PinLock.tsx'
+import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
+import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
+import { attachPinTriggers } from './pin-triggers.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
 import { UnlockOverlay } from './UnlockOverlay.tsx'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
@@ -96,6 +103,11 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
+export type { PinLocaleKey } from './pin-locales.ts'
+export type { PinModeLocaleKey } from './pin-mode-locales.ts'
+export type { PinModeSectionProps } from './PinModeSection.tsx'
+export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
+export type { PinLockProps } from './PinLock.tsx'
 export type { TrustLocaleKey } from './trust-locales.ts'
 export type { TrustBadgeInjected, TrustBadgeProps } from './TrustBadge.tsx'
 export { badgeLabel, formatTime, rowStateLabel, TrustBadge, VERIFY_COMMAND } from './TrustBadge.tsx'
@@ -162,6 +174,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'delorunDevices': DevicesLocaleKey
+    /** The PIN lock screen's copy. */
+    'delorunPin': PinLocaleKey
+    /** The PIN mode settings section's copy. */
+    'delorunPinMode': PinModeLocaleKey
     /** The trust badge's and the trust panel's copy. */
     'delorunTrust': TrustLocaleKey
     /** The full-access consent, the approval card's action, the MCP server review and notice, and the Permissions and External agents sections. */
@@ -178,6 +194,21 @@ export const NS = 'delorunPrivacy'
 
 /** Dictionary namespace of the Devices section and the remote refused-answer notice. */
 export const DEVICES_NS = 'delorunDevices'
+
+/** Dictionary namespace of the PIN lock screen. */
+export const PIN_NS = 'delorunPin'
+
+/** Dictionary namespace of the PIN mode settings section. */
+export const PIN_MODE_NS = 'delorunPinMode'
+
+/** The `settings.section` id of the PIN mode section. */
+export const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
+
+/** The PIN mode section's place in the Settings navigation: right after Devices. */
+export const PIN_MODE_SECTION_ORDER = 21.5
+
+/** The `shell.overlay` id of the PIN lock screen. */
+export const PIN_LOCK_OVERLAY_ID = 'delorun-pin-lock'
 
 /** Dictionary namespace of the Network section. */
 export const NETWORK_NS = 'delorunNetwork'
@@ -314,6 +345,7 @@ export const inject = ['slots', 'locale', 'configForms', 'sessions', 'connection
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
+  applyUnlockConnection(ctx)
   const t = ctx.locale.bind(NS)
   ctx.provide('delorunNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DelorunNoticeService)
   ctx.effect(() => overrideTitle(ctx.locale), 'delorun-privacy: the product name as the document title')
@@ -418,9 +450,18 @@ export function apply(ctx: Context): void {
   }, AboutSection))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
+  ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback, pin)
+  // The unlock banner follows the page's PIN unlock: read the elevation again when the page unlocks or locks.
+  let pinPhase = pin.hooks.pin.getSnapshot().phase
+  ctx.effect(() => pin.hooks.pin.subscribe(() => {
+    const phase = pin.hooks.pin.getSnapshot().phase
+    if (phase !== pinPhase) void unlock.refresh()
+    pinPhase = phase
+  }), 'delorun-pin: the unlock banner reads the elevation again when the page unlocks or locks')
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({
@@ -449,6 +490,17 @@ export function apply(ctx: Context): void {
     locale: DEVICES_NS,
     inject: devicesFace,
   }, DevicesSection))
+  ctx.effect(() => ctx.locale.register(PIN_MODE_NS, { en: pinModeEn, zh: pinModeZh }), 'delorun-pin-mode: section dictionaries')
+  const pinModeT = ctx.locale.bind(PIN_MODE_NS)
+  const pinModeFace = (): PinModeSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: PIN_MODE_SECTION_ID,
+    order: PIN_MODE_SECTION_ORDER,
+    label: () => pinModeT('nav'),
+    locale: PIN_MODE_NS,
+    inject: pinModeFace,
+  }, PinModeSection))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
   const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })
@@ -644,8 +696,13 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
  * @returns the store, which the Devices section reads too.
  */
-export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false): UnlockSource {
+export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
   const unlock = createUnlockSource(fetch, Date.now, onComputer)
+  // Lock now ends the page's PIN unlock when it holds one, and the device's elevation otherwise.
+  const lock = async (): Promise<void> => {
+    if (pin?.holdsUnlock() === true) await pin.lock()
+    else await unlock.lock()
+  }
   ctx.effect(() => () => { unlock.dispose() }, 'delorun-devices: the unlock\'s timers stop once the plugin unloads')
   ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
   ctx.on('connection/reset', () => { void unlock.refresh() })
@@ -654,9 +711,32 @@ export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false):
     name: 'shell.overlay',
     id: UNLOCK_OVERLAY_ID,
     locale: DEVICES_NS,
-    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock: unlock.lock, dismissEnded: unlock.dismissEnded }),
+    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock, dismissEnded: unlock.dismissEnded }),
   }, UnlockOverlay))
   return unlock
+}
+
+/**
+ * Register PIN mode's lock screen: its store, the page events that keep the unlock alive or lock it, and its
+ * `shell.overlay` entry. Where PIN mode does not apply the store settles on `off` and the entry renders nothing.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the request function.
+ * @param onComputer - whether the page is on the home's own computer ({@link createPinSource}).
+ * @returns the store, which the unlock banner's Lock now reads too.
+ */
+export function applyPin(ctx: Context, fetch: HostFetch, onComputer = false): PinSource {
+  const pin = createPinSource(fetch, Date.now, onComputer)
+  ctx.effect(() => pin.dispose, 'delorun-pin: the lock\'s timers stop once the plugin unloads')
+  ctx.effect(() => attachPinTriggers(pin), 'delorun-pin: input, visibility and page events keep the unlock alive or lock it')
+  ctx.on('connection/reset', () => { void pin.refresh() })
+  void pin.refresh()
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: PIN_LOCK_OVERLAY_ID,
+    locale: PIN_NS,
+    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock }),
+  }, PinLock))
+  return pin
 }
 
 /**

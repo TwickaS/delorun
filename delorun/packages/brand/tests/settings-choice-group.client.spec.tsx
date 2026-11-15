@@ -2,7 +2,7 @@
 /** A choice group is one radio group: named, one tab stop, arrow keys move the choice, no tabs and no dangling panel references. */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ChoiceGroup } from '../src/ChoiceGroup.tsx'
+import { ChoiceGroup } from '../src/settings/ChoiceGroup.tsx'
 
 afterEach(cleanup)
 

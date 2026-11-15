@@ -10,7 +10,8 @@
     "src/boot-settings.ts",
     "src/config.ts",
     "src/palette",
-    "src/css-modules.d.ts"
+    "src/css-modules.d.ts",
+    "../brand/src/css-modules.d.ts"
   ],
   "references": [
     {

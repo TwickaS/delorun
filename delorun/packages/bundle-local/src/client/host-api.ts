@@ -13,7 +13,7 @@ export type HostFetch = (input: string, init?: RequestInit) => Promise<Response>
  * the JSON the route promises.
  */
 export type HostFailure =
-  | { readonly kind: 'refused'; readonly status: number; readonly code: string; readonly message: string }
+  | { readonly kind: 'refused'; readonly status: number; readonly code: string; readonly message: string; readonly fields?: Readonly<Record<string, unknown>> }
   | { readonly kind: 'unreachable'; readonly cause: unknown }
   | { readonly kind: 'unreadable'; readonly status: number }
 
@@ -65,18 +65,26 @@ export const fields = (shape: Readonly<Record<string, Check>>): Check =>
 
 const isRefusal = fields({ error: isString, message: isString })
 
+/** What a request adds to the defaults: headers, and `keepalive` for a request sent while the page closes. */
+export interface RequestExtras {
+  readonly headers?: Readonly<Record<string, string>>
+  readonly keepalive?: boolean
+}
+
 /**
  * Send one request and read its JSON answer.
  * @param fetch - the request function.
  * @param path - the route.
  * @param body - the JSON body; absent sends none.
+ * @param extra - added headers and `keepalive`.
  * @returns the status and the decoded answer.
  * @throws {HostRequestError} `unreachable` when the request did not complete, `unreadable` when the answer is not JSON.
  */
-async function send(fetch: HostFetch, path: string, body?: object): Promise<{ status: number; ok: boolean; json: unknown }> {
+async function send(fetch: HostFetch, path: string, body?: object, extra: RequestExtras = {}): Promise<{ status: number; ok: boolean; json: unknown }> {
   const init: RequestInit = body === undefined
-    ? { method: 'GET', credentials: 'same-origin', headers: { accept: 'application/json' } }
-    : { method: 'POST', credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    ? { method: 'GET', credentials: 'same-origin', headers: { accept: 'application/json', ...extra.headers } }
+    : { method: 'POST', credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': 'application/json', ...extra.headers }, body: JSON.stringify(body) }
+  if (extra.keepalive === true) init.keepalive = true
   let response: Response
   try {
     response = await fetch(path, init)
@@ -99,15 +107,16 @@ async function send(fetch: HostFetch, path: string, body?: object): Promise<{ st
  * @param path - the route.
  * @param check - the answer's validation.
  * @param body - the JSON body; absent sends a GET.
+ * @param extra - added headers and `keepalive`.
  * @returns the validated answer.
  * @throws {HostRequestError} for a refusal, an unreachable Host or an answer that fails validation.
  */
-export async function call<T>(fetch: HostFetch, path: string, check: Check, body?: object): Promise<T> {
-  const { status, ok, json } = await send(fetch, path, body)
+export async function call<T>(fetch: HostFetch, path: string, check: Check, body?: object, extra?: RequestExtras): Promise<T> {
+  const { status, ok, json } = await send(fetch, path, body, extra)
   if (!ok) {
     if (!isRefusal(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
-    const refusal = json as { error: string; message: string }
-    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error, message: refusal.message })
+    const refusal = json as { error: string; message: string } & Record<string, unknown>
+    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error, message: refusal.message, fields: refusal })
   }
   if (!check(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
   return json as T
@@ -139,12 +148,13 @@ export function isRefused(error: unknown, code: string): boolean {
  * @param fetch - the request function.
  * @param path - the route.
  * @param check - the answer's validation.
+ * @param extra - added headers and `keepalive`.
  * @returns the validated answer, or undefined when the route answers 404, as a route this profile does not mount does.
  * @throws {HostRequestError} for any other refusal, an unreachable Host or an answer that fails validation.
  */
-export async function readServedRoute<T>(fetch: HostFetch, path: string, check: Check): Promise<T | undefined> {
+export async function readServedRoute<T>(fetch: HostFetch, path: string, check: Check, extra?: RequestExtras): Promise<T | undefined> {
   try {
-    return await call<T>(fetch, path, check)
+    return await call<T>(fetch, path, check, undefined, extra)
   } catch (error) {
     const failure = hostFailureOf(error)
     if (failure.kind !== 'unreachable' && failure.status === 404) return undefined

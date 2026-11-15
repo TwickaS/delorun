@@ -29,7 +29,7 @@ import {
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
 import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
-import { DangerousSettingsLedger, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
+import { DangerousSettingsLedger, type LiftField, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
 import type { ElevationState } from '@delorun/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -47,6 +47,8 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
+import type { UnlockAsker } from './pin-unlocks.ts'
+import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -61,6 +63,8 @@ export interface ConfigInput {
   readonly secretsDirectory?: string
   /** The pairing choices, each optional; see {@link Config.pairing}. */
   readonly pairing?: PairingConfig
+  /** Seconds between retries of a PIN page's set-back that failed; see {@link Config.pinSetBackRetrySeconds}. */
+  readonly pinSetBackRetrySeconds?: number
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -74,7 +78,15 @@ export interface Config {
    * cannot write this section.
    */
   readonly pairing: Volatile<PairingConfig>
+  /**
+   * Seconds between retries of a setting a PIN page loosened whose set-back failed after PIN mode went off, from 1 to
+   * 3600; 30 by default. The timer runs only while such a lift waits.
+   */
+  readonly pinSetBackRetrySeconds: number
 }
+
+/** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
+const PIN_RETRY_SECONDS = { min: 1, max: 3600, fallback: 30 } as const
 
 const MINUTE_MS = 60 * 1000
 
@@ -102,6 +114,8 @@ export const Config: schema<ConfigInput, Config> = schema.object({
     requestExpiryMinutes: pairingMinutes('requestExpiryMinutes', PAIRING_DEFAULTS.requestExpiryMs / MINUTE_MS).description('How long a request waits before it expires, from 1 to 10 minutes; 5 by default.'),
     pendingPerIdentity: pairingMinutes('pendingPerIdentity', PAIRING_DEFAULTS.pendingPerIdentity).description('How many requests one Tailscale user may have waiting without a window, from 1 to 5; 1 by default.'),
   }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
+  pinSetBackRetrySeconds: schema.number().step(1).min(PIN_RETRY_SECONDS.min).max(PIN_RETRY_SECONDS.max).default(PIN_RETRY_SECONDS.fallback)
+    .description('Seconds between retries of a setting a PIN page loosened whose set-back failed after PIN mode went off, from 1 to 3600; 30 by default.'),
 })
 
 /** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
@@ -120,6 +134,9 @@ export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-reach', field: EV
 /** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
 const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
 
+/** The refusal of a PIN page's settings write whose record could not be saved. */
+const PIN_RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when PIN mode turns off; make it at the home\'s computer'
+
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
   static inject = ['webServer']
@@ -128,6 +145,10 @@ export class HomeAuthService extends Service {
   private core: HomeAuth | undefined
   /** The settings a device loosened while dangerous mode held, set back when it ends. */
   private lifts: DangerousSettingsLedger | undefined
+  /** The settings an unlocked PIN page loosened, set back when PIN mode turns off. */
+  private pinLifts: DangerousSettingsLedger | undefined
+  /** Retries the PIN set-back while a lift waits; absent otherwise. */
+  private pinRetry: NodeJS.Timeout | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -171,10 +192,17 @@ export class HomeAuthService extends Service {
     this.core = core
     this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
     await this.lifts.load()
+    this.pinLifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachPinSettings), 'PIN mode settings')
+    await this.pinLifts.load()
+    // A lift left by a run whose PIN mode has since been turned off is set back before the first request.
+    await this.endPinSettings()
+    // The settings service mounting after this one retries a lift its absence kept.
+    this.ctx.inject(['settings'], () => { if (this.pinLifts?.pending() === true) this.endPinSettingsLogged() })
     // A lift left by a run whose mode has ended is set back before the first request; without the permission-defaults
     // provider the mode cannot be read yet, and the first read of it ends the lift.
     if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    this.ctx.effect(() => () => { this.stopPinRetry() }, 'home-auth PIN set-back retry')
     // A mode that ends sets back at once what a device loosened under it, without waiting for a device call or a restart.
     this.ctx.inject(['reachFullAccessGrants'], (grants) => {
       grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { this.setBackLogged() }), 'home-auth: dangerous-mode settings set back')
@@ -188,6 +216,14 @@ export class HomeAuthService extends Service {
       const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
       this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
     }), 'home-auth elevation log')
+    // Every PIN event is logged without the PIN, which is never in an event.
+    this.ctx.effect(() => core.onPinEvent((event) => {
+      this.ctx.logger.info(`home-auth: pin ${event.kind}${'deviceId' in event ? `: device=${event.deviceId}` : ''}${event.kind === 'wrong' ? ` triesLeft=${String(event.triesLeft)}` : ''}`)
+      // Turning the mode off, by any route, sets back what unlocked pages loosened.
+      if (event.kind === 'off') {
+        this.endPinSettingsLogged()
+      }
+    }), 'home-auth pin log')
     // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
     this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
     this.ctx.effect(() => this.registerComputerOnlySwitch(REACH_SWITCH), 'home-auth: computer-only reach settings')
@@ -214,6 +250,15 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.state, handler: pinStateHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.unlock, handler: pinUnlockHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.touch, handler: pinTouchHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.lock, handler: pinLockHandler(core) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.mode, handler: pinModeHandler(core, credential, () => this.pinSetBackWaiting()) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.set, handler: pinSetHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -302,6 +347,68 @@ export class HomeAuthService extends Service {
   }
 
   /**
+   * The running PIN mode page unlock one Peer was admitted under.
+   * @param unlockId - the id in the Peer's principal.
+   * @returns the unlock, or undefined, also before the service started.
+   */
+  pageUnlockOf(unlockId: string): ElevationRecord | undefined {
+    return this.core?.pageUnlockOf(unlockId)
+  }
+
+  /**
+   * Whether PIN mode is on.
+   * @returns whether it is; false before the service started.
+   */
+  pinEnabled(): boolean {
+    const on = this.core?.pin.enabled() ?? false
+    return on
+  }
+
+  /**
+   * The settings an unlocked PIN page loosened whose set-back failed and is being retried.
+   * @returns their namespaces and fields, never their values.
+   */
+  pinSetBackWaiting(): readonly LiftField[] {
+    return this.pinLifts?.waiting() ?? []
+  }
+
+  /** Start the retry timer while a PIN lift waits after PIN mode is off, and stop it when none does. */
+  private armPinRetry(): void {
+    const waiting = this.pinLifts?.pending() === true && this.core?.pin.enabled() !== true
+    if (!waiting) {
+      this.stopPinRetry()
+      return
+    }
+    if (this.pinRetry !== undefined) return
+    this.pinRetry = setInterval(() => { this.endPinSettingsLogged() }, this.config.pinSetBackRetrySeconds * 1000)
+    this.pinRetry.unref()
+  }
+
+  private stopPinRetry(): void {
+    if (this.pinRetry === undefined) return
+    clearInterval(this.pinRetry)
+    this.pinRetry = undefined
+  }
+
+  private endPinSettingsLogged(): void {
+    this.endPinSettings().catch((error: unknown) => {
+      this.ctx.logger.warn(`home-auth: PIN mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
+  /**
+   * Check the unlock token a page presented against the session that carried it.
+   * @param token - the token.
+   * @param asker - the device, listener and session the request arrived with.
+   * @returns the unlock's id.
+   * @throws {HomeAuthError} `UNLOCK_INVALID` for an unknown or ended token, and for one from another device, listener or
+   *   session, which also ends the unlock.
+   */
+  resolvePageUnlock(token: string, asker: UnlockAsker): string {
+    return this.state().pin.resolve(token, asker).id
+  }
+
+  /**
    * Whether dangerous mode holds now, read from the permission-defaults service when asked. While it does, an unlocked
    * device does what the computer does, except turn the mode on, approve a device and sign in.
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
@@ -346,6 +453,37 @@ export class HomeAuthService extends Service {
   }
 
   /**
+   * Record the settings an unlocked PIN page is about to loosen, with the values they have now.
+   * @param lifts - the fields and the values the call sets.
+   * @returns undefined once the record is saved to disk, or the refusal the page's write meets when it cannot be.
+   */
+  recordPinLifts(lifts: readonly SettingsLift[]): string | undefined {
+    if (this.pinLifts === undefined) return PIN_RECORD_REFUSAL
+    try {
+      this.pinLifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+      return undefined
+    } catch (error) {
+      this.ctx.logger.warn(`home-auth: the record of PIN mode settings could not be saved, so a page's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
+      return PIN_RECORD_REFUSAL
+    }
+  }
+
+  /**
+   * Write back, through the settings service, every setting a PIN page loosened once PIN mode is off, except one the
+   * person changed since.
+   * @returns when the pass is done; a failed write is retried at the next call.
+   */
+  async endPinSettings(): Promise<void> {
+    try {
+      await this.pinLifts?.revert(this.settingsFields(), () => this.core?.pin.enabled() ?? false, ({ ns, field }) => {
+        this.ctx.logger.warn(`home-auth: the PIN mode setting ${ns}.${field} could not be set back; it is retried every ${String(this.config.pinSetBackRetrySeconds)} seconds`)
+      })
+    } finally {
+      this.armPinRetry()
+    }
+  }
+
+  /**
    * Write back, through the settings service, every setting a device loosened under a mode that has ended, except one
    * the person changed since.
    * @returns when the pass is done; a failed write is retried at the next read of the mode.
@@ -357,6 +495,7 @@ export class HomeAuthService extends Service {
   private settingsFields(): SettingsFieldAccess {
     const settings: SettingsServiceView | undefined = this.ctx.get('settings')
     return {
+      described: ns => settings?.describe().some(row => row.ns === ns) ?? false,
       read: (ns, field) => Reflect.get(settings?.describe().find(row => row.ns === ns)?.value ?? {}, field),
       write: async (ns, field, value) => {
         if (settings === undefined) throw new Error('home-auth: no settings service is mounted')
@@ -431,6 +570,39 @@ export class HomeAuthService extends Service {
    */
   approveElevation(requestId: string, typedCode: string): ElevationRecord {
     return this.state().approveElevation(requestId, typedCode)
+  }
+
+  /**
+   * Set or replace the PIN and turn PIN mode on; the home's own computer only. Every page unlock ends.
+   * @param secret - the PIN or passcode.
+   * @param options - the idle minutes and the lock-when-hidden choice.
+   * @returns the kind of secret.
+   */
+  setPin(secret: string, options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<'pin' | 'passcode'> {
+    return this.state().pin.set(secret, options)
+  }
+
+  /**
+   * Change the idle minutes and lock-when-hidden of PIN mode without the secret; the home's own computer only.
+   * @param options - the new values; a missing one stays.
+   * @returns the settings now in force.
+   */
+  setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
+    return this.state().pin.setOptions(options)
+  }
+
+  /**
+   * Turn PIN mode off; the home's own computer only.
+   */
+  turnPinOff(): Promise<void> {
+    return this.state().pin.off()
+  }
+
+  /**
+   * Resume PIN unlocks after a home-wide pause; the home's own computer only.
+   */
+  resumePin(): Promise<void> {
+    return this.state().pin.resume()
   }
 
   /**

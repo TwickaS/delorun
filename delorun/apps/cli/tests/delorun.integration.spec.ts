@@ -562,6 +562,10 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       elevations: () => Promise.resolve({ pending: [], running: [] }),
       approveElevation: () => ({ id: 'elevation', deviceId: 'device', endsAt: 0 }),
       revokeElevation: () => false,
+      setPin: () => Promise.resolve('pin'),
+      setPinOptions: () => Promise.resolve({ idleMinutes: 15, lockWhenHidden: false }),
+      turnPinOff: () => Promise.resolve(),
+      resumePin: () => Promise.resolve(),
     }
     const base = recording([])
     const withApproval: StartDependencies = { ...base, runProfile: async options => ({ ...await base.runProfile(options), devices: () => devices }) }

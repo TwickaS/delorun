@@ -36,11 +36,11 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
 }
 
 /** What {@link requireComputerUnlessDangerous} and {@link admitUnlockedDevice} read of the home. */
-export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf'>
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'>
 
 /**
- * {@link requireComputer} for a route that an unlocked device may also use while dangerous mode holds: a request that
- * arrived on a reach listener passes the hook then, and the route's `admitPeer` ({@link admitUnlockedDevice}) decides
+ * {@link requireComputer} for a route that an unlocked device may also use while dangerous mode holds, or an unlocked
+ * PIN page while PIN mode is on: a request that arrived on a reach listener passes the hook then, and the route's `admitPeer` ({@link admitUnlockedDevice}) decides
  * whether its device holds an unlock. Every other request is decided as {@link requireComputer} decides it, so a request
  * the home cannot place, or that names a foreign `Host` on the loopback listener, is refused in both modes. A route that
  * approves a device or signs one in keeps {@link requireComputer}.
@@ -52,22 +52,26 @@ export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMo
  */
 export function requireComputerUnlessDangerous(request: ComputerRequest, response: ServerResponse, homeAuth: DangerousModeHome | undefined, action: string): boolean {
   const listener = homeAuth?.arrivalOf(request).listener
-  if (listener !== undefined && listener !== 'loopback' && homeAuth?.dangerousMode() === true) return true
+  if (listener !== undefined && listener !== 'loopback' && (homeAuth?.dangerousMode() === true || homeAuth?.pinEnabled() === true)) return true
   return requireComputer(request, response, homeAuth, action)
 }
 
 /**
  * The `admitPeer` of a route that uses {@link requireComputerUnlessDangerous}: it admits a reach device that holds a
- * running unlock while dangerous mode holds, and no other Peer; the owner's Peer never reaches `admitPeer`.
+ * running unlock while dangerous mode holds, an unlocked PIN page without it (the page can do what the computer can,
+ * minus the step-up routes, which keep {@link requireComputer}), and no other Peer; the owner's Peer never reaches
+ * `admitPeer`.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @returns the function for `ConnectionFetchRoute.admitPeer`.
  */
 export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefined): (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean {
   return (_request, peer) => {
     const home = homeAuth()
-    if (home === undefined || peer.principal.kind !== REACH_DEVICE || !home.dangerousMode()) return false
-    const { deviceId, listener } = peer.principal as ReachDevicePrincipal
-    return home.elevationOf(deviceId, listener) !== undefined
+    if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
+    const { deviceId, listener, unlockId } = peer.principal as ReachDevicePrincipal
+    // A page's Peer holds only its own page unlock, never the device's; the unlock exists only while PIN mode is on.
+    if (unlockId !== undefined) return home.pageUnlockOf(unlockId) !== undefined
+    return home.dangerousMode() && home.elevationOf(deviceId, listener) !== undefined
   }
 }
 

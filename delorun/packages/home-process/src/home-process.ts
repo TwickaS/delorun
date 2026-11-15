@@ -55,7 +55,7 @@ import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted
 import type { BootRow, ChatGate, HostProtection, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
-import { approveDevices, elevateDevices, removeDevice } from './devices-approve.ts'
+import { approveDevices, changePin, elevateDevices, removeDevice } from './devices-approve.ts'
 import { reloadChanges } from './reload.ts'
 import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
 import { reachApply, reachStatus } from './reach.ts'
@@ -190,6 +190,11 @@ export class HomeProcess implements HandshakeSubject {
   /** @inheritdoc */
   get journal(): string {
     return journalPath(this.options.home, this.options.profile)
+  }
+
+  /** Logs an error home-auth threw without a code, under the id its refusal carries. */
+  private readonly reportInternal = (error: unknown, id: string): void => {
+    this.logger.error('home-auth failed with an uncoded error', { err: error, data: { logId: id } })
   }
 
   /** @inheritdoc */
@@ -598,11 +603,16 @@ export class HomeProcess implements HandshakeSubject {
         if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')
         return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, request.args.profileOnly, progress)
       case 'devices.approve':
-        return approveDevices(request, check.callerOf(request.token), this.host?.devices)
+        return approveDevices(request, check.callerOf(request.token), this.host?.devices, undefined, this.reportInternal)
       case 'devices.remove':
-        return removeDevice(request, check.callerOf(request.token), this.host?.devices)
+        return removeDevice(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
       case 'devices.elevate':
-        return elevateDevices(request, check.callerOf(request.token), this.host?.devices)
+        return elevateDevices(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
+      case 'pin.set':
+      case 'pin.options':
+      case 'pin.off':
+      case 'pin.resume':
+        return changePin(request, check.callerOf(request.token), this.host?.devices, this.reportInternal)
       case 'permission.reload':
         return reloadPermissions(this.host?.consents)
       case 'mcp.list':

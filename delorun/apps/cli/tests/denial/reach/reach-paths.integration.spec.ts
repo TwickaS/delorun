@@ -67,6 +67,15 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/elevation/pending': HOME_AUTH,
   'exact /auth/elevation/approve': HOME_AUTH,
   'exact /auth/elevation/revoke': HOME_AUTH,
+  'exact /auth/pin/state': HOME_AUTH,
+  'exact /auth/pin/unlock': HOME_AUTH,
+  'exact /auth/pin/touch': HOME_AUTH,
+  'exact /auth/pin/lock': HOME_AUTH,
+  'exact /auth/pin/mode': HOME_AUTH,
+  'exact /auth/pin/set': HOME_AUTH,
+  'exact /auth/pin/off': HOME_AUTH,
+  'exact /auth/pin/options': HOME_AUTH,
+  'exact /auth/pin/resume': HOME_AUTH,
 }
 
 /**

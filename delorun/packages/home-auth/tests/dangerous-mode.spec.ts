@@ -62,7 +62,8 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     workspaceRootOf: () => undefined,
     delorunHome: '/nowhere',
     elevationOf: () => (unlocked ? UNLOCK : undefined),
-    logElevated: () => {}, liftedSettings: () => undefined,
+    pageUnlockOf: () => undefined,
+    logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
     defaultPermission: () => PERMISSION,
@@ -195,8 +196,10 @@ function recording(): { response: ServerResponse; answered: { status?: number; b
  * @param unlocked - whether every device holds an unlock.
  * @returns the part of the service the helpers read.
  */
-function home(listener: string | undefined, mode: boolean, unlocked = true) {
+function home(listener: string | undefined, mode: boolean, unlocked = true, pin = false, pageUnlocked = false) {
   return {
+    pinEnabled: () => pin,
+    pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
     dangerousMode: () => mode,
     elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined),
@@ -261,12 +264,62 @@ describe('admitUnlockedDevice', () => {
   })
 })
 
+describe('an unlocked PIN page without dangerous mode', () => {
+  const page = { principal: { kind: 'reach-device', deviceId: 'device-1', listener: LISTENER, unlockId: 'page-1' } }
+  const request = { headers: { host: 'home.example.ts.net' } } as never
+
+  it('is admitted to the consent and permission routes, and a locked page, a tokenless Peer and a device unlock are not', () => {
+    const { response } = recording()
+    expect(requireComputerUnlessDangerous(request, response, home(LISTENER, false, false, true), 'Turning on full access')).toBe(true)
+    expect(admitUnlockedDevice(() => home(LISTENER, false, false, true, true))({} as never, page)).toBe(true)
+    // Pins the unlock check: a page whose unlock ended is refused although PIN mode is on.
+    expect(admitUnlockedDevice(() => home(LISTENER, false, false, true, false))({} as never, page)).toBe(false)
+    // A device with no page unlock (a tokenless Peer) needs dangerous mode and its elevation.
+    const tokenless = { principal: { kind: 'reach-device', deviceId: 'device-1', listener: LISTENER } }
+    expect(admitUnlockedDevice(() => home(LISTENER, false, true, true, true))({} as never, tokenless)).toBe(false)
+    expect(admitUnlockedDevice(() => home(LISTENER, false, true, true, true))({} as never, { principal: { kind: 'anonymous' } })).toBe(false)
+    // With PIN mode and dangerous mode both off the hook refuses the reach request.
+    const off = recording()
+    expect(requireComputerUnlessDangerous(request, off.response, home(LISTENER, false, false, false), 'Turning on full access')).toBe(false)
+    expect(off.answered.status).toBe(403)
+  })
+
+  it('is bound to no settings-document or account action, and no mode or unlock lifts them', () => {
+    const pagePrincipal = reachDevicePrincipal('device-1', LISTENER, 'page-1')
+    const state: ReachAccessFacts = { ...facts(false, false), pageUnlockOf: id => (id === 'page-1' ? { id: 'page-1' } : undefined) }
+    const denied = Object.keys(REACH_DENIED_ACTIONS).filter(action => action === 'settings/openSettingsDocument' || action.startsWith('account/'))
+    expect(denied).toContain('settings/openSettingsDocument')
+    expect(denied).toContain('account/signOut')
+    const bindings = createReachAccessPolicy(state).bindings(pagePrincipal)
+    expect(bindings.length).toBeGreaterThan(0)
+    for (const binding of bindings) {
+      // Pins the role lists: an action outside them is refused by default, whatever the unlock.
+      for (const action of denied) expect(binding.role.actions, action).not.toContain(action)
+    }
+  })
+
+  it('is refused approving a device, reach and network exposure, and PIN changes, which keep requireComputer', () => {
+    const request = { headers: { host: 'home.example.ts.net' } } as never
+    for (const action of ['Approving a device', 'Changing remote access', 'Changing network exposure', 'Changing the PIN']) {
+      const { response, answered } = recording()
+      expect(requireComputer(request, response, home(LISTENER, false, false, true, true), action), action).toBe(false)
+      expect(answered.status).toBe(403)
+    }
+  })
+
+  it('is still refused the step-up routes, which keep requireComputer and read neither mode nor unlock', () => {
+    const { response, answered } = recording()
+    expect(requireComputer(request, response, home(LISTENER, false, false, true, true), 'Changing remote access')).toBe(false)
+    expect(answered.status).toBe(403)
+  })
+})
+
 describe('the routes that approve a device, sign one in, remove one or change remote access', () => {
   it('never read dangerous mode, so no mode lifts their refusal', () => {
     // Pins the split: these route files decide the arrival from the home's core, which has no dangerous-mode input.
     for (const file of ['reach-routes.ts', 'routes.ts', 'elevation-routes.ts', 'sign-in.ts', 'approvals.ts', 'pairing.ts', 'sessions.ts', '../../reach/src/service.ts', '../../reach/src/front.ts', '../../home-process/src/reach.ts', '../../home-process/src/devices-approve.ts']) {
       const source = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), 'utf8')
-      expect(source, file).not.toMatch(/dangerousMode|requireComputerUnlessDangerous|admitUnlockedDevice/)
+      expect(source, file).not.toMatch(/dangerousMode|pinEnabled|pageUnlockOf|requireComputerUnlessDangerous|admitUnlockedDevice/)
     }
   })
 })

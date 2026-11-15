@@ -16,6 +16,7 @@ English | [中文](README.zh.md)
 - [Use this bundle](#use-this-bundle)
 - [Rows](#rows)
 - [The Privacy section](#the-privacy-section)
+- [The PIN lock screen](#the-pin-lock-screen)
 - [The consent surfaces](#the-consent-surfaces)
 - [Tests](#tests)
 - [Limits](#limits)
@@ -90,6 +91,30 @@ The `delorun-trust` row also registers the **trust badge** at the sidebar's foot
 Setup and other surfaces open the section with `ctx.settingsShell.openSection('delorun-privacy')`. Upstream's own **Settings → General** switch for session-log upload edits the same row without the dialog; [`@delorun/plugin-settings-layout`](../plugin-settings-layout/README.md) hides it in Delorun's look, and the stock look shows it. The section's copy is in English and Chinese.
 
 The same row registers the **Devices** section (`delorun-devices`, right after Privacy, [`src/client/DevicesSection.tsx`](src/client/DevicesSection.tsx), with a link glyph in the navigation through `settings.section.icon`): the reach state, the approved devices with a confirmed Remove, and "Add a device", which opens the home's approval window and reads the pending requests every two seconds while it is open, all through same-origin requests ([`src/client/devices-api.ts`](src/client/devices-api.ts), whose `readReachStatus` onboarding imports). A profile without reach shows one line instead, and each `LOOPBACK_REQUIRED` refusal a remote studio receives shows in place as "This needs you at your computer" with the action. On the computer the section also lists each device's request to unlock sensitive actions, approved with the code the device shows or declined, and each running unlock with End; on a device it shows the device's own unlock with Unlock or Lock now. The remote studio's unlock is one `shell.overlay` entry ([`src/client/UnlockOverlay.tsx`](src/client/UnlockOverlay.tsx), store in [`src/client/unlock.ts`](src/client/unlock.ts)): a call the home refuses with `elevation-required:`, which upstream's Client Remote service reports as `remote/call-denied`, opens a dialog that asks the computer for an unlock and shows the code, and while unlocked a banner shows the end time with Lock now. The row also registers a `shell.overlay` notice ([`src/client/RemoteNotice.tsx`](src/client/RemoteNotice.tsx)) that shows each time the home refuses the page's answer to a forwarded prompt with `LOOPBACK_REQUIRED`, such as a full-access grant answered from a remote studio: upstream's Client Remote service reports that refusal as `remote/answer-refused`, and the notice says "This needs you at your computer" with the refused action.
+
+## The PIN lock screen
+
+When the home has PIN mode on, a phone or other device shows a full-page lock until the person unlocks the page. The device's studio asks `GET /auth/pin/state`: with the mode on and no unlock token in the page, the `delorun-pin-lock` `shell.overlay` entry ([`src/client/PinLock.tsx`](src/client/PinLock.tsx), store in [`src/client/pin-lock.ts`](src/client/pin-lock.ts), requests in [`src/client/pin-api.ts`](src/client/pin-api.ts)) covers the studio with a digit keypad for a PIN (at least six digits) or a text field for a passcode. The fields use `inputmode`, `autocomplete="off"` and a font of at least 16 px, so a phone does not zoom the page, and the layout holds at 390 px. A home with the mode off, an older home (404) and the home's own computer show today's unlock dialog, unchanged.
+
+- **Unlock.** The secret is posted once and the field is cleared as the request leaves. The returned token is held only in page memory ([`src/client/page-unlock-token.ts`](src/client/page-unlock-token.ts)), never in `localStorage`, `sessionStorage`, a cookie or a URL, so a reload, a new tab and a restored page start locked.
+- **Outcomes, in place.** A wrong try says how many tries are left; the fifth miss says the home signed the device out and that it needs approval again at the computer; unlocks paused home-wide say they resume when the person resumes them at the computer; a computer that cannot be reached, and an address where a PIN does not unlock, each say so.
+- **Staying unlocked.** Pointer, key and touch input sends `POST /auth/pin/touch` at most once a minute (or every half idle period when that is shorter); polls and reads never touch. A local timer locks the page at the unlock's idle end. Any `401 UNLOCK_INVALID` locks the page.
+- **Locking.** Lock now in the unlock banner ends the page's PIN unlock (`POST /auth/pin/lock`, then the token is dropped, whatever the home answers). When the state says `lockWhenHidden`, a hidden page locks; a page restored from the back-forward cache drops its token; a closing page sends a `keepalive` lock.
+
+Known debt: the Chinese README does not describe this section yet, so the bilingual pairing record for this file is out of date until the pairing is brought along. The state does not yet carry `lockWhenHidden`, and the home's `PIN_INVALID` answer carries tries left and the removal only in its sentence, which the page reads in [`pinMissOf`](src/client/pin-api.ts); a structured field on the home's side replaces both.
+
+## The PIN mode section
+
+The **PIN mode** section (`delorun-pin-mode`, right after Devices, [`src/client/PinModeSection.tsx`](src/client/PinModeSection.tsx)) is where the person at the home's own computer turns PIN mode on and off. It reads `GET /auth/pin/mode` and sends `POST /auth/pin/set`, `/options`, `/off` and `/resume` ([`src/client/pin-api.ts`](src/client/pin-api.ts)), the computer-only routes of [`@delorun/home-auth`](../home-auth/README.md). It shows whether the mode is on, with a PIN or a passcode, the idle minutes, lock when hidden and whether unlocks are paused.
+
+- **Turn on.** A PIN or passcode typed twice in masked fields (16 px, so a phone does not zoom), the idle minutes (1 to 60) and a lock-when-hidden switch. [`src/client/pin-rules.ts`](src/client/pin-rules.ts) checks the length, repeat, run and common-PIN rules and the match before any request; the home's own check stays the authority and its sentence shows in place.
+- **Options.** While the mode is on, the idle minutes and the lock-when-hidden switch save directly with Save changes (`POST /auth/pin/options`); no secret is asked for, because the computer is already trusted for these settings.
+- **Change PIN.** A separate Change PIN disclosure holds the two secret fields, the same rules and its own Save new PIN button; the new PIN keeps the saved options.
+- **Secret handling.** The secret lives in the component's state until the request leaves, is cleared whatever the answer, and is never written to storage.
+- **Turn off and resume.** Turn off needs no secret but asks one in-place confirmation ("Devices will no longer need a PIN."). Resume appears while unlocks are paused home-wide after too many wrong tries.
+- **On a device.** The section shows one line saying PIN mode is set at the computer, and sends no request. The home refuses a device's request with `LOOPBACK_REQUIRED` either way.
+
+Onboarding's Phone access step recommends the mode in one line and points at this section and `delorun devices pin set`.
 
 ## The consent surfaces
 

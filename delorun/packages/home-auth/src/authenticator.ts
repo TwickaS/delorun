@@ -41,7 +41,8 @@ import { ADMISSION_REFUSAL_STATUS } from '@delorun/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
 import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
-import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
+import { HOME_AUTH_HTTP_STATUS, HomeAuthError } from './errors.ts'
+import { takeUnlockToken } from './unlock-token.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -97,6 +98,8 @@ export interface ReachPeer {
   readonly deviceId: string
   readonly listener: ReachListenerId
   readonly factor: IdentityFactor
+  /** The PIN mode page unlock this Peer, one page's, was admitted under; none for a locked page. */
+  readonly unlockId?: string
 }
 
 /**
@@ -218,6 +221,11 @@ export class HomeAuthAuthenticator extends Authenticator {
       this.peers.clear()
       this.reachPeers.clear()
     }, 'home-auth reach peers')
+    // The Peer of an ended page unlock goes with it, with or without remote access: the page's next request carries no
+    // valid token and is refused.
+    ctx.effect(() => ctx.homeAuth.onElevationChange((change) => {
+      if (change.kind === 'ended' && change.elevation.page === true) this.disposePageUnlock(change.elevation.id)
+    }), 'home-auth page unlock peers')
     ctx.effect(() => ctx.homeAuth.onDeviceRemoved((deviceId) => { this.disposeDevice(deviceId) }), 'home-auth peer removal')
     ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth reserved grant guard')
     // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all. The policy lives in
@@ -235,8 +243,10 @@ export class HomeAuthAuthenticator extends Authenticator {
         },
         delorunHome: ctx.homeAuth.delorunHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
+        pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
         logElevated: (line) => { ctx.logger.info(line) },
         liftedSettings: lifts => ctx.homeAuth.recordLifts(lifts),
+        pinLiftedSettings: lifts => ctx.homeAuth.recordPinLifts(lifts),
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),
@@ -244,7 +254,7 @@ export class HomeAuthAuthenticator extends Authenticator {
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
-        for (const peer of this.reachPeers.values()) access.remoteAccess.invalidate(reachDevicePrincipal(peer.deviceId, peer.listener))
+        for (const peer of this.reachPeers.values()) access.remoteAccess.invalidate(reachDevicePrincipal(peer.deviceId, peer.listener, peer.unlockId))
       }
       access.on('session/created', invalidate)
       access.on('session/disposed', invalidate)
@@ -252,7 +262,8 @@ export class HomeAuthAuthenticator extends Authenticator {
       // A device's snapshot on one listener lists its elevated actions while it holds an unlock there, so it is
       // recomputed when one starts or ends.
       access.effect(() => ctx.homeAuth.onElevationChange((change) => {
-        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId, change.elevation.listener))
+        const { deviceId, listener, id, page } = change.elevation
+        access.remoteAccess.invalidate(reachDevicePrincipal(deviceId, listener, page === true ? id : undefined))
       }), 'home-auth elevation snapshots')
     })
   }
@@ -276,8 +287,11 @@ export class HomeAuthAuthenticator extends Authenticator {
     // `tailnet-membership`.
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
+    // An unlocked PIN page gives what the computer gives. This Peer is the answering page's, so a locked tab stays
+    // refused while a sibling tab is unlocked.
+    if (reach.unlockId !== undefined && this.ctx.homeAuth.pageUnlockOf(reach.unlockId) !== undefined) return
     // Dangerous mode lets a device that holds an unlock give what the computer gives.
-    if (this.ctx.homeAuth.dangerousMode() && this.ctx.homeAuth.elevationOf(reach.deviceId, reach.listener) !== undefined) return
+    if (reach.unlockId === undefined && this.ctx.homeAuth.dangerousMode() && this.ctx.homeAuth.elevationOf(reach.deviceId, reach.listener) !== undefined) return
     throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
   }
 
@@ -300,6 +314,8 @@ export class HomeAuthAuthenticator extends Authenticator {
     const served = this.ctx.homeAuth.servedListener(listener)
     if (served === undefined) return refused('NOT_SIGNED_IN')
     stampListener(request, served.listener)
+    // The token is stripped here, before any route, upgrade handler or plugin can read it.
+    const presented = takeUnlockToken(request)
     const pathname = pathnameOf(request)
     const route = REACH_PRE_LOGIN_ROUTES.find(candidate => matchesPreLogin(candidate, request.method, pathname))
     if (route !== undefined) return { kind: 'pre-login', route }
@@ -314,12 +330,24 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (admission.kind === 'refused') return signedOut(request, admission.code)
     if (!reachable) return { kind: 'refused', status: HOME_AUTH_HTTP_STATUS.LOOPBACK_REQUIRED, code: 'LOOPBACK_REQUIRED' }
     const { session, sessionId } = admission
-    const key = `${served.listener}\u0000${session.deviceId}`
+    // With PIN mode off the token is ignored; with it on, a token that does not name this page's unlock is refused and
+    // burned, so the page learns it is locked.
+    let unlockId: string | undefined
+    if (this.ctx.homeAuth.pinEnabled() && (presented.token !== undefined || presented.ambiguous)) {
+      try {
+        if (presented.ambiguous || presented.token === undefined) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
+        unlockId = this.ctx.homeAuth.resolvePageUnlock(presented.token, { deviceId: session.deviceId, listener: served.listener, sessionId })
+      } catch (_invalid) {
+        // `resolvePageUnlock` ended the unlock when it moved between devices, listeners or sessions.
+        return refused('UNLOCK_INVALID')
+      }
+    }
+    const key = `${served.listener}\u0000${session.deviceId}\u0000${unlockId ?? ''}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener) })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener, unlockId) })
       this.peers.set(key, peer)
-      this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
+      this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor, ...unlockId === undefined ? {} : { unlockId } })
     }
     const rolled = admission.rolled
     return {
@@ -343,7 +371,20 @@ export class HomeAuthAuthenticator extends Authenticator {
    */
   private disposeDevice(deviceId: string): void {
     for (const [key, peer] of this.peers) {
-      if (!key.endsWith(`\u0000${deviceId}`)) continue
+      if (key.split('\u0000')[1] !== deviceId) continue
+      this.peers.delete(key)
+      this.reachPeers.delete(peer.id)
+      void peer.dispose()
+    }
+  }
+
+  /**
+   * Dispose the Peer of an ended page unlock.
+   * @param unlockId - the unlock.
+   */
+  private disposePageUnlock(unlockId: string): void {
+    for (const [key, peer] of this.peers) {
+      if (this.reachPeers.get(peer.id)?.unlockId !== unlockId) continue
       this.peers.delete(key)
       this.reachPeers.delete(peer.id)
       void peer.dispose()
@@ -381,8 +422,8 @@ function signedOut(request: ConnectionIndexRequest, code: 'NOT_SIGNED_IN' | 'SES
  * @param code - the code.
  * @returns the admission.
  */
-function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Extract<Admission, { readonly kind: 'refused' }> {
-  return { kind: 'refused', status: ADMISSION_REFUSAL_STATUS[code], code }
+function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED' | 'UNLOCK_INVALID'): Extract<Admission, { readonly kind: 'refused' }> {
+  return { kind: 'refused', status: code === 'UNLOCK_INVALID' ? HOME_AUTH_HTTP_STATUS.UNLOCK_INVALID : ADMISSION_REFUSAL_STATUS[code], code }
 }
 
 export default HomeAuthAuthenticator

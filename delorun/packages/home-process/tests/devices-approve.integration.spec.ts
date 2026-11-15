@@ -7,8 +7,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { newStartToken } from '@delorun/home'
-import { approveDevices, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
-import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delorun/contract-home-process'
+import { approveDevices, changePin, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest, PinOptionsRequest, PinSetRequest } from '@delorun/contract-home-process'
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 /** A fake of home-auth's half that records every call. */
@@ -64,6 +64,29 @@ class FakeDevices implements LocalDeviceApproval {
   revokeElevation(id: string): boolean {
     this.calls.push(`revoke ${id}`)
     return true
+  }
+
+  async setPin(_secret: string, options: { readonly idleMinutes?: number | undefined }): Promise<'pin' | 'passcode'> {
+    // The fake records the idle minutes and never the secret, as the real service never logs it.
+    this.calls.push(`pin.set ${String(options.idleMinutes)}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve('pin')
+  }
+
+  async setPinOptions(options: { readonly idleMinutes?: number | undefined; readonly lockWhenHidden?: boolean | undefined }): Promise<{ readonly idleMinutes: number; readonly lockWhenHidden: boolean }> {
+    this.calls.push(`pin.options ${String(options.idleMinutes)} ${String(options.lockWhenHidden)}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve({ idleMinutes: options.idleMinutes ?? 15, lockWhenHidden: options.lockWhenHidden ?? false })
+  }
+
+  async turnPinOff(): Promise<void> {
+    this.calls.push('pin.off')
+    return Promise.resolve()
+  }
+
+  async resumePin(): Promise<void> {
+    this.calls.push('pin.resume')
+    return Promise.resolve()
   }
 }
 
@@ -124,7 +147,7 @@ describe('devices.approve', () => {
       .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'APPROVAL_CODE_MISMATCH: That code is wrong' })
     devices.refusal = new Error('broken')
     await expect(approveDevices(request({ requestId: PENDING.requestId, typedCode: '00000000' }), 'person', devices))
-      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'INTERNAL_ERROR: the approval failed' })
+      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: expect.stringMatching(/^INTERNAL_ERROR: the approval failed \(log id [0-9a-f]{8}\)$/) })
     await expect(approveDevices(request({ requestId: PENDING.requestId }), 'person', devices)).rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
     await expect(approveDevices(request(), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
   })
@@ -141,7 +164,7 @@ describe('devices.approve', () => {
       .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'APPROVAL_EXPIRED: This request is no longer waiting' })
     devices.refusal = new Error('broken')
     await expect(approveDevices(request({ cancelRequestId: PENDING.requestId }), 'person', devices))
-      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'INTERNAL_ERROR: the cancel failed' })
+      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: expect.stringMatching(/^INTERNAL_ERROR: the cancel failed \(log id [0-9a-f]{8}\)$/) })
     expect(devices.calls).toEqual([`cancel ${PENDING.requestId}`, `cancel ${PENDING.requestId}`, `cancel ${PENDING.requestId}`])
   })
 
@@ -169,7 +192,7 @@ describe('devices.remove', () => {
     devices.refusal = Object.assign(new Error('no owner'), { code: 'NO_OWNER', detail: 'This home has no owner yet' })
     await expect(removeDevice(removal(), 'person', devices)).rejects.toMatchObject({ code: 'REMOVAL_FAILED', detail: 'NO_OWNER: This home has no owner yet' })
     devices.refusal = new Error('disk')
-    await expect(removeDevice(removal(), 'person', devices)).rejects.toMatchObject({ code: 'REMOVAL_FAILED', detail: 'INTERNAL_ERROR: the removal failed' })
+    await expect(removeDevice(removal(), 'person', devices)).rejects.toMatchObject({ code: 'REMOVAL_FAILED', detail: expect.stringMatching(/^INTERNAL_ERROR: the removal failed \(log id [0-9a-f]{8}\)$/) })
     expect(devices.calls).toEqual(['remove device', 'remove device', 'remove device'])
   })
 })
@@ -202,8 +225,69 @@ describe('devices.elevate', () => {
     await expect(elevateDevices(elevation({ requestId: 'y', typedCode: '00000000' }), 'person', devices))
       .rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: 'APPROVAL_CODE_MISMATCH: Type it again' })
     devices.refusal = new Error('broken')
-    await expect(elevateDevices(elevation(), 'person', devices)).rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: 'INTERNAL_ERROR: the unlock did not change' })
+    await expect(elevateDevices(elevation(), 'person', devices)).rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: expect.stringMatching(/^INTERNAL_ERROR: the unlock did not change \(log id [0-9a-f]{8}\)$/) })
     expect(devices.calls).toEqual(['elevations', 'elevate BBBBBBBBBBBBBBBBBBBBBB 1234 5678', 'revoke elevation', 'elevate y 00000000', 'elevations'])
+  })
+})
+
+describe('pin.set, pin.off and pin.resume', () => {
+  const options: PinOptionsRequest = { v: 1, token: newStartToken(), op: 'pin.options', args: { idleMinutes: 30, lockWhenHidden: true } }
+  const set = (secret: string): PinSetRequest => ({ v: 1, token: newStartToken(), op: 'pin.set', args: { secret, idleMinutes: 20 } })
+
+  it('are the person\'s alone, and name home-auth\'s refusal without the secret', async () => {
+    const devices = new FakeDevices()
+    // Pins the caller rule: the Host's channel token acts for reach sessions, so it never sets the PIN.
+    await expect(changePin(set('482916'), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(changePin(options, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    expect(devices.calls).toEqual([])
+    await expect(changePin(set('482916'), 'person', devices)).resolves.toEqual({ enabled: true, secret: 'pin' })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.off' }, 'person', devices)).resolves.toEqual({ enabled: false })
+    await expect(changePin({ v: 1, token: newStartToken(), op: 'pin.resume' }, 'person', devices)).resolves.toEqual({ paused: false })
+    await expect(changePin(options, 'person', devices)).resolves.toEqual({ enabled: true, idleMinutes: 30, lockWhenHidden: true })
+    await expect(changePin(set('482916'), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
+    devices.refusal = Object.assign(new Error('weak'), { code: 'PIN_WEAK', detail: 'That PIN is a repeat' })
+    const refused: unknown = await changePin(set('482916'), 'person', devices).catch((error: unknown) => error)
+    expect(refused).toMatchObject({ code: 'PIN_FAILED', detail: 'PIN_WEAK: That PIN is a repeat' })
+    expect(JSON.stringify(refused)).not.toContain('482916')
+    expect(devices.calls).toEqual(['pin.set 20', 'pin.off', 'pin.resume', 'pin.options 30 true', 'pin.set 20'])
+  })
+})
+
+describe('an error home-auth throws without a code', () => {
+  const set = (secret: string): PinSetRequest => ({ v: 1, token: newStartToken(), op: 'pin.set', args: { secret, idleMinutes: 20 } })
+
+  it('is logged with its message and stack, and the reply carries the log id but not the message', async () => {
+    const devices = new FakeDevices()
+    devices.refusal = new RangeError('registry exhausted')
+    const reports: { error: unknown; id: string }[] = []
+    const refused = await changePin(set('482916'), 'person', devices, (error, id) => { reports.push({ error, id }) }).catch((error: unknown) => error)
+    expect(reports).toHaveLength(1)
+    const [{ error, id }] = reports as [{ error: Error; id: string }]
+    expect(error.name).toBe('RangeError')
+    expect(error.message).toBe('registry exhausted')
+    expect(error.stack).toContain('RangeError')
+    expect(refused).toMatchObject({ code: 'PIN_FAILED', detail: `INTERNAL_ERROR: PIN mode did not change (log id ${id})` })
+    expect(JSON.stringify(refused)).not.toContain('registry exhausted')
+  })
+
+  it('reaches the log without the PIN, even when the error quotes it', async () => {
+    const devices = new FakeDevices()
+    devices.refusal = new Error('could not store 482916')
+    const reports: unknown[] = []
+    await changePin(set('482916'), 'person', devices, (error) => { reports.push(error) }).catch(() => undefined)
+    const logged = reports[0] as Error
+    expect(logged.message).toBe('could not store [removed]')
+    expect(logged.stack).not.toContain('482916')
+  })
+
+  it('is not reported when home-auth coded its refusal', async () => {
+    const devices = new FakeDevices()
+    devices.refusal = Object.assign(new Error('weak'), { code: 'PIN_WEAK', detail: 'That PIN is a repeat' })
+    const reports: unknown[] = []
+    await changePin(set('482916'), 'person', devices, (error) => { reports.push(error) }).catch(() => undefined)
+    expect(reports).toEqual([])
   })
 })
 

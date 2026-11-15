@@ -115,6 +115,7 @@ export const en = {
   'reach.address': 'Your phone opens {address}.',
   'reach.remote': 'You are connected from your phone. Approvals and full access are decided at your computer.',
   'reach.limits': 'A phone session cannot grant full access or approve devices. You can skip this: Delorun works on this computer without it.',
+  'reach.pin': 'Once reach is on, consider PIN mode: a device then needs your PIN or passcode to open the studio. Turn it on in Settings → PIN mode, or run delorun devices pin set.',
 
   'workspace.lead': 'Choose the folder your first chat works in. You can add other folders as workspaces later.',
   'workspace.how': 'Where to work',
@@ -355,6 +356,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'reach.address': '你的手机将打开 {address}。',
   'reach.remote': '你正在通过手机连接。批准和完全访问需要在你的电脑上决定。', // A309: zh strings wait for the translation pass.
   'reach.limits': '手机会话不能授予完全访问权限，也不能批准设备。可以跳过：没有它，Delorun 在这台电脑上照常使用。',
+  'reach.pin': '开启远程访问后，建议同时开启 PIN 模式：设备需要输入你的 PIN 或密码短语才能打开 studio。可在“设置 → PIN 模式”中开启，或运行 delorun devices pin set。',
 
   'workspace.lead': '选择第一个对话所使用的文件夹。之后可以把其他文件夹也添加为工作区。',
   'workspace.how': '在哪里工作',

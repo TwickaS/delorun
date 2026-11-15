@@ -41,6 +41,11 @@ export interface ElevationRecord extends ElevationAsker {
   readonly id: string
   readonly startedAt: number
   readonly endsAt: number
+  /**
+   * Set on a PIN mode page unlock (C14, "PIN mode"). It belongs to one page's Peer, so a device-wide lookup
+   * ({@link Elevations.of}) never returns it and a device's Lock or a computer-approved elevation never ends it.
+   */
+  readonly page?: true
 }
 
 /** One request to elevate, waiting for the person at the computer. */
@@ -85,7 +90,7 @@ interface Pending {
 /** A running elevation and its expiry timer; the record changes only when its session rolls. */
 interface Running {
   record: ElevationRecord
-  readonly timer: NodeJS.Timeout
+  timer: NodeJS.Timeout
 }
 
 /**
@@ -185,15 +190,68 @@ export class Elevations {
     this.discard(requestId)
     const { request } = pending
     this.endFor(request.deviceId, request.listener, 'replaced')
+    return this.begin(request, at, at + minutes * 60_000)
+  }
+
+  /**
+   * Start an elevation that no request at the computer asked for, the page unlock of PIN mode (C14, "PIN mode"). It
+   * replaces nothing, so two tabs of one device hold two.
+   * @param asker - the device, the listener and the session that unlocked.
+   * @param endsAt - when it ends, in milliseconds since the epoch.
+   * @returns the elevation that started.
+   */
+  start(asker: ElevationAsker, endsAt: number): ElevationRecord {
+    return this.begin(asker, this.options.now(), endsAt, true)
+  }
+
+  /**
+   * Move the end of a running elevation, which a page's activity does within its cap.
+   * @param elevationId - the elevation.
+   * @param endsAt - the new end, in milliseconds since the epoch.
+   * @returns whether the elevation was running.
+   */
+  moveEnd(elevationId: string, endsAt: number): boolean {
+    const running = this.running.get(elevationId)
+    if (running === undefined || running.record.endsAt <= this.options.now()) return false
+    clearTimeout(running.timer)
+    running.record = { ...running.record, endsAt }
+    running.timer = setTimeout(() => { this.end(running, 'expired') }, endsAt - this.options.now())
+    running.timer.unref()
+    return true
+  }
+
+  /**
+   * One running elevation by id; one past its end is ended here as `expired`.
+   * @param elevationId - the elevation.
+   * @returns the elevation, or undefined.
+   */
+  get(elevationId: string): ElevationRecord | undefined {
+    const running = this.running.get(elevationId)
+    if (running === undefined) return undefined
+    if (running.record.endsAt > this.options.now()) return running.record
+    this.end(running, 'expired')
+    return undefined
+  }
+
+  /**
+   * Record and arm an elevation.
+   * @param asker - the device, the listener and the session.
+   * @param at - the start.
+   * @param endsAt - the end.
+   * @param page - whether it is a page unlock.
+   * @returns the record.
+   */
+  private begin(asker: ElevationAsker, at: number, endsAt: number, page = false): ElevationRecord {
     const record: ElevationRecord = {
       id: newSecret(ELEVATION_LIMITS.idBytes, this.options.random),
-      deviceId: request.deviceId,
-      listener: request.listener,
-      sessionId: request.sessionId,
+      deviceId: asker.deviceId,
+      listener: asker.listener,
+      sessionId: asker.sessionId,
       startedAt: at,
-      endsAt: at + minutes * 60_000,
+      endsAt,
+      ...page ? { page: true } : {},
     }
-    const running: Running = { record, timer: setTimeout(() => { this.end(running, 'expired') }, record.endsAt - at) }
+    const running: Running = { record, timer: setTimeout(() => { this.end(running, 'expired') }, endsAt - at) }
     running.timer.unref()
     this.running.set(record.id, running)
     this.options.changed({ kind: 'started', elevation: record })
@@ -212,7 +270,7 @@ export class Elevations {
   }
 
   /**
-   * The elevation a device holds on one listener; an elevation past its end is ended here as `expired`, in case its
+   * The computer-approved elevation a device holds on one listener (never a PIN mode page unlock); an elevation past its end is ended here as `expired`, in case its
    * timer has not fired yet.
    * @param deviceId - the device.
    * @param listener - the listener its Peer sits on.
@@ -222,7 +280,7 @@ export class Elevations {
     const at = this.options.now()
     for (const running of [...this.running.values()]) {
       const { record } = running
-      if (record.deviceId !== deviceId || record.listener !== listener) continue
+      if (record.deviceId !== deviceId || record.listener !== listener || record.page === true) continue
       if (record.endsAt > at) return record
       this.end(running, 'expired')
     }
@@ -248,7 +306,13 @@ export class Elevations {
    * @returns the elevations, oldest first.
    */
   list(): readonly ElevationRecord[] {
-    return [...this.running.values()].map(({ record }) => record).filter(record => this.of(record.deviceId, record.listener) !== undefined)
+    const at = this.options.now()
+    const live: ElevationRecord[] = []
+    for (const running of [...this.running.values()]) {
+      if (running.record.endsAt > at) live.push(running.record)
+      else this.end(running, 'expired')
+    }
+    return live
   }
 
   /**
@@ -260,7 +324,7 @@ export class Elevations {
    */
   endFor(deviceId: string, listener: ReachListenerId, reason: ElevationEndReason): number {
     this.cancelFor(deviceId, listener)
-    return this.endWhere(record => record.deviceId === deviceId && record.listener === listener, reason)
+    return this.endWhere(record => record.deviceId === deviceId && record.listener === listener && record.page !== true, reason)
   }
 
   /**
