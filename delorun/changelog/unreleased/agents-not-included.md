@@ -1,5 +1,5 @@
 ---
-area: Onboarding
+area: Setup
 section: Fixed
 ---
 
