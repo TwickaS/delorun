@@ -559,6 +559,21 @@ export async function startForeground(request: StartRequest, dependencies: Start
 }
 
 /**
+ * The request a successor boots with: its environment carries the record of the start check the successor ran on its own
+ * release, unless the environment already holds one for it.
+ * @param request - the start.
+ * @param running - the release this process runs.
+ * @param logger - the home process's logger.
+ * @param check - the successor's start check ({@link successorStartCheckRecord} in a real start).
+ * @returns the request to boot with.
+ * @throws whatever the check throws; the successor then does not boot.
+ */
+export async function successorRequest(request: StartRequest, running: RuntimeVersion, logger: DelorunLogger, check: typeof successorStartCheckRecord): Promise<StartRequest> {
+  const record = await check(request.home, running, logger, request.env, Date.now())
+  return record === undefined ? request : { ...request, env: { ...request.env, [DELORUN_START_CHECK_ENV]: record } }
+}
+
+/**
  * {@link startForeground}'s one start in this process.
  * @param request - the home, profile, studio choice and output.
  * @param dependencies - the start's dependencies.
@@ -591,8 +606,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   try {
     const running = handover?.handover.to ?? runtime.version
     // A successor that fails its own start check does not boot, so the predecessor's health check fails and it rolls back.
-    const record = handover !== undefined && runtime.store ? await dependencies.successorStartCheck(request.home, running, homeLog.logger, request.env, Date.now()) : undefined
-    const startRequest: StartRequest = record === undefined ? request : { ...request, env: { ...request.env, [DELORUN_START_CHECK_ENV]: record } }
+    const startRequest = handover !== undefined && runtime.store ? await successorRequest(request, running, homeLog.logger, dependencies.successorStartCheck) : request
     const options: HomeProcessOptions = {
       home: request.home,
       profile: request.profile,
