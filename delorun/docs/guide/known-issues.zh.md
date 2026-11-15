@@ -17,6 +17,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 - [WSL2 内的手机访问](#phone-access-from-inside-wsl2)
 - [密钥检查](#the-key-check)
 - [手机宽度下的间距](#phone-width-spacing)
+- [触摸屏上的右侧边栏按钮](#the-right-sidebar-button-on-a-touch-screen)
 - [安装插件](#installing-a-plugin)
 - [文档语言](#documentation-languages)
 
@@ -48,12 +49,23 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 
 **该怎么做。** 如果密钥检查通过后第一次聊天仍然失败，请打开设置 → 模型，检查你选择的模型。
 
+**部分提供方的情况。** 少数提供方（例如 OpenRouter、Hugging Face 和 NVIDIA）向所有人公开其模型列表，所以请求该列表并不能证明你的密钥有效。对这些提供方，Delorun 会如实说明，并把密钥保存为“Key saved, not tested”（密钥已保存，未测试）。
+
+**对这些提供方该怎么做。** 开始一次聊天。第一次聊天就是测试。
+
 <a id="phone-width-spacing"></a>
 ## 手机宽度下的间距
 
 **会发生什么。** 在较窄的手机屏幕上，少数标题（例如设备中的“Asking to connect”和品牌标题）会比其他标题向右偏几个像素。没有任何内容被隐藏，也没有任何功能失效。
 
 **该怎么做。** 什么都不用做，这只是外观上的小问题。
+
+<a id="the-right-sidebar-button-on-a-touch-screen"></a>
+## 触摸屏上的右侧边栏按钮
+
+**会发生什么。** 在触摸屏上，打开右侧边栏的按钮点击区域很小，所以点在其边缘附近可能点不中。
+
+**该怎么做。** 点按该按钮的中心。
 
 <a id="installing-a-plugin"></a>
 ## 安装插件

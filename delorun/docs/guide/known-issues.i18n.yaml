@@ -12,8 +12,8 @@
   en: 4cfcd84d83903165
   zh: af888c428bbd00cb
 /known-issues/contents:
-  en: ce6583c92f05aa87
-  zh: 6a88efc6c640cceb
+  en: 2b963332cdc04b22
+  zh: 81a8f368ceba98d5
 /known-issues/where-delorun-runs:
   en: 3b558c1809beffab
   zh: 8706ea6cb8937a55
@@ -24,11 +24,14 @@
   en: fe891806ff0a5a25
   zh: 562826857b5185e9
 /known-issues/the-key-check:
-  en: ac88c8412c36a922
-  zh: 1fc6cab406fe608f
+  en: 04b8da059d928c28
+  zh: 6ba1ada0c98f49ad
 /known-issues/phone-width-spacing:
   en: 27f38d6a6243e288
-  zh: 52bbd927363b28b2
+  zh: 151928ae7e25be02
+/known-issues/the-right-sidebar-button-on-a-touch-screen:
+  en: edb2b7836275e6e6
+  zh: 6f0181beb83c8f9c
 /known-issues/installing-a-plugin:
   en: e2725152050aece5
   zh: 144143fff4ccab79

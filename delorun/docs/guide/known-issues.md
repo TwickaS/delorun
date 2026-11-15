@@ -17,6 +17,7 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 - [Phone access from inside WSL2](#phone-access-from-inside-wsl2)
 - [The key check](#the-key-check)
 - [Phone-width spacing](#phone-width-spacing)
+- [The right sidebar button on a touch screen](#the-right-sidebar-button-on-a-touch-screen)
 - [Installing a plugin](#installing-a-plugin)
 - [Documentation languages](#documentation-languages)
 
@@ -44,11 +45,21 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 
 **What to do.** If the first chat fails after the key check passed, open Settings, Models and check the model you picked.
 
+**What happens for some providers.** A few providers, such as OpenRouter, Hugging Face and NVIDIA, publish their model list to everyone, so asking for it proves nothing about your key. For these, Delorun says so and saves the key as "Key saved, not tested".
+
+**What to do for those.** Start a chat. The first chat is the test.
+
 ## Phone-width spacing
 
 **What happens.** On a narrow phone screen, a few headings, such as "Asking to connect" in Devices and the Branding heading, sit a few pixels to the right of the other headings. Nothing is hidden and nothing stops working.
 
 **What to do.** Nothing. It is cosmetic.
+
+## The right sidebar button on a touch screen
+
+**What happens.** On a touch screen, the button that opens the right sidebar has a small tap area, so a tap near its edge can miss.
+
+**What to do.** Tap the centre of the button.
 
 ## Installing a plugin
 
