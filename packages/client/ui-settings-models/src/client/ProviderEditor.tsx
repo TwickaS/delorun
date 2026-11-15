@@ -208,6 +208,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const keyRemoval = typeof keyDraft === 'object' ? keyDraft : undefined
   const [busy, setBusy] = useState(false)
   const keyTesting = useModelKeyStatus(props.keyStatus)
+  const keyCopy = props.keyStatus?.copy()
+  const retrying = keyTesting.unverified?.has(props.provider) === true
+  const testLabel = keyTesting.testing ? keyCopy?.testing : retrying ? keyCopy?.retry ?? keyCopy?.test : keyCopy?.test
   const [listBusy, setListBusy] = useState(false)
   const { onBusyChange } = props
   useEffect(() => { onBusyChange?.(busy || listBusy) }, [busy, listBusy, onBusyChange])
@@ -691,7 +694,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             disabled={busy || keyTesting.testing}
             onClick={() => { props.keyStatus?.test() }}
           >
-            {props.keyStatus.copy()[keyTesting.testing ? 'testing' : 'test']}
+            {testLabel}
           </button>
         )}
         cancelLabelKey={keyRemoval?.removed === true ? 'close' : props.cancelLabelKey ?? 'cancel'}

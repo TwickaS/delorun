@@ -10,6 +10,8 @@ import { useSyncExternalStore } from 'react'
 export interface ModelKeyStatusSnapshot {
   /** Route ids whose stored key did not pass its test. */
   readonly failed: ReadonlySet<string>
+  /** Route ids whose test could not finish, such as a network error: the key's state is unknown. Absent when the shell reports none. */
+  readonly unverified?: ReadonlySet<string>
   /** True while a test runs. */
   readonly testing: boolean
 }
@@ -26,7 +28,13 @@ export interface ModelKeyStatus {
   /** Run the test now; the snapshot reports the outcome. */
   test(): void
   /** @returns the service's own copy for the failed marker and the test button, already translated. */
-  copy(): { readonly failed: string; readonly test: string; readonly testing: string }
+  copy(): {
+    readonly failed: string
+    readonly test: string
+    readonly testing: string
+    readonly unverified?: string
+    readonly retry?: string
+  }
 }
 
 declare module '@deepseek-ai/cordis' {

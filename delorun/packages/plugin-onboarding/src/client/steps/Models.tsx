@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { FooterPortal } from '../frame/StepFrame.tsx'
 import { StepFooter } from '../frame/StepFooter.tsx'
 import type { Guide } from '../guide.ts'
-import { didNotPass } from '../key-status.ts'
+import { couldNotTest, didNotPass } from '../key-status.ts'
 import { cardsOf, TEST_DELAY_MS, usableKey, type DirectoryEntry, type KeyProbe, type ProviderCard } from '../providers.ts'
 import type { StepServices } from '../types.ts'
 import type { LocalServer } from '../../wire.ts'
@@ -155,7 +155,9 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
                 )}>
                 {card.found && (didNotPass(card.result)
                   ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
-                  : <StateLine tone="success">{t('providers.found')}</StateLine>)}
+                  : couldNotTest(card.result)
+                    ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
+                    : <StateLine tone="success">{t('providers.found')}</StateLine>)}
               </Card>
             </li>
           ))}

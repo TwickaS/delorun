@@ -496,25 +496,27 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                         {keyStatus.copy().failed}
                       </span>
                     )
-                    : credentialConfigured
-                      ? (
-                        <span
-                          className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                          role="img"
-                          aria-label={t('credentialConfigured')}
-                          title={t('credentialConfigured')}
-                        />
-                      )
-                      : credentialMissing
+                    : credentialConfigured && keyState.unverified?.has(row.entry.provider) && keyStatus?.copy().unverified !== undefined
+                      ? <span className={styles['keyUnverified']}>{keyStatus.copy().unverified}</span>
+                      : credentialConfigured
                         ? (
                           <span
-                            className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                            className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
                             role="img"
-                            aria-label={t('credentialMissing')}
-                            title={t('credentialMissing')}
+                            aria-label={t('credentialConfigured')}
+                            title={t('credentialConfigured')}
                           />
                         )
-                        : null}
+                        : credentialMissing
+                          ? (
+                            <span
+                              className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                              role="img"
+                              aria-label={t('credentialMissing')}
+                              title={t('credentialMissing')}
+                            />
+                          )
+                          : null}
                 </span>
                 <span className={styles['rowActions']}>
                   {/* The account catalog comes from the account listing; its model overrides live in cordis.patch.yml. */}

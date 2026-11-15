@@ -207,7 +207,7 @@ export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-onboarding: dictionaries')
   const progress = ctx.configForms.get<OnboardingSettings>(ONBOARDING_ROW_ID)
   const keyT = ctx.locale.bind(NS)
-  const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))
+  const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), unverified: keyT('keyStatus.unverified'), retry: keyT('keyStatus.retry'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))
   ctx.effect(() => ctx.provide('modelKeyStatus', keyStatus), 'delorun-onboarding: key status')
   const extra = createSnapshotStore<readonly OnboardingStep[]>([])
   ctx.effect(() => ctx.provide('delorunOnboarding', {

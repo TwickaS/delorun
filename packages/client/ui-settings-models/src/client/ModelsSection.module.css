@@ -1028,3 +1028,9 @@ select.input {
   line-height: 20px;
   text-align: center;
 }
+
+.keyUnverified {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}

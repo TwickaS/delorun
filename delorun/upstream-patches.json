@@ -2652,7 +2652,7 @@
       "path": "packages/client/ui-settings-models/src/client/key-status.ts",
       "class": "delorun-feature",
       "feature": "key-status",
-      "reason": "New file: the `modelKeyStatus` service type, its Context merge and the hook that reads it."
+      "reason": "New file: the `modelKeyStatus` service type, its Context merge and the hook that reads it. Its snapshot also lists routes whose test could not finish (`unverified`), which the Models page shows as a neutral line with Try again."
     }
   ],
   "retired": []

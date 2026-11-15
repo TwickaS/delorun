@@ -7,8 +7,8 @@
 import type { ModelKeyStatus, ModelKeyStatusSnapshot } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type { KeyResult, KeyTestAnswer } from '../wire.ts'
 
-/** The results that mean a stored key was tried and did not pass. */
-const DID_NOT_PASS: ReadonlySet<KeyResult> = new Set(['rejected', 'failed'])
+/** The results that mean a stored key was tried and the provider refused it; a `failed` test (a network error) says nothing about the key. */
+const DID_NOT_PASS: ReadonlySet<KeyResult> = new Set(['rejected'])
 
 /**
  * @param result - one route's test result.
@@ -16,6 +16,14 @@ const DID_NOT_PASS: ReadonlySet<KeyResult> = new Set(['rejected', 'failed'])
  */
 export function didNotPass(result: KeyResult): boolean {
   return DID_NOT_PASS.has(result)
+}
+
+/**
+ * @param result - one route's test result.
+ * @returns true when the test itself could not finish, so the key's state is unknown.
+ */
+export function couldNotTest(result: KeyResult): boolean {
+  return result === 'failed'
 }
 
 /** The shared store: the service Settings reads, plus the refresh the guide and the banner call. */
@@ -38,11 +46,12 @@ export interface KeyStatusStore extends ModelKeyStatus {
 export function createKeyStatus(ask: () => Promise<KeyTestAnswer | undefined>, copy: () => ReturnType<ModelKeyStatus['copy']>): KeyStatusStore {
   const listeners = new Set<() => void>()
   let latest: KeyTestAnswer | undefined
-  let snapshot: ModelKeyStatusSnapshot = { failed: new Set(), testing: false }
+  let snapshot: ModelKeyStatusSnapshot = { failed: new Set(), unverified: new Set(), testing: false }
   let running: Promise<KeyTestAnswer | undefined> | undefined
   const publish = (testing: boolean): void => {
     const failed = new Set(latest?.providers.filter(each => didNotPass(each.result)).map(each => each.provider))
-    snapshot = { failed, testing }
+    const unverified = new Set(latest?.providers.filter(each => couldNotTest(each.result)).map(each => each.provider))
+    snapshot = { failed, unverified, testing }
     for (const listener of listeners) listener()
   }
   const refresh = (): Promise<KeyTestAnswer | undefined> => {

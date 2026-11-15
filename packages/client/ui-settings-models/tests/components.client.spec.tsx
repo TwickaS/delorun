@@ -746,6 +746,21 @@ describe('ModelsSection', () => {
     expect(test).toHaveBeenCalledTimes(2)
   })
 
+  it('shows a test that could not finish as a neutral line with Try again, not as a failed key', async () => {
+    const snapshot = { failed: new Set<string>(), unverified: new Set(['openai']), testing: false }
+    const keyStatus: ModelKeyStatus = {
+      getSnapshot: () => snapshot, subscribe: () => () => undefined, test: vi.fn(),
+      copy: () => ({ failed: 'Key did not pass its test', unverified: 'Could not test the key just now', retry: 'Try again', test: 'Test key', testing: 'Testing…' }),
+    }
+    await mountSection({}, keyStatus)
+    const line = screen.getByText('Could not test the key just now')
+    expect(line.closest('li')?.textContent).toContain('openai')
+    expect(line.className).not.toContain('keyFailed')
+    expect(screen.queryByText('Key did not pass its test')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`${en.edit}.*openai|openai.*${en.edit}`, 'i') }))
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+
   it('leaves the unkeyed provider a plain row once another provider is usable', async () => {
     await mountSection()
     // openai's key is stored, so the user is not blocked and nothing on the
