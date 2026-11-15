@@ -51,7 +51,9 @@
   [data-settings-anchor] :is(button:not([role='switch']), [role='tab'], summary, input[type='range']) {
     min-height: var(--delorun-touch-target);
   }
+}
 
+@media (pointer: coarse), (max-width: 767px) {
   [data-settings-anchor] [role='switch'] {
     position: relative;
   }
