@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- Settings → General and About no longer show "Delorun 0.0.0" when Delorun runs from a source checkout; they say "source build". A release still shows its own version.
+- Settings → General and About say "source build" when Delorun runs from a source checkout; a release shows its own version.

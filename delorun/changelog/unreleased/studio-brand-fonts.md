@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono again, as the brand specifies, instead of the system typeface.
+- The studio sets its text in Schibsted Grotesk and its code in JetBrains Mono, as the brand specifies.

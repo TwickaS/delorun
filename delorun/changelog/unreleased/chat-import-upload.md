@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- Importing a DeepSeek chat export uploads the archive again; the web server's media-type check had refused it.
+- Importing a DeepSeek chat export in the studio uploads the archive.

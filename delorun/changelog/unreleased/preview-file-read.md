@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- The browser preview opens the files in its workspace again: the Markdown guide beside the chat no longer reports "Read failed".
+- The browser preview opens the files in its workspace, such as the Markdown guide beside the chat.

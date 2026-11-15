@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- On a phone, Settings no longer offers "Edit shortcuts" or "Open configuration file", and the sidebar's trust badge is a shield rather than a word cut to "Unkno…".
+- On a phone, Settings does not offer "Edit shortcuts" or "Open configuration file", and the sidebar's trust badge is a shield.

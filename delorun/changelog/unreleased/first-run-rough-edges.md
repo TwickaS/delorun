@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
 - The browser tab is titled "Delorun", not "DSH Local Build", and the studio's stored look is applied before the first paint, with no flash of the stock sidebar.

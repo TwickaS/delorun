@@ -1,6 +1,6 @@
 ---
 area: Studio
-section: Fixed
+section: Added
 ---
 
-- On a phone, "Run setup again" in Settings closes the sidebar as well, so it no longer stays open under the guide or beside the chat once the guide closes.
+- On a phone, "Run setup again" in Settings closes the sidebar as well, so the sidebar is not left open under the guide or beside the chat.

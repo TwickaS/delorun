@@ -1,6 +1,6 @@
 ---
 area: Plugins
-section: Fixed
+section: Added
 ---
 
-- The Changes and instruction-consent plugins load when Delorun runs its TypeScript sources directly; they failed to import and left the studio without Changes.
+- The Changes and instruction-consent plugins load when Delorun runs its TypeScript sources directly, so the studio has Changes.

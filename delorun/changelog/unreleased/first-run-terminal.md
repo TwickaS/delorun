@@ -1,6 +1,6 @@
 ---
 area: Setup
-section: Fixed
+section: Added
 ---
 
 - Setup ends by saying once that Delorun is running in the background, and the review screen says when the key check failed and the key is not verified.
