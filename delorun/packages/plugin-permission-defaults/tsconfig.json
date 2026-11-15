@@ -21,6 +21,7 @@
     { "path": "../../../packages/interaction/user-approval" },
     { "path": "../../../packages/sandbox/sandbox" },
     { "path": "../../../packages/sandbox/sandbox-policy" },
+    { "path": "../../../packages/core/system-prompt" },
     { "path": "../../../packages/shell/shell" },
     { "path": "../../../packages/shell/tool-bash" },
     { "path": "../../../packages/test-support/agent-loop-testkit" },

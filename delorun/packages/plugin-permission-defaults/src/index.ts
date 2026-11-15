@@ -53,6 +53,7 @@ import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { resolveDelorunHome, shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delorun/home'
 import z from '@deepseek-ai/schemastery'
+import { registerSandboxTmpContext } from './sandbox-tmp.ts'
 import {
   defaultPresetOf,
   fullAccessGranted,
@@ -1163,6 +1164,7 @@ async function mountServices(ctx: Context, config: Config, hosts: readonly strin
   await service.await()
   // A service whose activation failed may leave its fiber's await resolved, so its registration is what counts.
   if (ctx.root.get('permissionDefaults') === undefined) throw new Error('the permission service did not start; its failure is in the log above')
+  registerSandboxTmpContext(ctx)
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'permissionDefaults'], (child) => { registerPermissionRoutes(child) })
   await ctx.plugin(CommandNetwork, {
