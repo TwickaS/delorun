@@ -2443,6 +2443,126 @@
       "class": "delorun-feature",
       "feature": "brand-icons",
       "reason": "The tile source is now the full-canvas Delorun hex mark with no drop shadow, so the script keeps the whole tile and scales only the mark group for the maskable variant."
+    },
+    {
+      "path": "packages/context/agent-instructions/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/deliverables/tool-present/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/extensions/tool-cordis/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/fs/tool-fs/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/goal/tool-goal/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/interaction/tool-ask-user/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/jobs/tool-jobs/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/preset/persona/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-bash-persistent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-bash/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-pwsh-persistent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/skill/skill-filesystem/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/skill/tool-skill/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/subagent/tool-subagent-control/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/todo/tool-todo/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/web/tool-web/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/workflow/tool-workflow/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
     }
   ],
   "retired": []
