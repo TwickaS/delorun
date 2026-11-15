@@ -158,6 +158,7 @@ function RangeSlider({ range, value, disabled, label, format, notchLabel, onComm
       <div className={notches.length === 0 ? css.sliderTrackPlain : css.sliderTrack}>
         <input type="range" aria-label={label} aria-valuetext={format(shown)} disabled={disabled}
           min={range.min} max={range.max} step={range.step} value={shown}
+          style={{ '--range-fill': at(shown) } as CSSProperties}
           onChange={(event) => { setDraft(snap(Number(event.currentTarget.value))) }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         {notches.map(notch => (

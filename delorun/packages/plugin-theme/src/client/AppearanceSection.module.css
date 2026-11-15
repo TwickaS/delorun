@@ -53,7 +53,52 @@
 .sliderTrack input {
   width: 100%;
   margin: 0;
-  accent-color: var(--dsw-alias-brand-primary);
+}
+
+/* The native track draws black on the right in some themes: the track is the neutral fill and the part up to the thumb the accent. */
+.sliderTrack input {
+  appearance: none;
+  background: transparent;
+  --range-fill: 50%;
+  --range-track: var(--dsw-alias-border-l3);
+  --range-accent: var(--dsw-alias-brand-primary);
+  --range-bar: 4px;
+}
+
+.sliderTrack input::-webkit-slider-runnable-track {
+  height: var(--range-bar);
+  border-radius: var(--range-bar);
+  background: linear-gradient(to right, var(--range-accent) var(--range-fill), var(--range-track) var(--range-fill));
+}
+
+.sliderTrack input::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: calc((var(--range-bar) - 16px) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: var(--range-accent);
+}
+
+.sliderTrack input::-moz-range-track {
+  height: var(--range-bar);
+  border-radius: var(--range-bar);
+  background: var(--range-track);
+}
+
+.sliderTrack input::-moz-range-progress {
+  height: var(--range-bar);
+  border-radius: var(--range-bar);
+  background: var(--range-accent);
+}
+
+.sliderTrack input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--range-accent);
 }
 
 .notch {

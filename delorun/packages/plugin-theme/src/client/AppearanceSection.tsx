@@ -3,7 +3,7 @@
  * the theme (Soft or one of Delorun's themes), the accent with a custom colour, and contrast on a slider. The choices
  * are the shared chips of `@delorun/brand`, which onboarding's Look step also renders.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice, type PaletteChoice, type ThemeSettings } from '../config.ts'
@@ -79,6 +79,7 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
       <div className={css.sliderTrack}>
         <input type="range" aria-label={label} aria-valuetext={`${String(shown)}%`} disabled={disabled}
           min={CONTRAST.min} max={CONTRAST.max} step={CONTRAST.step} value={shown}
+          style={{ '--range-fill': `${String(((shown - CONTRAST.min) / (CONTRAST.max - CONTRAST.min)) * 100)}%` } as CSSProperties}
           onChange={(event) => { setDraft(Number(event.currentTarget.value)) }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         <button type="button" className={css.notch} disabled={disabled} aria-pressed={value === CONTRAST.default}

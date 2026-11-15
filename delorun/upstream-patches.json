@@ -708,7 +708,7 @@
       "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css",
       "class": "delorun-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the audit-list, version and History-introduction styles. The `.readOnlyNote` block (C1) is left out."
+      "reason": "Profile history and safe mode: the audit-list, version and History-introduction styles. The `.readOnlyNote` block (C1) is left out. Plugin card descriptions show two lines before the clamp from 720px wide; a phone keeps one."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
@@ -840,7 +840,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall. The search field is 44px tall under a coarse pointer or on a phone width."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
@@ -876,7 +876,7 @@
       "path": "packages/client/ui-settings-models/src/client/ModelsSection.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections. Under a coarse primary pointer its text fields are 44px tall with a 16px font, so API key fields meet the touch target size. Key status (2026-11-15): The amber failed-key dot and its label, and the grouped commit buttons."
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections. Under a coarse primary pointer its text fields are 44px tall with a 16px font, so API key fields meet the touch target size. Key status (2026-11-15): The amber failed-key dot and its label, and the grouped commit buttons. The 16px help circle gains a transparent 44px tap area under a coarse pointer."
     },
     {
       "path": "packages/client/ui-settings-models/src/client/index.ts",

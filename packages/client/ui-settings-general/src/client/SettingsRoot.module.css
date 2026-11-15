@@ -281,6 +281,12 @@
   font-size: 13px;
 }
 
+@media (pointer: coarse), (max-width: 767px) {
+  .searchInput {
+    height: 44px;
+  }
+}
+
 .searchInput::placeholder {
   color: var(--dsw-alias-label-tertiary);
 }

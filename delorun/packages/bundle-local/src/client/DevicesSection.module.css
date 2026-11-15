@@ -39,10 +39,6 @@
   overflow-wrap: anywhere;
 }
 
-.intro {
-  padding: 0 4px;
-}
-
 .command {
   font-family: var(--dsw-font-mono, monospace);
   color: var(--dsw-alias-label-primary);

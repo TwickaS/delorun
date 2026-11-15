@@ -504,6 +504,13 @@
   overflow: hidden;
 }
 
+/* Two lines of a description show before the clamp on wider windows; a phone keeps one. */
+@media (min-width: 720px) {
+  .cardDesc {
+    -webkit-line-clamp: 2;
+  }
+}
+
 /* Match Session search's pulse without coupling the two feature packages. */
 .skeletonFill {
   background: var(--dsw-alias-bg-skeleton);
