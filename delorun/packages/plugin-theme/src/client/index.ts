@@ -31,6 +31,7 @@ import { DensityRow, EffortLabelsRow, StudioLookRow, TypefaceRow, type Appearanc
 import { HeroHeadline, HeroWordmark } from './brand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
+import { EdgeController } from './edges.ts'
 import { effortBarsCss } from './effort.ts'
 import { composerFocusCss } from './focus.ts'
 import { markMainLandmark } from './landmark.ts'
@@ -45,6 +46,7 @@ import { en as lookEn, zh as lookZh, type LookLocaleKey } from './look-locales.t
 import { LookRow, type LookRowInjected } from './LookRow.tsx'
 
 export { LAYERS, PLUGIN_ID, ThemeController } from './controller.ts'
+export { EDGE_ATTRIBUTE, EdgeController, edgeColours, type EdgeColours } from './edges.ts'
 export {
   ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, DENSITIES, EFFORT_DISPLAYS, PALETTES, THEME_ROW_ID, TYPEFACES,
   type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type ThemeSettings, type Typeface,
@@ -253,7 +255,9 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     [STUDIO_ROWS.effortLabels, EffortLabelsRow],
   ]
   controller.update(initial)
+  const edges = new EdgeController(document, window)
   const disposers = [
+    ctx.on('theme/change', () => { edges.refresh() }),
     ctx.locale.register(NS, { en, zh }),
     ctx.locale.register(CONVERSATION.ns, { en: conversationEn, zh: conversationZh }),
     ctx.locale.register(BRAND_NS, { en: brandEn, zh: brandZh }),
@@ -276,10 +280,11 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     markMainLandmark(document),
   ]
   return {
-    update: (stored) => { controller.update(stored) },
+    update: (stored) => { controller.update(stored); edges.refresh() },
     dispose: () => {
       for (const dispose of disposers) dispose()
       controller.dispose()
+      edges.dispose()
     },
   }
 }

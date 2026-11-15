@@ -1,0 +1,115 @@
+/* One chip style for every appearance choice. Targets are 44px; the selected chip carries the brand ring. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  min-width: 0;
+}
+
+.label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  font-weight: 500;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+  min-width: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--delorun-space-2) var(--delorun-space-5);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .chip:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+.chip[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.chip:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.mark {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A theme chip: its light and dark pages side by side. */
+.swatch {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-xs);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+.half {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-2);
+  padding: var(--delorun-space-2) var(--delorun-space-3);
+  background: var(--half-page);
+}
+
+.line {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--half-text);
+}
+
+.halfDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--half-accent);
+}
+
+.accentDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+:global(body[data-ds-dark-theme]) .accentDot {
+  background: var(--accent-dark);
+}

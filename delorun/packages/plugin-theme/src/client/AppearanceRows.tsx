@@ -15,6 +15,7 @@ import { STOCK_FONT_STACKS } from '../palette/stock.ts'
 import css from './AppearanceRows.module.css'
 import { useFormWrites, type FormWrites } from './form-writes.ts'
 import { ChoiceGroup, SettingRow, TileGroup } from '@delorun/settings-controls'
+import { StudioLookSwitch } from './controls/index.ts'
 
 /** What the rows read and write. */
 export interface AppearanceRowInjected {
@@ -29,9 +30,6 @@ export interface AppearanceRowInjected {
 
 /** The props each row reads: the Appearance dictionary and the injected services. */
 export type AppearanceRowProps = PropsRuntime<'settings.general.item'> & PropsLocale<'settings.delorunAppearance'> & InjectFace<AppearanceRowInjected>
-
-/** The looks offered; the rows exist only while Delorun's is on. */
-const LOOKS = ['delorun', 'stock'] as const
 
 /** The font stack each typeface tile shows its specimen in. */
 const SPECIMEN_FONTS: Readonly<Record<Typeface, string>> = {
@@ -59,8 +57,7 @@ export function StudioLookRow({ t, settings, useStockLook }: AppearanceRowProps)
   const { disabled, failure, track } = useTheme(settings, t)
   return (
     <SettingRow title={t('look')} description={t('look.lead')} failure={failure}>
-      <ChoiceGroup<(typeof LOOKS)[number]> label={t('look')} value="delorun" disabled={disabled}
-        options={LOOKS.map(look => ({ value: look, label: t(`look.${look}`) }))}
+      <StudioLookSwitch label={t('look')} value="delorun" delorunLabel={t('look.delorun')} stockLabel={t('look.stock')} disabled={disabled}
         onChange={() => { track(useStockLook()) }} />
     </SettingRow>
   )

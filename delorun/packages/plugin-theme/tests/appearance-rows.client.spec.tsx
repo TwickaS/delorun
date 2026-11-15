@@ -29,7 +29,7 @@ describe('the Look row', () => {
   it('offers Delorun and Stock as a radio group with Delorun chosen, and turns the studio additions off from Stock', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     open(StudioLookRow, themeForm(STUDIO_ON), useStockLook)
-    expect(screen.getByText(en.look)).toBeTruthy()
+    expect(screen.getAllByText(en.look).length).toBeGreaterThan(0)
     expect(screen.getByText(en['look.lead'])).toBeTruthy()
     const radios = within(group(en.look)).getAllByRole('radio')
     expect(radios.map(radio => [radio.textContent, radio.getAttribute('aria-checked')])).toEqual([['Delorun', 'true'], ['Stock', 'false']])
