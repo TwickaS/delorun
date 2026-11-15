@@ -20,6 +20,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 - [从未在真实的 tailnet 或手机上运行](#never-run-on-a-real-tailnet-or-phone)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - **tailnet 私有的 reach 已构建，并且在此人开启之前是关闭的**，开启方式是 `delorun reach on tailscale`，或 setup 的 Full 模式中回答“是”。`@delorun/reach` 绑定 `127.0.0.1` 上一个固定的端口，该端口从 20000 到 32767 中选定一次，把它中继到 reach 监听器，并把 `tailscale serve` 配置到该端口，绝不通过 `sudo`。它拒绝为该地址启用 Funnel，并默认每分钟重新检查一次 Tailscale。在写入自己的 serve 规则之前，它会移除 serve 端口上的任何其他规则，`delorun reach on` 和 `off` 也这样做，所以较早一次运行留在 `tailscaled` 中的规则会在下次启动时被清除。setup 的 `--yes` 让 reach 保持关闭，而指名了 `none` 以外任何 reach 选项的 `--config` 文档会被拒绝。
@@ -30,6 +32,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 - studio 的“设备”部分列出设备、打开窗口，并根据 `GET /delorun/reach/status` 显示地址的状态。
 - **尚未构建：**Funnel 和中继提供方、passkey、OpenID Connect、恢复套件、`delorun devices reset`、告警，以及带有闲置限制的回环凭据记录。
 - 回环 studio 接纳上游的启动令牌及其无状态的 `dsh-auth-*` cookie，这些 cookie 在铸造 30 天后过期，没有闲置限制，也没有服务端记录，并在 `.credentials.yaml` 中的浏览器会话密钥改变之前一直有效；Delorun 从不改变它。每个持有这样一个 cookie 的浏览器都作为唯一的所有者行事。回环 studio 不发送内容安全策略。
+
+<a id="exact-fetch-routes-a-device-meets"></a>
 
 ## 设备会遇到的确切 Fetch 路由
 
@@ -53,6 +57,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 | `/api/delorunMcpConsent.waiting` | 接纳，通过该路由的 `admitPeer` | 它只回答等待此人同意的服务器的名称以及什么发生了变化，不含它们的命令、参数、文件夹或环境，所以手机会提示到电脑上批准它们。 |
 | `/api/session.export`、`/api/session.markdown`、`/api/plugin-manager/detail-file`、`/api/file`、`/api/present.host`、`/api/present.open`、`/api/changes.summary`、`/api/changes.open`、`/api/changes.diff` | 拒绝 | 上游没有声明设备准入，所以只有所有者能访问它们。 |
 
+<a id="the-rules"></a>
+
 ## 规则
 
 ### 路由
@@ -73,6 +79,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 8. 它不可以做下列事情，并且 home 对每一项都以 `LOOPBACK_REQUIRED` 拒绝：通过逐次调用的升级或按工作区的同意授予完全访问；批准或移除设备；重置 home；使用恢复套件；注册身份因子；更改 reach 设置；或更改[更改](changes.zh.md)的保护设置。批准的答案把会话的因子带给授予权限的代码，所以拒绝不依赖于远程页面。远程 studio 显示 “This needs you at your computer” 以及该动作的名称。
 9. 因此不可能在远程会话中安装插件：上游要求对 `plugin_manager` 的每个写入操作进行完全访问批准。
 
+<a id="loopback-credentials"></a>
+
 ### 回环凭据
 
 规则 10 到 12 尚未构建：上游的连接发出 `authenticator/minted`，没有提供方监听它，所以不存在记录、闲置限制或重置。
@@ -85,6 +93,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 
 13. `delorun reach status | on tailscale | off` 和 `delorun devices list | approve | elevate | remove | code`；`elevate` 回答设备解锁敏感操作的请求（见 [C14](../contracts/c14-oidc-passkeys.zh.md#elevation)）。`delorun reach on tailscale` 检查 `tailscale` 已安装并在运行、tailnet 已开启 HTTPS 证书，以及此人可以运行 `tailscale serve`；对于最后一项，它会打印此人自己要运行的那一条命令，Delorun 从不运行 `sudo`。没有所有者的 home 通过 home 套接字以本地人的身份被认领。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **已批准、已解锁的手机。**它的持有者拥有这些 chat，并可以在电脑上已经授予的范围内驱动 agent。这一限制是局部的：此人已在电脑上设为完全访问的工作区，仍然可以从手机上操作，在那里运行的命令可以做此人的用户能做的任何事，包括写入设备记录。保护措施是手机自己的锁、在电脑上移除设备，以及远程会话的闲置超时。
@@ -94,6 +104,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 - **启动令牌。**在电脑上的批准依赖于 agent 无法读取启动令牌（C1 对其命令的约束）。以此人的用户身份在沙箱之外运行的进程可以读取令牌，并通过更新渠道打开批准窗口、用匹配码批准待处理请求、取消请求、移除设备并获得新的 studio 登录链接。当它同时控制提出请求的设备时，它会在无人在场的情况下批准该设备。
 - **没有清理就停止的 home 进程。**`tailscaled` 会继续把地址转发到固定端口，直到下一次启动或 `delorun reach off`。在这段时间里，绑定该端口的另一个本地用户会向手机的 origin 提供服务（见 [C7](../contracts/c07-reach-providers.zh.md#what-this-does-not-prove)）。
 - **没有外部评审。**对本设计或 reach 都没有进行过外部安全评审。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -112,6 +124,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 - `a loopback credential without a record is refused`（尚未构建）
 - `a loopback cookie minted before devices reset is refused after it`（尚未构建）
 
+<a id="never-run-on-a-real-tailnet-or-phone"></a>
+
 ## 从未在真实的 tailnet 或手机上运行
 
 这些规格伪造了 `tailscale`，并通过回环驱动固定端口。下列内容从未在真实的 tailnet 或手机上运行过：
@@ -127,6 +141,8 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 - 手机上 24 小时的令牌滚动；
 - 使用真实启动 cookie 的“设备”部分；
 - 真实手机页面上 1,000 个 chat 的列表的开销。
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

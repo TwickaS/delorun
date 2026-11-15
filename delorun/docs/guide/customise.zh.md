@@ -22,6 +22,8 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 - [fork 已发布的插件](#fork-a-shipped-plugin)
 - [编辑 harness 本身](#edit-the-harness-itself)
 
+<a id="the-levels"></a>
+
 ## 各个层级
 
 | 层级 | 它改变什么 | 它存放在哪里 | 更新时它让你付出什么 |
@@ -33,9 +35,13 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 | 已发布插件的 fork | DeepSeek Harness 的某个插件的行为 | 安装到你的 profile 中的改名副本，同时关闭已发布的行 | 你必须自己合并该插件的每一项上游更改，而它的接口在 1.0 之前的任何次版本中都可能变化 |
 | harness 本身 | 任何东西，包括插件循环 | 由 `delorun changes edit-harness` 制作的、你自己的已安装发布版本程序文件的副本 | 每项更改都属于已安装的版本，更新报告会说明它如何被保留；你运行的是 Delorun 没有签名的代码 |
 
+<a id="change-a-plugins-settings"></a>
+
 ## 更改插件的设置
 
 大多数插件在 studio 中都有一个设置页面，保存到你的 profile 中。对于页面没有提供的内容，你的 profile 的 `cordis.patch.yml`（位于 `~/.delorun/profiles/<profile>/` 下）可以按 id 给任何插件的行打补丁。补丁会替换该行完整的 `config`，所以请重述插件需要的每个键，`disabled: true` 则关闭一行。DeepSeek Harness 的[加载顺序](../../../docs/user/develop/basic/publish.zh.md#the-loading-order)说明了哪一层优先。如果补丁关闭了 Delorun 的某项保护，Delorun 会拒绝启动，并指出该文件。
+
+<a id="give-the-studio-your-own-name-and-icon"></a>
 
 ## 给 studio 起你自己的名称和图标
 
@@ -43,13 +49,19 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 其他设备打开的登录和配对页面显示相同的名称和图标，或者在你隐藏标志时两者都不显示。这些页面在任何人登录之前就会出现，所以任何能够访问你的地址的人都能看到它们。选取的图标只出现在 studio 中；登录页面仍保留 Delorun 的标志。如果保存的名称、问候语或图片无法使用，studio 会显示 Delorun 的默认值，Branding 部分会这样说明。Branding 设置保存在你的 profile 中，所以你已批准的手机在持有解锁时可以更改它们。
 
+<a id="make-an-agent-preset"></a>
+
 ## 制作 agent 预设
 
 agent 预设决定 agent 开始时拥有哪些工具、指令、skill 和模型。可以在 studio 中通过在 Creator 模式下开始一个 chat 来制作，也可以用 `delorun plugin new <name> --kind preset` 把它打包成插件（见[为 Delorun 编写插件](plugins.zh.md)）。预设会指名它所用的插件，所以只有当其中一个被移除或改名时，更新才会影响它。
 
+<a id="write-a-plugin"></a>
+
 ## 编写插件
 
 插件在不改变 Delorun 所发布的任何内容的情况下增加行为：一个工具、studio 的一部分、其他插件使用的服务，或针对现有插件的一组设置 bundle。[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个已安装的插件。你也可以从“设置”→“插件”→“Create a plugin”开始，或在 chat 中让 agent 在你的工作区中制作一个（[在 studio 中](plugins.zh.md#from-the-studio)，[在 chat 中](plugins.zh.md#in-a-chat)）；两种方式中，开启它都是你在电脑上要做的一步。变更保护默认是关闭的，所以对你所链接的插件的编辑（包括 agent 的编辑）会实时重新加载，并被记录为未经审阅而加载；开启保护之后，它们会等待你的批准（见[修改你的 harness](changing-your-harness.zh.md)）。请声明 `engines.dsh` 和 `engines.delorun`：更新时，Delorun 会关闭其范围不包含新发布版本的插件，并在这样做之前告诉你，而 [Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.zh.md)说明了每个发布版本可能改变什么。
+
+<a id="fork-a-shipped-plugin"></a>
 
 ## fork 已发布的插件
 
@@ -71,6 +83,8 @@ Delorun 从自己的安装中加载它所发布的包，所以你的 profile 中
 3. 用 `delorun plugin add ./my-todo` 安装副本，或用 `delorun plugin dev ./my-todo` 开发它。
 
 Delorun 自己的插件，以及它的保护所需要的行（例如沙箱），不能用这种方式替换：只要其中任何一个被关闭，Delorun 就会拒绝启动，并指出关闭它的文件。请通过它们的设置来更改，或者[编辑 harness](#edit-the-harness-itself)。fork 会保留你复制时插件代码的样子，所以请查看该插件每个发布版本的 changelog，并自己把它的更改带过来。
+
+<a id="edit-the-harness-itself"></a>
 
 ## 编辑 harness 本身
 

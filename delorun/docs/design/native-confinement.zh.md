@@ -18,6 +18,8 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - 只有由 `delorun setup` 创建、由 `delorun` 或 `delorun start` 启动的 CLI profile，具备 Delorun 的保护：上游沙箱行上受保护的 home、`delorun start` 写入 `run/<profile>/sandbox.patch.yml` 的被拒绝的套接字、各项同意、获取防护以及隐私默认值（见 [bundle-local](../../packages/bundle-local/README.zh.md)）。
@@ -29,11 +31,17 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 - 指令同意审阅文件工具所做的写入。`workspace-write` 下的 shell 命令或 PTC 代码，会在可写根之内写入 `AGENTS.md`、skill 或预设，而没有这种审阅。
 - `delorun start` 在 WSL 下和 Linux 上，把 Docker Desktop 的控制套接字目录作为逃逸套接字目录隐藏起来（[C1](../contracts/c01-home-layout.zh.md#confinement-rules)），并且不把它的 macOS 控制目录传给提供方。
 
+<a id="the-rules"></a>
+
 ## 规则
+
+<a id="every-way-a-host-boots"></a>
 
 ### Host 的每种启动方式
 
 1. 每条启动 Host 的 `delorun` 命令（包括 `delorun headless`），都组合与 CLI profile 相同的 Delorun 层，或者拒绝启动并指出缺少什么。在没有受保护的 home、被拒绝的套接字、各项同意、获取防护和隐私默认值的情况下启动的 Host，是一次失败的启动，而不是一条警告。
+
+<a id="checks-at-each-start"></a>
 
 ### 每次启动时的检查
 
@@ -42,10 +50,14 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 4. `delorun verify` 运行 `home-modes` 检查：home 的模式、每个 Delorun 目录的模式和每个受保护文件的模式，并为每条更宽松的路径给出 `chmod` 修复办法，在 Windows 上则给出 `icacls` 修复办法。
 5. 当 `docker-connect` 不是 `enforced` 时，`delorun verify` 会连同套接字的路径一起这样说明，setup 的 Docker 选项也会说明原生工作区中的命令可以连接到 Docker，而 Docker 可以挂载这台电脑的文件来启动容器。在使用 Landlock 和 rootful 引擎时，setup 提供 Docker 的 rootless 引擎。
 
+<a id="full-access"></a>
+
 ### 完全访问
 
 6. 对 `danger-full-access` 升级的批准提示，无论是命令请求它还是此人设置模式，都会在此人回答之前说明：“Full access lets this command read Delorun's home, including its keys and tokens, and reach the Docker supervisor and the update channel.”该提示显示给此人，对模型不可见。
 7. 按工作区的完全访问同意有一个询问它的界面，所以一个人可以为一个工作区授予完全访问并撤回它。
+
+<a id="docker-desktops-control-sockets"></a>
 
 ### Docker Desktop 的控制套接字
 
@@ -61,12 +73,16 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 
 12. 每一次模型编写的对指令层文件（`AGENTS.md`、skill 或预设）的写入，无论是由文件工具、shell 命令还是 PTC 代码所做，都需要指令同意的批准，该批准指出效果并显示差异。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **Landlock 与套接字。**Landlock 无法拒绝对路径名套接字的连接；在有 rootful Docker 套接字的情况下，受限命令可以访问引擎，这等同于 root。在这样的系统上，报告和 rootless 的提议是仅有的补救办法。
 - **网络和其他套接字。**受限命令在每种方言上都可以访问网络、[C1](../contracts/c01-home-layout.zh.md#confinement-rules) 所隐藏的目录之外的路径名套接字，以及抽象套接字。
 - **完全访问。**`danger-full-access` 下的命令不受约束地运行；提示说明它触及什么，没有任何规则适用。
 - **同一用户的进程。**以此人身份在沙箱之外运行的程序，可以读取和更改 home、探测和检查。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -83,6 +99,8 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 | `landlock-rootful-docker-reported` | 在带有 rootful Docker 套接字的 Landlock fixture 上，`delorun verify` 把 `docker-connect` 报告为 `not-enforced` 并附上套接字的路径，setup 指出该路径并提供 rootless 引擎。 |
 | `docker-desktop-control-sockets-denied` | 在 Seatbelt 下，受限命令无法连接到被拒绝的 Docker Desktop 控制目录中的 fixture 套接字，包括命令启动之后创建的套接字。 |
 | `a shell write to AGENTS.md asks` | 受限 shell 命令在 `workspace-write` 下对工作区 `AGENTS.md` 的写入会等待指令同意，被拒绝的询问让该文件保持不变。 |
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

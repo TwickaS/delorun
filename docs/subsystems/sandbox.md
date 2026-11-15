@@ -62,7 +62,8 @@ interface SandboxExecutionPolicy {
    */
   additionalWritableRoots?: readonly string[]
   /**
-   * The network this execution may reach. Absent means the host's network, as the runner shares it. Ignored under
+   * The network this execution may reach. Absent means the host's network, as the runner shares it, and a local Linux
+   * runner then refuses the wrap while a host abstract Unix socket listens. Ignored under
    * `danger-full-access`, which bypasses confinement.
    */
   network?: SandboxNetwork
@@ -110,7 +111,7 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 
 ## Network
 
-A policy may restrict the network a confined command reaches. Without a `network`, every runner shares the host's network, which is the stock behaviour. `off` gives the command no network connection of its own, and `proxy` gives it only one HTTP proxy that listens on a Unix socket outside the sandbox. The local provider expresses both under bwrap only and refuses them with `SANDBOX_UNSUPPORTED_POLICY` on Landlock, Seatbelt and the Windows ACL runner. Under both it also hides the sockets of daemons that resolve names or send traffic for a program, such as systemd-resolved, the system D-Bus and snapd; every other pathname socket, such as the D-Bus session bus in the person's runtime directory, stays reachable unless the provider's `deniedSockets` or `deniedSocketDirectories` hide it. Its [README](../../packages/sandbox/sandbox-local/README.md#network) states how.
+A policy may restrict the network a confined command reaches. Without a `network`, every runner shares the host's network, which is the stock behaviour. `off` gives the command no network connection of its own, `proxy` gives it only one HTTP proxy that listens on a Unix socket outside the sandbox, and `host` shares the host's network with the person's acceptance that abstract Unix sockets of the host stay reachable. A policy without a `network` is refused by a local Linux runner while the host has a listening abstract socket. The local provider expresses both under bwrap only and refuses them with `SANDBOX_UNSUPPORTED_POLICY` on Landlock, Seatbelt and the Windows ACL runner. Under both it also hides the sockets of daemons that resolve names or send traffic for a program, such as systemd-resolved, the system D-Bus and snapd; every other pathname socket, such as the D-Bus session bus in the person's runtime directory, stays reachable unless the provider's `deniedSockets` or `deniedSocketDirectories` hide it. Its [README](../../packages/sandbox/sandbox-local/README.md#network) states how.
 
 ```ts type-equiv
 /**
@@ -121,10 +122,12 @@ A policy may restrict the network a confined command reaches. Without a `network
  *   outside the sandbox. The runner serves that socket to the command on a loopback port and names the port in the
  *   command's proxy environment variables; a program that ignores them reaches nothing.
  *
+ * - `host`: the host's network, with the risk of abstract Unix sockets accepted ({@link SandboxHostNetwork}).
+ *
  * A runner that cannot express the requested network refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than
  * running the command with the host's network.
  */
-type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork
+type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork | SandboxHostNetwork
 ```
 
 ```ts type-equiv
@@ -139,6 +142,21 @@ interface SandboxProxyNetwork {
    * network is `off`.
    */
   readonly socket: string
+}
+```
+
+```ts type-equiv
+/**
+ * The `host` form of {@link SandboxNetwork}: the command shares the host's network namespace, and a person has accepted
+ * that abstract Unix sockets of the host stay reachable. A policy without a network also shares the host's namespace,
+ * but a local runner refuses that wrap while the host has a listening abstract socket, because Linux ties abstract
+ * socket names to the network namespace and no mount rule hides them.
+ */
+interface SandboxHostNetwork {
+  /** Share the host's network namespace. */
+  readonly mode: 'host'
+  /** The person accepted the abstract-socket risk, so the wrap runs and reports the gap as partial enforcement. */
+  readonly abstractSockets: 'accepted'
 }
 ```
 

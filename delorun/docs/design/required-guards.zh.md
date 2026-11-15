@@ -18,11 +18,15 @@ Delorun 的防护措施通过可选的服务查找到达上游：上游用 `ctx.
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - 上游通过可选查找读取每个防护，防护缺失就允许该动作：`packages/web/web-fetch-http/src/index.ts` 中的 `fetchGuard`、`packages/fs/tool-fs/src/consent.ts` 中的 `writeConsent`、`packages/mcp/mcp-client/src/index.ts` 中的 `mcpAddConsent`、`packages/schedule/schedule/src/runtime.ts` 和 `packages/schedule/tool-schedule/src/index.ts` 中的 `scheduleConsent`，以及 `packages/interaction/permission-presets/src/index.ts` 中的 `sandboxModeGuard`。
 - Delorun 在 `@delorun/bundle-local` 的行中，由它自己的插件提供每个防护。[C19](../contracts/c19-home-process.zh.md) 的 Host 不变式在启动之前和启动之后各检查一次，Delorun bundle 插入的每一行在 CLI profile 中都是活动的。启动之后不再检查，所以被重新加载停止、或在重启时失败的行，会使它的防护在 Host 运行期间缺失。
 - `delorun headless` 启动 home 的 `headless` profile，即上游的 `headless` 模板，其中链接了 `@delorun/bundle-headless`。它具有 C1 的沙箱覆盖层、安全模式以及该 bundle 的防护行，C19 的 Host 不变式在启动之前和之后都持有这些行。在受防护的消费方中，它挂载了 `web-fetch-http`、`tool-fs` 和 `permission-presets`；它不挂载 MCP 客户端和计划运行时，该 bundle 的 MCP 和计划同意是用来防护此人自己的补丁所添加的那一个。它的批准服务没有应答者，所以询问会以 `unavailable` 解析，询问的防护会拒绝。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -44,11 +48,15 @@ Delorun 的防护措施通过可选的服务查找到达上游：上游用 `ctx.
 - 上游：一个新的零依赖包 `packages/util/required-guard`，带有 `guardOf` 和 `GuardMissingError`，其中 `guardOf` 把查找 `ctx.get` 作为函数接收，以及上述六个消费方位置，每个都增加 `requiredGuards` config 字段及其 README 条目。
 - Delorun：`@delorun/bundle-local` 的行设置 `requiredGuards`；它们旁边有一个 headless 覆盖层；`delorun/apps/cli/src/compose.ts` 增加 headless 行和 `requiredGuards` 检查；C16 和 C19 陈述这些规则。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **存在但有错误的防护。**该标记只拒绝缺失的防护；已注册但允许了本应拒绝的内容的防护，不在本设计的范围之内。
 - **有自己生命周期缺口的 Delorun 行。**`plugin-main-chat` 在 `agent/created` 时限制主 chat 的工具，所以在该行停止期间创建的 chat 会保留它们；回收站、工作区和 chat 状态插件让排队的工作在其行被释放之后仍然运行。每一个都需要在它的插件中单独修复。
 - **安全模式。**安全模式保留 Delorun 的防护行，所以它不会丢弃该标记的防护；它确实丢弃第三方的行，而该标记不涵盖这些。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -61,6 +69,8 @@ Delorun 的防护措施通过可选的服务查找到达上游：上游用 `ctx.
 - `a guard that returns after a reload guards the next action`
 - `a headless model write to an instruction file is refused`
 - `a headless full-access selection without a recorded grant is refused`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

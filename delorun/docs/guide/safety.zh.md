@@ -27,6 +27,8 @@ Delorun 在你的电脑上、以你自己的权限运行。替你运行命令的
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="where-the-protections-apply"></a>
+
 ## 保护措施适用于哪里
 
 - **`delorun` 启动的 [studio](../reference/glossary.zh.md#studio)** 具备本页的每一项保护。
@@ -35,6 +37,8 @@ Delorun 在你的电脑上、以你自己的权限运行。替你运行命令的
 - **DeepSeek Harness 的桌面应用**是上游的，保持不变。Delorun 的任何保护都不适用于它。
 
 Delorun 不会启动其设置关闭了某项保护的 [profile](../reference/glossary.zh.md#profile)。它会指出该设置和文件，你可以按[故障排查](troubleshooting.zh.md#protections-and-plugins)来修复。
+
+<a id="the-sandbox"></a>
 
 ## 沙箱
 
@@ -75,6 +79,8 @@ Delorun 不会启动其设置关闭了某项保护的 [profile](../reference/glo
 - 阅读[威胁模型](../security/threat-model.zh.md)，了解每种沙箱隐藏的套接字。
 
 </details>
+
+<a id="full-access"></a>
 
 ## 完全访问
 
@@ -117,6 +123,8 @@ Delorun 不会启动其设置关闭了某项保护的 [profile](../reference/glo
 
 </details>
 
+<a id="consents"></a>
+
 ## 同意
 
 setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`delorun setup prompts` 可以更改答案。
@@ -143,6 +151,8 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 - 如果你在手机上，那么你无法回答同意：请在运行 Delorun 的那台电脑上回答。
 
 </details>
+
+<a id="mcp-servers"></a>
 
 ### MCP 服务器
 
@@ -173,6 +183,8 @@ MCP 服务器是给模型提供额外工具的辅助程序。运行命令的 MCP
 
 </details>
 
+<a id="external-agents"></a>
+
 ### 外部 agent
 
 Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 agent 程序，即[外部 agent](../reference/glossary.zh.md#external-agent)。该程序在 Delorun 的沙箱和批准提示之外运行。它可以读取和更改工作区中的文件，以及它自己的设置所允许的任何其他位置，包括你的 Delorun home。它使用你自己的 Claude Code 或 Codex 登录，所以任何费用都记在那个账户上。
@@ -201,6 +213,8 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 
 </details>
 
+<a id="the-network-setting"></a>
+
 ## 网络设置
 
 每个工作区都有一个网络设置，即 **Open**、**Allowlist** 或 **Off**，用来限制它沙箱中的命令和 `web_fetch` 可以访问哪些主机。它从 Open 开始，与 DeepSeek Harness 相同，所以全新安装在你选择之前不会改变任何东西。请在运行 Delorun 的那台电脑上，在“设置”→“安全”→“网络”中选择。收紧会立即生效。让工作区能访问更多内容则会要求你确认。
@@ -228,6 +242,8 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 
 </details>
 
+<a id="the-web_fetch-guard"></a>
+
 ## web_fetch 防护
 
 `web_fetch` 是模型用来读取网页的工具。它会拒绝你自己电脑和网络上的地址：回环、链路本地和私有网络地址，包括云元数据地址。它会检查每一次重定向，并告诉模型为何拒绝，例如 `web fetch refused: the host "localhost" is a loopback address, which web_fetch does not fetch`。没有任何设置可以关闭这项防护。
@@ -239,6 +255,8 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 - 如果你配置了代理或远程获取提供方，那么它在这项防护之外解析自己的目标。
 
 </details>
+
+<a id="release-checks"></a>
 
 ## 发布检查
 
@@ -265,6 +283,8 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 
 </details>
 
+<a id="what-delorun-does-not-protect-against"></a>
+
 ## Delorun 不防护什么
 
 - **在沙箱之外以你的身份运行的程序。**你运行的任何程序，以及你让它以完全访问运行的任何命令，都可以读取和更改你的 Delorun home 中的一切、用它的令牌批准设备或打开 studio，并改动各项检查。
@@ -278,12 +298,16 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 
 关闭[变更保护](https://docs.delorun.com/guide/changing-your-harness)（默认就是关闭）时，任何能够写入你所链接的插件文件夹的东西，都可以在你看到更改之前改变 Delorun 所运行的内容。该更改会被记录，并且可以撤销。[你使用 Delorun 时信任什么](trust.zh.md)说明了各方（包括 Delorun 的维护者）能做什么、不能做什么。
 
+<a id="next"></a>
+
 ## 接下来
 
 - 要限制工作区能向外发送什么，请阅读[提示词注入与数据外泄](prompt-injection.zh.md)。
 - 要用手机访问 studio，请阅读[用手机访问 studio](reach.zh.md)。
 - 要了解各方能看到什么、能做什么，请阅读[你使用 Delorun 时信任什么](trust.zh.md)。
 - 如果出了问题，请在[故障排查](troubleshooting.zh.md)中找到那条消息。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

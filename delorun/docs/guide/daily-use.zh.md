@@ -22,6 +22,8 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="start-open-and-stop"></a>
+
 ## 启动、打开与停止
 
 | 命令 | 作用 |
@@ -60,6 +62,8 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 </details>
 
+<a id="check-the-release-and-your-setup"></a>
+
 ## 检查发布版本与你的设置
 
 - **`delorun doctor`** 检查你的 home 的权限、Docker 是否有响应、你的 DeepSeek 密钥的格式（不发送它）、studio 的端口是否空闲、在 Linux 上 bubblewrap 是否能为命令提供沙箱、最近一次发布日志检查和最近一次更新检查。每一行以 `pass`、`warn` 或 `fail` 开头。当有检查失败时它以 1 退出；它还会报告你的更改和你的 CLI profile 的插件。
@@ -83,6 +87,8 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 `delorun verify --release <version>` 检查另一个已安装的发布版本。`delorun verify --json` 和 `delorun status --json` 为脚本打印 JSON。
 
 </details>
+
+<a id="workspaces-and-what-the-model-may-change"></a>
 
 ## 工作区与模型可以改动的内容
 
@@ -116,6 +122,8 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 </details>
 
+<a id="make-delorun-yours"></a>
+
 ## 把 Delorun 变成你的
 
 Delorun 就是为了被重新塑造而构建的。你可以更改插件设置，在 Creator 模式中构建 agent 预设、skill 和插件，链接你自己的插件，或编辑 Delorun 自己的文件。Delorun 会记录每一项对它所运行内容的更改，所以你可以查看并撤销它。更新会把你的更改带到新的发布版本，或在你确认之前指出它无法带过去的更改（见[更新](updates.zh.md)）。
@@ -125,6 +133,8 @@ Delorun 就是为了被重新塑造而构建的。你可以更改插件设置，
 - [修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
 
 Delorun 对你的 profile 所做的每一项更改，同时也是 profile 历史的一个版本，`delorun recover` 可以恢复它。
+
+<a id="safe-mode-and-recovery"></a>
 
 ## 安全模式与恢复
 
@@ -157,6 +167,8 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 </details>
 
+<a id="trash-export-and-import"></a>
+
 ## 回收站、导出与导入
 
 | 命令 | 作用 |
@@ -179,6 +191,8 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 </details>
 
+<a id="the-plugin-and-headless-commands"></a>
+
 ## plugin 与 headless 命令
 
 - **`delorun plugin --profile <name> …`** 在你的 Delorun home 内运行 DeepSeek Harness 的 `dsh plugin`，所以插件的安装方式与 stock 相同。它不应用 Delorun 的任何保护。`delorun plugin check <directory>` 读取插件的 `package.json`，不运行其中的任何文件，并说明此发布版本是否接受该插件的版本范围。
@@ -191,12 +205,16 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 让 Delorun 保持最新：[更新](updates.zh.md)。
 - 选择模型：[模型提供方](providers.zh.md)。
 - 了解这些保护：[Delorun 保护什么](safety.zh.md)。
 - 如果出了问题：[故障排查](troubleshooting.zh.md)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

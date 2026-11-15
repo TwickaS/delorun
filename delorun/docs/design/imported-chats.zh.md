@@ -18,12 +18,16 @@ description: "打开导入的 chat 与应用归档定制的设计：带有横幅
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun import` 把每个导入的工作区的 manifest 文档和对象发布在 home 中的 `archive/imported/<id>/` 之下。它不创建任何 session，CLI profile 的任何行都不读取 `archive/imported/`，所以没有导入的 chat 会到达 studio、Host 插件或模型请求。
 - 导入的 chat 没有信任状态、没有横幅，也没有把它标记为受信任的操作，并且它没有通往回收站或清除的路径。
 - `delorun import` 打印每个定制行的类型和目标，但不应用其中任何一个：不会写入来自归档的 bundle、profile 行、预设、skill、主题或插件声明。`delorun export` 不写入定制行。
 - `delorun import-home` 和 setup 的 `import` 部分导入 stock DeepSeek Harness 的 home（[C8](../contracts/c08-archive-and-trash.zh.md#the-stock-home-import)）。它的 chat 落在 `sessions/` 中，studio 把它们作为此人自己的 chat 打开：它们没有信任状态或横幅。每个复制的 chat 都记录在 `archive/stock-import/imports.json` 中，由 `@delorun/archive/dsh-import` 的 `readImportedChats` 读回，并且不携带停在某一轮之中的 chat。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -45,11 +49,15 @@ description: "打开导入的 chat 与应用归档定制的设计：带有横幅
 
 9. 导入 stock DeepSeek Harness 的 home 绝不修改该 stock home。它的 session 是上述规则之下的导入 chat；把它们标记为不受信任、带有横幅并把历史记录排除在模型上下文之外，是尚待为它们构建的部分。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **此人信任的文字。**一旦此人把 chat 标记为受信任，它的历史记录就像其他任何 chat 一样成为模型上下文，包括注入其中的任何指令。
 - **此人确认过的签名者。**签名表明是哪个密钥为归档签名，而不表明它的内容是安全的。
 - **此人应用的定制。**已应用的行会像此人自己写的一样生效。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -62,6 +70,8 @@ description: "打开导入的 chat 与应用归档定制的设计：带有横幅
 | `imported plugin declarations are listed and never installed` | 定制被应用之后，归档声明的任何插件都没有被安装。 |
 | `no row applies before its diff is shown` | 在差异界面显示它并且此人接受之前，不会写入任何定制行。 |
 | `a stock home is never modified` | 在 stock home 导入之后，fixture stock home 的每个文件都是逐字节相同的。 |
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

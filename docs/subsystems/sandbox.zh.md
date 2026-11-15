@@ -62,7 +62,8 @@ interface SandboxExecutionPolicy {
    */
   additionalWritableRoots?: readonly string[]
   /**
-   * The network this execution may reach. Absent means the host's network, as the runner shares it. Ignored under
+   * The network this execution may reach. Absent means the host's network, as the runner shares it, and a local Linux
+   * runner then refuses the wrap while a host abstract Unix socket listens. Ignored under
    * `danger-full-access`, which bypasses confinement.
    */
   network?: SandboxNetwork
@@ -110,7 +111,7 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 
 ## 网络
 
-策略可以限制受限命令能到达的网络。没有 `network` 时，每个 runner 都与主机共享网络，即原版行为。`off` 让命令无法自己打开任何网络连接，`proxy` 只给它一个在沙箱外 Unix socket 上监听的 HTTP 代理。本地提供方仅在 bwrap 下表达这两种形式，在 Landlock、Seatbelt 和 Windows ACL runner 上以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝。在这两种形式下，它还会隐藏替程序解析名称或发送流量的守护进程的套接字，例如 systemd-resolved、系统 D-Bus 与 snapd；其余每个路径名套接字，例如本人运行时目录中的 D-Bus 会话总线，仍然可达，除非提供方的 `deniedSockets` 或 `deniedSocketDirectories` 隐藏了它。其 [README](../../packages/sandbox/sandbox-local/README.zh.md#network) 说明实现方式。
+策略可以限制受限命令能到达的网络。没有 `network` 时，每个 runner 都与主机共享网络，即原版行为。`off` 让命令无法自己打开任何网络连接，`proxy` 只给它一个在沙箱外 Unix socket 上监听的 HTTP 代理，`host` 则共享主机的网络，并带有本人已接受主机的抽象 Unix socket 仍然可达这一风险的前提。当主机上有处于监听状态的抽象 socket 时，本地 Linux runner 会拒绝没有 `network` 的策略。本地提供方仅在 bwrap 下表达这两种形式，在 Landlock、Seatbelt 和 Windows ACL runner 上以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝。在这两种形式下，它还会隐藏替程序解析名称或发送流量的守护进程的套接字，例如 systemd-resolved、系统 D-Bus 与 snapd；其余每个路径名套接字，例如本人运行时目录中的 D-Bus 会话总线，仍然可达，除非提供方的 `deniedSockets` 或 `deniedSocketDirectories` 隐藏了它。其 [README](../../packages/sandbox/sandbox-local/README.zh.md#network) 说明实现方式。
 
 ```ts type-equiv
 /**
@@ -121,10 +122,12 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
  *   outside the sandbox. The runner serves that socket to the command on a loopback port and names the port in the
  *   command's proxy environment variables; a program that ignores them reaches nothing.
  *
+ * - `host`: the host's network, with the risk of abstract Unix sockets accepted ({@link SandboxHostNetwork}).
+ *
  * A runner that cannot express the requested network refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than
  * running the command with the host's network.
  */
-type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork
+type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork | SandboxHostNetwork
 ```
 
 ```ts type-equiv
@@ -139,6 +142,21 @@ interface SandboxProxyNetwork {
    * network is `off`.
    */
   readonly socket: string
+}
+```
+
+```ts type-equiv
+/**
+ * The `host` form of {@link SandboxNetwork}: the command shares the host's network namespace, and a person has accepted
+ * that abstract Unix sockets of the host stay reachable. A policy without a network also shares the host's namespace,
+ * but a local runner refuses that wrap while the host has a listening abstract socket, because Linux ties abstract
+ * socket names to the network namespace and no mount rule hides them.
+ */
+interface SandboxHostNetwork {
+  /** Share the host's network namespace. */
+  readonly mode: 'host'
+  /** The person accepted the abstract-socket risk, so the wrap runs and reports the gap as partial enforcement. */
+  readonly abstractSockets: 'accepted'
 }
 ```
 

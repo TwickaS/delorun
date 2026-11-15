@@ -18,6 +18,8 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun update` 通过 CLI home 的 home 进程更新它。home 进程获取并验证渠道的发布版本，把它安装到运行时存储中，并构建格式为 `delorun.update-report/3` 的更新报告，其条目包括规则 1 到 3 的 `data` 条目；命令打印报告、询问，并根据此人对 session 数据副本的选择应用它。
@@ -25,6 +27,8 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 - `delorun recover` 报告 profile 所处的状态，并且每次调用运行一个操作：通过唯一的回退表的 `rollback`、`rollback --profile-only`、`restore <version>`、`safe-mode` 和 `exit-safe-mode`，以及针对副本或搁置目录的 `discard <path>`。
 - 没有任何客户端在更新之前比较版本：只要渠道的发布版本与正在运行的不同，`delorun update` 就会提供它。
 - 桌面应用是上游的，保持不变：它的更新器在此人点击时下载并安装，拒绝降级，不检查任何 Delorun manifest 或日志条目，不保留上一个发布版本，也不提供回退。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -67,12 +71,16 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 16. `delorun update` 和更新渠道会拒绝低于正在运行版本的目标，除非此人要求回退，而回退只能通过回退表到达已签名并已记录日志的发布版本。
 
+<a id="the-desktop-app"></a>
+
 ### 桌面应用
 
 17. 在桌面应用把下载交给 electron-updater 的 `quitAndInstall` 之前，它会对照 manifest 的 `desktop` 条目和 manifest 的日志条目，验证一个新的时间戳、manifest 的签名以及下载文件的 SHA-512 和 SHA-256（见 [C2](../contracts/c02-release-manifest.zh.md)、[C18](../contracts/c18-release-log.zh.md)）。任何失败都会拒绝安装，并让正在运行的版本保持不变。
 18. 更新应用之后，应用会把它所替换的发布版本的安装程序或更新压缩包保留在它的更新缓存目录中，并对照该发布版本的 manifest 进行验证。缓存只保留一个上一个发布版本。
 19. 更新源拒绝自动降级：指出的版本低于或等于正在运行版本的更新源不提供任何东西。
 20. 此人请求的回退会安装缓存的上一个发布版本，或此人指名的更早的发布版本，从 GitHub Releases 下载。目标必须验证为已签名（manifest 和文件摘要）并已记录日志（包含证明）；未签名、未记录日志或不匹配的目标会被拒绝。安装之后，profile 从历史中恢复。
+
+<a id="what-this-does-not-protect-against"></a>
 
 ## 本设计不防护什么
 
@@ -82,6 +90,8 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 - 插件保存在 `sessions/` 和 `storages/` 之外的数据不会被复制。
 - 副本是 home 之下的普通文件，具有 home 的模式，与它复制的数据相同；它没有加密。
 - Windows 上打开的文件无法重命名这一重命名规则不在涵盖之列。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -103,6 +113,8 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 | `c02-desktop-refuses-unrequested-downgrade` | 指出较低版本的更新源不提供更新。 |
 | `c02-desktop-rollback-signed-logged` | 对已签名并已记录日志的更早发布版本所请求的回退会被应用，并从历史中恢复 profile。 |
 | `c02-desktop-rollback-refuses-unsigned-or-unlogged` | 对没有可验证的 manifest、或没有已验证的日志条目的发布版本所请求的回退会被拒绝。 |
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

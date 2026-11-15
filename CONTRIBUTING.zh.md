@@ -77,6 +77,8 @@ DeepSeek Harness 不接受外部 pull request。对上游自身代码的修复�
 
 不要跳过 pre-push hook。真实 API 测试（`pnpm run test:e2e`）需要 `DEEPSEEK_API_KEY`，没有该密钥时会跳过。切勿提交密钥或任何其他凭据。
 
+<a id="quality-bar"></a>
+
 ## 质量标准
 
 - 新增或修改的源文件，其语句、分支、函数和行的覆盖率均为 100%。

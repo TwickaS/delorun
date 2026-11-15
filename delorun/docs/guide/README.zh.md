@@ -21,12 +21,16 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - [出了问题](#something-went-wrong)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="i-want-to-get-started"></a>
+
 ## 我想开始使用
 
 - **安装 Delorun 并进行第一次 chat：**[安装与首次运行](install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](install.zh.md#setup-how-you-will-use-delorun)、[studio 与你的第一次 chat](install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)。
 - **带上我的 DeepSeek Harness chat：**[从 DeepSeek Harness 切换](switching.zh.md)。它说明哪些内容会被复制、哪些会被保留不动，以及[如何切换回去](switching.zh.md#going-back)。
 - **了解 Delorun 与 stock DeepSeek Harness 有何不同：**[Delorun 与 stock DeepSeek Harness](delorun-vs-stock.zh.md)。它列出每一处差异，以及 Delorun 不包含什么。
 - **了解 Delorun 是做什么的、将走向哪里：**[路线图](roadmap.zh.md)。它说明现在正在构建什么、接下来是什么、之后是什么。
+
+<a id="i-want-to-use-it-every-day"></a>
 
 ## 我想每天使用它
 
@@ -42,13 +46,19 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **查看一次 chat 花了多少钱：**[查看一次 chat 的花费](cost-meter.zh.md)。
 - **逐字阅读模型的思考过程：**[逐字阅读模型的思考过程](thinking-tab.zh.md)。
 
+<a id="i-want-to-choose-or-change-the-model"></a>
+
 ## 我想选择或更换模型
 
 - **选择提供方和密钥，或在我自己的电脑上运行模型：**[模型提供方](providers.zh.md)。它列出 setup 支持的每家提供方，以及如何[之后更换提供方](providers.zh.md#change-the-provider-later)。
 
+<a id="i-want-to-reach-it-from-my-phone"></a>
+
 ## 我想用手机访问它
 
 - **开启远程访问、批准设备或移除设备：**[用手机访问 studio](reach.zh.md)。
+
+<a id="i-want-to-make-it-mine"></a>
 
 ## 我想把它变成我自己的
 
@@ -56,17 +66,23 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **编写插件：**[为 Delorun 编写插件](https://docs.delorun.com/guide/plugins)从 `delorun plugin new` 讲到一个能在你的 studio 中加载的插件。
 - **查看、保护或撤销改动：**[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
 
+<a id="i-want-to-know-what-is-safe"></a>
+
 ## 我想知道什么是安全的
 
 - **了解沙箱、完全访问与各项同意：**[Delorun 保护什么](safety.zh.md)。
 - **了解提示词注入以及什么会离开我的电脑：**[提示词注入与数据外泄](prompt-injection.zh.md)。
 - **了解我使用 Delorun 时信任什么：**[你使用 Delorun 时信任什么](trust.zh.md)。
 
+<a id="something-went-wrong"></a>
+
 ## 出了问题
 
 - **看不懂的消息或代码：**[故障排查](troubleshooting.zh.md)。它解释[如何读懂一次拒绝](troubleshooting.zh.md#reading-a-refusal)，并按代码列出常见情况及修复办法。
 - **Delorun 无法启动：**[启动与停止](troubleshooting.zh.md#starting-and-stopping)，然后运行 `delorun doctor`（见[日常使用](daily-use.zh.md#check-the-release-and-your-setup)）。
 - **更新失败：**[更新与回退](troubleshooting.zh.md#updates-and-rollback)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

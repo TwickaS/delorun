@@ -18,9 +18,13 @@ Delorun 的安全可以在不编辑其核心的情况下增长：插件可以在
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 没有任何扩展点让插件向审阅更改、批准设备、启动或更新添加检查。`delorun verify` 所报告的验证检查，是 `@delorun/contract-verification-checks` 中的固定列表，插件不会扩展它。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -58,11 +62,15 @@ Delorun 的安全可以在不编辑其核心的情况下增长：插件可以在
 - 组织的策略：对其策略指名的更改、设备和更新予以拒绝并设置必需的确认。
 - 隔离的插件进程：在启动时拒绝没有被配置为在自己的进程中运行的插件。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **注册的插件。**注册的插件和任何插件一样，以 harness 的权限运行。注册表防止它的检查削弱另一项检查；它并不阻止该插件自己的代码造成损害。
 - **扩展点之外的代码。**插件可以通过上游的其他 seam，在不是扩展点的地方行事；这些扩展点只管辖上述四项决定。
 - **安全模式。**按设计，安全模式下的启动在没有第三方检查的情况下运行。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -73,6 +81,8 @@ Delorun 的安全可以在不编辑其核心的情况下增长：插件可以在
 - `a registered check that throws or times out refuses and names its plugin`
 - `a plugin with a pending change cannot register a check`
 - `a registered check receives no way to change its subject`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

@@ -18,6 +18,8 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - **启动器。**npm 启动器在做任何其他事情之前，会拒绝低于 24.9 的 Node，并给出它所需的版本。安装时，它为每一步打印一行：渠道指出的发布版本、带有发布根的签名检查、带有结果的发布日志检查、带有大小的下载，以及安装。当发布日志检查没有运行时，它会打印原因，以及一条指出该发布版本的警告。
@@ -30,6 +32,8 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 - **默认工作区。**`delorun start` 在 Host 启动之前解析 studio 的默认工作区：当平台报告了一个不是用户主目录的文档文件夹时，就是其中的 `Delorun/default-workspace`，否则在用户主目录中。该文件夹在 studio 第一次需要它时创建，并且绝不会在 Delorun home 之内，也不会在沙箱拒绝作为可写根的任何位置。在其 `workspace-controller` 行上设置了 `defaultWorkspaceDirectory` 的 profile 保留它自己的文件夹。
 - **studio。**Delorun 的 profile 用 Delorun 自己的通知替换上游的预览通知。`@delorun/bundle-studio` 挂载 `@delorun/plugin-onboarding`，它的对话框以预览通知开始，询问语言和外观，提供 Claude Code 和 Codex 委托 bundle 以及推荐的插件，并以打开一个带有起始提示的 chat 结束：在默认工作区中，或者当此人已经有一个时，在最近使用的工作区中。两者都不存在时，最后一步提供 Delorun 自己的文件夹选择器，它只添加此人选择或创建的文件夹，并拒绝用户主目录本身、文件系统根目录、Delorun home、stock home 以及包含其中之一的任何文件夹，同时说明原因和应当选择什么。“设置”→“通用”→“Getting started”会再次显示引导，重新加载会让它保持打开，直到完成或被跳过。它的 reach 步骤从不显示，因为目前不存在 reach。
 
+<a id="the-rules"></a>
+
 ## 规则
 
 1. 终端用于 setup 和运维：安装、setup、启动、更新、恢复、reach、设备、doctor 和日志。所有聊天都在 studio 中。
@@ -41,11 +45,15 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 7. studio 的第一分钟是一个以 chat 结束的流程。Delorun 的预览通知是新手引导的第一个界面；之后的步骤是语言和外观、提供 Claude Code 和 Codex 委托 bundle 并说明每个可以做什么、推荐的插件，以及 reach。最后一个界面在默认工作区中打开一个带有两三个起始提示的新 chat；没有默认工作区时，它会打开最近使用的工作区，或让此人选择一个可以容纳工作区的文件夹。新手引导可以从“设置”重新打开。
 8. 不重复询问任何问题。新手引导读取 `setup-answers.json` 的部分记录，并略去终端已涵盖的内容。唯一的例外是 reach：只要 reach 尚未设置，新手引导就会显示它的步骤，包括此人在终端中跳过它之后，作为一段带有要在电脑上运行的命令的说明。当 setup 存储了一个可用的密钥时，上游的密钥对话框保持隐藏。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - `npx delorun` 在任何 Delorun 检查之前运行 npm 所提供的启动器。没有任何工作流发布它，所以它不带 npm 构建证明；此人按[信任页面](../guide/trust.zh.md#checking-it-yourself)所描述的方式在带外检查它，[威胁模型](../security/threat-model.zh.md#releases-the-log-and-the-rebuild)陈述了这一局限。
 - `npm install -g delorun@<version>` 以此人自己的权限安装到此人的全局 npm 前缀中。
 - 后台启动让 Delorun 在终端关闭之后继续运行；此人用 `delorun stop` 停止它。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -54,6 +62,8 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 - `no question is asked in the studio that setup answered`
 - `setup asks no question whose answer it does not apply`
 - `the import changes nothing before the person confirms the preview`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

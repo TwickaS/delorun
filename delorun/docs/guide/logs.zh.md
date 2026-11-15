@@ -20,6 +20,8 @@ description: "Delorun 的运行日志存放在哪里：每份日志的位置、�
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="log-locations"></a>
+
 ## 日志位置
 
 下面的路径都在你的 Delorun home 内，即 `~/.delorun`，除非你设置了 `DELORUN_HOME`。`<profile>` 是你的 profile 的名称，除非你选了别的，否则就是 `default`。
@@ -37,6 +39,8 @@ Delorun 只写其中的第一份。它不包含 Docker 工作区、桌面应用�
 - **DeepSeek Harness 的启动报告。**DeepSeek Harness 自己的 `dsh` 命令在启动失败时会写入 `logs/startup-*.log`。这些报告可能包含你的密钥，因为它们保存的是原始诊断信息。`delorun` 从不写入它们，`delorun logs startup` 会连同这条警告一起列出它们。
 - **你的 chat** 在 `sessions/` 下。它们不是运行日志：本页的任何内容都不会缩短、脱敏、删除或读取它们。
 
+<a id="what-a-log-holds"></a>
+
 ## 日志保存什么
 
 - **Delorun 自己的记录**说明发生了什么：操作、状态、结果、耗时、版本、id 和错误代码。它们绝不包含你的消息、提示词、模型回复、工具参数、工具结果或文件内容。
@@ -44,6 +48,8 @@ Delorun 只写其中的第一份。它不包含 Docker 工作区、桌面应用�
 - **密钥会被去除。**每条记录，包括捕获的输出，在写入之前都会把其中的密钥替换为 `[redacted:<kind>]`：模型密钥、令牌、会话密钥、cookie 值以及 Delorun 加载的其他密钥，还有 `Authorization` 标头、URL 中的密码、私钥和提供方密钥等常见形式。Delorun 从未加载过、且不符合这些形式的密钥有可能漏过去。
 - **chat 与轮次 id。**chat 运行期间写入的记录带有该 chat 的 id 和轮次编号，所以 `delorun logs --session <id> --turn <n>` 能找到一次回答背后的记录。
 - **谁能读取。**只有你的用户能打开日志文件夹和文件。模型在沙箱工作区中运行的命令无法更改它们，并且在你的系统强制执行该规则的地方也无法读取它们（见[Delorun 保护什么](safety.zh.md#the-sandbox)）。
+
+<a id="how-long-logs-are-kept"></a>
 
 ## 日志保留多久
 
@@ -55,6 +61,8 @@ Delorun 只写其中的第一份。它不包含 Docker 工作区、桌面应用�
 | Delorun 检查旧文件 | 每次运行 `delorun` 命令时（`--help` 和 `--version` 除外），以及运行 `delorun logs --prune` 时 |
 
 Delorun 只在你运行 `delorun` 命令时删除旧文件，所以在你不运行任何命令期间，日志可能保留得更久。
+
+<a id="reading-logs-with-delorun-logs"></a>
 
 ## 用 delorun logs 读取日志
 
@@ -78,6 +86,8 @@ delorun logs --since 30m     # the last half hour
 | `--profile <name>` | 另一个 profile 的日志 |
 
 一条记录的打印格式为 `<time> <level> <log name> [<chat id>/<turn>] <message>`。捕获的输出中的控制字符会以转义形式显示，所以一行日志无法改变你的终端所显示的内容。
+
+<a id="clearing-logs"></a>
 
 ## 清空日志
 
@@ -107,10 +117,14 @@ delorun logs --since 30m     # the last half hour
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 为你看到的问题寻找修复办法：[故障排查](troubleshooting.zh.md)。
 - 检查你的设置：[日常使用](daily-use.zh.md#check-the-release-and-your-setup)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

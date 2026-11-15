@@ -22,6 +22,8 @@ description: "Delorun 中的提示词注入与数据外泄：一次攻击需要�
 - [更改设置](#changing-the-setting)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="the-three-ingredients"></a>
+
 ## 三个条件
 
 用这种方式窃取数据，需要同时具备下面三个条件。去掉任何一个，攻击就会失败。
@@ -31,6 +33,8 @@ description: "Delorun 中的提示词注入与数据外泄：一次攻击需要�
 3. **一条出路。**任何把数据放到攻击者能读到的地方的东西：向攻击者的服务器发请求的命令、对携带数据的网址执行的 `web_fetch`、发送数据的[插件](../reference/glossary.zh.md#plugin)或 MCP 服务器，或者被放进你之后要分享的内容里的数据。
 
 在真实工作中，前两个条件通常都存在。网络设置作用于第三个条件。
+
+<a id="the-network-setting"></a>
 
 ## 网络设置
 
@@ -69,6 +73,8 @@ Delorun 只在沙箱能做到的地方强制执行允许列表和关闭：Linux 
 
 </details>
 
+<a id="what-each-setting-closes"></a>
+
 ## 每种设置关闭了什么
 
 - **开放**什么也不关闭。命令可以把任何东西发送到任何地方。这是 stock DeepSeek Harness 的行为，也是 Delorun 的默认值。
@@ -76,6 +82,8 @@ Delorun 只在沙箱能做到的地方强制执行允许列表和关闭：Linux 
 - **关闭**关闭命令和 `web_fetch` 自己打开的每一个网络连接。需要下载依赖项的命令会失败。
 
 这两种限制性设置都能挡住自己打开网络的命令。对于请求沙箱之外的另一个程序去打开网络的命令，它们只在沙箱隐藏了那个程序的范围内有效。在所有设置下，沙箱都会隐藏你的登录会话的服务；在允许列表和关闭下，还会隐藏域名解析、打印和系统服务。有些程序在你的主目录中监听，并为任何提出请求的人建立连接：你用 `ControlMaster` 打开的 ssh 连接，命令可以通过它访问那台服务器；或是在没有运行时目录的系统上，gpg 的 `dirmngr`，它会从密钥服务器获取密钥。请把允许列表和关闭理解为关闭了命令自己打开的途径，而不是所有途径。
+
+<a id="what-no-setting-closes"></a>
 
 ## 任何设置都关不上的途径
 
@@ -89,6 +97,8 @@ Delorun 只在沙箱能做到的地方强制执行允许列表和关闭：Linux 
 - **模型的回复。**模型可以把数据放进它的回答。在你电脑上的 studio 中，回复所链接的图片会从其主机加载，所以图片的地址，以及写在其中的任何内容，都会到达那个主机。在通过远程访问使用的手机上，则显示为占位符。你点击的链接也以同样的方式发送它的地址。
 - **你之后分享的文件。**模型可以把数据写入工作区中的文件、提交信息或 pull request 描述。当你推送、发布或发送它们时，数据就离开了。
 - **模型提供方。**chat 中的一切都会发送给运行该模型的[提供方](../reference/glossary.zh.md#provider)。模型就是这样工作的，任何设置都改变不了。
+
+<a id="practical-advice"></a>
 
 ## 实用建议
 
@@ -107,6 +117,8 @@ Delorun 只在沙箱能做到的地方强制执行允许列表和关闭：Linux 
 | crates.io | `crates.io`, `index.crates.io`, `static.crates.io` |
 | Go modules | `proxy.golang.org`, `sum.golang.org` |
 | GitHub | `github.com`, `codeload.github.com`, `objects.githubusercontent.com` |
+
+<a id="changing-the-setting"></a>
 
 ## 更改设置
 
@@ -134,6 +146,8 @@ Delorun 只在沙箱能做到的地方强制执行允许列表和关闭：Linux 
 </details>
 
 **接下来。**要一并查看所有保护，请阅读 [Delorun 保护什么](safety.zh.md)。如果某条命令被拒绝，请在[故障排查](troubleshooting.zh.md#protections-and-plugins)中查找它的消息。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

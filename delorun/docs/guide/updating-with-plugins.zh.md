@@ -20,6 +20,8 @@ description: "在你运行大量第三方插件时更新 Delorun：Delorun 在�
 - [之后：验证与回退](#after-verify-and-go-back)
 - [接下来](#next)
 
+<a id="before-what-is-saved"></a>
+
 ## 之前：保存了什么
 
 Delorun 自己保存你的设置，所以你不必手工复制。在切换之前，它会记录一个名为 `Before update to Delorun <version>` 的 [profile 历史](../reference/glossary.zh.md#profile-history)版本（一个[快照](../reference/glossary.zh.md#snapshot)）。这个版本包含你的插件列表和你固定的版本、你的 bundle 列表、你的补丁以及你的插件版本豁免。它不包含插件已安装的代码；`delorun recover` 和 studio 的 Setup versions 界面会把列表带回来，profile 再据此安装。
@@ -31,6 +33,8 @@ delorun update --data-copy
 ```
 
 对于不能丢失的工作，还要用 `delorun export <chat-or-workspace> --out <file>` 把它导出，它会把一个 chat，或一个连同其 chat 的工作区，保存为另一个 home 可以导入的文件（见[日常使用](daily-use.zh.md#trash-export-and-import)）。导出涵盖 chat 和工作区，不涵盖插件。
+
+<a id="check-read-the-report"></a>
 
 ## 检查：阅读报告
 
@@ -69,6 +73,8 @@ Delorun 在保存豁免之前会打印风险。请使用报告中点名的插件
 
 </details>
 
+<a id="update-the-health-check"></a>
+
 ## 更新：健康检查
 
 运行 `delorun update`。它会再次打印报告并询问 `Apply the update to Delorun <version>?`。`delorun update --yes` 只确认不会关闭任何东西、不会移除任何东西、也不含 Delorun 无法预测的内容的报告，所以插件很多时，你通常需要自己回答这个问题。报告的有效期是十分钟。
@@ -82,6 +88,8 @@ Delorun 在保存豁免之前会打印风险。请使用报告中点名的插件
 - 你的 bundle 列表就是报告所预测的那一份。
 
 加载失败的已豁免插件，属于报告没有关闭的条目，所以检查会失败。如果任何一项检查失败，或新的发布版本停止运行，Delorun 会自行回退到你原来的发布版本和 profile，并打印哪项检查失败：`Delorun <version> failed its health check (<check>); Delorun <previous> runs again with the profile from before. See delorun logs.` 成功时它会打印 `Delorun <version> runs now.`
+
+<a id="after-verify-and-go-back"></a>
 
 ## 之后：验证与回退
 
@@ -118,6 +126,8 @@ studio 中的版本界面（“设置”→“Setup versions”）按最新在�
 - 对照你所运行的发布版本检查插件声明的范围：`delorun plugin check <directory>`。
 
 </details>
+
+<a id="next"></a>
 
 ## 接下来
 

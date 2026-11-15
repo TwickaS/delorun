@@ -13,10 +13,10 @@
   zh: 9279fbebafdb2c46
 /update-and-rollback/contents:
   en: 479fc10754bd01ac
-  zh: 6d4b5937ce2819d3
+  zh: 14a153171b4e29d8
 /update-and-rollback/what-exists-today:
   en: 68fffc4cbdd19686
-  zh: 3ad66e0e2ce896a8
+  zh: 7ddb08d4e81db488
 /update-and-rollback/the-rules:
   en: 69ac054b668fcc66
   zh: be9454bd35582018
@@ -34,16 +34,16 @@
   zh: 5b7325b6ac503888
 /update-and-rollback/the-rules/no-version-goes-down-on-its-own:
   en: ec74f5f65091830f
-  zh: 6695b38b9d1b27a9
+  zh: ef855bd841773cf7
 /update-and-rollback/the-rules/the-desktop-app:
   en: dc7fa42c43f41f79
-  zh: f52fefbfc1646544
+  zh: ab7c71e0729f6f9e
 /update-and-rollback/what-this-does-not-protect-against:
   en: 1e43271f4b616eed
-  zh: 54813c3de91af4fd
+  zh: 178119b01698cba8
 /update-and-rollback/denial-tests:
   en: ed1097934cd2d757
-  zh: 0abc46d26f58d9ad
+  zh: f6c9a88deac5ff8b
 /update-and-rollback/implementation-status:
   en: 149d492816207cbb
   zh: 10d01c842de703b5

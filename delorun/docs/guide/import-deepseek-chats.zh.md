@@ -19,13 +19,19 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 - [不会导入什么](#what-is-not-imported)
 - [接下来](#next)
 
+<a id="export-your-chats-from-the-website"></a>
+
 ## 从网站导出你的 chat
 
 在 chat.deepseek.com 上，打开账户设置并导出你的全部数据。网站会准备一个名称类似 `deepseek_data-2026-01-01.zip` 的文件并提供下载。请保持该文件原样，不要解压。
 
+<a id="turn-the-import-on"></a>
+
 ## 开启导入
 
 在侧边栏打开“插件”，选择“更多”，然后在“实验性插件”下开启 **DeepSeek chat import**。新手引导的“推荐插件”步骤提供同样的开关。开启之后，**New session** 右侧会出现一个带上传箭头的按钮。关闭它会移除该按钮；已导入的 chat 会保留。
+
+<a id="upload-the-file"></a>
 
 ## 上传文件
 
@@ -37,6 +43,8 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 对话框最后会说明导入了多少个 chat、导入到哪个工作区、有多少较旧的被略去，以及有多少无法导入。只有你本人在运行 Delorun 的那台电脑上才能导入；你批准过的手机不能。
 
 你应该会在该工作区的 chat 列表中看到导入的 chat。
+
+<a id="what-is-imported"></a>
 
 ## 会导入什么
 
@@ -56,12 +64,16 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 
 </details>
 
+<a id="what-is-not-imported"></a>
+
 ## 不会导入什么
 
 - **你附加的其他文件。**图片以外的文件显示为带有名称和大小的卡片。该卡片无法打开，模型也看不到其内容。
 - 一段对话的**其他分支**。
 - 导出文件中的**设置、记忆和账户详情**。
 - **比最新 1000 段更早的对话。**对话框会告诉你略去了多少段。
+
+<a id="next"></a>
 
 ## 接下来
 

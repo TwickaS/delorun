@@ -26,6 +26,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 - [保护设置](#the-protection-setting)
 - [在 studio 中](#in-the-studio)
 
+<a id="plugins-you-link-from-a-folder"></a>
+
 ## 你从文件夹链接的插件
 
 当你用 `delorun plugin --profile default add link:<folder>` 添加插件时，Delorun 会在你的 Delorun home 中保留该文件夹内容的一份副本，并运行这份副本，而不是该文件夹。
@@ -40,6 +42,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 带有这一行为的发布版本第一次启动时，会按原样批准你已经链接的插件，并只说明一次，所以你运行的内容不会有任何改变。
 
+<a id="seeing-what-waits-for-review"></a>
+
 ## 查看哪些在等待审阅
 
 | 命令 | 打印 |
@@ -51,6 +55,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 | `--profile <name>` | 另一个 CLI profile 的更改 |
 
 一项更改的 id（例如 `c3f09a1b2c4`）准确指代所显示的内容。如果文件夹在你查看之后发生变化，该 id 就不再适用，`delorun changes list` 会显示新的 id。
+
+<a id="applying-discarding-and-undoing"></a>
 
 ## 应用、丢弃与撤销
 
@@ -64,11 +70,15 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 当 Delorun 正在运行时，更改立即生效。如果插件随后无法加载，Delorun 会回到之前运行的内容、打印错误，并且该更改带着那个错误再次等待你的审阅。当 Delorun 没有运行时，下一次启动会运行该更改。每项被应用或被撤销的更改，同时也是你的 profile 历史的一个版本，`delorun recover` 可以恢复它。
 
+<a id="the-second-confirmation"></a>
+
 ## 第二次确认
 
 在你应用更改之前，Delorun 会打印该更改能做什么的摘要：更改同意、防护或沙箱策略；添加模型可以调用的工具；运行命令；打开网络连接；读取你的 Delorun home 下的文件；或添加依赖项或安装或构建脚本。它还会指出差异没有显示的内容：Node 可以加载的非文本文件、对于差异来说太大或超出其被截断位置的文件，以及位于插件文件夹内的包的文件。当检查标记了该更改时，`apply` 会再问一次，并指出它们发现了什么，包括差异没有显示的每个文件。
 
 摘要帮助你阅读更改；它不是一种保护。插件的代码可以做 Delorun 能做的任何事。
+
+<a id="working-on-a-plugin"></a>
 
 ## 开发插件
 
@@ -82,6 +92,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 两条命令都只在你电脑上的终端中运行；studio 的 Changes 部分在那台电脑的浏览器中做同样的事（见[在 studio 中](#in-the-studio)）。远程会话和你的 agent 无法开始或结束开发会话。
 
+<a id="when-your-agent-changes-a-plugin"></a>
+
 ## 当你的 agent 更改插件时
 
 保护关闭时，agent 对插件文件夹的写入不会询问：它写入的内容像你自己的编辑一样加载并被记录。它安装、更新或移除插件的请求与在 DeepSeek Harness 中一样运行，仅需完全访问批准，它从文件夹安装的插件不经审阅就加载并被记录。
@@ -89,6 +101,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 保护开启时，agent 在 chat 中第一次写入你批准过的插件的文件夹时，chat 会先询问你，指出该插件并显示差异，因为 agent 在更改你的 harness 所运行的内容。你一旦允许，agent 在同一个 chat 中对该插件的其他写入就会继续进行；另一个 chat 则会再次询问。它写入的内容与你自己的编辑一样，是 `delorun changes list` 中的一项更改，只有在你应用它之后才运行，或在你开发该插件期间立即运行。
 
 保护开启时，当 agent 请求安装、更新或移除插件，不会安装或移除任何东西。该请求在 `delorun changes list` 中等待，被标记为在 chat 中提出的，并且 agent 会被告知它在等你。`delorun changes show <id>` 说明应用它会做什么；`delorun changes apply <id>`（或 studio 中的 Apply）像 `delorun plugin` 添加或移除插件那样运行它，`discard` 则放弃它。来自文件夹的插件在添加时不加载任何东西：它的内容是第二项更改，你像其他任何更改一样审阅并应用它。agent 不能开启或关闭插件、更改它们的设置，或带回你的插件的早期版本；它被告知这些由你自己来做。
+
+<a id="changing-delorun-itself"></a>
 
 ## 更改 Delorun 本身
 
@@ -104,9 +118,13 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 这些命令只在终端中运行，并且只在已安装的 Delorun 中运行，不在源码检出中运行。当 Delorun 在你应用了对它的更改之后立即无法启动时（包括某个被更改的文件使 Delorun 在启动之前就停止的情况），它会像对插件那样，在没有你最新更改的情况下再启动一次。如果没有那项更改它也不能启动，它会对你最新应用的更改指出 `delorun changes undo <id>`，并指出 `delorun changes edit-harness --discard`，后者撤回对 Delorun 本身的每一项更改。安全模式（`delorun recover safe-mode`）在你离开安全模式之前，运行不带你对它的任何更改的已安装发布版本。`delorun verify` 和 `delorun doctor` 会列出你改动过的文件。你的更改属于已安装的版本：更新之后，更新报告会说明每一项如何被保留。
 
+<a id="turning-one-plugin-off"></a>
+
 ## 关闭单个插件
 
 `delorun changes off <plugin>` 停止一个插件而不触动其他插件，`delorun changes on <plugin>` 再次运行它。两者都会先询问，并且都是可以用 `delorun changes undo <id>` 撤销的更改。Delorun 自己的插件始终保持开启；要在没有其他所有插件的情况下启动，请使用 `delorun recover safe-mode`。
+
+<a id="when-a-change-stops-delorun-from-starting"></a>
 
 ## 当更改使 Delorun 无法启动时
 
@@ -120,6 +138,8 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 
 插件运行的是它在该更改之前运行的版本，或者在该更改是添加或开启它时不运行。在你再次应用该更改或撤销它之前，每次启动都会这样说明，`delorun changes list` 和 `delorun doctor` 也会如此。Delorun 只略去那一项更改，也不改写你的任何文件。当没有它 Delorun 也不能启动时，它会停止并说明：“Delorun did not start again. Start without third-party plugins: delorun recover safe-mode, then delorun start.”
 
+<a id="the-protection-setting"></a>
+
 ## 保护设置
 
 | 设置 | 更改会怎样 |
@@ -130,6 +150,8 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 保护关闭时，任何能写入已链接插件文件夹的东西，都可以在你看到之前改变 Delorun 运行的内容：以完全访问工作的 agent、你下载的程序、任何以你的身份运行的程序。受限工作区中的命令只在沙箱允许的地方写入：该工作区内的插件文件夹，绝不是你的 Delorun home，所以它们无法改变你的 Delorun 本身的副本。当你想先审阅每一项更改时，请开启保护。
 
 `delorun changes protection` 打印该设置及其含义。`delorun changes protection on` 或 `off` 更改它，只在你电脑上的终端中进行；studio 无法更改它。每条命令都会说明新设置的含义（例如对 `off` 说明 “Changes will load without your review.”），并要求你确认；新设置立即生效，无需重启。完整的 setup 也会提议开启保护。
+
+<a id="in-the-studio"></a>
 
 ## 在 studio 中
 

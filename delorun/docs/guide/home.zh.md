@@ -20,6 +20,8 @@ description: "你的 Delorun home：delorun 把你的数据保存在哪里，如
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="where-the-home-is"></a>
+
 ## home 的位置
 
 想把 home 放到别处，请设置 `DELORUN_HOME`：
@@ -30,9 +32,13 @@ DELORUN_HOME=~/work/delorun delorun
 
 路径必须是绝对路径，或以 `~` 开头。`delorun` 会拒绝你的用户主目录本身、文件系统根目录，以及 DeepSeek Harness 的 home `~/.dsh` 或其中的任何文件夹，因为这些位置都存放着 Delorun 不能与自己的数据混在一起的东西。`delorun status` 会打印正在使用的 home。
 
+<a id="the-first-run"></a>
+
 ## 首次运行
 
 在新的 home 上首次运行 `delorun` 会执行 setup（见[安装与首次运行](install.zh.md)）。此后，`delorun` 会在后台启动 Delorun，并在浏览器中打开 studio；如果你在 setup 中选择了在终端中运行，则不会这样。`delorun status` 显示它是否在运行，`delorun stop` 会在正在运行的 chat 结束后停止它，使用 `delorun stop --now` 则立即停止。每个 profile 只运行一个 Delorun：第二次启动会告诉你它已经在运行。[日常使用](daily-use.zh.md)列出了每一条命令。
+
+<a id="profiles"></a>
 
 ## Profile
 
@@ -45,11 +51,15 @@ delorun status --profile work   # other commands take --profile after their name
 
 Profile 名称由 1 到 32 个小写字母、数字、`-` 或 `_` 组成。Delorun 会拒绝 `desktop`（留给桌面应用自己的 profile）、`headless`（`delorun headless` 使用它），以及 `con` 这类 Windows 设备名。所有 profile 共享你的 chat、工作区和密钥。
 
+<a id="your-deepseek-harness-home"></a>
+
 ## 你的 DeepSeek Harness home
 
 Delorun 从不更改或移动 `~/.dsh`。只有当你从中导入时才会读取它（见[从 DeepSeek Harness 切换](switching.zh.md)）。如果你为 DeepSeek Harness 设置了 `DSH_HOME`，`delorun` 会忽略它并使用你的 Delorun home，`delorun status` 会告诉你这一点。
 
 `delorun plugin` 的行为与 `dsh plugin` 相同，只是在你的 Delorun home 内运行；`delorun headless` 像 `dsh headless` 一样回答单个任务，但带有 Delorun 的沙箱保护和防护措施（见[日常使用](daily-use.zh.md#the-plugin-and-headless-commands)）。
+
+<a id="fixing-permissions"></a>
 
 ## 修复权限
 
@@ -88,11 +98,15 @@ What you can do:
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 启动与停止 Delorun：[日常使用](daily-use.zh.md)。
 - 了解日志存放位置：[Delorun 的日志存放在哪里](logs.zh.md)。
 - 如果某个文件被拒绝：[home 及其文件](troubleshooting.zh.md#the-home-and-its-files)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

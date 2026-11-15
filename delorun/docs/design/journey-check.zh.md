@@ -18,9 +18,13 @@ description: "旅程检查的设计：在干净容器中进行的一次端到端
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 目前不存在旅程检查。发布、安装和启动器各个包有它们自己的规格，它们针对本地替身运行各自的部分，而没有任何检查从干净的机器上把它们一起运行。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -54,13 +58,19 @@ description: "旅程检查的设计：在干净容器中进行的一次端到端
 8. 同样的更新但带 `--no-data-copy`：回退以 `ROLLBACK_NEEDS_DATA_COPY` 拒绝，而 `--profile-only` 成功。
 9. 某个制品中改变了一个字节的发布版本，会在安装之前被拒绝。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 旅程检查不涵盖 npm 注册表及其证明、安装脚本、真实发布版本中附带的根、真实的公开发布日志、tailnet 路径、桌面应用、其他 Node 主版本、Windows 或 macOS。这些保留它们自己的检查，或在发布时手工检查。
 
+<a id="denial-tests"></a>
+
 ## 拒绝测试
 
 该检查本身就是第 2、7、8 和 9 步的拒绝测试：安装了日志矛盾的发布版本、不进行恢复的回退、没有副本却不拒绝的回退，以及安装了被篡改的发布版本，每一种都会让它失败。
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

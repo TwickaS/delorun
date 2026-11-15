@@ -18,6 +18,8 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `.github/workflows` 下没有任何工作流构建、签名、记录日志或发布 Delorun 的发布版本。为发布版本签名、为时间戳签名、写发布日志条目、检查公告以及比较重新构建，都是由人运行的命令：`delorun/apps/release/src/` 下的 `sign-release.ts`、`sign-timestamp.ts`、`log-release.ts`、`check-advisories.ts` 和 `compare-rebuild.ts`。
@@ -27,6 +29,8 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 - 发布 manifest 的 `desktop` 条目没有指名任何 Delorun 桌面构建：桌面应用是上游的。
 - closure 配方在一个由基础摘要、Debian 快照和确切软件包版本固定的构建器镜像中、在没有网络的情况下，从带标签的源代码为 `linux-x64` 和 `linux-arm64` 编译上游的原生系统插件（`native/system`），而 `prebuilt-pins.json` 固定这些二进制文件。它没有为 macOS 二进制文件固定的工具链，所以 `darwin-x64` 和 `darwin-arm64` 不是发布平台；closure 中的其他所有原生文件，都是锁文件固定的预构建 npm 文件。
 - 发布平台是明确的：`closure.json` 列出 `linux-x64` 和 `linux-arm64`（Windows 在 WSL2 中运行 Linux 运行时），而构建、SBOM、重新构建记录和签名恰好涵盖这些平台。当列表指出了配方无法构建其原生代码的平台时，读取配方会失败。在发布版本未列出的平台上，npm 启动器和 `delorun update` 以 `PLATFORM_NOT_RELEASED` 拒绝，并指出该平台。启动器和 `delorun update` 在原生 Windows 和 macOS 上会在任何下载之前停止，并指出 WSL2 和指南。只有当配方从带标签的源代码构建出其原生代码，且 `closure.json` 列出它时，原生 Windows 或 macOS 运行时才会加入发布版本。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -38,12 +42,16 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 6. **Authenticode。**Windows closure 和桌面应用中的每个 PE 文件都带有 Authenticode 签名，manifest 记录已签名文件的摘要。
 7. **安装脚本。**`install.sh` 和 `install.ps1` 在安装之前按 [C2](../contracts/c02-release-manifest.zh.md#client-verification) 所陈述的方式验证 closure，发布说明和信任页面会打印它们的摘要。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **签名者的机器。**重新构建表明带标签的源代码和已发布的配方产生了该发布版本，而不表明签名者的机器和工具链没有被攻破。
 - **带标签的源代码或固定依赖项中的恶意更改。**重新构建会重现它，签名会涵盖它。
 - **构建器镜像的软件包。**重新构建表明固定的 Debian 编译器、链接器和 C 库在两台机器上给出相同的二进制文件，而不表明这些软件包没有后门；两次构建都从同一个 Debian 快照获取它们。
 - **在任何 Delorun 检查之前的 npm 启动器。**`npx delorun` 运行 npm 所提供的启动器；构建证明把它与发布工作流联系起来。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -54,6 +62,8 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 | `the workflow publishes nothing before the signature and log verify` | manifest 签名或日志 bundle 未通过验证的工作流运行，不会向发布版本发布任何文件。 |
 | `the scheduled timestamp never lowers a channel` | 输入为某个渠道指定了更低版本的定时运行会拒绝签名。 |
 | `two of N rebuilds are required once maintainers sign` | 在二选 N 的根之下只用一条重新构建记录签名会被拒绝。 |
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

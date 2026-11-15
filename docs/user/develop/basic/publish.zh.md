@@ -117,6 +117,8 @@ dsh --profile demo
 
 `dsh plugin --profile demo remove dsh-hello-plugin` 会同时移除依赖和对应的层。
 
+<a id="the-loading-order"></a>
+
 ## 加载顺序
 
 生效配置在空根之上按以下顺序逐层组合：

@@ -30,12 +30,16 @@ tailnet 上的任何设备都能打开登录页面，但只有你在电脑上批
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="what-you-need"></a>
+
 ## 你需要什么
 
 - Delorun 已在你的电脑上设置好并能正常工作（见[安装与首次运行](install.zh.md)）。
 - 你的电脑和手机上都装有 Tailscale，并且都登录到同一个 tailnet。
 - 在 Tailscale 管理控制台的 DNS 页面中，为你的 tailnet 开启 HTTPS 证书。Tailscale 需要它们来给你的电脑一个安全的地址。
 - 在 Linux 上，你的用户需要有权限设置 `tailscale serve`，这是把手机的请求转发给 Delorun 的 Tailscale 功能。如果你的用户没有这个权限，`delorun reach on tailscale` 会打印出需要你自己运行的那一条命令：`sudo tailscale set --operator=$USER`。Delorun 从不运行 `sudo`。
+
+<a id="turn-remote-access-on"></a>
 
 ## 开启远程访问
 
@@ -75,6 +79,8 @@ delorun reach on tailscale
 
 </details>
 
+<a id="approve-a-device"></a>
+
 ## 批准设备
 
 设备只能在你的电脑上批准。这样可以防止 tailnet 上的陌生人进来。像这样批准一部手机：
@@ -113,6 +119,8 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 </details>
 
+<a id="keep-approval-yours"></a>
+
 ## 让批准权掌握在你手里
 
 批准是留给你本人、在你的电脑上进行的。三个事实有助于让它一直如此。
@@ -120,6 +128,8 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 - **代码把批准与你读到的屏幕绑定在一起。**窗口开启期间，tailnet 上的任何设备都可以提出请求，而 Delorun 无法分辨请求来自哪里。从另一台设备上读到的代码不会匹配。代码并不能证明谁持有这台设备：你批准时，任何拿着你已解锁手机的人都能得到这个批准。
 - **模型在[沙箱](../reference/glossary.zh.md#sandbox)中运行的命令无法批准设备。**studio 的“设备”部分只应答持有 studio 自己登录凭据的浏览器，而 `delorun devices` 通过一条需要你的 Delorun home 中某个文件里的令牌的通道与 Delorun 通信。沙箱中的命令两者都读不到。
 - **在沙箱之外、以你的身份运行的程序，可以在你不在时批准设备。**对于你让它以[完全访问](../reference/glossary.zh.md#full-access)运行的任何命令都是如此。电脑上的其他程序或其他用户可以访问 studio 的端口，但需要 studio 的登录凭据才能使用“设备”部分。在批准窗口之外，Delorun 会拒绝每一个请求被批准的操作。
+
+<a id="what-an-approved-phone-can-and-cannot-do"></a>
 
 ## 已批准的手机能做什么、不能做什么
 
@@ -179,6 +189,8 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 </details>
 
+<a id="unlock-sensitive-actions-for-a-while"></a>
+
 ## 暂时解锁敏感操作
 
 当手机尝试敏感操作（例如更改设置）时，你需要解锁。手机会显示 “This needs a quick unlock from your computer” 并提供 **Unlock**。你也可以提前在手机上的“设置”→“设备”中解锁。
@@ -210,6 +222,8 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 </details>
 
+<a id="unlock-with-a-pin"></a>
+
 ## 用 PIN 解锁
 
 PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作，而不必每次都在你的电脑上向你索取代码。它在你开启之前是关闭的，并且你只能在你的电脑上开启它。它只在 Tailscale 私有地址上有效，在 Funnel 地址上无效。
@@ -239,6 +253,8 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 
 </details>
 
+<a id="remove-a-device"></a>
+
 ## 移除设备
 
 当你丢失了某台设备或不再使用它时，请移除它。用 `delorun devices list` 中的 id 运行 `delorun devices remove <device id>`，或在你电脑上 studio 的“设备”部分选择该设备旁的 **Remove**。
@@ -252,6 +268,8 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 - 如果你给出的 id 不在列表中，那么命令会失败并说明原因：请从 `delorun devices list` 中复制 id。
 
 </details>
+
+<a id="turn-remote-access-off"></a>
 
 ## 关闭远程访问
 
@@ -270,6 +288,8 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 
 </details>
 
+<a id="get-a-one-time-owner-code"></a>
+
 ## 获取一次性所有者验证码
 
 `delorun devices code` 会在终端中打印一个新的一次性所有者验证码。验证码只能使用一次，有效期 10 分钟，仅对这台电脑的 studio 有效，新验证码会取代上一个。它只会打印到终端：当输出被重定向到别处时，命令会告诉你在终端中运行它。
@@ -278,17 +298,23 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 
 批准手机不需要这个验证码：在你的电脑上用 `delorun devices approve` 批准设备，就会认领一个尚无所有者的 home。studio 中没有任何地方会索要这个验证码。
 
+<a id="what-tailscale-sees"></a>
+
 ## Tailscale 能看到什么
 
 Tailscale 的协调服务能看到你电脑的名称、你的电脑和每台设备的 IP 地址、连接时间和流量大小。除非开启了 Tailnet Lock，否则 Tailscale 可以把设备添加到你的 tailnet，并且它会为你的地址获取证书。每台设备仍然需要你在电脑上批准。见[你使用 Delorun 时信任什么](trust.zh.md)。
 
 远程访问尚未经过外部安全评审。它的测试使用的是伪造的 `tailscale`，从未在真实的 tailnet 或手机上运行过。
 
+<a id="next"></a>
+
 ## 接下来
 
 - 要了解手机连接时哪些东西仍受保护，请阅读 [Delorun 保护什么](safety.zh.md)。
 - 要了解 Tailscale 和其他方能看到什么，请阅读[你使用 Delorun 时信任什么](trust.zh.md)。
 - 如果出了问题，请在[故障排查](troubleshooting.zh.md#remote-access-and-devices)中找到那条消息。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

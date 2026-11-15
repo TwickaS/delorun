@@ -18,6 +18,8 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun update` 请求 home 进程通过 `@delorun/install` 的 `LauncherChannel` 解析渠道最新的发布版本，后者验证根链、时间戳、manifest、发布日志 bundle 以及在线日志检查（见 [C2](../contracts/c02-release-manifest.zh.md)、[C18](../contracts/c18-release-log.zh.md)），将其安装到存储中，并打印 [C3](../contracts/c03-update-report.zh.md) 的报告。在一个人运行它之前，没有任何东西告诉他存在某个发布版本。
@@ -25,6 +27,8 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 - `@delorun/update` 针对目标发布版本，为报告判定每个已安装插件的两条轴。
 - 上游的 `evaluatePluginCompatibility` 在安装时和启动时判定两条轴。在安装之前，没有任何东西向插件作者显示他们的范围接纳什么。
 - 发布工具对草稿所指名的任何版本签名。没有任何东西把发布版本与其次版本的更早发布版本做比较。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -69,6 +73,8 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 19. 两条轴保持独立：`engines.delorun` 从不覆盖上游轴。
 20. `delorun plugin check <directory>` 在不导入其代码的情况下读取插件的 `package.json`，用上游的 `evaluatePluginCompatibility`（即安装器的求值）针对正在运行的发布版本对两条轴求值，并打印每个声明的范围接纳什么、什么未声明，以及以正在运行的 Delorun 次版本为目标的 `engines.delorun` 范围。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - 与其他所有完整性请求一样，主机能看到这台机器的地址以及每次检查的时间（见[威胁模型](../security/threat-model.zh.md#the-network)）。
@@ -78,6 +84,8 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 - 以此人自己的权限运行的进程可以写入 `run/<profile>/` 之下的记录，从而选择通知说什么；记录的读取方会拒绝含有控制字符的摘要，所以它无法改写终端。
 - 插件数量只涵盖版本轴。更新会改变的撤销、已退役的 bundle 或 profile 行，只在 `delorun update` 的报告中显示。
 - 补丁规则检查的是清单中的名称，而不是接口的类型。补丁之内接口行为的更改只有通过评审才能发现。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -101,6 +109,8 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 | `plugin-check-imports-no-code` | `delorun plugin check` 读取 manifest，且不运行插件的任何文件。 |
 | `plugin-check-refuses-special-files` | 是 FIFO 或符号链接的 manifest 会被拒绝，而不会等待或跟随它。 |
 | `plugin-check-escapes-manifest-text` | manifest 的名称和范围在打印时，终端控制字符会被转义。 |
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

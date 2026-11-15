@@ -25,12 +25,16 @@ Delorun 是一个可以按你自己的工作来塑造的 agent harness。它构�
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="before-you-start"></a>
+
 ## 开始之前
 
 - **一台受支持的电脑。**x64 或 arm64 上的 Linux，或通过 WSL2 使用的 Windows（见[通过 WSL2 使用 Windows](#windows-through-wsl2)）。Delorun 0.1.0 不能在原生 Windows 上运行，macOS 将在后续发布版本中加入（见[路线图](roadmap.zh.md)）。
 - **[Node.js](https://nodejs.org) 24.9 或更新版本。**只有安装命令需要它。用 `node --version` 检查。
 - **模型密钥。**密钥是让 Delorun 在你的账户下使用 AI 模型的秘密文本。运行模型的公司或服务器就是[模型提供方](../reference/glossary.zh.md#provider)。默认是 DeepSeek API 密钥。其他提供方也可以使用（见[模型提供方](providers.zh.md)）。你可以在 setup 时跳过密钥，之后再添加。
 - **git**，`delorun update` 在更新之前用它保存你的设置（见[更新](updates.zh.md)）。首次运行的 setup 不需要它。
+
+<a id="install"></a>
 
 ## 安装
 
@@ -79,6 +83,8 @@ Delorun 把一切都保存在一个文件夹 `~/.delorun` 中，只有你能打�
 
 </details>
 
+<a id="windows-through-wsl2"></a>
+
 ## 通过 WSL2 使用 Windows
 
 Delorun 0.1.0 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，可在 Windows 旁边运行 Linux。它不能在 PowerShell 这类原生 Windows 终端中运行。
@@ -89,6 +95,8 @@ Delorun 0.1.0 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功�
 4. 在那里运行 `npx delorun`，并按照[安装](#install)操作。
 
 请把你的项目放在 Ubuntu 的主目录里，例如 `~/projects`，因为 Windows 驱动器（`/mnt/c`）上的文件对 Linux 程序来说很慢。请在你的 Windows 浏览器中，用 Delorun 打印的地址打开 studio。
+
+<a id="what-the-launcher-verifies"></a>
 
 ## 启动器验证什么
 
@@ -115,6 +123,8 @@ Installing release 0.1.0.
 - 如果你想在每次启动时进行更严格的完整文件检查，请把 `DELORUN_RUNTIME_FULL_CHECK_DAYS` 设为 `0`。默认至少每 7 天对每个文件计算一次哈希；最大值是 30。
 
 </details>
+
+<a id="setup-how-you-will-use-delorun"></a>
 
 ## Setup：你将如何使用 Delorun
 
@@ -228,6 +238,8 @@ If something looks wrong: delorun doctor.
 
 </details>
 
+<a id="the-studio-and-your-first-chat"></a>
+
 ## studio 与你的第一次 chat
 
 setup 之后运行 `delorun`。它会启动 Delorun 并在浏览器中打开 studio。[studio](../reference/glossary.zh.md#studio) 是 Delorun 用来与模型聊天的网页。它会打印 studio 的地址和三条命令：
@@ -276,6 +288,8 @@ studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开�
 
 </details>
 
+<a id="the-default-workspace"></a>
+
 ## 默认工作区
 
 chat 在工作区中工作：这是你电脑上的一个文件夹，模型可以读取和更改其中的文件。Delorun 的默认工作区是你“文档”文件夹中的 `Delorun/default-workspace`，如果你的系统没有“文档”文件夹，则在你的用户主目录中。studio 在第一次使用时创建它。请在 studio 中添加你自己的项目文件夹。
@@ -287,6 +301,8 @@ chat 在工作区中工作：这是你电脑上的一个文件夹，模型可以
 - 如果你不想使用默认工作区，那么请在新手引导的 Workspace 步骤中选择另一个文件夹。
 
 </details>
+
+<a id="a-computer-without-a-browser"></a>
 
 ## 没有浏览器的电脑
 
@@ -309,6 +325,8 @@ delorun open --print
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 每天使用 Delorun：[日常使用](daily-use.zh.md)。
@@ -316,6 +334,8 @@ delorun open --print
 - 从 DeepSeek Harness 迁移而来：[从 DeepSeek Harness 切换](switching.zh.md)。
 - 了解哪些东西受到保护：[Delorun 保护什么](safety.zh.md)。
 - 如果出了问题：[故障排查](troubleshooting.zh.md)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

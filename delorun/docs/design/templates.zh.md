@@ -35,6 +35,8 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 - [尚待解决的问题](#open-questions)
 - [实现状态](#implementation-status)
 
+<a id="terms"></a>
+
 ## 术语
 
 - **模板（Template）**：采用下面格式的一条记录，由其 manifest 的 SHA-256 标识。它的名称和版本是标签。
@@ -42,6 +44,8 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 - **已保存的模板（Saved template）**：保存在 home 的库中的模板，在任何 profile 中都不活动，或在其中一个中活动。
 - **切换（Switch）**：作为一次事务，让另一个已保存的模板成为 profile 中的活动模板。
 - **机器选择（Machine choices）**：Delorun 根据 `delorun setup` 的答案和隐私部分（[C11](../contracts/c11-setup-answers.zh.md)）以及 reach 行所写入的行。它们属于这台机器上的 profile，而不属于模板。
+
+<a id="what-exists-today"></a>
 
 ## 今天已有的内容
 
@@ -57,7 +61,11 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 - 在尚未合并到 `main` 的分支上：Changes（[设计](changes.zh.md)）把已批准的插件保存在 profile 的 `package.json` 中，但把已批准的 harness 文件按每个运行时一份、整个 home 范围的记录保存；插件安装检查为每个插件写一条安装记录。
 - 不存在模板文件、库或命令。
 
+<a id="the-rules"></a>
+
 ## 规则
+
+<a id="the-template-file"></a>
 
 ### 模板文件
 
@@ -72,12 +80,16 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 9. **harness 编辑。**`harness` 通过 Delorun 版本和其已签名发布 manifest 的 SHA-256（[C2](../contracts/c02-release-manifest.zh.md)）指出编辑所针对的发布版本，并为每个文件列出一个条目：`app/` 之下的路径、编辑所起始的已签名文件的 SHA-256，以及 `harness/` 下的统一差异。
 10. **凭据。**`credentials` 按 `credential-ref` 字段所保存的名称，列出行所指名的每个凭据，并附一行用途说明。它从不包含值。
 
+<a id="the-active-template-is-the-persons-configuration"></a>
+
 ### 活动模板就是此人的配置
 
 11. **每个 profile 一个活动模板。**profile 运行发布版本的组合和恰好一个模板。模板不叠加。
 12. **此人的编辑保存在活动模板中。**此人自己的更改没有单独的层。活动模板的行是去掉机器选择之后的 profile 的 `cordis.patch.yml`，它的插件是 profile 在发布版本之外的依赖项和 bundle，它的 skill 是 `profiles/<profile>/skills/`（发布版本的组合把它作为 skill 来源提供），它的 harness 编辑是 profile 已批准的 harness 文件。更改设置、安装或移除插件、编辑预设或应用 harness 编辑，都会更改活动模板，下一次保存或切换会记录它。
 13. **为什么只有一处。**活动模板之上另设一层此人的层，会让“这个 profile 运行什么”变成此人必须在脑中组合的两件事，并且切换不会切换一切：在 “experiments” 处于活动状态时添加的插件或设置，会跟着此人进入 “work”。它还需要自己的组合机制，而今天的 profile 文件已经是上游的配置编辑器、插件管理器和 profile 历史写入的唯一位置。把此人的编辑保存在活动模板中，就是原样使用这些：模板是 profile 自己文件的内容，切换会替换它，profile 历史为它保存版本。应当在每个模板下都适用的选择，属于 home 补丁，它适用于每个 profile，并且不在任何模板中。
 14. **Delorun 对活动模板的记录。**`profiles/<profile>/delorun-template.json` 指出活动模板的名称、它上次被保存或加载时所属版本的 id，以及它的 `origin`。profile 历史会跟踪它。
+
+<a id="what-stays-with-the-home-and-the-machine"></a>
 
 ### 哪些留在 home 和机器上
 
@@ -86,10 +98,14 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 17. **信任决定留在 home。**权限和完全访问授权、MCP 和其他同意、保护设置、设备批准、版本豁免（`compatibility.json`、`delorun-compatibility.json`）和构建批准（`pnpm-workspace.yaml` 中的 `allowBuilds`）都不在任何模板中。加载其插件需要构建或豁免的模板，会在预览中要求做出这一决定。
 18. **绝不在模板中。**chat、工作区、附件、凭据的值，以及 `secrets/`、`trust/` 和 `run/` 的文件。
 
+<a id="the-library"></a>
+
 ### 库
 
 19. **它在哪里。**home 顶层的 `templates/`，模式为 0700：`templates/store/<id>/` 保存每个模板版本的条目，绝不重写；`templates/library.json` 列出每个已保存模板的名称、按 id 排列的版本及其时间和来源（`saved`、`imported` 或 `restored`）、它的 `origin` 和签名者状态，以及哪个 profile 将它作为活动模板。模板在 `templates/staging/` 下暂存，并在验证通过后通过一次重命名发布。
 20. **名称与版本。**一个名称标识一个已保存的模板；它的版本一直保留到此人移除为止。当有 profile 将某个模板或版本作为活动模板时，移除它会被拒绝。profile 的某个历史版本如果指名了库中已不再保存的模板版本，则会连同它所保存的 profile 文件一起恢复，而库不会增加任何东西。
+
+<a id="save-and-switch"></a>
 
 ### 保存与切换
 
@@ -101,17 +117,23 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 26. **失败的启动会回退。**切换之后的启动运行 [C3 的健康检查](../contracts/c03-update-report.zh.md#health-check) H4：新模板的每一行都能加载。失败会通过 profile-safety 的恢复来恢复 “Before” 版本，重新安装，再次启动，并把 Changes 条目标记为失败并附上错误。撤销该 Changes 条目就是切换回去。
 27. **日志。**每次启动都把活动模板的名称和 id 写入 home 的运行日志（[C20](../contracts/c20-operational-logs.zh.md)）。
 
+<a id="chats-and-presets-across-a-switch"></a>
+
 ### 切换前后的 chat 与预设
 
 28. **历史保留。**切换不改变任何 chat。每个 chat 都保留它的历史，它的下一轮在切换所启动的 Host 下运行。
 29. **chat 跟随它的预设 id。**chat 在下次运行时解析它所记录的预设 id，与上游今天所做的一样，并使用活动模板给予该 id 的定义。以不同方式定义同一个预设 id 的两个模板，会依次给 chat 各自的定义。
 30. **已不存在的预设。**当活动模板没有定义 chat 的预设 id 时，chat 不会在另一个预设下运行。studio 显示该 chat 并附上 “Its preset <id> is not in the template <name>”，并提供两个操作：切换到拥有它的模板（如果库中知道有这样一个），或为这个 chat 选择另一个预设，这会向它的 session 追加 `agent-preset/selected`。向该 chat 的计划投递会以同样的原因被拒绝并被记录。
 
+<a id="templates-presets-and-profiles"></a>
+
 ### 模板、预设与 profile
 
 31. **预设按 chat，模板按 profile。**agent 预设组合一个 agent：它自己 `config.plugins` 中的插件、它的指令和它的模型。chat 选择一个，session 记录它，多个预设在同一个 Host 中共存，更改 chat 的预设无需重启。模板决定 Host 加载哪些插件、各行的 config、存在哪些预设、提供哪些 skill 以及运行哪些 harness 编辑。它适用于该 profile 的每个 chat，切换它会重启 Host。
 32. **模板以行的形式携带预设。**它的预设是 `rows.patch.yml` 中的预设行，并且它可以设置预设注册表的默认值。
 33. **切换在一个 profile 之内。**切换保持同一个 profile，所以此人保有同一个 studio 地址、同一份历史和他们的机器选择。profile 仍然是同时运行两种组合的方式：每个都有自己的 Host、锁、运行目录、历史和已安装的包，并且每个都有来自同一个库的自己的活动模板。chat 像今天一样在各个 profile 之间共享，当 chat 在它们之间移动时适用规则 29 和 30。
+
+<a id="import-and-export"></a>
 
 ### 导入与导出
 
@@ -120,15 +142,21 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 36. **导入的模板的新版本。**导入 `name` 和签名者与某个已保存模板的 `origin` 匹配的模板时，会把它作为该模板的更新提供。预览是按条目的三方比较：基准是此人导入的版本，“theirs” 是新版本，“ours” 是带有此人编辑的已保存模板。行按 id 比较，插件按名称比较，harness 编辑按文件比较。只有一方更改的条目采用该方；双方都更改的条目会连同两个值一起显示，由此人选择其一，所以没有任何条目会被悄悄合并。结果是已保存模板的新版本。
 37. **stock home 的导入。**`delorun import-home` 把 stock home 的允许列表中的行写入活动模板，与它今天写入 profile 补丁时一样；下一次保存会记录它们。
 
+<a id="backup-and-restore"></a>
+
 ### 备份与恢复
 
 38. **备份。**`delorun template backup <file>` 写出一个用 home 密钥签名的文件，其中包含每个已保存的模板及库所保留的每个版本、每个 profile 的活动模板、每个 profile 的机器选择、home 补丁、home 的 `skills/` 和 `AGENTS.md`。harness 编辑始终包含在内。它不包含 chat、凭据的值或信任决定，并列出模板所指名的凭据。备份 chat 是 [C8 的导出](../contracts/c08-archive-and-trash.zh.md)，一个单独的功能。
 39. **恢复。**`delorun template restore <file>` 验证文件，为它带来的一切显示一个预览，对每个活动模板的每个插件运行安装检查，询问规则 17 留给 home 的构建和版本决定，然后在全新安装或另一台机器上填充库，并按每个 profile 一次事务加载其活动模板。恢复从不覆盖同名但内容不同的已保存模板：它把恢复的版本添加在它旁边。
 
+<a id="updates"></a>
+
 ### 更新
 
 40. **活动模板就是 profile。**[C3 的报告](../contracts/c03-update-report.zh.md#items)和 `@delorun/profile-safety` 的保留检查，像今天对 profile 文件求值那样对活动模板求值。它的 harness 编辑通过 C21 的三方合并来保留，运行的是目标的内容，`<file>.mine` 为有冲突的文件保存此人的内容。
 41. **不活动的已保存模板。**更新不改变任何已保存的模板。切换到其 `requires.delorun` 排除正在运行的发布版本、其插件被正在运行的发布版本关闭、或其 harness 编辑指向另一个发布版本的模板，会在它的预览中显示这一点：harness 编辑以其所述发布版本的已签名文件为基准做三方合并，该文件由运行时存储或已验证的下载提供，不能干净合并的文件会连同两方一起显示，由此人在应用任何东西之前选择。
+
+<a id="changes-protection-and-the-install-check"></a>
 
 ### 更改、保护与安装检查
 
@@ -137,15 +165,21 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 44. **对整个集合的安装检查。**安装检查在写入任何东西之前，把切换、导入或恢复所带来的每个插件作为一个集合来检查。任何插件中的阻断性发现都会使整个事务停止。
 45. **模型与远程会话。**agent 不能保存、切换、导入、导出、备份或恢复模板，也不能写入 `templates/`。
 
+<a id="secrets-and-credentials"></a>
+
 ### 密钥与凭据
 
 46. **只有名称。**模板指名凭据；home 把它们的值保存在 `.credentials.yaml` 中，由每个模板共享。需要不同值的模板使用不同的名称，例如 `WORK_GITHUB_TOKEN`。加载其凭据 home 没有的模板会成功；预览和 studio 会指出每个缺失的凭据以及如何添加。
 47. **profile 文件中没有密钥。**角色为 `secret` 的字段的值不会被写入补丁文件、模板或 profile 历史所跟踪的任何文件。Delorun 的“设置”提供这样一行的 `credential-ref` 字段，而不提供它的 `secret` 字段。
 
+<a id="commands-and-the-studio"></a>
+
 ### 命令与 studio
 
 48. **命令。**`delorun template list`；`show <name | file>`，不改变任何东西的预览；`save [<name>]`；`switch <name>[@<version>]`；`import <file>`；`export <name> <file>`；`backup <file>`；`restore <file>`；`remove <name>[@<version>]`。每条都接受 `--profile`。每条会更改 profile 的命令都打印预览并询问；`--yes` 只确认没有发现、冲突或未满足要求的预览，并且从不接受未知的签名者。
 49. **studio。**Changes 旁边的 Templates 部分显示库、带有其内容的活动模板、预览界面和切换。远程会话看到活动模板的名称，而看不到任何改变它的东西。
+
+<a id="what-this-does-not-protect-against"></a>
 
 ## 本设计不防护什么
 
@@ -156,6 +190,8 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 - **harness 编辑以 harness 的身份运行。**已发布模板的 harness 编辑会改变 harness 自己的代码。预览显示每个差异；没有任何东西检查代码做什么。
 - **未标记的字段中的密钥。**把密钥保存在没有 `secret` 角色的字段中的插件（例如普通的 `apiKey` 字符串）不会被检测到，它的值会随这一行去往任何地方。
 - **同一用户的进程。**以此人身份在沙箱之外运行的程序可以更改库和 profile 的文件，如[威胁模型](../security/threat-model.zh.md#other-local-processes-under-the-same-user)对整个 home 所陈述的那样；保护 Block 会在下次启动时指出该更改。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -172,6 +208,8 @@ description: "模板的设计：一份已保存的、按内容寻址的、记录
 - `the store's collection keeps every version a saved template refers to`
 - `Settings never writes a secret-role value into the profile patch`
 
+<a id="constraints-for-current-work"></a>
+
 ## 当前工作的约束
 
 Delorun 不包含模板（见[路线图](../guide/roadmap.zh.md)）。由 0.1.0 创建的 home 保留它所写入的格式和文件，这些规则使模板无需迁移就保持可能。它们适用于每一项更改，包括 Changes、安装检查和插件编写这几条线。
@@ -186,6 +224,8 @@ Delorun 不包含模板（见[路线图](../guide/roadmap.zh.md)）。由 0.1.0 
 8. **安装检查在写入之前决定一个集合。**安装检查可以接收一组插件，并在写入任何记录之前返回每一个决定。
 9. **存储的回收接受更多引用方。**Changes 存储的回收从一个其他功能可以扩展的列表中读取它的引用方，这样已保存的模板就能保留它们所引用的版本。
 10. **C8 的定制 schema 不再增长。**导出继续不写入定制行，也不添加新的行类型；由模板格式取代其位置。
+
+<a id="current-code-that-conflicts"></a>
 
 ## 与之冲突的当前代码
 
@@ -203,6 +243,8 @@ Delorun 不包含模板（见[路线图](../guide/roadmap.zh.md)）。由 0.1.0 
 | `packages/preset/agent-preset-registry/src/index.ts:220-224` 及 `packages/api/session-controller/src/agent.ts:271-283` | 预设 id 没有任何定义的 chat 会以 `agent-preset/not-found` 失败，并且 studio 不提供任何选择。 | 显示该 chat 并带有规则 30 的两个操作；不回退到默认预设。 | Code |
 | `delorun/packages/contract-archive-and-trash/src/index.ts:26-32` | C8 的定制行拒绝凭据引用，而模板按名称需要它们，并与模板格式重叠。 | 冻结定制 schema（约束 10）；构建模板时，归档指向模板。 | Code |
 
+<a id="open-questions"></a>
+
 ## 尚待解决的问题
 
 1. **“template” 一词的冲突。**没有任何 `delorun` 命令叫 `template`，所以这个命令是空闲的。这个词有两种用法：上游把它自己发布的 profile（`web`、`headless`、`sdk`、`acp`）称为 “profile templates”，见 `dsh --from-default-profile <name>` 以及 Delorun 自己的页面（“upstream's headless template”）；而 `delorun template import` 和 `export` 位于 `delorun import` 和 `export`（它们移动 chat 归档）以及 `delorun import-home` 旁边。建议：把 “template” 保留给这个功能，并在 Delorun 的页面现在写 “upstream's template” 的地方写 “upstream's shipped profile”，这样此人遇到的只有一个含义；保留两个导入命令，并在各自的帮助中说明它移动的是什么。请确认。
@@ -210,6 +252,8 @@ Delorun 不包含模板（见[路线图](../guide/roadmap.zh.md)）。由 0.1.0 
 3. **未签名的共享模板。**规则 5 在此人输入 `unverified` 之后接受未签名的模板，与 C8 对归档所做的一样。来自他人的模板是否应当要求签名，而把未签名的限制在此人自己的导出和备份文件？
 
 已决定的默认值，在此记录以供评审：备份涵盖每个已保存的模板、home 的 `skills/` 和 `AGENTS.md` 以及 home 补丁（规则 38）；stock home 的导入写入活动模板（规则 37）；共享模板中的 harness 编辑在应用任何东西之前，逐个文件并附带其差异显示（规则 23 和 35）；切换在一个 profile 之内（规则 33）。
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

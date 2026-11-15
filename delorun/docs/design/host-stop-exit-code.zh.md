@@ -18,6 +18,8 @@ description: "Host 停止的退出码设计：Host 拆除失败或超时的停�
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun/apps/cli/src/start.ts` 中的 `RunningHost.close()` 调用 `booted.shutdown(EXIT.ok)`，然后移除沙箱覆盖层。
@@ -26,6 +28,8 @@ description: "Host 停止的退出码设计：Host 拆除失败或超时的停�
 - 进程被强制退出时，沙箱覆盖层会保留，这是安全的：下一次启动会重写它。
 - 更新或回退的切换以不同的方式停止 Host：`suspend()` 释放它而不结束进程，home 进程自己限定这一等待的时间，并把没有停止的 Host 报告为 `HostNotStoppedError`。
 
+<a id="the-rules"></a>
+
 ## 规则
 
 1. `close()` 像 `suspend()` 一样通过 profile 自己的拆除流程释放 Host，由 home 进程以与限定切换相同的限制来限定时间，并且不调用上游的进程关闭。
@@ -33,10 +37,14 @@ description: "Host 停止的退出码设计：Host 拆除失败或超时的停�
 3. 在时限内完成的拆除，像今天一样以停止所要求的码结束进程。
 4. 如果规则 1 无法成立，因为有界的关闭必须仍是唯一的退出路径，那么上游的 `createProcessShutdown` 为被拒绝或超时的释放接受第二个码，Delorun 传入 `EXIT.failed`。该更改属于上游，并记录在 Delorun 的上游台账中。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **永远不从拆除中返回的 Host。**时限会结束进程；Host 启动但没有停止的子进程不会被本设计停止。
 - **从外部终止的进程。**`SIGKILL` 和电脑断电会在没有本设计所设置的任何码的情况下结束进程。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -44,6 +52,8 @@ description: "Host 停止的退出码设计：Host 拆除失败或超时的停�
 - `a stop whose Host teardown overruns its limit ends with the failure code`
 - `an interrupted stop whose teardown fails ends with the failure code, not 130`
 - `a clean stop ends with the code it asked for`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

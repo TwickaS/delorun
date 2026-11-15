@@ -82,6 +82,8 @@ git config merge.delorun-ledger.driver 'node_modules/.bin/tsx delorun/apps/tools
 
 没有这项设置时，git 把台账当作文本合并。有了它，驱动按 `path` 合并条目，按 `pattern` 合并规则。一方改动过的条目或规则取该方的版本，一方删除而另一方未动的也是如此。双方都新增或以相同方式改动的条目或规则只保留一份，因此规则是双方按模式的并集。没有 `sha256` 的条目与其他条目一样合并。`forkOwned` 是双方的有序并集，`upstream` 在双方必须一致，`$schema` 的合并方式与一个条目相同。双方以不同方式改动的条目或规则保持冲突，包括一方删除而另一方改动的条目，以及双方都新增、但种类或理由不同的同一个模式：驱动只用冲突标记包住这些元素，在标准错误上指出每一个，并以 1 退出。当合并结果未通过台账解析器或条目规则时，它在写入合并结果之后同样以 1 退出。只要任何一方仍列出某条 `forkOwned` 条目，该条目就会保留，所以条目只有在双方都删除之后才离开台账。
 
+<a id="the-rehearsal-merge"></a>
+
 ## 预演合并
 
 [`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) 预演合并某个上游提交，并按[差异预算](../../docs/reference/divergence/README.zh.md#divergence-budget)检验结果。在仓库根目录运行它，`--tag` 与 `--ref` 恰好给其中一个：
@@ -231,6 +233,8 @@ brief 已带有的链接以同样的方式改写。
 [`src/studio-browser.ts`](src/studio-browser.ts) 针对回环地址上的 studio 运行 Playwright 风格的脚本，并可把运行录制为 WebM：`node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` 与 `... run --url <studio url> --code '<js>' [--record <out.webm>]`。
 浏览器工具位于 [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts) 中的 `StudioBrowser` 接口之后；第一个适配器通过 `browse` CLI 驱动此人自己的 Chrome，[`origin.ts`](src/studio-browser/origin.ts) 拒绝每个非回环地址，且没有办法放宽。
 流程见 [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill。
+
+<a id="local-checks"></a>
 
 ## 本地检查
 
@@ -424,6 +428,8 @@ fork 套件的每个阶段为每个包记住一次通过（[`src/checks/units.ts
 | `rename_workspace_tool` | 已构建 | `@delorun/bundle-local/workspace-rename` `enabled` | 开 | 开，经由 `@delorun/bundle-local` | 关 | 是 |
 
 注册表默认值是注册表为 Delorun 的默认组合所陈述的值；CLI 配置一列是 `delorun` 启动的配置目前所组合的内容，对 `main_chat`、`preset_inspect`、`plugin_manager_read_exemption`、`profile_history` 与 `container_denial_marker`，两者不同。`delorun headless` 用 `@delorun/bundle-headless` 运行上游的 `headless` 模板，该 bundle 像 CLI 配置那样打开 `permission_defaults`、`fetch_guard`、`instruction_layer_consent` 与 `update_turn_refusal`；对等组合不挂载该 bundle，所以检查不要求它的任何行符合注册表。每个已构建字段的 schema 默认值就是对等值。
+
+<a id="what-parity-switches-detects"></a>
 
 ### `parity-switches` 检测什么
 

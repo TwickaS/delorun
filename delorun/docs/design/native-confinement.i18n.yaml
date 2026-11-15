@@ -13,22 +13,22 @@
   zh: b30e1fb9d59df2ba
 /native-confinement-on-every-command-and-platform/contents:
   en: 479fc10754bd01ac
-  zh: 6d4b5937ce2819d3
+  zh: 14a153171b4e29d8
 /native-confinement-on-every-command-and-platform/what-exists-today:
   en: f1407933a0e3f809
-  zh: c51f8f10a78a1336
+  zh: bf7f3d4a21835032
 /native-confinement-on-every-command-and-platform/the-rules:
   en: 69ac054b668fcc66
-  zh: be9454bd35582018
+  zh: 8fe5bc869b7c0713
 /native-confinement-on-every-command-and-platform/the-rules/every-way-a-host-boots:
   en: cdf6f58bac2644d8
-  zh: da7526e8cc364809
+  zh: a8c26f3f30d7cd7d
 /native-confinement-on-every-command-and-platform/the-rules/checks-at-each-start:
   en: 2dd4f5f8cbbade7e
-  zh: a797722464370ccc
+  zh: 796b6c02cbb9d4ee
 /native-confinement-on-every-command-and-platform/the-rules/full-access:
   en: f89eb562a2e7f9a3
-  zh: e942fc8c298dad45
+  zh: 944c76b72639eec0
 /native-confinement-on-every-command-and-platform/the-rules/docker-desktop-s-control-sockets:
   en: 5bf78236672e8276
   zh: bcf080068cc47df0
@@ -37,13 +37,13 @@
   zh: 91d406e943761de5
 /native-confinement-on-every-command-and-platform/the-rules/instruction-files:
   en: 55492495440d5adf
-  zh: 683db44d2ec62679
+  zh: c1e5a521940662a6
 /native-confinement-on-every-command-and-platform/what-this-does-not-protect-against:
   en: 4c657ccd5a219828
-  zh: 58c1c92b28056832
+  zh: 7eaa601af0e0c106
 /native-confinement-on-every-command-and-platform/denial-tests:
   en: c71c3b9ed9d2d421
-  zh: e759113195b23049
+  zh: 566b23a619c4c0e8
 /native-confinement-on-every-command-and-platform/implementation-status:
   en: 0d377395bd665a6e
   zh: 47fef68310d0c051

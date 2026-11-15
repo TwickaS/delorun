@@ -18,6 +18,8 @@ description: "后置启动检查之前的 studio 设计：只有当 Host 通过 
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun start` 以 `--no-open` 启动 CLI profile（`delorun/apps/cli/src/start.ts` 中的 `bootProfile`），所以上游的浏览器交接从不运行。
@@ -28,16 +30,22 @@ description: "后置启动检查之前的 studio 设计：只有当 Host 通过 
 - 更新门（`holdUntilChecked`）扣住 CLI profile 的 agent 轮次，直到 home 进程在检查之后释放它们。标题生成、自动审阅以及人启动的压缩不会被扣住。
 - 在被中断的更新之后，home 进程会在运行更新的健康检查之前设置 `host`，所以在该检查运行期间可以签发链接。
 
+<a id="the-rules"></a>
+
 ## 规则
 
 1. home 进程只在 `running` 状态下签发 studio 链接：即后置启动检查之后，以及在被中断的更新之后，其健康检查提交该更新之后。在所有其他状态下，`studio.open-token` 以 `STUDIO_UNAVAILABLE` 被拒绝，原因是 “Delorun is still starting”。
 2. 在 home 进程释放更新门之前，studio 对每个会话请求（包括来自较早会话的重新连接）都以 “Delorun is starting” 响应作答，并且不打开任何 chat。这需要在 Web 服务器的连接上有一个上游的准入点，让 Delorun 的某一行可以持有它，方式与更新门扣住轮次相同。
 3. 更新门的扣留涵盖 Host 在释放之前发出的每一个模型请求，而不仅仅是 agent 轮次。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **被拒绝的 Host 的拆除时间。**被检查拒绝的 Host 会一直运行到它的拆除结束；规则 2 和 3 在此期间让人和模型远离它。
 - **同一用户的另一个进程。**以此人身份运行并持有 home 的启动令牌的进程，可以在 Delorun 运行之后请求链接；[威胁模型](../security/threat-model.zh.md)把此人自己的账户视为受信任的。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -45,6 +53,8 @@ description: "后置启动检查之前的 studio 设计：只有当 Host 通过 
 - `a studio link requested during an interrupted update's health check is refused`
 - `a studio reconnect before the post-boot check opens no chat`
 - `no title generation request reaches the model before the post-boot check`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

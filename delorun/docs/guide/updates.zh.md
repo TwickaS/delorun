@@ -24,6 +24,8 @@ description: "更新 Delorun：更新通知以及如何关闭它，delorun updat
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="the-update-notice"></a>
+
 ## 更新通知
 
 Delorun 每天从 releases.delorun.com 获取一次已签名的发布文件，无法访问时则使用备用主机，并检查其渠道上是否存在更新的发布版本。这次检查不会发送任何关于你的安装的信息，而那些主机能看到你电脑的地址。它会验证文件的签名，且不下载任何发布版本。当存在更新的发布版本时，Delorun 会在三个地方告诉你：
@@ -35,6 +37,8 @@ Delorun 每天从 releases.delorun.com 获取一次已签名的发布文件，�
 你用来访问 studio 的手机或其他设备会看到没有控件的通知，因为更新是在你的电脑上应用的（见[用手机访问 studio](reach.zh.md)）。
 
 只有通过启动器安装的 Delorun 才会运行这项检查，源码检出不会。可以在 studio 的“设置”→“通用”→“更新”中用 **Check for new releases** 关闭它，或使用 `delorun setup privacy`。setup 会让它保持开启；审阅界面上的“更多设置”会询问。关闭检查之后，Delorun 不发出任何更新请求，也不显示通知，而你运行 `delorun update` 时它仍然可用。
+
+<a id="check-and-read-the-report"></a>
 
 ## 检查并阅读报告
 
@@ -54,6 +58,8 @@ delorun update --report    # what would the newest release change? applies nothi
 
 没有任何变化时，报告会显示 `No plugin, bundle or profile row changes.` 报告涵盖插件、bundle 和 profile 条目；它不列出设置值，设置值会原样保留。
 
+<a id="apply-an-update"></a>
+
 ## 应用更新
 
 运行 `delorun update`。它会打印同样的报告并询问 `Apply the update to Delorun <version>?`，默认答案为 No。报告的有效期是十分钟：确认一份更旧的报告，Delorun 会要求你阅读新的报告。
@@ -63,6 +69,8 @@ delorun update --report    # what would the newest release change? applies nothi
 - 更新需要 git，它保存你的 profile 历史；没有 git 时，Delorun 会在获取任何东西之前拒绝。`--check` 和 `--report` 不需要 git。
 
 Delorun 从不应用你没有确认过的更新，检查也不应用任何东西。
+
+<a id="update-from-files-you-downloaded"></a>
 
 ## 用你下载的文件更新
 
@@ -85,6 +93,8 @@ delorun update --from ~/Downloads/delorun-0.2.0
 
 </details>
 
+<a id="what-happens-during-an-update"></a>
+
 ## 更新期间会发生什么
 
 `delorun update` 会逐步打印每个步骤：
@@ -97,6 +107,8 @@ delorun update --from ~/Downloads/delorun-0.2.0
 
 如果健康检查失败，或新的发布版本停止运行，Delorun 会自行回退到你原来的发布版本和 profile，并打印哪项检查失败：`Delorun <version> failed its health check (<check>); Delorun <previous> runs again with the profile from before. See delorun logs.` 成功时它会打印 `Delorun <version> runs now.`
 
+<a id="chat-data-that-changes-format"></a>
+
 ## 改变格式的 chat 数据
 
 大多数发布版本存储 chat 的方式与前一个发布版本相同。当某个发布版本改变了 chat 或其他存储数据的写入方式时，报告会这样说明，例如 `Chat data: Delorun 1.1.0 keeps chat data in a format Delorun 1.0.0 may not read.`，而 Delorun 把这种改变视为单向的：新的发布版本一旦启动，旧的发布版本可能就无法读取这些数据。
@@ -107,6 +119,8 @@ delorun update --from ~/Downloads/delorun-0.2.0
 - `delorun update --no-data-copy` 跳过复制。没有副本时，新的发布版本首次启动之后，你就无法回退到旧的发布版本；只有你的 profile 可以回退。
 
 Delorun 只保留一份副本。`delorun recover status` 会列出它及其大小，一旦你不再需要回退，`delorun recover discard <path>` 就会移除它。
+
+<a id="going-back"></a>
 
 ## 切换回去
 
@@ -125,6 +139,8 @@ Delorun 只保留一份副本。`delorun recover status` 会列出它及其大�
 
 回退不会合并。当数据格式发生变化时，较新的发布版本留下的 chat 数据（包括你在更新之后开始的 chat）会被搁置到你的 Delorun home 的 `data-set-aside/` 中，而不是被删除，更新之前所做的副本则回到原处；一旦你不再需要这个文件夹，`delorun recover discard <path>` 就会移除它。密钥从不回退。
 
+<a id="try-another-setup-in-the-studio"></a>
+
 ## 在 studio 中试用另一套设置
 
 “设置”→“通用”→“更新”列出 Delorun 为你的设置（即你的插件、bundle 和设置）保存的版本，最新的在前。当前版本有标记，每个版本都说明它是怎么产生的：一次更新、你的一次保存，或一次切换。它与 `delorun recover` 使用的是同一份历史，所以在这里保存的版本可以在那里恢复，反之亦然。
@@ -134,6 +150,8 @@ Delorun 只保留一份副本。`delorun recover status` 会列出它及其大�
 - **Switch to this version** 先把你当前的设置保存为一个版本，然后带回所选的那个。页面会告诉你改变了什么，以及 Delorun 在重启之后才会运行切换后的设置：请运行 `delorun stop`，再运行 `delorun start`。切换回去就是切换到之前保存的版本，所以保留一套设置和回退是同一个步骤。
 
 保存和切换只能在运行 Delorun 的那台电脑上的 studio 中进行。你用来访问 studio 的手机或其他设备能看到列表和更改内容，每个版本显示 **Do this at your computer** 而不是按钮；即使页面被改动，home 也会拒绝来自这类设备的保存或切换。安全模式和更新失败之后的回退照常工作（见[切换回去](#going-back)）。后来被发布版本撤销的插件版本会以关闭状态回来，并附带原因，与 `delorun recover restore` 相同。
+
+<a id="channels"></a>
 
 ## 渠道
 
@@ -167,12 +185,16 @@ Delorun 只保留一份副本。`delorun recover status` 会列出它及其大�
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 在有大量第三方插件时更新：[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。
 - 使用 Delorun：[日常使用](daily-use.zh.md)。
 - 让你自己的更改在更新中保留：[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)。
 - 如果更新失败：[更新与回退](troubleshooting.zh.md#updates-and-rollback)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

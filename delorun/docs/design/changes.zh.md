@@ -20,6 +20,8 @@ description: "对人的 harness 的更改的设计：已签名的发布版本加
 - [拒绝测试](#denial-tests)
 - [实现状态](#implementation-status)
 
+<a id="what-stock-does-today"></a>
+
 ## stock 今天做什么
 
 Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做的。
@@ -30,11 +32,15 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 - 热重载只比较文件的 inode、大小和修改时间，以决定是否重新加载它。没有任何东西比较改变了什么，并且 Delorun 的指令同意涵盖指令文件、skill 和预设，而不涵盖插件的源代码。
 - 插件管理器保存 profile 文件的历史，其中每项更改都是 `undo` 和 `restore` 可以返回的一个版本。
 
+<a id="what-exists-today"></a>
+
 ## 今天已有的内容
 
 - `delorun recover safe-mode` 标记下一次启动在没有其第三方 bundle 和此人为它们所设的行的情况下启动 profile，且不写入任何 profile 文件；`delorun recover exit-safe-mode` 结束它。`delorun recover`（或 `recover status`）还会报告 profile 的状态，`recover rollback` 回退最近一次记录的更新，`recover restore <version>` 恢复某个 profile 历史版本。
 - `delorun doctor` 检查 Docker、DeepSeek API 密钥的格式、home 和 studio 的端口，并打印 Changes 的行。对于 CLI profile 的插件，它报告每个已安装的包的来源及其是否启用、正在运行的发布版本不满足的版本范围、被同名的已发布包隐藏的包、未安装的已启用 bundle、安全模式，以及根据 home 进程的日志得出的、在最近一次启动时未激活的插件行。它不报告关于已批准的内容或引入故障的更改的任何信息。
 - 针对从文件夹链接的插件的 Changes、此人对 harness 本身的编辑、`delorun changes`、开发会话、保护设置、agent 的同意和待处理的插件请求，以及 `delorun verify` 和 `delorun doctor` 中的 Changes，均已构建；[C21](../contracts/c21-changes.zh.md) 对它们作了陈述。
+
+<a id="the-rules"></a>
 
 ## 规则
 
@@ -50,6 +56,8 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 10. **更新会重新应用已批准的编辑。**更新报告列出每项已批准的 harness 更改，以及它是否适用于新的发布版本。应用是按文件进行的三方合并；有冲突的文件采用新发布版本的内容，此人的版本作为 `<file>.mine` 保留在旁边并在报告中指出。已批准的插件版本原样保留。更新的健康检查和回退涵盖这一结果（见[更新与回退](update-and-rollback.zh.md)）。
 11. **用词。**此人看到的是更改、审阅、应用、丢弃、撤销和正在开发。代码和约定保留技术术语。
 
+<a id="when-a-change-breaks-something"></a>
+
 ## 当更改造成问题时
 
 12. **糟糕的启动会略去最后一项更改。**当启动失败，或未通过更新的健康检查，并且 Changes 中最新的条目是插件或 harness 更改时，Delorun 会在没有该条目的情况下再试一次。该条目被标记为 “left out at start” 并附上故障，终端和 studio 会指出它并提供 Apply again 和 Undo。重试不写入任何 profile 文件：该更改是通过安全模式所使用的同一个覆盖层被略去的。第二次失败会停止，并给出完整的安全模式命令。不会删除任何东西。
@@ -58,12 +66,16 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 15. **两种规模的安全模式。**`delorun recover safe-mode` 在没有每一个第三方插件的情况下启动；`delorun changes off <plugin>` 和 `on <plugin>`，以及恢复界面，则在没有其中一个插件的情况下启动。两者都是 Changes 中的条目，所以它们是可见的，并且以同样的方式撤销。
 16. **`doctor` 指出原因。**对于失败的启动或失败的渲染，`delorun doctor` 会指出其代码失败的插件，以及引入它的更改。
 
+<a id="what-this-does-not-protect-against"></a>
+
 ## 本设计不防护什么
 
 - **插件代码拥有 harness 的权限。**已批准的插件可以做 harness 能做的任何事，而风险摘要是根据更改的文件计算的，不是根据代码在运行时做什么。
 - **开发会话运行未经审阅的代码。**在开发会话期间，每次编辑都不经审阅就实时加载。agent 第一次写入之前额外的询问和徽章是保护措施；在会话结束、其结果成为已批准的版本之前，没有任何东西会提示审阅 agent 写入的内容。
 - **保护关闭，这是默认值。**在更改加载之前没有任何东西审阅它：任何能写入已链接插件的文件夹、或在沙箱之外写入 harness 的可写副本的人，都会改变下次启动或保存时运行的内容。日志、`verify` 和 `doctor` 事后会指出每一项这样的更改，`undo` 会撤回它。
 - **同一用户的进程。**以此人身份在沙箱之外运行的程序，可以更改已批准的存储和设置本身，如[威胁模型](../security/threat-model.zh.md#other-local-processes-under-the-same-user)对整个 home 所陈述的那样。
+
+<a id="denial-tests"></a>
 
 ## 拒绝测试
 
@@ -80,6 +92,8 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 - `the recovery screen renders with every plugin's client code failing`
 - `a remote session cannot use the recovery actions`
 - `a failed reload leaves the previous version running`
+
+<a id="implementation-status"></a>
 
 ## 实现状态
 

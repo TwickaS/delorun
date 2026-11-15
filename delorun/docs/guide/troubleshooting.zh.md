@@ -32,6 +32,8 @@ description: "Delorun 故障排查：如何读懂一次拒绝、退出码，以�
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="reading-a-refusal"></a>
+
 ## 读懂一次拒绝
 
 拒绝信息在你的终端中分三部分出现：第一行说明发生了什么，`Why:` 指出错误代码以及它所涉及的路径或值，`What you can do:` 按顺序列出修复办法。拒绝信息从不显示堆栈跟踪，并且像 Delorun 的日志那样隐藏密钥和令牌。信息中把这个产品称为 “Delorun”。
@@ -66,6 +68,8 @@ What you can do:
 
 </details>
 
+<a id="the-home-and-its-files"></a>
+
 ## home 及其文件
 
 | 代码 | 含义 | 该怎么做 |
@@ -79,6 +83,8 @@ What you can do:
 修复到位之后，你应该会看到命令在没有拒绝的情况下运行。在 Windows 上，Delorun 不检查这些权限。[你的 Delorun home](home.zh.md)介绍了 home 及其权限。
 
 在你运行 `delorun` 的文件夹或你的 Delorun home 中的 `.env` 文件，不得设置以 `DELORUN_` 开头的名称，因为这些名称决定了 Delorun 信任哪个 home、profile 和发布版本。拒绝信息会指出该文件。请从中删除这些名称，如果需要，改为在你的 shell 中设置。
+
+<a id="starting-and-stopping"></a>
 
 ## 启动与停止
 
@@ -94,6 +100,8 @@ What you can do:
 - **`Delorun started no new turn: its start check did not finish`。**Delorun 在启动时对其发布版本的检查尚未完成。`delorun status` 和 `delorun logs` 会显示启动正在做什么；请用 `delorun start` 启动 Delorun，然后再次发送消息。
 - **`delorun start: Delorun did not start. Delorun stopped with exit code 1 before it was running.`**后台进程在启动时停止了。最常见的原因是 studio 端口被占用；见 [studio 端口被占用](#the-studio-port-is-busy)。
 - **`delorun start: Delorun did not start. Delorun was not running after … seconds.`**后台进程仍在启动或卡住了。运行 `delorun logs` 查看原因，然后运行 `delorun doctor`。
+
+<a id="the-studio-port-is-busy"></a>
 
 ### studio 端口被占用
 
@@ -125,6 +133,8 @@ Run delorun logs to see why, then delorun doctor to check your setup.
 
 </details>
 
+<a id="setup-and-the-model-key"></a>
+
 ## setup 与模型密钥
 
 - **`the key in DEEPSEEK_API_KEY was not accepted`。**setup 在保存密钥之前会与[提供方](../reference/glossary.zh.md#provider)核对，而提供方拒绝了它。请检查密钥并再次运行 `delorun setup`。
@@ -132,6 +142,8 @@ Run delorun logs to see why, then delorun doctor to check your setup.
 - **`the setup run for default is unfinished and needs the model key`。**用 `--yes` 或 `--config` 启动的 setup 在拿到密钥之前停止了。请在终端中运行 `delorun setup` 来完成它。
 - **`… holds …, which setup no longer asks`。**`delorun setup --config` 文档中写了 setup 不再有的答案。请从文档中删除它。
 - **`… is not a setup record; remove it to set up again`。**未完成的 setup 的记录已损坏。请删除它所指的文件并运行 `delorun setup`。
+
+<a id="installs-and-release-checks"></a>
 
 ## 安装与发布检查
 
@@ -152,6 +164,8 @@ npm 启动器和 `delorun update` 在安装每个[发布版本](../reference/glo
 | `STORE_BUSY` | 另一条 `delorun` 命令正在更改已安装的运行时。 | 等它完成。 |
 
 有两种拒绝来自公开发布日志本身。“Delorun could not reach the release log” 表示网络故障：请检查连接并重试。“The release log answered with something Delorun does not accept” 表示日志的应答前后不一致：如果重复出现，请报告。没有任何设置可以关闭发布日志检查（见[发布检查](safety.zh.md#release-checks)）。
+
+<a id="updates-and-rollback"></a>
 
 ## 更新与回退
 
@@ -236,6 +250,8 @@ npx delorun@latest repair
 
 </details>
 
+<a id="protections-and-plugins"></a>
+
 ## 保护与插件
 
 - **`the profile default would boot without protections Delorun requires`。**你的 profile 中的某项设置关闭了一项保护，例如沙箱或 Delorun 的某个防护措施。拒绝信息列出每一项及设置它的文件。请删除这些设置，或用 `delorun recover safe-mode` 在不带你的插件的情况下启动。
@@ -249,6 +265,8 @@ npx delorun@latest repair
 - **`The network setting could not be read, so every workspace's commands have no network`。**保存网络设置的文件已损坏或其他用户可以读取它。“设置”→“安全”→“网络”会指出问题。请修复或删除它所指的文件；在此之前这些工作区都视为 Off。
 - **某条命令因为工作区网络是 Allowlist 或 Off 而被拒绝。**你的沙箱无法强制执行这些设置（只有 Linux 上的 bubblewrap 可以），所以 Delorun 拒绝该命令，而不是带着你的网络运行它。请在“设置”→“安全”→“网络”中把工作区设回 Open（见[网络设置](safety.zh.md#the-network-setting)）。
 - **`Delorun could not use the Docker engine`。**Docker 没有应答，或以拒绝信息所指的 HTTP 状态拒绝了请求。请启动 Docker 并再次运行命令。
+
+<a id="letting-bubblewrap-run-under-ubuntus-apparmor-restriction"></a>
 
 ### 让 bubblewrap 在 Ubuntu 的 AppArmor 限制下运行
 
@@ -264,6 +282,8 @@ profile bwrap /usr/bin/bwrap flags=(unconfined) {
 ```
 
 用 `sudo apparmor_parser -r /etc/apparmor.d/bwrap` 加载它，检查 `bwrap --ro-bind / / true` 在没有错误的情况下退出，然后重新启动 Delorun。这样任何程序都可以通过 `bwrap` 创建用户命名空间，这正是该限制所要阻止的，但其他所有程序仍受限制。
+
+<a id="remote-access-and-devices"></a>
 
 ## 远程访问与设备
 
@@ -312,6 +332,8 @@ profile bwrap /usr/bin/bwrap flags=(unconfined) {
 - **`Remote access is off for this profile, so a phone cannot reach this home yet`。**`delorun devices approve` 在等待，但没有手机能连到你。请运行 `delorun reach on tailscale`。
 - **`DEVICE_NOT_TRUSTED`，“This home does not trust that device on this address. Ask for approval at the home's computer”。**home 拒绝了来自一台它在这个地址上不信任的设备的登录：它被移除了，或它是为另一个地址批准的。请再次从手机上请求批准，并在你的电脑上批准它（见[批准设备](reach.zh.md#approve-a-device)）。
 
+<a id="what-a-phone-shows-when-it-cannot-sign-in"></a>
+
 ### 手机无法登录时显示什么
 
 手机上的登录页面在标题中指出问题。
@@ -340,11 +362,15 @@ profile bwrap /usr/bin/bwrap flags=(unconfined) {
 
 </details>
 
+<a id="archives-imports-and-the-trash"></a>
+
 ## 归档、导入与回收站
 
 - **“Delorun refused the archive and changed nothing.”**`delorun import` 在写入任何东西之前先检查归档；代码指出它拒绝的条目。
 - **“Delorun stopped at the stock DeepSeek Harness home import.”**从 `~/.dsh` 的导入被拒绝，或启动时发现一个它无法移除的被中断的导入；代码和详情会说明是哪一种。[从 DeepSeek Harness 切换](switching.zh.md)介绍了导入。
 - **`TRASH_ITEM_NOT_FOUND`。**回收站中没有该 id 的项目；`delorun trash list` 显示它里面有什么。
+
+<a id="the-workspace-list"></a>
 
 ## 工作区列表
 
@@ -355,6 +381,8 @@ Delorun 把你的[工作区](../reference/glossary.zh.md#workspace)保存在一�
 - **检查它。**`delorun doctor` 有一行 `workspaces`。它打开该文件而不改变它，对可读的列表打印 `pass`，当有记录将被搁置或之前已有记录被搁置时打印 `warn`，对无法读取的文件打印 `fail`，并指出损坏的记录和被搁置的文件。
 - **带回之前的列表。**停止 Delorun（`delorun stop`），然后运行 `delorun recover workspaces`。它显示当前文件和之前的副本各包含什么，要求你确认（`--yes` 供脚本回答），把当前文件移到一边，并在原位写入之前的副本。它不删除任何东西，副本仍然保留。请在你自己的电脑上运行；Delorun 运行期间它不会运行。
 - **用 studio 重命名。**agent 在你允许之后用它的 `rename_workspace` 工具重命名工作区，所以从不需要手工编辑该文件。如果你自己编辑 `workspace.json`，请先停止 Delorun。
+
+<a id="when-nothing-here-fits"></a>
 
 ## 当这里没有你的情况时
 
@@ -371,12 +399,16 @@ Delorun 把你的[工作区](../reference/glossary.zh.md#workspace)保存在一�
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 修复之后要检查你的设置，请运行 `delorun doctor`，然后运行 `delorun status`。
 - 要了解 Delorun 保护什么，请阅读 [Delorun 保护什么](safety.zh.md)。
 - 要了解日志如何帮助你，请阅读 [Delorun 的日志存放在哪里](logs.zh.md)。
 - 要设置远程访问，请阅读[用手机访问 studio](reach.zh.md)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

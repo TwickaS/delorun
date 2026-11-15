@@ -23,6 +23,8 @@ description: "Delorun 的 setup 支持的模型提供方：DeepSeek、Anthropic�
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
+<a id="choose-a-provider-in-setup"></a>
+
 ## 在 setup 中选择提供方
 
 setup 的模型提供方问题是 `Which model provider should Delorun use?`，选项为 DeepSeek（推荐）、More providers 和 Choose later。每种使用场景都会问这个问题，然后：
@@ -33,6 +35,8 @@ setup 的模型提供方问题是 `Which model provider should Delorun use?`，�
 4. 新 chat 所用的模型，来自提供方的模型列表，默认选中该提供方当前的通用模型。除 DeepSeek 以外的每家提供方 setup 都会询问这一项，DeepSeek 则从 profile 的默认模型 DeepSeek-V4.1-Flash 开始；`delorun setup key` 对 DeepSeek 也会询问。
 
 **None for now** 不更改任何提供方设置：新 chat 保持 profile 已在使用的模型（新 profile 上是 DeepSeek-V4.1-Flash），setup 会告诉你那是哪个模型以及如何添加提供方。你可以在 studio 的模型选择器中更改任何 chat 的模型。
+
+<a id="the-providers"></a>
 
 ## 提供方一览
 
@@ -52,6 +56,8 @@ setup 的模型提供方问题是 `Which model provider should Delorun use?`，�
 
 每家提供方的模型列表，是随 Delorun 一起安装的列表。有些密钥变量与 studio 的“设置”→“Agent”→“模型”为其存储的密钥所起的名称不同：Google Gemini 使用 `GEMINI_API_KEY`，Moonshot AI 使用 `MOONSHOT_API_KEY`，这是这些提供方自己的工具所读取的名称。setup 会记录它所用的变量，所以 studio 会从同一处读取密钥。除兼容 OpenAI 的端点外，每家提供方都使用该提供方公布的地址。当你设置了 `DEEPSEEK_BASE_URL` 时，DeepSeek 也会读取它，与 DeepSeek Harness 相同。
 
+<a id="an-openai-compatible-endpoint"></a>
+
 ## 兼容 OpenAI 的端点
 
 对于任何支持 OpenAI Chat Completions API 的服务器，请选择 **OpenAI-compatible endpoint**：网关、列表中没有的托管服务，或你自己电脑上的服务器，例如 Ollama、LM Studio 或 vLLM。setup 会询问：
@@ -62,15 +68,21 @@ setup 的模型提供方问题是 `Which model provider should Delorun use?`，�
 
 再次运行 `delorun setup key` 可以为同一个端点添加另一个模型；setup 会保留它之前添加的模型。
 
+<a id="how-setup-checks-a-key"></a>
+
 ## setup 如何检查密钥
 
 setup 在存储手工输入的密钥之前，会向提供方发出一次请求来检查它。该请求索要的是提供方的模型列表（对 OpenRouter 则是其密钥的详情），绝不索要补全。请求只发往提供方自己的地址，不会发到别处：发生重定向会让检查失败。被提供方拒绝的密钥不会被存储，除非你选择 **Continue without a successful check**；此时审阅界面会说明密钥未经验证以及原因。原因会指出地址和 HTTP 状态，绝不包含密钥。
 
 从环境变量读取的密钥不会被检查，除非你用 `--check-key` 运行 setup。无需任何密钥就能返回模型列表的兼容 OpenAI 的服务器，无论你输入什么密钥都能通过检查。
 
+<a id="where-the-key-is-kept"></a>
+
 ## 密钥保存在哪里
 
 手工输入的密钥存放在你的 Delorun home 的 `.credentials.yaml` 中，只有你能读取，使用该提供方的密钥变量名。从环境变量读取的密钥不会被存储：Delorun 每次启动时都会读取该变量，来源是它启动时所在的环境、你启动它时所在文件夹的 `.env` 文件，或你的 home 的 `.env` 文件。setup 的答案、profile 和日志中都不会保存密钥。`delorun doctor` 会检查新 chat 所用提供方的密钥是否已设置且格式正确，不会把它发往任何地方。
+
+<a id="set-up-without-questions"></a>
 
 ## 无需回答问题的 setup
 
@@ -84,9 +96,13 @@ delorun setup --yes --provider openai-compatible --base-url http://127.0.0.1:114
 
 除 DeepSeek 外，每家提供方都需要 `--model`，且必须在该提供方的模型列表中。`--base-url` 只用于兼容 OpenAI 的端点。`--key-env <NAME>` 从另一个变量读取密钥。命令行上从不接受密钥。添加 `--check-key` 可在写入任何内容之前检查密钥。供 `delorun setup --config` 使用的答案文件在 `modelProvider` 中指明同样的选择，见[约定 C11](../contracts/c11-setup-answers.zh.md#answer-schema)的描述。
 
+<a id="change-the-provider-later"></a>
+
 ## 之后更换提供方
 
 运行 `delorun setup key` 重新选择；它会问提供方部分的每一个问题。带上 `--provider` 及其标志时它什么都不问，因此脚本可以运行它。之后用 `delorun stop` 再 `delorun start` 重启 Delorun。studio 的“设置”→“Agent”→“模型”显示 setup 写入的内容，也可以在那里更改。再次选择 DeepSeek 会让新 chat 回到 DeepSeek 的默认模型，并保留你设置过的其他提供方，所以它们的模型仍留在模型选择器中。
+
+<a id="providers-set-up-in-the-studio"></a>
 
 ## 在 studio 中设置的提供方
 
@@ -116,11 +132,15 @@ Claude Code 和 Codex 不是 Delorun 的 chat 所用的模型提供方：它们�
 
 </details>
 
+<a id="next"></a>
+
 ## 接下来
 
 - 开始 chat：[日常使用](daily-use.zh.md)。
 - 查看一次 chat 的花费：[查看一次 chat 的花费](cost-meter.zh.md)。
 - 如果密钥被拒绝：[setup 与模型密钥](troubleshooting.zh.md#setup-and-the-model-key)。
+
+<a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 

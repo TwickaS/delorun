@@ -18,11 +18,15 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 - [它没有计入什么](#what-it-does-not-count)
 - [接下来](#next)
 
+<a id="turn-it-on"></a>
+
 ## 开启它
 
 在侧边栏打开“插件”，然后打开 **Delorun studio**。在 Components 下找到 **Cost meter** 并开启；它会立即启动，无需重启。你应该会在每个 chat 的输入框下方、token 数之后看到一个数字。
 
 新手引导的“推荐插件”步骤提供同样的开关。
+
+<a id="what-it-shows"></a>
 
 ## 它显示什么
 
@@ -31,6 +35,8 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 选中它可以查看明细：每个模型一行，列出其请求数、token 数和费用。每一行可以展开为输入、缓存写入、缓存读取和输出 token。有 agent 参与时，最先是本 chat 的一行，然后是它所启动的每个 agent 各一行，按费用从高到低排列。
 
 这个数字是估算值。价格表中没有价格的请求会被如实列为无价格，而不是猜一个价格。
+
+<a id="prices"></a>
 
 ## 价格
 
@@ -55,9 +61,13 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 
 </details>
 
+<a id="what-it-does-not-count"></a>
+
 ## 它没有计入什么
 
 批量价格、快速模式、一小时缓存写入、折扣和中国节假日都没有建模。
+
+<a id="next"></a>
 
 ## 接下来
 
