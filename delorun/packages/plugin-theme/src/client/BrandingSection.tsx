@@ -9,7 +9,7 @@ import { Button, Notice, TextField } from '@delorun/brand'
 import { checkGreeting, checkName, checkUpload, DEFAULT_GREETING, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
 import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-controls'
 import { useState, type ChangeEvent } from 'react'
-import type { ThemeSettings } from '../config.ts'
+import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
 import { BrandIcon } from './BrandIcon.tsx'
 import { publishBranding, useBranding } from './branding-store.ts'
 import css from './BrandingSection.module.css'
@@ -48,7 +48,7 @@ async function base64Of(file: File): Promise<string> {
  */
 export function BrandingSection({ t, settings }: BrandingSectionProps) {
   const { snapshot, disabled, failed, track } = useFormWrites(settings)
-  const stored = snapshot.current.branding
+  const stored = (snapshot.value ?? DEFAULT_SETTINGS).branding
   const view = useBranding()
   const [problem, setProblem] = useState<{ readonly field: 'name' | 'greeting' | 'icon'; readonly text: string } | undefined>()
   const [picking, setPicking] = useState(false)

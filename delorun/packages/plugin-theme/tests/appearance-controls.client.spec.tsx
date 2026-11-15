@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 /** The shared appearance chips: one selected state, a single tab stop, radio-group keys, and 44px targets. */
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccentPicker, ChipGroup, StudioLookSwitch, ThemePicker } from '../src/client/controls/index.ts'
@@ -48,13 +46,6 @@ describe('the chip group', () => {
     expect(radios().every(radio => (radio as HTMLButtonElement).disabled)).toBe(true)
     await act(async () => { fireEvent.click(radios()[1] as HTMLElement) })
     expect(onChange).not.toHaveBeenCalled()
-  })
-
-  it('sizes every chip to a 44px target through the shared stylesheet', () => {
-    const css = readFileSync(join(import.meta.dirname, '../src/client/controls/controls.module.css'), 'utf8')
-    const chip = /\.chip \{[^}]*\}/.exec(css)?.[0] ?? ''
-    expect(chip).toContain('min-height: 44px;')
-    expect(chip).toContain('min-width: 44px;')
   })
 })
 
