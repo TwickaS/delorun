@@ -9,6 +9,8 @@ import { StepFooter } from '../frame/StepFooter.tsx'
 import type { Guide } from '../guide.ts'
 import { cardsOf, TEST_DELAY_MS, usableKey, type DirectoryEntry, type KeyProbe, type ProviderCard } from '../providers.ts'
 import type { StepServices } from '../types.ts'
+import type { LocalServer } from '../../wire.ts'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Card } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { useStore } from './shared.ts'
@@ -141,12 +143,66 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
           ))}
         </ul>
       )}
+      <LocalServers services={services} taken={new Set(cards.map(card => card.provider))} />
       <p className={shared.hint}>{t('welcome.model.hint')}</p>
       <FooterPortal>
         <StepFooter skip={{ label: t('providers.skip'), onClick: next }} back={{ label: t('back'), onClick: back }}
           next={{ label: t('providers.connect', { n: String(walk.length) }), onClick: connect, disabled: walk.length === 0 }} />
       </FooterPortal>
     </div>
+  )
+}
+
+/** The name a found local server is shown under. */
+const LOCAL_NAMES: Readonly<Record<LocalServer['kind'], string>> = { 'ollama': 'Ollama', 'lm-studio': 'LM Studio' }
+
+/**
+ * Offer each local model server the host found, unless a route of that name already exists: its address and model count,
+ * and an Add that asks for confirmation before anything is written. From a phone the write is left to the computer.
+ * @param props - the services and the route ids that already exist.
+ * @returns the offers, or nothing when no server was found.
+ */
+function LocalServers({ services, taken }: { readonly services: StepServices; readonly taken: ReadonlySet<string> }): ReactNode {
+  const { t, host, providers, remote } = services
+  const [servers, setServers] = useState<readonly LocalServer[]>([])
+  const [asking, setAsking] = useState<string | undefined>()
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let live = true
+    void host.localModels().then((found) => { if (live) setServers(found ?? []) })
+    return () => { live = false }
+  }, [host])
+  const confirm = (server: LocalServer): void => {
+    setFailed(false)
+    void providers.declareLocal(server).then((ok) => {
+      if (ok) { setAsking(undefined); setAdded(held => new Set(held).add(server.kind)) } else setFailed(true)
+    })
+  }
+  const offers = servers.filter(server => !taken.has(server.kind) || added.has(server.kind))
+  if (offers.length === 0) return null
+  return (
+    <ul className={shared.cards} aria-label={t('local.label')}>
+      {offers.map(server => (
+        <li key={server.kind}>
+          <Card title={LOCAL_NAMES[server.kind]} labels={{ more: t('more'), less: t('less') }}
+            action={added.has(server.kind) ? <span className={shared.added}><span aria-hidden="true">✓ </span>{t('bundle.added')}</span>
+              : remote || asking === server.kind ? undefined
+                : <Button variant="outline" size="sm" aria-label={t('local.addNamed', { name: LOCAL_NAMES[server.kind] })} onClick={() => { setAsking(server.kind) }}>{t('bundle.add')}</Button>}>
+            <StateLine tone="success">{t('local.found', { n: String(server.models.length), address: server.baseURL })}</StateLine>
+            {remote && !added.has(server.kind) && <StateLine tone="info">{t('bundle.atComputer')}</StateLine>}
+            {asking === server.kind && (
+              <div className={shared.stack}>
+                <p className={shared.hint}>{t('local.confirm', { name: LOCAL_NAMES[server.kind], address: server.baseURL })}</p>
+                <Button size="sm" onClick={() => { confirm(server) }}>{t('local.confirmYes')}</Button>
+                <Button variant="outline" size="sm" onClick={() => { setAsking(undefined); setFailed(false) }}>{t('local.confirmNo')}</Button>
+              </div>
+            )}
+            {failed && asking === server.kind && <StateLine tone="error">{t('local.failed')}</StateLine>}
+          </Card>
+        </li>
+      ))}
+    </ul>
   )
 }
 

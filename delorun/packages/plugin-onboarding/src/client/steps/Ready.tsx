@@ -45,9 +45,11 @@ export function ReadyStep({ services, guide, reach, target }: StepProps & { read
     ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' ? 'ready.reach.on' : 'ready.reach.off'), tone: undefined }],
     workspace !== undefined
       ? { key: 'workspace', label: t('ready.workspace'), value: workspace.path, tone: undefined }
-      : target.kind === 'other'
-        ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
-        : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },
+      : target.kind === 'default'
+        ? { key: 'workspace', label: t('ready.workspace'), value: target.path, tone: undefined }
+        : target.kind === 'other'
+          ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
+          : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },
   ]
   const set = starterSet(folderOf(workspace) ?? '')
   return (

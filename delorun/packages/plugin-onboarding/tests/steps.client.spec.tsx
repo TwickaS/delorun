@@ -452,6 +452,12 @@ describe('the ready step', () => {
     render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} />)
   const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
 
+  it('shows the default workspace as a plain value when the Workspace step was skipped', async () => {
+    ready(guideOf(), { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
+    await settle()
+    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', DEFAULT_PATH, undefined])
+  })
+
   it('lists what the guide set and the starting prompts that fit the chosen folder', async () => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'installed' }, '@scope/a': { state: 'restart' }, '@scope/b': { state: 'available' } })

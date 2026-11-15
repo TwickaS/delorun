@@ -33,10 +33,11 @@ import { createCloneService, spawnGit } from './clone.ts'
 import type { Config } from './config.ts'
 import { listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
+import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
-  ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
+  ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
   type WorkspaceNoticeAnswer,
 } from './wire.ts'
 import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
@@ -45,7 +46,7 @@ export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './an
 export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, ROW_ID, type OnboardingSettings } from './config.ts'
 export {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
-  CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
+  CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LOCAL_SERVER_KINDS, LocalModelsAnswer, LocalServer, isLoopbackBaseURL, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
   MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneFailure, type CloneProblem, type FolderKind, type KeyResult, type LocationProblem,
 } from './wire.ts'
@@ -121,6 +122,12 @@ export function apply(ctx: Context, config: Config): void {
     methods: ['POST'],
     requestBody: 'buffered',
     fetch: async () => json(await testKeys(keyTestDeps(ctx, config.keyTestTimeoutMs, config.hiddenProviders))),
+  })
+  ctx.connection.fetch.register({
+    path: LOCAL_MODELS_PATH,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async () => json(await findLocalServers(config.keyTestTimeoutMs)),
   })
   ctx.connection.fetch.register({
     path: RECOMMEND_PATH,

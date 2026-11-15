@@ -10,7 +10,7 @@ import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { CloneStatus, KeyTestAnswer, Readiness, RecommendAnswer } from '../src/wire.ts'
+import type { CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
   AddOutcome, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
@@ -128,18 +128,20 @@ export function hostFake(change: {
   readonly keys?: KeyTestAnswer | undefined
   readonly recommend?: RecommendAnswer | undefined
   readonly reach?: ReachState
+  readonly localModels?: readonly LocalServer[] | undefined
   readonly cloneStart?: CloneStartOutcome
   readonly cloneStatus?: readonly CloneStatus[]
 } = {}) {
   const statuses = [...change.cloneStatus ?? [{ state: 'unknown' } as const]]
   const readiness = vi.fn(() => Promise.resolve('readiness' in change ? change.readiness : READY))
   const keyTest = vi.fn(() => Promise.resolve('keys' in change ? change.keys : KEYS))
+  const localModels = vi.fn(() => Promise.resolve('localModels' in change ? change.localModels : []))
   const recommend = vi.fn((_registry: boolean) => Promise.resolve('recommend' in change ? change.recommend : { plugins: [], registry: 'not-asked' as const }))
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
   const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
   const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
-  const host: HostFace = { readiness, keyTest, recommend, reach, cloneStart, cloneStatus }
-  return { host, readiness, keyTest, recommend, reach, cloneStart, cloneStatus }
+  const host: HostFace = { readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
+  return { host, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
 }
 
 /** The home directory the folder listings start at. */
@@ -185,12 +187,13 @@ export function startFace(
 }
 
 /** The providers service with every call a spy; each can be replaced. */
-export function providersFake(change: { readonly directory?: readonly DirectoryEntry[] | undefined; readonly probe?: KeyProbe; readonly save?: boolean } = {}) {
+export function providersFake(change: { readonly directory?: readonly DirectoryEntry[] | undefined; readonly probe?: KeyProbe; readonly save?: boolean; readonly declareLocal?: boolean } = {}) {
   const directory = vi.fn(() => Promise.resolve('directory' in change ? change.directory : DIRECTORY))
   const probe = vi.fn((_entry: DirectoryEntry, _key: string, _baseURL: string | undefined) => Promise.resolve(change.probe ?? { kind: 'works', models: 12, defaultModel: 'deepseek-chat' } as KeyProbe))
   const save = vi.fn((_entry: DirectoryEntry, _key: string, _baseURL: string | undefined) => Promise.resolve(change.save ?? true))
-  const face: ProvidersFace = { directory, probe, save }
-  return { face, directory, probe, save }
+  const declareLocal = vi.fn((_server: LocalServer) => Promise.resolve(change.declareLocal ?? true))
+  const face: ProvidersFace = { directory, probe, save, declareLocal }
+  return { face, directory, probe, save, declareLocal }
 }
 
 /** Step services with every part faked; each can be replaced. */

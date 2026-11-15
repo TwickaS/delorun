@@ -7,7 +7,11 @@ import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.remote merge.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { deriveKeyRef, type DirectoryEntry, type KeyProbe } from './providers.ts'
+import { isLoopbackBaseURL, type LocalServer } from '../wire.ts'
 import type { ProvidersFace } from './types.ts'
+
+/** The route ids and names a found local server is declared under. */
+const LOCAL_ROUTES = { 'ollama': 'Ollama', 'lm-studio': 'LM Studio' } as const
 
 /** The settings namespace whose profiles name a credential reference only once a key is stored. */
 const PI_AI_NAMESPACE = 'llm-pi-ai'
@@ -61,6 +65,24 @@ export function createProvidersFace(ctx: Context): ProvidersFace {
       } catch (error) {
         console.warn('delorun onboarding: the key was not tested', error)
         return { kind: 'failed' }
+      }
+    },
+    declareLocal: async (server: LocalServer) => {
+      if (!isLoopbackBaseURL(server.baseURL)) return false
+      try {
+        const described = await ctx.remote.settings.describe()
+        if (!described.ok) return false
+        const namespace = described.value.namespaces.find(each => each.ns === PI_AI_NAMESPACE)
+        if (at(namespace?.value, ['providers', server.kind]) !== undefined) return false
+        const profile = {
+          displayName: LOCAL_ROUTES[server.kind], api: 'openai-completions', baseURL: server.baseURL,
+          models: server.models.map(id => ({ id, name: id })),
+        }
+        const written = await ctx.remote.settings.mutate(PI_AI_NAMESPACE, [{ op: 'set' as const, path: ['providers', server.kind], value: profile }], namespace?.revision)
+        return written.ok
+      } catch (error) {
+        console.warn('delorun onboarding: the local server was not declared', error)
+        return false
       }
     },
     save: async (entry, key, baseURL) => {

@@ -250,3 +250,45 @@ export const RecommendAnswer = z.strictObject({
 
 /** {@link RecommendAnswer}'s parsed value. */
 export type RecommendAnswer = z.output<typeof RecommendAnswer>
+
+/** The harness's route that looks for local model servers on this computer. `GET` answers {@link LocalModelsAnswer}. */
+export const LOCAL_MODELS_PATH = '/api/delorunOnboarding.localModels'
+
+/** The local servers the step recognises, with the route id each is declared under. */
+export const LOCAL_SERVER_KINDS = ['ollama', 'lm-studio'] as const
+
+/** The most model ids one found server reports. */
+export const MAX_LOCAL_MODELS = 200
+
+/** One local server that answered its OpenAI-compatible model listing. */
+export const LocalServer = z.strictObject({
+  kind: z.enum(LOCAL_SERVER_KINDS),
+  baseURL: z.string().min(1).max(200),
+  models: z.array(z.string().min(1).max(200)).min(1).max(MAX_LOCAL_MODELS),
+})
+
+/** {@link LocalServer}'s parsed value. */
+export type LocalServer = z.output<typeof LocalServer>
+
+/** The local servers found, in the order {@link LOCAL_SERVER_KINDS} lists them. */
+export const LocalModelsAnswer = z.strictObject({ servers: z.array(LocalServer).max(LOCAL_SERVER_KINDS.length) })
+
+/** {@link LocalModelsAnswer}'s parsed value. */
+export type LocalModelsAnswer = z.output<typeof LocalModelsAnswer>
+
+/**
+ * Whether a base URL is a plain-HTTP address on this computer's loopback interface, with no credentials.
+ * @param baseURL - the address.
+ * @returns true for `http://127.0.0.1`, `http://localhost` or `http://[::1]`, with any port and path.
+ */
+export function isLoopbackBaseURL(baseURL: string): boolean {
+  let url: URL
+  try {
+    url = new URL(baseURL)
+  } catch (_notAUrl) {
+    // Not an address, so not loopback.
+    return false
+  }
+  return url.protocol === 'http:' && url.username === '' && url.password === ''
+    && (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]')
+}

@@ -190,3 +190,50 @@ describe('the summary', () => {
     expect(guide.providersPhase.getSnapshot()).toBe('landing')
   })
 })
+
+describe('local model servers', () => {
+  const OLLAMA = { kind: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', models: ['llama3', 'qwen3'] } as const
+
+  const mountLocal = async (servers: readonly (typeof OLLAMA)[], remote = false, declareLocal = true) => {
+    const providers = providersFake({ declareLocal })
+    const host = hostFake({ localModels: servers })
+    render(
+      <StepFrame title="Models" headingRef={null} count="Step 2 of 7" place={2} total={7} steps={['Welcome', 'Models']} stepsLabel="Steps" stepKey="models">
+        <ProvidersStep services={stepServices({ providers: providers.face, host: host.host, remote })} guide={createGuide(host.host)} next={vi.fn()} back={vi.fn()} />
+      </StepFrame>,
+    )
+    await flush()
+    return providers
+  }
+
+  it('shows the found server with its model count and writes nothing until the person confirms', async () => {
+    const { declareLocal } = await mountLocal([OLLAMA])
+    expect(screen.getByText('Found at http://127.0.0.1:11434/v1 · 2 models')).toBeTruthy()
+    await click(screen.getByRole('button', { name: 'Add Ollama' }))
+    expect(declareLocal).not.toHaveBeenCalled()
+    await click(screen.getByRole('button', { name: en['local.confirmYes'] }))
+    expect(declareLocal).toHaveBeenCalledWith(OLLAMA)
+    expect(screen.getByText(en['bundle.added'])).toBeTruthy()
+  })
+
+  it('writes nothing when the person declines, and reports a write that failed', async () => {
+    const { declareLocal } = await mountLocal([OLLAMA], false, false)
+    await click(screen.getByRole('button', { name: 'Add Ollama' }))
+    await click(screen.getByRole('button', { name: en['local.confirmNo'] }))
+    expect(declareLocal).not.toHaveBeenCalled()
+    await click(screen.getByRole('button', { name: 'Add Ollama' }))
+    await click(screen.getByRole('button', { name: en['local.confirmYes'] }))
+    expect(screen.getByText(en['local.failed'])).toBeTruthy()
+  })
+
+  it('leaves the write to the computer on a phone', async () => {
+    await mountLocal([OLLAMA], true)
+    expect(screen.getByText(en['bundle.atComputer'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add Ollama' })).toBeNull()
+  })
+
+  it('offers nothing when no server answered', async () => {
+    await mountLocal([])
+    expect(screen.queryByRole('list', { name: en['local.label'] })).toBeNull()
+  })
+})
