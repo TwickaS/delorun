@@ -31,7 +31,7 @@ import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delorun/contract-setup-answe
 import { readSetupRecord } from './answers.ts'
 import { createCloneService, spawnGit } from './clone.ts'
 import type { Config } from './config.ts'
-import { listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
+import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
@@ -175,7 +175,7 @@ function credentialRef(ctx: Context, entry: { readonly settingsNs: string; reado
 /**
  * The key test's parts in this harness: upstream's provider registry and discoveries, each configurable route's credential
  * as the credentials service describes its reference (`configured`, read without the value), and the official DeepSeek
- * route's listing with the key its credential reference resolves to (`DEEPSEEK_API_KEY`, through the credentials service,
+ * route's listing with the key its credential reference resolves to (the variable its profile names, `DEEPSEEK_API_KEY` by default, through the credentials service,
  * or the environment where none is mounted) at the address `DEEPSEEK_BASE_URL` names, or DeepSeek's public one.
  * @param ctx - the plugin context.
  * @param timeoutMs - the most time one route's test may take.
@@ -211,9 +211,12 @@ export function keyTestDeps(ctx: Context, timeoutMs: number, hidden: readonly st
       await llm.discoverModels(settingsNs, { provider }, signal)
     },
     deepseek: async (signal) => {
-      const ref = brandString<CredentialRef>(SETUP_DEFAULT_CREDENTIAL_VARIABLE)
+      // The variable the route's own profile names, as the provider reads it; the default only where the profile names none.
+      const entry = ctx.get('llm')?.listConfigurableProviders().find(each => each.provider === DEEPSEEK_ROUTE)
+      const variable = (entry === undefined ? undefined : credentialRef(ctx, entry)) ?? SETUP_DEFAULT_CREDENTIAL_VARIABLE
+      const ref = brandString<CredentialRef>(variable)
       const credentials = ctx.get('credentials')
-      const key = credentials === undefined ? env[SETUP_DEFAULT_CREDENTIAL_VARIABLE] : (await credentials.resolve(ref))?.value
+      const key = credentials === undefined ? env[variable] : (await credentials.resolve(ref))?.value
       if (key === undefined || key === '') return 'no-key'
       const base = env['DEEPSEEK_BASE_URL'] !== undefined && env['DEEPSEEK_BASE_URL'] !== '' ? env['DEEPSEEK_BASE_URL'] : PUBLIC_BASE_URL
       try {

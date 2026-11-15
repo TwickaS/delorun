@@ -191,6 +191,19 @@ describe('the key test in the harness', () => {
     expect(await keyTestDeps(ctx, 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('rejected')
   })
 
+  it('reads the variable the DeepSeek route\'s profile names, not only DEEPSEEK_API_KEY', async () => {
+    const ctx = new Context()
+    const resolve = vi.fn(async (ref: string) => (ref === 'MY_ROUTE_KEY' ? { value: 'sk-mine' } : undefined))
+    ctx.provide('credentials', { resolve } as never)
+    ctx.provide('llm', { listConfigurableProviders: () => [{ provider: DEEPSEEK_ROUTE, settingsNs: 'llm.deepseek', settingsPath: [] }] } as never)
+    ctx.provide('settings', { describe: () => [{ ns: 'llm.deepseek', value: { apiKeyEnv: 'MY_ROUTE_KEY' } }] } as never)
+    const ok = await listing(200)
+    vi.stubEnv('DEEPSEEK_BASE_URL', ok.url)
+    expect(await keyTestDeps(ctx, 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('works')
+    expect(ok.keys).toEqual(['sk-mine'])
+    expect(resolve).toHaveBeenCalledExactlyOnceWith('MY_ROUTE_KEY')
+  })
+
   it('reads the key from the environment without a credentials service, and answers no-key without one', async () => {
     const ok = await listing(200)
     vi.stubEnv('DEEPSEEK_BASE_URL', ok.url)
