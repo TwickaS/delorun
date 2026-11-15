@@ -12,7 +12,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { allowAllAccess } from '@deepseek-ai/dsh-client-test-runtime'
-import type { SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
+import type { SidebarHoverPeek, SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
 import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
 import { en } from '../src/client/locales.ts'
 
@@ -53,6 +53,7 @@ interface MountOptions {
   collapsed?: boolean
   drawer?: boolean
   width?: number
+  hoverPeek?: SidebarHoverPeek
 }
 
 /**
@@ -66,7 +67,8 @@ function mountRail(options: MountOptions = {}) {
   let regionOwner: SidebarSectionOwnerProps | undefined
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
-  const view = render(
+  let hoverPeek: SidebarHoverPeek = options.hoverPeek ?? { enabled: true, delayMs: PEEK_HOVER_DELAY_MS }
+  const tree = () => (
     <SidebarRoot
       drawer={drawer}
       collapsed={collapsed} width={width}
@@ -74,7 +76,7 @@ function mountRail(options: MountOptions = {}) {
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')}
       useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)}
-      useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector(hoverPeek)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook} renderFactorySlot={() => null}
       {...allowAllAccess}
@@ -88,17 +90,20 @@ function mountRail(options: MountOptions = {}) {
         if (key === 'sidebar.settings') return <div data-testid="settings-seat" data-wide={owner.wide} />
         if (key === 'sidebar.footer.action') return null
         if (key === 'sidebar.session.action') return options?.children ?? null
-        regionOwner = owner as SidebarSectionOwnerProps
+        regionOwner = owner
         return <div data-testid="region" data-wide={owner.wide}><PeekControl /></div>
       }) as SidebarRootComponentProps['renderSlot']}
-    />,
+    />
   )
+  const view = render(tree())
   const column = view.container.firstElementChild
   if (!(column instanceof HTMLElement)) throw new Error('sidebar column not rendered')
   return {
     column,
     startSession,
     toggleSidebar,
+    /** Change the hover-peek setting under the mounted shell, as the layout service does. */
+    setHoverPeek: (next: SidebarHoverPeek): void => { hoverPeek = next; view.rerender(tree()) },
     regionWide: (): boolean => {
       if (regionOwner === undefined) throw new Error('region owner not rendered')
       return regionOwner.wide
@@ -516,5 +521,54 @@ describe('SidebarRoot hover peek', () => {
     fireEvent.pointerMove(document, { pointerType: 'touch', clientX: 4, clientY: 300 })
     advance(1000)
     expect(peekAttribute(column)).toBeNull()
+  })
+
+  it('opens after the configured delay, not the default one', () => {
+    stubHoverCapability(true)
+    const { column } = mountRail({ hoverPeek: { enabled: true, delayMs: 1000 } })
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
+    advance(PEEK_HOVER_DELAY_MS)
+    expect(peekAttribute(column)).toBeNull()
+    advance(1000 - PEEK_HOVER_DELAY_MS - 1)
+    expect(peekAttribute(column)).toBeNull()
+    advance(1)
+    expect(peekAttribute(column)).toBe('open')
+  })
+
+  it('opens on the next tick with a zero delay', () => {
+    stubHoverCapability(true)
+    const { column } = mountRail({ hoverPeek: { enabled: true, delayMs: 0 } })
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
+    advance(0)
+    expect(peekAttribute(column)).toBe('open')
+  })
+
+  it('never opens while the peek is off, on the rail or at the left edge, and the expand control still works', () => {
+    stubHoverCapability(true)
+    const { column, toggleSidebar } = mountRail({ hoverPeek: { enabled: false, delayMs: 350 } })
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
+    fireEvent.pointerMove(column, { clientX: 30, clientY: 300 })
+    advance(5000)
+    expect(peekAttribute(column)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }))
+    expect(toggleSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies a change live: turning it off closes an open peek and drops a pending dwell, turning it on arms the next one', () => {
+    stubHoverCapability(true)
+    const { column, setHoverPeek } = mountRail()
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
+    advance(PEEK_HOVER_DELAY_MS)
+    expect(peekAttribute(column)).toBe('open')
+    setHoverPeek({ enabled: false, delayMs: 350 })
+    expect(peekAttribute(column)).toBeNull()
+    fireEvent.pointerLeave(column)
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
+    advance(5000)
+    expect(peekAttribute(column)).toBeNull()
+    setHoverPeek({ enabled: true, delayMs: 100 })
+    fireEvent.pointerMove(column, { clientX: 30, clientY: 300 })
+    advance(100)
+    expect(peekAttribute(column)).toBe('open')
   })
 })

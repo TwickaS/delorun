@@ -104,6 +104,23 @@ describe('ui-sidebar apply', () => {
     expectTypeOf<Parameters<SidebarRootInjected['selectPanel']>[0]>().toEqualTypeOf<MainPanelId>()
   })
 
+  it('offers the hover peek on after 350 ms until a distribution sets it, the latest call winning', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { hoverPeek } = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)().hooks
+    expect(hoverPeek.getSnapshot()).toEqual({ enabled: true, delayMs: 350 })
+    const layout = b.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    const first = layout.setHoverPeek({ enabled: false, delayMs: 200 })
+    const second = layout.setHoverPeek({ enabled: true, delayMs: 0 })
+    expect(hoverPeek.getSnapshot()).toEqual({ enabled: true, delayMs: 0 })
+    first()
+    first()
+    expect(hoverPeek.getSnapshot()).toEqual({ enabled: true, delayMs: 0 })
+    second()
+    expect(hoverPeek.getSnapshot()).toEqual({ enabled: true, delayMs: 350 })
+  })
+
   it('forwards entry clicks to the optional product analytics service without tracking panel selection', async () => {
     const b = await bench()
     await b.ctx.plugin({ inject: [...inject], apply }).await()

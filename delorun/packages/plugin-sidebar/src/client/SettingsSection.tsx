@@ -3,7 +3,8 @@
  * tiles drawn in the chosen palette, the palette swatches, the art's strength
  * and style as radio segments, and its fade as tiles. Chat list: the list's
  * style and sort order as radio segments, the Working shelf, Ask before
- * unpinning and the sidebar's width on a notched slider.
+ * unpinning and the sidebar's width on a notched slider. Collapsed sidebar: whether
+ * resting on the rail expands the sidebar, and how long it rests first.
  * @module @delorun/plugin-sidebar/client/SettingsSection
  */
 import { Button, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -12,7 +13,7 @@ import { ChoiceGroup, SettingHeading, SettingsCard } from '@delorun/settings-con
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useId, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import {
-  ART_FADES, ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
+  ART_FADES, ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, PEEK_DELAY, SIDEBAR_WIDTH, SORT_ORDERS,
   type ArtPalette, type SidebarSettings,
 } from '../config.ts'
 import { InkEdgeFilters, StageBackdrop } from './StageArt.tsx'
@@ -119,24 +120,34 @@ function SettingRow({ id, title, lead, muted, children }: {
   )
 }
 
+/** A slider's range, step and the notches that snap and jump. */
+interface SliderRange {
+  readonly min: number
+  readonly max: number
+  readonly step: number
+  readonly notches?: readonly number[]
+}
+
 /**
- * The width slider: any width in the range, with notches that snap within a step and buttons that jump to them.
- * Dragging shows the width; the setting is saved when the slider is let go.
- * @param props - the saved width, whether it is disabled, the label, the value and notch formats and the save.
+ * A slider over `range`: any value in it, with notches that snap within a step and buttons that jump to them.
+ * Dragging shows the value; the setting is saved when the slider is let go.
+ * @param props - the range, the saved value, whether it is disabled, the label, the value and notch formats and the save.
  * @returns the slider.
  */
-function WidthSlider({ value, disabled, label, format, notchLabel, onCommit }: {
+function RangeSlider({ range, value, disabled, label, format, notchLabel, onCommit }: {
+  readonly range: SliderRange
   readonly value: number
   readonly disabled: boolean
   readonly label: string
-  readonly format: (px: number) => string
-  readonly notchLabel: (px: number) => string
-  readonly onCommit: (px: number) => void
+  readonly format: (value: number) => string
+  readonly notchLabel: (value: number) => string
+  readonly onCommit: (value: number) => void
 }) {
+  const notches = range.notches ?? []
   const [draft, setDraft] = useState<number | null>(null)
   const shown = draft ?? value
-  const at = (px: number): string => `${String(((px - SIDEBAR_WIDTH.min) / (SIDEBAR_WIDTH.max - SIDEBAR_WIDTH.min)) * 100)}%`
-  const snap = (px: number): number => SIDEBAR_WIDTH.notches.find(notch => Math.abs(notch - px) <= SIDEBAR_WIDTH.step) ?? px
+  const at = (at: number): string => `${String(((at - range.min) / (range.max - range.min)) * 100)}%`
+  const snap = (next: number): number => notches.find(notch => Math.abs(notch - next) <= range.step) ?? next
   const commit = (): void => {
     if (draft !== null && draft !== value) onCommit(draft)
     setDraft(null)
@@ -144,12 +155,12 @@ function WidthSlider({ value, disabled, label, format, notchLabel, onCommit }: {
   return (
     <div className={css.slider}>
       <span className={css.sliderValue} aria-hidden="true">{format(shown)}</span>
-      <div className={css.sliderTrack}>
+      <div className={notches.length === 0 ? css.sliderTrackPlain : css.sliderTrack}>
         <input type="range" aria-label={label} aria-valuetext={format(shown)} disabled={disabled}
-          min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} step={SIDEBAR_WIDTH.step} value={shown}
+          min={range.min} max={range.max} step={range.step} value={shown}
           onChange={(event) => { setDraft(snap(Number(event.currentTarget.value))) }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
-        {SIDEBAR_WIDTH.notches.map(notch => (
+        {notches.map(notch => (
           <button key={notch} type="button" className={css.notch} style={{ left: at(notch) }} disabled={disabled}
             aria-pressed={value === notch} onClick={() => { if (value !== notch) onCommit(notch) }}>
             {notchLabel(notch)}
@@ -293,9 +304,23 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
         </SettingRow>
 
         <SettingRow id="delorun-sidebar-width" title={t('settings.width')} lead={t('settings.width.lead')}>
-          <WidthSlider value={current.width} disabled={disabled} label={t('settings.width')}
+          <RangeSlider range={SIDEBAR_WIDTH} value={current.width} disabled={disabled} label={t('settings.width')}
             format={px => t('settings.width.value', { px: String(px) })} notchLabel={px => String(px)}
             onCommit={(px) => { save('width', px) }} />
+        </SettingRow>
+
+      </SettingsCard>
+
+      <SettingsCard id="delorun-sidebar-collapsed" title={t('settings.group.collapsed')}>
+        <SettingRow id="delorun-sidebar-peek" title={t('settings.peek')} lead={t('settings.peek.lead')}>
+          <Switch checked={current.peekOnHover} disabled={disabled} label={t('settings.peek')}
+            onChange={(checked) => { save('peekOnHover', checked) }} />
+        </SettingRow>
+
+        <SettingRow id="delorun-sidebar-peek-delay" title={t('settings.peekDelay')} lead={t('settings.peekDelay.lead')} muted={!current.peekOnHover}>
+          <RangeSlider range={PEEK_DELAY} value={current.peekDelayMs} disabled={disabled || !current.peekOnHover} label={t('settings.peekDelay')}
+            format={ms => t('settings.peekDelay.value', { ms: String(ms) })} notchLabel={ms => String(ms)}
+            onCommit={(ms) => { save('peekDelayMs', ms) }} />
         </SettingRow>
 
         <p className={css.credit}>{t('settings.credit')}</p>

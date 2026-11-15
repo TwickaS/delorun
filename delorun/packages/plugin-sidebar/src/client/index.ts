@@ -383,5 +383,24 @@ export function applyStudio(ctx: Context): void {
     child.effect(() => child.sidebarLayout.setNewSessionButton(false), 'delorun-sidebar: New chat in the list header')
     child.effect(() => child.sidebarLayout.setFootRow(true), 'delorun-sidebar: the foot in one row')
     child.effect(() => child.sidebarLayout.setPanelPlacement('footer'), 'delorun-sidebar: the panels in the foot row')
+    // The hover peek follows the Collapsed sidebar settings, live.
+    child.effect(() => {
+      let peek: { enabled: boolean, delayMs: number } | undefined
+      let restore: (() => void) | undefined
+      const sync = (): void => {
+        const { peekOnHover, peekDelayMs } = settings.getSnapshot()
+        if (peek?.enabled === peekOnHover && peek.delayMs === peekDelayMs) return
+        peek = { enabled: peekOnHover, delayMs: peekDelayMs }
+        const previous = restore
+        restore = child.sidebarLayout.setHoverPeek(peek)
+        previous?.()
+      }
+      sync()
+      const unsubscribe = settings.subscribe(sync)
+      return () => {
+        unsubscribe()
+        restore?.()
+      }
+    }, 'delorun-sidebar: hover peek')
   })
 }

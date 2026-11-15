@@ -48,6 +48,7 @@ function makeHeaderProps(): HeaderLeadingControlsProps {
     useEntryPins: selector => selector([]), useEntryActions: selector => selector(false),
     usePanelPlacement: selector => selector('top'), useLeadPanel: selector => selector(null),
     useNewSessionButton: selector => selector(true), useFootRow: selector => selector(false),
+    useHoverPeek: selector => selector({ enabled: true, delayMs: 350 }),
     selectPanel: vi.fn(), setPinned: vi.fn(), toggleSidebar: vi.fn(),
     startSession: vi.fn(), trackEntryClick: vi.fn(), t,
   }
@@ -83,7 +84,7 @@ function mountShell({
       collapsed={current.collapsed} width={current.width}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector(panels)} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector(shortcuts)}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -219,7 +220,7 @@ describe('SidebarRoot shell', () => {
       useSessionRetainInfo={neverHook} useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
       usePanels={select => select([])} useEntryPins={select => select([])}
-      useEntryActions={select => select(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()} useShortcuts={select => select([shortcut])} />)
+      useEntryActions={select => select(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()} useShortcuts={select => select([shortcut])} />)
     const button = screen.getByRole('button', { name: 'New session' })
     expect(screen.getByRole('button', { name: 'Open sidebar' }).hasAttribute('data-sidebar-opener')).toBe(true)
     expect(button.getAttribute('aria-keyshortcuts')).toBe('Control+N')
@@ -262,7 +263,7 @@ describe('SidebarRoot shell', () => {
       collapsed={false} width={300} drawer={false}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -295,7 +296,7 @@ describe('SidebarRoot shell', () => {
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -320,7 +321,7 @@ describe('SidebarRoot shell', () => {
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -349,7 +350,7 @@ describe('SidebarRoot shell', () => {
       collapsed={false} width={300} drawer={false}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -401,7 +402,7 @@ describe('SidebarRoot shell', () => {
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -473,7 +474,7 @@ describe('SidebarRoot shell', () => {
       collapsed width={56}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
-      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} setPinned={vi.fn()}
+      useEntryActions={selector => selector(false)} usePanelPlacement={placementSelector => placementSelector('top')} useLeadPanel={leadSelector => leadSelector(null)} useNewSessionButton={shownSelector => shownSelector(true)} useFootRow={rowSelector => rowSelector(false)} useHoverPeek={peekSelector => peekSelector({ enabled: true, delayMs: 350 })} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
       useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}

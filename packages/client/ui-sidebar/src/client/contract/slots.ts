@@ -238,6 +238,14 @@ export interface SidebarSessionActionOwnerProps {
   wide: boolean
 }
 
+/** How the collapsed rail's hover peek behaves. */
+export interface SidebarHoverPeek {
+  /** Whether dwelling on the collapsed rail opens the peek; the rail's expand control works either way. */
+  readonly enabled: boolean
+  /** Milliseconds the pointer rests on the rail before the peek opens. */
+  readonly delayMs: number
+}
+
 /**
  * Registrant-private injected share (arrives via the register inject
  * factory). The renderer binds the panel metadata source to usePanels.
@@ -277,6 +285,8 @@ export type SidebarRootInjected = {
     newSessionButton: ObservableSnapshot<boolean>
     /** Whether the wide sidebar's foot is one row (`SidebarLayout.setFootRow`). */
     footRow: ObservableSnapshot<boolean>
+    /** Whether and how soon the collapsed rail lifts into the hover peek (`SidebarLayout.setHoverPeek`). */
+    hoverPeek: ObservableSnapshot<SidebarHoverPeek>
   }
 }
 

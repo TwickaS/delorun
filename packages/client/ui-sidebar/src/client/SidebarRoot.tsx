@@ -57,14 +57,6 @@ const COLLAPSE_SETTLE_MS = 150
 const SCROLLBAR_LINGER_MS = 2000
 
 /**
- * Pointer dwell before the collapsed rail lifts into the hover peek. The delay
- * is what leaves the rail's controls alone: the pointer crosses the rail's
- * surface on its way to a control, which cancels the arm, so a click that
- * starts on a control is never intercepted by the expanding panel.
- */
-const PEEK_HOVER_DELAY_MS = 350
-
-/**
  * Grace between the pointer leaving the peek and its close fade starting. Moving back into the panel inside the
  * grace keeps it open; Escape and focus leaving close it at once.
  */
@@ -252,6 +244,7 @@ export function SidebarRoot({
   useLeadPanel,
   useNewSessionButton,
   useFootRow,
+  useHoverPeek,
   useShortcuts,
   usePanelInfo,
   t,
@@ -267,6 +260,7 @@ export function SidebarRoot({
   const leadEntry = useLeadPanel(entry => entry)
   const newSessionButton = useNewSessionButton(shown => shown)
   const footRow = useFootRow(row => row)
+  const hoverPeek = useHoverPeek(peek => peek)
   const lead = panels.find(panel => panel.id === leadEntry?.panelId)
   const listed = lead === undefined ? panels : panels.filter(panel => panel.id !== lead.id)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
@@ -365,14 +359,16 @@ export function SidebarRoot({
     }
   }, [pointerInside])
 
-  // Hover peek: dwell on the rail's own surface (or on the left edge where the
-  // platform hides the rail) lifts the expanded shell over the page. The
+  // Hover peek: the dwell is `SidebarLayout.setHoverPeek`'s delay. It is what leaves the rail's controls alone: the
+  // pointer crosses the rail's surface on its way to a control, which cancels the arm, so a click that starts on a
+  // control is not intercepted by the expanding panel (a zero delay gives that up). Dwell on the rail's own surface
+  // (or on the left edge where the platform hides the rail) lifts the expanded shell over the page. The
   // pointer handlers arm it, both through the element and, where the column
   // has no rail to enter, through the document's left edge band; focus and
   // Escape end it. It never runs while the drawer is open.
   const peekTimer = useRef<number | undefined>(undefined)
-  const peekEligible = useCallback((): boolean => collapsed && !drawer && hoveringPointer()
-    && !isBehindModal(column.current), [collapsed, drawer])
+  const peekEligible = useCallback((): boolean => hoverPeek.enabled && collapsed && !drawer && hoveringPointer()
+    && !isBehindModal(column.current), [hoverPeek.enabled, collapsed, drawer])
   const cancelPeekArm = useCallback((): void => {
     if (peekTimer.current === undefined) return
     window.clearTimeout(peekTimer.current)
@@ -384,8 +380,8 @@ export function SidebarRoot({
       peekTimer.current = undefined
       if (!peekEligible()) return
       setPeek('open')
-    }, PEEK_HOVER_DELAY_MS)
-  }, [peekEligible])
+    }, hoverPeek.delayMs)
+  }, [peekEligible, hoverPeek.delayMs])
   const closeGraceTimer = useRef<number | undefined>(undefined)
   const cancelPeekGrace = useCallback((): void => {
     if (closeGraceTimer.current === undefined) return
@@ -414,11 +410,11 @@ export function SidebarRoot({
   // Expanding, collapsing into the drawer, or leaving the rail ends the peek;
   // its trigger and close timer go with it.
   useEffect(() => {
-    if (collapsed && !drawer) return
+    if (collapsed && !drawer && hoverPeek.enabled) return
     cancelPeekArm()
     cancelPeekGrace()
     setPeek('closed')
-  }, [collapsed, drawer, cancelPeekArm, cancelPeekGrace])
+  }, [collapsed, drawer, hoverPeek.enabled, cancelPeekArm, cancelPeekGrace])
   // The close fade keeps the expanded content mounted for its duration.
   useEffect(() => {
     if (peek !== 'closing') return

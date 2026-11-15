@@ -4,7 +4,8 @@
  * chat list groups and sorts chats, whether working chats gather on their
  * shelf, whether unpinning asks first, the sidebar's width, each
  * Workspace's icon (kept as stored; the studio validates each icon it reads),
- * and how often the studio asks the harness for the update notice.
+ * how often the studio asks the harness for the update notice, and whether
+ * and how soon the collapsed rail expands under the pointer.
  * @module @delorun/plugin-sidebar/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
@@ -61,6 +62,9 @@ export type SortOrder = typeof SORT_ORDERS[number]
 /** The sidebar width slider's range and step, in pixels, and its notches: T3 Code's 256 and upstream's 280. */
 export const SIDEBAR_WIDTH = { min: 240, max: 420, step: 4, notches: [256, 280] } as const
 
+/** The hover-peek delay's range and step, in milliseconds. */
+export const PEEK_DELAY = { min: 0, max: 1500, step: 50 } as const
+
 export { MAX_WORKSPACE_ICONS } from './workspace-icon.ts'
 
 /** The range, in minutes, of the studio's interval between reads of the update notice. */
@@ -99,12 +103,17 @@ export interface SidebarSettings {
    * reads it when it starts, reconnects or regains focus.
    */
   updateNoticeRefreshMinutes: number
+  /** Whether resting the pointer on the collapsed rail shows the full sidebar over the page. */
+  peekOnHover: boolean
+  /** Milliseconds the pointer rests on the collapsed rail before the sidebar expands, within `PEEK_DELAY`. */
+  peekDelayMs: number
 }
 
 /** The settings a studio applies before its stored ones arrive. */
 export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettings = {
   headerArt: 'blueprint', artPalette: 'accent', view: 'cards', workingShelf: true, artSeed: 1, artStrength: 'standard', artFade: 'soft', artStyle: 'artwork', sort: 'updated',
   confirmUnpin: false, width: 256, workspaceIcons: {}, updateNoticeRefreshMinutes: 60,
+  peekOnHover: true, peekDelayMs: 350,
 }
 
 /** The host half's live configuration: one field per setting. */
@@ -122,6 +131,8 @@ export interface Config {
   width: Volatile<number>
   workspaceIcons: Volatile<Record<string, unknown>>
   updateNoticeRefreshMinutes: Volatile<number>
+  peekOnHover: Volatile<boolean>
+  peekDelayMs: Volatile<number>
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -145,4 +156,7 @@ export const Config = z.object({
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
   updateNoticeRefreshMinutes: z.natural().min(UPDATE_NOTICE_REFRESH_MINUTES.min).max(UPDATE_NOTICE_REFRESH_MINUTES.max)
     .description('Minutes between the studio\'s reads of the update notice.').default(DEFAULT_SIDEBAR_SETTINGS.updateNoticeRefreshMinutes).volatile(),
+  peekOnHover: z.boolean().description('Whether resting the pointer on the collapsed rail shows the full sidebar.').default(DEFAULT_SIDEBAR_SETTINGS.peekOnHover).volatile(),
+  peekDelayMs: z.natural().min(PEEK_DELAY.min).max(PEEK_DELAY.max).step(PEEK_DELAY.step)
+    .description('Milliseconds the pointer rests on the collapsed rail before the sidebar expands.').default(DEFAULT_SIDEBAR_SETTINGS.peekDelayMs).volatile(),
 })

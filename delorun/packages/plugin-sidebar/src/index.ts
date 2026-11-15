@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { MAX_WORKSPACE_ICONS, type Config } from './config.ts'
 
 export {
-  ART_FADES, ART_PALETTES, ART_STRENGTHS, ART_STYLES, Config, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, MAX_WORKSPACE_ICONS, SIDEBAR_ROW_ID,
+  ART_FADES, ART_PALETTES, ART_STRENGTHS, ART_STYLES, Config, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, MAX_WORKSPACE_ICONS, PEEK_DELAY, SIDEBAR_ROW_ID,
   SIDEBAR_WIDTH, SORT_ORDERS, UPDATE_NOTICE_REFRESH_MINUTES,
   type ArtFade, type ArtPalette, type ArtStrength, type ArtStyle, type HeaderArt, type ListView, type SidebarSettings, type SortOrder,
 } from './config.ts'

@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Session root standard-props merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type { SidebarLeadPanel, SidebarPanelMetadata, SidebarRootInjected, SidebarSectionInjected } from './contract/slots.ts'
+import type { SidebarLeadPanel, SidebarPanelMetadata, SidebarHoverPeek, SidebarRootInjected, SidebarSectionInjected } from './contract/slots.ts'
 import { createPanelPins } from './panel-pins.ts'
 import { HeaderLeadingControls } from './HeaderLeadingControls.tsx'
 import { SidebarRoot } from './SidebarRoot.tsx'
@@ -19,7 +19,8 @@ import { en, ja, es, fr, de, ru, pt, zh, type SidebarKey } from './locales.ts'
 
 export type {
   SidebarBackdropOwnerProps, SidebarBrandMarkOwnerProps, SidebarBrandNameOwnerProps, SidebarFooterActionOwnerProps,
-  SidebarLeadPanel, SidebarPanelActionEntry, SidebarPanelActionsOwnerProps, SidebarPanelIconOwnerProps, SidebarPanelMetadata,
+  SidebarHoverPeek, SidebarLeadPanel,
+  SidebarPanelActionEntry, SidebarPanelActionsOwnerProps, SidebarPanelIconOwnerProps, SidebarPanelMetadata,
   SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps, SidebarSessionActionOwnerProps,
   SidebarSettingsOwnerProps, SectionScroller, SidebarSectionHookContext, SidebarSectionInjected, UseSectionScroller,
 } from './contract/slots.ts'
@@ -60,6 +61,14 @@ export interface SidebarLayout {
    * @returns the disposer that restores the previous choice.
    */
   setFootRow(row: boolean): () => void
+  /**
+   * Set whether dwelling on the collapsed rail opens the hover peek and how long the pointer rests first, until the
+   * returned disposer runs; the latest call wins. Without a call the peek is on with a 350 ms dwell. A change applies
+   * to a rail already mounted, and an open peek closes when the peek is turned off.
+   * @param peek - whether the peek opens and the dwell in milliseconds.
+   * @returns the disposer that restores the previous choice.
+   */
+  setHoverPeek(peek: SidebarHoverPeek): () => void
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -80,6 +89,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     sidebar: SidebarKey
   }
 }
+
+/** The hover peek without a `setHoverPeek` call: on, after a 350 ms dwell. */
+const DEFAULT_HOVER_PEEK: SidebarHoverPeek = { enabled: true, delayMs: 350 }
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'sidebar'
@@ -107,6 +119,8 @@ export function apply(ctx: ClientContext): void {
   const newSessionButton = createSnapshotStore(true)
   const footRowChoices: { readonly row: boolean }[] = []
   const footRow = createSnapshotStore(false)
+  const hoverPeekChoices: { readonly peek: SidebarHoverPeek }[] = []
+  const hoverPeek = createSnapshotStore<SidebarHoverPeek>(DEFAULT_HOVER_PEEK)
   ctx.provide('sidebarLayout', {
     setPanelPlacement: (placement) => {
       const entry = { placement }
@@ -152,6 +166,17 @@ export function apply(ctx: ClientContext): void {
         footRow.set(footRowChoices.at(-1)?.row ?? false)
       }
     },
+    setHoverPeek: (peek) => {
+      const entry = { peek }
+      hoverPeekChoices.push(entry)
+      hoverPeek.set(peek)
+      return () => {
+        const index = hoverPeekChoices.indexOf(entry)
+        if (index === -1) return
+        hoverPeekChoices.splice(index, 1)
+        hoverPeek.set(hoverPeekChoices.at(-1)?.peek ?? DEFAULT_HOVER_PEEK)
+      }
+    },
   } satisfies SidebarLayout)
   const syncPanels = (): void => {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
@@ -184,7 +209,7 @@ export function apply(ctx: ClientContext): void {
     trackEntryClick: (attributes) => { ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes) },
     hooks: {
       panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions, panelPlacement, leadPanel, newSessionButton,
-      footRow,
+      footRow, hoverPeek,
     },
   })
   ctx.slots.inject('sidebar', function* () {

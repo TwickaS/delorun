@@ -94,10 +94,12 @@ function harness(options: {
   const shown: boolean[] = []
   const rows: boolean[] = []
   const placements: string[] = []
+  const peeks: unknown[] = []
   ctx.provide('sidebarLayout', {
     setNewSessionButton: (value: boolean) => { shown.push(value); return () => { shown.push(true) } },
     setFootRow: (row: boolean) => { rows.push(row); return () => { rows.push(false) } },
     setPanelPlacement: (placement: string) => { placements.push(placement); return () => { placements.push('top') } },
+    setHoverPeek: (value: unknown) => { peeks.push(value); return () => { peeks.push('restored') } },
   } as never)
   const widths: unknown[] = []
   ctx.provide('layout', {
@@ -107,7 +109,7 @@ function harness(options: {
   void studio
   const fiber = ctx.plugin({ name: 'delorun-sidebar', inject, apply })
   return {
-    ctx, fiber, dictionaries, entries, forms, shown, rows, placements, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
+    ctx, fiber, dictionaries, entries, forms, shown, rows, placements, peeks, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
     checkChange: (enabled: boolean) => { checkSnapshot = { ...checkSnapshot, status: 'ready', value: { enabled } }; for (const listener of [...checkListeners]) listener() },
     change: (value: SidebarSettings | undefined) => { snapshot = { ...snapshot, value, status: 'ready' }; for (const listener of [...listeners]) listener() },
     face: <T,>(key: string): T => {
@@ -190,6 +192,18 @@ describe('the studio half', () => {
     expect(h.widths).toEqual([{ default: 256, min: 256 }, { default: 240, min: 240 }])
     await h.fiber.dispose()
     expect(h.widths.at(-1)).toBe('restored')
+  })
+
+  it('hands the hover peek to the layout and follows live changes to it, swapping before it restores', async () => {
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS })
+    await h.fiber.await()
+    expect(h.peeks).toEqual([{ enabled: true, delayMs: 350 }])
+    h.change({ ...DEFAULT_SIDEBAR_SETTINGS, artSeed: 7 })
+    expect(h.peeks).toEqual([{ enabled: true, delayMs: 350 }])
+    h.change({ ...DEFAULT_SIDEBAR_SETTINGS, peekOnHover: false, peekDelayMs: 0 })
+    expect(h.peeks).toEqual([{ enabled: true, delayMs: 350 }, { enabled: false, delayMs: 0 }, 'restored'])
+    await h.fiber.dispose()
+    expect(h.peeks.at(-1)).toBe('restored')
   })
 
   it('uses the default settings until the stored ones arrive', async () => {

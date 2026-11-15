@@ -348,7 +348,14 @@
   padding-bottom: calc(var(--settings-hit) + var(--delorun-space-2));
 }
 
-.sliderTrack input {
+.sliderTrackPlain {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.sliderTrack input,
+.sliderTrackPlain input {
   width: 100%;
   min-height: var(--settings-hit);
   margin: 0;

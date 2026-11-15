@@ -120,11 +120,12 @@ describe('Settings → Sidebar groups', () => {
   it('heads the header art settings and the chat list settings, each over its own box, in the order of the pane', () => {
     renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
     const groups = screen.getAllByRole('heading', { level: 3 })
-    expect(groups.map(heading => heading.textContent)).toEqual([en['settings.group.header'], en['settings.group.list']])
+    expect(groups.map(heading => heading.textContent)).toEqual([en['settings.group.header'], en['settings.group.list'], en['settings.group.collapsed']])
     const titlesIn = (heading: HTMLElement) => within(screen.getByRole('region', { name: heading.textContent ?? '' })).getAllByRole('heading', { level: 4 }).map(title => title.textContent)
     expect(titlesIn(groups[0]!)).toEqual([en['settings.art'], en['settings.palette'], en['settings.strength'], en['settings.style'], en['settings.fade']])
     expect(titlesIn(groups[1]!)).toEqual([en['settings.view'], en['settings.sort'], en['settings.working'], en['settings.confirmUnpin'], en['settings.width']])
-    expect(within(screen.getByRole('region', { name: en['settings.group.list'] })).getByText(en['settings.credit'])).toBeTruthy()
+    expect(titlesIn(groups[2]!)).toEqual([en['settings.peek'], en['settings.peekDelay']])
+    expect(within(screen.getByRole('region', { name: en['settings.group.collapsed'] })).getByText(en['settings.credit'])).toBeTruthy()
   })
 
   it('offers strength, style, list style and sort order as radio groups whose arrow keys move and save the choice', () => {
@@ -412,5 +413,33 @@ describe('Settings → Sidebar swipe strip', () => {
     fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 })
     expect(rows().scrollLeft).toBe(0)
     expect(track.setPointerCapture).not.toHaveBeenCalled()
+  })
+})
+
+describe('Settings → Sidebar → Collapsed sidebar', () => {
+  const delaySlider = () => screen.getByRole('slider', { name: en['settings.peekDelay'] }) as HTMLInputElement
+
+  it('saves the hover switch and the delay, shown in milliseconds, when the slider is let go', () => {
+    const set = recordingSet()
+    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS, set))
+    expect(screen.getByRole('switch', { name: en['settings.peek'] }).getAttribute('aria-checked')).toBe('true')
+    expect(delaySlider().getAttribute('aria-valuetext')).toBe('350 ms')
+    expect([delaySlider().min, delaySlider().max, delaySlider().step]).toEqual(['0', '1500', '50'])
+    fireEvent.click(screen.getByRole('switch', { name: en['settings.peek'] }))
+    fireEvent.change(delaySlider(), { target: { value: '900' } })
+    expect(set).toHaveBeenCalledTimes(1)
+    fireEvent.pointerUp(delaySlider())
+    expect(set.mock.calls).toEqual([['peekOnHover', false], ['peekDelayMs', 900]])
+  })
+
+  it('mutes and disables the delay while Expand on hover is off, and leaves the switch usable', () => {
+    const set = recordingSet()
+    renderSection(formOf({ ...DEFAULT_SIDEBAR_SETTINGS, peekOnHover: false }, set))
+    expect(delaySlider().disabled).toBe(true)
+    expect(delaySlider().closest('section')?.getAttribute('data-muted')).toBe('true')
+    const toggle = screen.getByRole('switch', { name: en['settings.peek'] })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    expect(set).toHaveBeenCalledExactlyOnceWith('peekOnHover', true)
   })
 })
