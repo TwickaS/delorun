@@ -248,6 +248,10 @@ describe('the agents step', () => {
     const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(screen.getAllByText(en['bundle.unavailable'])).toHaveLength(2)
+    // No sign-in line beside "Not included": the two would read as a contradiction.
+    await settle()
+    expect(screen.queryByText(en['agents.claude.signIn.found'])).toBeNull()
+    expect(screen.queryByText(en['agents.signIn.checking'])).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
     const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
     expect(opens).toHaveLength(2)
