@@ -91,7 +91,14 @@ export default class DeepseekChatImportService extends TypertRemoteService {
       failed: (error) => { ctx.logger.error('deepseek-chat-import: import failed', error) },
     })
     ctx.effect(
-      () => ctx.connection.fetch.register({ path: UPLOAD_PATH, methods: ['POST'], requestBody: 'streaming', fetch: route }),
+      () => ctx.connection.fetch.register({
+        path: UPLOAD_PATH,
+        methods: ['POST'],
+        requestBody: 'streaming',
+        // The archive is raw bytes; the exact-route gate refuses every declared type but the route's.
+        requestMediaType: 'application/octet-stream',
+        fetch: route,
+      }),
       'deepseek-chat-import: upload route',
     )
     ctx.effect(() => async () => {

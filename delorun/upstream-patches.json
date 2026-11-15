@@ -1923,6 +1923,12 @@
       "reason": "The WebWorker preview's `node:net` gains a constructible `BlockList` whose `check` throws, so Delorun's client connection module, which builds its loopback list while it loads, loads in the preview."
     },
     {
+      "path": "packages/experimental/deepseek-chat-import/src/index.ts",
+      "class": "generic-fix",
+      "feature": "studio-seams",
+      "reason": "The archive upload route declares `application/octet-stream` as its request media type, because the exact-route media-type gate in Connection refuses every other declared type and the upload sends raw bytes. Offer upstream."
+    },
+    {
       "path": "packages/experimental/webworker-runtime/src/node/builtin_modules/implemented/fs.ts",
       "class": "generic-fix",
       "feature": "studio-seams",
