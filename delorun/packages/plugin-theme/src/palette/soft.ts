@@ -53,6 +53,7 @@ export const SOFT: PaletteSpec = {
     // Status lines ("Signed in", "No working key") are text in these colours, so they reach AA on every surface.
     '--dsw-alias-state-success-primary': { surfaces: TEXT_SURFACES, contrast: 4.5 },
     '--dsw-alias-state-warn-primary': { surfaces: TEXT_SURFACES, contrast: 4.5 },
+    '--dsw-alias-state-warn-label': { surfaces: TEXT_SURFACES, contrast: 4.5 },
     '--dsw-alias-state-error-primary': { surfaces: TEXT_SURFACES, contrast: 4.5 },
   },
   states: {

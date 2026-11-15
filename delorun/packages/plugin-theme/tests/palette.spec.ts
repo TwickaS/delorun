@@ -173,7 +173,7 @@ const BACKGROUND_ROLES = [
 const HINT_ROLES = ['--dsw-alias-label-secondary', '--dsw-alias-label-tertiary'] as const
 
 /** The roles status lines ("Signed in", "No working key", an error) use as text colour. */
-const STATE_TEXT_ROLES = ['--dsw-alias-state-success-primary', '--dsw-alias-state-warn-primary', '--dsw-alias-state-error-primary'] as const
+const STATE_TEXT_ROLES = ['--dsw-alias-state-success-primary', '--dsw-alias-state-warn-primary', '--dsw-alias-state-warn-label', '--dsw-alias-state-error-primary'] as const
 
 describe('hint text with the default accent and contrast', () => {
   it('is floored on the background roles listed here', () => {
