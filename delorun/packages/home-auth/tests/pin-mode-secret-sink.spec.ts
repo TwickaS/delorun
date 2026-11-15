@@ -47,4 +47,16 @@ describe('a PIN shorter than the redactor matches', () => {
     expect(await store.set('a long pass phrase')).toBe('passcode')
     expect(secrets.registered).toEqual(['a long pass phrase'])
   }, 60_000)
+
+  // Restoring protect() on the check path registers the guess while the hash runs.
+  it('does not register a wrong guess of 8 characters or more while checking it', async () => {
+    const secrets = registry()
+    const store = new PinModeStore({ directory, now: () => 1_000, secrets })
+    await store.load()
+    await store.set('a long pass phrase')
+    secrets.registered.length = 0
+    expect(await store.check('device-1', 'another long phrase')).toMatchObject({ kind: 'wrong' })
+    expect(await store.check('device-1', 'a long pass phrase')).toMatchObject({ kind: 'ok' })
+    expect(secrets.registered).toEqual([])
+  }, 60_000)
 })

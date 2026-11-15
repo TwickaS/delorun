@@ -176,6 +176,14 @@ describe('delorun devices pin', () => {
     expect(sent).toEqual([])
   })
 
+  it('never echoes an unknown action, which may be a PIN typed in the action\'s place', async () => {
+    const failure = await command().run(['pin', SECRET], context).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ exit: EXIT.usage })
+    expect(String((failure as Error).message)).toContain('unknown action')
+    expect(String((failure as Error).message)).not.toContain(SECRET)
+    expect(sent).toEqual([])
+  })
+
   it('refuses without a terminal unless --stdin reads a line, and sends nothing', async () => {
     await expect(command({ interactive: false }).run(['pin', 'set'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('there is no terminal to ask for the PIN or passcode on')

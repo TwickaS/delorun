@@ -332,20 +332,15 @@ export class PinModeStore {
     const kept = this.attempts.home.filter(time => at - time < PIN_MODE_LIMITS.homeWindowMs)
     this.attempts = { ...this.attempts, devices: { ...this.attempts.devices, [deviceId]: before + 1 }, home: [...kept, at] }
     await this.persist()
+    // A guess is not registered with the log redactor: registering it would blank matching ordinary text in other log lines while the hash runs, and no code path logs it.
     const secret = normalised(presented)
-    const release = this.protect(secret)
-    let matches = false
-    try {
-      const salt = Buffer.from(record.hash.salt, 'base64url')
-      const expected = Buffer.from(record.hash.dk, 'base64url')
-      const derived = await this.derive(secret, salt, record.hash, expected.length)
-      matches = derived.length === expected.length && timingSafeEqual(derived, expected)
-      if (this.record === undefined) throw new HomeAuthError('PIN_MODE_OFF', 'PIN mode is off. Turn it on at your computer')
-      // A set or off during the comparison made this record stale: its secret no longer opens anything.
-      if (this.record !== record) return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries }
-    } finally {
-      release?.()
-    }
+    const salt = Buffer.from(record.hash.salt, 'base64url')
+    const expected = Buffer.from(record.hash.dk, 'base64url')
+    const derived = await this.derive(secret, salt, record.hash, expected.length)
+    const matches = derived.length === expected.length && timingSafeEqual(derived, expected)
+    if (this.record === undefined) throw new HomeAuthError('PIN_MODE_OFF', 'PIN mode is off. Turn it on at your computer')
+    // A set or off during the comparison made this record stale: its secret no longer opens anything.
+    if (this.record !== record) return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries }
     if (matches) {
       const { [deviceId]: _cleared, ...rest } = this.attempts.devices
       const home = [...this.attempts.home]

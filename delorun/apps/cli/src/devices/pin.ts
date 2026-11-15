@@ -81,7 +81,7 @@ export async function runPin(action: string | undefined, options: readonly strin
     case 'off': return off(options, where)
     case 'resume': return resume(options, where)
     case 'status': return status(options, where)
-    default: throw new CliError(EXIT.usage, `delorun devices pin: ${action === undefined ? 'choose an action' : `unknown action ${JSON.stringify(action)}`}\n${PIN_USAGE}`)
+    default: throw new CliError(EXIT.usage, `delorun devices pin: ${action === undefined ? 'choose an action' : 'unknown action'}\n${PIN_USAGE}`)
   }
 }
 
