@@ -61,13 +61,13 @@
     welcomeNotice: false
 
 # The sidebar search looks inside chats, which needs upstream's content index. Upstream ships it closed (`openAt: never`,
-# in memory), so every message search fails; this row opens it on the first search and keeps the index in the Delorun home,
-# where the trash purge (`forgetSessions`) already removes a purged chat's rows. The index is a local SQLite file built from
-# the chats' own session files; it makes no network call. A patch replaces the row's whole config. The stock look keeps this
-# row, and upstream's own search then also finds message text.
+# in memory), so every message search fails; this row opens it on the first search. The index stays in memory, as upstream's
+# own session-search plugin has it: it is rebuilt from the chats' own session files, makes no network call, and leaves no
+# copy of chat text in the home, so the trash purge and the update's data copy have nothing extra to cover.
+# A patch replaces the row's whole config. The stock look keeps this row, and upstream's own search then also finds message text.
 - id: session-query-sqlite
   config:
-    path: !!js dshHomePath('session-search.db')
+    path: ':memory:'
     openAt: first-search
 
 # Optional studio plugins: each row is inserted disabled, so a new profile

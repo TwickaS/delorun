@@ -143,6 +143,26 @@ describe('GeneralSection', () => {
 })
 
 describe('SettingsDocumentAction', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it.each([[true, 0], [false, 1]])('on a phone (%s) shows %i open-document buttons', async (phone, count) => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: phone, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    }))
+    const controller = derivedDocumentStore({
+      settings: {
+        describe: vi.fn(() => Promise.resolve({
+          ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] },
+        })),
+        openSettingsDocument: vi.fn(),
+      },
+    })
+    render(<SettingsDocumentAction {...kit} t={t} controller={controller}
+      useSnapshot={bindSnapshotSelector(controller.store)} />)
+    await waitFor(() => { expect(controller.store.getSnapshot().status).toBe('ready') })
+    expect(screen.queryAllByRole('button', { name: 'Open configuration file' })).toHaveLength(count)
+  })
+
   it('appears only for a file-backed provider and requests its Host-owned document', async () => {
     const openDocument = vi.fn(() => Promise.resolve({
       ok: true as const, value: { opened: true as const },

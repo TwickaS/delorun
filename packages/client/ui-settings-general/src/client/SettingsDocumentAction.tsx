@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, usePhone } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsDocumentStore } from './settings-document-store.ts'
 import css from './SettingsDocumentAction.module.css'
@@ -28,12 +28,14 @@ export type SettingsDocumentActionProps =
  */
 export function SettingsDocumentAction({ controller, useSnapshot, t }: SettingsDocumentActionProps): ReactNode {
   const state = useSnapshot(snapshot => snapshot)
+  const phone = usePhone()
 
   useEffect(() => {
     void controller.load()
   }, [controller])
 
-  if (state.status !== 'ready') return null
+  // Opening the file hands it to the computer's editor, which a phone does not have.
+  if (state.status !== 'ready' || phone) return null
 
   return (
     <div className={css.action}>

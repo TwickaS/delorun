@@ -828,13 +828,13 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsDocumentAction.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size."
+      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size, and hides it on a phone, which has no editor to hand the file to."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsDocumentAction.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size."
+      "reason": "Gives the Open configuration file button a class so it is 44px tall under a coarse primary pointer, the touch target size, and hides it on a phone, which has no editor to hand the file to."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
@@ -2563,6 +2563,24 @@
       "class": "delorun-feature",
       "feature": "plugin-titles",
       "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/usePhone.ts",
+      "class": "delorun-feature",
+      "feature": "phone-settings",
+      "reason": "Adds the usePhone hook (coarse pointer or a window of 767px or less) that the two desktop-only Settings actions read."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "phone-settings",
+      "reason": "Exports usePhone and its media query."
+    },
+    {
+      "path": "packages/client/ui-shortcuts/src/client/Reference.tsx",
+      "class": "delorun-feature",
+      "feature": "phone-settings",
+      "reason": "Hides the Edit shortcuts row on a phone, which has no keyboard to bind."
     }
   ],
   "retired": []

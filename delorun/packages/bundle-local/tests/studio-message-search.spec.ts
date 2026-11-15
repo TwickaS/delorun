@@ -14,9 +14,8 @@ describe('the studio profile\'s message search', () => {
     expect(row?.config).toMatchObject({ openAt: 'first-search' })
   })
 
-  it('keeps the index in a file, which the trash purge empties, not in memory', () => {
+  it('keeps the index in memory, so no copy of chat text is left in the home', () => {
     const row = home.rows(DELORUN_PROFILE).find(entry => entry.id === 'session-query-sqlite')
-    expect((row?.config as { path?: unknown } | undefined)?.path).not.toBe(':memory:')
-    expect((row?.config as { path?: unknown } | undefined)?.path).toBeDefined()
+    expect(row?.config).toMatchObject({ path: ':memory:' })
   })
 })
