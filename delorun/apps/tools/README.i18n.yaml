@@ -3,53 +3,65 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/apps/tools/README.md
 /delorun-tools:
-  en: 5675537982409791
-  zh: 554ff6aed62fc1b2
+  en: 63297a751cbacbbd
+  zh: 6357b2802dcaa538
 /delorun-tools/modules:
-  en: f005edeaa51c3248
-  zh: 956c7733e915c7e4
+  en: 169b50bc063741b0
+  zh: f18e117129062b1a
 /delorun-tools/the-divergence-ledger:
-  en: 6b9db91d3f89e63e
-  zh: e452bd29f5b28986
+  en: ef24902be1eece08
+  zh: fb61526a30a0398e
 /delorun-tools/the-rehearsal-merge:
-  en: 78a9666d76c50544
-  zh: 6592a27fcbd6cbcc
+  en: b0945a201faa20c6
+  zh: 3c01b869e3f4ffff
 /delorun-tools/the-gates:
-  en: 62b2529ce1ba076b
-  zh: a2c8ff2ffc408be7
+  en: 7a05ebc9c526ecea
+  zh: 39c3be0b0340099a
+/delorun-tools/the-gates/gate-debt:
+  en: aceb1135d48f5936
+  zh: 87aeffbef88c2652
+/delorun-tools/translation-command-specified-not-built:
+  en: a709068cbdec1558
+  zh: 13a8bce4f65b8bde
 /delorun-tools/workflows:
-  en: d7a988598da4d95c
-  zh: e3b1ffabb83cf89b
+  en: 726f858b4bdec264
+  zh: f39a18643ec8989f
 /delorun-tools/brief-issues:
-  en: 8cce82ede4ac52ca
-  zh: 4361aba5e555ddd3
+  en: fd52908aeeae8a8a
+  zh: e87adecab839afe6
+/delorun-tools/studio-browser:
+  en: be7f87e17ebd64b9
+  zh: c1c29c360b14570b
 /delorun-tools/local-checks:
-  en: d0e001a7f37148aa
-  zh: 00b0e263716610a1
+  en: 6ef161cde987737c
+  zh: 4301b6cb165047ca
+/delorun-tools/batch-integration:
+  en: f69381fcfbaae243
+  zh: 98d7e7c00610cfb1
 /delorun-tools/the-stand-in-stack:
-  en: 0ff16754c0ed2e45
-  zh: dd2d39fc1ba352e6
+  en: 782e2cc2478a3807
+  zh: 19b95bfb98c575e3
 /delorun-tools/parity-composition:
-  en: 473ce5274405809c
-  zh: 5ac12bfcdcc0a9e4
+  en: 2fa11496470566a5
+  zh: 07ee291dab622e0f
 /delorun-tools/parity-composition/the-overlay:
-  en: 393e4fed4d84b972
-  zh: 96e1351cfa074aec
+  en: 5fdf3d29a37f513e
+  zh: f64ab5cd3331e13c
 /delorun-tools/parity-composition/the-registry:
-  en: 54705d327c28a15d
-  zh: afea12652d4e2875
+  en: 7c18df2b6bb7ac5b
+  zh: a916520fe82649a0
 /delorun-tools/parity-composition/what-parity-switches-detects:
-  en: e9c8e791b6c02ff3
-  zh: fbb617f3aa71d498
+  en: 951eb4ab461501ed
+  zh: 67b6bdb016d20658
 /delorun-tools/parity-composition/what-it-cannot-detect:
-  en: 341d63ec8cc23b8e
-  zh: 428a4faeb6044021
+  en: e0c7bd323621011c
+  zh: 7fee98f7425a12d6
 /delorun-tools/parity-composition/the-switch-sweep:
-  en: 37b224a300cf2fc0
-  zh: cee616647c591654
+  en: 4ec204bc40540d3c
+  zh: 951b22cd0834c4f5
 /delorun-tools/parity-composition/commands:
   en: 33426141a410c907
-  zh: 08164f2269132637
+  zh: 611c0145002228f8
 /delorun-tools/reconciliation-against-rc-1:
-  en: 729b74aa034647ec
-  zh: 82e076dc8074d4b8
+  en: 53f009613482bf08
+  zh: 49d9a92a57be6564
