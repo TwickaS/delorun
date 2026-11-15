@@ -71,6 +71,7 @@
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/home-auth": "workspace:*",
+    "@delorun/install": "workspace:*",
     "@delorun/plugin-delegation-consent": "workspace:*",
     "@delorun/plugin-changes": "workspace:*",
     "@delorun/plugin-fetch-guard": "workspace:*",

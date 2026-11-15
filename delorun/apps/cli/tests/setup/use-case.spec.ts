@@ -110,7 +110,7 @@ describe('the three use cases', { timeout: TIMEOUT_MS }, () => {
     expect(questions()).toContain('Open Delorun from your phone or another device over Tailscale?')
     expect(screen()).toContain('? Open Delorun from your phone or another device over Tailscale?\n> Yes\n')
     expect(recordOf()).toMatchObject({ useCase: 'remote', background: true, reach: { option: 'none' } })
-    expect(screen()).toContain('Remote access is off. Fix what the Tailscale note said')
+    expect(screen()).toContain('Remote access is off. To turn it on later, install Tailscale and sign in')
   })
 
   it('automation asks neither the background, the phone, the profile nor the import, starts on the environment key and keeps no studio running', async () => {

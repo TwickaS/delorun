@@ -1865,6 +1865,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/install':
+        specifier: workspace:*
+        version: link:../../apps/install
       '@delorun/plugin-changes':
         specifier: workspace:*
         version: link:../plugin-changes

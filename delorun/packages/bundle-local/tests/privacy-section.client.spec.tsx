@@ -3,7 +3,7 @@
  * The Privacy section and the release check's General row turn each switch on only after consent, alone, and off again
  * from the same screen; the plugin registers them, the versions row and the About section.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
 import { apply as connectionApply } from '@deepseek-ai/dsh-client-connection/client'
@@ -205,6 +205,28 @@ describe('the release check\'s General row', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
     expect(updateCheck.set.mock.calls).toEqual([['enabled', false], ['enabled', true]])
+  })
+
+  it('names the host of another release channel in the row and its consent dialog, in place of the production hosts', async () => {
+    const fetched = vi.fn(async (_path: string) => new Response(JSON.stringify({ host: '127.0.0.1:18080' })))
+    vi.stubGlobal('fetch', fetched)
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    renderUpdateCheck('ready', false)
+    const description = await screen.findByText(en['updateCheck.description.channel'].replace('{host}', '127.0.0.1:18080'))
+    expect(description.textContent).not.toMatch(/releases\.delorun\.com|GitHub/u)
+    expect(fetched.mock.calls[0]![0]).toBe('api/delorunUpdateCheck.channel')
+    fireEvent.click(switchOf(en['updateCheck.title']))
+    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    expect(within(dialog).getByText(en['updateCheck.confirm.body.channel'].replace('{host}', '127.0.0.1:18080'))).toBeTruthy()
+    expect(dialog.textContent).not.toMatch(/releases\.delorun\.com|GitHub/u)
+  })
+
+  it('keeps the production wording when the channel route names no host or is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ host: null }))))
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    renderUpdateCheck('ready', false)
+    await waitFor(() => { expect(screen.getByText(en['updateCheck.description'])).toBeTruthy() })
+    expect(en['updateCheck.description']).toContain('releases.delorun.com and GitHub')
   })
 
   it('closes the consent dialog from its close button without writing', () => {

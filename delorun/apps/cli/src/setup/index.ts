@@ -26,6 +26,7 @@ import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type ModelProviderAnswer, type Prompts
 import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { currentAnswers } from './current.ts'
 import { promptsFromFlags } from './dangerous.ts'
+import { channelOriginOf } from './channel-origin.ts'
 import { nextSteps } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
@@ -328,7 +329,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   let keepSavedKey = false
   // The answers a re-run started from, which decide the sections it leaves alone.
   let before: SetupAnswers | undefined
-  if (request.form.kind !== 'interactive') request.output.stdout(`${statementLines().join('\n')}\n`)
+  if (request.form.kind !== 'interactive') request.output.stdout(`${statementLines(await channelOriginOf(request.home)).join('\n')}\n`)
   if (progress === undefined) {
     if (finished) {
       request.output.stdout(RERUN_LINE(request.profile))
@@ -378,7 +379,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   const directory = profileDirectory(request.home, profile)
   writeAnswersRecord(directory, progress.answers)
   removeProgress(runDir)
-  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env }))
+  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin: await channelOriginOf(request.home) }))
   return EXIT.ok
 }
 

@@ -17,7 +17,8 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
+import { readChannelRecord } from '@delorun/install'
+import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateChannelResponse, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -177,11 +178,25 @@ export class UpdateCheckService extends Service {
 }
 
 /**
- * With the `update_check` switch on, mount the `delorunUpdateCheck` service and serve its notice. Off, mount nothing.
+ * Serve the channel route, then, with the `update_check` switch on, mount the `delorunUpdateCheck` service and serve its notice. Off, mount nothing else.
  * @param ctx - the plugin context.
  * @param config - the switch, the interval and the deadline, defaulted by the schema above.
  */
 export function apply(ctx: Context, config: Config): void {
+  ctx.inject(['connection'], (scope) => {
+    scope.effect(() => scope.connection.fetch.register({
+      path: UPDATE_CHANNEL_PATH,
+      methods: ['GET'],
+      requestBody: 'buffered',
+      fetch: async () => {
+        const home = scope.get('profileContext')?.home
+        // A record that cannot be read is reported by `delorun doctor`; the copy then names the production hosts.
+        const record = home === undefined ? undefined : await readChannelRecord(home).catch(() => undefined)
+        const body: UpdateChannelResponse = { host: record?.channelOrigin === undefined ? null : new URL(record.channelOrigin).host }
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+      },
+    }), `${name}: the channel route`)
+  })
   if (!config.enabled) return
   const service = new UpdateCheckService(ctx, config)
   ctx.inject(['connection'], (scope) => {
