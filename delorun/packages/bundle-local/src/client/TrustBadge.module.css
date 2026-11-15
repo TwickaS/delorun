@@ -24,15 +24,27 @@
 }
 
 .badge {
-  /* Keeps its label's full width; a long label such as "Verified · 3 of your changes" still ends in an ellipsis at the limit. */
-  flex: 0 0 auto;
-  gap: 6px;
-  min-width: 0;
+  /*
+   * Shows its label whole or not at all: the label wraps onto a second line that the fixed height clips, so a foot too
+   * narrow for the full label shows the shield alone, and the tooltip and accessible name carry the label.
+   */
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: 6px;
+  min-width: var(--trust-control);
   overflow: hidden;
   max-width: 100%;
   padding: 0 8px;
   font-size: 12px;
   line-height: 16px;
+}
+
+.badge > * {
+  /* Each line is the control's height, so the shield stays centred on the first. */
+  height: var(--trust-control);
+  display: inline-flex;
+  align-items: center;
 }
 
 .rail {
@@ -78,9 +90,6 @@
 }
 
 .label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

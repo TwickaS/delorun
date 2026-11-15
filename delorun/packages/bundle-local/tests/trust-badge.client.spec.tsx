@@ -209,6 +209,13 @@ describe('the badge', () => {
     expect(screen.getByRole('tooltip').textContent).toContain('Verified')
   })
 
+  it('names the full label in a tooltip on the wide badge, for a foot too narrow to show it', () => {
+    renderBadge(storeOf(null).store, { wide: true })
+    const badge = screen.getByRole('button', { name: 'Trust: Not checked' })
+    fireEvent.focus(badge)
+    expect(screen.getByRole('tooltip').textContent).toContain('Not checked')
+  })
+
   it('reads in Chinese', () => {
     renderBadge(storeOf(CASES[1]?.bill ?? null).store, {}, zh)
     expect(screen.getByRole('button', { name: '可信状态：已验证 · 你的 12 项更改' })).toBeTruthy()

@@ -172,7 +172,7 @@ export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeP
   )
   return (
     <>
-      {wide ? button : <Tooltip label={label}>{button}</Tooltip>}
+      <Tooltip label={label}>{button}</Tooltip>
       {open && <TrustPanel t={t} bill={bill} rows={rows} useChecking={useChecking} check={check} onClose={() => { setOpen(false) }} />}
     </>
   )
