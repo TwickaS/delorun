@@ -35,7 +35,7 @@ export interface OptInRowProps {
 
 /**
  * Render the switch's title, description and write failure, then the switch; a form the profile does not serve shows
- * the `unavailable` line instead of the switch.
+ * the `unavailable` line instead of the description and the switch.
  * @param props - the switch, its copy, form and write state, and the writer.
  * @returns the row, with its dialog while it asks.
  */
@@ -48,8 +48,9 @@ export function OptInRow({ id, t, form, mutation, unavailable, channelHost, setE
   return <div className={css.row} data-opt-in={id}>
     <div className={css.text}>
       <div className={css.title}>{t(`${id}.title`)}</div>
-      <div className={css.description}>{copy('description')}</div>
-      {served || unavailable === undefined ? null : <div className={css.description}>{t(unavailable)}</div>}
+      {served || unavailable === undefined
+        ? <div className={css.description}>{copy('description')}</div>
+        : <div className={css.description}>{t(unavailable)}</div>}
       {mutation.failed ? <div className={css.failed} role="alert">{t('failed')}</div> : null}
     </div>
     {served

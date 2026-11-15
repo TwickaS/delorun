@@ -6,7 +6,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { DelorunVersionRow, type DelorunVersionRowProps } from '../src/client/DelorunVersionRow.tsx'
 import { en } from '../src/client/locales.ts'
 import { VersionsRow, type VersionsRowProps } from '../src/client/VersionsRow.tsx'
-import { readVersions, VERSIONS_GLOBAL } from '../src/client/versions.ts'
+import { readVersions, SOURCE_BUILD, VERSIONS_GLOBAL } from '../src/client/versions.ts'
 
 afterEach(() => { cleanup() })
 
@@ -15,6 +15,11 @@ const t = (key: keyof typeof en, params: { version: string }): string => en[key]
 describe('the page global', () => {
   it('reads two version strings', () => {
     expect(readVersions({ [VERSIONS_GLOBAL]: { delorun: '0.1.0', dsh: '0.2.2-rc.1' } })).toEqual({ delorun: '0.1.0', dsh: '0.2.2-rc.1' })
+  })
+
+  it('shows a source build for the unstamped 0.0.0 of a checkout, and a stamped release version as it is', () => {
+    expect(readVersions({ [VERSIONS_GLOBAL]: { delorun: '0.0.0', dsh: '0.2.2-rc.3' } })).toEqual({ delorun: SOURCE_BUILD, dsh: '0.2.2-rc.3' })
+    expect(readVersions({ [VERSIONS_GLOBAL]: { delorun: '0.1.0-rc.4', dsh: '0.2.2-rc.3' } })?.delorun).toBe('0.1.0-rc.4')
   })
 
   it('reads nothing from a page without it, or with anything other than two version strings', () => {

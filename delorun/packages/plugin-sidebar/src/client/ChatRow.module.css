@@ -12,6 +12,7 @@
   --row-line: 20px;
   --row-trail-slim: 24px;
   --row-hit: 32px;
+  --row-touch: 44px;
   --row-icon: 16px;
   --row-icon-action: 14px;
   --row-icon-small: 12px;
@@ -507,6 +508,28 @@ button.status {
     justify-content: center;
     min-width: var(--row-hit);
     min-height: var(--row-hit);
+  }
+}
+
+/* A touch screen or a phone-width window gets 44px targets for the row's controls. The visible control keeps its size; a
+ * transparent box centred on it takes the taps, so the row and its icons do not grow. */
+@media (pointer: coarse), (max-width: 767px) {
+  .action,
+  .pin,
+  button.status {
+    position: relative;
+  }
+
+  .action::before,
+  .pin::before,
+  button.status::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--row-touch));
+    height: max(100%, var(--row-touch));
+    transform: translate(-50%, -50%);
   }
 }
 

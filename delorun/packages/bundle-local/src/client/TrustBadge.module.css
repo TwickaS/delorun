@@ -6,6 +6,7 @@
 .badge,
 .rail {
   --trust-control: 32px;
+  --trust-touch: 44px;
   --trust-state: var(--dsw-alias-state-idle-primary);
 
   display: inline-flex;
@@ -304,5 +305,34 @@
 
   .field + .field .fieldLabel {
     margin-top: 6px;
+  }
+}
+
+/* A phone's drawer has room for the shield and not for its word, which the 256px foot cuts to "Unkno…": the badge is the
+ * shield alone, its state stays in the accessible name and the panel, and a transparent box makes the tap area 44px. */
+@media (max-width: 767px) {
+  .badge {
+    width: var(--trust-control);
+    padding: 0;
+  }
+
+  .label {
+    display: none;
+  }
+
+  .badge,
+  .rail {
+    position: relative;
+  }
+
+  .badge::before,
+  .rail::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--trust-touch);
+    height: var(--trust-touch);
+    transform: translate(-50%, -50%);
   }
 }

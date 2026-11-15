@@ -1,0 +1,33 @@
+/*
+ * Phone-sized touch targets for the controls the studio takes from DeepSeek Harness, whose stylesheets are not Delorun's to
+ * edit: the sidebar toggles and panel rows, the composer's add and send buttons, and the right sidebar's toggle. Each keeps
+ * its look; a transparent box centred on it grows the tap area to 44px. The rules select the toggles by their data
+ * attributes and the others by the module-local class name each stylesheet gives them.
+ */
+:root {
+  --delorun-touch-target: 44px;
+}
+
+@media (pointer: coarse), (max-width: 767px) {
+  [data-sidebar-toggle],
+  [data-sidebar-right-expand],
+  button[class*='_panelRow'],
+  button[class*='_add'][aria-haspopup],
+  button[aria-busy][class*='_primary'] {
+    position: relative;
+  }
+
+  [data-sidebar-toggle]::before,
+  [data-sidebar-right-expand]::before,
+  button[class*='_panelRow']::before,
+  button[class*='_add'][aria-haspopup]::before,
+  button[aria-busy][class*='_primary']::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--delorun-touch-target));
+    height: max(100%, var(--delorun-touch-target));
+    transform: translate(-50%, -50%);
+  }
+}

@@ -182,4 +182,10 @@ describe('the icon picker', () => {
     expect(ring.find(declaration => declaration.property === 'outline')?.value).toContain('var(--dsw-focus-ring-width)')
     expect(ring.find(declaration => declaration.property === 'outline')?.value).toContain('--dsw-focus-ring-color')
   })
+
+  it('grow the tap area of a phone-width control with a transparent box, not with the visible control', () => {
+    const grown = [...BY_FILE('touch-targets.css'), ...BY_FILE('ChatRow.module.css')].filter(declaration => declaration.selector.includes('::before') && declaration.property === 'width')
+    expect(grown.length).toBeGreaterThanOrEqual(2)
+    expect(grown.every(declaration => declaration.atRules.includes('@media (pointer: coarse), (max-width: 767px)') && /^max\(100%, var\(--[a-z-]+\)\)$/.test(declaration.value))).toBe(true)
+  })
 })
