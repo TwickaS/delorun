@@ -346,6 +346,8 @@ export class HomeAuth {
     await this.persistTouched()
     // Wait for the changes already queued, such as the removal of an expired session.
     await this.serial(() => Promise.resolve())
+    // A device removal forgets its PIN tries in the background; the directory is not free until that write lands.
+    await this.pinStore.settled()
   }
 
   /**

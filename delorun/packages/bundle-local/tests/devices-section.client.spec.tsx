@@ -17,7 +17,7 @@ import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
   MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
-  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_LOCK_OVERLAY_ID, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_LOCK_OVERLAY_ID, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -484,13 +484,14 @@ describe('the plugin', () => {
       expect(sections).toMatchObject([
         { id: PLUGIN_INSTALLS_SECTION_ID, order: PLUGIN_INSTALLS_SECTION_ORDER },
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
+        { id: PIN_MODE_SECTION_ID, order: PIN_MODE_SECTION_ORDER },
         { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
         { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
         { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: SETUP_VERSIONS_SECTION_ID, order: SETUP_VERSIONS_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
       expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
-        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
+        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'PIN mode', 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
@@ -512,7 +513,7 @@ describe('the plugin', () => {
       expect(await readReachStatus(face.fetch)).toEqual(READY.body)
       expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
       // The External agents section's settings read and write the consent row's Host form.
-      const agentsInject = slots.entries('settings.section')[4]?.inject as (() => ExternalAgentsSectionInjected) | undefined
+      const agentsInject = slots.entries('settings.section').find(entry => entry.options.id === EXTERNAL_AGENTS_SECTION_ID)?.inject as (() => ExternalAgentsSectionInjected) | undefined
       const agents = agentsInject?.()
       if (agents === undefined) throw new Error('no External agents section face')
       expect(agents.hooks.agentSettings).toBe(ctx.get('configForms')?.get(DELEGATION_CONSENT_ROW))

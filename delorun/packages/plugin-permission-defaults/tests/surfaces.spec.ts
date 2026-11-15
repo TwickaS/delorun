@@ -294,7 +294,7 @@ function routesOver(defaults: PermissionDefaults, listener: string | undefined, 
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }>()
   const ctx = {
     on: (_name: string, listener: FakeConnection['hook']) => { hook = listener },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }) => { routes.set(route.path, route) } } },
     permissionDefaults: defaults,
   }

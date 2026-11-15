@@ -240,14 +240,14 @@ describe('the route hook', () => {
   /** The service mounted with a `homeAuth` that places every request on one listener and reports dangerous mode. */
   async function withListener(listener: string, dangerous = false): Promise<Context> {
     const { ctx } = await mounted()
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
     return ctx
   }
 
   it('lets an unlocked device through to either route only while dangerous mode holds, and refuses a locked one at the peer check', async () => {
     const { ctx, routes } = await mounted()
     let dangerous = false
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
     const device = (deviceId: string) => ({ principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })
     for (const url of [NETWORK_LIST_PATH, NETWORK_SET_PATH]) {
       // Pins the mode check: with the mode off the hook refuses the device before any route.
