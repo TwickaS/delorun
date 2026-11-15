@@ -9,6 +9,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { WorkspaceIconSchema } from './workspace-icon.ts'
 
 /** The Loader row id, which names the settings namespace the studio edits. */
 export const SIDEBAR_ROW_ID = 'delorun-sidebar'
@@ -61,8 +62,7 @@ export type SortOrder = typeof SORT_ORDERS[number]
 /** The sidebar width slider's range and step, in pixels, and its notches: T3 Code's 256 and upstream's 280. */
 export const SIDEBAR_WIDTH = { min: 240, max: 420, step: 4, notches: [256, 280] } as const
 
-/** The most Workspace icons the setting holds; the studio drops the oldest beyond it, and a stored value above it is refused. */
-export const MAX_WORKSPACE_ICONS = 200
+export { MAX_WORKSPACE_ICONS } from './workspace-icon.ts'
 
 /** The range, in minutes, of the studio's interval between reads of the update notice. */
 export const UPDATE_NOTICE_REFRESH_MINUTES = { min: 5, max: 1440 } as const
@@ -90,8 +90,9 @@ export interface SidebarSettings {
   width: number
   /**
    * Each Workspace's chosen icon, by Workspace id, as stored, oldest choice first and at most `MAX_WORKSPACE_ICONS`.
-   * The harness accepts any value for an icon so one bad icon cannot keep the row from loading; read it through
-   * `readWorkspaceIcons`. A Workspace without a valid icon shows its monogram.
+   * The row's schema accepts only a valid icon (`WorkspaceIconSchema`), so a write of anything else is refused; read it
+   * through `readWorkspaceIcons`, which also skips an entry that no longer validates. A Workspace without a valid icon
+   * shows its monogram.
    */
   workspaceIcons: Record<string, unknown>
   /**
@@ -138,7 +139,7 @@ export const Config = z.object({
   confirmUnpin: z.boolean().default(DEFAULT_SIDEBAR_SETTINGS.confirmUnpin).volatile(),
   // A plain dict: the studio rehydrates this schema from its serialized form, which carries no transform callback, so a
   // transform here fails every validation there. The host half refuses a stored value above `MAX_WORKSPACE_ICONS` at load.
-  workspaceIcons: z.dict(z.any()).default({}).volatile(),
+  workspaceIcons: z.dict(WorkspaceIconSchema).default({}).volatile(),
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
   updateNoticeRefreshMinutes: z.natural().min(UPDATE_NOTICE_REFRESH_MINUTES.min).max(UPDATE_NOTICE_REFRESH_MINUTES.max)
     .description('Minutes between the studio\'s reads of the update notice.').default(DEFAULT_SIDEBAR_SETTINGS.updateNoticeRefreshMinutes).volatile(),

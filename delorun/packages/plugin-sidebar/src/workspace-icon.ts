@@ -6,7 +6,9 @@
  * @module @delorun/plugin-sidebar/workspace-icon
  */
 import z from '@deepseek-ai/schemastery'
-import { MAX_WORKSPACE_ICONS } from './config.ts'
+
+/** The most Workspace icons the setting holds; the studio drops the oldest beyond it, and a stored value above it is refused. */
+export const MAX_WORKSPACE_ICONS = 200
 
 /** What the icon shows. */
 export const ICON_KINDS = ['letters', 'glyph', 'emoji', 'pattern'] as const

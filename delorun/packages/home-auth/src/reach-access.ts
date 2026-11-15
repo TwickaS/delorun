@@ -246,7 +246,8 @@ const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_A
  * The actions that add, remove and check a model provider's key from an approved device (A380). Each is allowed to a
  * device without an unlock and, while PIN mode is on, only to a Peer of an unlocked page; a locked page's Peer is refused
  * with `elevation-required: <action>`. A stored key is never sent to a device: `credentials/describe` answers presence
- * and writability only, and the events name the key, never its value.
+ * and writability only, and the events name the key, never its value. A call may name only the references the model
+ * providers declare ({@link ReachAccessFacts.keyRefs}); any other is refused with {@link UNDECLARED_KEY_REFUSAL}.
  */
 export const REACH_KEY_ACTIONS = {
   'credentials/describe': 'read whether a provider key is saved, never its value (A380)',
@@ -256,6 +257,23 @@ export const REACH_KEY_ACTIONS = {
   'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value (A380)',
 } as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
 const KEY_SET: ReadonlySet<string> = new Set(Object.keys(REACH_KEY_ACTIONS))
+
+/** The reason a key action that names a reference no model provider declares is refused to a device, unlocked or not. */
+export const UNDECLARED_KEY_REFUSAL = 'loopback-required: a key reference no model provider names'
+
+/**
+ * Whether a key action's reference arguments all name a reference of the model providers. `credentials/set` and
+ * `credentials/unset` name one `ref`, `credentials/describe` a list of `refs`; a list that holds one undeclared name is
+ * refused as a whole, and arguments the condition cannot read are refused. Events carry no arguments.
+ * @param action - the key action.
+ * @param args - the call's arguments.
+ * @param declared - the references the model providers declare.
+ * @returns whether the call names only declared references.
+ */
+function namesOnlyDeclaredRefs(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, declared: ReadonlySet<string>): boolean {
+  const names = action === 'credentials/describe' ? args.refs : [args.ref]
+  return Array.isArray(names) && names.every(name => typeof name === 'string' && declared.has(name))
+}
 
 /**
  * The settings namespaces an approved device writes without an unlock (A381): the everyday settings the computer's
@@ -277,6 +295,48 @@ export const REACH_EVERYDAY_SETTINGS = {
   'delorun-cost-meter': 'the cost meter',
   'delorun-thinking-rsvp': 'the Thinking tab',
 } as const satisfies Readonly<Record<string, string>>
+
+/**
+ * The fields of an everyday namespace an approved device writes without an unlock, for a namespace whose other fields
+ * stay unlocked-only: onboarding's `plugins` and `optionalRows` decide which packages the guide installs and which rows
+ * it turns on, and chat states' `maxRecords` and `pruneMinutes` size the Host's sweep. A namespace not listed here has
+ * every field everyday. A write that touches another field, rebuilds the whole section (`settings/replace`, or an
+ * operation on the section's root) or cannot be read is not an everyday call and needs an unlock.
+ */
+export const REACH_EVERYDAY_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  'delorun-onboarding': ['done', 'step', 'starterSession', 'starterKind'],
+  'delorun-chat-states': ['snoozePresets', 'autoSettleDays', 'refreshSeconds'],
+}
+
+/**
+ * The top-level fields a settings write touches.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns the field names, or undefined for a write that rebuilds the section or whose arguments cannot be read.
+ */
+function fieldsTouched(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): readonly string[] | undefined {
+  if (action === 'settings/update') return isObject(args.patch) ? Object.keys(args.patch) : undefined
+  if (action !== 'settings/mutate' || !Array.isArray(args.ops)) return undefined
+  const fields: string[] = []
+  for (const op of args.ops as unknown[]) {
+    if (!isObject(op) || !Array.isArray(op.path) || typeof op.path[0] !== 'string') return undefined
+    fields.push(op.path[0])
+  }
+  return fields
+}
+
+/**
+ * Whether a settings write stays inside the fields an approved device writes without an unlock.
+ * @param action - the settings write.
+ * @param args - the call's arguments, naming a namespace of {@link REACH_EVERYDAY_SETTINGS}.
+ * @returns whether every field it touches is everyday.
+ */
+function touchesOnlyEverydayFields(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  const allowed = REACH_EVERYDAY_FIELDS[String(args.ns)]
+  if (allowed === undefined) return true
+  const touched = fieldsTouched(action, args)
+  return touched !== undefined && touched.every(field => allowed.includes(field))
+}
 
 /**
  * The plugin rows of Delorun's own profile an approved device turns on or off through `pluginManager/setPluginEnabled`
@@ -311,7 +371,9 @@ export const REACH_SHIPPED_BUNDLES = {
  * @returns whether the call needs no unlock.
  */
 function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
-  if (SETTINGS_WRITES.has(action)) return typeof args.ns === 'string' && Object.hasOwn(REACH_EVERYDAY_SETTINGS, args.ns)
+  if (SETTINGS_WRITES.has(action)) {
+    return typeof args.ns === 'string' && Object.hasOwn(REACH_EVERYDAY_SETTINGS, args.ns) && touchesOnlyEverydayFields(action, args)
+  }
   if (action === 'pluginManager/setPluginEnabled') return typeof args.id === 'string' && Object.hasOwn(REACH_SHIPPED_ROWS, args.id)
   if (action === 'pluginManager/setBundleEnabled') return typeof args.name === 'string' && Object.hasOwn(REACH_SHIPPED_BUNDLES, args.name)
   return false
@@ -867,7 +929,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -920,6 +982,7 @@ export function createCondition(
       if (refused !== undefined) return refused
     }
     if (KEY_SET.has(action) && facts.pinEnabled() && !pageUnlocked) return { kind: 'deny', reason: `elevation-required: ${action}` }
+    if (KEY_SET.has(action) && args !== undefined && !namesOnlyDeclaredRefs(action, args, facts.keyRefs())) return { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
     if (ELEVATED_SET.has(action) && !(args !== undefined && isEverydayCall(action, args))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
@@ -997,6 +1060,13 @@ export interface ReachAccessFacts {
    * @returns whether it is.
    */
   readonly pinEnabled: () => boolean
+  /**
+   * The credential references the model providers declare, read when a key action arrives: each provider's conventional
+   * key reference, the environment variables its authentication reads and the `apiKeyEnv` its profile names. A key action
+   * of a device may name no other reference.
+   * @returns the references.
+   */
+  readonly keyRefs: () => ReadonlySet<string>
   /**
    * Record one line in the operational log, for each call an unlock admits.
    * @param line - the line.

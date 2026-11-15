@@ -255,6 +255,12 @@
       "reason": "Late session projection keys: the `SessionProjectionUpdate` JSDoc states the frame sent when a key becomes live after the baseline and that a Session with no committed event receives none; the update's fields are unchanged. Session created-at: the optional `createdAt` wire field of `SessionSummary`, the header's epoch milliseconds, for the studio sidebar's created-order sort; the field is additive."
     },
     {
+      "path": "packages/api/settings-controller/src/credentials.ts",
+      "class": "delorun-feature",
+      "feature": "device-key-privacy",
+      "reason": "Write-only keys for approved devices (A380): `credentials/describe` leaves out `masked`, which carries the key's prefix, suffix and length, for any caller that is not the owner; the owner's page keeps its view."
+    },
+    {
       "path": "packages/api/workspace-controller/src/index.ts",
       "class": "delorun-feature",
       "feature": "default-workspace-directory",

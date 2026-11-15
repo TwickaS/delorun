@@ -36,7 +36,7 @@ export {
   type SignedIn,
   type TokenAdmission,
 } from './home-auth.ts'
-export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, defaultPermissionOf, protectedEntryIdsOf, type ReachPeer } from './authenticator.ts'
+export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, defaultPermissionOf, keyRefsOf, protectedEntryIdsOf, type ReachPeer } from './authenticator.ts'
 export {
   REACH_ALLOWED_ACTIONS,
   REACH_DANGEROUS_ACTIONS,
@@ -44,6 +44,8 @@ export {
   REACH_ELEVATED_ACTIONS,
   REACH_KEY_ACTIONS,
   REACH_EVERYDAY_SETTINGS,
+  REACH_EVERYDAY_FIELDS,
+  UNDECLARED_KEY_REFUSAL,
   REACH_SHIPPED_BUNDLES,
   REACH_SHIPPED_ROWS,
   REACH_DEVICE,

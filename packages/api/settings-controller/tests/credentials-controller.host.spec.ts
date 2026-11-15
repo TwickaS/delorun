@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
+import type { PeerId, Principal, RemoteInvocation } from '@deepseek-ai/dsh-typert-protocol/types'
 import CredentialsController from '../src/credentials.ts'
 import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
 
@@ -11,6 +12,15 @@ class LeakyCredentials extends MemoryCredentials {
     return Promise.resolve(
       { configured: true, source: 'memory', writable: true, masked: '•'.repeat(9), value: 'sk-leaked', preview: 'sk…ed' } as CredentialInfo,
     )
+  }
+}
+
+/** A store that masks a stored value the way the local file store does: prefix, suffix and length. */
+class MaskingCredentials extends MemoryCredentials {
+  override async describe(ref: Parameters<MemoryCredentials['describe']>[0]): Promise<CredentialInfo> {
+    const info = await super.describe(ref)
+    const value = (await this.resolve(ref))?.value ?? ''
+    return { ...info, masked: `${value.slice(0, 3)}${'•'.repeat(5)}${value.slice(-4)} (${String(value.length)})` }
   }
 }
 
@@ -104,6 +114,30 @@ describe('the credentials Remote namespace a configuration surface calls', () =>
     expect(described.DEEPSEEK_API_KEY).toEqual({ configured: true, source: 'memory', writable: true, masked: '•'.repeat(9) })
     expect(JSON.stringify(described)).not.toContain('sk-leaked')
     expect(JSON.stringify(described)).not.toContain('sk…ed')
+  })
+
+  it('gives a caller that is not the owner presence and writability only, with no part or length of the key', async () => {
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz0123456789'
+    const ctx = new Context()
+    await ctx.plugin(MaskingCredentials, { DEEPSEEK_API_KEY: key })
+    await ctx.plugin(CredentialsController)
+    const signal = new AbortController().signal
+    const as = (principal: Principal) => ctx.extend({
+      invocation: {
+        request: { namespace: 'credentials', method: 'describe', args: {} },
+        service: 'credentialsController',
+        peer: { id: 'p' as PeerId, ctx, principal, interactions: 'answer', signal, dispose: async () => {} },
+        signal,
+        uplink: <In>(): AsyncIterable<In> => ({ [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }) }),
+      } satisfies RemoteInvocation,
+    }).credentialsController
+    const owner = await as({ kind: 'owner' }).describe(['DEEPSEEK_API_KEY'])
+    expect(owner.DEEPSEEK_API_KEY?.masked).toBeDefined()
+    const device = await as({ kind: 'test-guest', guest: 'viewer' }).describe(['DEEPSEEK_API_KEY'])
+    expect(device).toEqual({ DEEPSEEK_API_KEY: { configured: true, source: 'memory', writable: true } })
+    const text = JSON.stringify(device)
+    for (let at = 0; at + 4 <= key.length; at++) expect(text).not.toContain(key.slice(at, at + 4))
+    expect(text).not.toContain(String(key.length))
   })
 
   it('stores and removes through the same references the batch describes', async () => {

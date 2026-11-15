@@ -9,7 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
-import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { principalOf, Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 
 /**
@@ -40,14 +40,16 @@ function parseRequest<T>(method: string, schema: z.ZodType<T>, value: unknown): 
  * a business result without decoding it, so a provider whose `describe` carried
  * extra enumerable properties would otherwise serialize them to the caller.
  * @param info - the provider's answer for one reference.
+ * @param owner - whether the caller is the owner; any other caller gets presence and writability only, because `masked`
+ *   carries a prefix, a suffix and the length of the stored value.
  * @returns the same facts with nothing else attached.
  */
-function projectCredentialInfo(info: CredentialInfo): CredentialInfo {
+function projectCredentialInfo(info: CredentialInfo, owner: boolean): CredentialInfo {
   return {
     configured: info.configured,
     ...info.source === undefined ? {} : { source: info.source },
     writable: info.writable,
-    ...info.masked === undefined ? {} : { masked: info.masked },
+    ...!owner || info.masked === undefined ? {} : { masked: info.masked },
   }
 }
 
@@ -77,7 +79,7 @@ export class CredentialsController extends TypertRemoteService {
    * round trip keeps those rows from settling separately.
    * @param refs - reference names, at most {@link MAX_DESCRIBE_REFS}; a name outside the grammar
    *   rejects the whole call as `gateway/bad-request`.
-   * @returns one view per requested name, keyed by that name.
+   * @returns one view per requested name, keyed by that name; a caller that is not the owner gets no `masked` text.
    * @throws RemoteError when the request is invalid or no credential provider is mounted.
    */
   @Remote
@@ -85,8 +87,9 @@ export class CredentialsController extends TypertRemoteService {
     const request = parseRequest('credentials.describe', describeRequestSchema, { refs })
     const branded = request.refs.map(ref => [ref, credentialRef(ref)] as const)
     const credentials = this.provider()
+    const owner = principalOf(this.ctx.invocation) === undefined
     const entries = await Promise.all(branded.map(async ([ref, key]) =>
-      [ref, projectCredentialInfo(await credentials.describe(key))] as const))
+      [ref, projectCredentialInfo(await credentials.describe(key), owner)] as const))
     return Object.fromEntries(entries)
   }
 
