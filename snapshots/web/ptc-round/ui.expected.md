@@ -18,7 +18,7 @@
 - 'button "Think The user wants me to write a single `run_code` program that:"'
 - button "Code Run bash echo and catch missing file read"
 - button "Bash Echo CODE_ROUND_OK" [expanded]
-- text: Done workspace echo CODE_ROUND_OK 0.1 s
+- text: Done workspace echo CODE_ROUND_OK {{duration}}
 - button "Copy command"
 - button "Copy"
 - text: CODE_ROUND_OK

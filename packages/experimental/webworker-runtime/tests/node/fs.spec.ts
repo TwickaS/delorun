@@ -258,7 +258,7 @@ check('createReadStream honours start on an inherited handle', await streamed(fs
 const numeric = async (flags: number): Promise<string> => {
   const handle = await fsp.open('/dsh/numeric.txt', flags)
   await handle.close()
-  return fs.readFileSync('/dsh/numeric.txt', 'utf8')
+  return String(fs.readFileSync('/dsh/numeric.txt', 'utf8'))
 }
 fs.writeFileSync('/dsh/numeric.txt', 'keep')
 check('promises.open reads with numeric O_RDONLY flags', await numeric(fs.constants.O_RDONLY), 'keep')
