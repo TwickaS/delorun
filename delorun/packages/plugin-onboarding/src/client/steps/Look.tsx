@@ -47,7 +47,7 @@ function StockLookLine({ t, appearance, disabled, onConfirm }: { readonly t: Ste
     return (
       <p className={css.hint}>
         {t('look.stock.ask')}{' '}
-        <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { setAsking(true) }}>{appearance('look.stock')}</Button>
+        <Button className={css.stockLink} variant="ghost" size="sm" disabled={disabled} onClick={() => { setAsking(true) }}>{appearance('look.stock')}</Button>
       </p>
     )
   }
@@ -55,8 +55,8 @@ function StockLookLine({ t, appearance, disabled, onConfirm }: { readonly t: Ste
     <div className={css.stack} role="group" aria-label={t('look.studio')}>
       <p className={css.hint}>{t('look.stock.confirm')}</p>
       <div className={css.actions}>
-        <Button ref={yes} variant="outline" size="sm" onClick={onConfirm}>{t('look.stock.yes')}</Button>
-        <Button variant="ghost" size="sm" onClick={() => { setAsking(false) }}>{t('look.stock.no')}</Button>
+        <Button ref={yes} className={css.stockLink} variant="outline" size="sm" onClick={onConfirm}>{t('look.stock.yes')}</Button>
+        <Button className={css.stockLink} variant="ghost" size="sm" onClick={() => { setAsking(false) }}>{t('look.stock.no')}</Button>
       </div>
     </div>
   )

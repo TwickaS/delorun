@@ -551,3 +551,11 @@
     animation: none;
   }
 }
+
+/* The quiet stock-look buttons get a 44px hit area on touch screens. */
+@media (pointer: coarse) {
+  .stockLink {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
