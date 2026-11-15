@@ -3,17 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/harness-feedback.md
 /harness-feedback-pain-points:
-  en: 835bebb3ee408297
-  zh: 96c66ca3a7bc01e5
+  en: 99931705fab9fcdb
+  zh: 8c05eb91ea38a137
 /harness-feedback-pain-points/entries:
   en: 2a38f622e9c1d12f
   zh: bd21b6d5cbbbb3e0
 /harness-feedback-pain-points/entries/2026-11-06-1-webkit-s-system-libraries-are-missing-on-this-host:
-  en: c4c08a8c9830b5c7
-  zh: b9cd98dc736bb50c
+  en: 46427e6f357a995f
+  zh: 14c474c100fa0d67
 /harness-feedback-pain-points/entries/2026-11-07-2-the-plugin-manager-e2e-s-team-dialog-times-out-on-this-host:
-  en: f318475b195cc77c
-  zh: 1fe045c9e7fb9a0d
+  en: 0010d63daf4dad5a
+  zh: 0baa0ae122d1e1ec
 /harness-feedback-pain-points/entries/2026-11-09-3-a-fresh-worktree-s-suites-fail-on-the-missing-native-system-addon:
-  en: 5fc260129bf46af8
-  zh: 2d3b3a0d83774225
+  en: b216b5997d9c5250
+  zh: 9bec5f8f2a94cb40
+/harness-feedback-pain-points/entries/2026-11-10-4-parity-switches-flags-a-non-model-visible-edit-inside-an-upstream-plugin-s-apply:
+  en: 3c6ca88f803f5c07
+  zh: 0af3887547132ba3
+/harness-feedback-pain-points/where-to-go-next:
+  en: ea9bbe4f6de0859a
+  zh: dee984b248cb9c9a

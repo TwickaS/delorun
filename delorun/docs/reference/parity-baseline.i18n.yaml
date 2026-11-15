@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/parity-baseline.md
 /parity-baseline:
   en: 98eb767184067f95
-  zh: c7a3a9738c1d5bc2
+  zh: 0f5a2dc1959433f0
 /parity-baseline/contents:
   en: 2c84af45b12e69df
   zh: 1dac3646ecd92a0f
@@ -31,7 +31,7 @@
   zh: 6edfa0b8d09edd7d
 /parity-baseline/environment-as-upstream-ci-sets-it/wsl-confinement:
   en: 2f0dd745d5de7f61
-  zh: 29bb2d9c3f2974f9
+  zh: 556317708f21c52b
 /parity-baseline/node-24-check:
   en: 1031f44d6a638bb8
   zh: c5952ec190dc29ac
@@ -58,16 +58,16 @@
   zh: a1c10cdfae9d195e
 /parity-baseline/green-base-on-main:
   en: 4d09defb10939767
-  zh: 5a02b23ce29e04b7
+  zh: 28f74f514cdfba0c
 /parity-baseline/green-base-on-main/procedure:
   en: df5ebfa1f24ac485
   zh: 7583bc10593eacf3
 /parity-baseline/green-base-on-main/prerequisites:
   en: f6fcbadd81f44fab
-  zh: b9b9944d7caf268a
+  zh: 9e4223e5b10cbeaf
 /parity-baseline/green-base-on-main/results:
   en: 5e5896aa69d6eb47
-  zh: 3a7d08211efa094b
+  zh: 763bba7710006b38
 /parity-baseline/green-base-on-main/exclusion:
   en: 4c17ea6ba8655195
   zh: de7c6a400c1e77b1

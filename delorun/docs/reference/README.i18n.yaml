@@ -3,8 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/README.md
 /:
-  en: 2e2eb6d16413aef1
-  zh: 74259080b72dfe2e
-/delorun-reference:
-  en: 4756a0c75876cc1f
-  zh: abb9cfabd2cc1156
+  en: 0b0c4f2814bab8e8
+  zh: defd270d54783fcd
+/delorun-developer-reference:
+  en: 748d4eeec09441c5
+  zh: a3ad5f96aa6909e6
+/delorun-developer-reference/for-everyone:
+  en: 25f3feb075ec7634
+  zh: 8c24dea17dfb2bf5
+/delorun-developer-reference/for-developers-and-maintainers:
+  en: 337ffa90c8abeb00
+  zh: c3f3be2165c7cee6

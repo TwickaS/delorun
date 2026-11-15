@@ -3,29 +3,32 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/divergence/README.md
 /:
-  en: 5248ac22669ac8a5
-  zh: f935ff5a3f78c423
+  en: 7696b0772bf1930c
+  zh: 38b7d609601d54a3
 /divergence-index:
-  en: 61f237742355e777
-  zh: 16bfa02adee9aa53
+  en: 482f4f38c31b1be5
+  zh: c515f1322006b531
 /divergence-index/contents:
   en: e49567ee6e2cf256
   zh: 690a7049d70d6889
 /divergence-index/the-ledger:
-  en: e741d98873deb756
-  zh: 7ca360bdbc82101b
+  en: b725e895730f325c
+  zh: e7cda8205228195c
 /divergence-index/classes:
-  en: 4ee538b5ac4ecce1
-  zh: a3739690811a97ae
+  en: d6f4a9a9a1d0baa7
+  zh: d86db2e2be1ea9c2
 /divergence-index/reading-the-ledger:
-  en: 01129839b937fb60
-  zh: d891e888dc9754c4
+  en: 2cb7ea7aa9740ea0
+  zh: 0e5bebbf51a3a48a
 /divergence-index/measuring-the-ledger:
-  en: bfa0e6c4959a687a
-  zh: 394eff541170cec3
+  en: 89bccde91c20dbe4
+  zh: bb273f1bc22b9545
 /divergence-index/divergence-budget:
-  en: 0202e783aafb1a9a
-  zh: 98a77c11b570d235
+  en: d80af21a096e3e8c
+  zh: 945b987176583781
 /divergence-index/divergence-records:
   en: 8469d929c90a911d
   zh: a867192bc6bb2351
+/divergence-index/where-to-go-next:
+  en: 26c2ccfe8dc167cb
+  zh: 990e62655ab0d756

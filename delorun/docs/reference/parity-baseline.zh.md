@@ -2,7 +2,7 @@
 
 [English](parity-baseline.md) | 中文
 
-本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delo 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。本页还记录 `main` 上的绿色基线：运行步骤、前置条件、唯一的排除项，以及使每个失败文件通过的修复。术语遵循 [Delo 术语表](glossary.zh.md)。
+本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delorun 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。本页还记录 `main` 上的绿色基线：运行步骤、前置条件、唯一的排除项，以及使每个失败文件通过的修复。术语遵循 [Delorun 术语表](glossary.zh.md)。
 
 ## 目录
 
@@ -90,7 +90,7 @@
 
 ### WSL 下的本地限制
 
-每条命令都在 Delo 检查工具于 WSL 上施加的 Linux 限制下运行，即 `delorun/apps/tools/src/checks/machine.ts` 中的 `confineToLinux`。上游 CI 不施加该限制。shell 的 `PATH` 去掉了 44 个位于 Windows 驱动器挂载点下的条目，保留 25 个；下列变量被取消设置：`WSL_INTEROP`、`WSL_DISTRO_NAME`、`WSLENV`、`WSL2_GUI_APPS_ENABLED`、`DISPLAY`、`WAYLAND_DISPLAY`、`PULSE_SERVER` 与 `NoDefaultCurrentDirectoryInExePath`。这些变量是在 shell 中为每条命令设置的，而不是在每个测试 fork 中设置；移除的变量集合相同，因此各套件看到的环境一致。
+每条命令都在 Delorun 检查工具于 WSL 上施加的 Linux 限制下运行，即 `delorun/apps/tools/src/checks/machine.ts` 中的 `confineToLinux`。上游 CI 不施加该限制。shell 的 `PATH` 去掉了 44 个位于 Windows 驱动器挂载点下的条目，保留 25 个；下列变量被取消设置：`WSL_INTEROP`、`WSL_DISTRO_NAME`、`WSLENV`、`WSL2_GUI_APPS_ENABLED`、`DISPLAY`、`WAYLAND_DISPLAY`、`PULSE_SERVER` 与 `NoDefaultCurrentDirectoryInExePath`。这些变量是在 shell 中为每条命令设置的，而不是在每个测试 fork 中设置；移除的变量集合相同，因此各套件看到的环境一致。
 
 <a id="node-24-check"></a>
 ## Node 24 核对
@@ -221,7 +221,7 @@ rc.4 的分诊类别解决如下。
 <a id="green-base-on-main"></a>
 ## main 上的绿色基线
 
-绿色基线是 `main`：上游单元测试套件、上游录制会话回放与 Delo 完整门禁均通过，且不带入任何已知失败：无法通过的测试要么被修复，要么按名称排除并在本页记录原因。下列运行于 Node `v24.22.0` 上、在 `main` 的某一提交（本次运行的提交）处进行；修复是在更早的一个提交之上完成的。
+绿色基线是 `main`：上游单元测试套件、上游录制会话回放与 Delorun 完整门禁均通过，且不带入任何已知失败：无法通过的测试要么被修复，要么按名称排除并在本页记录原因。下列运行于 Node `v24.22.0` 上、在 `main` 的某一提交（本次运行的提交）处进行；修复是在更早的一个提交之上完成的。
 
 ### 运行步骤
 
@@ -251,7 +251,7 @@ DSH_EXAMPLE_MODE=lib node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts 
 
 P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重现了 `pnpm run test` 在上游 CI 中为每个上游规范提供的值，因此不改变规范所检查的任何内容。另一种做法是按名称排除 `release pack CLI > does not broaden an empty parallel family to the whole workspace`，但这会带入一个已知失败。
 
-上文的运行步骤提供了全部四项设定：`pnpm run test` 提供 P1、P3 与 P4，`env -u` 提供 P2。Delo 的检查运行器没有运行上游整个单元测试套件的通道，但其各通道获得相同的设定。`delorun/apps/tools/src/checks/machine.ts` 中的 `checkEnvironment` 在 WSL 上为每个检查移除 P2，并与其他 Windows 侧变量一并移除；对于规划了运行 pnpm 的检查（或标记为 `pnpmScript` 的检查，如 `tests:upstream-changed`）的任何运行，运行器从 pnpm 读取 P1、P3 与 P4（[工具 README](../../apps/tools/README.zh.md#local-checks)）。
+上文的运行步骤提供了全部四项设定：`pnpm run test` 提供 P1、P3 与 P4，`env -u` 提供 P2。Delorun 的检查运行器没有运行上游整个单元测试套件的通道，但其各通道获得相同的设定。`delorun/apps/tools/src/checks/machine.ts` 中的 `checkEnvironment` 在 WSL 上为每个检查移除 P2，并与其他 Windows 侧变量一并移除；对于规划了运行 pnpm 的检查（或标记为 `pnpmScript` 的检查，如 `tests:upstream-changed`）的任何运行，运行器从 pnpm 读取 P1、P3 与 P4（[工具 README](../../apps/tools/README.zh.md#local-checks)）。
 
 ### 结果
 
@@ -266,15 +266,15 @@ P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重
 | 文件 | 类别 | 原因 | 修复 |
 | --- | --- | --- | --- |
 | `apps/desktop/tests/macos-notarization-proxy.spec.ts` | 前置条件 | 缺少 P1 | 运行步骤 |
-| `scripts/ci-workflow.spec.ts` | Delo 改动 | Delo 的仓库守卫，以及 `ci.yml`、`ci-windows.yml`、`ci-master.yml`、`ci-python.yml` 中的运行器路由，还有发布、审批与议题工作流 | 规范通过 `scripts/tests/delorun-repository-guard.ts` 读取受守卫的字段 |
-| `scripts/tests/ci-release-selfhosted.spec.ts` | Delo 改动 | Delo 在 `cua-helper-package.yml` 与 `release-publish.yml` 中的仓库守卫 | 同上 |
-| `scripts/tests/ci-master-platforms.spec.ts` | Delo 改动 | Delo 在 `build-exe-for-python-sdk.yml`、`ci-python.yml` 与 `ci-master.yml` 中的仓库守卫 | 同上；`ci-master.yml` 中的 `serial-macos` 恢复为上游的 `if: false`，无需守卫 |
-| `scripts/client-bundle-css.spec.ts` | Delo 改动 | Delo 的 `.woff2` 包资源媒体类型；规范把 `.woff2` 用作不受支持的资源 | 规范改用 `.woff` 作为不受支持的字体 |
-| `scripts/verify-client-packages.spec.ts` | Delo 改动 | 同上 | 规范期望 `.woff2` 说明符，并使一个 `.woff` 说明符保持不被收集 |
-| `scripts/translation-prompt.expected.spec.ts` | Delo 改动 | Delo 在 `docs/i18n/terminology.md` 中的各行，组装好的提示词会嵌入这些行 | 预期输出以 `DSH_SNAPSHOT=refresh` 重新录制 |
+| `scripts/ci-workflow.spec.ts` | Delorun 改动 | Delorun 的仓库守卫，以及 `ci.yml`、`ci-windows.yml`、`ci-master.yml`、`ci-python.yml` 中的运行器路由，还有发布、审批与议题工作流 | 规范通过 `scripts/tests/delorun-repository-guard.ts` 读取受守卫的字段 |
+| `scripts/tests/ci-release-selfhosted.spec.ts` | Delorun 改动 | Delorun 在 `cua-helper-package.yml` 与 `release-publish.yml` 中的仓库守卫 | 同上 |
+| `scripts/tests/ci-master-platforms.spec.ts` | Delorun 改动 | Delorun 在 `build-exe-for-python-sdk.yml`、`ci-python.yml` 与 `ci-master.yml` 中的仓库守卫 | 同上；`ci-master.yml` 中的 `serial-macos` 恢复为上游的 `if: false`，无需守卫 |
+| `scripts/client-bundle-css.spec.ts` | Delorun 改动 | Delorun 的 `.woff2` 包资源媒体类型；规范把 `.woff2` 用作不受支持的资源 | 规范改用 `.woff` 作为不受支持的字体 |
+| `scripts/verify-client-packages.spec.ts` | Delorun 改动 | 同上 | 规范期望 `.woff2` 说明符，并使一个 `.woff` 说明符保持不被收集 |
+| `scripts/translation-prompt.expected.spec.ts` | Delorun 改动 | Delorun 在 `docs/i18n/terminology.md` 中的各行，组装好的提示词会嵌入这些行 | 预期输出以 `DSH_SNAPSHOT=refresh` 重新录制 |
 | `scripts/release/pack.spec.ts` | 前置条件 | 缺少 P4 | 运行步骤 |
-| `scripts/desktop-publish-workflow.spec.ts` | Delo 改动 | Delo 在 `desktop-publish.yml` 中的仓库守卫 | 同 `ci-workflow.spec.ts` |
-| `scripts/ci-compatible-selfhosted.spec.ts` | Delo 改动 | Delo 在 `ci.yml` 中的运行器路由 | 同 `ci-workflow.spec.ts`，另加一个用例：在上游仓库之外，每种故障转移模式都运行于 `ubuntu-latest` |
+| `scripts/desktop-publish-workflow.spec.ts` | Delorun 改动 | Delorun 在 `desktop-publish.yml` 中的仓库守卫 | 同 `ci-workflow.spec.ts` |
+| `scripts/ci-compatible-selfhosted.spec.ts` | Delorun 改动 | Delorun 在 `ci.yml` 中的运行器路由 | 同 `ci-workflow.spec.ts`，另加一个用例：在上游仓库之外，每种故障转移模式都运行于 `ubuntu-latest` |
 | `packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts` | 前置条件 | 缺少 P2 | 运行步骤 |
 | `packages/boot/plugin-manager/tests/manager.spec.ts` | 前置条件 | 缺少 P3 | 运行步骤 |
 | `packages/subagent/subagent/tests/continuation.spec.ts` | 资源争用 | 见[资源争用](#contention) | 无 |

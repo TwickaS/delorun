@@ -77,7 +77,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **运行时发行包**（runtime closure）：`delorun` 命令所运行全部内容的一次已签名发布，安装在 `~/.delorun/runtimes/<version>` 下。**运行时仓库**（runtime store）：这些安装，附带指向当前活动安装的指针，并保留上一个安装以便回滚。桌面应用在其已签名资源中携带自己的副本。<a id="runtime-closure"></a>
 - **启动令牌**（start token）：每次 home 进程启动时写入 `run/<profile>/start-token` 的 32 字节随机令牌；Docker 监管器与更新通道只在该次启动运行期间，接受携带它的请求。<a id="start-token"></a>
 - **能力报告**（capability report）：说明机器运行什么、强制执行什么的陈述，其中每项限制标为 `enforced`、`not-enforced` 或 `unknown` 并附证据；setup 在本人选择 Docker 形态之前显示它。代码对应：运行时提供方的 `report()`。<a id="capability-report"></a>
-- **读取豁免**（read exemption）：受限命令可以读取并执行的目录，即 `runtimes/`、`skills/` 与 `dsh-runtimes/`；任何密钥都不写入其中。<a id="read-exemption"></a>
+- **读取豁免**（read exemption）：受限命令可以读取并执行的目录，即 `runtimes/`、`skills/` 与 `dsh-runtimes/`，以及运行中 profile 位于 `changes/profiles/<profile>/active/` 之下的已批准插件副本，命令无法写入这些副本；任何密钥都不写入其中。<a id="read-exemption"></a>
 - **启动协议**（launch protocol）：运行时已签名 manifest 中的编号，它规定入口文件、启动器传入的参数与所设置的环境变量；启动器只在支持该编号时运行此运行时。<a id="launch-protocol"></a>
 - **网络设置**（network setting）：也称**工作区网络**：一个工作区对模型所运行的命令以及 `web_fetch` 可以访问哪些主机的选择。**Open** 是默认值，与 DeepSeek Harness 相同；**Allowlist** 只访问你列出的主机；**Off** 不访问任何主机。它只能在运行 Delorun 的电脑上的“设置”→“安全”→“网络”中更改（[提示注入](../guide/prompt-injection.zh.md#the-network-setting)）。技术说明：针对模型在其沙箱中运行的命令以及 `web_fetch`：`open`，即原版给出的主机网络，为默认值；`allowlist`，只允许列出的主机，经出站代理访问；或 `off`，没有网络。它只能在 home 所在电脑上的 studio 中更改。代码对应：`@delorun/plugin-permission-defaults` 中的 `delorunCommandNetwork`。<a id="workspace-network"></a><a id="network-setting"></a>
 - **出站代理**（egress proxy）：作为工作区唯一对外路由、拒绝非公共地址的 HTTP 代理。网络为 `allowlist` 的原生工作区使用每个列表一个的代理，由 Host 在 `~/.delorun` 下的套接字上运行，并由沙箱绑定进每个命令，它在解析名称之前先与列表比对；每个 Docker 工作区则在其自有网络上运行自己的代理。<a id="egress-proxy"></a>
