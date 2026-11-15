@@ -11,7 +11,7 @@ import { loadView, type ChangelogView } from '../../packages/site-design/src/cha
 const OUT_DIR = 'out'
 
 /** The pages the build prerenders; the site has no others. */
-const PAGES = ['/', '/privacy', '/404']
+const PAGES = ['/', '/blog', '/privacy', '/404']
 
 /**
  * The not-found page without the router's scripts. A static host serves 404.html at any address, where the page's own

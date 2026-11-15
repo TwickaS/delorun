@@ -58,7 +58,9 @@ export function Home() {
         <section className="mx-auto grid w-full max-w-5xl gap-10 px-5 pt-10 sm:px-8 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
           <div>
             <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
+            <p className="mt-3 text-xl font-medium tracking-tight">{COPY.heroSubline}</p>
             <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
+            <p className="mt-3 max-w-xl text-sm text-fd-muted-foreground">{COPY.factLine}</p>
             <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
             <div className="mt-2 grid w-fit max-w-full gap-2">
               <PackageManagerPicker value={manager} onChange={setManager} />
@@ -66,6 +68,7 @@ export function Home() {
             </div>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
             <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
+            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.status.before}<Link href={COPY.status.href}>{COPY.status.linkText}</Link>{COPY.status.after}</p>
             <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
           </div>
           <Terminal command={command} />
@@ -83,6 +86,24 @@ export function Home() {
           </ul>
         </section>
         <WhatsNew />
+        <section aria-labelledby="roadmap" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
+          <h2 id="roadmap" className="text-2xl font-semibold tracking-tight">{COPY.roadmap.heading}</h2>
+          <p className="mt-2 text-fd-muted-foreground">{COPY.roadmap.text}</p>
+          <ol className="mt-6 grid gap-x-10 gap-y-6 sm:grid-cols-3">
+            {COPY.roadmap.stages.map(stage => (
+              <li key={stage.title}>
+                <h3 className="font-semibold">{stage.title}</h3>
+                <p className="mt-2 leading-7 text-fd-muted-foreground">{stage.text}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-6 leading-7">{COPY.roadmap.earns}</p>
+          <p className="mt-3 text-sm"><Link href={COPY.roadmap.href}>{COPY.roadmap.link}</Link></p>
+        </section>
+        <section aria-labelledby="teams" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
+          <h2 id="teams" className="text-2xl font-semibold tracking-tight">{COPY.teams.heading}</h2>
+          <p className="mt-2 leading-7 text-fd-muted-foreground">{COPY.teams.text}</p>
+        </section>
         <SignupSection />
       </main>
     </Frame>

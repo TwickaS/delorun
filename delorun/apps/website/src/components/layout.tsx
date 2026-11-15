@@ -32,6 +32,7 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
         </a>
         <nav aria-label={COPY.footer.primaryNav} className="flex items-center gap-5 text-sm">
           <a href={DOCS_URL} className={`font-medium ${FOCUS}`}>{nav.docs}</a>
+          <a href="/blog" className={`text-fd-muted-foreground hover:text-fd-foreground ${FOCUS}`}>{nav.blog}</a>
           <a href={GITHUB_URL} className={`text-fd-muted-foreground hover:text-fd-foreground ${FOCUS}`}>{nav.github}</a>
         </nav>
       </header>
@@ -49,6 +50,7 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
               <li><TextLink href={DOCS_URL}>{COPY.footer.docs}</TextLink></li>
               <li><TextLink href={`${DOCS_URL}/changelog`}>{COPY.footer.changelog}</TextLink></li>
               <li><TextLink href={`${DOCS_URL}/guide/roadmap`}>{COPY.footer.roadmap}</TextLink></li>
+              <li><TextLink href="/blog">{COPY.footer.blog}</TextLink></li>
               <li><TextLink href={GITHUB_URL}>{COPY.footer.github}</TextLink></li>
               <li><TextLink href="/privacy">{COPY.footer.privacy}</TextLink></li>
               <li><TextLink href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</TextLink></li>

@@ -2,13 +2,14 @@
 
 [English](README.md) | 中文
 
-本包构建 delorun.com，即 Delorun 的产品站点：主页、隐私页和未找到页面，是基于 TanStack Start 的静态站点，并有一个接收发布消息订阅的小型 Worker。文档在[文档站点](../docs/README.zh.md)，各页面链接到它。该站点是私有工作区，有自己的锁文件，因此在仓库根工作区之外。
+本包构建 delorun.com，即 Delorun 的产品站点：主页、博客索引、隐私页和未找到页面，是基于 TanStack Start 的静态站点，并有一个接收发布消息订阅的小型 Worker。文档在[文档站点](../docs/README.zh.md)，各页面链接到它。该站点是私有工作区，有自己的锁文件，因此在仓库根工作区之外。
 
 ## 路由
 
 | 路由 | 内容 |
 | --- | --- |
-| `/` | Delorun 是什么、安装命令、第一个设置问题，以及六个各链接一页指南的简短小节；已有汇编版本时，还有来自变更记录的“最新动态”小节 |
+| `/` | Delorun 是什么、安装命令、第一个设置问题、预览版状态、六个各链接一页指南的简短小节、路线图的三个阶段、一行“面向团队”，已有汇编版本时还有来自变更记录的“最新动态”小节 |
+| `/blog` | `content/blog/` 中的文章，最新的在前；没有文章时显示一行说明 |
 | `/privacy` | 站点收集什么、主机记录什么，以及程序发送的内容该去哪里阅读 |
 | `/404` | 主机在没有对应文件的地址上从 `404.html` 提供的页面 |
 | `POST /api/subscribe` | 接收订阅表单：校验表单，对连接限速，用 Siteverify 验证 Turnstile 令牌，然后保存或刷新一条 `pending` 记录。每次被接受的订阅都得到相同的回答，无论该地址是否已知 |
@@ -17,6 +18,10 @@
 | `GET /unsubscribe?token=` | 立即退订。`POST /unsubscribe?token=` 为邮件程序的一键 `List-Unsubscribe-Post` 做同样的事。两者都是幂等的 |
 
 静态文件来自 `out/`；只有这四个订阅路由会到达 Worker（[`alchemy.run.ts`](alchemy.run.ts) 中的 `runWorkerFirst`）。Worker 在 [`src/worker`](src/worker/routes.ts)，订阅表单是 [`src/components/signup.tsx`](src/components/signup.tsx)。
+
+## 博客
+
+一篇文章就是 [`content/blog/`](content/blog) 中的一个 Markdown 文件，文件名为 `YYYY-MM-DD-slug.md`，slug 为小写。文件以两行 `---` 之间的 `key: value` 前置信息块开头：`title`、`date`（与文件名中的日期相同）和 `summary` 必填，`crosspost` 可选，是开发者平台上指回原文的副本的 `https` 地址。[`src/site/blog.ts`](src/site/blog.ts) 解析这些文件，格式错误的文件会使构建停止。索引显示每篇文章的标题、日期和摘要，有转载副本时附上其链接。
 
 ## 发布消息订阅
 

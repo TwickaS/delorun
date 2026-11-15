@@ -2,13 +2,14 @@
 
 English | [中文](README.zh.md)
 
-This package builds delorun.com, Delorun's product site: a home page, a privacy page and a not-found page, as a static site on TanStack Start, with a small Worker that takes sign-ups for release news. Documentation lives on the [documentation site](../docs/README.md), which the pages link. The site is a private workspace with its own lockfile, so it is outside the repository's root workspace.
+This package builds delorun.com, Delorun's product site: a home page, a blog index, a privacy page and a not-found page, as a static site on TanStack Start, with a small Worker that takes sign-ups for release news. Documentation lives on the [documentation site](../docs/README.md), which the pages link. The site is a private workspace with its own lockfile, so it is outside the repository's root workspace.
 
 ## Routes
 
 | Route | Serves |
 | --- | --- |
-| `/` | What Delorun is, the install command, the first setup question and six short sections that each link a guide page; with an assembled version, a What's new section from the changelog record |
+| `/` | What Delorun is, the install command, the first setup question, the preview status, six short sections that each link a guide page, the roadmap's three stages, a "For teams" line, and with an assembled version a What's new section from the changelog record |
+| `/blog` | The articles in `content/blog/`, newest first, or a line saying there are none |
 | `/privacy` | What the site collects, what its host logs and where to read what the program sends |
 | `/404` | The page a host serves, from `404.html`, for an address no file has |
 | `POST /api/subscribe` | Takes the sign-up form: validates it, rate-limits the connection, verifies the Turnstile token with Siteverify, then stores or refreshes a `pending` record. Every accepted sign-up gets the same answer, whether or not the address was known |
@@ -17,6 +18,10 @@ This package builds delorun.com, Delorun's product site: a home page, a privacy 
 | `GET /unsubscribe?token=` | Unsubscribes at once. `POST /unsubscribe?token=` does the same for a mail program's one-click `List-Unsubscribe-Post`. Both are idempotent |
 
 The static files come from `out/`; only the four sign-up routes reach the Worker (`runWorkerFirst` in [`alchemy.run.ts`](alchemy.run.ts)). The Worker is in [`src/worker`](src/worker/routes.ts), and the sign-up form is [`src/components/signup.tsx`](src/components/signup.tsx).
+
+## Blog
+
+An article is one Markdown file in [`content/blog/`](content/blog), named `YYYY-MM-DD-slug.md` with a lower-case slug. It starts with a front matter block of `key: value` lines between two `---` lines: `title`, `date` (the same date as in the file name) and `summary` are required, and `crosspost` is the optional `https` address of the copy on a developer platform that points back to the original. [`src/site/blog.ts`](src/site/blog.ts) parses the files, and a malformed file stops the build. The index shows each article's title, date and summary, and links the cross-posted copy when there is one.
 
 ## Sign-ups for release news
 
