@@ -300,7 +300,7 @@ describe('the add-time consent before a reconnect', () => {
   describe('credential templates in a reviewed start', () => {
     const templated = (patch: Partial<StdioConfig>): StdioConfig => ({ ...config(), expandTemplates: true, ...patch })
 
-    it.each(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH', 'DYLD_INSERT_LIBRARIES'])(
+    it.each(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH', 'DYLD_INSERT_LIBRARIES', 'LD_AUDIT', 'BASH_ENV', 'ENV', 'NODE_PATH', 'PYTHONHOME', 'PERL5LIB', 'RUBYOPT', 'OPENSSL_CONF', 'GCONV_PATH', 'JAVA_TOOL_OPTIONS'])(
       'refuses a template in the run-affecting variable %s at load, before any review or spawn', async (name) => {
         const consent = new StubConsent(ctx, [allow])
         await expect(apply(ctx, templated({ env: { [name]: '${credential:X}' } }))).rejects.toThrow(

@@ -10,11 +10,22 @@
  * @module @delorun/plugin-mcp-consent/review
  */
 import { createHash } from 'node:crypto'
-import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
+import { isRunAffectingEnv, sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
 import type { PinnedStart } from './pins.ts'
 import { envDigests } from './store.ts'
-import { showsEnvValue } from './wire.ts'
 import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'
+
+/**
+ * Whether a surface shows an environment variable's value: only for a variable that changes which program, library or
+ * startup script runs, by the one list `isRunAffectingEnv` of `@deepseek-ai/dsh-mcp-client` holds (`PATH`, `NODE_*`,
+ * `LD_*`, `DYLD_*`, `PYTHON*`, `BASH_ENV`, `JAVA_TOOL_OPTIONS` and the rest of it). Every other value may be a secret
+ * and is never shown; the acceptance store keeps only digests of every value.
+ * @param name - the variable's name.
+ * @returns true when the value is shown.
+ */
+export function showsEnvValue(name: string): boolean {
+  return isRunAffectingEnv(name)
+}
 
 /** The length of a review id: hexadecimal digits of a SHA-256. */
 export const MCP_REVIEW_ID_LENGTH = 32

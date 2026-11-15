@@ -51,20 +51,19 @@ import {
   writeAcceptanceStore,
 } from './store.ts'
 import type { AcceptanceStore, AcceptanceStoreRead, SetAsideState } from './store.ts'
-import { acceptHint, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview, type RefusedStart } from './review.ts'
+import { acceptHint, McpReviewError, pendingReviewOf, showsEnvValue, type McpReviews, type PendingReview, type RefusedStart } from './review.ts'
 import { pinsOf, type PinnedStart } from './pins.ts'
 import { chatWritableRoots, writableByChats } from './writable.ts'
-import { showsEnvValue } from './wire.ts'
 import type { AcceptedServer, EnvVariable, PendingServer, PinnedFile } from './wire.ts'
 import { registerMcpConsentRoutes } from './routes.ts'
 
 export {
-  acceptHint, mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, shownEnv,
+  acceptHint, mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, shownEnv, showsEnvValue,
   type McpReviews, type PendingReview, type RefusedStart,
 } from './review.ts'
 export {
   MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_REFUSAL_CODES, MCP_CONSENT_ROUTES, SERVER_CHANGES, SERVER_NAME_PATTERN, SERVER_STATES,
-  showsEnvValue, type AcceptServerAnswer, type PinnedFile, type AcceptServerRequest, type AcceptedServer, type DeclineServerAnswer,
+  type AcceptServerAnswer, type PinnedFile, type AcceptServerRequest, type AcceptedServer, type DeclineServerAnswer,
   type DeclineServerRequest, type EnvVariable, type McpConsentRefusalCode, type PendingServer, type PendingServersAnswer,
   type RevokeServerAnswer, type RevokeServerRequest, type ServerChange, type ServerState,
 } from './wire.ts'

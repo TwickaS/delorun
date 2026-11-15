@@ -19,17 +19,33 @@ const TOKEN = /\$\{credential:([A-Za-z_][A-Za-z0-9_]*)\}/g
 /** One whole occurrence must BE a token; containment is not enough. */
 const TOKEN_EXACT = /^\$\{credential:[A-Za-z_][A-Za-z0-9_]*\}$/
 
-/** The environment variables that change which program or library a start runs; the consent's `showsEnvValue` keeps the same list. */
-const RUN_AFFECTING_ENV: ReadonlySet<string> = new Set(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH'])
+/**
+ * The exact names of environment variables that change which program, library or startup script a start runs. The
+ * list follows app-boot's bootstrap-only names (`BOOTSTRAP_NAMES`) for process launch, module and library loading,
+ * interpreter startup hooks and program selectors. It is the one list: the consent card in `plugin-mcp-consent` shows
+ * a value for these names and {@link assertLiteralStart} refuses a credential template in them.
+ */
+const RUN_AFFECTING_ENV_NAMES: ReadonlySet<string> = new Set([
+  'PATH', 'PATHEXT', 'SHELL', 'COMSPEC', 'LOCPATH', 'GCONV_PATH',
+  'BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS',
+  'JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS',
+  'GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_EXTERNAL_DIFF', 'GIT_PAGER', 'GIT_EDITOR', 'GIT_ASKPASS', 'SSH_ASKPASS',
+  'EDITOR', 'VISUAL', 'PAGER', 'BROWSER',
+])
+
+/** Name prefixes of run-affecting environment variables: dynamic linker, Node, interpreter and OpenSSL families. */
+const RUN_AFFECTING_ENV_PREFIXES: readonly string[] = ['LD_', 'DYLD_', 'NODE_', 'PYTHON', 'PERL5', 'RUBY', 'OPENSSL_', 'BASH_FUNC_']
 
 /**
- * Whether an environment variable changes which program or library a start runs: `NODE_OPTIONS`, `LD_PRELOAD`,
- * `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH` and every name starting with `DYLD_`.
- * @param name - the variable's name, compared exactly.
+ * Whether an environment variable changes which program, library or startup script a start runs: the names of
+ * `RUN_AFFECTING_ENV_NAMES` and every name starting with `LD_`, `DYLD_`, `NODE_`, `PYTHON`, `PERL5`, `RUBY`,
+ * `OPENSSL_` or `BASH_FUNC_`. The comparison ignores letter case, because Windows reads names that way.
+ * @param name - the variable's name.
  * @returns true for a run-affecting variable.
  */
 export function isRunAffectingEnv(name: string): boolean {
-  return RUN_AFFECTING_ENV.has(name) || name.startsWith('DYLD_')
+  const upper = name.toUpperCase()
+  return RUN_AFFECTING_ENV_NAMES.has(upper) || RUN_AFFECTING_ENV_PREFIXES.some(prefix => upper.startsWith(prefix))
 }
 
 /**

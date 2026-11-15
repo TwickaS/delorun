@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, DelorunMcpConsent, MCP_CONSENT_ROUTES, mcpReviewId } from '../src/index.ts'
 import { registerMcpConsentRoutes } from '../src/routes.ts'
 import { acceptanceStorePath } from '../src/store.ts'
-import { showsEnvValue } from '../src/wire.ts'
+import { showsEnvValue } from '../src/review.ts'
 
 /** The secret value of the suite's configured environment, which no review or answer may hold. */
 const SECRET = 'secret-token-value'
@@ -144,7 +144,7 @@ describe('a refused start', () => {
     ])
     expect(JSON.stringify(consent.pending())).not.toContain(SECRET)
     expect(JSON.stringify(consent.pending())).not.toContain('not-shown')
-    expect([showsEnvValue('path'), showsEnvValue('DYLD_'), showsEnvValue('XDYLD_X')]).toEqual([false, true, false])
+    expect([showsEnvValue('path'), showsEnvValue('DYLD_'), showsEnvValue('XDYLD_X')]).toEqual([true, true, false])
   })
 
   it('ends its refusal with where the person accepts it', async () => {

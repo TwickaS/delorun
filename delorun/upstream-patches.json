@@ -2327,8 +2327,8 @@
     {
       "path": "packages/mcp/mcp-client/src/templates.ts",
       "class": "security",
-      "reason": "Template rules (2026-11-14): adds `isRunAffectingEnv`, `isWholeTemplate`, `assertLiteralStart` and `assertNoInjectedOption`, and the `RefusedTemplateValue` failure that leaves the server waiting like a missing credential. The run-affecting names match the consent's `showsEnvValue` list.",
-      "sha256": "b002055657c5ed2daeb568c5229d543f476f0635a86ddd64e571b5297bf4cd52"
+      "reason": "Template rules (2026-11-14): adds `isRunAffectingEnv`, `isWholeTemplate`, `assertLiteralStart` and `assertNoInjectedOption`, and the `RefusedTemplateValue` failure that leaves the server waiting like a missing credential. `isRunAffectingEnv` is the one list of run-affecting names (the bootstrap names of app-boot that load code or choose a program, plus the `LD_`, `DYLD_`, `NODE_`, `PYTHON`, `PERL5`, `RUBY`, `OPENSSL_` and `BASH_FUNC_` prefixes); the consent's `showsEnvValue` calls it.",
+      "sha256": "e4667301b191fcc26ce4badaae1a11ea82c14d66bc29a7aead1a0876ced20be3"
     },
     {
       "path": "packages/experimental/liveshare/src/host/shareable-catalog.ts",

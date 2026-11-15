@@ -73,25 +73,11 @@ export const SERVER_STATES = ['waiting', 'declined', 'revoked'] as const
 /** One code of {@link SERVER_STATES}. */
 export type ServerState = typeof SERVER_STATES[number]
 
-/** The environment variables whose value a surface shows, besides the `DYLD_` family: each changes what runs. */
-const RUN_AFFECTING_ENV: ReadonlySet<string> = new Set(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH'])
-
-/**
- * Whether a surface shows an environment variable's value: only for a variable that changes which program or library
- * runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH` and every name starting with `DYLD_`).
- * Every other value may be a secret and is never shown; the acceptance store keeps only digests of every value.
- * @param name - the variable's name, compared exactly.
- * @returns true when the value is shown.
- */
-export function showsEnvValue(name: string): boolean {
-  return RUN_AFFECTING_ENV.has(name) || name.startsWith('DYLD_')
-}
-
 /** One configured environment variable as a surface shows it. */
 export interface EnvVariable {
   /** The variable's name. */
   readonly name: string
-  /** The variable's value, present only when {@link showsEnvValue} holds for the name. */
+  /** The variable's value, present only when `showsEnvValue` of `review.ts` holds for the name. */
   readonly value?: string
 }
 
@@ -129,7 +115,7 @@ export interface PendingServer {
   readonly resolvedCwd: string
   /** On Windows, the canonical command shell (`COMSPEC`) that runs a `.cmd` or `.bat` executable; absent otherwise. */
   readonly resolvedShell?: string
-  /** The configured environment variables, sorted by name; a value only where {@link showsEnvValue} allows it. */
+  /** The configured environment variables, sorted by name; a value only where `showsEnvValue` of `review.ts` allows it. */
   readonly env: readonly EnvVariable[]
   /**
    * The files the start runs, as the review pinned them: the executable first, then each argument that names a regular
@@ -181,7 +167,7 @@ export interface AcceptedServer {
   /** On Windows, the canonical command shell (`COMSPEC`) that runs a `.cmd` or `.bat` executable; absent otherwise. */
   readonly resolvedShell?: string
   /**
-   * The accepted environment variables, sorted by name; a value only where {@link showsEnvValue} allows it and the
+   * The accepted environment variables, sorted by name; a value only where `showsEnvValue` of `review.ts` allows it and the
    * server's configured row still sets that value, since the store keeps digests only.
    */
   readonly env: readonly EnvVariable[]
