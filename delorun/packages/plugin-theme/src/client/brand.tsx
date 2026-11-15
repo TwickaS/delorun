@@ -32,11 +32,12 @@ export function HeroWordmark({ size, className }: HeroBrandMarkOwnerProps & Prop
 }
 
 /**
- * The New Session headline: the person's greeting, or the translated default.
+ * The New Session headline: the person's greeting, or the translated default. While the mark shows, the greeting takes
+ * the hero row's full width, so the row wraps and the mark stands centred above it at every width.
  * @param props - the brand's dictionary.
  * @returns the headline.
  */
 export function HeroHeadline({ t }: PropsLocale<'delorunBrand'>) {
-  const { greeting } = useBranding()
-  return <span className={css.headline}>{greeting === DEFAULT_GREETING ? t('hero.headline') : greeting}</span>
+  const { greeting, showMark } = useBranding()
+  return <span className={`${css.headline} ${showMark ? css.stacked : ''}`}>{greeting === DEFAULT_GREETING ? t('hero.headline') : greeting}</span>
 }

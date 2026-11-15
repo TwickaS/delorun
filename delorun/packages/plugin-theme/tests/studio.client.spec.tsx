@@ -211,6 +211,16 @@ describe('with the studio additions on', () => {
     await fiber.dispose()
   })
 
+  it('gives the greeting its own line under the mark while the mark shows', async () => {
+    const { slots, fiber } = await mount(themeForm(STUDIO_ON))
+    const Headline = slots.get('conversation.hero.headline')?.component
+    if (Headline === undefined) throw new Error('no headline')
+    render(<Headline t={makeTranslate(brandEn)} />)
+    expect(screen.getByText(brandEn['hero.headline']).className).toContain('stacked')
+    cleanup()
+    await fiber.dispose()
+  })
+
   it('follows each settings change: another accent, density, the system typeface, contrast, a theme and the effort bars', async () => {
     const form = themeForm(STUDIO_ON)
     const { fiber, layers, faces } = await mount(form)

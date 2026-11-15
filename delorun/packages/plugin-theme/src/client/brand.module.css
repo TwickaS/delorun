@@ -3,13 +3,18 @@
   text-align: center;
 }
 
+/* A full-width item in the hero's wrapping row sits on its own line, under the mark. */
+.stacked {
+  flex: 1 1 100%;
+}
+
 /* The hero's brand seat: the icon above the name, centred, the name set in proportion to the greeting. */
 .mark {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--dsw-space-3, 12px);
+  gap: var(--dsw-space-2, 8px);
   font-family: var(--dsw-font-family-brand);
   font-size: var(--dsw-font-l-20-font-size);
   font-weight: 500;
