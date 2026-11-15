@@ -537,6 +537,11 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "Settings → Appearance → Branding lets you hide the Delorun mark and give the studio your own name, icon (picked or uploaded) and greeting. The sign-in and pairing pages show your name and an uploaded icon. The empty chat screen now shows the icon above the name."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "Settings opens as one larger panel with its pages grouped by topic and a search field that finds pages and settings by name, in English and Chinese. A section from a plugin that the grouping does not name appears under More."
     },
@@ -632,6 +637,46 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "Two themes carry Delorun's own names, Slate and Berry, in place of the names of other products. A theme you saved before keeps working under its new name."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The Look step of setup uses the same theme, accent and colour-scheme controls as Settings → Appearance, with a one-line explanation. The original DeepSeek Harness look is a quiet line under the choices; choosing it asks first and says that it closes the guide."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The Phone access step of setup now reads as one sentence and one command (`delorun reach on tailscale`). The Tailscale checks, the approval command and the PIN mode option sit under **More**. A studio opened from a phone no longer shows the step."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Setup now has a Models step right after Welcome. It lists the providers you can connect with a key, ticks the ones whose key it already found, walks you through each ticked provider (paste the key, see it tested, then Next or Skip) and ends with a summary. Each provider links to its own key page, and a pasted key is tested with the provider's free model list, which shows how many models it offers and the default one. Keys are write-only: Delorun shows \"Key found\" or \"Key saved\", never the key."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "In setup, **Skip** now leaves only the step you are on and moves to the next one. A quiet **Finish later** beside the step name closes the guide and keeps your place, so it opens again where you left off next time."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Setup keeps the step name and \"Step n of 7\" with a progress bar at the top, and Skip, Back and Continue at the bottom, at every window width; only the middle scrolls. The list of steps at the side is gone. Welcome is the language plus a short preview note with \"Read more\". Agents, Recommended plugins and Models share one card: an icon (a neutral one where a plugin has none), a title, a one-line summary with \"More\" for the rest, and \"Add\" or \"✓ Added\". Errors and warnings show in a full-width line under the card with what to do next, and a failed plugin check shows a note at the top of the step."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "In setup, the Workspace step shows the chosen folder as a card with its name and path, and says what is happening in plain status lines. Ready lists what you set up in one calm colour: green no longer marks values, and \"None added\" is neutral."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "On mobile Safari the status bar and bottom toolbar take the studio's colours, and the sign-in page's, and follow a change of theme, accent or light and dark."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "The browser tab is titled \"Delorun\", not \"DSH Local Build\", and the studio's stored look is applied before the first paint, with no flash of the stock sidebar."
     },
@@ -704,6 +749,16 @@
       "area": "Studio",
       "section": "Fixed",
       "text": "Settings → General and About no longer show \"Delorun 0.0.0\" when Delorun runs from a source checkout; they say \"source build\". A release still shows its own version."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Settings → Appearance uses the same theme, accent and studio look chips as the first-run Look step, each a 44px target with keyboard support. The accent chips are locked, with a note, while a theme other than Soft is chosen, because a change would be saved without showing."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "On a phone, \"Run setup again\" in Settings closes the sidebar as well, so it no longer stays open under the guide or beside the chat once the guide closes."
     },
     {
       "area": "Studio",
@@ -1287,6 +1342,16 @@
     },
     {
       "area": "Reach",
+      "section": "Changed",
+      "text": "An approved phone can add and test model keys; stored keys are never shown, not even their first or last characters or their length, and a phone can name only the keys that model providers use."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "An approved phone can change everyday settings (appearance, accent, studio look, language, sidebar, onboarding progress) and turn on Delorun's own optional plugins, with no unlock; installing or removing plugins stays at the computer."
+    },
+    {
+      "area": "Reach",
       "section": "Security",
       "text": "A device reads only the files whose real location lies inside its chat's workspace: a link inside the workspace that leads elsewhere, and Delorun's own folder, are refused."
     },
@@ -1627,6 +1692,80 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-rc.6",
+      "date": "2026-11-15",
+      "preview": false,
+      "areas": [
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "Settings → Appearance → Branding lets you hide the Delorun mark and give the studio your own name, icon (picked or uploaded) and greeting. The sign-in and pairing pages show your name and an uploaded icon. The empty chat screen now shows the icon above the name."
+            },
+            {
+              "section": "Changed",
+              "text": "Two themes carry Delorun's own names, Slate and Berry, in place of the names of other products. A theme you saved before keeps working under its new name."
+            },
+            {
+              "section": "Changed",
+              "text": "The Look step of setup uses the same theme, accent and colour-scheme controls as Settings → Appearance, with a one-line explanation. The original DeepSeek Harness look is a quiet line under the choices; choosing it asks first and says that it closes the guide."
+            },
+            {
+              "section": "Changed",
+              "text": "The Phone access step of setup now reads as one sentence and one command (`delorun reach on tailscale`). The Tailscale checks, the approval command and the PIN mode option sit under **More**. A studio opened from a phone no longer shows the step."
+            },
+            {
+              "section": "Changed",
+              "text": "Setup now has a Models step right after Welcome. It lists the providers you can connect with a key, ticks the ones whose key it already found, walks you through each ticked provider (paste the key, see it tested, then Next or Skip) and ends with a summary. Each provider links to its own key page, and a pasted key is tested with the provider's free model list, which shows how many models it offers and the default one. Keys are write-only: Delorun shows \"Key found\" or \"Key saved\", never the key."
+            },
+            {
+              "section": "Changed",
+              "text": "In setup, **Skip** now leaves only the step you are on and moves to the next one. A quiet **Finish later** beside the step name closes the guide and keeps your place, so it opens again where you left off next time."
+            },
+            {
+              "section": "Changed",
+              "text": "Setup keeps the step name and \"Step n of 7\" with a progress bar at the top, and Skip, Back and Continue at the bottom, at every window width; only the middle scrolls. The list of steps at the side is gone. Welcome is the language plus a short preview note with \"Read more\". Agents, Recommended plugins and Models share one card: an icon (a neutral one where a plugin has none), a title, a one-line summary with \"More\" for the rest, and \"Add\" or \"✓ Added\". Errors and warnings show in a full-width line under the card with what to do next, and a failed plugin check shows a note at the top of the step."
+            },
+            {
+              "section": "Changed",
+              "text": "In setup, the Workspace step shows the chosen folder as a card with its name and path, and says what is happening in plain status lines. Ready lists what you set up in one calm colour: green no longer marks values, and \"None added\" is neutral."
+            },
+            {
+              "section": "Changed",
+              "text": "On mobile Safari the status bar and bottom toolbar take the studio's colours, and the sign-in page's, and follow a change of theme, accent or light and dark."
+            },
+            {
+              "section": "Fixed",
+              "text": "Settings → Appearance uses the same theme, accent and studio look chips as the first-run Look step, each a 44px target with keyboard support. The accent chips are locked, with a note, while a theme other than Soft is chosen, because a change would be saved without showing."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a phone, \"Run setup again\" in Settings closes the sidebar as well, so it no longer stays open under the guide or beside the chat once the guide closes."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "An approved phone can add and test model keys; stored keys are never shown, not even their first or last characters or their length, and a phone can name only the keys that model providers use."
+            },
+            {
+              "section": "Changed",
+              "text": "An approved phone can change everyday settings (appearance, accent, studio look, language, sidebar, onboarding progress) and turn on Delorun's own optional plugins, with no unlock; installing or removing plugins stays at the computer."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-rc.5",
       "date": "2026-11-15",
