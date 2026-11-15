@@ -2323,6 +2323,10 @@ importers:
       '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
+    devDependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
 
   delorun/packages/home-process:
     dependencies:

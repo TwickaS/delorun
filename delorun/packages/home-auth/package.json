@@ -33,6 +33,9 @@
     "@delorun/home": "workspace:*",
     "@delorun/logs": "workspace:*"
   },
+  "devDependencies": {
+    "@delorun/brand": "workspace:*"
+  },
   "delorun": {
     "state": "shipped"
   }
