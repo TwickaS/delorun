@@ -586,3 +586,14 @@ it('preserves a failed draft when its status text is clicked, then retries after
   expect(f.edit).toHaveBeenLastCalledWith({ type: 'set', id: 'settings.open', binding: { code: 'Period', modifiers: ['shift', 'meta'] } }, f.config.getSnapshot().revision)
   expect(screen.queryByRole('group', { name: 'Open settings' })).toBeNull()
 })
+it.each([[true, 0], [false, 1]])('on a phone (%s) shows %i Edit shortcuts buttons', (phone, count) => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: phone, media: query, addEventListener: () => {}, removeEventListener: () => {},
+  }))
+  const catalog = createSnapshotStore<readonly ShortcutCatalogEntry[]>([])
+  const props = { actions: createShortcutsStore().create().actions, useCatalog: bindSnapshotSelector(catalog),
+    t: makeTranslate(en) } as never
+  render(<ShortcutsRow {...props} />)
+  expect(screen.queryAllByRole('button', { name: en.view })).toHaveLength(count)
+  vi.unstubAllGlobals()
+})

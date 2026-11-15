@@ -101,7 +101,6 @@ import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.ts
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
-import './phone.css'
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'

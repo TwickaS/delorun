@@ -1,6 +1,6 @@
 /** Searchable editable shortcut reference and its General Settings row. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Button, IconCloseOutlineRegular, IconRefreshOutlineRegular, Modal, ShortcutKeys, Tooltip, Toast, focusWithoutRing, isBehindModal, rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, usePhone, IconCloseOutlineRegular, IconRefreshOutlineRegular, Modal, ShortcutKeys, Tooltip, Toast, focusWithoutRing, isBehindModal, rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot, PropsStore } from '@deepseek-ai/dsh-client-store'
 import type { ShortcutCatalogEntry, ShortcutPlatform, Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
@@ -53,6 +53,9 @@ const coreActionOrder = new Map<string, number>([
  */
 export function ShortcutsRow({ actions, t, useCatalog }: PropsRuntime<'settings.general.item'> & Store & Locale & InjectFace<ReferenceInjected>) {
   const shortcut = useCatalog(rows => rows.find(row => row.id === 'shortcuts.open'))
+  const phone = usePhone()
+  // A phone has no keyboard to bind.
+  if (phone) return null
   return <div className={css.setting}>
     <div className={css.settingText}>
       <div className={css.settingTitle}>{t('settings')}</div>
