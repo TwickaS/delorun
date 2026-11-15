@@ -1923,6 +1923,18 @@
       "reason": "The WebWorker preview's `node:net` gains a constructible `BlockList` whose `check` throws, so Delorun's client connection module, which builds its loopback list while it loads, loads in the preview."
     },
     {
+      "path": "packages/experimental/webworker-runtime/src/node/builtin_modules/implemented/fs.ts",
+      "class": "generic-fix",
+      "feature": "studio-seams",
+      "reason": "The browser preview's `node:fs` opens with numeric `O_*` flags, builds a read stream over an inherited `fd` (a descriptor or a handle) from its cursor, and answers `promises.readlink` and `promises.rmdir` over a VFS with no symbolic links, so the hardened local file reader that Delorun ships (`fs-local`) reads a file in the preview. Offer upstream."
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/node/builtin_modules/implemented/fs/promises.ts",
+      "class": "generic-fix",
+      "feature": "studio-seams",
+      "reason": "Re-exports `readlink` and `rmdir` from the preview's `node:fs` promises face, which the hardened local file reader imports. Offer upstream."
+    },
+    {
       "path": "packages/experimental/webworker-runtime/src/transport/tunnel.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",

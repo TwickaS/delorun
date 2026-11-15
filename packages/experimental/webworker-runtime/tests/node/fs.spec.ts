@@ -240,3 +240,37 @@ check('promises.chmod reads back through the bigint shape', Number(bigStats('/ds
 fs.mkdirSync('/dsh/vault', { mode: 0o700 })
 check('mkdir honours its mode option', plainMode('/dsh/vault'), 0o700)
 check('promises.stat forwards the bigint option', typeof (await fsp.stat('/dsh/config', { bigint: true })).mode, 'bigint')
+
+const streamed = async (stream: AsyncIterable<unknown>): Promise<string> => {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(chunk as Buffer)
+  return Buffer.concat(chunks).toString('utf8')
+}
+fs.writeFileSync('/dsh/streamed.txt', 'abcdefghij')
+const inherited = await fsp.open('/dsh/streamed.txt', 'r')
+await inherited.read(Buffer.alloc(2), 0, 2, null)
+check('createReadStream continues an inherited handle at its cursor', await streamed(fs.createReadStream('', { fd: inherited })), 'cdefghij')
+const bounded = await fsp.open('/dsh/streamed.txt', 'r')
+check('createReadStream bounds an inherited descriptor by end', await streamed(fs.createReadStream('', { fd: bounded.fd, end: 3 })), 'abcd')
+const started = await fsp.open('/dsh/streamed.txt', 'r')
+check('createReadStream honours start on an inherited handle', await streamed(fs.createReadStream('', { fd: started, start: 4, end: 6 })), 'efg')
+
+const numeric = async (flags: number): Promise<string> => {
+  const handle = await fsp.open('/dsh/numeric.txt', flags)
+  await handle.close()
+  return fs.readFileSync('/dsh/numeric.txt', 'utf8')
+}
+fs.writeFileSync('/dsh/numeric.txt', 'keep')
+check('promises.open reads with numeric O_RDONLY flags', await numeric(fs.constants.O_RDONLY), 'keep')
+check('promises.open truncates with numeric write flags', await numeric(fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC), '')
+
+const rejection = async (run: () => Promise<unknown>): Promise<string> => {
+  try { await run() } catch (error) { return (error as { code?: string }).code ?? 'no code' }
+  return 'resolved'
+}
+check('promises.readlink reports a missing path as ENOENT', await rejection(() => fsp.readlink('/proc/self/fd/3')), 'ENOENT')
+check('promises.readlink reports a VFS file as not a link', await rejection(() => fsp.readlink('/dsh/numeric.txt')), 'EINVAL')
+fs.mkdirSync('/dsh/emptied')
+await fsp.rmdir('/dsh/emptied')
+check('promises.rmdir removes an empty directory', fs.existsSync('/dsh/emptied'), false)
+check('promises.rmdir refuses a directory with entries', await rejection(() => fsp.rmdir('/dsh')), 'ENOTEMPTY')
