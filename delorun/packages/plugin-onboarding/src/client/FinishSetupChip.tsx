@@ -31,7 +31,7 @@ export type FinishSetupChipProps = PropsLocale<'delorunOnboarding'> & InjectFace
 export function FinishSetupChip({ t, later, progress, reopen }: FinishSetupChipProps): ReactNode {
   const aside = useSyncExternalStore(later.subscribe, later.getSnapshot)
   const snapshot = useSyncExternalStore(progress.subscribe, () => progress.getSnapshot())
-  if (!aside || snapshot.status !== 'ready' || snapshot.value.done) return null
+  if (!aside || snapshot.status !== 'ready' || snapshot.value === undefined || snapshot.value.done) return null
   return (
     <div className={css.dock}>
       <button type="button" className={css.chip} onClick={reopen}>{t('finishSetup')}</button>
