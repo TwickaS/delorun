@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.remote merge.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { CUSTOM_PROVIDER, DECLARED_NAMESPACE, deriveKeyRef, routeIdOf, type DirectoryEntry, type KeyProbe } from './providers.ts'
+import { CUSTOM_PROVIDER, DECLARED_NAMESPACE, deriveKeyRef, listingOf, routeIdOf, type DirectoryEntry, type KeyProbe } from './providers.ts'
 import { isLoopbackBaseURL, type LocalServer } from '../wire.ts'
 import type { ProvidersFace } from './types.ts'
 
@@ -58,9 +58,14 @@ export function createProvidersFace(ctx: Context): ProvidersFace {
     },
     probe: async (entry, key, baseURL): Promise<KeyProbe> => {
       try {
-        const endpoint = baseURL ?? entry.defaultBaseURL
+        // A catalogue route named to discovery answers from its installed models without any request, so a typed key is
+        // checked against the provider's own listing instead, or not claimed about when no listing refuses a wrong key.
+        const catalogue = entry.settingsNs === PI_AI_NAMESPACE && entry.declared !== true && entry.provider !== CUSTOM_PROVIDER
+        const listing = catalogue ? listingOf(entry.provider) : undefined
+        if (catalogue && listing === undefined) return { kind: 'unchecked' }
         // The endpoint offer names no route yet, so discovery asks the endpoint itself over the protocol it will be declared with.
-        const named = entry.provider === CUSTOM_PROVIDER ? { api: CUSTOM_PROTOCOL } : { provider: entry.provider }
+        const endpoint = listing?.baseURL ?? baseURL ?? entry.defaultBaseURL
+        const named = listing !== undefined ? { api: listing.api } : entry.provider === CUSTOM_PROVIDER ? { api: CUSTOM_PROTOCOL } : { provider: entry.provider }
         const response = await ctx.remote.llm.discoverModels(entry.settingsNs, {
           ...named, apiKey: key, ...endpoint === undefined ? {} : { baseURL: endpoint },
         })

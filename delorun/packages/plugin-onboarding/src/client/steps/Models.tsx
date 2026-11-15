@@ -319,7 +319,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
     void write.then((saved) => {
       setSaving(false)
       if (!saved) { setProblem(true); return }
-      onDone(test.state !== 'done' ? 'untested' : test.probe.kind === 'works' ? 'connected' : 'failed')
+      onDone(test.state !== 'done' || test.probe.kind === 'unchecked' ? 'untested' : test.probe.kind === 'works' ? 'connected' : 'failed')
     })
   }
   const works = test.state === 'done' && test.probe.kind === 'works' ? test.probe : undefined
@@ -355,6 +355,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
           {invalid && <StateLine tone="warning">{t('providers.invalid')}</StateLine>}
           {works !== undefined && <StateLine tone="success">{t('providers.works', { n: String(works.models) })}{works.defaultModel === undefined ? null : <span className={css.defaultModel}>{t('providers.default', { model: works.defaultModel })}</span>}</StateLine>}
           {test.state === 'done' && test.probe.kind === 'failed' && <StateLine tone="error">{t('providers.failed')}</StateLine>}
+          {test.state === 'done' && test.probe.kind === 'unchecked' && <StateLine tone="info">{t('providers.unchecked')}</StateLine>}
           {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
         </div>
         {card.keyPage !== undefined && (

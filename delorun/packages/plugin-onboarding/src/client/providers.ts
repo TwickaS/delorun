@@ -45,10 +45,50 @@ export interface ProviderCard {
   readonly custom?: true
 }
 
-/** What the free model-list request answered for a typed key. */
+/**
+ * What the free model-list request answered for a typed key: `works` only when a request carrying the key was answered
+ * with a model list; `failed` when it was refused or did not answer; `unchecked` when no request here can tell, so the key
+ * may be saved but nothing is claimed about it.
+ */
 export type KeyProbe =
   | { readonly kind: 'works'; readonly models: number; readonly defaultModel: string | undefined }
   | { readonly kind: 'failed' }
+  | { readonly kind: 'unchecked' }
+
+/** The model listing a catalogue provider answers over HTTP: the wire protocol and the base URL its `/models` path hangs from. */
+export interface ProviderListing {
+  /** The wire protocol, which decides how the key is sent. */
+  readonly api: string
+  /** The base URL the listing path is appended to. */
+  readonly baseURL: string
+}
+
+/**
+ * The providers whose own model listing refuses a wrong key (each answered 401 or 400 to a made-up key), so that a listing
+ * the key passed shows the key authenticated. The catalogue's own answer is never used for a typed key: it lists installed
+ * models without any request. A provider missing here, or whose listing is public (OpenRouter, Hugging Face, NVIDIA), is
+ * `unchecked`.
+ */
+const LISTINGS: Readonly<Record<string, ProviderListing>> = {
+  'openai': { api: 'openai-completions', baseURL: 'https://api.openai.com/v1' },
+  'anthropic': { api: 'anthropic-messages', baseURL: 'https://api.anthropic.com' },
+  'google': { api: 'google-generative-ai', baseURL: 'https://generativelanguage.googleapis.com/v1beta' },
+  'groq': { api: 'openai-completions', baseURL: 'https://api.groq.com/openai/v1' },
+  'mistral': { api: 'openai-completions', baseURL: 'https://api.mistral.ai/v1' },
+  'xai': { api: 'openai-completions', baseURL: 'https://api.x.ai/v1' },
+  'moonshotai': { api: 'openai-completions', baseURL: 'https://api.moonshot.ai/v1' },
+  'together': { api: 'openai-completions', baseURL: 'https://api.together.ai/v1' },
+  'fireworks': { api: 'openai-completions', baseURL: 'https://api.fireworks.ai/inference/v1' },
+  'cerebras': { api: 'openai-completions', baseURL: 'https://api.cerebras.ai/v1' },
+}
+
+/**
+ * @param provider - a catalogue route's id.
+ * @returns the listing that checks a key for it, or undefined when none does.
+ */
+export function listingOf(provider: string): ProviderListing | undefined {
+  return LISTINGS[provider]
+}
 
 /**
  * Official API-key pages by route id. Only a provider's own page belongs here; a provider without an entry shows no link.

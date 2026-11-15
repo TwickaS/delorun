@@ -7,7 +7,7 @@ import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { TEST_DELAY_MS } from '../src/client/providers.ts'
 import { DIRECTORY } from './directory.fixture.ts'
-import type { DirectoryEntry } from '../src/client/providers.ts'
+import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
 import type { KeyTestAnswer, LocalServer } from '../src/wire.ts'
 import { hostFake, providersFake, stepServices } from './fixtures.client.ts'
 
@@ -216,6 +216,28 @@ describe('the walk', () => {
     expect(mounted.probe.mock.calls[0]?.[2]).toBe('http://127.0.0.1:9')
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(mounted.save.mock.calls[0]?.[2]).toBe('http://127.0.0.1:9')
+  })
+})
+
+describe('a key that was not checked', () => {
+  const GROQ: DirectoryEntry = { provider: 'groq', displayName: 'Groq', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'groq'], authEnv: ['GROQ_API_KEY'], baseURLEnv: [] }
+
+  it.each<readonly [string, KeyProbe, string]>([
+    ['refused', { kind: 'failed' }, en['providers.failed']],
+    ['unchecked', { kind: 'unchecked' }, en['providers.unchecked']],
+  ])('is never shown as working when the key was %s', async (_, probe, line) => {
+    const mounted = await mount({ directory: [...DIRECTORY, GROQ], probe })
+    await click(screen.getByRole('checkbox', { name: 'Use Groq' }))
+    await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'gsk-abc')
+    await flush(TEST_DELAY_MS)
+    expect(screen.getByText(line)).toBeTruthy()
+    expect(screen.queryByText(/Key works/)).toBeNull()
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(mounted.save).toHaveBeenCalledOnce()
+    expect(screen.queryByText(en['providers.outcome.connected'])).toBeNull()
+    expect(screen.queryByText(/Key works/)).toBeNull()
   })
 })
 

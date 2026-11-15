@@ -36,9 +36,10 @@ describe('the providers service', () => {
   it('asks the free model list with the typed key and the route\'s endpoint, and counts the models', async () => {
     const { face, discoverModels } = remote()
     expect(await face.probe(DIRECTORY[1]!, 'sk-abc', undefined)).toEqual({ kind: 'works', models: 2, defaultModel: 'Model one' })
-    expect(discoverModels).toHaveBeenCalledWith('llm-pi-ai', { provider: 'openai', apiKey: 'sk-abc', baseURL: 'https://api.openai.com/v1' })
+    // No route is named: a named catalogue route is answered from installed models, without a request that carries the key.
+    expect(discoverModels).toHaveBeenCalledWith('llm-pi-ai', { api: 'openai-completions', apiKey: 'sk-abc', baseURL: 'https://api.openai.com/v1' })
     expect(await face.probe(DIRECTORY[1]!, 'sk-abc', 'http://h')).toMatchObject({ kind: 'works' })
-    expect(discoverModels).toHaveBeenLastCalledWith('llm-pi-ai', { provider: 'openai', apiKey: 'sk-abc', baseURL: 'http://h' })
+    expect(discoverModels).toHaveBeenLastCalledWith('llm-pi-ai', { api: 'openai-completions', apiKey: 'sk-abc', baseURL: 'https://api.openai.com/v1' })
     expect(await remote({ discover: ok([]) }).face.probe(DIRECTORY[0]!, 'k', undefined)).toEqual({ kind: 'works', models: 0, defaultModel: undefined })
     expect(await remote({ discover: refused }).face.probe(DIRECTORY[1]!, 'k', undefined)).toEqual({ kind: 'failed' })
     expect(await remote({ discover: Promise.reject(new Error('down')) }).face.probe(DIRECTORY[1]!, 'k', undefined)).toEqual({ kind: 'failed' })
@@ -68,6 +69,15 @@ describe('the providers service', () => {
     expect(refusedWrite.set).not.toHaveBeenCalled()
     expect(await remote({ settings: refused }).face.save(DIRECTORY[1]!, 'k', undefined)).toBe(false)
     expect(await remote({ settings: Promise.reject(new Error('down')) }).face.save(DIRECTORY[1]!, 'k', undefined)).toBe(false)
+  })
+
+  it('claims nothing for a catalogue provider whose listing cannot check a key, and sends no request', async () => {
+    const { face, discoverModels } = remote()
+    for (const provider of ['typesafe', 'openrouter', 'huggingface', 'nvidia']) {
+      const entry = { provider, displayName: provider, settingsNs: 'llm-pi-ai', settingsPath: ['providers', provider], authEnv: ['X_API_KEY'], baseURLEnv: [] }
+      expect(await face.probe(entry, 'sk-abc', undefined)).toEqual({ kind: 'unchecked' })
+    }
+    expect(discoverModels).not.toHaveBeenCalled()
   })
 
   it('asks an endpoint offer\'s models over the OpenAI protocol without naming a route', async () => {
