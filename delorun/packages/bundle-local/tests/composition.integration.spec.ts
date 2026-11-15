@@ -37,6 +37,9 @@ const STUDIO_OPTIONAL_ROWS = [
 /** The upstream row `@delorun/bundle-studio` patches so upstream's "Add an API key" dialog never opens. */
 const STUDIO_KEY_DIALOG_ROW = 'ui-settings-models'
 
+/** The upstream row only `@delorun/bundle-studio` patches, to open the content index the sidebar's message search reads. */
+const STUDIO_SEARCH_INDEX_ROW = 'session-query-sqlite'
+
 /** The consent and guard rows this bundle mounts, with the row id each entry carries. */
 const MOUNTED_PLUGINS = [
   { id: 'delorun-instruction-consent', name: '@delorun/plugin-instruction-consent' },
@@ -200,8 +203,8 @@ describe('a Delorun CLI profile', () => {
     const local = dump.rows.filter(({ label }) => writers(label).includes(LOCAL_BUNDLE)).map(({ row }) => row.id)
     expect(local).toEqual(LOCAL_ROWS.map(row => row.id))
     const studio = dump.rows.filter(({ label }) => writers(label).includes(STUDIO_BUNDLE)).map(({ row }) => row.id)
-    // The studio bundle also patches upstream's models row, to turn the first-run key dialog off.
-    expect(studio).toEqual([STUDIO_KEY_DIALOG_ROW, ...STUDIO_ROWS.map(row => row.id), ...STUDIO_OPTIONAL_ROWS.map(row => row.id)])
+    // The studio bundle also patches upstream's models row, to turn the first-run key dialog off, and its content index row.
+    expect(studio).toEqual([STUDIO_KEY_DIALOG_ROW, STUDIO_SEARCH_INDEX_ROW, ...STUDIO_ROWS.map(row => row.id), ...STUDIO_OPTIONAL_ROWS.map(row => row.id)])
   })
 
   it('mounts every studio plugin, with the Delorun look switched on in the theme row', () => {
@@ -299,7 +302,7 @@ describe('a Delorun CLI profile', () => {
     const changed = upstream.flatMap((row, index) => text(row) === text(delorun[index] ?? {}) ? [] : [row.id])
     const added = delorun.slice(upstream.length).map(row => row.id)
     const listed = (kind: 'changed' | 'added'): (string | undefined)[] => LOCAL_ROWS.filter(row => row.kind === kind).map(row => row.id)
-    expect(changed.sort()).toEqual(listed('changed').sort())
+    expect(changed.sort()).toEqual([...listed('changed'), STUDIO_SEARCH_INDEX_ROW].sort())
     expect(added.sort()).toEqual([...listed('added'), ...STUDIO_ROWS.map(row => row.id), ...STUDIO_OPTIONAL_ROWS.map(row => row.id)].sort())
   })
 
