@@ -120,7 +120,7 @@ export function apply(ctx: Context, config: Config): void {
     path: KEY_TEST_PATH,
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async () => json(await testKeys(keyTestDeps(ctx, config.keyTestTimeoutMs))),
+    fetch: async () => json(await testKeys(keyTestDeps(ctx, config.keyTestTimeoutMs, config.hiddenProviders))),
   })
   ctx.connection.fetch.register({
     path: RECOMMEND_PATH,
@@ -168,12 +168,14 @@ function credentialRef(ctx: Context, entry: { readonly settingsNs: string; reado
  * or the environment where none is mounted) at the address `DEEPSEEK_BASE_URL` names, or DeepSeek's public one.
  * @param ctx - the plugin context.
  * @param timeoutMs - the most time one route's test may take.
+ * @param hidden - route ids the test leaves out.
  * @returns the parts.
  */
-export function keyTestDeps(ctx: Context, timeoutMs: number): KeyTestDeps {
+export function keyTestDeps(ctx: Context, timeoutMs: number, hidden: readonly string[]): KeyTestDeps {
   const env = process.env
   return {
     timeoutMs,
+    hidden,
     providers: () => ctx.get('llm')?.listProviders() ?? [],
     configurable: () => ctx.get('llm')?.listConfigurableProviders() ?? [],
     needsKey: (provider) => {

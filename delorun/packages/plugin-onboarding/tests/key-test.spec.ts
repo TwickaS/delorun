@@ -25,6 +25,7 @@ function deps(change: Partial<KeyTestDeps> = {}): KeyTestDeps {
     discover: vi.fn(async () => {}),
     deepseek: vi.fn(async () => 'works' as const),
     timeoutMs: 1000,
+    hidden: [],
     ...change,
   }
 }
@@ -48,6 +49,19 @@ describe('the key test', () => {
       deepseek: vi.fn(async () => 'rejected' as const),
     })
     expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['untested', 'rejected'])
+  })
+
+  it('leaves a hidden route out of the answer and does not test it', async () => {
+    const discover = vi.fn(async () => {})
+    const parts = deps({
+      providers: () => [{ id: 'deepseek-account', name: 'DeepSeek Account' }, { id: 'custom', name: 'Custom' }],
+      configurable: () => [{ provider: 'custom', settingsNs: 'llm.custom' }, { provider: 'deepseek-account', settingsNs: 'llm.account' }],
+      needsKey: () => false,
+      discover,
+      hidden: ['deepseek-account'],
+    })
+    expect((await testKeys(parts)).providers.map(each => each.provider)).toEqual(['custom'])
+    expect(discover).toHaveBeenCalledExactlyOnceWith('llm.custom', 'custom', expect.any(AbortSignal))
   })
 
   it('answers no-key for a route with no configured credential, without asking its discovery, and untested for a configured one with no listing', async () => {
@@ -145,7 +159,7 @@ describe('the key test in the harness', () => {
   }
 
   it('lists no route and discovers nothing without the model runtime', async () => {
-    const parts = keyTestDeps(new Context(), 1000)
+    const parts = keyTestDeps(new Context(), 1000, [])
     expect([parts.providers(), parts.configurable()]).toEqual([[], []])
     await expect(parts.discover('ns', 'openai', AbortSignal.timeout(1000))).rejects.toMatchObject({ code: 'NO_DISCOVERY' })
   })
@@ -154,7 +168,7 @@ describe('the key test in the harness', () => {
     const ctx = new Context()
     const discoverModels = vi.fn(async () => [])
     ctx.provide('llm', { listProviders: () => [{ id: 'openai', name: 'OpenAI' }], listConfigurableProviders: () => [{ provider: 'openai', settingsNs: 'ns' }], discoverModels } as never)
-    const parts = keyTestDeps(ctx, 1000)
+    const parts = keyTestDeps(ctx, 1000, [])
     expect(parts.providers()).toEqual([{ id: 'openai', name: 'OpenAI' }])
     expect(parts.configurable()).toEqual([{ provider: 'openai', settingsNs: 'ns' }])
     const signal = AbortSignal.timeout(1000)
@@ -168,25 +182,25 @@ describe('the key test in the harness', () => {
     ctx.provide('credentials', { resolve } as never)
     const ok = await listing(200)
     vi.stubEnv('DEEPSEEK_BASE_URL', ok.url)
-    expect(await keyTestDeps(ctx, 5000).deepseek(AbortSignal.timeout(5000))).toBe('works')
+    expect(await keyTestDeps(ctx, 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('works')
     expect(ok.keys).toEqual(['sk-stored'])
     expect(resolve).toHaveBeenCalledExactlyOnceWith('DEEPSEEK_API_KEY')
     const refused = await listing(401)
     vi.stubEnv('DEEPSEEK_BASE_URL', refused.url)
-    expect(await keyTestDeps(ctx, 5000).deepseek(AbortSignal.timeout(5000))).toBe('rejected')
+    expect(await keyTestDeps(ctx, 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('rejected')
   })
 
   it('reads the key from the environment without a credentials service, and answers no-key without one', async () => {
     const ok = await listing(200)
     vi.stubEnv('DEEPSEEK_BASE_URL', ok.url)
     vi.stubEnv('DEEPSEEK_API_KEY', 'sk-env')
-    expect(await keyTestDeps(new Context(), 5000).deepseek(AbortSignal.timeout(5000))).toBe('works')
+    expect(await keyTestDeps(new Context(), 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('works')
     expect(ok.keys).toEqual(['sk-env'])
     vi.stubEnv('DEEPSEEK_API_KEY', '')
-    expect(await keyTestDeps(new Context(), 5000).deepseek(AbortSignal.timeout(5000))).toBe('no-key')
+    expect(await keyTestDeps(new Context(), 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('no-key')
     const ctx = new Context()
     ctx.provide('credentials', { resolve: async () => undefined } as never)
-    expect(await keyTestDeps(ctx, 5000).deepseek(AbortSignal.timeout(5000))).toBe('no-key')
+    expect(await keyTestDeps(ctx, 5000, []).deepseek(AbortSignal.timeout(5000))).toBe('no-key')
   })
 
   it('uses DeepSeek\'s public address when none is configured, and gives up at the deadline', async () => {
@@ -197,7 +211,7 @@ describe('the key test in the harness', () => {
       throw new Error('unreachable')
     })
     const controller = new AbortController()
-    const result = keyTestDeps(new Context(), 5000).deepseek(controller.signal)
+    const result = keyTestDeps(new Context(), 5000, []).deepseek(controller.signal)
     controller.abort()
     expect(await result).toBe('unreachable')
     expect(String(fetch.mock.calls[0]?.[0])).toContain('api.deepseek.com')
@@ -213,14 +227,14 @@ describe('the key test in the harness', () => {
     }
 
     it('needs a key when the profile names a reference or the adapter reports environment variables', () => {
-      expect(keyTestDeps(needsContext({}, { providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } }), 1000).needsKey('custom')).toBe(true)
-      expect(keyTestDeps(needsContext({ nativeAuth: { env: ['CUSTOM_API_KEY'], oauth: false } }, {}), 1000).needsKey('custom')).toBe(true)
-      expect(keyTestDeps(new Context(), 1000).needsKey('custom')).toBe(true)
+      expect(keyTestDeps(needsContext({}, { providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } }), 1000, []).needsKey('custom')).toBe(true)
+      expect(keyTestDeps(needsContext({ nativeAuth: { env: ['CUSTOM_API_KEY'], oauth: false } }, {}), 1000, []).needsKey('custom')).toBe(true)
+      expect(keyTestDeps(new Context(), 1000, []).needsKey('custom')).toBe(true)
     })
 
     it('is keyless when the profile names no reference and the adapter reports no environment variable', () => {
-      expect(keyTestDeps(needsContext({}, { providers: { custom: { baseURL: 'http://localhost:11434/v1' } } }), 1000).needsKey('custom')).toBe(false)
-      expect(keyTestDeps(needsContext({ nativeAuth: { env: [], oauth: true } }, {}), 1000).needsKey('custom')).toBe(false)
+      expect(keyTestDeps(needsContext({}, { providers: { custom: { baseURL: 'http://localhost:11434/v1' } } }), 1000, []).needsKey('custom')).toBe(false)
+      expect(keyTestDeps(needsContext({ nativeAuth: { env: [], oauth: true } }, {}), 1000, []).needsKey('custom')).toBe(false)
     })
   })
 
@@ -237,21 +251,21 @@ describe('the key test in the harness', () => {
 
     it('asks the credentials service whether the route\'s reference is configured, and never reads its value', async () => {
       const { ctx, describe, resolve } = routeContext({ providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } })
-      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(true)
+      expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(true)
       expect(describe).toHaveBeenCalledExactlyOnceWith('CUSTOM_API_KEY')
       expect(resolve).not.toHaveBeenCalled()
     })
 
     it('answers the credentials service\'s configured flag', async () => {
       const { ctx } = routeContext({ providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } }, vi.fn(async () => ({ configured: false, writable: true })))
-      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+      expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(false)
     })
 
     it('reports no credential for a route the directory does not list, or whose profile names no reference', async () => {
-      expect(await keyTestDeps(new Context(), 1000).credentialConfigured('custom')).toBe(false)
+      expect(await keyTestDeps(new Context(), 1000, []).credentialConfigured('custom')).toBe(false)
       for (const profile of [undefined, {}, { providers: {} }, { providers: { custom: 'text' } }, { providers: { custom: {} } }, { providers: { custom: { apiKeyEnv: '' } } }]) {
         const { ctx, describe } = routeContext(profile)
-        expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+        expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(false)
         expect(describe).not.toHaveBeenCalled()
       }
     })
@@ -260,17 +274,17 @@ describe('the key test in the harness', () => {
       const ctx = new Context()
       ctx.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: ['providers', 'custom'] }] } as never)
       ctx.provide('settings', { describe: () => [{ ns: 'llm.custom', value: { providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } } }] } as never)
-      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+      expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(false)
       vi.stubEnv('CUSTOM_API_KEY', '')
-      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+      expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(false)
       vi.stubEnv('CUSTOM_API_KEY', 'sk-env')
-      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(true)
+      expect(await keyTestDeps(ctx, 1000, []).credentialConfigured('custom')).toBe(true)
     })
 
     it('refuses a route whose settings service is not mounted, rather than reporting no credential', async () => {
       const unmounted = new Context()
       unmounted.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: [] }] } as never)
-      await expect(keyTestDeps(unmounted, 1000).credentialConfigured('custom')).rejects.toThrow('the settings service is not mounted')
+      await expect(keyTestDeps(unmounted, 1000, []).credentialConfigured('custom')).rejects.toThrow('the settings service is not mounted')
     })
   })
 })
