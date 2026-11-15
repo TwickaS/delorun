@@ -1,0 +1,93 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+  padding: var(--onb-gap-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.card[data-selected] {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--onb-gap-1);
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.image {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--dsw-radius-md);
+}
+
+.glyph {
+  width: 32px;
+  height: 32px;
+  fill: var(--dsw-alias-border-l3);
+}
+
+.text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--onb-body-size);
+  font-weight: 500;
+  line-height: var(--onb-body-line);
+}
+
+.summary {
+  margin: 0;
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary[data-open] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.more {
+  min-height: var(--onb-target);
+  padding-left: 0;
+  color: var(--dsw-alias-brand-primary);
+}
+
+.action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: var(--onb-target);
+}
+
+.action button {
+  min-height: var(--onb-target);
+}
+
+/* On a phone the action sits under the text, aligned with it. */
+@media (max-width: 767px) {
+  .action {
+    flex: 1 1 100%;
+    padding-left: calc(32px + var(--onb-gap-1));
+  }
+}

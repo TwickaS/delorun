@@ -1,0 +1,23 @@
+/* The "More" disclosure of the Phone access step. */
+.details {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--onb-target);
+  cursor: pointer;
+  color: var(--dsw-alias-brand-primary);
+  font-size: var(--onb-small-size);
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+}

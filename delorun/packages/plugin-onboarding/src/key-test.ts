@@ -8,10 +8,9 @@
  * @module @delorun/plugin-onboarding/key-test
  */
 import type { KeyResult, KeyTestAnswer } from './wire.ts'
-import { MAX_PROVIDERS } from './wire.ts'
+import { DEEPSEEK_ROUTE, MAX_PROVIDERS } from './wire.ts'
 
-/** The official DeepSeek route, which `@deepseek-ai/dsh-llm-deepseek-api-key` registers. */
-export const DEEPSEEK_ROUTE = 'deepseek-official'
+export { DEEPSEEK_ROUTE }
 
 /** What the test reads and calls in the harness. */
 export interface KeyTestDeps {

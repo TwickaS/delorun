@@ -69,6 +69,8 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
     getTheme: () => ({ preference: preference.value }),
     setTheme: (next: string) => { preference.value = next; ctx.emit('theme/change' as never) },
   } as never)
+  // The providers step's remote namespaces are only read when the step runs, so the activation needs them present.
+  for (const name of ['remote', 'remote.credentials', 'remote.llm', 'remote.settings']) ctx.provide(name as never, {} as never)
   const useStockLook = vi.fn(() => Promise.resolve(true))
   const delorunStudio = options.studio === false ? undefined : { useStockLook }
   if (delorunStudio !== undefined) ctx.provide('delorunStudio', delorunStudio as never)
@@ -485,7 +487,11 @@ describe('a fresh home with no default workspace', () => {
     const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
     const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} completeStep={vi.fn()} renderSection={() => null} />)
     await act(async () => { await flush() })
-    for (let n = 0; n < 3; n++) await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
+    // The Models step has its own Skip for now until its summary.
+    for (let n = 0; n < 4; n++) {
+      await act(async () => { await flush() })
+      await act(async () => { fireEvent.click(screen.queryByRole('button', { name: en.continue }) ?? screen.getByRole('button', { name: en['providers.skip'] })) })
+    }
     expect(document.body.textContent).toContain(en['start.lead.none'])
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['workspace.folder.choose'] })) })
     await act(async () => { await flush() })
@@ -534,7 +540,7 @@ describe('Show again', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
   })
 
-  it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished or skipped', async () => {
+  it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
     const { service } = shell()
     const { entries, served, progress } = await harness({ progress: settings({ done: true, step: 'agents' }), late: { settingsShell: service } })
@@ -548,8 +554,14 @@ describe('Show again', () => {
     await act(async () => { await flush() })
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.welcome'])
     expect(complete).not.toHaveBeenCalled()
+    // Skip leaves only this step.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
-    expect(progress.value()).toMatchObject({ done: true, step: '' })
+    expect(progress.value()).toMatchObject({ done: false, step: 'providers' })
+    expect(complete).not.toHaveBeenCalled()
+    // Finish later closes the guide and keeps the place.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.later })) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(progress.value()).toMatchObject({ done: false, step: 'providers' })
     expect(complete).toHaveBeenCalled()
   })
 

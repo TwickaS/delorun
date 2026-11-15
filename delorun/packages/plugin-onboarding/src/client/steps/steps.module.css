@@ -1,144 +1,12 @@
-/* The dialog: a rail of steps beside the current step on a wide window, and below the phone breakpoint a full-window
-   sheet whose steps collapse into a count and a bar. The footer stays at the bottom so its buttons are always reachable. */
-.dialog {
-  display: flex;
-  width: min(880px, 100%);
-  height: min(640px, 100%);
-  max-height: 100%;
-  padding: 0;
-  gap: 0;
-}
-
-.frame {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  color: var(--dsw-alias-label-primary);
-}
-
-.rail {
-  flex: none;
-  width: 220px;
-  box-sizing: border-box;
-  padding: var(--delorun-space-8) var(--delorun-space-7);
-  border-right: 0.5px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-1);
-  overflow-y: auto;
-}
-
-.stepList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stepItem {
-  display: flex;
-  align-items: center;
-  gap: var(--delorun-space-4);
-  min-height: 36px;
-  padding: 0 var(--delorun-space-4);
-  border-radius: var(--dsw-radius-sm);
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.stepItem[data-state='current'] {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.stepItem[data-state='done'] {
-  color: var(--dsw-alias-label-secondary);
-}
-
-.stepDot {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 50%;
-  font-size: var(--dsw-font-xxxs-11-font-size);
-  line-height: 1;
-}
-
-.stepItem[data-state='current'] .stepDot {
-  border-color: var(--dsw-alias-brand-primary);
-  color: var(--dsw-alias-brand-primary);
-}
-
-.main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.progress {
-  display: none;
-  align-items: center;
-  gap: var(--delorun-space-5);
-  padding: var(--delorun-space-6) var(--delorun-space-8) 0;
-  padding-top: max(var(--delorun-space-6), var(--dsh-frame-overlay-top, 0px));
-}
-
-.count {
-  flex: none;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.bar {
-  flex: 1;
-  height: 4px;
-  overflow: hidden;
-  border-radius: var(--dsw-radius-xs);
-  background: var(--dsw-alias-border-l2);
-}
-
-.bar > span {
-  display: block;
-  height: 100%;
-  background: var(--dsw-alias-brand-primary);
-}
-
-.scroll {
-  flex: 1;
-  min-height: 0;
-  padding: var(--delorun-space-8) var(--delorun-space-9) var(--delorun-space-6);
-  overflow-y: auto;
-}
-
-.heading {
-  margin: 0 0 var(--delorun-space-6);
-  font-size: var(--dsw-font-l-20-font-size);
-  font-weight: 500;
-  line-height: var(--dsw-font-l-20-line-height);
-  outline: none;
-}
-
-.body {
-  min-width: 0;
-}
-
+/* Shared styles of the step bodies not yet moved to their own component: stacks, text, the Look preview, the Phone access
+   checks, the Ready list and the Workspace folder chooser. */
 .stack {
   display: flex;
   flex-direction: column;
-  gap: var(--delorun-space-7);
+  gap: var(--onb-gap-2);
 }
 
-.lead,
-.body p {
+.lead {
   margin: 0;
 }
 
@@ -179,153 +47,6 @@
   line-height: var(--dsw-font-xs-13-line-height);
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--delorun-space-4);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--delorun-space-4);
-  min-height: 36px;
-  box-sizing: border-box;
-  padding: var(--delorun-space-2) var(--delorun-space-5);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .chip:hover:not(:disabled) {
-    border-color: var(--dsw-alias-label-tertiary);
-  }
-}
-
-@media (pointer: coarse) {
-  .chip {
-    min-height: 44px;
-  }
-}
-
-.chip[aria-checked='true'] {
-  border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
-}
-
-.chip:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.chip:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
-}
-
-/* A palette chip: its light and dark pages side by side, each with a line in its text colour and a dot in its accent. */
-.swatch {
-  display: inline-flex;
-  flex: none;
-  overflow: hidden;
-  border-radius: var(--dsw-radius-xs);
-  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
-}
-
-.half {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--delorun-space-2);
-  padding: var(--delorun-space-3);
-  background: var(--half-page);
-}
-
-.line {
-  width: 14px;
-  height: 3px;
-  border-radius: var(--dsw-radius-xs);
-  background: var(--half-text);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--half-accent);
-}
-
-.accentDot {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background-color: var(--accent-light);
-  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
-}
-
-:global(body[data-ds-dark-theme]) .accentDot {
-  background-color: var(--accent-dark);
-}
-
-.cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  padding: var(--delorun-space-6);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.cardMain {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--delorun-space-5) var(--delorun-space-6);
-}
-
-.cardIcon {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  border-radius: var(--dsw-radius-md);
-}
-
-.cardText {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.cardTitle {
-  margin: 0;
-  font-size: var(--dsw-font-s-14-font-size);
-  font-weight: 500;
-  line-height: var(--dsw-font-s-14-line-height);
-}
-
-.cardLead {
-  margin: var(--delorun-space-1) 0 0;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
 .status {
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
@@ -342,30 +63,6 @@
 
 .status[data-tone='attention'] {
   color: var(--dsw-alias-state-warn-primary);
-}
-
-.failedAction {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--delorun-space-4) var(--delorun-space-5);
-}
-
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--delorun-space-4);
-  padding: var(--delorun-space-5) var(--delorun-space-8);
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
-}
-
-.spacer {
-  flex: 1;
-}
-
-.skip {
-  color: var(--dsw-alias-label-secondary);
 }
 
 /* The Workspace step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
@@ -443,11 +140,13 @@
   }
 }
 
+
 @media (pointer: coarse) {
   .folder {
     min-height: 44px;
   }
 }
+
 
 .folder[aria-selected='true'] {
   box-shadow: inset 0 0 0 1px var(--dsw-alias-brand-primary);
@@ -474,28 +173,6 @@
   user-select: all;
 }
 
-/* Welcome: the preview notice, and each provider's key test as a row. */
-.notice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-4);
-  padding: var(--delorun-space-6);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-1);
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.noticeTitle {
-  margin: 0;
-  font-size: var(--dsw-font-s-14-font-size);
-  font-weight: 500;
-  line-height: var(--dsw-font-s-14-line-height);
-  color: var(--dsw-alias-label-primary);
-}
-
 .rows {
   display: flex;
   flex-direction: column;
@@ -514,13 +191,6 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--delorun-space-4);
 }
 
 .alignStart {
@@ -746,41 +416,55 @@
   line-height: var(--dsw-font-xs-13-line-height);
 }
 
-/* Below the Settings panel's breakpoint the dialog is the whole window; its offsets undo the modal's own 24px padding. */
 @media (max-width: 767px) {
-  .dialog {
-    width: calc(100% + 48px);
-    height: calc(100% + 2 * max(24px, var(--dsh-frame-overlay-top, 24px)));
-    max-height: none;
-    margin: calc(-1 * max(24px, var(--dsh-frame-overlay-top, 24px))) -24px;
-    border-radius: 0;
-  }
-
-  .rail {
-    display: none;
-  }
-
-  .progress {
-    display: flex;
-  }
-
-  .scroll {
-    padding: var(--delorun-space-7) var(--delorun-space-7) var(--delorun-space-5);
-  }
-
-  .footer {
-    padding: var(--delorun-space-5) var(--delorun-space-7);
-  }
-
   .lookGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
-  .chip,
-  .folder,
-  .scroll button,
-  .footer button {
+  .folder {
     min-height: 44px;
   }
+}
+
+
+/* Cards in a list. */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--onb-gap-1);
+}
+
+.target {
+  min-height: var(--onb-target);
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+}
+
+/* A row that reads as a link and opens another page of the studio. */
+.linkRow {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: var(--onb-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-brand-primary);
+  font: inherit;
+  font-size: var(--onb-small-size);
+  cursor: pointer;
 }

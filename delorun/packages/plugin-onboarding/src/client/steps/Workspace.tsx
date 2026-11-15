@@ -6,14 +6,16 @@
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useId, useState, useSyncExternalStore } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { isCloneAddress, isFolderName, suggestedName } from '../clone-address.ts'
-import type { CloneProblem } from '../wire.ts'
-import { Choices } from './choices.tsx'
-import { FolderChooser, problemText, type FolderProblem } from './FolderChooser.tsx'
-import type { CloneView, Store, WorkspaceMode } from './guide.ts'
-import type { StepProps } from './steps.tsx'
-import type { FolderChoice, StartTarget, StepServices } from './types.ts'
-import css from './Onboarding.module.css'
+import { isCloneAddress, isFolderName, suggestedName } from '../../clone-address.ts'
+import type { CloneProblem } from '../../wire.ts'
+import { Card } from '../ui/Card.tsx'
+import { ChipGroup } from '@delorun/plugin-theme/controls'
+import { StateLine } from '../ui/StateLine.tsx'
+import { FolderChooser, problemText, type FolderProblem } from '../FolderChooser.tsx'
+import type { CloneView, Store, WorkspaceMode } from '../guide.ts'
+import type { StepProps } from './shared.ts'
+import type { FolderChoice, StartTarget, StepServices } from '../types.ts'
+import css from './steps.module.css'
 
 /**
  * @param store - a store.
@@ -45,12 +47,21 @@ function Chosen({ services, guide }: StepProps): ReactNode {
   const { t } = services
   const workspace = useStore(guide.workspace)
   if (workspace?.kind !== 'added') return null
+  return <FolderCard path={workspace.path} note={t(`workspace.kind.${workspace.folder}`)} t={t} />
+}
+
+/**
+ * The chosen folder as a card: its name, its path and what it holds. It names no state; the choice is the state.
+ * @param props - the path, an optional note and this plugin's copy.
+ * @returns the card.
+ */
+function FolderCard({ path, note, t }: { readonly path: string; readonly note?: string; readonly t: StepServices['t'] }): ReactNode {
+  const name = path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
   return (
-    <p className={css.chosen} role="status">
-      <span className={css.status} data-tone="done">{t('workspace.chosen')}</span>
-      <span className={css.path}>{workspace.path}</span>
-      <span className={css.hint}>{t(`workspace.kind.${workspace.folder}`)}</span>
-    </p>
+    <Card title={name} labels={{ more: t('more'), less: t('less') }}>
+      <span className={css.path}>{path}</span>
+      {note !== undefined && <span className={css.hint}>{note}</span>}
+    </Card>
   )
 }
 
@@ -94,7 +105,7 @@ function FolderMode({ services, guide }: StepProps): ReactNode {
       {view.kind !== 'browse' && (
         <Button variant="outline" size="sm" className={css.alignStart} disabled={choosing} onClick={choose}>{t('workspace.folder.choose')}</Button>
       )}
-      {view.kind === 'problem' && <p className={css.failure} role="alert">{problemText(t, view.problem)}</p>}
+      {view.kind === 'problem' && <StateLine tone="error">{problemText(t, view.problem)}</StateLine>}
       {view.kind === 'unavailable' && <p className={css.hint}>{t('workspace.folder.unavailable')}</p>}
       {view.kind === 'browse' && (
         <FolderChooser services={services} onAdded={(added) => {
@@ -114,7 +125,7 @@ function FolderMode({ services, guide }: StepProps): ReactNode {
 function CloneProgress({ clone, t }: { readonly clone: CloneView; readonly t: StepServices['t'] }): ReactNode {
   switch (clone.state) {
     case 'idle': return null
-    case 'starting': return <p className={css.status}>{t('clone.starting')}</p>
+    case 'starting': return <StateLine tone="loading">{t('clone.starting')}</StateLine>
     case 'running':
       return (
         <div className={css.cloneProgress}>
@@ -122,8 +133,8 @@ function CloneProgress({ clone, t }: { readonly clone: CloneView; readonly t: St
           <progress className={css.meter} max={100} {...clone.percent === undefined ? {} : { value: clone.percent }} aria-label={t('clone.running')} />
         </div>
       )
-    case 'refused': return <p className={css.failure} role="alert">{cloneProblemText(t, clone.problem)}</p>
-    case 'failed': return <p className={css.failure} role="alert">{t(`clone.failure.${clone.failure}`)}</p>
+    case 'refused': return <StateLine tone="error">{cloneProblemText(t, clone.problem)}</StateLine>
+    case 'failed': return <StateLine tone="error">{t(`clone.failure.${clone.failure}`)}</StateLine>
     /* v8 ignore next 2 -- closed-union default only defends a future widening of CloneView */
     default: return assertNever(clone)
   }
@@ -202,22 +213,19 @@ export function WorkspaceStep({ services, guide, target }: StepProps & { readonl
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('workspace.lead')}</p>
-      {target.kind === 'checking' && <p className={css.status}>{t('start.lead.checking')}</p>}
-      {target.kind === 'none' && <p className={css.status} data-tone="attention">{t('start.lead.none')}</p>}
-      {target.kind === 'other' && workspace === undefined && <p className={css.hint}>{t('workspace.other')}</p>}
-      <Choices label={t('workspace.how')} options={[
-        ...target.kind === 'default' ? [{ key: 'default', checked: shown === 'default', content: t('workspace.mode.default'), onSelect: () => {
-          guide.setMode('default')
-          guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
-        } }] : [],
-        { key: 'folder', checked: shown === 'folder', onSelect: () => { guide.setMode('folder') }, content: t('workspace.mode.folder') },
-        { key: 'clone', checked: shown === 'clone', onSelect: () => { guide.setMode('clone') }, content: t('workspace.mode.clone') },
+      {target.kind === 'checking' && <StateLine tone="loading">{t('start.lead.checking')}</StateLine>}
+      {target.kind === 'none' && <StateLine tone="warning">{t('start.lead.none')}</StateLine>}
+      {target.kind === 'other' && workspace === undefined && <StateLine tone="info">{t('workspace.other')}</StateLine>}
+      <ChipGroup label={t('workspace.how')} value={shown} onChange={(next) => {
+        guide.setMode(next)
+        if (next === 'default' && target.kind === 'default') guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path })
+      }} options={[
+        ...target.kind === 'default' ? [{ value: 'default' as WorkspaceMode, label: t('workspace.mode.default') }] : [],
+        { value: 'folder' as WorkspaceMode, label: t('workspace.mode.folder') },
+        { value: 'clone' as WorkspaceMode, label: t('workspace.mode.clone') },
       ]} />
       {shown === 'default' && target.kind === 'default' && (
-        <p className={css.chosen}>
-          <span className={css.status} data-tone="done">{t('workspace.default')}</span>
-          <span className={css.path}>{target.path}</span>
-        </p>
+        <FolderCard path={target.path} note={t('workspace.default')} t={t} />
       )}
       {shown === 'folder' && <FolderMode services={services} guide={guide} />}
       {shown === 'clone' && <CloneMode services={services} guide={guide} />}

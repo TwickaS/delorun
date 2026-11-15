@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
-  KEY_TEST_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
+  KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
 } from '../src/index.ts'
 import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
@@ -203,7 +203,7 @@ async function mount(directory: string | undefined) {
 describe('the route', () => {
   it('is one exact GET route that serves the record uncached, beside the guide\'s read-only routes', async () => {
     const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: [{ id: 'reach', status: 'answered' }] })))
-    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, KEY_TEST_PATH, RECOMMEND_PATH])
+    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, RECOMMEND_PATH])
     expect(SETUP_RECORD_PATH).toBe('/api/delorunOnboarding.setupRecord')
     expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
     const response = await get()

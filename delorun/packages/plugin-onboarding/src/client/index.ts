@@ -44,6 +44,7 @@ import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, S
 import { createBundleInstaller } from './bundles.ts'
 import { hostApi, readWorkspaceNotice } from './host-api.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
+import { createProvidersFace } from './providers-face.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
@@ -120,7 +121,7 @@ const FAILED: AddOutcome = { kind: 'failed' }
  * The Settings shell (`settingsShell`) is looked up when Show again is pressed, so the entry also stays active where a
  * plugin turns upstream's general Settings off and draws its own Settings.
  */
-export const inject = ['slots', 'locale', 'configForms', 'theme']
+export const inject = ['slots', 'locale', 'configForms', 'theme', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings']
 
 /**
  * Read what the terminal setup recorded from the harness. Any failure leaves every step in the flow.
@@ -235,6 +236,7 @@ export function applyStudio(ctx: Context): void {
     appearance: ctx.locale.bind('settings.delorunAppearance'),
     bundles: createBundleInstaller(ctx),
     host: hostApi,
+    providers: createProvidersFace(ctx),
     start,
     resolveText: text => ctx.locale.resolveText(text),
   })

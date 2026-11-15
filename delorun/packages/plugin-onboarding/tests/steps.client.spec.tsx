@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, readableName, REACH_COMMAND, ReachStep, ReadyStep, RemoteReachStep, WelcomeStep } from '../src/client/steps.tsx'
+import { AGENT_BUNDLES, AgentsStep } from '../src/client/steps/Agents.tsx'
+import { LookStep } from '../src/client/steps/Look.tsx'
+import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
+import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
+import { ReadyStep } from '../src/client/steps/Ready.tsx'
+import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
+import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
@@ -61,7 +67,7 @@ describe('the look step', () => {
     expect(radio('Dark').getAttribute('aria-checked')).toBe('true')
   })
 
-  it('offers the accent presets with the Soft palette, writes the one chosen, and replaces them with a note for a theme that brings its own', async () => {
+  it('offers the accent presets with the Soft palette, writes the one chosen, and locks them with a note for a theme that brings its own', async () => {
     const services = stepServices()
     look(services)
     const group = screen.getByRole('radiogroup', { name: 'Accent' })
@@ -71,7 +77,7 @@ describe('the look step', () => {
     await click(radio('Cobalt'))
     expect(services.look.settings.getSnapshot().value?.accent).toBe('cobalt')
     await click(radio('Grove'))
-    expect(screen.queryByRole('radiogroup', { name: 'Accent' })).toBeNull()
+    expect((radio('Cobalt') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Set by the theme/)).toBeTruthy()
   })
 
@@ -80,22 +86,22 @@ describe('the look step', () => {
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
     expect(radio('Soft').getAttribute('aria-checked')).toBe('true')
     expect(radio('Peach').getAttribute('aria-checked')).toBe('true')
-    expect([radio('Iris'), radio('Cobalt'), radio('Stock')].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
+    expect([radio('Iris'), radio('Cobalt'), screen.getByRole('button', { name: 'Stock' })].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
     expect((radio('Dark') as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('says, before the choice, that the stock look turns Delorun\'s additions and this guide off, and switches only when it is chosen', async () => {
+  it('offers the stock look as a quiet line, and switches only after the confirmation that says it closes the guide', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
-    const group = screen.getByRole('radiogroup', { name: en['look.studio'] })
-    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['Delorun', 'true'], ['Stock', 'false']])
+    expect(screen.queryByRole('radiogroup', { name: en['look.studio'] })).toBeNull()
+    expect(screen.getByText(en['look.stock.ask'], { exact: false })).toBeTruthy()
+    await click(screen.getByRole('button', { name: 'Stock' }))
     expect(screen.getByText(/turns Delorun's studio additions off and closes this guide/)).toBeTruthy()
-    expect(en['look.studio.lead']).toContain('Settings → General → Look switches between the two')
-    expect(en['look.studio.lead']).toContain('with the stock look on, the Delorun look row in Settings → General')
     expect(useStockLook).not.toHaveBeenCalled()
-    await click(radio('Delorun'))
+    await click(screen.getByRole('button', { name: en['look.stock.no'] }))
     expect(useStockLook).not.toHaveBeenCalled()
-    await click(radio('Stock'))
+    await click(screen.getByRole('button', { name: 'Stock' }))
+    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
     expect(useStockLook).toHaveBeenCalledOnce()
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -113,7 +119,8 @@ describe('the look step', () => {
     ['cannot be reached', () => Promise.reject(new Error('transport'))],
   ])('shows a failure and keeps the choice open when the host %s', async (_, write) => {
     look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: write } }))
-    await click(radio('Stock'))
+    await click(screen.getByRole('button', { name: 'Stock' }))
+    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
 
@@ -160,54 +167,6 @@ describe('the welcome step', () => {
     render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
     expect(screen.queryByText(/Delorun is a pre-release/)).toBeNull()
   })
-
-  it('says it is testing the keys, then each provider\'s result, worded for a person', async () => {
-    const keys: KeyTestAnswer = { providers: [
-      { provider: 'deepseek-official', name: 'DeepSeek', result: 'works' },
-      { provider: 'openai', name: 'OpenAI', result: 'rejected' },
-      { provider: 'local', name: 'Local', result: 'untested' },
-    ] }
-    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
-    expect(screen.getByText(en['key.testing'])).toBeTruthy()
-    await settle()
-    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([`DeepSeek${en['key.works']}`, `OpenAI${en['key.rejected']}`, `Local${en['key.untested']}`])
-    expect(screen.getByText(en['key.works']).getAttribute('data-tone')).toBe('done')
-    expect(screen.getByText(en['key.rejected']).getAttribute('data-tone')).toBe('attention')
-    expect(screen.getByText(en['key.untested']).getAttribute('data-tone')).toBeNull()
-    expect(document.body.textContent).toContain('nothing is spent')
-  })
-
-  it.each<readonly [string, KeyTestAnswer | undefined, string]>([
-    ['no provider is set up', { providers: [] }, en['key.none']],
-    ['the keys could not be tested', undefined, en['key.unread']],
-  ])('says so when %s', async (_, keys, text) => {
-    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
-    await settle()
-    expect(screen.getByText(text).getAttribute('data-tone')).toBe('attention')
-  })
-
-  it('opens the Models section of Settings in place, and tests the keys again when it closes or when asked', async () => {
-    const fake = hostFake()
-    const scrollIntoView = vi.fn()
-    Element.prototype.scrollIntoView = scrollIntoView
-    onTestFinished(() => { Reflect.deleteProperty(Element.prototype, 'scrollIntoView') })
-    render(<WelcomeStep services={stepServices()} guide={guideOf(fake.host)} notice={undefined} />)
-    await settle()
-    expect(screen.queryByText('section models')).toBeNull()
-    const toggle = screen.getByRole('button', { name: en['welcome.models.open'] })
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    await click(toggle)
-    expect(screen.getByText('section models')).toBeTruthy()
-    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(fake.keyTest).toHaveBeenCalledOnce()
-    await click(screen.getByRole('button', { name: en['welcome.models.close'] }))
-    expect(screen.queryByText('section models')).toBeNull()
-    expect(fake.keyTest).toHaveBeenCalledTimes(2)
-    await settle()
-    await click(screen.getByRole('button', { name: en['key.again'] }))
-    expect(fake.keyTest).toHaveBeenCalledTimes(3)
-  })
 })
 
 describe('a command', () => {
@@ -252,7 +211,7 @@ describe('the agents step', () => {
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const adds = screen.getAllByRole('button', { name: /^Add / })
-    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.addConfirm']], ['Add Codex', en['bundle.addConfirm']]])
+    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.add']], ['Add Codex', en['bundle.add']]])
     await click(screen.getByRole('button', { name: 'Add Codex' }))
     expect(fake.install).not.toHaveBeenCalled()
     const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
@@ -288,21 +247,22 @@ describe('the agents step', () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
-    expect(screen.getAllByText('Not included in this installation')).toHaveLength(2)
-    expect(document.querySelector('[data-tone="failed"]')).toBeNull()
+    expect(screen.getAllByText(en['bundle.unavailable'])).toHaveLength(2)
+    expect(screen.queryByRole('alert')).toBeNull()
     const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
     expect(opens).toHaveLength(2)
     await click(opens[0] as HTMLElement)
     expect(fake.openPlugins).toHaveBeenCalledOnce()
   })
 
-  it('shows a bundle that failed to be added as an error that Plugins can finish', async () => {
+  it('shows a bundle that failed to be added as an error under the card with a retry', async () => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'failed' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
-    expect(document.querySelector('[data-tone="failed"]')?.textContent).toBe(en['bundle.failed'])
-    await click(screen.getByRole('button', { name: 'Open Plugins' }))
-    expect(fake.openPlugins).toHaveBeenCalledOnce()
+    expect(within(screen.getByRole('alert')).getByText(en['bundle.failed'])).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['bundle.retry'] }))
+    expect(screen.getByRole('group', { name: 'What adding Claude Code means' })).toBeTruthy()
+    expect(fake.install).not.toHaveBeenCalled()
   })
 })
 
@@ -319,7 +279,7 @@ describe('the recommended plugins step offers bundled rows', () => {
     await settle()
     expect(fake.refreshRows).toHaveBeenCalledExactlyOnceWith(optionalRows)
     expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Thinking tab', 'Cost meter'])
-    expect(screen.getAllByRole('button', { name: /^Turn on / }).map(each => each.getAttribute('aria-label'))).toEqual(['Turn on Thinking tab', 'Turn on Cost meter'])
+    expect(screen.getAllByRole('button', { name: /^Add / }).map(each => each.getAttribute('aria-label'))).toEqual(['Add Thinking tab', 'Add Cost meter'])
     expect(screen.queryByText(en['plugins.none'])).toBeNull()
     expect(fake.enableRow).not.toHaveBeenCalled()
   })
@@ -327,23 +287,23 @@ describe('the recommended plugins step offers bundled rows', () => {
   it('turns on the row whose button is pressed, and no other', async () => {
     const fake = installerFake({}, views)
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows })} guide={guideOf()} />)
-    await click(screen.getByRole('button', { name: 'Turn on Cost meter' }))
+    await click(screen.getByRole('button', { name: 'Add Cost meter' }))
     expect(fake.enableRow).toHaveBeenCalledExactlyOnceWith('delorun-cost-meter')
     expect(fake.install).not.toHaveBeenCalled()
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
     ['is being checked', 'checking', en['bundle.checking']],
-    ['is being turned on', 'installing', en['optional.turningOn']],
-    ['is on', 'installed', en['optional.on']],
-    ['is on but waits for a restart', 'restart', en['optional.restart']],
+    ['is being turned on', 'installing', en['bundle.adding']],
+    ['is on', 'installed', en['bundle.added']],
+    ['is on but waits for a restart', 'restart', en['bundle.restart']],
     ['is not part of this profile', 'unavailable', en['bundle.unavailable']],
     ['cannot be changed', 'failed', en['bundle.failed']],
-  ])('shows a row that %s and no Turn on button', (_, state, text) => {
+  ])('shows a row that %s and no Add button', (_, state, text) => {
     const fake = installerFake({}, { 'delorun-cost-meter': { state } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows: ['delorun-cost-meter'] })} guide={guideOf()} />)
     expect(screen.getByText(text)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /^Turn on / })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Add / })).toBeNull()
   })
 })
 
@@ -421,14 +381,6 @@ describe('the recommended plugins step', () => {
   })
 })
 
-describe('the phone access step on a phone', () => {
-  it('says the phone is connected and shows no terminal command', () => {
-    render(<RemoteReachStep services={stepServices()} guide={guideOf()} />)
-    expect(screen.getByText(en['reach.remote'])).toBeTruthy()
-    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
-  })
-})
-
 describe('the phone access step', () => {
   const reachWith = (tailscale: TailscaleReadiness | undefined) => hostFake({ readiness: tailscale === undefined ? undefined : { ...READY, tailscale } }).host
   const states = () => screen.getAllByRole('listitem').map(each => each.getAttribute('data-state'))
@@ -447,6 +399,16 @@ describe('the phone access step', () => {
     expect(todo.textContent).toContain(en['reach.state.todo'])
     if (fix !== undefined) expect(within(todo).getByText(fix).tagName).toBe('CODE')
     expect(screen.queryByText(/Your phone opens/)).toBeNull()
+  })
+
+  it('reads as one sentence and one command, with the details under More', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
+    await settle()
+    const more = document.querySelector('details') as HTMLDetailsElement
+    expect(more.open).toBe(false)
+    expect(more.querySelector('summary')?.textContent).toBe(en['reach.more'])
+    expect(screen.getByText(REACH_COMMAND).closest('details')).toBeNull()
+    expect(en['reach.lead']).not.toMatch(/\b(reach|tailnet|serve|PIN mode)\b/i)
   })
 
   it('recommends PIN mode and says where to turn it on', async () => {
@@ -490,6 +452,12 @@ describe('the ready step', () => {
     render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} />)
   const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
 
+  it('shows the default workspace as a plain value when the Workspace step was skipped', async () => {
+    ready(guideOf(), { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
+    await settle()
+    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', DEFAULT_PATH, undefined])
+  })
+
   it('lists what the guide set and the starting prompts that fit the chosen folder', async () => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'installed' }, '@scope/a': { state: 'restart' }, '@scope/b': { state: 'available' } })
@@ -498,11 +466,11 @@ describe('the ready step', () => {
     ready(guide, { reach: 'set-up', services: stepServices({ bundles: fake.installer, plugins: ['@scope/a', '@scope/b'] }) })
     await settle()
     expect(rows()).toEqual([
-      ['Model', 'DeepSeek', 'done'],
+      ['Model', 'DeepSeek', undefined],
       ['Look', 'Soft · Peach', undefined],
-      ['Agents', 'Claude Code', 'done'],
-      ['Plugins', '1 added', 'done'],
-      ['Phone access', 'On', 'done'],
+      ['Agents', 'Claude Code', undefined],
+      ['Plugins', '1 added', undefined],
+      ['Phone access', 'On', undefined],
       ['Workspace', '/home/person/app', undefined],
     ])
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
@@ -554,7 +522,7 @@ describe('a set of chips', () => {
 
   it('is one tab stop, on the chosen chip', () => {
     look(stepServices())
-    for (const name of ['Mode', 'Theme', 'Accent', en['look.studio']]) {
+    for (const name of ['Mode', 'Theme', 'Accent']) {
       const stops = radios(name).filter(each => each.tabIndex === 0)
       expect(stops).toHaveLength(1)
       expect(stops[0]?.getAttribute('aria-checked')).toBe('true')
@@ -603,22 +571,10 @@ describe('a set of chips', () => {
     expect(set).not.toHaveBeenCalled()
   })
 
-  it('only moves focus in the studio look set, so an arrow key never leaves Delorun\'s look', async () => {
-    const useStockLook = vi.fn(() => Promise.resolve(true))
-    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
-    const [delorun, stock] = radios(en['look.studio']) as [HTMLElement, HTMLElement]
-    delorun.focus()
-    await key(delorun, 'ArrowRight')
-    expect(document.activeElement).toBe(stock)
-    expect(useStockLook).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(stock) })
-    expect(useStockLook).toHaveBeenCalledOnce()
-  })
-
-  it('gives a set whose chips cannot be chosen no tab stop', () => {
+  it('disables a set whose chips cannot be chosen', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
-    for (const name of ['Theme', 'Accent', en['look.studio']]) expect(radios(name).every(each => each.tabIndex === -1)).toBe(true)
+    for (const name of ['Theme', 'Accent']) expect(radios(name).every(each => (each as HTMLButtonElement).disabled)).toBe(true)
     expect(radios('Mode').map(each => each.tabIndex)).toEqual([-1, -1, 0])
   })
 

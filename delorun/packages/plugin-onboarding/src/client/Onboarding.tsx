@@ -1,12 +1,12 @@
 /**
- * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the steps listed at its
- * left (a progress count on a phone), the current step at its right and Back, Continue and Skip under it. It shows on a
- * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing or skipping is kept
- * on the profile. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
+ * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the step's name and
+ * progress pinned at its top, the current step scrolling beneath with Finish later beside it, and Skip, Back and Continue pinned under it. It shows on a
+ * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing is kept
+ * on the profile. Skip leaves one step and goes on; Finish later closes the guide and keeps the place. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
  * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
  * upstream's steps do.
  */
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
@@ -16,7 +16,8 @@ import { buildSteps, STEPS, type FlowStep } from './flow.tsx'
 import { landFocus } from './focus.ts'
 import { createGuide, folderOf, type Guide } from './guide.ts'
 import type { OnboardingInjected, ReachState, StepServices } from './types.ts'
-import css from './Onboarding.module.css'
+import { DIALOG_CLASS, StepFrame } from './frame/StepFrame.tsx'
+import { StepFooter } from './frame/StepFooter.tsx'
 
 /** The entry's props: the owner props it reads, this plugin's copy and the dialog's services. */
 export type OnboardingStepEntryProps = Pick<PropsRuntime<'settings.onboarding'>, 'complete' | 'explicit' | 'renderSection' | 'completeStep'> & PropsLocale<'delorunOnboarding'> & InjectFace<OnboardingInjected>
@@ -40,7 +41,10 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   const decided = snapshot.status !== 'loading'
   // A finished profile, or one whose progress cannot be read, lets upstream's flow go on at once.
   useEffect(() => { if (decided && !show) complete() }, [decided, show, complete])
-  return show ? <Dialog {...props} settings={settings} explicit={explicit} /> : null
+  // "Finish later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
+  const [later, setLater] = useState(false)
+  const leave = useCallback((): void => { setLater(true); complete() }, [complete])
+  return show && !later ? <Dialog {...props} settings={settings} explicit={explicit} later={leave} /> : null
 }
 
 /** Whether the Workspace step told the person there is no default workspace; the flow sets it. */
@@ -68,7 +72,7 @@ interface Loaded {
 }
 
 /** Load what the terminal setup recorded and whether reach is set up, start the guide's reads, then show the flow. */
-function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean }): ReactNode {
+function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly later: () => void }): ReactNode {
   const { loadRecord, services } = props
   const told = useNoticeHold(services.start)
   const [loaded, setLoaded] = useState<Loaded | undefined>()
@@ -105,8 +109,8 @@ function useInertRoot(): void {
 }
 
 /** The steps, the current one and the buttons. */
-function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide }): ReactNode {
-  const { t, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
+function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide; readonly later: () => void }): ReactNode {
+  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
   const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
@@ -119,7 +123,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     if (target.kind === 'none') told.current = true
   }, [target, guide, told])
   const { plugins, optionalRows } = settings
-  const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins, optionalRows, renderSection }), [fixed, t, plugins, optionalRows, renderSection])
+  const services = useMemo<StepServices>(() => ({ ...fixed, t, remote: reach === 'remote', plugins, optionalRows, renderSection }), [fixed, t, reach, plugins, optionalRows, renderSection])
 
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delorun onboarding: progress was not saved', error) })
@@ -140,6 +144,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const current = Math.min(index, steps.length - 1)
   // The list is never empty: Welcome, Workspace and Ready are always built.
   const step = steps[current] as FlowStep
+  const providersPhase = useSyncExternalStore(useCallback(listener => guide.providersPhase.subscribe(listener), [guide]), () => guide.providersPhase.getSnapshot())
+  // The providers step's landing and walk have their own buttons; its summary uses the dialog's Continue.
+  const ownButtons = step.id === STEPS.providers.id && providersPhase !== 'summary'
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus({ preventScroll: true }) }, [step.id])
 
@@ -165,37 +172,22 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     void startChat(workspace?.workspaceId, folderOf(workspace))
   }
   const title = step.title()
+  // The last step has nothing left to skip, and Welcome offers no Skip while the preview notice is owed.
+  const showSkip = !last && (notice === undefined || step.id !== STEPS.welcome.id)
+  const footer = ownButtons
+    ? null
+    : (
+      <StepFooter
+        {...showSkip ? { skip: { label: t('skip'), onClick: () => { go(current + 1) } } } : {}}
+        {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
+        next={{ label: t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue'), onClick: next }} />
+    )
   return (
-    <Modal open title={title} onClose={ignoreImplicitDismiss} headless className={css.dialog as string}>
-      <div className={css.frame}>
-        <nav className={css.rail} aria-label={t('steps')}>
-          <ol className={css.stepList}>
-            {steps.map((each, position) => (
-              <li key={each.id} className={css.stepItem} data-state={position < current ? 'done' : position === current ? 'current' : 'next'}
-                aria-current={position === current ? 'step' : undefined}>
-                <span className={css.stepDot} aria-hidden="true">{position < current ? '✓' : String(position + 1)}</span>
-                <span>{each.title()}</span>
-              </li>
-            ))}
-          </ol>
-        </nav>
-        <div className={css.main}>
-          <div className={css.progress}>
-            <span className={css.count}>{t('count', { n: String(current + 1), total: String(steps.length) })}</span>
-            <span className={css.bar} aria-hidden="true"><span style={{ width: `${String(((current + 1) / steps.length) * 100)}%` }} /></span>
-          </div>
-          <div className={css.scroll}>
-            <h2 ref={heading} tabIndex={-1} data-modal-autofocus className={css.heading}>{title}</h2>
-            <div className={css.body} key={step.id}>{step.render(next)}</div>
-          </div>
-          <footer className={css.footer}>
-            {notice === undefined || step.id !== STEPS.welcome.id ? <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button> : null}
-            <span className={css.spacer} />
-            {current > 0 && <Button variant="ghost" onClick={() => { go(current - 1) }}>{t('back')}</Button>}
-            <Button variant="primary" onClick={next}>{t(needsFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>
-          </footer>
-        </div>
-      </div>
+    <Modal open title={title} onClose={ignoreImplicitDismiss} headless className={DIALOG_CLASS}>
+      <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} later={{ label: t('later'), onClick: later }} footer={footer}>
+        {step.render(next, () => { go(current - 1) })}
+      </StepFrame>
     </Modal>
   )
 }

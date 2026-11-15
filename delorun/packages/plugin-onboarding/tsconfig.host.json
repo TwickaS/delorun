@@ -15,6 +15,7 @@
     "src/clone-address.ts",
     "src/folder-kind.ts",
     "src/key-test.ts",
+    "src/local-models.ts",
     "src/readiness.ts",
     "src/recommend.ts",
     "src/rows.ts"

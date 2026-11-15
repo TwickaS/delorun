@@ -47,6 +47,7 @@
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/home-auth": "workspace:*",
+    "@delorun/plugin-theme": "workspace:*",
     "@delorun/reach": "workspace:*",
     "zod": "4.6.6"
   },
