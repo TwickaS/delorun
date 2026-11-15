@@ -308,6 +308,8 @@ export interface CheckOptions {
   readonly anchor: LauncherAnchor
   /** How long the whole check may take, in milliseconds. */
   readonly timeoutMs: number
+  /** Aborts the check: its requests stop and no record is written. */
+  readonly signal?: AbortSignal
   /** The clock; `Date` by default. */
   readonly now?: () => Date
   /** The fetch every request goes through; this process's by default. */
@@ -375,6 +377,9 @@ export async function checkForUpdate(options: CheckOptions): Promise<UpdateCheck
   const previous = await readUpdateCheck(options.home, options.profile)
   const deadline = new AbortController()
   const timer = setTimeout(() => { deadline.abort(new Error(`the check took longer than ${String(options.timeoutMs / 1000)} seconds`)) }, options.timeoutMs)
+  const cancel = (): void => { deadline.abort(options.signal?.reason) }
+  if (options.signal?.aborted === true) cancel()
+  else options.signal?.addEventListener('abort', cancel, { once: true })
   const fetch = withDeadline(options.fetch ?? globalThis.fetch.bind(globalThis), deadline.signal)
   let record: UpdateCheckRecord
   try {
@@ -402,8 +407,10 @@ export async function checkForUpdate(options: CheckOptions): Promise<UpdateCheck
     record = { schema: UPDATE_CHECK_SCHEMA, checked: utc(now()), ...kept, failure: failureOf(error, deadline.signal.aborted) }
   } finally {
     clearTimeout(timer)
+    options.signal?.removeEventListener('abort', cancel)
   }
-  await writeUpdateCheck(options.home, options.profile, record)
+  // A cancelled check leaves the home as it was: the switch turning off also removes the record.
+  if (options.signal?.aborted !== true) await writeUpdateCheck(options.home, options.profile, record)
   return record
 }
 

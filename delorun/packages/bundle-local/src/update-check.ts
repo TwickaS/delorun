@@ -13,11 +13,11 @@
  *
  * @module @delorun/bundle-local/update-check
  */
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context, type Fiber, type Volatile } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { REACH_DEVICE } from '@delorun/home-auth'
+import { REACH_DEVICE, type ComputerOnlySwitch } from '@delorun/home-auth'
 import { readChannelRecord } from '@delorun/install'
 import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateChannelResponse, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
 
@@ -27,6 +27,12 @@ declare module '@deepseek-ai/cordis' {
     delorunUpdateCheck: UpdateCheckService
   }
 }
+
+/**
+ * The release check's switch as the reach policy reads it: a signed-in device, unlocked or not, cannot turn the check off,
+ * as the volatile field would otherwise let it; only the home's own computer does.
+ */
+export const UPDATE_CHECK_SWITCH: ComputerOnlySwitch = Object.freeze({ ns: 'delorun-update-check', field: 'enabled', label: 'the release check' })
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'delorun-update-check'
@@ -47,7 +53,7 @@ export interface Config {
    * parity value and the default, it mounts nothing and no check runs. Delorun's composition turns it on, and
    * Settings → General → Updates turns it off.
    */
-  readonly enabled: boolean
+  readonly enabled: Volatile<boolean>
   /** How long after one check, successful or not, the next one runs, in hours. */
   readonly intervalHours: number
   /** How long one check may take in all, in seconds; a check that takes longer fails and shows nothing. */
@@ -55,8 +61,8 @@ export interface Config {
 }
 
 /** Validated configuration. The default of `enabled` is the parity value. */
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(false),
+export const Config = z.object({
+  enabled: z.boolean().volatile().default(false),
   intervalHours: z.natural().min(1).max(MAX_INTERVAL_HOURS).default(UPDATE_CHECK_DEFAULTS.intervalHours),
   timeoutSeconds: z.natural().min(1).max(120).default(UPDATE_CHECK_DEFAULTS.timeoutSeconds),
 })
@@ -89,9 +95,10 @@ export interface UpdateCheckSource {
   /**
    * Run one check and record it; a check that fails is recorded as failed and resolves.
    * @param timeoutMs - how long the check may take in all.
+   * @param signal - aborts when the check is detached or the row is switched off; the check then stops its requests and records nothing.
    * @returns the state after it.
    */
-  check(timeoutMs: number): Promise<UpdateCheckState>
+  check(timeoutMs: number, signal: AbortSignal): Promise<UpdateCheckState>
   /**
    * The release notes of the notice's release, as the check verified them.
    * @returns the plain-text notes and the release they belong to, or `undefined` when there are none or the stored file no longer matches what was verified.
@@ -119,7 +126,7 @@ export class UpdateCheckService extends Service {
    * hourly wake that checks when the wall clock shows the interval has passed since the last check, or, after a failed
    * check, one hour, two, four and so on up to the interval. Nothing waits for a check.
    * @param source - the check.
-   * @returns the disposer, which stops the schedule and detaches the source; a check in flight finishes unobserved.
+   * @returns the disposer, which stops the schedule and detaches the source; a check in flight is aborted and its result discarded.
    * @throws {Error} when a source is already attached; one Host runs one check.
    */
   attach(source: UpdateCheckSource): () => void {
@@ -128,6 +135,7 @@ export class UpdateCheckService extends Service {
     const intervalMs = this.config.intervalHours * HOUR_MS
     let timer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
+    const cancelled = new AbortController()
     let checked: number | undefined
     let failures = 0
     const note = (state: UpdateCheckState): void => {
@@ -140,7 +148,7 @@ export class UpdateCheckService extends Service {
     const tick = async (first: boolean): Promise<void> => {
       try {
         if (first) note(await source.read())
-        if (!stopped && due()) note(await source.check(this.config.timeoutSeconds * 1000))
+        if (!stopped && due()) note(await source.check(this.config.timeoutSeconds * 1000, cancelled.signal))
       } catch (error) {
         // The source records its own failures; one that escapes is logged and counts as a failed check.
         this.ctx.logger.warn(`${name}: the update check failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -155,6 +163,7 @@ export class UpdateCheckService extends Service {
     void tick(true)
     const dispose = (): void => {
       stopped = true
+      cancelled.abort()
       if (timer !== undefined) clearTimeout(timer)
       this.source = undefined
     }
@@ -202,7 +211,30 @@ export function apply(ctx: Context, config: Config): void {
       },
     }), `${name}: the channel route`)
   })
-  if (!config.enabled) return
+  ctx.inject(['homeAuth'], (scope) => {
+    scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(UPDATE_CHECK_SWITCH), `${name}: computer-only switch`)
+  })
+  let mounted: Fiber | undefined
+  const follow = (): void => {
+    if (config.enabled.get() === (mounted !== undefined)) return
+    if (mounted === undefined) {
+      mounted = ctx.plugin({ name: `${name}-mounted`, apply: mountCheck }, config)
+      return
+    }
+    // Disposal reports its own failures through the scope's logger; turning the switch off needs no answer from it.
+    void mounted.dispose()
+    mounted = undefined
+  }
+  follow()
+  ctx.on('loader/volatile-update', follow)
+}
+
+/**
+ * Mount the `delorunUpdateCheck` service and serve its notice while the switch is on.
+ * @param ctx - the mounted scope, disposed when the switch turns off.
+ * @param config - the interval and the deadline.
+ */
+function mountCheck(ctx: Context, config: Config): void {
   const service = new UpdateCheckService(ctx, config)
   ctx.inject(['connection'], (scope) => {
     scope.effect(() => scope.connection.fetch.register({

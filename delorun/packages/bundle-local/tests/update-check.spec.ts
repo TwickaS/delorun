@@ -17,12 +17,15 @@ const HOUR = 3_600_000
 /** A semantic version as the notice's types brand it. */
 type SemanticVersion = UpdateNotice['release']['delorun']
 const semantic = (text: string): SemanticVersion => text as SemanticVersion
+/** A row's configuration as written: plain values, before the Loader wraps `enabled` as a volatile. */
+interface ConfigInput { readonly enabled?: boolean; readonly intervalHours?: number; readonly timeoutSeconds?: number }
+
 /**
  * Validate a configuration as the Loader does, with the fields the row leaves out.
  * @param value - the row's configuration.
  * @returns the validated configuration.
  */
-const parse = (value: Partial<UpdateCheck.Config>): UpdateCheck.Config => Config(value as UpdateCheck.Config)
+const parse = (value: ConfigInput): UpdateCheck.Config => Config(value as never) as UpdateCheck.Config
 const NOTICE: UpdateNotice = {
   running: { delorun: semantic('0.1.0'), dsh: semantic('0.2.2') },
   release: { delorun: semantic('0.1.1'), dsh: semantic('0.2.2'), channel: 'stable', security: true },
@@ -43,7 +46,7 @@ interface Route {
  * @param config - the row's configuration.
  * @returns the context and the routes it registered.
  */
-async function mount(config: Partial<UpdateCheck.Config>) {
+async function mount(config: ConfigInput) {
   return mountIn(new Context(), config)
 }
 
@@ -53,7 +56,7 @@ async function mount(config: Partial<UpdateCheck.Config>) {
  * @param config - the row's configuration.
  * @returns the context and the routes it registered.
  */
-async function mountIn(ctx: Context, config: Partial<UpdateCheck.Config>) {
+async function mountIn(ctx: Context, config: ConfigInput) {
   const routes = new Map<string, Route>()
   ctx.provide('connection', {
     fetch: {
@@ -63,7 +66,7 @@ async function mountIn(ctx: Context, config: Partial<UpdateCheck.Config>) {
       },
     },
   } as never)
-  const fiber = ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config })
+  const fiber = ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config } as never)
   await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   return { ctx, routes, fiber }
@@ -95,14 +98,15 @@ afterEach(() => {
 
 describe('the switch', () => {
   it('update-notice-off-makes-no-request: off, the default and the parity value, mounts no service and no route', async () => {
-    expect(parse({}).enabled).toBe(false)
+    expect(parse({}).enabled.get()).toBe(false)
     const { ctx, routes } = await mount({})
     expect(ctx.get('delorunUpdateCheck')).toBeUndefined()
     expect([...routes.keys()]).toEqual([UPDATE_CHANNEL_PATH])
   })
 
   it('validates the interval and the deadline', () => {
-    expect(parse({ enabled: true })).toEqual({ enabled: true, intervalHours: 24, timeoutSeconds: 15 })
+    expect(parse({ enabled: true }).enabled.get()).toBe(true)
+    expect(parse({ enabled: true })).toMatchObject({ intervalHours: 24, timeoutSeconds: 15 })
     expect(() => parse({ intervalHours: 0 })).toThrow()
     expect(() => parse({ intervalHours: MAX_INTERVAL_HOURS + 1 })).toThrow()
     expect(() => parse({ timeoutSeconds: 0 })).toThrow()
@@ -213,6 +217,62 @@ describe('switching the check off in a running Host', () => {
   })
 })
 
+describe('switching the check off and on again', () => {
+  /** Mount with a late attach that gives each service its own source, whose notice names the attach number. */
+  async function mountAttaching() {
+    const mounted = await mount({ enabled: true, intervalHours: 1 })
+    let attaches = 0
+    mounted.ctx.inject(['delorunUpdateCheck'], (scope) => {
+      attaches++
+      const state: UpdateCheckState = { checked: Date.now(), notice: { ...NOTICE, disables: attaches } }
+      scope.effect(() => scope.delorunUpdateCheck.attach(source(state).source))
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    return { ...mounted, attaches: () => attaches }
+  }
+
+  it('replaces the service: the old one is gone, a new one is provided and a late attach reaches it', async () => {
+    const { ctx, fiber, attaches } = await mountAttaching()
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBe(1)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeUndefined()
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeDefined()
+    expect(attaches()).toBe(2)
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBe(2)
+  })
+
+  it('off then on in the same tick still ends with a live service that holds an attached check', async () => {
+    const { ctx, fiber } = await mountAttaching()
+    void fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('delorunUpdateCheck')).toBeDefined()
+    expect((await ctx.delorunUpdateCheck.notice())?.disables).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('a check in flight when the switch turns off', () => {
+  it('is told to stop: its signal aborts when the row is switched off or the check is detached', async () => {
+    const { ctx, fiber } = await mount({ enabled: true, intervalHours: 1 })
+    const signals: AbortSignal[] = []
+    const hanging: UpdateCheckSource = {
+      read: async () => ({}),
+      check: (_timeoutMs, signal) => { signals.push(signal); return new Promise<UpdateCheckState>(() => {}) },
+      notes: async () => undefined,
+    }
+    ctx.inject(['delorunUpdateCheck'], (scope) => { scope.effect(() => scope.delorunUpdateCheck.attach(hanging)) })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(false)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(signals[0]?.aborted).toBe(true)
+  })
+})
+
 describe('the notice route', () => {
   it('serves the attached check\'s notice uncached, and null without one', async () => {
     const { ctx, routes } = await mount({ enabled: true })
@@ -266,5 +326,27 @@ describe('the channel route', () => {
   it('answers null for the production channel and for a Host without a profile', async () => {
     expect(await answer({}, false)).toEqual({ host: null })
     expect(await answer(undefined, false)).toEqual({ host: null })
+  })
+})
+
+describe('the switch in Settings', () => {
+  it('update-check-switch-is-served-to-the-studio: the switch is a volatile field, so the Host describes the row and the sidebar reads it', () => {
+    expect(Config.dict?.enabled?.meta.volatile).toBe(true)
+  })
+})
+
+describe('who may turn the check off', () => {
+  it('update-check-switch-refuses-devices: the row registers its switch as computer-only, so the reach policy refuses a device that turns it off', async () => {
+    const ctx = new Context()
+    const registered: object[] = []
+    let removed = 0
+    ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
+    ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: object) => { registered.push(target); return () => { removed += 1 } } } as never)
+    await ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false }).await()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(registered).toEqual([{ ns: 'delorun-update-check', field: 'enabled', label: 'the release check' }])
+    expect(registered[0]).toBe(UpdateCheck.UPDATE_CHECK_SWITCH)
+    await ctx.fiber.dispose()
+    expect(removed).toBe(1)
   })
 })

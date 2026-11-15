@@ -234,10 +234,10 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
    * @param config - the composed row's config.
    * @returns whether the row provided the check's service.
    */
-  async function mountsCheck(config: UpdateCheck.Config | undefined): Promise<boolean> {
+  async function mountsCheck(config: Record<string, unknown> | undefined): Promise<boolean> {
     const ctx = new Context()
     try {
-      await ctx.plugin(UpdateCheck, UpdateCheck.Config(config))
+      await ctx.plugin(UpdateCheck, config as never)
       return ctx.get('delorunUpdateCheck') !== undefined
     } finally {
       await ctx.fiber.dispose()
