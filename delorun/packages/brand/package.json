@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./tokens": "./src/tokens.ts",
     "./tokens.css": "./src/tokens.css",
+    "./soft-surfaces": "./src/soft-surfaces.ts",
     "./fonts.css": "./src/fonts.css",
     "./mark": "./src/mark.tsx",
     "./mark-data": "./src/mark-data.ts",

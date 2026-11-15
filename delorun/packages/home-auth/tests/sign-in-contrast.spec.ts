@@ -1,5 +1,6 @@
-/** The sign-in page takes every colour from the brand tokens and keeps each text pair at WCAG AA in both schemes. */
+/** The sign-in page takes every colour from the brand tokens and the Soft surfaces and keeps each text pair at WCAG AA in both schemes. */
 import { readFileSync } from 'node:fs'
+import { SOFT_SURFACES } from '@delorun/brand/soft-surfaces'
 import { describe, expect, it } from 'vitest'
 
 const css = (name: string): string => readFileSync(new URL(name, import.meta.url), 'utf8')
@@ -41,16 +42,14 @@ describe('the sign-in page colours', () => {
   })
 
   it.each(['light', 'dark'] as const)('keep every text pair at 4.5:1 and the field border at 3:1 in the %s scheme', scheme => {
-    const page = token('dl-surface', scheme)
-    const card = token('dl-surface-raised', scheme)
-    const well = token('dl-surface-sunken', scheme)
-    const text = token('dl-text', scheme)
-    const quiet = token('dl-text-muted', scheme)
+    const { page, card, well, text, textMuted: quiet, accentText } = SOFT_SURFACES[scheme]
     const accent = token('dl-accent', scheme) || token('dl-peach', scheme)
     const tint = mix(accent, card, 0.1)
-    for (const [foreground, background] of [[text, page], [text, card], [text, well], [quiet, page], [quiet, card], [quiet, well], [token('dl-accent-text', scheme), card], [token('dl-accent-text', scheme), tint], [token('dl-on-accent', scheme), accent], [token('dl-error', scheme), card]] as const) {
+    for (const [foreground, background] of [[text, page], [text, card], [text, well], [quiet, page], [quiet, card], [quiet, well], [accentText, card], [token('dl-on-accent', scheme), accent], [token('dl-error', scheme), card]] as const) {
       expect(ratio(foreground, background), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5)
     }
     expect(ratio(quiet, card)).toBeGreaterThanOrEqual(3)
+    // The tinted badge holds a 22px icon, a graphical object, which WCAG 1.4.11 holds to 3:1.
+    expect(ratio(accentText, tint)).toBeGreaterThanOrEqual(3)
   })
 })

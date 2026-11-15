@@ -1,5 +1,5 @@
-/* The reach sign-in page. The studio's bundle does not load before sign-in, so the route serves the brand's tokens.css in
- * front of this file and the page reads the --dl-* custom properties of @delorun/brand; it repeats no brand value. Every
+/* The reach sign-in page. The studio's bundle does not load before sign-in, so the route serves the brand's tokens.css and
+ * the Soft theme's surface values in front of this file, and the page reads the --dl-* custom properties of @delorun/brand; it repeats no brand value. Every
  * text and background pair meets 4.5:1 in both schemes (tests/sign-in-contrast.spec.ts), a field's border meets 3:1, and
  * the accent fill carries dark text in both. */
 
