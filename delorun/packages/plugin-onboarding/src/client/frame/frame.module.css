@@ -159,3 +159,12 @@
 .later:hover {
   color: var(--dsw-alias-label-primary);
 }
+
+/* Every button and disclosure in a step is at least 44px each way for a finger. */
+@media (pointer: coarse) {
+  .frame button,
+  .frame summary {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
