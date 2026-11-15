@@ -15,6 +15,7 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./controls": "./src/client/controls/index.ts",
     "./assets/*": "./lib/assets/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
