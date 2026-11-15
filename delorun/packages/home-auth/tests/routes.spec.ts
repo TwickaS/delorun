@@ -234,7 +234,7 @@ describe('the claim route', () => {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
         v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer',
-      }, { host: 'LOCALHOST:3080' })
+      }, { host: 'LOCALHOST:3080', headers: ['Origin: http://localhost:3080'] })
       expect(reply.status).toBe(201)
       expect(json(reply)).toMatchObject({ device: { address: 'http://127.0.0.1:3080' } })
       const file = JSON.parse(await readFile(join(home.directory, 'devices.json'), 'utf8')) as { devices: { address: string }[] }

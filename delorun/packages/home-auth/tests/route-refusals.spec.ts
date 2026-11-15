@@ -80,6 +80,25 @@ async function send(port: number, method: string, path: string, body?: string): 
 }
 
 /**
+ * Send one POST with the headers given instead of the studio's own origin.
+ * @param port - the server's port.
+ * @param path - the request target.
+ * @param body - the body text.
+ * @param headers - the request headers besides the cookie.
+ * @returns the status and the body.
+ */
+async function rawPost(port: number, path: string, body: string, headers: Readonly<Record<string, string>>): Promise<Reply> {
+  const request = httpRequest({ host: '127.0.0.1', port, method: 'POST', path, agent: false, headers: { connection: 'close', cookie: STUDIO_COOKIE, ...headers } })
+  const replied = once(request, 'response')
+  request.end(body)
+  const [response] = await replied as [IncomingMessage]
+  let text = ''
+  response.setEncoding('utf8')
+  for await (const chunk of response) text += String(chunk)
+  return { status: response.statusCode ?? 0, body: text }
+}
+
+/**
  * A response that records what it was answered with, without a socket.
  * @returns the response and a reader of what it sent.
  */
@@ -116,6 +135,36 @@ describe('the claim route', () => {
       expect(JSON.parse(reply.body)).toMatchObject({ error: 'BAD_REQUEST', message: 'a claim carries the owner code and the device label' })
       await expect(home.auth.owner()).resolves.toBeUndefined()
     } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it.each([
+    ['an Origin that is another site', { origin: 'http://evil.example' }],
+    ['a cross-site fetch', { 'sec-fetch-site': 'cross-site' }],
+  ])('refuses a claim from %s before the claim limiter runs', async (_name, headers) => {
+    const home = await homeFixture()
+    const server = await serve(home)
+    try {
+      const claim = vi.spyOn(home.auth, 'claim')
+      const issued = await home.auth.issueOwnerCode()
+      const message = claimOf(issued.code)
+      const reply = await rawPost(server.port, OWNER_CLAIM_PATH, JSON.stringify({
+        v: 1, ownerCode: message.ownerCode, devicePublicKey: message.devicePublicKey, label: message.label,
+      }), headers)
+      // Pins cameFromOwnOrigin in the claim route: without it the request reaches claim(), which draws on the shared limit.
+      expect(reply.status).toBe(403)
+      expect(JSON.parse(reply.body)).toMatchObject({ error: 'ORIGIN_MISMATCH' })
+      expect(claim).not.toHaveBeenCalled()
+      await expect(home.auth.owner()).resolves.toBeUndefined()
+      // The honest caller, from the studio's own origin, still claims.
+      const own = await send(server.port, 'POST', OWNER_CLAIM_PATH, JSON.stringify({
+        v: 1, ownerCode: message.ownerCode, devicePublicKey: message.devicePublicKey, label: message.label,
+      }))
+      expect(own.status).toBe(201)
+    } finally {
+      vi.restoreAllMocks()
       await server.close()
       await home.dispose()
     }

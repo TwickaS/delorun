@@ -101,6 +101,9 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Claim the home with a POST to /auth/owner/claim'))
       return
     }
+    // Decided before the body is read and before the claim limiter runs: a page on another origin must not spend the
+    // loopback claim budget the owner's own claim draws on.
+    if (!cameFromOwnOrigin(request, response)) return
     try {
       const message = await readMessage(request, response)
       if (message === undefined) return
