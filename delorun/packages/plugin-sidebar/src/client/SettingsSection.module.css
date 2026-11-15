@@ -8,6 +8,7 @@
   --settings-fade: 48px;
   --settings-radio: 16px;
   --settings-slider: 280px;
+  --settings-heading-basis: 240px;
   --settings-value-min: 52px;
   --settings-bar: 6px;
   --settings-notch-tick: 5px;
@@ -48,6 +49,11 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--delorun-space-5) var(--delorun-space-8);
+}
+
+/* The text takes the room the control leaves, so a long help wraps beside a slider as it does under Appearance. */
+.row > :first-child {
+  flex: 1 1 var(--settings-heading-basis);
 }
 
 /* The header art's choices: one short row that scrolls sideways and snaps to a tile, its edges fading where more wait. */

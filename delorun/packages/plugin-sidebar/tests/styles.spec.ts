@@ -191,4 +191,9 @@ describe('the icon picker', () => {
     expect(grown.length).toBeGreaterThanOrEqual(2)
     expect(grown.every(declaration => declaration.atRules.includes('@media (pointer: coarse), (max-width: 767px)') && /^max\(100%, var\(--[a-z-]+\)\)$/.test(declaration.value))).toBe(true)
   })
+
+  it('lets a setting row\'s text share the row with its control, so a slider sits beside a long help as under Appearance', () => {
+    const text = BY_FILE('SettingsSection.module.css').filter(declaration => declaration.selector === '.row > :first-child')
+    expect(text.map(declaration => [declaration.property, declaration.value])).toEqual([['flex', '1 1 var(--settings-heading-basis)']])
+  })
 })
