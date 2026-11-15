@@ -1,5 +1,5 @@
 ---
-area: Docs
+area: Studio
 section: Changed
 ---
 
