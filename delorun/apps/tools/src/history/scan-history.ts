@@ -17,6 +17,7 @@ import { HASHES_PATH, addedRuns, personalDataErrors, readHashes, type Source } f
 import { ALLOWLIST_PATH, lineFindings, readAllowlist } from '../checks/gates/infrastructure.ts'
 import { scanSecrets } from '../checks/gates/secrets.ts'
 import { rangeCommits } from '../checks/gates/commit-range.ts'
+import { MANIFEST_PATH, parseManifest } from '../fork-boundary.ts'
 import { git, repositoryRoot, runGit } from '../git.ts'
 import { identityProblem, readTerms, readinessMatches, type ReadinessKind, type ReadinessTerm } from './public-readiness.ts'
 
@@ -179,13 +180,13 @@ async function scanBlobs(root: string, blobs: ReadonlyMap<string, { commit: stri
 
 /**
  * The command line.
- * @param argv - `--branch <name>`, `--pin <commit>`, `--terms <file>` (kind<TAB>value lines kept outside the repository), `--tree` to scan the working tree instead of history, `--values-out <file>` to write the distinct matched texts of the public-readiness gate.
+ * @param argv - `--branch <name>`, `--pin <commit>` (default: the commit the ledger pins), `--terms <file>` (kind<TAB>value lines kept outside the repository), `--tree` to scan the working tree instead of history, `--values-out <file>` to write the distinct matched texts of the public-readiness gate.
  * @returns the exit code: 0 for no findings.
  */
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({ args: [...argv], options: { branch: { type: 'string' }, pin: { type: 'string' }, terms: { type: 'string' }, tree: { type: 'boolean' }, 'values-out': { type: 'string' } } })
   const root = repositoryRoot(process.cwd())
-  const pin = values.pin ?? '38a6a5c965aa99ab525161efb7cc5cf1fe62fced'
+  const pin = values.pin ?? parseManifest(readFileSync(join(root, MANIFEST_PATH), 'utf8')).upstream.commit
   const terms = values.terms === undefined ? [] : readTerms(values.terms)
   const findings = values.tree === true ? scanTree(root, terms) : await scanHistory(root, values.branch ?? 'HEAD', pin, terms)
   for (const finding of findings) console.log(`${finding.gate}\t${finding.commit}\t${finding.where}\t${finding.kind}`)
