@@ -120,6 +120,8 @@ export const RENAME_TOOL = 'rename_workspace'
 /** The starter prompts' place in the input dock: just above the message box. */
 export const STARTER_ENTRY = { id: 'delorun-onboarding.starters', order: 10 } as const
 
+/** The id of the PIN mode section in Settings, which bundle-local registers. */
+const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
 const CHECKING: StartTarget = { kind: 'checking' }
 const OTHER: StartTarget = { kind: 'other' }
 const NONE: StartTarget = { kind: 'none' }
@@ -255,6 +257,11 @@ export function applyStudio(ctx: Context): void {
     providers: createProvidersFace(ctx),
     start,
     resolveText: text => ctx.locale.resolveText(text),
+    pin: {
+      fetch: (input, init) => globalThis.fetch(input, init),
+      // Looked up on click, as for the Models link above.
+      openSettings: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
+    },
   })
 
   /** Where the chat opens; the dialog starts resolving it when it opens, and the last button waits for it. */

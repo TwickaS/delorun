@@ -7,6 +7,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
+import type { HostFetch } from '@delorun/bundle-local/host-api'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
@@ -298,6 +299,16 @@ export interface StaticServices {
   readonly start: StartFace
   /** Resolve a package's localized text in the active language. */
   readonly resolveText: (text: LocalizedText) => string
+  /** The PIN mode step's requests and its link to Settings. */
+  readonly pin: PinFace
+}
+
+/** What the PIN step reaches the home with. */
+export interface PinFace {
+  /** Sends the step's same-origin requests: the browser's `fetch`, or a spec's fake. */
+  readonly fetch: HostFetch
+  /** Open Settings at the PIN mode section. */
+  readonly openSettings: () => void
 }
 
 /** The services the built-in steps draw with: the static ones, this plugin's copy, the recommended packages and the Settings section drawer. */

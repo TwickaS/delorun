@@ -259,8 +259,9 @@ The first time, the studio shows a short first-run guide, one step at a time, en
 4. **Agents.** Optionally add Claude Code or Codex as helpers a chat can hand work to.
 5. **Recommended plugins.** Optionally add [plugins](../reference/glossary.md#plugin), small add-ons that give Delorun more tools.
 6. **Phone access.** Shown while remote access is not set up. It lists what Tailscale still needs, and offers **Not now** or **I've done this**.
-7. **Workspace.** Choose the [workspace](../reference/glossary.md#workspace) for your first chat: the default one, a folder on your computer, or a git address to clone.
-8. **Ready.** Choose **Start a chat**.
+7. **PIN.** Shown only in a studio on the computer that runs Delorun, once phone access is on. Choose a PIN or passcode, typed twice, and **Set PIN**, or **Skip** to leave PIN mode off. If PIN mode is already on, the step says so and links to Settings.
+8. **Workspace.** Choose the [workspace](../reference/glossary.md#workspace) for your first chat: the default one, a folder on your computer, or a git address to clone.
+9. **Ready.** Choose **Start a chat**.
 
 Most steps have Back, Continue and **Skip**, which leaves only that step; the Models step has **Connect** and **Next** while you go through providers, and the Phone access step has its own two buttons. **Finish later**, beside the step name, closes the guide and keeps your place, and the guide shows again next time. To go through the steps again, choose Settings, General, Getting started, **Run setup again**. Each step starts on your current choices, such as the mode and theme saved in Settings, and a choice changes only when you change it. On a phone, the Phone access step says that Tailscale is set up on the computer that runs Delorun.
 

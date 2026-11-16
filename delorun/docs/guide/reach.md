@@ -241,7 +241,7 @@ An unlock lasts 15 minutes. Nothing extends it: when it ends, unlock again. It w
 
 PIN mode lets an approved device unlock sensitive actions by typing a PIN or passcode, without asking you for a code at your computer each time. It is off until you turn it on, and you can only turn it on at your computer. It works only on the Tailscale private address, not on a Funnel address.
 
-Run `delorun devices pin set` in a terminal while Delorun is running. It asks for the secret twice, with the characters hidden. A PIN has at least 6 digits and is not a repeat or a run, such as `111111` or `123456`. A passcode has at least 10 characters and is any secret that is not all digits. To pipe one line instead of typing it, add `--stdin`.
+The first-run guide offers this as its PIN step once phone access is on, at your computer only; **Skip** there leaves PIN mode off. You can also set it later in Settings, PIN mode, or run `delorun devices pin set` in a terminal while Delorun is running. It asks for the secret twice, with the characters hidden. A PIN has at least 6 digits and is not a repeat or a run, such as `111111` or `123456`. A passcode has at least 10 characters and is any secret that is not all digits. To pipe one line instead of typing it, add `--stdin`.
 
 You should see "PIN mode is on, with a PIN." and a short list of what it allows. Setting or changing the PIN, turning the mode on or off, and approving a device stay at your computer.
 
