@@ -49,7 +49,7 @@ describe('the copy button', () => {
 describe('the platform note', () => {
   it('states the platforms and links the WSL2 section of the install guide', () => {
     const { before, linkText, href, after } = COPY.platformNote
-    expect(before + linkText + after).toBe('For now, Delorun runs on Linux and on Windows through WSL2. macOS and native Windows come in a later release.')
+    expect(before + linkText + after).toBe('Delorun runs on Linux and on Windows through WSL2. macOS and native Windows are not supported.')
     expect(href).toBe('https://docs.delorun.com/guide/install#windows-through-wsl2')
     expect(renderToStaticMarkup(createElement(CopyButton, { text: 'x' }))).toContain('Copy command')
   })
