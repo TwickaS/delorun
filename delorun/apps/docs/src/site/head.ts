@@ -9,15 +9,21 @@ import { htmlLangOf, type Locale } from './locale.ts'
 /** The product name that link previews show as the site. */
 const SITE_NAME = 'Delorun documentation'
 
+/** The meta tags and links a route's `head` option returns. */
+export interface PageHead {
+  /** The title, description and link-preview meta tags. */
+  meta: Array<Record<string, string>>
+  /** The canonical link. */
+  links: Array<{ rel: string, href: string }>
+}
+
 /**
  * The head of a page.
- * @param page.title - the page's title.
- * @param page.description - the page's summary; none leaves out the description and the preview summary.
- * @param page.path - the page's route on the published site, such as `/guide/trust`.
- * @param page.locale - the page's locale.
+ * @param page - the page's title, its summary (`undefined` leaves out the description and the preview summary), its route on the published site such as `/guide/trust`, and its locale.
  * @returns the title, the description, the canonical address and the link-preview (Open Graph) tags.
  */
-export function pageHead({ title, description, path, locale }: { title: string, description: string | undefined, path: string, locale: Locale }) {
+export function pageHead(page: { title: string, description: string | undefined, path: string, locale: Locale }): PageHead {
+  const { title, description, path, locale } = page
   const url = `${SITE_URL}${path}`
   return {
     meta: [
