@@ -184,8 +184,10 @@ describe('a start through the service', () => {
     const transport = unreachable()
     await service.start(input(fixture, transport))
     transport.distributorFailure = undefined
-    // The log answers with its signed checkpoint and a witness cosignature dated a day after this machine's clock.
-    transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT + 86_400)
+    // The log answers with its signed checkpoint and a witness line whose signature is another checkpoint's, which fails.
+    const lines = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT).split('\n')
+    lines[lines.length - 2] = fixture.witness.cosign(fixture.log.note(2), COSIGNED_AT).split('\n').at(-2)!
+    transport.note = lines.join('\n')
     timers.fire()
     await settled(service, 'failed')
     expect(timers.pending).toBe(0)
