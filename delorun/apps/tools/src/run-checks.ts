@@ -58,7 +58,7 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
-import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
+import { FUNDAMENTALS_INPUTS, gatesFor, rangeBase, rangeBaseOverridden, unresolvedRangeBase } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, scratchPlace, statfsOf, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
@@ -549,9 +549,10 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const workers = workerCounts(cpus, memory)
   const forkWorkers = values.workers === undefined ? workers.fork : Number(values.workers)
   if (!Number.isSafeInteger(forkWorkers) || forkWorkers < 1) throw new Error(`--workers must be a positive integer, got ${String(values.workers)}`)
+  const rangeRef = rangeBase(env)
   const tree = readTree(root)
   const budgets: Budgets = BudgetsFile.parse(JSON.parse(readFileSync(new URL('./checks/budgets.json', import.meta.url), 'utf8')))
-  const checks = catalog(tree, { workers: { ...workers, fork: forkWorkers }, cacheDir: CACHE_DIR, budgets, staleRuntime: staleRuntime(root, tree.upstream), staleDelorunBuilds: staleDelorunBuilds(tree.packages, { exists: path => existsSync(join(root, path)), newestOutput: dir => newestFile(join(root, dir, 'lib'), true), newestSource: dir => newestFile(join(root, dir, 'src'), false) }), gates: GATES })
+  const checks = catalog(tree, { workers: { ...workers, fork: forkWorkers }, cacheDir: CACHE_DIR, budgets, staleRuntime: staleRuntime(root, tree.upstream), staleDelorunBuilds: staleDelorunBuilds(tree.packages, { exists: path => existsSync(join(root, path)), newestOutput: dir => newestFile(join(root, dir, 'lib'), true), newestSource: dir => newestFile(join(root, dir, 'src'), false) }), gates: gatesFor(rangeRef) })
   // A name that selects or skips nothing would turn a typo into a pass, so the run stops before any check starts.
   const unknown = unknownSelectors(checks, [...list(values.only), ...list(values.skip)])
   if (unknown.length > 0) throw new Error(`--only and --skip name no check: ${unknown.join(', ')}; the catalogue is printed by --list`)
@@ -606,6 +607,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     if (gateTier !== undefined) mode += `, ${gateTier} tier`
     if (values['pre-push']) console.log(pushBase === undefined ? 'delorun checks: the full gate for this push' : `delorun checks: what changed since ${pushBase.slice(0, 10)} for this push (DELORUN_FULL_GATE=1 for the full gate)`)
   }
+  // A range gate with no base fails on its own with a git error; one refusal before any check starts names the ref instead.
+  if (plan.some(check => check.history === true) && !commitExists(root, rangeRef)) throw new Error(unresolvedRangeBase(rangeRef))
   const use = cacheUse({ preCommit: values['pre-commit'], tier: gateTier, only: list(values.only), noCache: values['no-cache'], noSharedCache: values['no-shared-cache'], fullGate }, env)
   const shared: SharedUse | undefined = use.shared
     ? { store: openSharedStore(sharedCacheDir(env), { root, uid: process.getuid?.() ?? -1, now: () => Date.now() }), noReads: use.noReads }
@@ -650,7 +653,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     return false
   }
   // Answered before the lock: a covered tree starts nothing, so it does not wait for a gate running on this machine.
-  if (covered(treeRecordsOn ? treeState(root) : undefined, false)) return 0
+  if (covered(treeRecordsOn ? treeState(root, rangeRef) : undefined, false)) return 0
 
   // Heavy runs share the machine's slots, first come, first served (`checks/slots.ts`); a light plan, the pre-flight and a
   // plan whose every check a stored pass serves take none.
@@ -678,7 +681,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const runMemory = Math.max(GIB, (grant === undefined ? memory : Math.min(memory, grant.memoryBytes)) - place.capBytes)
   const ioAtStart = ioPressure(name => readFileSync(name, 'utf8'))
   // A gate that ran while this run waited for the lock may have recorded the tree, so the record is read again here.
-  const startState = treeRecordsOn ? treeState(root) : undefined
+  const startState = treeRecordsOn ? treeState(root, rangeRef) : undefined
   if (covered(startState, true)) return 0
   // A pre-push or change run of HEAD's tree records its pass, and only from a clean tree.
   const before = startState?.clean === true ? startState : undefined
@@ -693,6 +696,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   mkdirSync(logDir, { recursive: true })
   mkdirSync(join(root, CACHE_DIR, 'tsbuildinfo'), { recursive: true })
   console.log(`delorun checks: ${String(plan.length)} checks, ${mode}, ${header}${grant === undefined ? '' : `; granted ${String(grant.slots)} of ${String(slotBudget.slots)} slots and ${(runMemory / GIB).toFixed(1)} GiB after waiting ${formatSeconds(grant.waitedMs / 1000)}`}; temporary files in ${scratch}`)
+  if (rangeBaseOverridden(env)) console.log(`delorun checks: range base: ${rangeRef} (DELORUN_RANGE_BASE)`)
   if (left.length > 0) console.log(`delorun checks: left for the merge tier: ${left.join(', ')}`)
 
   const started = performance.now()
@@ -724,7 +728,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const machine = { waitedSeconds: Math.round((grant?.waitedMs ?? 0) / 100) / 10, slots: grant?.slots ?? null, ioPressureAtStart: ioAtStart ?? null, ioPressureAtEnd: ioAtEnd ?? null }
   writeReport(root, results, shared?.store.dir, machine)
   if (before !== undefined && !results.some(result => gateFailure(result, gateTier))) {
-    const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
+    const written = recordTreePass(treeRecords, { before, after: treeState(root, rangeRef), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
     console.log(written.recorded ? `delorun checks: this tree's pass is recorded in ${treePassPath(treeRecords, before.tree, process.version)}` : `delorun checks: this tree's pass is not recorded: ${written.reason}`)
   }
   const elapsed = (performance.now() - started) / 1000

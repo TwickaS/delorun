@@ -23,7 +23,6 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { git, runGit } from '../git.ts'
 import { passCacheEnabled } from './cache.ts'
-import { RANGE_BASE } from './gates/index.ts'
 import type { Check, GateTier } from './plan.ts'
 import type { Result } from './run.ts'
 
@@ -57,6 +56,8 @@ export interface TreeState {
   readonly tree: string
   /** HEAD's commit, which the history-reading checks depend on. */
   readonly head: string
+  /** The ref the range gates compare HEAD with, from `rangeBase`. */
+  readonly rangeRef: string
   /** The commit the range gates compare HEAD with, or null when the clone has no such ref. */
   readonly rangeBase: string | null
   /** Whether the working tree equals HEAD: no tracked file differs and no untracked file outside git's ignore rules exists. */
@@ -118,13 +119,15 @@ export function treePassEnabled(options: { readonly noCache: boolean }, env: Nod
 /**
  * The repository state a record is keyed on, read from the repository.
  * @param root - the repository root.
+ * @param rangeRef - the range base ref, from `rangeBase`.
  * @returns HEAD's tree and commit, the range base's commit, and whether the working tree equals HEAD.
  */
-export function treeState(root: string): TreeState {
-  const base = runGit(root, ['rev-parse', '--verify', '-q', `${RANGE_BASE}^{commit}`])
+export function treeState(root: string, rangeRef: string): TreeState {
+  const base = runGit(root, ['rev-parse', '--verify', '-q', `${rangeRef}^{commit}`])
   return {
     tree: git(root, ['rev-parse', 'HEAD^{tree}']).trim(),
     head: git(root, ['rev-parse', 'HEAD^{commit}']).trim(),
+    rangeRef,
     rangeBase: base.status === 0 ? base.stdout.trim() : null,
     clean: git(root, ['status', '--porcelain', '-z', '--untracked-files=all']) === '',
   }
@@ -220,7 +223,7 @@ function uncovered(record: TreePass, state: TreeState, plan: readonly Check[], f
     if (check.declined !== undefined) return `${check.id} is declined on this host`
     if (!record.checks.includes(check.id)) return `the record has no ${check.id}`
     if (!scopeCovers(record.scopes[check.id], check.scope)) return `the record does not cover the scope of ${check.id}`
-    if (check.history === true && !sameHistory(record, state)) return `${check.id} reads commits, and HEAD or ${RANGE_BASE} differs from the record`
+    if (check.history === true && !sameHistory(record, state)) return `${check.id} reads commits, and HEAD or ${state.rangeRef} differs from the record`
   }
   return record.pnpm === facts.pnpm() ? undefined : 'the pnpm version changed'
 }

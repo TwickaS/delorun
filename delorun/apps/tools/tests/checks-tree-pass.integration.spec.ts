@@ -105,12 +105,13 @@ const PASS = 'process.exit(0)'
  * @param root - the repository.
  * @param plan - the checks.
  * @param facts - the facts the record stores.
+ * @param rangeRef - the range base ref the run measures.
  * @returns the recording outcome.
  */
-async function runAndRecord(root: string, plan: Planned[], facts: RunFacts): Promise<TreePassWrite> {
-  const before = treeState(root)
+async function runAndRecord(root: string, plan: Planned[], facts: RunFacts, rangeRef = 'origin/main'): Promise<TreePassWrite> {
+  const before = treeState(root, rangeRef)
   const results = await runPlan(plan, { root, env: process.env, logDir: tempDir('delorun-tree-logs-'), cpus: 4, memoryBytes: 1024 ** 3, bail: false, report: () => undefined })
-  return recordTreePass(treesOf(root), { before, after: treeState(root), base: treeOfRef(root, 'origin/main'), plan, results }, facts, new Date('2026-11-06T07:00:00.000Z'))
+  return recordTreePass(treesOf(root), { before, after: treeState(root, rangeRef), base: treeOfRef(root, 'origin/main'), plan, results }, facts, new Date('2026-11-06T07:00:00.000Z'))
 }
 
 /**
@@ -121,7 +122,7 @@ async function runAndRecord(root: string, plan: Planned[], facts: RunFacts): Pro
  * @returns the lookup's outcome.
  */
 function lookup(root: string, plan: Planned[], facts: RunFacts): ReturnType<typeof findTreePass> {
-  return findTreePass(treesOf(root), treeState(root), plan, facts)
+  return findTreePass(treesOf(root), treeState(root, 'origin/main'), plan, facts)
 }
 
 /**
@@ -238,6 +239,18 @@ describe('the tree pass record', () => {
     expect(lookup(root, [check('a', PASS)], facts)).toMatchObject({ hit: true })
   })
 
+  it('keys the commit-reading checks on a range base other than origin/main, and names it when they rerun', async () => {
+    const root = makeRepo()
+    git(root, ['tag', 'v-base'])
+    const plan = [check('boundary', PASS, { history: true })]
+    const facts = factsFor(root)
+    expect(treeState(root, 'v-base')).toMatchObject({ rangeRef: 'v-base', rangeBase: headOf(root) })
+    expect(treeState(root, 'does-not-exist')).toMatchObject({ rangeBase: null })
+    expect((await runAndRecord(root, plan, facts, 'v-base')).recorded).toBe(true)
+    git(root, ['commit', '-q', '--allow-empty', '-m', 'other history'])
+    expect(findTreePass(treesOf(root), treeState(root, 'v-base'), plan, facts)).toEqual({ hit: false, reason: 'boundary reads commits, and HEAD or v-base differs from the record' })
+  })
+
   it('leaves a different tree to the checks, since no record names it', async () => {
     const root = makeRepo()
     const plan = [check('a', PASS)]
@@ -275,9 +288,9 @@ describe('the tree pass record', () => {
     const facts = factsFor(root)
     expect(await runAndRecord(root, [check('a', 'process.exit(1)')], facts)).toEqual({ recorded: false, reason: 'not every planned check passed' })
     expect(existsSync(treesOf(root))).toBe(false)
-    const before = treeState(root)
+    const before = treeState(root, 'origin/main')
     git(root, ['commit', '-q', '--allow-empty', '-m', 'during the run'])
-    const moved = recordTreePass(treesOf(root), { before, after: treeState(root), base: null, plan: [check('a', PASS)], results: [{ id: 'a', outcome: 'passed', seconds: 0 }] }, facts, new Date())
+    const moved = recordTreePass(treesOf(root), { before, after: treeState(root, 'origin/main'), base: null, plan: [check('a', PASS)], results: [{ id: 'a', outcome: 'passed', seconds: 0 }] }, facts, new Date())
     expect(moved).toEqual({ recorded: false, reason: 'HEAD, the range base or the working tree changed during the run' })
     expect(existsSync(treesOf(root))).toBe(false)
   })

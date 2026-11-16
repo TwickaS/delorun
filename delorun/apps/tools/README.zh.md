@@ -101,7 +101,7 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --ref <ref>
 
 ## 门禁
 
-[`src/checks/gates/index.ts`](src/checks/gates/index.ts) 把每个门禁列为运行器从仓库根目录执行的一条命令。命令以 0 退出时门禁通过。暂存门禁接受路径作为尾随参数，运行器在提交前追加它们。范围门禁比较从 `origin/main` 到 HEAD 的提交，除非给出 `--base <rev>`，并且排除 `delorun/upstream-patches.json` 所锁定的上游提交可以到达的那些提交，因为上游自己为其提交签名和措辞。除非门禁指名了较轻的层级，否则它在每个门禁层级中运行：`gates:docs` 与耗时超过约十秒的上游门禁跳过 lane 层级，耗时超过约一分钟、构建站点或读取上游构建产物的上游门禁只在合并层级运行（[本地检查](#local-checks)）。
+[`src/checks/gates/index.ts`](src/checks/gates/index.ts) 把每个门禁列为运行器从仓库根目录执行的一条命令。命令以 0 退出时门禁通过。暂存门禁接受路径作为尾随参数，运行器在提交前追加它们。范围门禁比较从 `origin/main` 到 HEAD 的提交，除非给出 `--base <rev>`，并且排除 `delorun/upstream-patches.json` 所锁定的上游提交可以到达的那些提交，因为上游自己为其提交签名和措辞。`DELORUN_RANGE_BASE=<rev>` 会取代 `origin/main`，成为每个范围门禁和树通过记录的基准，适用于 `origin/main` 是旧分支的克隆，以及向空仓库的首次推送。指名不到任何提交的基准会在任何检查开始前停止运行，运行标题会指明覆盖。除非门禁指名了较轻的层级，否则它在每个门禁层级中运行：`gates:docs` 与耗时超过约十秒的上游门禁跳过 lane 层级，耗时超过约一分钟、构建站点或读取上游构建产物的上游门禁只在合并层级运行（[本地检查](#local-checks)）。
 
 | 门禁 | 暂存 | 拒绝或检查 |
 |---|---|---|

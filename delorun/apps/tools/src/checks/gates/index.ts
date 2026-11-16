@@ -79,133 +79,166 @@ export const FUNDAMENTALS_INPUTS: readonly string[] = [
   'packages/web/web-fetch-http/src/provider.ts',
 ]
 
-/** The integration branch that pull requests merge into; the range gates compare against it by default. */
-export const RANGE_BASE = 'origin/main'
+/**
+ * The ref the range gates and tree pass records compare HEAD with: `DELORUN_RANGE_BASE` when it is set and not empty,
+ * else `origin/main`, the integration branch that pull requests merge into. This is the only place that names the default.
+ * @param env - the environment the run starts with.
+ * @returns the ref, which {@link unresolvedRangeBase} checks against the repository.
+ */
+export function rangeBase(env: NodeJS.ProcessEnv): string {
+  const set = env['DELORUN_RANGE_BASE']
+  return set === undefined || set === '' ? 'origin/main' : set
+}
+
+/**
+ * Whether the range base was chosen with `DELORUN_RANGE_BASE`, which the run header names.
+ * @param env - the environment the run starts with.
+ * @returns true when the variable is set and not empty.
+ */
+export function rangeBaseOverridden(env: NodeJS.ProcessEnv): boolean {
+  return env['DELORUN_RANGE_BASE'] !== undefined && env['DELORUN_RANGE_BASE'] !== ''
+}
+
+/**
+ * The refusal for a range base that names no commit.
+ * @param base - the range base from {@link rangeBase}.
+ * @returns one actionable line naming the ref.
+ */
+export function unresolvedRangeBase(base: string): string {
+  return `the range base ${base} is not a commit in this clone; fetch it, or set DELORUN_RANGE_BASE to a commit`
+}
 
 /**
  * The repository gates the runner schedules, in catalogue order: Delorun's own, then upstream's ({@link UPSTREAM_GATES}). A
  * gate's command runs from the repository root and passes on exit 0; at pre-commit the runner appends the staged paths to
  * the command of each staged gate. A gate listed in `debt.json` runs through `debt.ts`, which reports its failure
  * without failing the run and fails the run once it passes.
+ * @param base - the ref each range gate's `--base` names, from {@link rangeBase}.
+ * @returns the gates.
  */
-export const GATES: readonly GateCheck[] = withDebt([
-  {
-    id: 'gates:licence',
-    title: 'Delorun packages and the root LICENSE are MIT',
-    command: [TSX, `${GATE_DIR}/licence.ts`],
-    inputs: ['delorun/**/package.json', 'LICENSE'],
-  },
-  {
-    id: 'gates:erasable-syntax',
-    title: 'Every Delorun source uses only syntax that Node\'s type stripping removes',
-    command: [TSX, `${GATE_DIR}/erasable-syntax.ts`],
-    inputs: ['delorun/**/*.ts', 'delorun/**/*.tsx', 'delorun/**/*.mts', 'delorun/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
-  },
-  {
-    id: 'gates:bundle-patch-literals',
-    title: 'Shipped Delorun bundle patches disable rows only with literal true or false',
-    command: [TSX, `${GATE_DIR}/bundle-patch-literals.ts`],
-    inputs: ['delorun/packages/*/cordis.patch.yml', `${GATE_DIR}/bundle-patch-literals.ts`],
-  },
-  {
-    id: 'gates:upstream-src-imports',
-    title: 'No Delorun source imports a file from an upstream package\'s src/',
-    command: [TSX, `${GATE_DIR}/upstream-src-imports.ts`],
-    inputs: ['delorun/packages/*/src/**', 'delorun/apps/*/src/**', `${GATE_DIR}/upstream-src-imports.ts`],
-  },
-  {
-    id: 'gates:no-unknown-casts',
-    title: 'No assertion to `unknown` beyond upstream\'s recorded baseline, in upstream\'s sources and Delorun\'s',
-    command: [TSX, 'scripts/verify-no-unknown-casts.ts'],
-    inputs: ['**/*.ts', '**/*.mts', '**/*.cts', '**/*.tsx', '**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', 'scripts/no-unknown-casts.baseline.json'],
-  },
-  {
-    id: 'gates:package-states',
-    title: 'Every Delorun package records a state that agrees with what the shipped roots reach',
-    command: [TSX, `${GATE_DIR}/package-states.ts`],
-    inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
-  },
-  {
-    id: 'gates:workspace-graph',
-    title: 'Delorun packages have no dependency cycle and the runtime closure carries no release or developer tooling',
-    command: [TSX, `${GATE_DIR}/workspace-graph.ts`],
-    inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', 'delorun/apps/release/closure.json', `${GATE_DIR}/workspace-graph.ts`, `${GATE_DIR}/package-states.ts`],
-  },
-  {
-    id: 'gates:secrets',
-    title: 'No secrets in the staged or changed paths',
-    command: [TSX, `${GATE_DIR}/secrets.ts`],
-    inputs: ['**/*'],
-    staged: true,
-  },
-  {
-    id: 'gates:personal-data',
-    title: 'No personal data or postal address in the staged paths or the range',
-    command: [TSX, `${GATE_DIR}/personal-data.ts`, '--base', RANGE_BASE],
-    staged: true,
-    history: true,
-  },
-  {
-    id: 'gates:infrastructure',
-    title: 'No deployment identifiers in the staged or changed paths',
-    command: [TSX, `${GATE_DIR}/infrastructure.ts`],
-    inputs: ['**/*'],
-    staged: true,
-  },
-  {
-    id: 'gates:brand-drift',
-    title: 'No brand colour, named typeface or copy of the hex mark outside @delorun/brand',
-    command: [TSX, `${GATE_DIR}/brand-drift.ts`],
-    inputs: ['delorun/packages/*/src/**', 'delorun/packages/site-design/**', 'delorun/apps/website/{src,public,scripts}/**', 'delorun/apps/docs/{src,public,scripts}/**', `${GATE_DIR}/brand-drift.*`],
-  },
-  {
-    id: 'gates:dco',
-    title: 'Every commit in the range is signed off by its author',
-    command: [TSX, `${GATE_DIR}/dco.ts`, '--base', RANGE_BASE],
-    history: true,
-  },
-  {
-    id: 'gates:commits',
-    title: 'Commit subjects, sign-offs and changelog trailers in the range',
-    command: [TSX, 'delorun/apps/tools/src/check-commits.ts', '--base', RANGE_BASE],
-    history: true,
-  },
-  {
-    id: 'gates:changelog',
-    title: 'Each product change in the range has a changelog fragment or a reasoned trailer, and every fragment parses',
-    command: [TSX, 'delorun/apps/release/src/changelog/check.ts', '--base', RANGE_BASE],
-    history: true,
-  },
-  {
-    id: 'gates:doc-times',
-    title: 'No calendar planning in the Delorun documentation the range adds',
-    command: [TSX, `${GATE_DIR}/doc-times.ts`, '--base', RANGE_BASE],
-    history: true,
-  },
-  {
-    id: 'gates:spec-lanes',
-    title: 'No unit spec starts a process, and every synchronous process call under a tests directory has a timeout',
-    command: [TSX, `${GATE_DIR}/spec-lanes.ts`],
-    inputs: ['delorun/apps/*/tests/**', 'delorun/packages/*/tests/**', `${GATE_DIR}/spec-lanes.ts`],
-  },
-  {
-    id: 'gates:whitespace',
-    title: 'No whitespace error, and exactly one final newline, in the files that differ from the merge base with origin/main',
-    command: [TSX, `${GATE_DIR}/whitespace.ts`, '--base', RANGE_BASE],
-    history: true,
-  },
-  {
-    id: 'gates:docs',
-    title: 'Upstream documentation checks over delorun/docs',
-    command: [TSX, `${GATE_DIR}/docs.ts`],
-    inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json', `${GATE_DIR}/docs.ts`],
-    tier: 'agent',
-  },
-  {
-    id: 'gates:fundamentals',
-    title: 'Each enforced security fundamental names code that exists and a test that exists with its exact title',
-    command: [TSX, `${GATE_DIR}/fundamentals.ts`],
-    inputs: FUNDAMENTALS_INPUTS,
-  },
-  ...UPSTREAM_GATES,
-], readDebt())
+export function gatesFor(base: string): readonly GateCheck[] {
+  return withDebt([
+    {
+      id: 'gates:licence',
+      title: 'Delorun packages and the root LICENSE are MIT',
+      command: [TSX, `${GATE_DIR}/licence.ts`],
+      inputs: ['delorun/**/package.json', 'LICENSE'],
+    },
+    {
+      id: 'gates:erasable-syntax',
+      title: 'Every Delorun source uses only syntax that Node\'s type stripping removes',
+      command: [TSX, `${GATE_DIR}/erasable-syntax.ts`],
+      inputs: ['delorun/**/*.ts', 'delorun/**/*.tsx', 'delorun/**/*.mts', 'delorun/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
+    },
+    {
+      id: 'gates:bundle-patch-literals',
+      title: 'Shipped Delorun bundle patches disable rows only with literal true or false',
+      command: [TSX, `${GATE_DIR}/bundle-patch-literals.ts`],
+      inputs: ['delorun/packages/*/cordis.patch.yml', `${GATE_DIR}/bundle-patch-literals.ts`],
+    },
+    {
+      id: 'gates:upstream-src-imports',
+      title: 'No Delorun source imports a file from an upstream package\'s src/',
+      command: [TSX, `${GATE_DIR}/upstream-src-imports.ts`],
+      inputs: ['delorun/packages/*/src/**', 'delorun/apps/*/src/**', `${GATE_DIR}/upstream-src-imports.ts`],
+    },
+    {
+      id: 'gates:no-unknown-casts',
+      title: 'No assertion to `unknown` beyond upstream\'s recorded baseline, in upstream\'s sources and Delorun\'s',
+      command: [TSX, 'scripts/verify-no-unknown-casts.ts'],
+      inputs: ['**/*.ts', '**/*.mts', '**/*.cts', '**/*.tsx', '**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', 'scripts/no-unknown-casts.baseline.json'],
+    },
+    {
+      id: 'gates:package-states',
+      title: 'Every Delorun package records a state that agrees with what the shipped roots reach',
+      command: [TSX, `${GATE_DIR}/package-states.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
+    },
+    {
+      id: 'gates:workspace-graph',
+      title: 'Delorun packages have no dependency cycle and the runtime closure carries no release or developer tooling',
+      command: [TSX, `${GATE_DIR}/workspace-graph.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', 'delorun/apps/release/closure.json', `${GATE_DIR}/workspace-graph.ts`, `${GATE_DIR}/package-states.ts`],
+    },
+    {
+      id: 'gates:secrets',
+      title: 'No secrets in the staged or changed paths',
+      command: [TSX, `${GATE_DIR}/secrets.ts`],
+      inputs: ['**/*'],
+      staged: true,
+    },
+    {
+      id: 'gates:personal-data',
+      title: 'No personal data or postal address in the staged paths or the range',
+      command: [TSX, `${GATE_DIR}/personal-data.ts`, '--base', base],
+      staged: true,
+      history: true,
+    },
+    {
+      id: 'gates:infrastructure',
+      title: 'No deployment identifiers in the staged or changed paths',
+      command: [TSX, `${GATE_DIR}/infrastructure.ts`],
+      inputs: ['**/*'],
+      staged: true,
+    },
+    {
+      id: 'gates:brand-drift',
+      title: 'No brand colour, named typeface or copy of the hex mark outside @delorun/brand',
+      command: [TSX, `${GATE_DIR}/brand-drift.ts`],
+      inputs: ['delorun/packages/*/src/**', 'delorun/packages/site-design/**', 'delorun/apps/website/{src,public,scripts}/**', 'delorun/apps/docs/{src,public,scripts}/**', `${GATE_DIR}/brand-drift.*`],
+    },
+    {
+      id: 'gates:dco',
+      title: 'Every commit in the range is signed off by its author',
+      command: [TSX, `${GATE_DIR}/dco.ts`, '--base', base],
+      history: true,
+    },
+    {
+      id: 'gates:commits',
+      title: 'Commit subjects, sign-offs and changelog trailers in the range',
+      command: [TSX, 'delorun/apps/tools/src/check-commits.ts', '--base', base],
+      history: true,
+    },
+    {
+      id: 'gates:changelog',
+      title: 'Each product change in the range has a changelog fragment or a reasoned trailer, and every fragment parses',
+      command: [TSX, 'delorun/apps/release/src/changelog/check.ts', '--base', base],
+      history: true,
+    },
+    {
+      id: 'gates:doc-times',
+      title: 'No calendar planning in the Delorun documentation the range adds',
+      command: [TSX, `${GATE_DIR}/doc-times.ts`, '--base', base],
+      history: true,
+    },
+    {
+      id: 'gates:spec-lanes',
+      title: 'No unit spec starts a process, and every synchronous process call under a tests directory has a timeout',
+      command: [TSX, `${GATE_DIR}/spec-lanes.ts`],
+      inputs: ['delorun/apps/*/tests/**', 'delorun/packages/*/tests/**', `${GATE_DIR}/spec-lanes.ts`],
+    },
+    {
+      id: 'gates:whitespace',
+      title: 'No whitespace error, and exactly one final newline, in the files that differ from the merge base with origin/main',
+      command: [TSX, `${GATE_DIR}/whitespace.ts`, '--base', base],
+      history: true,
+    },
+    {
+      id: 'gates:docs',
+      title: 'Upstream documentation checks over delorun/docs',
+      command: [TSX, `${GATE_DIR}/docs.ts`],
+      inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json', `${GATE_DIR}/docs.ts`],
+      tier: 'agent',
+    },
+    {
+      id: 'gates:fundamentals',
+      title: 'Each enforced security fundamental names code that exists and a test that exists with its exact title',
+      command: [TSX, `${GATE_DIR}/fundamentals.ts`],
+      inputs: FUNDAMENTALS_INPUTS,
+    },
+    ...UPSTREAM_GATES,
+  ], readDebt())
+}
+
+/** The gates with the default range base, for consumers that read the catalogue and run nothing. */
+export const GATES: readonly GateCheck[] = gatesFor(rangeBase({}))
