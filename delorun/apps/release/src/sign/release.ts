@@ -49,6 +49,7 @@ import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@de
 import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema, StrictRuntimeSchema } from '@delorun/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
 import { npmPackageProblem } from './npm-package.ts'
+import { signPacks } from './packs.ts'
 import { productionKeyProblem, releaseBranchProblem, tagSignatureProblem } from './source.ts'
 
 /** Signing refused; the message names what is missing or wrong. */
@@ -387,7 +388,10 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   const envelope = signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.key])
   const manifestBytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
   const entryBytes = Buffer.from(`${JSON.stringify(entryRequest(manifestBytes, request.key), undefined, 2)}\n`)
-  const outputs: Array<[string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], [manifestName, manifestBytes]]
+  const packOutputs = await signPacks(request.release, draft.version, manifestBytes, request.key).catch((error: unknown) => {
+    throw new SigningRefusal(`signing refuses: the packs file: ${(error as Error).message}`, { cause: error })
+  })
+  const outputs: Array<readonly [string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], ...packOutputs, [manifestName, manifestBytes]]
   await writeAll(request.release, outputs)
   return { manifest, manifestName, comparison }
 }

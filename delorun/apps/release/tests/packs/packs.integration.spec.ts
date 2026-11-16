@@ -4,11 +4,11 @@
  * the signed SHA-512. Each refusal leaves the destination empty.
  */
 import { createHash, generateKeyPairSync } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RELEASE_SCHEMAS, type PackExternal } from '@delorun/contract-release-manifest'
+import { RELEASE_SCHEMAS, type PackExternal, type Sha512Base64 } from '@delorun/contract-release-manifest'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { gzip } from '@delorun/release-formats/archive/bytes'
 import { tarStream } from '@delorun/release-formats/archive/tar'
@@ -18,6 +18,7 @@ import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { verifyPacks, trustRootChain, verifySignedManifest } from '@delorun/release-formats/sign/verify'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { manifestContent, rootFile, throwawayKeys } from '../sign/fixture.ts'
+import { signPacks } from '../../src/sign/packs.ts'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -39,7 +40,7 @@ function pin(bytes: Buffer, overrides: Partial<PackExternal> = {}): PackExternal
     name: '@openai/codex-linux-x64',
     version: semanticVersion('0.153.4'),
     url: 'https://registry.npmjs.org/@openai/codex-linux-x64/-/codex-linux-x64-0.153.4.tgz',
-    sha512: brandString(createHash('sha512').update(bytes).digest('base64')),
+    sha512: brandString<Sha512Base64>(createHash('sha512').update(bytes).digest('base64')),
     length: bytes.byteLength,
     ...overrides,
   }
@@ -103,5 +104,34 @@ describe('the packs file', () => {
     expect(() => verifyPacks(root.metadata, manifest, other, bytes)).toThrow(/belongs to the manifest/u)
     const unsigned = envelope(signed, [generateKeyPairSync('ed25519').privateKey])
     expect(() => verifyPacks(root.metadata, manifest, manifestBytes, unsigned)).toThrow()
+  })
+})
+
+describe('signing the packs file', () => {
+  async function release() {
+    const keys = throwawayKeys()
+    const dir = temp()
+    const built = await buildPackArchive('delorun-0.1.0-pack-demo.tar.gz', [entry('package.json', '{}')], EPOCH)
+    writeFileSync(join(dir, built.variant.archive.name), built.bytes)
+    const draft = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: '0'.repeat(64), packs: [{ name: 'demo', version: '1.0.0', experimental: true, peers: [], variants: { any: { ...built.variant, external: [] } } }] }
+    writeFileSync(join(dir, 'delorun-0.1.0.packs.json'), envelope(draft, []))
+    return { keys, dir, built }
+  }
+
+  it('binds the file to the manifest, signs it with the targets key and writes a log entry request', async () => {
+    const { keys, dir } = await release()
+    const manifestBytes = envelope(manifestContent('0.1.0', Buffer.from('a')), [keys.targets])
+    const outputs = await signPacks(dir, '0.1.0', manifestBytes, keys.targets)
+    expect(outputs.map(([name]) => name)).toEqual(['delorun-0.1.0.packs.json', 'delorun-0.1.0.packs.entry.json'])
+    const root = trustRootChain([rootFile(keys).bytes], Date.parse('2026-11-06T12:00:00Z') / 1000).at(-1)!
+    const manifest = verifySignedManifest(root.metadata, manifestBytes)
+    expect(verifyPacks(root.metadata, manifest, manifestBytes, outputs[0]![1] as Buffer).packs.map(pack => pack.name)).toEqual(['demo'])
+  })
+
+  it('writes nothing for a release with no packs file, and refuses an archive that differs from the file', async () => {
+    const { keys, dir, built } = await release()
+    expect(await signPacks(temp(), '0.1.0', Buffer.from('m'), keys.targets)).toEqual([])
+    writeFileSync(join(dir, built.variant.archive.name), Buffer.concat([built.bytes, Buffer.from('x')]))
+    await expect(signPacks(dir, '0.1.0', Buffer.from('m'), keys.targets)).rejects.toThrow(/does not match the packs file/u)
   })
 })

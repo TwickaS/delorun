@@ -4,6 +4,8 @@
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/log-release.ts --root <root file> --manifest <manifest file> --entry
  * <delorun-<version>.manifest.entry.json> --submit <url> --checkpoint <url> --tiles <url> --out <bundle file>`
+ * [`--kind packs`, with the packs file as `--manifest` and `delorun-<version>.packs.entry.json` as `--entry`, logs the
+ * release's packs file as its own record]
  *
  * It submits the Rekor v2 entry request the signing command wrote, waits for a checkpoint that a witness the root lists has
  * cosigned and that covers the entry, and writes `delorun-<version>.manifest.log.json` only when the bundle verifies
@@ -24,7 +26,7 @@ import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { trustRootChain } from '@delorun/release-formats/sign/verify'
 
 async function main(argv: readonly string[]): Promise<number> {
-  const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, tiles: { type: 'string' }, out: { type: 'string' } } })
+  const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, tiles: { type: 'string' }, out: { type: 'string' }, kind: { type: 'string' } } })
   try {
     const { root: rootPath, manifest: manifestPath, entry, submit, checkpoint, tiles, out } = values
     if (rootPath === undefined || manifestPath === undefined || entry === undefined || submit === undefined || checkpoint === undefined || tiles === undefined || out === undefined) {
@@ -32,7 +34,7 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     const root = trustRootChain([readFileSync(resolve(rootPath))], Math.floor(Date.now() / 1000)).at(-1)!.metadata
     const manifest = readFileSync(resolve(manifestPath))
-    const version = readEnvelope('manifest', manifest).signed.version
+    const version = (values.kind === 'packs' ? readEnvelope('packs', manifest) : readEnvelope('manifest', manifest)).signed.version
     const bundle = await logRelease({ submit, checkpoint, tiles }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000))
     writeFileSync(resolve(out), `${JSON.stringify(bundle, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     console.log(`log-release: ${basename(manifestPath)} is entry ${String(bundle.entry.logIndex)}, witnessed at tree size ${String(bundle.inclusion.treeSize)}`)

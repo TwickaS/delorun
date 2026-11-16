@@ -142,3 +142,16 @@ export function selectedBundles(packages: readonly WorkspacePackage[], selection
   const included = new Set(selection.included)
   return packages.filter(each => each.bundle && included.has(each.name)).map(each => each.name).sort()
 }
+
+/**
+ * The packs a release builds: bundles of the selection that the default install does not carry. A private Delorun
+ * package is a pack only when its manifest says so, which none does yet.
+ * @param packages - the workspace packages.
+ * @param selection - the selection.
+ * @param carried - package names in the staged closure's `node_modules`.
+ * @returns the packages to build as packs, sorted by name.
+ */
+export function packCandidates(packages: readonly WorkspacePackage[], selection: ClosureSelection, carried: ReadonlySet<string>): WorkspacePackage[] {
+  const included = new Set(selection.included)
+  return packages.filter(each => each.bundle && !each.private && included.has(each.name) && !carried.has(each.name)).sort((a, b) => (a.name < b.name ? -1 : 1))
+}
