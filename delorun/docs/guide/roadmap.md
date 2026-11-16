@@ -8,7 +8,7 @@ English | [中文](roadmap.zh.md)
 
 ## Summary
 
-This page is the one place in the guide that describes work Delorun does not do today. It helps you decide whether something you need is on the way. You need nothing first. Every other page describes Delorun as it is. The roadmap has three parts: Now is what is being built, Next is what follows it, and Later is a list of directions without an order. It carries no dates and no version numbers except the `1.0.0` milestone, and plans change, so treat an item as an intention and not as a promise.
+This page is the one place in the guide that describes work Delorun does not do today. It helps you decide whether something you need is on the way. You need nothing first. Every other page describes Delorun as it is. The roadmap has three parts: Now is what is being built, Next is the planned order of what follows it, and Later is a list of directions without an order. It carries no dates and no version numbers except the `0.1.0` and `1.0.0` milestones, and plans change, so treat an item as an intention and not as a promise.
 
 ## Contents
 
@@ -36,28 +36,27 @@ DeepSeek Harness plugins and chats stay compatible. Everything a person sees, wh
 
 ## Now
 
-What is being built is the first public version, for individuals: people switching from stock and people new to it.
+What is being built is `0.1.0`, the first public version, for individuals: people switching from stock and people new to it.
 
-- **The preview.** Delorun on Linux and on Windows through WSL2, with the Web studio and your phone over Tailscale.
+- **The preview.** The preview versions lead to `0.1.0`: Delorun on Linux and on Windows through WSL2, with the Web studio and your phone over Tailscale.
 - **The words.** The README, the trust page, the known issues and the answers to the hard questions, so a first-time reader is never lost.
 - **A safe release process.** Signed releases, a written plan for a bad release, and a security review of remote access and the update chain by the maintainer.
-- **Opt-in telemetry.** Delorun's own, off unless you say yes, asked at setup with its exact payload shown, built in the open. The preview ships with upstream's analytics switched off and none of Delorun's own.
+- **Opt-in telemetry.** Arrives with `0.1.0`: Delorun's own, off unless you say yes, asked at setup with its exact payload shown, built in the open. The preview ships with upstream's analytics switched off and none of Delorun's own.
 
 ## Next
 
-What follows, in order. A stage starts when the one before it is ready.
+This is the planned order of what follows, not a set of commitments. A stage starts when the one before it is ready.
 
-1. **The desktop app.** macOS and Windows reach most developers. It manages WSL2 on Windows, shares one profile with the command line, and adds releases for macOS.
-2. **The free relay with accounts.** Reach without Tailscale: studio addresses on `your-name.delo.run`, a Delo Run account and device approvals through Delorun. The [Delorun relay](../reference/glossary.md#delorun-relay) passes encrypted traffic it cannot read, and the page that announces it states exactly what Delorun can see. It is free, with a fair-use limit per account on devices and traffic. Until then, [reach](../reference/glossary.md#reach) is Tailscale on your own tailnet ([Reach the studio from your phone](reach.md)).
-3. **Extra machines.** Run chats on a laptop, a server or a homelab machine from one studio. Where an existing DeepSeek Harness plugin does the job, Delorun adopts it.
-4. **`1.0.0`, ready for a business.** The desktop app, the relay and extra machines work, the signing keys are made in a key ceremony on an offline machine, and an outside security review has happened and its report is published.
+- **The desktop app.** macOS and Windows reach most developers. It manages WSL2 on Windows, shares one profile with the command line, and adds releases for macOS.
+- **Then the free relay with accounts.** Reach without Tailscale: studio addresses on `your-name.delo.run`, a Delo Run account and device approvals through Delorun. The [Delorun relay](../reference/glossary.md#delorun-relay) passes encrypted traffic it cannot read, and the page that announces it states exactly what Delorun can see. It is free, with a fair-use limit per account on devices and traffic. Until then, [reach](../reference/glossary.md#reach) is Tailscale on your own tailnet ([Reach the studio from your phone](reach.md)).
+- **Then extra machines.** Run chats on a laptop, a server or a homelab machine from one studio. Where an existing DeepSeek Harness plugin does the job, Delorun adopts it.
+- **Then `1.0.0`, ready for a business.** The desktop app, the relay and extra machines work, the signing keys are made in a key ceremony on an offline machine, and an outside security review has happened and its report is published.
 
 ## Later
 
 Directions, in no fixed order. None of them is promised.
 
 - **Teams.** After `1.0.0`, the maintainer works with a first company to shape Delorun to its work ([How Delorun earns](#how-delorun-earns)).
-- **Income that does not depend on the maintainer's hours.** Support subscriptions, hosted instances for individuals or managed private deployments; which one is chosen after the first company's work. Nothing is built for any of them now.
 - **Isolation.** Docker workspaces, where a workspace's commands run in a container.
 - **Reach and sign-in.** Reach through Tailscale Funnel or through a relay you host on your own domain, and sign-in with a passkey or your own sign-in provider ([What each reach option shows its provider](trust.md#what-each-reach-option-shows-its-provider) compares them).
 - **Verification and plugins.** `delorun verify` checks of isolation, exposure, sign-in, plugins and data sharing; a community plugin [catalogue](../reference/glossary.md#catalogue) with "tested with Delorun X" badges; an optional plugin security review that you can run before installing a plugin; and ejecting a plugin while keeping its settings in your profile.
@@ -67,11 +66,9 @@ Directions, in no fixed order. None of them is promised.
 
 ## How Delorun earns
 
-Delorun and everything it needs stay MIT and free. You can set it up for yourself, and anyone may host it for others. Nothing in the product is held back for payment, and no plugin works only for people who pay.
+Delorun is MIT and free and nothing in it is held back for payment; from `1.0.0` teams can pay for custom plugins and integrations, and whether anything else is ever sold is not decided, but if it is, it is a service and never a locked feature.
 
-From `1.0.0`, the maintainer offers teams custom plugins, modes and integrations as paid work: a company pays for the work, not for a licence. The code is the same for everyone. Sponsors can support the project on GitHub.
-
-Delorun has no hosted waitlist, because hosting is not decided. Delorun does not sell model access or resell inference.
+You can set it up for yourself, and anyone may host it for others. The code is the same for everyone. Sponsors can support the project on GitHub. Delorun has no hosted waitlist, because hosting is not decided.
 
 ## Not planned
 

@@ -61,7 +61,7 @@ There is no hidden one, and these are the real ones:
 - **It is a preview.** It runs on Linux and on Windows through WSL2, not yet as a desktop app on macOS or native Windows. The [known issues](known-issues.md) list the rough edges.
 - **One person maintains it.** I reply when I can, and I promise no response time. [Governance](../../../GOVERNANCE.md) says what happens to releases if I cannot act.
 - **It follows an upstream that moves fast.** Delorun may diverge from DeepSeek Harness over time. DeepSeek Harness plugins and chat data stay compatible, and everything you see in the studio is Delorun's own.
-- **How it earns.** Delorun is MIT and free, and nothing in it is held back for payment. From `1.0.0` I offer teams custom plugins and integrations as paid work. That is the whole plan ([Roadmap](roadmap.md#how-delorun-earns)).
+- **How it earns.** Delorun is MIT and free and nothing in it is held back for payment; from `1.0.0` teams can pay for custom plugins and integrations, and whether anything else is ever sold is not decided, but if it is, it is a service and never a locked feature. ([Roadmap](roadmap.md#how-delorun-earns)).
 
 ## Where do I go next?
 
