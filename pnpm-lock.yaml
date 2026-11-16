@@ -2126,6 +2126,9 @@ importers:
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@delorun/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout

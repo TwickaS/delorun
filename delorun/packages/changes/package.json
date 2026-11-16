@@ -9,13 +9,15 @@
     ".": "./src/index.ts",
     "./install": "./src/install-actions.ts",
     "./stop": "./src/stop.ts",
-    "./plugin-operation": "./src/plugin-operation.ts"
+    "./plugin-operation": "./src/plugin-operation.ts",
+    "./setup-transfer": "./src/setup-transfer/index.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@delorun/archive": "workspace:*",
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/profile-safety": "workspace:*",
