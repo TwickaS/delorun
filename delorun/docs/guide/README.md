@@ -24,8 +24,7 @@ The user guide is for people who install and use Delorun, the agent harness you 
 ## I want to get started
 
 - **Install Delorun and have a first chat:** [Install and first run](install.md). It covers what you need first, [setup by how you will use Delorun](install.md#setup-how-you-will-use-delorun), [the studio and your first chat](install.md#the-studio-and-your-first-chat) and [a computer without a browser](install.md#a-computer-without-a-browser).
-- **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](switching.md). It explains what is copied, what is held back and [how to go back](switching.md#going-back).
-- **See how Delorun differs from stock DeepSeek Harness:** [Delorun and stock DeepSeek Harness](delorun-vs-stock.md). It lists every difference and what Delorun does not include.
+- **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](switching.md). It explains what stays the same and what is different, what is copied, what stays behind and [how to go back](switching.md#going-back).
 - **See what Delorun is for and where it is going:** [Roadmap](roadmap.md). It says what is being built now, what comes next and what comes later.
 
 ## I want to use it every day
