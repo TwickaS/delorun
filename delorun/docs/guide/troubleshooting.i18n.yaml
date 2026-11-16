@@ -12,14 +12,17 @@
   en: d1b0ef0a27d5f9d6
   zh: 73fec8331f5a29cc
 /troubleshooting/contents:
-  en: 4b9372cd9db44c25
-  zh: 98f38ac61cebe54c
+  en: 7e76da7890551c3a
+  zh: 196b6e6e1f8635de
 /troubleshooting/reading-a-refusal:
   en: 127017ba5eeb1ad7
   zh: b3e8eeea5b414b21
 /troubleshooting/the-home-and-its-files:
-  en: e3a3242669d1dfc9
-  zh: 6f733e99d4c48c26
+  en: 690b2365aeb552b4
+  zh: b97e48e5dd6297b5
+/troubleshooting/the-first-day:
+  en: 90f3bb6ace6002af
+  zh: 2bba13d83e199a5b
 /troubleshooting/starting-and-stopping:
   en: a9d1e76cc5cbe2c5
   zh: 7c53b6ae695dec5c
@@ -27,14 +30,14 @@
   en: 285eceb9ff1ef63e
   zh: 212420964ad71051
 /troubleshooting/setup-and-the-model-key:
-  en: 00846b95b5176ec4
-  zh: 5a6ec2f522b98122
+  en: 8614ab844bdba618
+  zh: 18bbdbd9c94d90da
 /troubleshooting/installs-and-release-checks:
   en: 3122084ff528422e
   zh: 88f89761bb5a1216
 /troubleshooting/updates-and-rollback:
-  en: 49b250a46512e688
-  zh: 5bb703dc42722076
+  en: cbbbd87086d3a32f
+  zh: c24c6688d4220c6a
 /troubleshooting/repair-the-program-and-keep-your-data:
   en: d116b0abb900ebb5
   zh: 7fa7a9ea42e37dec
@@ -48,8 +51,8 @@
   en: 9c3d720781ca9a4f
   zh: c73eeab2bcfa6574
 /troubleshooting/remote-access-and-devices:
-  en: 5beca18226c4a693
-  zh: cd2fa25ff377a917
+  en: 249f4383746357a5
+  zh: bad6e23d2d3af112
 /troubleshooting/remote-access-and-devices/what-a-phone-shows-when-it-cannot-sign-in:
   en: a1f9bb73ceb7e82d
   zh: 52ad7407d5c49bc9
@@ -60,8 +63,14 @@
   en: a77546dd899edac9
   zh: 07f49e785e7160b6
 /troubleshooting/when-nothing-here-fits:
-  en: c908a92315b66f24
-  zh: 043b5b525898f6a5
+  en: f2f8658ce721cdd6
+  zh: 53a1f408777aaa6a
+/troubleshooting/when-nothing-here-fits/report-a-problem-that-is-not-listed:
+  en: 41cdb8d1fe9340d6
+  zh: c52ea20433593e5e
+/troubleshooting/remove-delorun:
+  en: 9733d03ee47b7509
+  zh: 55ace3d7eb72d94c
 /troubleshooting/next:
   en: 7e98cf4cb6a67b7f
   zh: 795eaa08740023a5

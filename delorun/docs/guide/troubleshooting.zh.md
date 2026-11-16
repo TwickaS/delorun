@@ -16,6 +16,7 @@ description: "Delorun 故障排查：如何读懂一次拒绝、退出码，以�
 
 - [读懂一次拒绝](#reading-a-refusal)
 - [home 及其文件](#the-home-and-its-files)
+- [第一天](#the-first-day)
 - [启动与停止](#starting-and-stopping)
 - [studio 端口被占用](#the-studio-port-is-busy)
 - [setup 与模型密钥](#setup-and-the-model-key)
@@ -29,6 +30,8 @@ description: "Delorun 故障排查：如何读懂一次拒绝、退出码，以�
 - [归档、导入与回收站](#archives-imports-and-the-trash)
 - [工作区列表](#the-workspace-list)
 - [当这里没有你的情况时](#when-nothing-here-fits)
+- [报告未列出的问题](#report-a-problem-that-is-not-listed)
+- [移除 Delorun](#remove-delorun)
 - [接下来](#next)
 - [给想深入了解的人](#for-the-technically-curious)
 
@@ -80,9 +83,21 @@ What you can do:
 | `HOME_IS_DSH_HOME` | `DELORUN_HOME` 指向 DeepSeek Harness 的 home `~/.dsh` 或其中的某个文件夹。 | 选择另一个文件夹；Delorun 保持 `~/.dsh` 不动。 |
 | `SOCKET_PATH_TOO_LONG` | home 的路径对于 `delorun` 命令与正在运行的 Delorun 通信所用的本地通道来说太长。 | 用 `DELORUN_HOME` 选择更短的 home。 |
 
-修复到位之后，你应该会看到命令在没有拒绝的情况下运行。在 Windows 上，Delorun 不检查这些权限。[你的 Delorun home](home.zh.md)介绍了 home 及其权限。
+修复到位之后，你应该会看到命令在没有拒绝的情况下运行。[你的 Delorun home](home.zh.md)介绍了 home 及其权限。
 
 在你运行 `delorun` 的文件夹或你的 Delorun home 中的 `.env` 文件，不得设置以 `DELORUN_` 开头的名称，因为这些名称决定了 Delorun 信任哪个 home、profile 和发布版本。拒绝信息会指出该文件。请从中删除这些名称，如果需要，改为在你的 shell 中设置。
+
+<a id="the-first-day"></a>
+
+## 第一天
+
+这些是人们在 Delorun 运行起来之前会遇到的问题。每一条都以修复方法结尾。
+
+- **`Delorun needs Node 24.9 or newer to start`。**消息会说出你现有的 Node 版本。系统包管理器（例如 Ubuntu 的 `apt`）常常只提供较旧的 Node，所以请从 [nodejs.org](https://nodejs.org) 或用 nvm 之类的版本管理器安装当前的 Node，打开一个新终端，用 `node --version` 检查，然后再次运行命令。每个 `delorun` 命令都运行在 Node 上，所以安装之后 Node 也必须保留；没有它时，shell 会打印 `env: 'node': No such file or directory`。
+- **`npm install -g delorun` 以 `EACCES` 或 “permission denied” 失败。**你的 Node 位于只有管理员才能写入的文件夹中，这在 Linux 上的系统级 Node 很常见。请改为安装到你自己的文件夹：使用 setup 打印的那一行，并加上 `--prefix ~/.local`：`npm install -g --prefix ~/.local delorun@<version>`。然后把 `~/.local/bin` 加入你的 `PATH`（`export PATH="$HOME/.local/bin:$PATH"`，并把同一行写进你的 shell 启动文件使其长期有效），打开一个新终端，并用 `command -v delorun` 检查。用 nvm 这样装在你主目录里的 Node 永远不会遇到这个问题。
+- **studio 没有在你的浏览器中打开。**运行 `delorun open`。如果它说 `No browser took the studio link`，请运行 `delorun open --print` 并打开它打印的链接。打印出的链接只能登录一次，一分钟后失效，所以请再次运行命令获取新的链接。在没有浏览器的电脑上，见[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)。
+- **每个命令都被拒绝，且 `delorun doctor` 显示 `fail sandbox: bubblewrap (bwrap) is not installed`。**在 Linux 上，Delorun 用 bubblewrap 限制命令。没有它时，命令会退回到 Landlock，而 Landlock 无法隐藏你的登录会话或 tmux 之类的终端复用器保存在 `/tmp` 中的套接字，所以只要存在这样的套接字，Delorun 就拒绝每一个命令。请安装 `bubblewrap` 软件包（在 Ubuntu 和 Debian 上是 `sudo apt install bubblewrap`），然后运行 `delorun doctor` 并重新启动。如果 `doctor` 随后说 bubblewrap 无法创建沙箱，见[保护与插件](#protections-and-plugins)。
+- **`delorun doctor` 显示 `warn docker`。**Docker 是可选的。这条警告表示 Docker 没有安装或没有响应，而使用你电脑自己文件夹的工作区无需它也能工作。
 
 <a id="starting-and-stopping"></a>
 
@@ -137,7 +152,9 @@ Run delorun logs to see why, then delorun doctor to check your setup.
 
 ## setup 与模型密钥
 
-- **`the key in DEEPSEEK_API_KEY was not accepted`。**setup 在保存密钥之前会与[提供方](../reference/glossary.zh.md#provider)核对，而提供方拒绝了它。请检查密钥并再次运行 `delorun setup`。
+- **`The key was not checked successfully: …`。**setup 在保存键入的密钥之前会与[提供方](../reference/glossary.zh.md#provider)核对，而这次检查失败了；后面跟着原因。请选择 **Enter the key again**，或选择 **Continue without a successful check** 仍然保存它，同时要知道密钥错误时 chat 无法回答。之后你可以用 `delorun setup key` 更改它。
+- **`the key in DEEPSEEK_API_KEY was not accepted`。**你带 `--check-key` 运行了 setup，并使用从环境中读取的密钥，而提供方拒绝了它。请检查密钥并再次运行 `delorun setup`。
+- **`DEEPSEEK_API_KEY is not set in this terminal`。**你选择从环境变量读取密钥，而这个终端没有该变量。请设置它（例如在你的 shell 启动文件中写 `export DEEPSEEK_API_KEY=your-key`），然后运行 `delorun stop` 和 `delorun start`。
 - **`DEEPSEEK_BASE_URL is not a URL`。**请修正或取消设置 `DEEPSEEK_BASE_URL`；没有有效的地址，setup 无法检查密钥。
 - **`the setup run for default is unfinished and needs the model key`。**用 `--yes` 或 `--config` 启动的 setup 在拿到密钥之前停止了。请在终端中运行 `delorun setup` 来完成它。
 - **`… holds …, which setup no longer asks`。**`delorun setup --config` 文档中写了 setup 不再有的答案。请从文档中删除它。
@@ -185,7 +202,7 @@ npm 启动器和 `delorun update` 在安装每个[发布版本](../reference/glo
 | `HOST_STOP_FAILED` | studio 没有及时停止，所以发布版本没有切换，原来的仍在运行。 | 再次运行同一条命令。 |
 | `REPORT_TARGET_UNVERIFIED` | 发布版本未通过验证，所以没有生成更新报告。 | 运行 `delorun verify`。 |
 
-`delorun update --yes` 会拒绝会关闭或移除某些东西、或含有 Delorun 无法预测的项目的报告：请不带 `--yes` 运行 `delorun update`，并逐项决定。当更新正在等待运行中的 chat 结束时，新消息会收到 “Delorun started no new turn: an update is waiting for running chats”；待 Delorun 恢复后再次发送。
+`delorun update --yes` 会拒绝会关闭或移除某些东西、会合并你对 Delorun 自身文件的改动、或含有 Delorun 无法预测的项目的报告，发布日志检查没有通过时它也会拒绝：请不带 `--yes` 运行 `delorun update`，并逐项决定。当更新正在等待运行中的 chat 结束时，新消息会收到 “Delorun started no new turn: an update is waiting for running chats”；待 Delorun 恢复后再次发送。
 
 以 “Delorun refused the change and left the profile as it was” 开头的拒绝，保护的是你添加到 profile 的东西，所以没有丢失任何内容。它的代码指出本来会丢失什么：
 
@@ -314,22 +331,13 @@ profile bwrap /usr/bin/bwrap flags=(unconfined) {
 
 如果 `delorun reach on tailscale` 说 “the running Delorun did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again”，请阅读它上面的那一行，修复它，然后再次运行命令。如果它说 “the running Delorun did not apply it” 或 “did not close its remote listener”，请用它打印的命令重启 Delorun。
 
-| 代码 | 含义 | 该怎么做 |
-| --- | --- | --- |
-| `APPROVALS_UNAVAILABLE` | 正在运行的 Delorun 没有加载远程访问。 | 运行 `delorun reach on tailscale`，然后重启 Delorun。 |
-| `LOOPBACK_REQUIRED` | 设备请求并非来自这台电脑上你自己的 `delorun`。 | 在这台电脑上用 `delorun devices approve` 批准设备。 |
-| `APPROVAL_FAILED` | 批准或取消没有成功。 | 运行 `delorun devices approve`，并再次从设备上提出请求。 |
-| `REMOVAL_FAILED` | 设备没有被移除。 | 检查 `delorun devices list`。 |
-| `ELEVATION_FAILED` | 设备上的敏感操作没有解锁，或解锁没有结束。 | 运行 `delorun devices elevate` 并再次查看列表。 |
-| `PIN_FAILED` | PIN 模式没有改变，例如因为 PIN 太弱。 | 选择至少 6 位且不是重复或连续数字的 PIN，或至少 10 个字符的口令。 |
-
 这些消息来自 `delorun devices`：
 
 - **`delorun devices: Delorun is not running. Start it with delorun start, then run delorun devices approve again`。**批准需要正在运行的 Delorun。请运行 `delorun start`，然后再次批准。`delorun devices elevate` 会用 “so no device holds an unlock” 说同样的话。
 - **`delorun devices: No device asked for approval before the window closed. Run delorun devices approve again`。**5 分钟内没有人提出请求。请再次运行命令，然后在手机上打开你的地址并选择 **Ask for approval**。
 - **`That request is no longer waiting.`**请求自行结束了（它过期了，或在手机上被取消了）。命令会再次列出等待中的请求；请选择另一个，或再次从手机上提出请求。
 - **`That code is not the one the device shows. Try again.`**你可以再次输入。第三次输错之后请求会被取消；请再次从手机上提出请求以获得新代码。
-- **`Remote access is off for this profile, so a phone cannot reach this home yet`。**`delorun devices approve` 在等待，但没有手机能连到你。请运行 `delorun reach on tailscale`。
+- **`Remote access is off for this profile, so a phone cannot reach your studio: turn it on with delorun reach on tailscale`。**`delorun devices approve` 在等待，但没有手机能连到你。请运行 `delorun reach on tailscale`。
 - **`DEVICE_NOT_TRUSTED`，“This home does not trust that device on this address. Ask for approval at the home's computer”。**home 拒绝了来自一台它在这个地址上不信任的设备的登录：它被移除了，或它是为另一个地址批准的。请再次从手机上请求批准，并在你的电脑上批准它（见[批准设备](reach.zh.md#approve-a-device)）。
 
 <a id="what-a-phone-shows-when-it-cannot-sign-in"></a>
@@ -386,9 +394,24 @@ Delorun 把你的[工作区](../reference/glossary.zh.md#workspace)保存在一�
 
 ## 当这里没有你的情况时
 
-运行 `delorun doctor`。它会检查 Docker、模型密钥的格式、你的 home、studio 的端口、发布日志检查、最近一次更新检查、你的更改以及你的 CLI profile 的插件，并为每一项打印一行。运行 `delorun logs home` 阅读正在运行的 Delorun 的最近记录；[Delorun 的日志存放在哪里](logs.zh.md)解释了每一份日志。
+运行 `delorun doctor`。它会检查 Docker、模型密钥的格式、你的 home、studio 的端口、沙箱（`sandbox` 一行）、工作区列表（`workspaces`）、profile 是否会在没有其保护的情况下运行（`dangerous-mode`）、发布日志检查、最近一次更新检查、最近一次从 DeepSeek Harness home 的导入（`import`）、你的更改以及你的 CLI profile 的插件，并为每一项打印一行。运行 `delorun logs home` 阅读正在运行的 Delorun 的最近记录；[Delorun 的日志存放在哪里](logs.zh.md)解释了每一份日志。
 
-说 “Report this” 的拒绝，表示 Delorun 发现了它无法解释的东西。请连同拒绝信息的文本一起报告：疑似漏洞请按 [SECURITY.md](../../../SECURITY.md) 的描述私下报告，其他问题请使用 [CONTRIBUTING.md](../../../CONTRIBUTING.zh.md) 所指的 issue 模板，或发送到 support@delorun.com。
+说 “Report this” 的拒绝，表示 Delorun 发现了它无法解释的东西。请连同拒绝信息的文本一起报告。
+
+<a id="report-a-problem-that-is-not-listed"></a>
+
+### 报告未列出的问题
+
+在 studio 侧边栏底部或“设置”→“关于”中选择 **Report a problem**。它会打开一份简短的 GitHub issue 审阅，其中已填好你的 Delorun 版本、系统和最近的错误，并已去除密钥。你先阅读，然后在浏览器中打开或复制它；Delorun 自己不会发送任何东西。你也可以在 chat 里请助手“Help me report this”，它会起草一份 issue 供你发送。
+
+手动报告时请包含：
+
+- `delorun --version` 给出的版本；
+- `delorun doctor` 的输出；
+- 能重现问题的最少步骤；
+- `delorun logs` 的相关行。请先阅读并去掉任何私密内容。
+
+问题请发到 [GitHub Discussions](https://github.com/Delo-Run/delorun/discussions)，缺陷请使用 [issue 模板](https://github.com/Delo-Run/delorun/issues/new/choose)，或发送到 support@delorun.com。[SUPPORT.md](../../../SUPPORT.md) 列出了各个途径。疑似漏洞只能私下报告，方式见 [SECURITY.md](../../../SECURITY.md)。
 
 <details>
 <summary>进一步了解</summary>
@@ -398,6 +421,17 @@ Delorun 把你的[工作区](../reference/glossary.zh.md#workspace)保存在一�
 - `delorun start` 和其他命令接受 `--profile <name>`，以对 `default` 以外的 profile 操作。
 
 </details>
+
+<a id="remove-delorun"></a>
+
+## 移除 Delorun
+
+1. 如果你开启过手机访问，请运行 `delorun reach off`。它会移除把你的手机转发到 studio 的 Tailscale 规则。
+2. 运行 `delorun stop`。
+3. 移除 `delorun` 命令：`npm uninstall -g delorun`，如果你是那样安装的，则加上 `--prefix ~/.local`。
+4. 只有在你不再需要自己的数据时，才删除你的 Delorun home，即 `~/.delorun` 或 `DELORUN_HOME` 所指的文件夹。
+
+home 保存着你的 chat、工作区列表、设置、密钥、已批准的设备和已安装的 Delorun 发布版本。删除它会丢掉这一切且无法撤销；请先用 `delorun export` 保存你想留下的 chat（见[日常使用](daily-use.zh.md#trash-export-and-import)）。你的工作区文件夹（包括 Documents 文件夹中的默认工作区 `Delorun/default-workspace`）以及 DeepSeek Harness 的 `~/.dsh` 都在它之外，会保留下来。如果你把 home 留在原处，再次安装 Delorun 时会从你停下的地方继续。
 
 <a id="next"></a>
 

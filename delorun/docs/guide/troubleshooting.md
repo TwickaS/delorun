@@ -16,6 +16,7 @@ Find yours by searching this page for the exact words or the code in the message
 
 - [Reading a refusal](#reading-a-refusal)
 - [The home and its files](#the-home-and-its-files)
+- [The first day](#the-first-day)
 - [Starting and stopping](#starting-and-stopping)
 - [The studio port is busy](#the-studio-port-is-busy)
 - [Setup and the model key](#setup-and-the-model-key)
@@ -29,6 +30,8 @@ Find yours by searching this page for the exact words or the code in the message
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
 - [The workspace list](#the-workspace-list)
 - [When nothing here fits](#when-nothing-here-fits)
+- [Report a problem that is not listed](#report-a-problem-that-is-not-listed)
+- [Remove Delorun](#remove-delorun)
 - [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
@@ -76,9 +79,21 @@ A command that fails without a code of its own starts with `delorun <command>:` 
 | `HOME_IS_DSH_HOME` | `DELORUN_HOME` names DeepSeek Harness's home `~/.dsh` or a folder inside it. | Choose another folder; Delorun keeps `~/.dsh` untouched. |
 | `SOCKET_PATH_TOO_LONG` | The home's path is too long for the local channel through which `delorun` commands talk to the running Delorun. | Choose a shorter home with `DELORUN_HOME`. |
 
-You should see the command run without a refusal once the fix is in. On Windows, Delorun does not check these permissions. [Your Delorun home](home.md) explains the home and its permissions.
+You should see the command run without a refusal once the fix is in. [Your Delorun home](home.md) explains the home and its permissions.
 
 A `.env` file in the folder you run `delorun` from, or in your Delorun home, may not set a name that starts with `DELORUN_`, because those names decide which home, profile and releases Delorun trusts. The refusal names the file. Remove the names from it, and set them in your shell instead if you need them.
+
+<a id="the-first-day"></a>
+
+## The first day
+
+These are the problems people meet before Delorun is running. Each ends with the fix.
+
+- **`Delorun needs Node 24.9 or newer to start`.** The message names the Node you have. A system package manager such as Ubuntu's `apt` often offers an older Node, so install a current one from [nodejs.org](https://nodejs.org) or with a version manager such as nvm, open a new terminal, check `node --version`, and run the command again. Every `delorun` command runs on Node, so Node must stay installed after the install; without it the shell prints `env: 'node': No such file or directory`.
+- **`npm install -g delorun` fails with `EACCES` or "permission denied".** Your Node lives in a folder only an administrator can write, which is usual for a system-wide Node on Linux. Install into your own folder instead, with the line that setup printed and `--prefix ~/.local` added: `npm install -g --prefix ~/.local delorun@<version>`. Then put `~/.local/bin` on your `PATH` (`export PATH="$HOME/.local/bin:$PATH"`, and the same line in your shell's startup file so that it lasts), open a new terminal and check with `command -v delorun`. A Node installed in your home folder, as nvm does, never meets this.
+- **The studio did not open in your browser.** Run `delorun open`. If it says `No browser took the studio link`, run `delorun open --print` and open the link it prints. A printed link signs in once and stops working after one minute, so run the command again for a new one. On a computer without a browser, see [A computer without a browser](install.md#a-computer-without-a-browser).
+- **Every command is refused, and `delorun doctor` says `fail sandbox: bubblewrap (bwrap) is not installed`.** On Linux, Delorun confines commands with bubblewrap. Without it, commands fall back to Landlock, which cannot hide the sockets that your login session or a terminal multiplexer such as tmux keeps in `/tmp`, so Delorun refuses every command while such a socket exists. Install the `bubblewrap` package (`sudo apt install bubblewrap` on Ubuntu and Debian), then run `delorun doctor` and start again. If `doctor` then says bubblewrap cannot create a sandbox, see [Protections and plugins](#protections-and-plugins).
+- **`delorun doctor` shows `warn docker`.** Docker is optional. The warning means Docker is not installed or does not answer, and workspaces on your own computer's folders work without it.
 
 ## Starting and stopping
 
@@ -127,7 +142,9 @@ To fix it, either stop the other program, or run `delorun setup profile` (add `-
 
 ## Setup and the model key
 
-- **`the key in DEEPSEEK_API_KEY was not accepted`.** Setup checks the key with the [provider](../reference/glossary.md#provider) before it saves it, and the provider refused it. Check the key and run `delorun setup` again.
+- **`The key was not checked successfully: …`.** Setup checks a typed key with the [provider](../reference/glossary.md#provider) before it saves it, and the check failed; the reason follows. Choose **Enter the key again**, or **Continue without a successful check** to store it anyway, knowing that chats cannot answer if the key is wrong. You can change it later with `delorun setup key`.
+- **`the key in DEEPSEEK_API_KEY was not accepted`.** You ran setup with `--check-key` and a key read from the environment, and the provider refused it. Check the key and run `delorun setup` again.
+- **`DEEPSEEK_API_KEY is not set in this terminal`.** You chose to read the key from an environment variable that this terminal does not hold. Set it (for example `export DEEPSEEK_API_KEY=your-key` in your shell's startup file), then run `delorun stop` and `delorun start`.
 - **`DEEPSEEK_BASE_URL is not a URL`.** Fix or unset `DEEPSEEK_BASE_URL`; setup cannot check the key without a valid address.
 - **`the setup run for default is unfinished and needs the model key`.** A setup started with `--yes` or `--config` stopped before it had a key. Run `delorun setup` in a terminal to finish it.
 - **`… holds …, which setup no longer asks`.** A `delorun setup --config` document names an answer setup no longer has. Remove it from the document.
@@ -171,7 +188,7 @@ Two refusals come from the public release log itself. "Delorun could not reach t
 | `HOST_STOP_FAILED` | The studio did not stop in time, so the release was not switched, and it runs again. | Run the same command again. |
 | `REPORT_TARGET_UNVERIFIED` | The release did not verify, so no update report was made. | Run `delorun verify`. |
 
-`delorun update --yes` refuses a report that turns off or removes something, or holds an item Delorun cannot predict: run `delorun update` without `--yes` and decide each item. When an update is waiting for running chats to end, a new message gets "Delorun started no new turn: an update is waiting for running chats"; send it again once Delorun is back.
+`delorun update --yes` refuses a report that turns off or removes something, merges your change to one of Delorun's own files, or holds an item Delorun cannot predict, and it refuses when the release-log check did not pass: run `delorun update` without `--yes` and decide each item. When an update is waiting for running chats to end, a new message gets "Delorun started no new turn: an update is waiting for running chats"; send it again once Delorun is back.
 
 A refusal that starts "Delorun refused the change and left the profile as it was" protects something you added to your profile, so nothing was lost. Its code names what would have been lost:
 
@@ -294,22 +311,13 @@ A refusal that starts "Delorun could not read or change what Tailscale serves fo
 
 If `delorun reach on tailscale` says "the running Delorun did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again", read the line above it, fix that, and run the command again. If it says "the running Delorun did not apply it" or "did not close its remote listener", restart Delorun with the command it prints.
 
-| Code | What it means | What to do |
-| --- | --- | --- |
-| `APPROVALS_UNAVAILABLE` | The running Delorun does not load remote access. | Run `delorun reach on tailscale`, then restart Delorun. |
-| `LOOPBACK_REQUIRED` | A device request did not come from your own `delorun` on this computer. | Approve devices at this computer with `delorun devices approve`. |
-| `APPROVAL_FAILED` | The approval or cancellation did not happen. | Run `delorun devices approve` and ask from the device again. |
-| `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
-| `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
-| `PIN_FAILED` | PIN mode did not change, for example because the PIN was too weak. | Choose a PIN of at least 6 digits that is not a repeat or a run, or a passcode of at least 10 characters. |
-
 These messages come from `delorun devices`:
 
 - **`delorun devices: Delorun is not running. Start it with delorun start, then run delorun devices approve again`.** Approving needs the running Delorun. Run `delorun start`, then approve again. `delorun devices elevate` says the same with "so no device holds an unlock".
 - **`delorun devices: No device asked for approval before the window closed. Run delorun devices approve again`.** Nobody asked within 5 minutes. Run the command again, then open your address on the phone and choose **Ask for approval**.
 - **`That request is no longer waiting.`** The request ended on its own (it expired, or was cancelled on the phone). The command lists the waiting requests again; choose another, or ask again from the phone.
 - **`That code is not the one the device shows. Try again.`** You may type it again. After the third wrong code the request is cancelled; ask again from the phone for a new code.
-- **`Remote access is off for this profile, so a phone cannot reach this home yet`.** `delorun devices approve` waits, but no phone can reach you. Run `delorun reach on tailscale`.
+- **`Remote access is off for this profile, so a phone cannot reach your studio: turn it on with delorun reach on tailscale`.** `delorun devices approve` waits, but no phone can reach you. Run `delorun reach on tailscale`.
 - **`DEVICE_NOT_TRUSTED`, "This home does not trust that device on this address. Ask for approval at the home's computer".** The home refused a sign-in from a device it does not trust at this address: it was removed, or it was approved for another address. Ask for approval from the phone again, and approve it at your computer ([Approve a device](reach.md#approve-a-device)).
 
 ### What a phone shows when it cannot sign in
@@ -358,9 +366,22 @@ Before every change to the list, Delorun keeps the previous good file as `worksp
 
 ## When nothing here fits
 
-Run `delorun doctor`. It checks Docker, the model key's format, your home, the studio's port, the release-log check, the last update check, your changes and your CLI profile's plugins, and prints one line for each. Run `delorun logs home` to read the running Delorun's recent records; [Where Delorun keeps its logs](logs.md) explains each log.
+Run `delorun doctor`. It checks Docker, the model key's format, your home, the studio's port, the sandbox (the `sandbox` line), the workspace list (`workspaces`), whether the profile would run without its protections (`dangerous-mode`), the release-log check, the last update check, the last import from a DeepSeek Harness home (`import`), your changes and your CLI profile's plugins, and prints one line for each. Run `delorun logs home` to read the running Delorun's recent records; [Where Delorun keeps its logs](logs.md) explains each log.
 
-A refusal that says "Report this" means Delorun found something it cannot explain. Report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+A refusal that says "Report this" means Delorun found something it cannot explain. Report it with the refusal's text.
+
+### Report a problem that is not listed
+
+Choose **Report a problem** at the foot of the studio's sidebar, or in Settings → About. It opens a short review of a GitHub issue already filled in with your Delorun version, your system and recent errors, with secrets removed. You read it, then open it in your browser or copy it; Delorun sends nothing itself. You can also ask the assistant in a chat to "Help me report this", and it drafts the issue for you to send.
+
+By hand, include:
+
+- the version from `delorun --version`;
+- the output of `delorun doctor`;
+- the smallest steps that repeat the problem;
+- the relevant lines of `delorun logs`. Read them first and remove anything private.
+
+Send it to [GitHub Discussions](https://github.com/Delo-Run/delorun/discussions) for a question, the [issue templates](https://github.com/Delo-Run/delorun/issues/new/choose) for a bug, or support@delorun.com. [SUPPORT.md](../../../SUPPORT.md) lists the routes. Report a suspected vulnerability only privately, as [SECURITY.md](../../../SECURITY.md) describes.
 
 <details>
 <summary>Go further</summary>
@@ -370,6 +391,15 @@ A refusal that says "Report this" means Delorun found something it cannot explai
 - `delorun start` and the other commands accept `--profile <name>` to work on a profile other than `default`.
 
 </details>
+
+## Remove Delorun
+
+1. If you turned on phone access, run `delorun reach off`. It removes the Tailscale rule that forwards your phone to the studio.
+2. Run `delorun stop`.
+3. Remove the `delorun` command: `npm uninstall -g delorun`, adding `--prefix ~/.local` if you installed it that way.
+4. Delete your Delorun home, `~/.delorun` or the folder `DELORUN_HOME` names, only if you no longer want your data.
+
+The home holds your chats, your workspace list, your settings, your keys, your approved devices and the installed Delorun releases. Deleting it loses all of that and cannot be undone; save chats you want first with `delorun export` ([Daily use](daily-use.md#trash-export-and-import)). The folders of your workspaces, including the default workspace `Delorun/default-workspace` in your Documents folder, and DeepSeek Harness's `~/.dsh` are outside it and stay. If you leave the home in place, installing Delorun again picks up where you stopped.
 
 ## Next
 
