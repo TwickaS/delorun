@@ -10,6 +10,7 @@
 import { DELORUN_LAUNCHER_VERSION_ENV } from '@delorun/contract-home-layout'
 import type { SetupAnswers } from '@delorun/contract-setup-answers'
 import semver from 'semver'
+import type { CheckResult } from '../doctor/checks.ts'
 import { profileFlag } from '../open/studio.ts'
 import { SETUP_PROVIDERS } from './providers.ts'
 
@@ -39,6 +40,15 @@ export function localInstallLine(version: string): string {
 }
 
 /**
+ * The sentence that follows an install line, for a computer where npm refuses a global install without permission.
+ * @param installCommand - the install line it follows.
+ * @returns one sentence naming the line with a user prefix and the folder to add to `PATH`.
+ */
+export function permissionLine(installCommand: string): string {
+  return `If npm refuses for lack of permission, run ${installCommand.replace('install -g', 'install -g --prefix ~/.local')} and add ~/.local/bin to your PATH.`
+}
+
+/**
  * The version of the launcher that started this run.
  * @param env - the environment `delorun` inherited.
  * @returns the version from `DELORUN_LAUNCHER_VERSION`, or `undefined` when the variable is unset or not a semantic version.
@@ -58,6 +68,8 @@ export interface NextStepsRequest {
   readonly env: Readonly<Record<string, string | undefined>>
   /** The channel origin of a launcher built for another release channel, or `undefined` for the production channel. */
   readonly channelOrigin?: string | undefined
+  /** The sandbox check `delorun doctor` has, run at the end of setup on Linux; `undefined` where it does not run. */
+  readonly sandbox?: CheckResult | undefined
 }
 
 /**
@@ -76,6 +88,16 @@ function keyStep(request: NextStepsRequest, flag: string): string | undefined {
 }
 
 /**
+ * The sandbox warning, when the check found the sandbox cannot run.
+ * @param sandbox - the check's result.
+ * @returns nothing for a pass or no check; a blank line and the check's message with the word it carries otherwise.
+ */
+function sandboxLines(sandbox: CheckResult | undefined): readonly string[] {
+  if (sandbox === undefined || sandbox.status === 'pass') return []
+  return ['', `Sandbox: ${sandbox.message}`]
+}
+
+/**
  * The text a finished setup prints.
  * @param request - the profile, the answers and the environment.
  * @returns the text: what is set up, the numbered next steps for the use case, and how to change an answer.
@@ -87,8 +109,8 @@ export function nextSteps(request: NextStepsRequest): string {
   const version = launcherVersion(request.env)
   if (version !== undefined) {
     steps.push(request.channelOrigin === undefined
-      ? ['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`]
-      : [`Keep the delorun command, which npx does not keep: ${version} is not on the npm registry, so install the package file this launcher came from:`, `  ${localInstallLine(version)}`])
+      ? ['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`, permissionLine(installLine(version))]
+      : [`Keep the delorun command, which npx does not keep: ${version} is not on the npm registry, so install the package file this launcher came from:`, `  ${localInstallLine(version)}`, permissionLine(localInstallLine(version))])
   }
   const key = keyStep(request, flag)
   if (key !== undefined) steps.push([key])
@@ -108,6 +130,7 @@ export function nextSteps(request: NextStepsRequest): string {
     '',
     'Next:',
     ...steps.flatMap((lines, index) => lines.map((line, position) => position === 0 ? `  ${String(index + 1)}. ${line}` : `     ${line.trimStart()}`)),
+    ...sandboxLines(request.sandbox),
     '',
     `Change an answer later: delorun setup <section>${flag} (delorun setup --list shows the sections).`,
     `If something looks wrong: delorun doctor${flag}.`,

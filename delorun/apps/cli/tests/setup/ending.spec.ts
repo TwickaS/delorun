@@ -20,6 +20,16 @@ describe('the launcher version', () => {
 })
 
 describe('the next steps', () => {
+  it('print the sandbox fix when the check found the sandbox cannot run, and nothing when it passes', () => {
+    const answers = { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV }
+    const message = 'bubblewrap (bwrap) is not installed, so every sandboxed command is refused while /run/user/1000 exists; install the bubblewrap package (on Debian or Ubuntu: sudo apt install bubblewrap), then restart Delorun.'
+    const failed = nextSteps({ profile: 'default', answers, env: KEY_SET, sandbox: { name: 'sandbox', status: 'fail', message } })
+    expect(failed).toContain(`\nSandbox: ${message}\n\nChange an answer later`)
+    const passed = nextSteps({ profile: 'default', answers, env: KEY_SET, sandbox: { name: 'sandbox', status: 'pass', message: 'ok' } })
+    expect(passed).not.toContain('Sandbox:')
+    expect(passed).toBe(nextSteps({ profile: 'default', answers, env: KEY_SET }))
+  })
+
   it('print how to start and open the studio, the install guide first-chat section and how to change an answer, and nothing about a process', () => {
     const text = steps({})
     expect(text).toBe([
@@ -45,12 +55,12 @@ describe('the next steps', () => {
 
   it('put the install of the command first when the launcher started the run', () => {
     const text = steps({}, { ...KEY_SET, DELORUN_LAUNCHER_VERSION: '0.1.0' })
-    expect(text).toContain('  1. Install the delorun command, which npx does not keep:\n     npm install -g delorun@0.1.0\n  2. Start Delorun')
+    expect(text).toContain('  1. Install the delorun command, which npx does not keep:\n     npm install -g delorun@0.1.0\n     If npm refuses for lack of permission, run npm install -g --prefix ~/.local delorun@0.1.0 and add ~/.local/bin to your PATH.\n  2. Start Delorun')
   })
 
   it('keep the command from the package file when the launcher was built for another release channel', () => {
     const text = nextSteps({ profile: 'default', answers: { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV }, env: { ...KEY_SET, DELORUN_LAUNCHER_VERSION: '0.1.0-rc.1' }, channelOrigin: 'http://127.0.0.1:18080' })
-    expect(text).toContain('  1. Keep the delorun command, which npx does not keep: 0.1.0-rc.1 is not on the npm registry, so install the package file this launcher came from:\n     npm install -g ./delorun-0.1.0-rc.1.tgz\n  2. Start Delorun')
+    expect(text).toContain('  1. Keep the delorun command, which npx does not keep: 0.1.0-rc.1 is not on the npm registry, so install the package file this launcher came from:\n     npm install -g ./delorun-0.1.0-rc.1.tgz\n     If npm refuses for lack of permission, run npm install -g --prefix ~/.local ./delorun-0.1.0-rc.1.tgz and add ~/.local/bin to your PATH.\n  2. Start Delorun')
     expect(text).not.toContain('delorun@0.1.0-rc.1')
   })
 

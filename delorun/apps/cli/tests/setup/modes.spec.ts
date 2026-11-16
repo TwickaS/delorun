@@ -391,6 +391,12 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
     })
   }
 
+  it('prints the sandbox check\'s fix on the last screen when the sandbox cannot run', async () => {
+    const message = 'bubblewrap (bwrap) is not installed, so sandboxed commands run under Landlock, which cannot keep them from connecting to sockets; install the bubblewrap package (on Debian or Ubuntu: sudo apt install bubblewrap), then restart Delorun.'
+    expect(await unattended({ sandboxCheck: () => Promise.resolve({ name: 'sandbox', status: 'warn', message }) })).toBe(EXIT.ok)
+    expect(screen()).toContain(`Sandbox: ${message}`)
+  })
+
   it('records the privacy note as seen and every other section as skipped, starts nothing and prints the next step', async () => {
     expect(await unattended({})).toBe(EXIT.ok)
     expect(recordOf().sections).toEqual([

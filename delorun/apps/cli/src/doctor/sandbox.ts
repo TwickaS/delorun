@@ -9,6 +9,8 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { escapeDirectories } from '../sandbox-protection.ts'
 import type { CheckResult } from './checks.ts'
 
 /** What `bwrap --ro-bind / / true` found. */
@@ -109,7 +111,7 @@ export function checkSandbox(facts: SandboxFacts): CheckResult {
     : `every sandboxed command is refused while ${escapeDirectory} exists`
   switch (probe.kind) {
     case 'missing':
-      return { name: 'sandbox', status, message: `bubblewrap (bwrap) is not installed, so ${effect}; install the bubblewrap package, then restart Delorun.` }
+      return { name: 'sandbox', status, message: `bubblewrap (bwrap) is not installed, so ${effect}; install the bubblewrap package (on Debian or Ubuntu: sudo apt install bubblewrap), then restart Delorun.` }
     case 'timed-out':
       return { name: 'sandbox', status: 'warn', message: `bubblewrap did not finish within ${String(BWRAP_PROBE_TIMEOUT_MILLIS / 1000)} s; run delorun doctor again when the computer is less busy.` }
     case 'failed':
@@ -119,6 +121,20 @@ export function checkSandbox(facts: SandboxFacts): CheckResult {
     default:
       return assertNever(probe)
   }
+}
+
+/**
+ * The sandbox check on this computer: bwrap's probe, the AppArmor setting, and the first escape socket directory the
+ * start would name that exists. `delorun doctor` and the end of `delorun setup` both run it.
+ * @param path - the search path for `bwrap`, from the command's environment.
+ * @returns the check's result.
+ */
+export async function checkSandboxHere(path: string | undefined): Promise<CheckResult> {
+  return checkSandbox({
+    probe: await runBwrapProbe(path),
+    appArmorRestricts: appArmorRestrictsUserNamespaces(),
+    escapeDirectory: firstExisting(escapeDirectories(process.getuid?.(), homedir())),
+  })
 }
 
 /**

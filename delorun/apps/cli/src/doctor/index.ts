@@ -32,7 +32,6 @@
  *
  * @module @delorun/cli/doctor
  */
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-layout'
@@ -49,11 +48,10 @@ import { isSetupProviderId, profileModelSelection, routeKeyReference, SETUP_PROV
 import { dangerousModeState, dangerousStateLine } from '../setup/dangerous.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { studioAddress } from '../status.ts'
-import { escapeDirectories } from '../sandbox-protection.ts'
 import { printable } from '../terminal-text.ts'
 import { delorunVersion, versions } from '../version.ts'
 import { checkChanges } from './changes.ts'
-import { appArmorRestrictsUserNamespaces, checkSandbox, firstExisting, runBwrapProbe } from './sandbox.ts'
+import { checkSandboxHere } from './sandbox.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
 import { checkLastStart } from './last-start.ts'
 import { checkPlugins, checkSafeMode } from './plugins.ts'
@@ -242,20 +240,6 @@ async function portCheck(context: CommandContext, profile: string, option: numbe
   return checkPort(resolveStudioPort(option, configured, profile), async () => homeStudioPort(await home(), profile))
 }
 
-/**
- * The sandbox check, on Linux: bwrap's probe, the AppArmor setting, and the first escape socket directory the start
- * would name that exists.
- * @param context - the command's environment, whose `PATH` finds `bwrap`.
- * @returns the check's result.
- */
-async function sandboxCheck(context: CommandContext): Promise<CheckResult> {
-  return checkSandbox({
-    probe: await runBwrapProbe(context.env.PATH),
-    appArmorRestricts: appArmorRestrictsUserNamespaces(),
-    escapeDirectory: firstExisting(escapeDirectories(process.getuid?.(), homedir())),
-  })
-}
-
 /** What the command reads besides the home and the environment. */
 export interface DoctorEnvironment {
   /**
@@ -300,7 +284,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
         await guarded('key', () => keyCheck(context, profile)),
         await guarded('port', () => portCheck(context, profile, option)),
-        ...process.platform === 'linux' ? [await guarded('sandbox', () => sandboxCheck(context))] : [],
+        ...process.platform === 'linux' ? [await guarded('sandbox', () => checkSandboxHere(context.env.PATH))] : [],
         ...await guardedLines('changes', () => checkChanges(context.env, profile)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDelorunHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),

@@ -27,6 +27,8 @@ import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument,
 import { currentAnswers } from './current.ts'
 import { promptsFromFlags } from './dangerous.ts'
 import { channelOriginOf } from './channel-origin.ts'
+import { checkSandboxHere } from '../doctor/sandbox.ts'
+import type { CheckResult } from '../doctor/checks.ts'
 import { nextSteps } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
@@ -89,6 +91,8 @@ export interface SetupRequest {
   readonly noUpdateCheck?: boolean
   /** Whether a local port is free; a listen on the loopback address by default. */
   readonly portIsFree?: (port: number) => Promise<boolean>
+  /** The sandbox check printed at the end of setup; `delorun doctor`'s check on Linux by default, nothing elsewhere. */
+  readonly sandboxCheck?: () => Promise<CheckResult | undefined>
 }
 
 /**
@@ -379,7 +383,8 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   const directory = profileDirectory(request.home, profile)
   writeAnswersRecord(directory, progress.answers)
   removeProgress(runDir)
-  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin: await channelOriginOf(request.home) }))
+  const sandbox = await (request.sandboxCheck ?? (() => process.platform === 'linux' ? checkSandboxHere(request.env.PATH) : Promise.resolve(undefined)))()
+  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin: await channelOriginOf(request.home), sandbox }))
   return EXIT.ok
 }
 

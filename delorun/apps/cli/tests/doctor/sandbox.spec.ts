@@ -85,10 +85,10 @@ describe('checkSandbox', () => {
 
   it('fails where an escape directory exists and warns where none does, naming the fix', () => {
     expect(checkSandbox({ probe: { kind: 'missing' }, appArmorRestricts: false, escapeDirectory: ESCAPE })).toEqual({
-      name: 'sandbox', status: 'fail', message: 'bubblewrap (bwrap) is not installed, so every sandboxed command is refused while /run/user/1000 exists; install the bubblewrap package, then restart Delorun.',
+      name: 'sandbox', status: 'fail', message: 'bubblewrap (bwrap) is not installed, so every sandboxed command is refused while /run/user/1000 exists; install the bubblewrap package (on Debian or Ubuntu: sudo apt install bubblewrap), then restart Delorun.',
     })
     expect(checkSandbox({ probe: { kind: 'missing' }, appArmorRestricts: false, escapeDirectory: undefined })).toEqual({
-      name: 'sandbox', status: 'warn', message: 'bubblewrap (bwrap) is not installed, so sandboxed commands run under Landlock, which cannot keep them from connecting to sockets; install the bubblewrap package, then restart Delorun.',
+      name: 'sandbox', status: 'warn', message: 'bubblewrap (bwrap) is not installed, so sandboxed commands run under Landlock, which cannot keep them from connecting to sockets; install the bubblewrap package (on Debian or Ubuntu: sudo apt install bubblewrap), then restart Delorun.',
     })
   })
 
