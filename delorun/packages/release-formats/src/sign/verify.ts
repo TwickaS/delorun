@@ -26,7 +26,7 @@ import semver from 'semver'
 import { sha256Hex } from '../brands.ts'
 import { validSigners, verifyingKey, type VerifyingKey } from './envelope.ts'
 import type { JsonValue } from './json.ts'
-import { readEnvelope, type ReadEnvelope } from './schemas.ts'
+import { readEnvelope, type EnvelopeKinds, type ReadEnvelope } from './schemas.ts'
 
 /** Why verification refused a file. */
 export class VerificationError extends Error {
@@ -286,5 +286,23 @@ export function verifyFileList(root: RootMetadata, manifest: ReleaseManifest, pl
   const envelope = readEnvelope('files', bytes)
   requireTargets(root, `file list ${platform}`, asJson(envelope), manifest.version)
   if (envelope.signed.version !== manifest.version || envelope.signed.platform !== platform) throw new VerificationError(`the file list is for ${envelope.signed.version} ${envelope.signed.platform}, not ${manifest.version} ${platform}`)
+  return envelope.signed
+}
+
+/**
+ * Verify a release's packs document against the manifest it belongs to.
+ * @param root - the trusted root.
+ * @param manifest - the verified manifest.
+ * @param manifestBytes - the manifest file's bytes, whose SHA-256 the document names.
+ * @param bytes - the packs file.
+ * @returns the packs.
+ * @throws VerificationError when the signature fails, or the document names another release or another manifest.
+ */
+export function verifyPacks(root: RootMetadata, manifest: ReleaseManifest, manifestBytes: Uint8Array, bytes: Uint8Array): EnvelopeKinds['packs'] {
+  const envelope = readEnvelope('packs', bytes)
+  requireTargets(root, `packs ${envelope.signed.version}`, asJson(envelope), manifest.version)
+  if (envelope.signed.version !== manifest.version) throw new VerificationError(`the packs file is for ${envelope.signed.version}, not ${manifest.version}`)
+  const digest = createHash('sha256').update(manifestBytes).digest('hex')
+  if (envelope.signed.manifest !== digest) throw new VerificationError(`the packs file belongs to the manifest with SHA-256 ${envelope.signed.manifest}, not ${digest}`)
   return envelope.signed
 }

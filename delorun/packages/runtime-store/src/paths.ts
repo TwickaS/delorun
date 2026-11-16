@@ -71,6 +71,8 @@ export class StorePaths {
   readonly layout: string
   /** `runtimes/store.lock`. */
   readonly lock: string
+  /** `<home>/packs`, the unpacked plugin packs by release. */
+  readonly packs: string
   /** `trust/runtime-files`, the installations' identity records, outside every read exemption of confined commands. */
   readonly identityRecords: string
 
@@ -88,9 +90,20 @@ export class StorePaths {
     this.platform = platform
     this.root = join(home, DELORUN_HOME_ENTRIES.runtimes)
     this.staging = join(home, DELORUN_HOME_ENTRIES.staging)
+    this.packs = join(home, DELORUN_HOME_ENTRIES.packs)
     this.layout = join(this.root, STORE_ENTRIES.layout)
     this.lock = join(this.root, STORE_ENTRIES.lock)
     this.identityRecords = join(home, DELORUN_HOME_ENTRIES.trust, IDENTITY_RECORDS)
+  }
+
+  /**
+   * A pack's directory for one release.
+   * @param version - the release version.
+   * @param name - the pack's package name.
+   * @returns `packs/<version>/<name>`, with `/` in a scoped name written `__`.
+   */
+  pack(version: RuntimeVersion, name: string): string {
+    return join(this.packs, version, name.replaceAll('/', '__'))
   }
 
   /**
