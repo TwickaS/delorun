@@ -1,0 +1,171 @@
+/* One row per plugin. The card tone gives the active bar the accent; the quiet tone never does. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-5);
+  min-width: 0;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  object-fit: cover;
+}
+
+.row[data-tone='quiet'] .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row[data-tone='quiet'] .name {
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
+
+.status {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-border-l2);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dsw-alias-label-tertiary);
+  transition: width 0.3s ease-out;
+}
+
+.fill.accent {
+  background: var(--dsw-alias-brand-primary);
+}
+
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--delorun-space-2);
+}
+
+.action,
+.text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 var(--delorun-space-3);
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--dsw-font-xs-13-font-size);
+  cursor: pointer;
+}
+
+.action:focus-visible,
+.text:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .action:hover,
+  .text:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+@media (pointer: coarse) {
+  .action,
+  .text {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.tick {
+  display: inline-flex;
+  color: var(--dsw-alias-state-success-primary);
+  animation: tick-in 0.28s ease-out;
+}
+
+.row[data-tone='quiet'] .tick {
+  color: var(--dsw-alias-label-tertiary);
+  animation: none;
+}
+
+.marker {
+  display: inline-flex;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@keyframes tick-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick {
+    animation: none;
+  }
+
+  .fill {
+    transition: none;
+  }
+}
