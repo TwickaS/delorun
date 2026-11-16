@@ -133,6 +133,9 @@ export class AbstractSocketConsent {
    * Whether the local provider's own wrap of this call fails with the abstract-socket refusal, rather than for an
    * earlier reason (the escape-socket refusal, no usable runner). The wrap runs the runner's checks in order, so only
    * a failure with the same text as {@link refusalOf} means the abstract sockets are what would stop the call.
+   * The probe writes nothing and starts no command, but it may pick the runner earlier than the real wrap would (one
+   * cached `spawnSync` probe of bubblewrap or Landlock) and, if the workspace accepted the risk in the meantime, log the
+   * accepted-sockets warning in place of the wrap.
    * @param refusal - the text the abstract-socket refusal carries for the finding.
    * @param session - the calling chat.
    * @returns true when the abstract-socket refusal is the one the call meets.
