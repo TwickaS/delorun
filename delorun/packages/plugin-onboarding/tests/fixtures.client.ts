@@ -12,7 +12,7 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
+import type { AgentModelsAnswer, CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
   AddOutcome, AgentRowSettings, AgentsFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
@@ -42,6 +42,10 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
     snapshot = { ...snapshot, ...next }
     for (const listener of [...listeners]) listener()
   }
+  const unset = vi.fn((field: string): Promise<boolean> => {
+    publish({ value: { ...snapshot.value, [field]: undefined } as T })
+    return Promise.resolve(true)
+  })
   const set = vi.fn((field: string, value: unknown): Promise<boolean> => {
     if (options.result === 'reject') return Promise.reject(new Error('transport'))
     if (options.result === false) return Promise.resolve(false)
@@ -56,9 +60,9 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    set, unset: () => Promise.resolve(true), mutate: () => Promise.resolve(true),
+    set, unset, mutate: () => Promise.resolve(true),
   }
-  return { form, set, publish, listeners, value: () => snapshot.value }
+  return { form, set, unset, publish, listeners, value: () => snapshot.value }
 }
 
 /** Delorun's look with its defaults, as the theme's host half stores it. */
@@ -134,6 +138,7 @@ export function hostFake(change: {
   readonly readiness?: Readiness | undefined
   readonly keys?: KeyTestAnswer | undefined
   readonly recommend?: RecommendAnswer | undefined
+  readonly agentModels?: AgentModelsAnswer
   readonly reach?: ReachState
   readonly localModels?: readonly LocalServer[] | undefined
   readonly cloneStart?: CloneStartOutcome
@@ -147,8 +152,9 @@ export function hostFake(change: {
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
   const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
   const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
-  const host: HostFace = { readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
-  return { host, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
+  const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const }))
+  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
+  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
 }
 
 /** The home directory the folder listings start at. */

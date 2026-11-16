@@ -93,6 +93,51 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* The model choice: one row per model, scrolling when the list is long. */
+.models {
+  display: flex;
+  flex-direction: column;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.model {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--onb-target);
+  padding: 0 var(--onb-gap-2);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  cursor: pointer;
+}
+
+.model + .model {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.model:hover {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.model[data-selected] {
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--dsw-alias-brand-primary);
+}
+
+.model:has(.radio:focus-visible) {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.model:has(.radio:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .preset { transition: none; }
 }

@@ -296,3 +296,38 @@ export function isLoopbackBaseURL(baseURL: string): boolean {
   return url.protocol === 'http:' && url.username === '' && url.password === ''
     && (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]')
 }
+
+/** The harness's route that asks an installed agent which models it offers. `POST` takes {@link AgentModelsRequest} and answers {@link AgentModelsAnswer}. */
+export const AGENT_MODELS_PATH = '/api/delorunOnboarding.agentModels'
+
+/** The agents whose models the route lists. */
+export const AGENT_IDS = ['claude-code', 'codex'] as const
+
+/** Which agent's models to list. */
+export const AgentModelsRequest = z.strictObject({ agent: z.enum(AGENT_IDS) })
+
+/** {@link AgentModelsRequest}'s parsed value. */
+export type AgentModelsRequest = z.output<typeof AgentModelsRequest>
+
+/** One model an agent reports. */
+export const AgentModelOption = z.strictObject({
+  /** The name to configure as the agent's `model`. */
+  model: z.string().min(1),
+  /** The name a person knows it by. */
+  displayName: z.string().min(1),
+})
+
+/** {@link AgentModelOption}'s parsed value. */
+export type AgentModelOption = z.output<typeof AgentModelOption>
+
+/**
+ * What the route answers: the agent's models, or `unavailable` when the agent is not installed and running, did not
+ * answer in time or failed. `unavailable` carries no reason; the person sees only that the list is not there.
+ */
+export const AgentModelsAnswer = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('listed'), models: z.array(AgentModelOption) }),
+  z.strictObject({ state: z.literal('unavailable') }),
+])
+
+/** {@link AgentModelsAnswer}'s parsed value. */
+export type AgentModelsAnswer = z.output<typeof AgentModelsAnswer>

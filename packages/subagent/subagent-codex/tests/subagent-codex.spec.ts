@@ -25,6 +25,7 @@ import {
   CODEX_PERMISSION_MODES,
   DEFAULT_CODEX_PERMISSION_MODE,
   codexAppServerArgv,
+  listCodexModels,
   DEFAULT_DISPOSE_GRACE_MS,
   disposeCodexChild,
   startCodexRun,
@@ -597,6 +598,34 @@ describe('task admission and package contracts', () => {
     for (const permissionMode of ['on-request', 'untrusted', 'future-mode']) {
       expect(() => codex.Config({ permissionMode } as never)).toThrow()
     }
+  })
+
+  it('lists the models the app-server reports across its pages, leaving hidden ones out, and releases the child', async () => {
+    const child = fakeChild()
+    const listing = listCodexModels({
+      cwd: '/workspace',
+      permissionMode: DEFAULT_CODEX_PERMISSION_MODE,
+      env: {},
+      disposeGraceMs: 3_000,
+      spawn: () => child.handle,
+    }, new AbortController().signal)
+    const initialize = await child.peer.nextMethod('initialize')
+    child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+    await child.peer.nextMethod('initialized')
+    const first = await child.peer.nextMethod('model/list')
+    expect(first.params).toEqual({})
+    child.peer.respond(first, {
+      data: [{ id: 'a', model: 'gpt-codex', displayName: 'GPT Codex', hidden: false }, { id: 'b', model: 'old', displayName: 'Old', hidden: true }],
+      nextCursor: 'page-2',
+    })
+    const second = await child.peer.nextMethod('model/list')
+    expect(second.params).toEqual({ cursor: 'page-2' })
+    child.peer.respond(second, { data: [{ id: 'c', model: 'gpt-mini', displayName: '', hidden: false }], nextCursor: null })
+    await expect(listing).resolves.toEqual([
+      { model: 'gpt-codex', displayName: 'GPT Codex' },
+      { model: 'gpt-mini', displayName: 'gpt-mini' },
+    ])
+    expect(child.handle.terminate).toHaveBeenCalled()
   })
 
   it('resolves the safe permission default when apply is called directly', async () => {

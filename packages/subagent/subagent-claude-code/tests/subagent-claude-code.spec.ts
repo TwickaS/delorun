@@ -48,6 +48,7 @@ import {
   claudeQueryOptions,
   consumeClaudeQuery,
   disposeClaudeCodeChild,
+  listClaudeCodeModels,
   startClaudeCodeRun,
   successfulResult,
   textTask,
@@ -340,6 +341,43 @@ afterEach(() => {
   queryMock.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+})
+
+describe('model listing', () => {
+  it('lists the models Claude Code reports without its default row, and releases the process', async () => {
+    const run = fakeRun()
+    const close = vi.fn()
+    queryMock.mockImplementation(({ options }) => {
+      options.spawnClaudeCodeProcess!(sdkSpawnOptions())
+      return {
+        ...queryFrom([], undefined, close),
+        supportedModels: () => Promise.resolve([
+          { value: 'default', displayName: 'Default (recommended)', description: '' },
+          { value: 'sonnet', displayName: 'Sonnet', description: '' },
+          { value: 'opus', displayName: 'Opus', description: '' },
+        ]),
+      } as unknown as Query
+    })
+    await expect(listClaudeCodeModels(run.spec, new AbortController().signal)).resolves.toEqual([
+      { model: 'sonnet', displayName: 'Sonnet' },
+      { model: 'opus', displayName: 'Opus' },
+    ])
+    expect(close).toHaveBeenCalled()
+    expect(run.child.terminate).toHaveBeenCalled()
+  })
+
+  it('rejects when cancelled before the process answers, and still releases it', async () => {
+    const run = fakeRun()
+    const controller = new AbortController()
+    queryMock.mockImplementation(({ options }) => {
+      options.spawnClaudeCodeProcess!(sdkSpawnOptions())
+      return { ...queryFrom([]), supportedModels: () => new Promise(() => {}) } as unknown as Query
+    })
+    const listing = listClaudeCodeModels(run.spec, controller.signal)
+    controller.abort(new Error('stop'))
+    await expect(listing).rejects.toThrow('stop')
+    expect(run.child.terminate).toHaveBeenCalled()
+  })
 })
 
 describe('task admission and package contracts', () => {

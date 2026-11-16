@@ -2677,6 +2677,24 @@
       "class": "delorun-feature",
       "feature": "agents-setup",
       "reason": "Maps `read-only` to `approvalPolicy: never` with `sandbox: read-only` on `thread/start`. Stricter than the default; no existing mode changes."
+    },
+    {
+      "path": "packages/subagent/subagent-claude-code/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Claude Code reports."
+    },
+    {
+      "path": "packages/subagent/subagent-claude-code/src/run.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listClaudeCodeModels`: asks a fresh Claude Code process for `supportedModels()` and releases it, leaving out the default row."
+    },
+    {
+      "path": "packages/subagent/subagent-codex/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
     }
   ],
   "retired": []

@@ -8,7 +8,8 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { RUN_TIMEOUT_MINUTES } from '@delorun/plugin-delegation-consent/wire'
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import type { StepServices } from '../types.ts'
+import type { AgentModelsAnswer } from '../../wire.ts'
+import type { AgentRowSettings, StepServices } from '../types.ts'
 import { Disclosure } from '../ui/Disclosure.tsx'
 import { AGENT_PRESETS, type AgentId } from './agent-presets.ts'
 import css from './agents.module.css'
@@ -24,8 +25,6 @@ function useForm<T>(form: ConfigForm<T>): ReturnType<ConfigForm<T>['getSnapshot'
 /** What the person chose before the agent's row existed. */
 interface Pending {
   readonly mode?: string
-  /** An empty string clears the model. */
-  readonly model?: string
 }
 
 /** The props of the group. */
@@ -45,38 +44,77 @@ export interface AgentAdvancedProps {
  * @param props - the agent, its copy key and name, and the services.
  * @returns the disclosure.
  */
+/** The model choice: the agent's own default first, then the models the installed agent reports. */
+function ModelChoice({ agent, form, live, services, title }: {
+  readonly agent: AgentId
+  readonly form: ConfigForm<AgentRowSettings>
+  readonly live: boolean
+  readonly services: StepServices
+  readonly title: string
+}): ReactNode {
+  const { t } = services
+  const row = useForm(form)
+  const [answer, setAnswer] = useState<AgentModelsAnswer | 'reading' | undefined>()
+  const name = useId()
+  useEffect(() => {
+    if (!live) { setAnswer(undefined); return undefined }
+    let current = true
+    setAnswer('reading')
+    void services.host.agentModels(agent).then((next) => { if (current) setAnswer(next) })
+    return () => { current = false }
+  }, [live, agent, services.host])
+  const saved = row.value?.model ?? ''
+  const listed = typeof answer === 'object' && answer.state === 'listed' ? answer.models : []
+  const options: readonly { readonly value: string; readonly label: string }[] = [
+    { value: '', label: t('agents.model.default') },
+    ...listed.map(each => ({ value: each.model, label: each.displayName })),
+    // A model already configured that the agent does not list stays visible, so the choice never hides what is set.
+    ...saved !== '' && !listed.some(each => each.model === saved) ? [{ value: saved, label: saved }] : [],
+  ]
+  const choose = (value: string): void => {
+    if (!live) return
+    void (value === '' ? form.unset('model') : form.set('model', value)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
+  }
+  const note = !live ? t('agents.model.later', { name: title }) : answer === 'reading' || answer === undefined ? t('agents.model.reading') : answer.state === 'unavailable' ? t('agents.model.unavailable') : undefined
+  return (
+    <div className={css.field}>
+      <span className={css.fieldLabel} id={`${name}-label`}>{t('agents.model.label')}</span>
+      <div role="radiogroup" aria-labelledby={`${name}-label`} className={css.models}>
+        {options.map(option => (
+          <label key={option.value} className={css.model} data-selected={option.value === saved ? '' : undefined}>
+            <input type="radio" className={css.radio} name={name} value={option.value} checked={option.value === saved} disabled={!live || services.remote}
+              onChange={() => { choose(option.value) }} />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+      {note !== undefined && <span className={css.hint} role="status">{note}</span>}
+    </div>
+  )
+}
+
 export function AgentAdvanced({ agent, copy, title, services }: AgentAdvancedProps): ReactNode {
   const { t, remote } = services
   const form = services.agents.rows[agent]
   const row = useForm(form)
   const limit = useForm(services.agents.limit)
   const [pending, setPending] = useState<Pending>({})
-  const [modelDraft, setModelDraft] = useState<string | undefined>()
   const [minutesDraft, setMinutesDraft] = useState<string | undefined>()
   const name = useId()
   const presets = AGENT_PRESETS[agent]
   const live = row.status === 'ready' && row.value !== undefined && row.writable && !remote
   // Once the agent's row exists, what was chosen before it did is written and forgotten.
   useEffect(() => {
-    if (!live || (pending.mode === undefined && pending.model === undefined)) return
-    const { mode, model } = pending
+    if (!live || pending.mode === undefined) return
+    const { mode } = pending
     setPending({})
-    if (mode !== undefined) void form.set('permissionMode', mode).catch((error: unknown) => { console.warn('delorun onboarding: the agent preset was not saved', error) })
-    if (model !== undefined) void (model === '' ? form.unset('model') : form.set('model', model)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
+    void form.set('permissionMode', mode).catch((error: unknown) => { console.warn('delorun onboarding: the agent preset was not saved', error) })
   }, [live, pending, form])
   const mode = pending.mode ?? row.value?.permissionMode ?? presets[0].mode
   const chosen = presets.find(each => each.mode === mode) ?? presets[0]
   const choose = (next: string): void => {
     if (live) void form.set('permissionMode', next).catch((error: unknown) => { console.warn('delorun onboarding: the agent preset was not saved', error) })
     else setPending({ ...pending, mode: next })
-  }
-  const savedModel = pending.model ?? row.value?.model ?? ''
-  const commitModel = (): void => {
-    const next = (modelDraft ?? savedModel).trim()
-    setModelDraft(undefined)
-    if (next === savedModel) return
-    if (live) void (next === '' ? form.unset('model') : form.set('model', next)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
-    else setPending({ ...pending, model: next })
   }
   const savedMinutes = limit.value?.runTimeoutMinutes
   const commitMinutes = (): void => {
@@ -87,7 +125,7 @@ export function AgentAdvanced({ agent, copy, title, services }: AgentAdvancedPro
     }
   }
   const limitLive = limit.status === 'ready' && limit.writable && !remote
-  const waiting = !live && (pending.mode !== undefined || pending.model !== undefined)
+  const waiting = !live && pending.mode !== undefined
   return (
     <Disclosure label={t('agents.advanced')}>
       <div role="radiogroup" aria-label={t('agents.presets.label', { name: title })} className={css.presets}>
@@ -105,14 +143,7 @@ export function AgentAdvanced({ agent, copy, title, services }: AgentAdvancedPro
         {t(`agents.${copy}.preset.${chosen.id}.sets`)}{waiting ? ` ${t('agents.preset.pending', { name: title })}` : ''}
       </p>
       <Disclosure label={t('agents.fineTune')} size="quiet">
-        <div className={css.field}>
-          <label className={css.fieldLabel} htmlFor={`${name}-model`}>{t('agents.model.label')}</label>
-          <Input id={`${name}-model`} value={modelDraft ?? savedModel} placeholder={t('agents.model.placeholder')} disabled={remote}
-            autoCapitalize="none" autoCorrect="off" spellCheck={false}
-            onChange={(event) => { setModelDraft(event.currentTarget.value) }}
-            onBlur={commitModel} onKeyDown={(event) => { if (event.key === 'Enter') commitModel() }} />
-          <span className={css.hint}>{t('agents.model.hint')}</span>
-        </div>
+        <ModelChoice agent={agent} form={form} live={live} services={services} title={title} />
         {savedMinutes !== undefined && (
           <div className={css.field}>
             <label className={css.fieldLabel} htmlFor={`${name}-limit`}>{t('agents.limit.label')}</label>

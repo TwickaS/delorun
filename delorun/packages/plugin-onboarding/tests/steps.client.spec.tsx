@@ -320,16 +320,43 @@ describe('the agents step', () => {
       expect(agents.claude.set).toHaveBeenCalledExactlyOnceWith('permissionMode', 'plan')
     })
 
-    it('writes the model from Fine-tune', async () => {
-      const agents = agentsFake()
-      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+    it('offers only the agent\'s own default before the agent is added, with a line that the list comes later', async () => {
+      const agents = agentsFake({ rows: false })
+      const host = hostFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
       const card = await open('Codex')
       await click(within(card).getByRole('button', { name: en['agents.fineTune'] }))
-      const model = within(card).getByRole('textbox', { name: en['agents.model.label'] })
-      fireEvent.change(model, { target: { value: 'gpt-codex' } })
-      fireEvent.keyDown(model, { key: 'Enter' })
-      expect(agents.codex.set).toHaveBeenCalledWith('model', 'gpt-codex')
-      expect((model as HTMLInputElement).value).toBe('gpt-codex')
+      expect(within(card).getAllByRole('radio', { name: en['agents.model.default'] })).toHaveLength(1)
+      expect(within(card).getByText('The list of models appears once Codex is added.')).toBeTruthy()
+      expect(host.agentModels).not.toHaveBeenCalled()
+    })
+
+    it('lists the models the installed agent reports after the default and writes the one chosen', async () => {
+      const agents = agentsFake()
+      const host = hostFake({ agentModels: { state: 'listed', models: [{ model: 'gpt-codex', displayName: 'GPT Codex' }, { model: 'gpt-mini', displayName: 'GPT Mini' }] } })
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const card = await open('Codex')
+      await click(within(card).getByRole('button', { name: en['agents.fineTune'] }))
+      await settle()
+      expect(host.agentModels).toHaveBeenCalledExactlyOnceWith('codex')
+      const radios = within(within(card).getByRole('radiogroup', { name: en['agents.model.label'] })).getAllByRole('radio')
+      expect(radios.map(each => each.parentElement?.textContent)).toEqual([en['agents.model.default'], 'GPT Codex', 'GPT Mini'])
+      await click(within(card).getByRole('radio', { name: 'GPT Mini' }))
+      expect(agents.codex.set).toHaveBeenCalledExactlyOnceWith('model', 'gpt-mini')
+      await click(within(card).getByRole('radio', { name: en['agents.model.default'] }))
+      expect(agents.codex.unset).toHaveBeenCalledExactlyOnceWith('model')
+    })
+
+    it('says so briefly, with the default still chosen, when the agent cannot list its models', async () => {
+      const agents = agentsFake()
+      const host = hostFake({ agentModels: { state: 'unavailable' } })
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const card = await open('Claude Code')
+      await click(within(card).getByRole('button', { name: en['agents.fineTune'] }))
+      await settle()
+      expect(within(card).getByText(en['agents.model.unavailable'])).toBeTruthy()
+      expect(within(card).queryByRole('alert')).toBeNull()
+      expect((within(card).getByRole('radio', { name: en['agents.model.default'] }) as HTMLInputElement).checked).toBe(true)
     })
 
     it('writes the run time limit from Fine-tune only as a whole number of minutes in range', async () => {

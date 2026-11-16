@@ -376,6 +376,54 @@ export function claudeQueryOptions(
   }
 }
 
+/** One model Claude Code reports. */
+export interface ClaudeCodeModelOption {
+  /** The name to configure as `model`. */
+  readonly model: string
+  /** The name a person knows it by. */
+  readonly displayName: string
+}
+
+/**
+ * Ask a fresh Claude Code process which models it offers, then release the process. The row for Claude's own default
+ * is left out: an unset `model` already means that.
+ * @param spec - Workspace, environment and process service; the permission mode and model are not used.
+ * @param signal - cancellation; aborting releases the process and rejects.
+ * @returns the offered models.
+ */
+export async function listClaudeCodeModels(
+  spec: ClaudeCodeRunSpec,
+  signal: AbortSignal,
+): Promise<ClaudeCodeModelOption[]> {
+  const controller = new AbortController()
+  const onAbort = (): void => { controller.abort(signal.reason) }
+  if (signal.aborted) onAbort()
+  signal.addEventListener('abort', onAbort, { once: true })
+  let child: SubprocessHandle | undefined
+  // A prompt that never yields keeps the process idle while it answers the control request.
+  const idle = (async function* (): AsyncGenerator<never> {
+    await new Promise<void>((resolve) => { controller.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+  })()
+  const query = officialQuery({
+    prompt: idle,
+    options: claudeQueryOptions(spec, controller, (captured) => { child = captured }, () => {}),
+  })
+  try {
+    const aborted = new Promise<never>((_, reject) => {
+      controller.signal.addEventListener('abort', () => { reject(thrown(controller.signal.reason)) }, { once: true })
+    })
+    const models = await Promise.race([query.supportedModels(), aborted])
+    return models
+      .filter(model => model.value !== 'default')
+      .map(model => ({ model: model.value, displayName: model.displayName }))
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    controller.abort(new Error('subagent-claude-code: model listing finished'))
+    if (child === undefined) query.close()
+    else await disposeClaudeCodeChild(query, child)
+  }
+}
+
 /**
  * Start one official Claude Agent SDK query and publish its one-shot run.
  * @param request - resolved shared subagent request.

@@ -20,6 +20,8 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { admitApprovedDevice, admitKeyDevice, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
+// Type-only: the ctx.subagents merge.
+import type {} from '@deepseek-ai/dsh-subagent'
 import { brandString } from '@deepseek-ai/dsh-brand'
 // The ctx.credentials merge and the credential reference's brand.
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -37,9 +39,10 @@ import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
-  ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
+  ADD_WORKSPACE_PATH, AGENT_MODELS_PATH, AgentModelsRequest, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
   type WorkspaceNoticeAnswer,
 } from './wire.ts'
+import { listAgentModels } from './agent-models.ts'
 import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
@@ -90,7 +93,7 @@ export function apply(ctx: Context, config: Config): void {
     const clones = createCloneService({ ...deps, git: spawnGit, timeoutMs: config.cloneTimeoutMs })
     child.effect(() => () => { clones.dispose() }, 'delorun-onboarding: clones')
     // Before the body is read: a reach or remote session never adds or clones a workspace.
-    const loopbackOnly = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])
+    const loopbackOnly = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, AGENT_MODELS_PATH])
     child.on('connection/request', async (request, response, next) => {
       if (loopbackOnly.has(routedPathname(request.url)) && !arrivedOnLoopback(request, response, child.get('homeAuth'))) return
       await next()
@@ -102,6 +105,28 @@ export function apply(ctx: Context, config: Config): void {
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
     child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => addWorkspace(request, deps) })
+    child.connection.fetch.register({
+      path: AGENT_MODELS_PATH,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: async (request) => {
+        let body: unknown
+        try {
+          body = await request.json()
+        } catch (_notJson) {
+          // The parser's message quotes the body, so the request is only refused.
+          body = undefined
+        }
+        const parsed = AgentModelsRequest.safeParse(body)
+        if (!parsed.success) return new Response(JSON.stringify({ error: 'the request must be JSON with agent' }), { status: 400, headers: { 'content-type': 'application/json' } })
+        return json(await listAgentModels(parsed.data.agent, {
+          provider: agent => ctx.get('subagents')?.getProvider(agent),
+          cwd: () => ctx.get('profileContext')?.dir ?? process.cwd(),
+          timeoutMs: config.agentModelsTimeoutMs,
+          warn,
+        }))
+      },
+    })
     child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.start(request) })
     child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.status(request) })
   })

@@ -12,7 +12,7 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
-import type { CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
+import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -211,6 +211,12 @@ export interface HostFace {
   readonly keyTest: () => Promise<KeyTestAnswer | undefined>
   /** @returns the local model servers found on this computer; undefined when the route cannot be read. */
   readonly localModels: () => Promise<readonly LocalServer[] | undefined>
+  /**
+   * Ask an installed agent which models it offers.
+   * @param agent - the agent's connection id.
+   * @returns the models, or `unavailable` when the agent is not installed and running, did not answer or the route failed.
+   */
+  readonly agentModels: (agent: 'claude-code' | 'codex') => Promise<AgentModelsAnswer>
   /**
    * @param registry - whether to read packages that are not installed from the npm registry.
    * @returns which connections each recommended plugin is for.

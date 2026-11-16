@@ -7,3 +7,4 @@ section: Changed
 - Each agent card now has Advanced options, closed by default. Recommended is what Add leaves in place; Read only makes Claude Code plan and review without changing files, and makes Codex run with a read-only sandbox. Fine-tune sets the model and the time limit per task. A new guide page, [Hand work to Claude Code or Codex](https://docs.delorun.com/guide/agents), explains how a chat uses an agent.
 - Codex has a new `read-only` permission mode, which never asks and pins its sandbox to read-only.
 - Each card shows how much adding the agent downloads, and the sign-in line names the command to run.
+- Fine-tune lists the models an added agent reports, with the agent's own default first. Claude Code and Codex answer when asked; before they are added, only the default shows.

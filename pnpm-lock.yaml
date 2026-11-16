@@ -3208,6 +3208,9 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
       '@deepseek-ai/dsh-util-crypto':
         specifier: workspace:*
         version: link:../../../packages/util/crypto

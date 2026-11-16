@@ -16,6 +16,7 @@ Claude Code and Codex are optional [external agents](../reference/glossary.md#ex
 
 - [How a chat uses an agent](#how-a-chat-uses-an-agent)
 - [Add an agent](#add-an-agent)
+- [Download size and sign-in](#download-size-and-sign-in)
 - [The first time](#the-first-time)
 - [What the agent can touch](#what-the-agent-can-touch)
 - [Where the result shows](#where-the-result-shows)
@@ -32,6 +33,12 @@ When you ask, a chat hands the agent one task in the chat's workspace. The agent
 1. Open the Agents step of setup, or Plugins.
 2. Read the card: it says how the agent is used, how much it downloads and what to do if it is not signed in yet.
 3. Press **Add**. Add takes the defaults and asks nothing more.
+
+## Download size and sign-in
+
+Adding an agent downloads a pinned copy of its program for your platform: about 206 MB for Claude Code and about 320 MB for Codex. Delorun checks the download before it uses it, and the copy stays in your Delorun home. It is not your own `claude` or `codex` command.
+
+The agent signs in with your own account, kept where the provider keeps it (`~/.claude` for Claude Code, `~/.codex` for Codex). The card says whether Delorun can see a sign-in. If you have the provider's command, `claude auth login` or `codex login` signs you in.
 
 ## The first time
 
@@ -62,14 +69,19 @@ Each agent card has **Advanced options**, closed by default. The default path ne
 - **Recommended** is what Add leaves in place. For Claude Code, anything its own settings do not already allow is refused (permission mode `dontAsk`). For Codex, it works without asking you and its own sandbox settings apply (permission mode `never`).
 - **Read only** makes the agent plan and review without changing files. For Claude Code it sets permission mode `plan`. For Codex it sets permission mode `read-only`, which pins its sandbox to read-only.
 
-Selecting a preset shows what it sets. No preset is looser than Recommended. **Fine-tune** holds two more settings: the **Model** the agent runs (empty means the agent's own default) and the **Time limit per task** in minutes, which applies to every agent from the next run.
+Selecting a preset shows what it sets. No preset is looser than Recommended.
+
+**Fine-tune** holds two more settings:
+
+- **Model.** The first choice, **The agent's own default (recommended)**, leaves the model to the agent. Once the agent is added, Delorun asks it which models it offers and lists them by name; choosing one sets that model for every task. Before the agent is added, or if it cannot answer, only the default shows.
+- **Time limit per task**, in minutes (1 to 1440, 30 by default). A task stops after this long. It applies to every agent from the next run, and it is the same setting as Settings, Safety, External agents.
 
 <details>
 <summary>Go further</summary>
 
-- The presets write the agent's row in the profile, the same place Plugins edits.
-- A choice made before you add the agent is kept and written when the agent is added.
-- Settings, Safety, External agents also holds the time limit and the question that Delorun asks before each run.
+- The presets and the model write the agent's row in the profile, the same place Plugins edits.
+- A preset chosen before you add the agent is kept and written when the agent is added.
+- Settings, Safety, External agents also holds the question that Delorun asks before each run.
 
 </details>
 
