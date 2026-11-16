@@ -290,15 +290,16 @@ export function verifyFileList(root: RootMetadata, manifest: ReleaseManifest, pl
 }
 
 /**
- * Verify a release's packs document against the manifest it belongs to.
+ * Verify a release's packs document against the manifest it belongs to. The manifest is parsed and verified here from
+ * its bytes, so a caller cannot pair a verified manifest with other bytes.
  * @param root - the trusted root.
- * @param manifest - the verified manifest.
  * @param manifestBytes - the manifest file's bytes, whose SHA-256 the document names.
  * @param bytes - the packs file.
  * @returns the packs.
- * @throws VerificationError when the signature fails, or the document names another release or another manifest.
+ * @throws VerificationError when a signature fails, or the document names another release or another manifest.
  */
-export function verifyPacks(root: RootMetadata, manifest: ReleaseManifest, manifestBytes: Uint8Array, bytes: Uint8Array): EnvelopeKinds['packs'] {
+export function verifyPacks(root: RootMetadata, manifestBytes: Uint8Array, bytes: Uint8Array): EnvelopeKinds['packs'] {
+  const manifest = verifySignedManifest(root, manifestBytes)
   const envelope = readEnvelope('packs', bytes)
   requireTargets(root, `packs ${envelope.signed.version}`, asJson(envelope), manifest.version)
   if (envelope.signed.version !== manifest.version) throw new VerificationError(`the packs file is for ${envelope.signed.version}, not ${manifest.version}`)

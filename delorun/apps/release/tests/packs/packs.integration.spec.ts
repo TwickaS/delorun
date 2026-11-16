@@ -99,11 +99,11 @@ describe('the packs file', () => {
     const manifest = verifySignedManifest(root.metadata, manifestBytes)
     const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifestBytes).digest('hex'), packs: [] }
     const bytes = envelope(signed, [keys.targets])
-    expect(verifyPacks(root.metadata, manifest, manifestBytes, bytes).packs).toEqual([])
+    expect(verifyPacks(root.metadata, manifestBytes, bytes).packs).toEqual([])
     const other = envelope(manifestContent('0.1.0', Buffer.from('b')), [keys.targets])
-    expect(() => verifyPacks(root.metadata, manifest, other, bytes)).toThrow(/belongs to the manifest/u)
+    expect(() => verifyPacks(root.metadata, other, bytes)).toThrow(/belongs to the manifest/u)
     const unsigned = envelope(signed, [generateKeyPairSync('ed25519').privateKey])
-    expect(() => verifyPacks(root.metadata, manifest, manifestBytes, unsigned)).toThrow()
+    expect(() => verifyPacks(root.metadata, manifestBytes, unsigned)).toThrow()
   })
 })
 
@@ -113,7 +113,7 @@ describe('signing the packs file', () => {
     const dir = temp()
     const built = await buildPackArchive('delorun-0.1.0-pack-demo.tar.gz', [entry('package.json', '{}')], EPOCH)
     writeFileSync(join(dir, built.variant.archive.name), built.bytes)
-    const draft = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: '0'.repeat(64), packs: [{ name: 'demo', version: '1.0.0', experimental: true, peers: [], variants: { any: { ...built.variant, external: [] } } }] }
+    const draft = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: '0'.repeat(64), packs: [{ name: 'demo', version: '1.0.0', experimental: true, variants: { any: { ...built.variant, external: [], peers: [] } } }] }
     writeFileSync(join(dir, 'delorun-0.1.0.packs.json'), envelope(draft, []))
     return { keys, dir, built }
   }
@@ -125,7 +125,7 @@ describe('signing the packs file', () => {
     expect(outputs.map(([name]) => name)).toEqual(['delorun-0.1.0.packs.json', 'delorun-0.1.0.packs.entry.json'])
     const root = trustRootChain([rootFile(keys).bytes], Date.parse('2026-11-06T12:00:00Z') / 1000).at(-1)!
     const manifest = verifySignedManifest(root.metadata, manifestBytes)
-    expect(verifyPacks(root.metadata, manifest, manifestBytes, outputs[0]![1] as Buffer).packs.map(pack => pack.name)).toEqual(['demo'])
+    expect(verifyPacks(root.metadata, manifestBytes, outputs[0]![1] as Buffer).packs.map(pack => pack.name)).toEqual(['demo'])
   })
 
   it('writes nothing for a release with no packs file, and refuses an archive that differs from the file', async () => {

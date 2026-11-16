@@ -18,6 +18,7 @@ import type { ArchiveEntry } from '@delorun/release-formats/archive/entry'
 import { sha256Hex } from '@delorun/release-formats/brands'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
+import { closureName } from '../rebuild/compare.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
 
@@ -62,6 +63,22 @@ export function tarballUrl(name: string, version: string): string {
   return `https://registry.npmjs.org/${name}/-/${base}-${version}.tgz`
 }
 
+/**
+ * A pack archive's file name: `delorun-<release>-pack-<name>.<platform or any>.tar.gz`. The platform follows a dot, not a
+ * hyphen, so no pack archive reads as a runtime archive (`delorun-<release>-<platform>.tar.gz`) to the rebuild
+ * comparison, whatever the pack is called.
+ * @param release - the release version.
+ * @param name - the package name.
+ * @param platform - the platform, or `undefined` for the platform-independent archive.
+ * @returns the file name.
+ * @throws Error when the name would still parse as a runtime archive or file list.
+ */
+export function packArchiveName(release: string, name: string, platform: RuntimePlatform | undefined): string {
+  const archive = `delorun-${release}-pack-${name.replaceAll('/', '__').replaceAll('@', '')}.${platform ?? 'any'}.tar.gz`
+  if (closureName(archive) !== undefined) throw new Error(`the pack archive name ${archive} reads as a runtime archive; rename the pack`)
+  return archive
+}
+
 async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources): Promise<PackExternal> {
   const locked = sources.locked(name, platform)
   if (locked === undefined) throw new Error(`the lockfile does not pin ${name} for ${platform}`)
@@ -96,13 +113,13 @@ async function versionIn(directory: string): Promise<string | undefined> {
  */
 export async function buildPack(name: string, version: string, experimental: boolean, releaseVersion: string, platforms: readonly RuntimePlatform[], epoch: number, externals: readonly string[], sources: PackSources, scratch: string): Promise<BuiltPack> {
   const archives = new Map<string, Buffer>()
-  const peers = new Set<string>()
-  const built = new Map<RuntimePlatform, { bytes: Buffer, variant: Omit<PackVariant, 'external'>, external: PackExternal[] }>()
+  const built = new Map<RuntimePlatform, { bytes: Buffer, variant: Omit<PackVariant, 'external' | 'peers'>, external: PackExternal[], peers: string[] }>()
   for (const platform of platforms) {
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
     await sources.deploy(name, platform, directory)
     const external: PackExternal[] = []
     const dropped = new Set<string>()
+    const peers = new Set<string>()
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
@@ -112,7 +129,9 @@ export async function buildPack(name: string, version: string, experimental: boo
           external.push(await pinOf(nested, platform, sources))
         } else {
           const inClosure = await versionIn(join(sources.closureNodeModules(platform), nested))
-          if (inClosure !== undefined && inClosure === await versionIn(join(directory, 'node_modules', nested))) {
+          const bundled = await versionIn(join(directory, 'node_modules', nested))
+          if (inClosure !== undefined && inClosure !== bundled) throw new Error(`${name} bundles ${nested}@${bundled ?? 'unknown'} for ${platform}, but the closure carries ${nested}@${inClosure}; a pack never carries a second copy of a core package`)
+          if (inClosure !== undefined) {
             dropped.add(nested)
             peers.add(nested)
           }
@@ -121,29 +140,28 @@ export async function buildPack(name: string, version: string, experimental: boo
       if (nested !== undefined && dropped.has(nested)) continue
       entries.push({ path: file.path, mode: file.mode, data: await readFile(file.absolute) })
     }
-    const archiveName = `delorun-${releaseVersion}-pack-${name.replaceAll('/', '__').replaceAll('@', '')}-${platform}.tar.gz`
-    const result = await buildPackArchive(archiveName, entries, epoch)
-    built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)) })
+    const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
+    built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() })
   }
   const variants: Partial<Record<RuntimePlatform | 'any', PackVariant>> = {}
   const same = platforms.every(platform => {
     const first = built.get(platforms[0]!)!
     const other = built.get(platform)!
-    return other.external.length === 0 && first.external.length === 0 && JSON.stringify(other.variant.files) === JSON.stringify(first.variant.files)
+    return other.external.length === 0 && first.external.length === 0 && JSON.stringify(other.variant.files) === JSON.stringify(first.variant.files) && JSON.stringify(other.peers) === JSON.stringify(first.peers)
   })
   if (same) {
     const first = built.get(platforms[0]!)!
-    const anyName = first.variant.archive.name.replace(`-${platforms[0]!}.tar.gz`, '.tar.gz')
+    const anyName = packArchiveName(releaseVersion, name, undefined)
     const result = await buildPackArchive(anyName, first.variant.files.length === 0 ? [] : await entriesOf(scratch, name, platforms[0]!, first.variant.files.map(file => file.path)), epoch)
-    variants.any = { ...result.variant, external: [] }
+    variants.any = { ...result.variant, external: [], peers: first.peers }
     archives.set(anyName, result.bytes)
   } else {
     for (const [platform, result] of built) {
-      variants[platform] = { ...result.variant, external: result.external }
+      variants[platform] = { ...result.variant, external: result.external, peers: result.peers }
       archives.set(result.variant.archive.name, result.bytes)
     }
   }
-  return { entry: { name, version: brandString<SemanticVersion>(version), experimental, peers: [...peers].sort(), variants }, archives }
+  return { entry: { name, version: brandString<SemanticVersion>(version), experimental, variants }, archives }
 }
 
 async function entriesOf(scratch: string, name: string, platform: RuntimePlatform, paths: readonly string[]): Promise<ArchiveEntry[]> {

@@ -25,6 +25,18 @@ import { readEntryRequest } from '@delorun/release-formats/log/entry'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { trustRootChain } from '@delorun/release-formats/sign/verify'
 
+/**
+ * The kind of signed document being logged.
+ * @param kind - `--kind`'s value, or `undefined` for the manifest.
+ * @returns `manifest` or `packs`.
+ * @throws Error when the value is neither.
+ */
+export function logKind(kind: string | undefined): 'manifest' | 'packs' {
+  if (kind === undefined || kind === 'manifest') return 'manifest'
+  if (kind === 'packs') return 'packs'
+  throw new Error(`--kind is ${JSON.stringify(kind)}; use manifest or packs`)
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, tiles: { type: 'string' }, out: { type: 'string' }, kind: { type: 'string' } } })
   try {
@@ -34,7 +46,7 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     const root = trustRootChain([readFileSync(resolve(rootPath))], Math.floor(Date.now() / 1000)).at(-1)!.metadata
     const manifest = readFileSync(resolve(manifestPath))
-    const version = (values.kind === 'packs' ? readEnvelope('packs', manifest) : readEnvelope('manifest', manifest)).signed.version
+    const version = (logKind(values.kind) === 'packs' ? readEnvelope('packs', manifest) : readEnvelope('manifest', manifest)).signed.version
     const bundle = await logRelease({ submit, checkpoint, tiles }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000))
     writeFileSync(resolve(out), `${JSON.stringify(bundle, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     console.log(`log-release: ${basename(manifestPath)} is entry ${String(bundle.entry.logIndex)}, witnessed at tree size ${String(bundle.inclusion.treeSize)}`)

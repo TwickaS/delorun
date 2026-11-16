@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimePlatform } from '@delorun/contract-release-manifest'
-import { buildPack, isExternal, lockedFrom, tarballUrl, type PackSources } from '../../src/closure/packs.ts'
+import { closureName } from '../../src/rebuild/compare.ts'
+import { buildPack, isExternal, packArchiveName, lockedFrom, tarballUrl, type PackSources } from '../../src/closure/packs.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from '../../src/closure/plugin-set.ts'
 
 const roots: string[] = []
@@ -20,16 +21,17 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = Buffer.from('registry tarball bytes')
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer }): PackSources {
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean }): PackSources {
   const closure = temp()
-  put(closure, { 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}' })
+  put(closure, { 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
   return {
     closureNodeModules: () => join(closure, 'node_modules'),
     deploy: async (_name, platform, directory) => {
       put(directory, {
         'package.json': '{"name":"@delorun/demo","version":"1.0.0"}',
         'lib/index.js': 'export {}\n',
-        'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}',
+        'node_modules/shared-peer/package.json': `{"name":"shared-peer","version":"${options.bundledPeer ?? '2.0.0'}"}`,
+        ...options.armOnlyPeer === true && platform === 'linux-arm64' ? { 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' } : {},
         'node_modules/shared-peer/index.js': 'peer\n',
         'node_modules/own-dep/package.json': '{"name":"own-dep","version":"1.0.0"}',
         ...options.native ? { [`node_modules/@vendor/native-${platform}/package.json`]: '{}' } : {},
@@ -44,10 +46,10 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer }
 describe('building a pack', () => {
   it('links the closure\'s packages as peers, keeps its own dependency, and shares one variant across platforms', async () => {
     const built = await buildPack('@delorun/demo', '1.0.0', true, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native-*'], sources({ native: false }), temp())
-    expect(built.entry.peers).toEqual(['shared-peer'])
+    expect(built.entry.variants.any!.peers).toEqual(['shared-peer'])
     expect(Object.keys(built.entry.variants)).toEqual(['any'])
     expect(built.entry.variants.any!.files.map(file => file.path)).toEqual(['lib/index.js', 'node_modules/own-dep/package.json', 'package.json'])
-    expect(built.entry.variants.any!.archive.name).toBe('delorun-0.1.0-pack-delorun__demo.tar.gz')
+    expect(built.entry.variants.any!.archive.name).toBe('delorun-0.1.0-pack-delorun__demo.any.tar.gz')
     expect([...built.archives.keys()]).toEqual([built.entry.variants.any!.archive.name])
   })
 
@@ -57,6 +59,26 @@ describe('building a pack', () => {
     expect(x64.external).toEqual([expect.objectContaining({ name: '@vendor/native-linux-x64', url: 'https://registry.npmjs.org/@vendor/native-linux-x64/-/native-linux-x64-9.9.9.tgz', length: NATIVE.byteLength })])
     expect(x64.files.some(file => file.path.includes('native-'))).toBe(false)
     expect(Object.keys(built.entry.variants).sort()).toEqual(['linux-arm64', 'linux-x64'])
+  })
+
+  it('keeps each platform\'s peers with its own variant instead of merging them', async () => {
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, armOnlyPeer: true }), temp())
+    expect(Object.keys(built.entry.variants).sort()).toEqual(['linux-arm64', 'linux-x64'])
+    expect(built.entry.variants['linux-x64']!.peers).toEqual(['shared-peer'])
+    expect(built.entry.variants['linux-arm64']!.peers).toEqual(['arm-peer', 'shared-peer'])
+  })
+
+  it('refuses a pack that bundles a core package at another version than the closure carries', async () => {
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, bundledPeer: '1.0.0' }), temp())).rejects.toThrow(/shared-peer@1\.0\.0.*closure carries shared-peer@2\.0\.0/u)
+  })
+
+  it('names no pack archive like a runtime archive or file list, whatever the pack is called', () => {
+    for (const name of ['demo', '@delorun/linux-x64', 'files', 'foo-linux-x64']) {
+      for (const platform of [undefined, ...PLATFORMS]) {
+        const archive = packArchiveName('0.1.0', name, platform)
+        expect(closureName(archive)).toBeUndefined()
+      }
+    }
   })
 
   it('refuses a registry that serves other bytes than the lockfile pins', async () => {

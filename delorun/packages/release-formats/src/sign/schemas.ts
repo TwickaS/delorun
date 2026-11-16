@@ -7,6 +7,8 @@
 import {
   DESKTOP_PLATFORMS,
   RELEASE_CHANNELS,
+  NPM_PACKAGE_NAME_PATTERN,
+  PACK_DOWNLOAD_MAX_BYTES,
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_SCHEMAS,
   RELEASE_SUMMARY_MAX_LENGTH,
@@ -173,16 +175,19 @@ export const FileListSchema = z.strictObject({
 })
 
 const sha512 = z.string().regex(/^[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<Sha512Base64>(value))
+const npmName = z.string().max(214).regex(new RegExp(NPM_PACKAGE_NAME_PATTERN, 'u'))
+const packArchiveRef = fileRef.extend({ length: z.number().int().min(0).max(PACK_DOWNLOAD_MAX_BYTES), sha512 })
 const packFile = z.strictObject({ path: z.string().min(1), length: z.number().int().min(0), sha256, mode: z.enum(['0644', '0755']) })
 const packVariant = z.strictObject({
-  archive: fileRef.extend({ sha512 }),
+  archive: packArchiveRef,
   files: z.array(packFile),
+  peers: z.array(npmName),
   external: z.array(z.strictObject({
-    name: z.string().min(1),
+    name: npmName,
     version,
     url: z.string().regex(/^https:\/\/registry\.npmjs\.org\/[^?#\s]+\.tgz$/u),
     sha512,
-    length: z.number().int().min(1),
+    length: z.number().int().min(1).max(PACK_DOWNLOAD_MAX_BYTES),
   })),
 })
 
@@ -192,10 +197,9 @@ export const PacksSchema = z.strictObject({
   version,
   manifest: sha256,
   packs: z.array(z.strictObject({
-    name: z.string().min(1),
+    name: npmName,
     version,
     experimental: z.boolean(),
-    peers: z.array(z.string().min(1)),
     variants: z.strictObject({ any: packVariant.exactOptional(), ...Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, packVariant.exactOptional()])) }),
   })),
 })

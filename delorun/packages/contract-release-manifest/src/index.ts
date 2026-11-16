@@ -402,6 +402,8 @@ export interface PackVariant {
   readonly files: readonly PackFile[]
   /** Dependencies fetched from npm instead of shipped, for this platform. */
   readonly external: readonly PackExternal[]
+  /** Package names this platform's base runtime provides; the install links them into the pack. */
+  readonly peers: readonly string[]
 }
 
 /** One pack: a plugin package that is not in the default install. */
@@ -412,8 +414,6 @@ export interface PackEntry {
   readonly version: SemanticVersion
   /** Whether Plugins labels it experimental. */
   readonly experimental: boolean
-  /** Package names the base runtime provides; the install links them into the pack. */
-  readonly peers: readonly string[]
   /** The variant per platform, or `any` for a pack with no native code. */
   readonly variants: Readonly<Partial<Record<RuntimePlatform | 'any', PackVariant>>>
 }
@@ -514,6 +514,12 @@ export const DESKTOP_CACHED_PREVIOUS_RELEASES = 1
 
 /** Per-request timeout for release metadata and release files. */
 export const METADATA_REQUEST_TIMEOUT_SECONDS = 30
+
+/** The most bytes one pack archive, or one external npm tarball, may have: the signed length is capped here. */
+export const PACK_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024
+
+/** An npm package name (lower case, optionally scoped), the only form a pack, a peer or an external may carry. */
+export const NPM_PACKAGE_NAME_PATTERN = '^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$'
 
 /** Size limits in bytes, applied before parsing. */
 export const RELEASE_FILE_SIZE_LIMITS = {
