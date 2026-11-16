@@ -2,26 +2,32 @@
 
 English | [中文](SAFETY.zh.md)
 
-## Experimental status
+<!-- DRAFT FOR THE OWNER: rewrite every section in your own words, then delete this comment and the note below. -->
 
-DeepSeek Harness is experimental developer-preview software. It has not undergone a security audit and must not be treated as secure or production-ready.
+> **Draft.** The maintainer has not yet rewritten this notice in his own words. The facts are right; the voice is a first pass.
 
-The project can execute model-generated code and commands, load third-party plugins, and access the network, processes, credentials, and files made available to it. Incorrect model output, defects, misconfiguration, malicious input, or untrusted plugins may damage the host computer, modify or delete files, disclose data or credentials, or cause other unintended effects.
+## Preview status
 
-## Sandbox limitations
+Delorun is preview software. Its releases are signed with preview keys, it has had no outside security review, and one person maintains it. Do not treat it as secure or ready for production. [What you trust when you use Delorun](delorun/docs/guide/trust.md) says what each of these means.
 
-Sandboxing, approval prompts, and permission controls can reduce risk, but they do not guarantee isolation or prevent damage. Even correctly enforced restrictions cannot protect resources that the project is allowed to access.
+Delorun can run code and commands that a model wrote, load third-party plugins, and reach the network, processes, credentials and files you make available to it. A model's mistake, a defect, a wrong setting, hostile input or an untrusted plugin may damage your computer, change or delete files, disclose data or credentials, or cause other harm.
 
-Do not rely on DeepSeek Harness as the sole security control for untrusted workloads.
+## What the sandbox does not do
 
-## Responsible use
+The sandbox, the approval prompts and the permission settings lower the risk. They do not guarantee isolation or prevent damage, and no restriction protects what you have allowed Delorun to reach. [What Delorun protects](delorun/docs/guide/safety.md) lists each protection and each limit.
 
-- Run the project with the least privileges and access required.
-- Prefer a disposable virtual machine, container, or dedicated environment.
-- Keep backups of files that the project can access.
-- Do not expose sensitive credentials or data unless you accept the risk.
-- Review plugins, configuration, and proposed commands before allowing them to run.
+Do not rely on Delorun as your only protection when you run work you do not trust.
+
+## Using it responsibly
+
+- Run Delorun with the least access the work needs.
+- Prefer a virtual machine, a container or a computer set aside for it.
+- Keep backups of the files Delorun can reach, and keep your projects in git: Delorun does not undo what an agent did to your files.
+- Do not give it credentials or data unless you accept the risk.
+- Review plugins, settings and proposed commands before you allow them.
 
 ## No warranty or liability
 
-Use DeepSeek Harness at your own risk. The software is provided without warranty under the [MIT License](LICENSE). To the maximum extent permitted by applicable law, the authors and copyright holders are not responsible for damage to computers, loss or disclosure of data, loss of files, or other harm arising from use of the project.
+Use Delorun at your own risk. The software is provided without warranty under the [MIT License](LICENSE). To the maximum extent permitted by applicable law, the authors and copyright holders are not responsible for damage to computers, loss or disclosure of data, loss of files, or other harm arising from use of the project.
+
+This notice is based on the safety notice of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), on which Delorun is built.
