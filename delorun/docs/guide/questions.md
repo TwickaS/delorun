@@ -36,7 +36,7 @@ Building on someone else's code has a cost. Upstream changes every week and take
 
 A stock plugin can add remote access, a sidebar or a theme, and many good ones do. What a plugin cannot do is change how the whole harness is delivered and protected. Signed updates that show what they would change, a saved copy of your setup before each update, one command that takes you back, a safe mode, and protections that apply across the whole harness need a distribution, not one more plugin.
 
-That is what Delorun is. The things you see are the smaller part. If you are happy on stock with your own plugins, you may not need Delorun. If you want updates you can trust and change you can undo, [Delorun and stock DeepSeek Harness](delorun-vs-stock.md) lists every difference.
+That is what Delorun is. The things you see are the smaller part. If you are happy on stock with your own plugins, you may not need Delorun. If you want updates you can trust and change you can undo, [Switching from DeepSeek Harness](switching.md) says what is different.
 
 ## Agents wrote most of it. Why should I trust that?
 

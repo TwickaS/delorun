@@ -32,7 +32,7 @@ Four ideas steer what gets built:
 - **Honest about safety.** A protection is called enforced only where a test proves it, and a feature Delorun lacks is stated as missing.
 - **Reachable, without giving up control.** You can open your studio from your phone, and every new device needs your approval at your computer.
 
-DeepSeek Harness plugins and chats stay compatible. Everything a person sees, which is the studio, the defaults and the first run, is Delorun's own ([Delorun and stock DeepSeek Harness](delorun-vs-stock.md)).
+DeepSeek Harness plugins and chats stay compatible. Everything a person sees, which is the studio, the defaults and the first run, is Delorun's own ([Switching from DeepSeek Harness](switching.md)).
 
 ## Now
 
@@ -81,11 +81,11 @@ Each release's notes say what changed. The sign-up list on delorun.com sends a n
 <details>
 <summary>Go further</summary>
 
-- Read [Delorun and stock DeepSeek Harness](delorun-vs-stock.md#what-delorun-does-not-include) for each absence as it applies today.
+- Read [Switching from DeepSeek Harness](switching.md#what-stays-the-same-and-what-is-different) for each absence as it applies today.
 - Read [Questions and answers](questions.md) for why Delorun is built the way it is.
 
 </details>
 
 ## What to read next
 
-To see what Delorun does today, read [Delorun and stock DeepSeek Harness](delorun-vs-stock.md). To install it, read [Install and first run](install.md).
+To see what Delorun does today, read [Switching from DeepSeek Harness](switching.md). To install it, read [Install and first run](install.md).

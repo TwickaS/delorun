@@ -2,7 +2,7 @@
 
 [English](parity.md) | 中文
 
-对等清单记录本树中 Delorun 所对照的每个 stock DeepSeek Harness（DSH）区域，以及每项刻意差异的状态，并给出一项证据。每一行都标明其基线，即[对等组合](../contracts/c16-parity-composition.zh.md)所回放的上游记录标签 `dsh-v0.2.2-rc.3`。本页涵盖下列各区域、对等组合约定所列的开关与已变更的默认值，以及[对比页面](../guide/delorun-vs-stock.zh.md)所指名的差异。它并不盘点 stock 的每一项功能。
+对等清单记录本树中 Delorun 所对照的每个 stock DeepSeek Harness（DSH）区域，以及每项刻意差异的状态，并给出一项证据。每一行都标明其基线，即[对等组合](../contracts/c16-parity-composition.zh.md)所回放的上游记录标签 `dsh-v0.2.2-rc.3`。本页涵盖下列各区域、对等组合约定所列的开关与已变更的默认值，以及[切换页面](../guide/switching.zh.md)所指名的差异。它并不盘点 stock 的每一项功能。
 
 ## 如何判定各行
 
@@ -130,4 +130,4 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 
 ## 下一步
 
-[术语表](glossary.zh.md)定义本页使用的术语。[差异索引](divergence/README.zh.md)列出每项差异背后的上游文件，[对等基线](parity-baseline.zh.md)记录上游自身的测试结果。想用平实的话了解同样的差异，请阅读 [Delorun 与 stock DeepSeek Harness](../guide/delorun-vs-stock.zh.md)。
+[术语表](glossary.zh.md)定义本页使用的术语。[差异索引](divergence/README.zh.md)列出每项差异背后的上游文件，[对等基线](parity-baseline.zh.md)记录上游自身的测试结果。想用平实的话了解同样的差异，请阅读 [从 DeepSeek Harness 切换](../guide/switching.zh.md)。

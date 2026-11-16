@@ -207,4 +207,4 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 
 ## 下一步
 
-要了解如何使用 Delorun，请从[用户指南](../guide/README.zh.md)或[安装与首次运行](../guide/install.zh.md)开始。要了解 Delorun 与 DeepSeek Harness 有何不同，请阅读 [Delorun 与 stock DeepSeek Harness](../guide/delorun-vs-stock.zh.md)；要查看每项差异背后的检查，请阅读[对等清单](parity.zh.md)。[参考索引](README.zh.md)列出了开发者页面。
+要了解如何使用 Delorun，请从[用户指南](../guide/README.zh.md)或[安装与首次运行](../guide/install.zh.md)开始。要了解 Delorun 与 DeepSeek Harness 有何不同，请阅读 [从 DeepSeek Harness 切换](../guide/switching.zh.md)；要查看每项差异背后的检查，请阅读[对等清单](parity.zh.md)。[参考索引](README.zh.md)列出了开发者页面。

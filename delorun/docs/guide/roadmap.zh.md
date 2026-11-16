@@ -33,7 +33,7 @@ Delorun 是一个按你自己的工作方式来塑造的 harness（智能体框�
 - **对安全保持坦诚。** 只有测试证明了的保护才称为已强制执行，Delorun 缺少的功能会明确说明缺少。
 - **可以访问，又不交出控制权。** 你可以用手机打开你的 studio，每台新设备都需要你在电脑上批准。
 
-DeepSeek Harness 的插件和聊天保持兼容。一个人看到的一切，也就是 studio、默认设置和首次运行，都是 Delorun 自己的（[Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md)）。
+DeepSeek Harness 的插件和聊天保持兼容。一个人看到的一切，也就是 studio、默认设置和首次运行，都是 Delorun 自己的（[从 DeepSeek Harness 切换](switching.zh.md)）。
 
 <a id="now"></a>
 ## 现在
@@ -88,7 +88,7 @@ Delorun 不计划把其他 harness 当作产品来管理，不计划把一个聊
 <details>
 <summary>进一步了解</summary>
 
-- 阅读 [Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md#what-delorun-does-not-include)，了解每项缺失在今天的情况。
+- 阅读 [从 DeepSeek Harness 切换](switching.zh.md#what-stays-the-same-and-what-is-different)，了解每项缺失在今天的情况。
 - 阅读[问答](questions.zh.md)，了解 Delorun 为什么是现在这样。
 
 </details>
@@ -96,4 +96,4 @@ Delorun 不计划把其他 harness 当作产品来管理，不计划把一个聊
 <a id="what-to-read-next"></a>
 ## 接下来读什么
 
-要了解 Delorun 今天能做什么，请阅读 [Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md)。要安装它，请阅读[安装与首次运行](install.zh.md)。
+要了解 Delorun 今天能做什么，请阅读 [从 DeepSeek Harness 切换](switching.zh.md)。要安装它，请阅读[安装与首次运行](install.zh.md)。

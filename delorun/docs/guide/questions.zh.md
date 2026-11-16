@@ -38,7 +38,7 @@ description: "对 Delorun 那些难回答的问题的直接回答：为什么它
 
 原版上的插件可以增加远程访问、侧边栏或主题，很多优秀的插件正是这样做的。插件做不到的，是改变整个 harness 的交付与保护方式。会展示自己将改动什么的签名更新、每次更新前保存的配置副本、一条让你回去的命令、安全模式，以及作用于整个 harness 的保护，需要的是一个发行版，而不是再多一个插件。
 
-这就是 Delorun。你看到的东西只是其中较小的部分。如果你在原版上配合自己的插件用得很满意，你可能不需要 Delorun。如果你想要值得信任的更新和可以撤销的改动，[Delorun 与原版 DeepSeek Harness](delorun-vs-stock.zh.md)列出了每一处差异。
+这就是 Delorun。你看到的东西只是其中较小的部分。如果你在原版上配合自己的插件用得很满意，你可能不需要 Delorun。如果你想要值得信任的更新和可以撤销的改动，[从 DeepSeek Harness 切换](switching.zh.md)说明了哪些不同。
 
 <a id="agents-wrote-most-of-it-why-should-i-trust-that"></a>
 ## 大部分是 agent 写的。我为什么该信任它？

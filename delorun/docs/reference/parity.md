@@ -2,7 +2,7 @@
 
 English | [中文](parity.zh.md)
 
-The parity checklist records, for each stock DeepSeek Harness (DSH) area that Delorun is compared against and for each deliberate difference, the status of that area in this tree and one piece of evidence. Every row names its baseline, the recorded upstream tag `dsh-v0.2.2-rc.3`, which the [parity composition](../contracts/c16-parity-composition.md) replays. The page covers the areas below, the switches and changed defaults that the parity composition contract lists, and the differences that the [comparison page](../guide/delorun-vs-stock.md) names. It does not inventory every stock feature.
+The parity checklist records, for each stock DeepSeek Harness (DSH) area that Delorun is compared against and for each deliberate difference, the status of that area in this tree and one piece of evidence. Every row names its baseline, the recorded upstream tag `dsh-v0.2.2-rc.3`, which the [parity composition](../contracts/c16-parity-composition.md) replays. The page covers the areas below, the switches and changed defaults that the parity composition contract lists, and the differences that the [switching page](../guide/switching.md) names. It does not inventory every stock feature.
 
 ## How rows are judged
 
@@ -130,4 +130,4 @@ Setup's prompts answer sets four of the switches below: `permission_defaults`, `
 
 ## Where to go next
 
-The [glossary](glossary.md) defines the terms this page uses. The [divergence index](divergence/README.md) lists the upstream files behind each difference, and the [parity baseline](parity-baseline.md) records upstream's own test results. For the same differences in plain words, read [Delorun and stock DeepSeek Harness](../guide/delorun-vs-stock.md).
+The [glossary](glossary.md) defines the terms this page uses. The [divergence index](divergence/README.md) lists the upstream files behind each difference, and the [parity baseline](parity-baseline.md) records upstream's own test results. For the same differences in plain words, read [Switching from DeepSeek Harness](../guide/switching.md).

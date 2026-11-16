@@ -187,4 +187,4 @@ Defined in other sections: home, studio, workspace and chat under [Where things 
 
 ## Where to go next
 
-To learn how to use Delorun, start with the [user guide](../guide/README.md) or [Install and first run](../guide/install.md). To see how Delorun differs from DeepSeek Harness, read [Delorun and stock DeepSeek Harness](../guide/delorun-vs-stock.md); to see the checks behind each difference, read the [parity checklist](parity.md). The [reference index](README.md) lists the developer pages.
+To learn how to use Delorun, start with the [user guide](../guide/README.md) or [Install and first run](../guide/install.md). To see how Delorun differs from DeepSeek Harness, read [Switching from DeepSeek Harness](../guide/switching.md); to see the checks behind each difference, read the [parity checklist](parity.md). The [reference index](README.md) lists the developer pages.

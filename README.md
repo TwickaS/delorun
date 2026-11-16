@@ -72,7 +72,7 @@ Delorun can be shaped to a team's work with custom plugins, modes and integratio
 
 ## Compatibility with stock
 
-DeepSeek Harness's plugins and your chat data stay compatible with Delorun. Everything else, including the interface and the defaults, is Delorun's own. [Delorun and stock DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.md) lists every difference.
+DeepSeek Harness's plugins and your chat data stay compatible with Delorun. Everything else, including the interface and the defaults, is Delorun's own. [Switching from DeepSeek Harness](delorun/docs/guide/switching.md) says what is different.
 
 ## Relationship to upstream
 

@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/parity.md
 /parity-checklist:
-  en: 86d46605e8d64ded
-  zh: f493a70b4ae777ea
+  en: 3cc30d4accf93241
+  zh: e3f43da17e7ec984
 /parity-checklist/how-rows-are-judged:
   en: 11dab7226b8c9d22
   zh: 3cff5e2a5a4dd6b4
@@ -48,5 +48,5 @@
   en: 84407d1d339c2768
   zh: f743ea2415d4c916
 /parity-checklist/where-to-go-next:
-  en: 63b8a69c1291dccd
-  zh: 415fe2e0eb086d35
+  en: fd6d27c9b64e6d98
+  zh: b9c52e8d43503061

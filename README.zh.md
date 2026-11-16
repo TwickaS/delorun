@@ -77,7 +77,7 @@ Delorun 可以通过定制插件、模式和集成，按团队的工作方式来
 
 ## 与原版的兼容性
 
-DeepSeek Harness 的插件和你的聊天数据与 Delorun 保持兼容。其余一切，包括界面和默认设置，都是 Delorun 自己的。[Delorun 与原版 DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.zh.md)列出了所有差异。
+DeepSeek Harness 的插件和你的聊天数据与 Delorun 保持兼容。其余一切，包括界面和默认设置，都是 Delorun 自己的。[从 DeepSeek Harness 切换](delorun/docs/guide/switching.zh.md)说明了哪些不同。
 
 ## 与上游的关系
 
