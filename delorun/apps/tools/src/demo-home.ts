@@ -7,7 +7,7 @@
  * `node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home <dir> [--projects <dir>] [--no-chats] [--no-setup]`
  *
  * `--home` is a new or empty folder (mode 700 is set) and `--projects` is where the invented project folders go,
- * `<home>/../projects` by default. Setup runs first, with a placeholder key that no request ever uses, unless
+ * `<home>/../projects` by default. Setup runs first, with a placeholder key that is not a real key, unless
  * `--no-setup` is given. `--no-chats` stops after setup: the fresh home that the first-run guide's picture needs.
  * The procedure and the pictures it serves are in `delorun/apps/tools/README.md`.
  *
@@ -37,7 +37,7 @@ import { DEMO_WORKSPACES, type DemoChat, type DemoWorkspace } from './demo-home/
 /** The upload route of the chat import plugin. */
 const UPLOAD_PATH = '/api/deepseek-chat-import/archive'
 
-/** The placeholder key setup is given; the demonstration home never sends a request to a model. */
+/** The placeholder key setup is given. It is not a real key; a studio serving the home still tests it unless its requests are kept local (README). */
 export const PLACEHOLDER_KEY = 'sk-demonstration-placeholder-never-sent'
 
 /** What the build made. */
