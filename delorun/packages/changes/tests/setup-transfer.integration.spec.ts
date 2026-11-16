@@ -13,7 +13,7 @@ import { parseDocument } from 'yaml'
 import { ArchiveImporter, DirectoryWorkspaceStore, encodePublicKey, exportSetupArchive, keyFingerprint, parseSetupDocument, signManifest, type SetupDocument } from '@delorun/archive'
 import { listChanges } from '../src/actions.ts'
 import { type PluginOperation } from '../src/install-actions.ts'
-import { readApproved } from '../src/records.ts'
+import { readApproved, type AtComputer } from '../src/records.ts'
 import { applySetupImport, collectSetup, planSetupImport } from '../src/setup-transfer/index.ts'
 import { fixture, history, migrated, NOW, PROFILE, terminal, type Fixture } from './profile-fixture.ts'
 import { rejection } from './support.ts'
@@ -295,7 +295,8 @@ describe('applySetupImport', () => {
     const { document, read } = await exported()
     const fx = target()
     const run = operation(fx)
-    const forged = { kind: 'terminal' } as unknown as ReturnType<typeof terminal>
+    // A proof the attest functions did not issue, however it looks.
+    const forged: AtComputer = Object.create(null)
     await rejection(applySetupImport(context(fx), document, { presence: forged, reload: NOT_RUNNING, run, readFile: read }), 'NOT_AT_COMPUTER')
     expect(run.calls).toEqual([])
   })
