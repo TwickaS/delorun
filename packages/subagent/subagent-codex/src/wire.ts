@@ -47,7 +47,6 @@ const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>
     approvalsReviewer: 'auto_review',
     sandbox: 'workspace-write',
   },
-  'read-only': { approvalPolicy: 'never', sandbox: 'read-only' },
   'dangerously-bypass-approvals-and-sandbox': {
     approvalPolicy: 'never',
     sandbox: 'danger-full-access',

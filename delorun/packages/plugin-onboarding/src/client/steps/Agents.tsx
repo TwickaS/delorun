@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
 import { AgentAdvanced } from './AgentAdvanced.tsx'
+import { CommandRow } from '../ui/CommandRow.tsx'
 import { BundleCard } from './BundleCard.tsx'
 import { useBundle, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
@@ -53,7 +54,8 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
           {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
         </StateLine>
       )}
-      <AgentAdvanced agent={agent.agent} copy={agent.key} title={title} services={services} />
+      {showSignIn && !loading && signIn === 'missing' && <CommandRow command={`delorun agents login ${agent.agent}`} t={t} />}
+      <AgentAdvanced agent={agent.agent} title={title} services={services} />
     </BundleCard>
   )
 }

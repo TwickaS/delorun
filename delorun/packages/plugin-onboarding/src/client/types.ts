@@ -283,10 +283,8 @@ export interface CustomEndpoint {
   readonly key: string
 }
 
-/** The fields of an agent provider's row that the agents step writes. */
+/** The field of an agent provider's row that the agents step writes. */
 export interface AgentRowSettings {
-  /** The agent's fixed non-interactive permission mode. */
-  readonly permissionMode: string
   /** The model the agent runs, or absent for the agent's own default. */
   readonly model?: string | undefined
 }

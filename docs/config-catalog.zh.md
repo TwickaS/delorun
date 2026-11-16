@@ -3999,7 +3999,6 @@ export interface Config {
 export type CodexPermissionMode =
   | 'never'
   | 'approve-for-me'
-  | 'read-only'
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-subagent-codex -->

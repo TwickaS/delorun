@@ -2670,13 +2670,13 @@
       "path": "packages/subagent/subagent-codex/src/run.ts",
       "class": "delorun-feature",
       "feature": "agents-setup",
-      "reason": "Adds the `read-only` Codex permission mode to the type and the accepted list, so the agents setup can offer a stricter preset than the default."
+      "reason": "Adds `listCodexModels`: starts a fresh app-server, asks `model/list` and releases the child, so the agents setup can offer the models Codex reports."
     },
     {
       "path": "packages/subagent/subagent-codex/src/wire.ts",
       "class": "delorun-feature",
       "feature": "agents-setup",
-      "reason": "Maps `read-only` to `approvalPolicy: never` with `sandbox: read-only` on `thread/start`. Stricter than the default; no existing mode changes."
+      "reason": "Adds `listModels` to the wire: pages through `model/list` and leaves hidden models out."
     },
     {
       "path": "packages/subagent/subagent-claude-code/src/index.ts",

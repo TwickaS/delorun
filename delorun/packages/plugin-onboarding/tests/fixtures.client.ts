@@ -211,14 +211,19 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
   return { face, directory, probe, save, declareLocal, declareCustom }
 }
 
-/** Step services with every part faked; each can be replaced. */
+/**
+ * The agents' settings forms, faked.
+ * @param options - whether the agents' rows exist, and the saved time limit.
+ * @returns each form with its spies, and the face made of them.
+ */
 export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
-  const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : { permissionMode: 'dontAsk' }, { status: options.rows === false ? 'unavailable' : 'ready' })
-  const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : { permissionMode: 'never' }, { status: options.rows === false ? 'unavailable' : 'ready' })
+  const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
+  const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
   const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30 })
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
 }
 
+/** Step services with every part faked; each can be replaced. */
 export function stepServices(change: Partial<StepServices> = {}): StepServices & { readonly spies: ReturnType<typeof installerFake> } {
   const bundles = installerFake()
   const theme = liveForm<ThemeSettings>(THEME)

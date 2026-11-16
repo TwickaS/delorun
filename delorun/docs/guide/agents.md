@@ -1,5 +1,5 @@
 ---
-description: "Hand work to Claude Code or Codex: how a chat gives an agent a task, the consent the first time, what the agent can touch, where its result shows, the presets under Advanced options, and the use-at-your-own-risk warning."
+description: "Hand work to Claude Code or Codex: how a chat gives an agent a task, the consent the first time, what the agent can touch, where its result shows, the model and time limit under Advanced options, and the use-at-your-own-risk warning."
 ---
 
 # Hand work to Claude Code or Codex
@@ -8,7 +8,7 @@ English | [中文](agents.zh.md)
 
 ## Summary
 
-This page shows how a chat hands a task to Claude Code or Codex, what that agent can touch, and how to make it stricter. You need Delorun running and set up ([Install and first run](install.md)), and an account with the agent's provider.
+This page shows how a chat hands a task to Claude Code or Codex, what that agent can touch, and how to choose its model and time limit. You need Delorun running and set up ([Install and first run](install.md)), and an account with the agent's provider.
 
 Claude Code and Codex are optional [external agents](../reference/glossary.md#external-agent). Adding one downloads a pinned copy of its program, and the agent signs in with your own account, not Delorun's. Use them at your own risk: they run under your own account and that provider's terms, outside Delorun's sandbox and prompts.
 
@@ -38,7 +38,7 @@ When you ask, a chat hands the agent one task in the chat's workspace. The agent
 
 Adding an agent downloads a pinned copy of its program for your platform: about 206 MB for Claude Code and about 320 MB for Codex. Delorun checks the download before it uses it, and the copy stays in your Delorun home. It is not your own `claude` or `codex` command.
 
-The agent signs in with your own account, kept where the provider keeps it (`~/.claude` for Claude Code, `~/.codex` for Codex). The card says whether Delorun can see a sign-in. If you have the provider's command, `claude auth login` or `codex login` signs you in.
+The agent signs in with your own account, kept where the provider keeps it (`~/.claude` for Claude Code, `~/.codex` for Codex). The card says whether Delorun can see a sign-in. If it is missing, the card shows `delorun agents login claude-code` or `delorun agents login codex` with a Copy button. Run it at a terminal: it runs the agent's own sign-in from the copy Delorun downloaded, so you need no separately installed command. Add the agent first.
 
 ## The first time
 
@@ -56,7 +56,7 @@ The first time a chat hands an agent a task in a workspace, Delorun asks at the 
 
 ## What the agent can touch
 
-An agent works in the chat's workspace. It can read and, where its own settings allow, change files there, and it can reach anywhere else its own settings allow, your Delorun home included. It runs outside Delorun's sandbox and permission prompts. The presets under [Advanced options](#advanced-options) make it stricter.
+An agent works in the chat's workspace. It can read and, where its own settings allow, change files there, and it can reach anywhere else its own settings allow, your Delorun home included. It runs outside Delorun's sandbox and permission prompts. What it may do inside the workspace follows its own settings, which Delorun does not change.
 
 ## Where the result shows
 
@@ -64,23 +64,15 @@ The result comes back into the chat that handed over the task, as the agent's an
 
 ## Advanced options
 
-Each agent card has **Advanced options**, closed by default. The default path needs nothing from it.
+Each agent card has **Advanced options**, closed by default. The default path needs nothing from it. It holds two settings.
 
-- **Recommended** is what Add leaves in place. For Claude Code, anything its own settings do not already allow is refused (permission mode `dontAsk`). For Codex, it works without asking you and its own sandbox settings apply (permission mode `never`).
-- **Read only** makes the agent plan and review without changing files. For Claude Code it sets permission mode `plan`. For Codex it sets permission mode `read-only`, which pins its sandbox to read-only.
-
-Selecting a preset shows what it sets. No preset is looser than Recommended.
-
-**Fine-tune** holds two more settings:
-
-- **Model.** The first choice, **The agent's own default (recommended)**, leaves the model to the agent. Once the agent is added, Delorun asks it which models it offers and lists them by name; choosing one sets that model for every task. Before the agent is added, or if it cannot answer, only the default shows.
+- **Model.** The first choice, **The agent's own default (recommended)**, leaves the model to the agent. Once the agent is added, Delorun asks it which models it offers and lists them by name; choosing one sets that model for every task. Before the agent is added, or if it cannot answer, only the default shows, with a line saying the list appears once the agent is added.
 - **Time limit per task**, in minutes (1 to 1440, 30 by default). A task stops after this long. It applies to every agent from the next run, and it is the same setting as Settings, Safety, External agents.
 
 <details>
 <summary>Go further</summary>
 
-- The presets and the model write the agent's row in the profile, the same place Plugins edits.
-- A preset chosen before you add the agent is kept and written when the agent is added.
+- The model is written to the agent's row in the profile, the same place Plugins edits.
 - Settings, Safety, External agents also holds the question that Delorun asks before each run.
 
 </details>

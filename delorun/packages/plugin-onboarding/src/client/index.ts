@@ -63,7 +63,7 @@ import type {
   AddOutcome, AgentRowSettings, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
 } from './types.ts'
-import { AGENT_ROWS } from './steps/agent-presets.ts'
+import { AGENT_ROWS } from './steps/agent-rows.ts'
 
 export { createBundleInstaller, stateOf } from './bundles.ts'
 export type { BundleInstaller, BundleState, BundleView, RowView } from './bundles.ts'

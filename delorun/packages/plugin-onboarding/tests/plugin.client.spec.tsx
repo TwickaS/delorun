@@ -55,8 +55,10 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
   } as never)
   const progress = liveForm<OnboardingSettings>(options.progress ?? settings())
   const theme = liveForm(THEME)
+  // The agents' provider rows and the external-agent consent's row, served only once an agent is added.
+  const otherRows = new Set(['subagent-claude-code', 'subagent-codex', 'delorun-delegation-consent'])
   ctx.provide('configForms', {
-    get: (id: string) => (id === ONBOARDING_ROW_ID ? progress.form : id === THEME_ROW_ID ? theme.form : (() => { throw new Error(`unexpected row ${id}`) })()),
+    get: (id: string) => (id === ONBOARDING_ROW_ID ? progress.form : id === THEME_ROW_ID ? theme.form : otherRows.has(id) ? liveForm<object>(undefined, { status: 'unavailable' }).form : (() => { throw new Error(`unexpected row ${id}`) })()),
     whileServed: (ids: readonly string[], register: () => () => void) => {
       served.ids = ids
       served.register = register

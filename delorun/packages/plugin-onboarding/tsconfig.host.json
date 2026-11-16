@@ -11,6 +11,7 @@
     "src/wire.ts",
     "src/answers.ts",
     "src/workspace-route.ts",
+    "src/agent-models.ts",
     "src/clone.ts",
     "src/clone-address.ts",
     "src/folder-kind.ts",
@@ -35,6 +36,9 @@
     },
     {
       "path": "../../../packages/settings/settings"
+    },
+    {
+      "path": "../../../packages/subagent/subagent"
     },
     {
       "path": "../../../packages/util/brand"
