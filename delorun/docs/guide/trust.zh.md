@@ -60,7 +60,7 @@ Delo Run 不能：
 
 每个发布版本都有签名，`delorun update` 和 `delorun verify` 会在任何东西运行之前检查签名。在 `1.0.0` 之前，签名密钥是预览密钥：它们生成于维护者及其 agent 工作的那台电脑上，而不是专门为此保持离线的机器上，也没有其他人见证或备份过它们。那台电脑同时也是 agent 运行的地方。因此，任何人或任何 agent 一旦获得对它的访问权限，就能签出一个你的安装会接受的版本。公开发布日志仍会记录每个版本，所以这样签出的版本会让每个核查的人看到，但没有任何机制阻止它被签出。
 
-这是预览版的主要限制，也是 README 称 Delorun 为预览版的原因。签名告诉你，一个版本来自持有预览密钥的人；发布日志告诉你，所有人拿到的是同一个版本。两者都不是离线密钥所提供的保护。到 `1.0.0`，密钥会在离线机器上的密钥仪式中生成；在那之前，维护者用实体第二因素手动发布每个版本，使 agent 能够使用的地方不存放任何长期有效的发布凭据。
+这是预览版的主要限制，也是 README 称 Delorun 为预览版的原因。签名告诉你，一个版本来自持有预览密钥的人；发布日志告诉你，所有人拿到的是同一个版本。两者都不是离线密钥所提供的保护。到 `1.0.0`，密钥会在离线机器上的密钥仪式中生成；在那之前，维护者用第二因素手动发布每个版本，使 agent 能够使用的地方不存放任何长期有效的发布凭据。
 
 这些版本所使用的发布根：
 
@@ -84,7 +84,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 
 [远程访问](../reference/glossary.zh.md#reach)是指从另一台设备（例如你的手机）打开你的 studio。它在你开启前处于关闭状态，并且不使用 Delo Run 的任何东西。Delorun 提供一个选项：你自己的 [tailnet](../reference/glossary.zh.md#tailnet) 上的 Tailscale（[用手机访问 studio](reach.zh.md)）。当 Tailscale Funnel（会把你的地址发布到互联网上）开启时，`delorun reach on tailscale` 会拒绝执行。
 
-下表还描述了 Delorun 不提供的两个选项，方便你比较（[路线图](roadmap.zh.md)）。
+下表还描述了 Delorun 不提供的两个选项，方便你比较。[路线图](roadmap.zh.md)提到一个由 Delo Run 运行的中继；Delorun 不提供它，所以没有哪一行描述它。
 
 | 远程访问选项 | 提供方能看到或做到什么 |
 | --- | --- |
@@ -150,7 +150,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 <a id="reporting-a-problem"></a>
 ## 报告问题
 
-请按 [SECURITY.md](../../../SECURITY.md) 所述私下报告疑似漏洞，不要公开提交 issue。其他问题请发送至 support@delorun.com。
+请按 [SECURITY.md](../../../SECURITY.md) 所述私下报告疑似漏洞，不要公开提交 issue。其他问题请按 [CONTRIBUTING.zh.md](../../../CONTRIBUTING.zh.md) 处理，或写信到 support@delorun.com。
 
 **下一步。** 要了解保护措施本身，请阅读 [Delorun 保护什么](safety.zh.md)。要用手机访问你的 studio，请阅读[用手机访问 studio](reach.zh.md)。如果出了问题，请在[故障排查](troubleshooting.zh.md)中找到对应的信息。
 

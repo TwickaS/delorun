@@ -57,7 +57,7 @@ What you still trust:
 
 Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. Until `1.0.0`, the signing keys are preview keys: they were made on the computer where the maintainer and his agents work, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
 
-This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. With `1.0.0` the keys are made in a key ceremony on an offline machine, and the maintainer publishes every release by hand with a physical second factor until then, so that no long-lived publishing credential sits where agents can use it.
+This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. With `1.0.0` the keys are made in a key ceremony on an offline machine, and the maintainer publishes every release by hand with a second factor until then, so that no long-lived publishing credential sits where agents can use it.
 
 The release root that these releases are signed under:
 
@@ -79,7 +79,7 @@ No outside security review of Delorun has happened yet. The maintainer's own rev
 
 [Reach](../reference/glossary.md#reach) means opening your studio from another device, such as your phone. It is off until you turn it on, and it uses nothing of Delo Run's. Delorun offers one option: Tailscale on your own [tailnet](../reference/glossary.md#tailnet) ([Reach the studio from your phone](reach.md)). `delorun reach on tailscale` refuses while Tailscale Funnel, which would publish your address on the internet, is on.
 
-The table also describes two options that Delorun does not offer, so you can compare ([Roadmap](roadmap.md)).
+The table also describes two options that Delorun does not offer, so you can compare. The [roadmap](roadmap.md) names a relay that Delo Run would run; Delorun does not offer it, so no row describes it.
 
 | Reach option | What the provider can see or do |
 | --- | --- |
@@ -142,7 +142,7 @@ Each file these checks download is checked against its signature, so a server th
 
 ## Reporting a problem
 
-Report a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and not in a public issue. Report other problems to support@delorun.com.
+Report a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and not in a public issue. For other problems, follow [CONTRIBUTING.md](../../../CONTRIBUTING.md), or write to support@delorun.com.
 
 **Next.** To see the protections themselves, read [What Delorun protects](safety.md). To reach your studio from your phone, read [Reach the studio from your phone](reach.md). If something went wrong, find its message in [Troubleshooting](troubleshooting.md).
 
