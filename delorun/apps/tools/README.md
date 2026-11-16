@@ -13,6 +13,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, prints each path rule's coverage, and prints the count with `--count`.
 - `src/ledger-record.ts` writes the ledger: stub entries, removals of entries that no longer differ, and security digests, as the divergence ledger section below describes.
 - `src/ledger-digests.ts` computes and compares the digests of security entries.
+- `src/demo-home.ts` builds the demonstration home that the pictures are taken from, as the demonstration home section below describes.
 - `src/ledger-merge.ts` is git's merge driver for the ledger. It merges the entries by path and the rules by pattern, and the rules are in the divergence ledger section below.
 - `src/rehearse-upstream.ts` is the rehearsal merge. It merges an upstream tag or a local ref in a scratch worktree and holds the result to the divergence budget, as the rehearsal merge section below describes.
 - `src/upstream-update.ts` carries the listed patches onto a later upstream tag in a scratch worktree and writes the carried ledger once the release merge is in `HEAD`.
@@ -231,6 +232,32 @@ The specs in `tests/issues/` run the tool in scratch repositories with a fake `g
 [`src/studio-browser.ts`](src/studio-browser.ts) runs a Playwright-style script against a studio on a loopback address, and can record the run to WebM: `node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` and `... run --url <studio url> --code '<js>' [--record <out.webm>]`.
 The browser tool sits behind the `StudioBrowser` interface in [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts); the first adapter drives the person's own Chrome through the `browse` CLI, and [`origin.ts`](src/studio-browser/origin.ts) refuses every non-loopback address with no way to widen it.
 The procedure is the [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill.
+
+## The demonstration home and the pictures
+
+The product website's hero and the guide's pictures are screenshots of a demonstration home that holds invented chats and projects: nothing of a person's own, and no real path, name, address or key. [`src/demo-home.ts`](src/demo-home.ts) builds it without a model. It runs `delorun setup --yes` from source with a placeholder key that is never sent, writes the invented project folders of [`src/demo-home/content.ts`](src/demo-home/content.ts), registers them as workspaces and stores their chats through the DeepSeek chat import's own upload route. The studio then reads them as any other history.
+
+```sh
+node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home /tmp/delorun-demo/home
+node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home /tmp/delorun-fresh/home --no-chats
+```
+
+The first command makes the home with three projects and six chats, and the project folders beside it in `/tmp/delorun-demo/projects`. The second makes a home with no chats, for the first-run guide. Run each with the studio stopped and after `pnpm run build:artifacts` and a build of the `delorun/packages` that have a `build` script. The script sets the user's home directory for setup to the folder above `--home`, so no real path appears.
+
+To serve a home from source, append a `webserver` row with a free high port to `<home>/profiles/default/cordis.patch.yml` (`host: 127.0.0.1`, `port: <n>`), then run `delorun start --foreground` from `delorun/apps/cli` with `HOME` and `DELORUN_HOME` set to the folders above, `DEMO_HOME_KEY=sk-demonstration-placeholder-never-sent` and `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1,localhost`. The proxy setting keeps the studio's key test from reaching a provider, so no "key did not pass its test" banner shows and the placeholder key never leaves the computer. `delorun open --print` prints the sign-in link.
+
+The pictures are taken through the owner's browser with `browse` (Windows: `/mnt/c/Users/<user>/.local/bin/browse.exe`) on a loopback address. Open the studio's origin in a tab, set the window with `browse emulate <tab> --viewport '{"width":1440,"height":900,"deviceScaleFactor":1}'`, sign in by running `location.href = '<link>'` with `browse eval <tab>`, and save each picture with `browse screenshot <tab> --format webp --quality 85 --scale device --path <name>.webp`. The tab can disappear between calls, so open it again when `browse` says it is gone. In a new demonstration home, choose **Finish later** and **Continue** on the first-run guide, then open each chat once so that the sidebar shows its title.
+
+| Picture | File | Page | Window | Route and steps |
+| --- | --- | --- | --- | --- |
+| The studio with a chat open | `delorun/apps/website/public/hero-studio.webp` | The website's home page | 1440 × 900 | Demonstration home. Open "Lay out four raised beds" and scroll up until its table shows. |
+| The first-run guide | `delorun/docs/guide/pictures/first-run-guide.webp` | [Install and first run](../../docs/guide/install.md) | 1440 × 900 | The home with no chats. The Welcome step, as the studio opens. |
+| A theme change, before | `delorun/docs/guide/pictures/theme-soft.webp` | [Customise](../../docs/guide/customise.md) | 1440 × 900 | Demonstration home. Settings, then Appearance. |
+| A theme change, after | `delorun/docs/guide/pictures/theme-ocean.webp` | [Customise](../../docs/guide/customise.md) | 1440 × 900 | The same page after choosing Ocean under Theme. Choose Soft again afterwards. |
+| The setup versions | `delorun/docs/guide/pictures/setup-versions.webp` | [Updates](../../docs/guide/updates.md) | 1440 × 900 | After the theme change: Settings, then Setup versions under Data. |
+| The studio on a phone | `delorun/docs/guide/pictures/phone-chat.webp` | [Reach](../../docs/guide/reach.md) | 390 × 844, scale 2, mobile; `--scale css` | Demonstration home. `browse emulate` with `"deviceScaleFactor":2,"mobile":true`, reload, open "Lay out four raised beds". |
+
+The update report is the output of `delorun update --report`, which needs two releases and a running installed Delorun, so the Updates page shows the setup versions instead. The guide's pictures are in `delorun/docs/guide/pictures/`; a page names one with a relative path such as `pictures/phone-chat.webp`, and the documentation site's build bundles it into the page with a content hash and copies the folder to `/guide/pictures/` for the Markdown routes.
 
 ## Local checks
 

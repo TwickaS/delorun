@@ -15,6 +15,7 @@
 - `src/check-fork-boundary.ts` 是命令行门禁。它读取台账，依据台账检查本仓库，打印每条路径规则的覆盖情况，并在传入 `--count` 时打印差异数量。
 - `src/ledger-record.ts` 写入台账：桩条目、对不再有差异的条目的移除，以及安全摘要，如下文的差异台账一节所述。
 - `src/ledger-digests.ts` 计算并比较安全条目的摘要。
+- `src/demo-home.ts` 建出用来拍摄图片的演示主目录，见下文“演示主目录与图片”一节。
 - `src/ledger-merge.ts` 是台账的 git 合并驱动。它按路径合并条目，按模式合并规则，规则见下文的差异台账一节。
 - `src/rehearse-upstream.ts` 是预演合并。它在临时工作树中合并一个上游标签或本地引用，并按差异预算检验结果，如下文的预演合并一节所述。
 - `src/upstream-update.ts` 在临时工作树中把列出的补丁带到较新的上游标签上，并在发布合并进入 `HEAD` 之后写出带过去的台账。
@@ -237,6 +238,32 @@ brief 已带有的链接以同样的方式改写。
 流程见 [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill。
 
 <a id="local-checks"></a>
+
+## 演示主目录与图片
+
+产品网站的首屏图和指南中的图片，都是演示主目录的截图。这个主目录里只有虚构的 chat 和项目：没有任何人自己的内容，也没有真实的路径、姓名、地址或密钥。[`src/demo-home.ts`](src/demo-home.ts) 不用模型就能建好它。它从源码运行 `delorun setup --yes`，使用一个不会被发送的占位密钥，写出 [`src/demo-home/content.ts`](src/demo-home/content.ts) 中虚构的项目文件夹，把它们登记为工作区，并通过 DeepSeek chat 导入自己的上传路由存入它们的 chat。之后 studio 把它们当作普通历史来读取。
+
+```sh
+node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home /tmp/delorun-demo/home
+node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home /tmp/delorun-fresh/home --no-chats
+```
+
+第一条命令建出含三个项目和六个 chat 的主目录，项目文件夹在它旁边的 `/tmp/delorun-demo/projects`。第二条建出没有 chat 的主目录，用于首次运行向导。每次运行时 studio 都要处于停止状态，并且要先运行 `pnpm run build:artifacts`，再构建 `delorun/packages` 中带 `build` 脚本的包。脚本把 setup 用的用户主目录设为 `--home` 的上一级文件夹，因此不会出现真实路径。
+
+要从源码提供一个主目录，在 `<home>/profiles/default/cordis.patch.yml` 末尾追加一行 `webserver`，写上一个空闲的高端口（`host: 127.0.0.1`、`port: <n>`），然后在 `delorun/apps/cli` 中运行 `delorun start --foreground`，并设置 `HOME` 和 `DELORUN_HOME` 为上述文件夹、`DEMO_HOME_KEY=sk-demonstration-placeholder-never-sent`，以及 `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1,localhost`。代理设置让 studio 的密钥测试到不了任何提供方，所以不会出现“key did not pass its test”横幅，占位密钥也不会离开这台电脑。`delorun open --print` 会打印登录链接。
+
+图片通过所有者的浏览器用 `browse`（Windows：`/mnt/c/Users/<user>/.local/bin/browse.exe`）在回环地址上拍摄。在标签页中打开 studio 的源，用 `browse emulate <tab> --viewport '{"width":1440,"height":900,"deviceScaleFactor":1}'` 设定窗口，用 `browse eval <tab>` 运行 `location.href = '<link>'` 登录，再用 `browse screenshot <tab> --format webp --quality 85 --scale device --path <name>.webp` 保存每张图片。标签页可能在两次调用之间消失，`browse` 提示它已消失时重新打开即可。在新的演示主目录中，先在首次运行向导上选择 **Finish later** 和 **Continue**，再把每个 chat 打开一次，侧边栏才会显示它的标题。
+
+| 图片 | 文件 | 页面 | 窗口 | 路径与步骤 |
+| --- | --- | --- | --- | --- |
+| 打开了一个 chat 的 studio | `delorun/apps/website/public/hero-studio.webp` | 网站首页 | 1440 × 900 | 演示主目录。打开“Lay out four raised beds”，向上滚动到它的表格出现。 |
+| 首次运行向导 | `delorun/docs/guide/pictures/first-run-guide.webp` | [安装与首次运行](../../docs/guide/install.zh.md) | 1440 × 900 | 没有 chat 的主目录。studio 打开时的 Welcome 步骤。 |
+| 更改主题，之前 | `delorun/docs/guide/pictures/theme-soft.webp` | [自定义](../../docs/guide/customise.zh.md) | 1440 × 900 | 演示主目录。Settings，然后 Appearance。 |
+| 更改主题，之后 | `delorun/docs/guide/pictures/theme-ocean.webp` | [自定义](../../docs/guide/customise.zh.md) | 1440 × 900 | 在 Theme 下选择 Ocean 之后的同一页。之后再选回 Soft。 |
+| 设置版本 | `delorun/docs/guide/pictures/setup-versions.webp` | [更新](../../docs/guide/updates.zh.md) | 1440 × 900 | 更改主题之后：Settings，然后 Data 下的 Setup versions。 |
+| 手机上的 studio | `delorun/docs/guide/pictures/phone-chat.webp` | [远程访问](../../docs/guide/reach.zh.md) | 390 × 844，倍率 2，移动端；`--scale css` | 演示主目录。用 `"deviceScaleFactor":2,"mobile":true` 运行 `browse emulate`，重新加载，打开“Lay out four raised beds”。 |
+
+更新报告是 `delorun update --report` 的输出，它需要两个版本和一个正在运行的已安装 Delorun，所以“更新”页改为展示设置版本。指南的图片放在 `delorun/docs/guide/pictures/`；页面用 `pictures/phone-chat.webp` 这样的相对路径引用图片，文档站点的构建会带内容哈希地把它打包进页面，并把该文件夹复制到 `/guide/pictures/`，供 Markdown 路由使用。
 
 ## 本地检查
 
