@@ -59,7 +59,7 @@ The harness and your chats: your setup, plugins and settings come back as they w
 There is no hidden one, and these are the real ones:
 
 - **It is a preview.** It runs on Linux and on Windows through WSL2, not yet as a desktop app on macOS or native Windows. The [known issues](known-issues.md) list the rough edges.
-- **One person maintains it.** I reply as soon as I can, usually within a day or two and sometimes longer, and I promise no response time. [Governance](../../../GOVERNANCE.md) says what happens to releases if I cannot act.
+- **One person maintains it.** I reply when I can, and I promise no response time. [Governance](../../../GOVERNANCE.md) says what happens to releases if I cannot act.
 - **It follows an upstream that moves fast.** Delorun may diverge from DeepSeek Harness over time. DeepSeek Harness plugins and chat data stay compatible, and everything you see in the studio is Delorun's own.
 - **How it earns.** Delorun is MIT and free, and nothing in it is held back for payment. From `1.0.0` I offer teams custom plugins and integrations as paid work. That is the whole plan ([Roadmap](roadmap.md#how-delorun-earns)).
 
