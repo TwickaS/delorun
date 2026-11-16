@@ -64,7 +64,7 @@ A change's id, such as `c3f09a1b2c4`, names exactly the content that was shown. 
 | --- | --- |
 | `delorun changes apply <id>` | Shows the change's diff, a page at a time, then asks; the plugin runs exactly the content you reviewed. |
 | `delorun changes discard <id>` | The change never runs, and it is no longer listed while the folder holds that content. Your folder stays as it is. |
-| `delorun changes undo <id>` | An applied change is taken back: the plugin runs what it ran before, or nothing after undoing its install. |
+| `delorun changes undo <id>` | An applied change is taken back: the plugin runs what it ran before, or nothing after undoing its install, which stops it without removing it: the undo prints `delorun plugin remove <name>` for that. |
 
 Each of these runs only in a terminal, prints what it is about to do and asks you to confirm; any answer but `y` or `yes` changes nothing. `apply` prints the diff before it asks: press Enter for the next page, or `a` for the rest. Names, lines and messages that hold control characters are printed with those characters written as `\uXXXX`, so a file cannot change what your terminal shows. With input or output redirected, the command refuses with "This needs you at your computer: run it in a terminal."
 

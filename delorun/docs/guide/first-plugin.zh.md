@@ -95,7 +95,7 @@ delorun changes list
 1. 在运行 `delorun plugin dev .` 的终端中按 Ctrl+C。插件仍保持已安装。
 2. 在 studio 中，选择侧边栏的 Plugins，然后选择 Hello plugin，再选择 Uninstall。studio 会提示 `What it provides goes away once it is uninstalled.` 再次选择 Uninstall 确认。Hello plugin 不再出现在 Installed plugins 中，`delorun doctor` 也不再列出它。
 
-`delorun changes undo <id>` 会撤销一项已记录的更改，但它只是停止该更改所加载的内容，并不卸载插件：在你卸载之前，Hello plugin 会在 Plugins 页面中显示为未运行。你的 `hello-plugin` 文件夹不会被删除；不再需要时请自行删除。
+`delorun changes undo <id>` 会撤销一项已记录的更改，但它只是停止该更改所加载的内容，并不卸载插件：在你卸载之前，Hello plugin 会在 Plugins 页面中显示为未运行，撤销时会打印卸载它的命令：`delorun plugin remove hello-plugin`。你的 `hello-plugin` 文件夹不会被删除；不再需要时请自行删除。
 
 <a id="go-further"></a>
 

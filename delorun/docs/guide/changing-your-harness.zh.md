@@ -70,7 +70,7 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 | --- | --- |
 | `delorun changes apply <id>` | 逐页显示该更改的差异，然后询问；插件运行的正是你审阅过的内容。 |
 | `delorun changes discard <id>` | 该更改永远不会运行，并且在文件夹含有那份内容期间不再被列出。你的文件夹保持原样。 |
-| `delorun changes undo <id>` | 撤回已应用的更改：插件运行它之前运行的内容，或在撤销其安装之后什么都不运行。 |
+| `delorun changes undo <id>` | 撤回已应用的更改：插件运行它之前运行的内容，或在撤销其安装之后什么都不运行，即停止它而不移除它：撤销时会打印 `delorun plugin remove <name>` 用于移除。 |
 
 其中每一条命令都只在终端中运行，打印它将要做什么并要求你确认；除 `y` 或 `yes` 之外的任何回答都不会改变任何东西。`apply` 在询问之前打印差异：按 Enter 看下一页，按 `a` 看其余部分。包含控制字符的名称、行和消息，会把这些字符写成 `\uXXXX` 打印出来，所以文件无法改变你的终端所显示的内容。当输入或输出被重定向时，命令会以 “This needs you at your computer: run it in a terminal.” 拒绝。
 

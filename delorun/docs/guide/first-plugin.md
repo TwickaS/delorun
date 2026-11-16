@@ -83,7 +83,7 @@ If you turn changes protection on, an edit waits for your review instead and loa
 1. In the terminal that runs `delorun plugin dev .`, press Ctrl+C. The plugin stays installed.
 2. In the studio, choose Plugins in the sidebar, then Hello plugin, then Uninstall. The studio says `What it provides goes away once it is uninstalled.` Choose Uninstall again to confirm. Hello plugin is gone from Installed plugins, and `delorun doctor` no longer lists it.
 
-`delorun changes undo <id>` takes one recorded change back, but it stops what that change loaded without uninstalling the plugin: Hello plugin stays on the Plugins page as not running until you uninstall it. Your `hello-plugin` folder is never deleted; remove it yourself when you no longer want it.
+`delorun changes undo <id>` takes one recorded change back, but it stops what that change loaded without uninstalling the plugin: Hello plugin stays on the Plugins page as not running until you uninstall it, and the undo prints the command that does: `delorun plugin remove hello-plugin`. Your `hello-plugin` folder is never deleted; remove it yourself when you no longer want it.
 
 ## Go further
 

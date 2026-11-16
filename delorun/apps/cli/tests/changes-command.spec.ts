@@ -441,9 +441,16 @@ describe('delorun changes discard, undo, off and on', () => {
     expect(await runChanges(['undo', id], context, terminal)).toBe(EXIT.ok)
     expect(terminal.questions).toEqual([`Undo ${id}: plug: changes in ${source}? [y/N] `])
     expect(out()).toContain(`Undid ${id}. Delorun runs it now.`)
+    expect(out()).not.toContain('delorun plugin remove')
     const again = driven(['y'])
     expect(await runChanges(['undo', id], context, again)).toBe(EXIT.failed)
     expect(again.questions).toEqual([`Undo ${id}: plug? [y/N] `])
+  })
+
+  it('says an undone install stops the plugin and names the command that removes it', async () => {
+    const install = (await readChangeLog(home, PROFILE)).entries.find(entry => entry.kind === 'plugin-install' && entry.subject.plugin === 'plug')!
+    expect(await runChanges(['undo', install.id], context, driven(['y']))).toBe(EXIT.ok)
+    expect(out()).toContain(`Undid ${install.id}. Delorun runs it now.\nplug is stopped, not removed. To remove it fully: delorun plugin remove plug\n`)
   })
 
   it('turns one plugin off and on, editing only the bundle list', async () => {

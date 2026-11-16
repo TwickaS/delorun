@@ -674,7 +674,15 @@ export async function runChanges(args: readonly string[], context: CommandContex
         if (target.kind === 'harness') return await undoHarness(harness, target.target, presence!, dependencies, context)
         const { shown } = target
         if (!await confirmed(dependencies, `Undo ${action.id}: ${printable(shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary)}?`)) return declined(context)
-        return reported(`Undid ${action.id}`, await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload })), context)
+        const undone = await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload }))
+        const code = reported(`Undid ${action.id}`, undone, context)
+        const { entry } = undone
+        const name = entry.subject.plugin
+        // An undone first approval stops the plugin; its package stays in the profile until it is removed.
+        if (code === EXIT.ok && name !== undefined && entry.from === undefined && (entry.kind === 'plugin-install' || entry.kind === 'plugin-edit')) {
+          context.stdout(`${printable(name)} is stopped, not removed. To remove it fully: delorun plugin remove ${printable(name)}\n`)
+        }
+        return code
       }
       case 'off':
       case 'on': {
