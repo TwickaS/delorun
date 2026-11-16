@@ -31,7 +31,9 @@ Delorun 所做的一切都是插件，你也可以添加自己的插件：agent 
 
 ## 开始之前
 
-你需要一个已完成 setup 的 Delorun（`delorun setup`）、Node.js 24，以及用于构建 TypeScript 的 pnpm。每条 `delorun plugin` 命令都作用于你的 CLI profile，除非你设置了 `DELORUN_PROFILE` 或传入 `--profile <name>`，否则就是 `default`。插件是一个 npm 包，其 `package.json` 声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`；它的 `cordis.patch.yml` 把插件的行插入你的 profile。DeepSeek Harness 的教程解释了插件模型本身：[你的第一个插件](../../../docs/user/develop/basic/index.zh.md)、[工具](../../../docs/user/develop/basic/tool.zh.md)、[配置](../../../docs/user/develop/basic/config.zh.md)和[打包](../../../docs/user/develop/basic/publish.zh.md)。Delorun 原样运行这些插件。
+刚接触插件？[你的第一个插件](first-plugin.zh.md)带你从零开始直到在 studio 中看到它。
+
+你需要一个已完成 setup 的 Delorun（`delorun setup`）、[Node.js](https://nodejs.org) 24.9 或更新版本，以及用于构建 TypeScript 的 pnpm。pnpm 是一个独立的工具：Delorun 自带的那份只供 `delorun plugin` 内部使用，不在你的命令路径上，所以请自行安装 pnpm，例如用 `npm install -g pnpm`，或按 [pnpm.io](https://pnpm.io/installation) 的说明安装，并用 `pnpm --version` 检查。每条 `delorun plugin` 命令都作用于你的 CLI profile，除非你设置了 `DELORUN_PROFILE` 或传入 `--profile <name>`，否则就是 `default`。插件是一个 npm 包，其 `package.json` 声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`；它的 `cordis.patch.yml` 把插件的行插入你的 profile。DeepSeek Harness 的教程解释了插件模型本身：[你的第一个插件](../../../docs/user/develop/basic/index.zh.md)、[工具](../../../docs/user/develop/basic/tool.zh.md)、[配置](../../../docs/user/develop/basic/config.zh.md)和[打包](../../../docs/user/develop/basic/publish.zh.md)。Delorun 原样运行这些插件。
 
 <a id="create-a-plugin"></a>
 
@@ -86,7 +88,7 @@ delorun plugin dev ./my-plugin
 - 带有 `build` 脚本的包会在开始时构建一次，并在 `src/` 下每次变化之后再次构建。构建失败时会保留最后一次成功的构建，错误显示在你的终端上。
 - 对插件的 `cordis.patch.yml` 或 `package.json` 的更改会在下次启动时加载：先 `delorun stop`，再 `delorun start`。
 - Delorun 不必先运行：随时启动它，它就会加载该插件。
-- 你是在终端中启动它的，所以在它运行期间，该文件夹中的每次编辑都会实时加载，无论是你还是 agent 做的，也无论变更保护设置如何。
+- 变更保护关闭时（默认），在它运行期间，该文件夹中的每次编辑都会实时加载，无论是你还是 agent 做的。保护开启时，编辑和其他任何编辑一样在 Changes 中等待你的审阅，只有在你应用之后才会加载；请先运行 `delorun changes work my-plugin`，才能实时加载你自己的编辑（见[开发插件](changing-your-harness.zh.md#working-on-a-plugin)）。
 
 运行期间，`plugin dev` 会向你的 profile 的 `cordis.patch.yml` 添加一个带注释标记的条目：它设置上游的 `hmr` 行所监视的文件夹。按 Ctrl+C 会再次移除该条目；如果命令被终止，下一次 `plugin dev` 会重用它。如果你的 profile 补丁已经自己设置了 `hmr` 行，`plugin dev` 会拒绝，而不是替换你的设置。你停止时插件仍保持已安装；`delorun plugin remove my-plugin` 会将其卸载。`plugin dev` 运行期间，Delorun 的更新会等待。
 
@@ -153,7 +155,7 @@ delorun start --foreground --inspect
 delorun start --patch ./try.patch.yml
 ```
 
-`--patch <file>`（可重复）仅在这一次启动中把补丁文件应用到你的 profile 之上，与 DeepSeek Harness 中的 `dsh --patch` 相同，且不改变 profile。Delorun 自己的检查仍然适用：关闭 Delorun 某项保护的覆盖层会被拒绝，并指出文件名。安全模式会拒绝覆盖层，更新所启动的进程也不带它们运行。
+`--patch <file>`（即 [overlay](../reference/glossary.zh.md#overlay)）（可重复）仅在这一次启动中把补丁文件应用到你的 profile 之上，与 DeepSeek Harness 中的 `dsh --patch` 相同，且不改变 profile。Delorun 自己的检查仍然适用：关闭 Delorun 某项保护的覆盖层会被拒绝，并指出文件名。安全模式会拒绝覆盖层，更新所启动的进程也不带它们运行。
 
 <a id="forking-a-plugin-delorun-ships"></a>
 

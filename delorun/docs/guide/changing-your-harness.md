@@ -10,7 +10,15 @@ This page describes how Delorun works today.
 
 ## Summary
 
-You can change what your Delorun runs: plugins you link from a folder, and Delorun's own files. By default protection is off, so a change loads without review and is recorded: `delorun changes` lists it, shows it with its files and a diff, and undoes it. Turn protection on and changes wait for your review instead: a plugin you link from a folder runs the copy you approved, so edits in the folder, yours or your agent's, break nothing that is running until you apply them. `delorun changes` then lists what waits, shows each change with a summary of what it can do, and applies, discards or undoes it. While you work on a plugin, `delorun changes work` loads your edits live until you are done. Delorun's own files change in your own copy of the installed release. `delorun changes` also turns one plugin off or on, and turns protection on or off. A change that stops Delorun from starting is left out, and Delorun starts without it. The studio's Changes section in Settings does the same at your computer.
+You can change what your Delorun runs: plugins you link from a folder, and Delorun's own files. The [protection](../reference/glossary.md#changes-protection) setting decides whether a change loads at once or waits for your review.
+
+- With protection off, the default, a change loads without review and is recorded. `delorun changes` lists it, shows it with its files and a diff, and undoes it.
+- With protection on, a change waits for your review. A plugin you link from a folder runs the copy you approved, so edits in the folder, yours or your agent's, break nothing that is running until you apply them. `delorun changes` lists what waits, shows each change with a summary of what it can do, and applies, discards or undoes it.
+- While you work on a plugin with protection on, `delorun changes work` loads your edits live until you are done.
+- Delorun's own files change in your own copy of the installed release. `delorun changes` also turns one plugin off or on, and turns protection on or off.
+- A change that stops Delorun from starting is left out, and Delorun starts without it.
+
+The studio's Changes section in Settings does the same at your computer.
 
 ## Contents
 
@@ -37,8 +45,6 @@ With protection on, edits in the folder appear in `delorun changes list` as a ch
 The copy includes the installed packages the plugin links to, such as those of a pnpm workspace, so a change to one of them is not what runs until it is part of a change you applied. A copy holds at most 50,000 files and 512 MiB with those packages. A plugin larger than that keeps running the copy you approved, or does not run, and every start says why; with protection off, a plugin that is larger only with its installed packages runs and loads those packages from where they are installed, and every start says so. A folder Delorun cannot read, such as one that keeps changing, never stops Delorun from starting: the plugin runs the copy you approved and the start names it.
 
 Before Delorun reloads its plugins, while it runs, it checks that each plugin's copy is the one Changes keeps; when one is not, it does not reload, and what was running keeps running.
-
-The first start of a release with this behaviour approves the plugins you already link as they are and says so once, so nothing you run changes.
 
 ## Seeing what waits for review
 
@@ -79,6 +85,8 @@ If an edit fails to load, Delorun goes back to the last version of the plugin th
 `delorun changes done <plugin>` shows what the folder holds as a version, such as `3f9a2c1`, with its files, the summary of what it can do and the diff against the version you approved before, and asks you to approve that version. Exactly that version becomes the approved one, and everything you changed during the session is one change, which you can undo with `delorun changes undo <id>` like any other. If the folder changes while the question waits, nothing is approved and the session stays open; run `done` again to see what it holds now. If the version fails to load, nothing is approved either.
 
 A session that ends without you approves nothing: when Delorun stops, when the next start finds a session Delorun left open, and when its time is up. Your plugin then runs the version you approved before the session, and what the folder holds waits for your review in `delorun changes list` like any other edit, or with protection off loads at the next start.
+
+`delorun plugin dev <folder>` ([Write a plugin for Delorun](plugins.md#run-it-while-you-work-on-it)) follows these rules too. With protection off, each edit it builds loads live. With protection on, an edit waits for your review like any other edit in the folder, and `delorun plugin dev` loads nothing from the folder until you apply it or start `delorun changes work <plugin>`.
 
 Both commands run only in a terminal on your computer; the studio's Changes section does the same in a browser on that computer ([In the studio](#in-the-studio)). A remote session and your agent cannot start or end a work session.
 

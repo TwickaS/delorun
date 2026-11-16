@@ -14,6 +14,7 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 ## 目录
 
+- [更改一件事，看到它，再撤销它](#change-one-thing-see-it-undo-it)
 - [各个层级](#the-levels)
 - [更改插件的设置](#change-a-plugins-settings)
 - [给 studio 起你自己的名称和图标](#give-the-studio-your-own-name-and-icon)
@@ -22,24 +23,54 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 - [fork 已发布的插件](#fork-a-shipped-plugin)
 - [编辑 harness 本身](#edit-the-harness-itself)
 
+<a id="change-one-thing-see-it-undo-it"></a>
+
+## 更改一件事，看到它，再撤销它
+
+最快能看到的更改是 studio 的主题。它不需要文件、不需要重启，也不需要终端。
+
+1. 在侧边栏底部选择 Settings。在左侧列表中，选择 General 下的 Appearance。
+2. 在 Theme 下你会看到 Soft、Slate、Berry、Grove、Ocean、Ember 和 Iris。Soft 是 Delorun 起初使用的主题。选择 Ocean。
+3. studio 的颜色立即改变。Delorun 已把你的选择保存在你的 profile 中：`~/.delorun/profiles/default/` 下的 `cordis.patch.yml` 现在以主题的一个[行](../reference/glossary.zh.md#row)结尾，Settings → Setup versions 列出了一个名为 Changed the settings of Theme 的版本。
+
+   ```yaml
+   - id: delorun-theme
+     name: "@delorun/plugin-theme"
+     config:
+       studioAdditions: true
+       palette: ocean
+   ```
+
+4. 要撤销它，在 Theme 下选择 Soft。颜色恢复，该行再次写着 `palette: soft`。
+
+其他每个设置页面的工作方式都相同：你改变一个控件，studio 显示出来，反向的更改则把它放回去。下面的各个层级触及的范围更广，每一层都写明了它自己的退路。
+
 <a id="the-levels"></a>
 
 ## 各个层级
 
-| 层级 | 它改变什么 | 它存放在哪里 | 更新时它让你付出什么 |
-| --- | --- | --- | --- |
-| 设置 | 插件的设置页面提供什么 | studio 的“设置”和“插件”页面 | 没有：设置会被保留 |
-| profile 补丁 | 任何插件的配置；关闭某个插件 | 你的 profile 的 `cordis.patch.yml` | 新版本改名或移除的键；补丁会重述插件完整的 `config` |
-| agent 预设 | agent 开始时拥有的工具、指令、skill 和模型 | 在 Creator 模式中制作、保存在你的 profile 中的预设 | 很少：预设指名插件，所以只有被移除或改名的插件才会让它出问题 |
-| 你自己的插件 | 新的工具、studio 组成部分、服务、插件行 | 安装到你的 profile 中的包 | 它的 `engines` 范围：排除新发布版本的范围会让插件被关闭，直到你放宽范围并测试 |
-| 已发布插件的 fork | DeepSeek Harness 的某个插件的行为 | 安装到你的 profile 中的改名副本，同时关闭已发布的行 | 你必须自己合并该插件的每一项上游更改，而它的接口在 1.0 之前的任何次版本中都可能变化 |
-| harness 本身 | 任何东西，包括插件循环 | 由 `delorun changes edit-harness` 制作的、你自己的已安装发布版本程序文件的副本 | 每项更改都属于已安装的版本，更新报告会说明它如何被保留；你运行的是 Delorun 没有签名的代码 |
+| 层级 | 它改变什么 | 它存放在哪里 | 更新时它让你付出什么 | 退回方式 |
+| --- | --- | --- | --- | --- |
+| 设置 | 插件的设置页面提供什么 | studio 的“设置”和“插件”页面 | 没有：设置会被保留 | 把控件设回去，例如 Theme → Soft；Branding 有 Use the Delorun defaults |
+| profile 补丁 | 任何插件的配置；关闭某个插件 | 你的 profile 的 `cordis.patch.yml` | 新版本改名或移除的键；补丁会重述插件完整的 `config` | 删除你添加的条目并重启；先在 Settings → Setup versions 中选 Save this setup，之后 Switch to this version 可把它带回来 |
+| agent 预设 | agent 开始时拥有的工具、指令、skill 和模型 | 在 Creator 模式中制作、保存在你的 profile 中的预设 | 很少：预设指名插件，所以只有被移除或改名的插件才会让它出问题 | 制作之前先在 Settings → Setup versions 中选 Save this setup；Switch to this version 会带回没有它的设置 |
+| 你自己的插件 | 新的工具、studio 组成部分、服务、插件行 | 安装到你的 profile 中的包 | 它的 `engines` 范围：排除新发布版本的范围会让插件被关闭，直到你放宽范围并测试 | 侧边栏的 Plugins，选该插件，再选 Uninstall；`delorun changes undo <id>` 只会停止某项更改所加载的内容 |
+| 已发布插件的 fork | DeepSeek Harness 的某个插件的行为 | 安装到你的 profile 中的改名副本，同时关闭已发布的行 | 你必须自己合并该插件的每一项上游更改，而它的接口在 1.0 之前的任何次版本中都可能变化 | 像卸载你自己的插件那样卸载这个 fork；它的补丁随之消失，所以已发布的插件会再次运行 |
+| harness 本身 | 任何东西，包括插件循环 | 由 `delorun changes edit-harness` 制作的、你自己的已安装发布版本程序文件的副本 | 每项更改都属于已安装的版本，更新报告会说明它如何被保留；你运行的是 Delorun 没有签名的代码 | `delorun changes undo <id>` 撤销一项更改；`delorun changes edit-harness --discard` 撤销全部更改 |
 
 <a id="change-a-plugins-settings"></a>
 
 ## 更改插件的设置
 
-大多数插件在 studio 中都有一个设置页面，保存到你的 profile 中。对于页面没有提供的内容，你的 profile 的 `cordis.patch.yml`（位于 `~/.delorun/profiles/<profile>/` 下）可以按 id 给任何插件的行打补丁。补丁会替换该行完整的 `config`，所以请重述插件需要的每个键，`disabled: true` 则关闭一行。DeepSeek Harness 的[加载顺序](../../../docs/user/develop/basic/publish.zh.md#the-loading-order)说明了哪一层优先。如果补丁关闭了 Delorun 的某项保护，Delorun 会拒绝启动，并指出该文件。
+大多数插件在 studio 中都有一个设置页面，保存到你的 profile 中。对于页面没有提供的内容，你的 profile 的 `cordis.patch.yml`（位于 `~/.delorun/profiles/<profile>/` 下）可以按 id 给任何插件的行[打补丁](../reference/glossary.zh.md#patch)。Settings → Plugins 会在每个插件名称之下显示它的 id，例如待办工具的 id 是 `tool-todo`。要让两个待办事项同时处于进行中，把下面这段添加到文件末尾：
+
+```yaml
+- id: tool-todo
+  config:
+    allowParallelInProgress: true
+```
+
+你手工编辑的补丁在下次启动时加载：运行 `delorun stop`，再运行 `delorun start`。补丁会替换该行完整的 `config`，所以请重述插件需要的每个键；缺少必需键的行会使 Delorun 无法启动，错误信息会指出该键。`disabled: true` 则关闭一行。要撤销这项更改，删除该条目并重启。Delorun 不会把手工编辑保存为版本，所以如果想要一份副本，请自己保留文件的副本。DeepSeek Harness 的[加载顺序](../../../docs/user/develop/basic/publish.zh.md#the-loading-order)说明了哪一层优先。如果补丁关闭了 Delorun 的某项保护，Delorun 会拒绝启动，并指出该文件。
 
 <a id="give-the-studio-your-own-name-and-icon"></a>
 
@@ -59,7 +90,7 @@ agent 预设决定 agent 开始时拥有哪些工具、指令、skill 和模型�
 
 ## 编写插件
 
-插件在不改变 Delorun 所发布的任何内容的情况下增加行为：一个工具、studio 的一部分、其他插件使用的服务，或针对现有插件的一组设置 bundle。[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个已安装的插件。你也可以从“设置”→“插件”→“Create a plugin”开始，或在 chat 中让 agent 在你的工作区中制作一个（[在 studio 中](plugins.zh.md#from-the-studio)，[在 chat 中](plugins.zh.md#in-a-chat)）；两种方式中，开启它都是你在电脑上要做的一步。变更保护默认是关闭的，所以对你所链接的插件的编辑（包括 agent 的编辑）会实时重新加载，并被记录为未经审阅而加载；开启保护之后，它们会等待你的批准（见[修改你的 harness](changing-your-harness.zh.md)）。请声明 `engines.dsh` 和 `engines.delorun`：更新时，Delorun 会关闭其范围不包含新发布版本的插件，并在这样做之前告诉你，而 [Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.zh.md)说明了每个发布版本可能改变什么。
+插件在不改变 Delorun 所发布的任何内容的情况下增加行为：一个工具、studio 的一部分、其他插件使用的服务，或针对现有插件的一组设置 bundle。[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个已安装的插件。你也可以从“设置”→“插件”→“Create a plugin”开始，或在 chat 中让 agent 在你的工作区中制作一个（[在 studio 中](plugins.zh.md#from-the-studio)，[在 chat 中](plugins.zh.md#in-a-chat)）；两种方式中，开启它都是你在电脑上要做的一步。[变更保护](../reference/glossary.zh.md#changes-protection)默认是关闭的，所以对你所链接的插件的编辑（包括 agent 的编辑）会实时重新加载，并被记录为未经审阅而加载；开启保护之后，它们会等待你的批准（见[修改你的 harness](changing-your-harness.zh.md)）。请声明 `engines.dsh` 和 `engines.delorun`：更新时，Delorun 会关闭其范围不包含新发布版本的插件，并在这样做之前告诉你，而 [Delorun 版本对插件的承诺](../contracts/c22-delorun-plugin-interface.zh.md)说明了每个发布版本可能改变什么。
 
 <a id="fork-a-shipped-plugin"></a>
 
@@ -67,7 +98,7 @@ agent 预设决定 agent 开始时拥有哪些工具、指令、skill 和模型�
 
 Delorun 从自己的安装中加载它所发布的包，所以你的 profile 中与已发布的包同名的包永远不会被加载。要改变 DeepSeek Harness 的某个插件的行为：
 
-1. 把它的包复制到一个文件夹中，并在 `package.json` 中给它起一个新名称，例如把 `@deepseek-ai/dsh-tool-todo` 改为 `my-todo`，并带有它自己的 `engines` 范围和一个 `dsh.bundle` 声明。
+1. 把它的包复制到一个文件夹中，并在 `package.json` 中给它起一个新名称，例如把 `@deepseek-ai/dsh-tool-todo` 改为 `my-todo`，并带有它自己的 `engines` 范围和一个 `dsh.bundle` 声明（即[组合包](../reference/glossary.zh.md#bundle)）。
 2. 在副本的 `cordis.patch.yml` 中，关闭已发布的行，并以新的 id 插入你自己的行，配置与已发布的行相同：
 
    ```yaml

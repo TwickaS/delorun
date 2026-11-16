@@ -29,7 +29,9 @@ Everything Delorun does is a plugin, and you can add your own: a tool the agent 
 
 ## Before you start
 
-You need a set-up Delorun (`delorun setup`), Node.js 24 and pnpm to build TypeScript. Every `delorun plugin` command works on your CLI profile, `default` unless you set `DELORUN_PROFILE` or pass `--profile <name>`. A plugin is an npm package whose `package.json` declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`; its `cordis.patch.yml` inserts the plugin's rows into your profile. DeepSeek Harness's tutorials explain the plugin model itself: [your first plugin](../../../docs/user/develop/basic/index.md), [a tool](../../../docs/user/develop/basic/tool.md), [configuration](../../../docs/user/develop/basic/config.md) and [packaging](../../../docs/user/develop/basic/publish.md). Delorun runs those plugins unchanged.
+New to plugins? [Your first plugin](first-plugin.md) walks through one from nothing to the studio.
+
+You need a set-up Delorun (`delorun setup`), [Node.js](https://nodejs.org) 24.9 or newer, and pnpm to build TypeScript. pnpm is a separate tool: the copy Delorun carries is private to `delorun plugin` and is not on your command path, so install pnpm yourself, for example with `npm install -g pnpm` or as [pnpm.io](https://pnpm.io/installation) describes, and check it with `pnpm --version`. Every `delorun plugin` command works on your CLI profile, `default` unless you set `DELORUN_PROFILE` or pass `--profile <name>`. A plugin is an npm package whose `package.json` declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`; its `cordis.patch.yml` inserts the plugin's rows into your profile. DeepSeek Harness's tutorials explain the plugin model itself: [your first plugin](../../../docs/user/develop/basic/index.md), [a tool](../../../docs/user/develop/basic/tool.md), [configuration](../../../docs/user/develop/basic/config.md) and [packaging](../../../docs/user/develop/basic/publish.md). Delorun runs those plugins unchanged.
 
 ## Create a plugin
 
@@ -76,7 +78,7 @@ delorun plugin dev ./my-plugin
 - A package with a `build` script is built once at the start and again after each change under `src/`. A failed build leaves the last good build loaded, and the error is on your terminal.
 - A change to the plugin's `cordis.patch.yml` or `package.json` loads at the next start: `delorun stop`, then `delorun start`.
 - Delorun does not have to run first: start it at any time, and it loads the plugin.
-- You started it at the terminal, so every edit in that folder loads live while it runs, whether you or the agent made it and whatever the changes protection setting is.
+- With changes protection off, the default, every edit in that folder loads live while it runs, whether you or the agent made it. With protection on, an edit waits in Changes for your review like any other and loads only when you apply it; run `delorun changes work my-plugin` first to load your own edits live ([Working on a plugin](changing-your-harness.md#working-on-a-plugin)).
 
 While it runs, `plugin dev` adds one entry, marked with a comment, to your profile's `cordis.patch.yml`: it sets the folders that upstream's `hmr` row watches. Ctrl+C removes the entry again; if the command was killed, the next `plugin dev` reuses it. If your profile patch already sets the `hmr` row itself, `plugin dev` refuses rather than replace your setting. The plugin stays installed when you stop; `delorun plugin remove my-plugin` uninstalls it. An update of Delorun waits while `plugin dev` runs.
 
@@ -131,7 +133,7 @@ delorun start --foreground --inspect
 delorun start --patch ./try.patch.yml
 ```
 
-`--patch <file>`, which you may repeat, applies a patch file over your profile for this start only, as `dsh --patch` does in DeepSeek Harness, without changing the profile. Delorun's own checks still apply: an overlay that turns off one of Delorun's protections is refused with the file's name. Safe mode refuses overlays, and the process an update starts runs without them.
+`--patch <file>`, which you may repeat, applies a patch file (an [overlay](../reference/glossary.md#overlay)) over your profile for this start only, as `dsh --patch` does in DeepSeek Harness, without changing the profile. Delorun's own checks still apply: an overlay that turns off one of Delorun's protections is refused with the file's name. Safe mode refuses overlays, and the process an update starts runs without them.
 
 ## Forking a plugin Delorun ships
 

@@ -122,6 +122,13 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **profile**：上游的 profile。`delorun` 命令与桌面应用各自保留一个，与上游一致，并共享 chat 与工作区。**层**（layer）：一个组合包、profile patch、home patch 或 overlay。<a id="profile"></a>
 - **本地组合包**（local bundle）：Delorun 的 CLI profile 在上游 web profile 模板之后加入的组合包，承载 Delorun 的本地集成行；profile 的 `--dump-config` 会在它写入的每一行旁标注该组合包。代码对应：`@delorun/bundle-local`。<a id="local-bundle"></a>
 - **profile 历史**（profile history）：profile 的每个已保存版本，记录改动了什么以及由谁改动。**撤销**（undo）：恢复到最近一次之前的版本。<a id="profile-history"></a>
+- **行**（row）：profile 配置中的一个条目。它指明一个插件并保存该插件的设置，profile 就是一列行。每一行有一个 id，例如 `tool-todo`，Settings → Plugins 把它显示在插件名称之下；patch 通过这个 id 来更改一行。技术说明：一个 Cordis 插件条目；`disabled: true` 会将其关闭。<a id="row"></a>
+- **组合包**（bundle）：为 profile 添加一组现成的行的包，例如你连同其设置一起编写的插件。profile 列出该包时，包自带的 `cordis.patch.yml` 会插入它的行。技术说明：上游的组合包，由包的 `package.json` 中的 `dsh.bundle` 声明；该术语归上游的[术语表](../../../docs/glossary.zh.md)所有。<a id="bundle"></a>
+- **补丁**（patch）：你的 profile 文件夹中的 `cordis.patch.yml` 文件，在其中你可以按 id 更改或关闭任一插件的行，而不动其余部分。补丁会替换该行的整个 `config`，所以要重新写出插件需要的每个键，手工所做的编辑在下次启动时加载。技术说明：上游的 profile patch；组合包也带有自己的补丁。<a id="patch"></a>
+- **overlay**：只对一次启动生效的补丁文件，用 `delorun start --patch <file>` 应用。它不改变 profile 中保存的任何内容，Delorun 会拒绝关闭其自身保护的 overlay。<a id="overlay"></a>
+- **变更保护**（changes protection）：决定对 Delorun 所运行内容的更改是立即加载还是等待你审阅的设置。关闭（默认）时，每项更改都会加载并被记录，以便你撤销；开启时，更改要等你在自己的电脑上应用之后才加载。`delorun changes protection on` 或 `off` 设置它，只能在终端中进行。技术说明：`changes/protection.json`，见[契约 C21](../contracts/c21-changes.zh.md#the-protection-setting)。<a id="changes-protection"></a>
+- **更改**（change）：对 Delorun 所运行内容的一次已记录的改动：编辑过的插件文件夹、安装或关闭的插件，或 Delorun 自身的某个文件。每项更改有一个 id，例如 `c3f09a1b2c4`，`delorun changes list` 显示它是在等待、已应用、已丢弃还是已撤销。<a id="change"></a>
+- **开发会话**（work session）：在这段时间内，对某个插件文件夹的编辑即使在保护开启时也会不经审阅实时加载，默认两小时，用 `--for` 最多可设 480 分钟。`delorun changes work <plugin>` 开始它，`delorun changes done <plugin>` 通过批准文件夹的版本来结束它。<a id="work-session"></a>
 - **安全模式**（safe mode）：启动时不加载你添加的所有插件与组合包，只保留 Delorun 自己的，使你能够查明是否是你的某一项导致 Delorun 无法工作。它不改变任何文件。`delorun recover safe-mode` 为下次启动开启它，`delorun recover exit-safe-mode` 将其关闭。<a id="safe-mode"></a>
 - **eject**：将插件源码复制到 profile 中，作为原插件的可编辑替代品。<a id="eject"></a>
 - **源码模式**（source mode）：从本人自己分叉的 git 检出版本运行 Delorun，并通过合并已签名的发布标签进行更新。目前未提供此模式，界面文本不使用该术语。<a id="source-mode"></a>
