@@ -66,5 +66,5 @@ You should see the imported chats in the workspace's chat list.
 
 ## Next
 
-- Move chats from stock DeepSeek Harness: [Switching from DeepSeek Harness](switching.md).
+- Move chats from DeepSeek Harness: [Switching from DeepSeek Harness](switching.md).
 - Start chatting: [Daily use](daily-use.md).

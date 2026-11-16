@@ -67,9 +67,6 @@ Run the printed `chmod` command, then run `delorun` again. Delorun never changes
 <details>
 <summary>Edge cases</summary>
 
-- If `DELORUN_HOME` is not an absolute path and does not start with `~`, then `delorun` refuses it.
-- If `DELORUN_HOME` names your home folder, the filesystem root, or `~/.dsh` or a folder inside it, then `delorun` refuses it.
-- If you set `DSH_HOME`, then `delorun` ignores it and `delorun status` says so.
 - If a profile name uses capitals, spaces, a first character other than a letter or digit, or more than 32 characters, or is `desktop` or `headless`, then `delorun` refuses it.
 - If another user can read your home or a secret file, then Delorun refuses to use it and prints the `chmod` command that fixes it ([Fixing permissions](#fixing-permissions)).
 - If a file or folder in the home is a symbolic link or belongs to another user, then Delorun refuses it with no command to fix it. Move it away and let `delorun` create it again.

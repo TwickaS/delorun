@@ -78,5 +78,5 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 
 ## 接下来
 
-- 从 stock DeepSeek Harness 迁移 chat：[从 DeepSeek Harness 切换](switching.zh.md)。
+- 从 DeepSeek Harness 迁移 chat：[从 DeepSeek Harness 切换](switching.zh.md)。
 - 开始 chat：[日常使用](daily-use.zh.md)。

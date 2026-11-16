@@ -77,9 +77,6 @@ What you can do:
 <details>
 <summary>边界情况</summary>
 
-- 如果 `DELORUN_HOME` 不是绝对路径且不以 `~` 开头，那么 `delorun` 会拒绝它。
-- 如果 `DELORUN_HOME` 指向你的用户主目录、文件系统根目录，或 `~/.dsh` 及其中的文件夹，那么 `delorun` 会拒绝它。
-- 如果你设置了 `DSH_HOME`，那么 `delorun` 会忽略它，并且 `delorun status` 会说明这一点。
 - 如果 profile 名称含有大写字母、空格，首字符不是字母或数字，或超过 32 个字符，或者是 `desktop` 或 `headless`，那么 `delorun` 会拒绝它。
 - 如果其他用户能读取你的 home 或某个密钥文件，那么 Delorun 会拒绝使用它，并打印修复它的 `chmod` 命令（见[修复权限](#fixing-permissions)）。
 - 如果 home 中的某个文件或文件夹是符号链接或属于其他用户，那么 Delorun 会拒绝它，且不给出修复命令。请把它移走，让 `delorun` 重新创建。
