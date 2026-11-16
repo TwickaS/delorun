@@ -43,7 +43,7 @@ import { attestationProblem } from '../rebuild/attestation.ts'
 import { logEntryName } from '@delorun/release-formats/log/bundle'
 import { entryRequest } from '@delorun/release-formats/log/entry'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
-import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, packOutputs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delorun/release-formats/sign/json'
 import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema, StrictRuntimeSchema } from '@delorun/release-formats/sign/schemas'
@@ -225,8 +225,8 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft, tagge
     refuse(`the files in ${rebuild} do not reproduce the digests the rebuild record lists`)
   }
   const names = new Set(local.map(ref => ref.name))
-  const missing = requiredOutputs(draft.version, recipe.closure.platforms, draft.images).filter(name => !names.has(name))
-  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
+  const missing = [...requiredOutputs(draft.version, recipe.closure.platforms, draft.images), ...await packOutputs(release, draft.version)].filter(name => !names.has(name))
+  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file, the images' seccomp profiles and every pack the packs file names`)
   let attestationPath: string
   let attestation: Buffer
   try {
@@ -388,10 +388,10 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   const envelope = signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.key])
   const manifestBytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
   const entryBytes = Buffer.from(`${JSON.stringify(entryRequest(manifestBytes, request.key), undefined, 2)}\n`)
-  const packOutputs = await signPacks(request.release, draft.version, manifestBytes, request.key).catch((error: unknown) => {
+  const packFiles = await signPacks(request.release, draft.version, manifestBytes, request.key).catch((error: unknown) => {
     throw new SigningRefusal(`signing refuses: the packs file: ${(error as Error).message}`, { cause: error })
   })
-  const outputs: Array<readonly [string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], ...packOutputs, [manifestName, manifestBytes]]
+  const outputs: Array<readonly [string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], ...packFiles, [manifestName, manifestBytes]]
   await writeAll(request.release, outputs)
   return { manifest, manifestName, comparison }
 }

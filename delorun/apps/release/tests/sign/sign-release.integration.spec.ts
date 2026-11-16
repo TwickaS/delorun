@@ -9,6 +9,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sha256Hex } from '@delorun/release-formats/brands'
+import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { logEntryName, verifyBundle } from '@delorun/release-formats/log/bundle'
 import { readEntryRequest } from '@delorun/release-formats/log/entry'
 import { attestationText } from '../../src/rebuild/attestation.ts'
@@ -354,7 +355,32 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     expect(fixture.record().status).toBe(0)
     rmSync(sbom)
     editRecord(fixture, record => ({ ...record, outputs: (record.outputs as Array<{ name: string }>).filter(output => !output.name.endsWith('.spdx.json')) }))
-    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file, the images' seccomp profiles and every pack the packs file names`)
+  })
+
+  it('requires the rebuild to reproduce every pack the release lists, byte for byte', async (test) => {
+    const fixture = await releaseFixture(test)
+    const built = await buildPackArchive(`delorun-${VERSION}-pack-demo.tar.gz`, [{ path: 'package.json', mode: '0644', data: Buffer.from('{}') }], 1_800_000_000)
+    const draft = { schema: 'delorun.release-packs/1', version: VERSION, manifest: '0'.repeat(64), packs: [{ name: 'demo', version: '1.0.0', experimental: false, peers: [], variants: { any: { ...built.variant, external: [] } } }] }
+    const packs = `${JSON.stringify({ signed: draft, signatures: [] }, undefined, 2)}\n`
+    const archive = `delorun-${VERSION}-pack-demo.tar.gz`
+    const file = `delorun-${VERSION}.packs.json`
+    writeFileSync(join(fixture.release, file), packs)
+    writeFileSync(join(fixture.release, archive), built.bytes)
+    const lacking = fixture.record()
+    expect(lacking.stderr).toContain(`lacks ${file}, ${archive}`)
+    expect(lacking.status).toBe(2)
+    writeFileSync(join(fixture.rebuild, file), packs)
+    writeFileSync(join(fixture.rebuild, archive), Buffer.concat([built.bytes, Buffer.from('x')]))
+    const differing = fixture.record()
+    expect(differing.status).not.toBe(0)
+    expect(differing.stdout + differing.stderr).toContain(archive)
+    // A record of a difference is written, and signing refuses it; the holder rebuilds again.
+    rmSync(fixture.recordPath)
+    writeFileSync(join(fixture.rebuild, archive), built.bytes)
+    const matching = fixture.record()
+    expect(matching.stderr).toBe('')
+    expect(matching.status).toBe(0)
   })
 
   it('refuses a draft that names another file as the SBOM', async (test) => {
