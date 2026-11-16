@@ -57,7 +57,7 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 <details>
 <summary>进一步了解</summary>
 
-插件设置中 `prices` 下的一个条目，会替换价格表中该模型的条目，或添加一个模型。每个条目指定一个 `model`（模型 id 的前缀；匹配最长的前缀优先）和四个费率，单位为每百万 token 的美元数：`input`、`output`、`cacheRead` 和 `cacheWrite`。添加 `provider` 可将该条目限制于一家提供方，添加 `longContext` 可为超过某个提示词大小的情况设置更高的费率，添加 `peak` 可为提供方的繁忙时段设置费率。[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明了插件设置存放在哪里，以及如何撤销更改。
+插件设置中 `prices` 下的一个条目，会替换价格表中该模型的条目，或添加一个模型。每个条目指定一个 `model`（模型 id 的前缀；匹配最长的前缀优先）和四个费率，单位为每百万 token 的美元数：`input`、`output`、`cacheRead` 和 `cacheWrite`。添加 `provider` 可将该条目限制于一家提供方，添加 `longContext` 可为超过某个提示词大小的情况设置更高的费率，添加 `peak` 可为提供方的繁忙时段设置费率。[修改你的 harness](changing-your-harness.zh.md)说明了插件设置存放在哪里，以及如何撤销更改。
 
 </details>
 
@@ -65,7 +65,14 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 
 ## 它没有计入什么
 
-批量价格、快速模式、一小时缓存写入、折扣和中国节假日都没有建模。
+计量器只累计它在这个 studio 中能看到的 chat。它不计入：
+
+- **外部 agent。**Claude Code、Codex 和其他外部 agent 作为它们自己的程序在 studio 之外运行，所以它们的用量不计入。使用它们的 chat 会显示一条提示，例如 “2 external agents run outside this studio and are not counted.”
+- **批量价格。**有些提供方对以较慢的批量方式发送的请求收费较低。
+- **快速模式。**有些提供方对模型的更快模式收费较高。
+- **一小时缓存写入。**有些提供方对把缓存的提示词保留一小时（而不是默认的较短时间）收费较高。
+- 提供方给你的账户的**折扣**。
+- **中国公共假日。**DeepSeek 的繁忙时段价格按以 UTC 表示的工作日时间表计算，计量器不会针对中国公共假日调整这份时间表。
 
 <a id="next"></a>
 

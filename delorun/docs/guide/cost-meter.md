@@ -51,13 +51,20 @@ Prices come with Delorun and are checked against each provider's published price
 <details>
 <summary>Go further</summary>
 
-An entry under `prices` in the plugin's settings replaces the price table's entry for that model, or adds a model. Each entry names a `model` (a prefix of the model id; the longest matching prefix wins) and four rates in US dollars per million tokens: `input`, `output`, `cacheRead` and `cacheWrite`. Add `provider` to limit the entry to one provider, `longContext` for a higher rate above a prompt size, or `peak` for rates in the provider's busy hours. [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains where plugin settings live and how to undo a change.
+An entry under `prices` in the plugin's settings replaces the price table's entry for that model, or adds a model. Each entry names a `model` (a prefix of the model id; the longest matching prefix wins) and four rates in US dollars per million tokens: `input`, `output`, `cacheRead` and `cacheWrite`. Add `provider` to limit the entry to one provider, `longContext` for a higher rate above a prompt size, or `peak` for rates in the provider's busy hours. [Changing your harness](changing-your-harness.md) explains where plugin settings live and how to undo a change.
 
 </details>
 
 ## What it does not count
 
-Batch prices, fast mode, one-hour cache writes, discounts and Chinese holidays are not modelled.
+The meter adds up the chats it can see in this studio. It does not count:
+
+- **External agents.** Claude Code, Codex and other external agents run as their own programs outside the studio, so their usage is not counted. A chat that uses them shows a note, such as "2 external agents run outside this studio and are not counted."
+- **Batch prices.** Some providers charge less for requests sent in a slower batch.
+- **Fast mode.** Some providers charge more for a faster mode of a model.
+- **One-hour cache writes.** Some providers charge more to keep a cached prompt for an hour instead of the default shorter time.
+- **Discounts** that a provider gives your account.
+- **Chinese public holidays.** DeepSeek's busy-hour prices follow a weekday schedule in UTC, and the meter does not adjust that schedule for Chinese public holidays.
 
 ## Next
 
