@@ -8,7 +8,7 @@ description: "用 npx delorun 安装 Delorun，并从零开始进行第一次 ch
 
 ## 摘要
 
-本页带你从零开始，直到你的第一次 chat。你只需运行一条命令：`npx delorun`。它会下载 Delorun，检查下载内容是否真实可信，问你几个问题，并完成 Delorun 的设置。之后你用 `delorun` 启动它，它会在浏览器中打开。此后一切都运行在你自己的电脑上。你需要一台 Delorun 支持的电脑、运行该命令所需的 Node.js，以及你想与之对话的 AI 模型的密钥。chat 需要密钥；不过没有密钥 studio 也能打开，所以你可以先四处看看。
+本页带你从零开始，直到你的第一次 chat。你只需运行一条命令：`npx delorun`。它会下载 Delorun，检查下载内容是否真实可信，问你几个问题，并完成 Delorun 的设置。之后你用 `delorun` 启动它，它会在浏览器中打开。此后一切都运行在你自己的电脑上。你需要一台 Delorun 支持的电脑、安装和启动它所需的 Node.js，以及你想与之对话的 AI 模型的密钥。chat 需要密钥；不过没有密钥 studio 也能打开，所以你可以先四处看看。
 
 Delorun 是一个可以按你自己的工作来塑造的 agent harness。它构建在 [DeepSeek Harness](../reference/glossary.zh.md#stock) 之上，后者是一个开源程序，让 AI 模型能够处理文件并在你的电脑上运行命令。
 
@@ -29,8 +29,9 @@ Delorun 是一个可以按你自己的工作来塑造的 agent harness。它构�
 
 ## 开始之前
 
-- **一台受支持的电脑。**x64 或 arm64 上的 Linux，或通过 WSL2 使用的 Windows（见[通过 WSL2 使用 Windows](#windows-through-wsl2)）。Delorun 0.1.0 不能在原生 Windows 上运行，macOS 将在后续发布版本中加入（见[路线图](roadmap.zh.md)）。
-- **[Node.js](https://nodejs.org) 24.9 或更新版本。**只有安装命令需要它。用 `node --version` 检查。
+- **一台受支持的电脑。**x64 或 arm64 上的 Linux，或通过 WSL2 使用的 Windows（见[通过 WSL2 使用 Windows](#windows-through-wsl2)）。Delorun 不能在原生 Windows 或 macOS 上运行（见[路线图](roadmap.zh.md)）。
+- **[Node.js](https://nodejs.org) 24.9 或更新版本。**`delorun` 命令是一个 Node 程序，所以每次启动都需要 Node，而不只是安装时。用 `node --version` 检查。如果你没有 Node，或版本较旧，请使用 [nodejs.org](https://nodejs.org/en/download) 上的官方安装方式。Ubuntu 自带的 Node 软件包要旧得多（Ubuntu 24.04 提供的是 Node 18），所以 `apt` 给不了你可用的 Node。
+- **bubblewrap（在 Linux 和 WSL2 中）。**它是限制 chat 所运行命令的程序。请用系统的包管理器安装 `bubblewrap` 软件包。没有它时，在有登录会话或正在运行 tmux 这类程序的电脑上，Delorun 会拒绝每一条命令，`delorun doctor` 会显示 `fail sandbox`（见 [Delorun 保护什么](safety.zh.md#the-sandbox)）。
 - **模型密钥。**密钥是让 Delorun 在你的账户下使用 AI 模型的秘密文本。运行模型的公司或服务器就是[模型提供方](../reference/glossary.zh.md#provider)。默认是 DeepSeek API 密钥。其他提供方也可以使用（见[模型提供方](providers.zh.md)）。你可以在 setup 时跳过密钥，之后再添加。
 - **git**，`delorun update` 在更新之前用它保存你的设置（见[更新](updates.zh.md)）。首次运行的 setup 不需要它。
 
@@ -51,20 +52,21 @@ pnpm dlx delorun
 bunx delorun
 ```
 
-第一次运行会下载并安装 Delorun，然后开始 setup。Delorun 会打印下面描述的各项检查，然后问出 setup 的第一个问题。此后每一次 `npx delorun` 都会启动已安装的 Delorun，不再下载任何东西。
+`npx` 在安装 `delorun` 包之前可能会先问 `Ok to proceed? (y)`。请按 **y** 和回车。第一次运行会下载并安装 Delorun（这是一个很大的下载），然后开始 setup。Delorun 会打印下面描述的各项检查，然后问出 setup 的第一个问题。此后每一次 `npx delorun` 都会启动已安装的 Delorun，不再下载任何东西。
 
-在 setup 结束时，Delorun 会提议 `Install the delorun command? (runs npm install -g delorun)`。回答“是”，从此以后你就可以输入 `delorun` 而不是 `npx delorun`。
+在结束时，setup 会打印后续步骤。第一步是一行需要你自己运行的命令，`npm install -g delorun@<version>`，它会安装 `delorun` 命令。之后你就可以输入 `delorun` 而不是 `npx delorun`。
 
 Delorun 把一切都保存在一个文件夹 `~/.delorun` 中，只有你能打开它（见[你的 Delorun home](home.zh.md)）。
 
 <details>
 <summary>边界情况</summary>
 
-- 如果你运行的是 macOS，那么启动器会在下载任何东西之前停止，并说明 macOS 将在后续发布版本中加入。请使用 Linux，或通过 WSL2 使用 Windows。
-- 如果你运行的是原生 Windows，那么启动器会在下载任何东西之前停止，并说明 Delorun 0.1.0 在 WSL2 中运行。请按照[通过 WSL2 使用 Windows](#windows-through-wsl2) 操作。
+- 如果你运行的是 macOS，那么启动器会在下载任何东西之前停止，并说明 Delorun 尚不能在 macOS 上运行。请使用 Linux，或通过 WSL2 使用 Windows。
+- 如果你运行的是原生 Windows，那么启动器会在下载任何东西之前停止，并说明 Delorun 在 WSL2 中运行。请按照[通过 WSL2 使用 Windows](#windows-through-wsl2) 操作。
 - 如果你的电脑运行的是发布版本未列出的其他系统或处理器，那么启动器会以 `PLATFORM_NOT_RELEASED` 停止，且不安装任何东西。
-- 如果你的 Node 低于 24.9，那么启动器会以 `Delorun needs Node 24.9 or newer to start` 停止，并指出你的版本。请从 nodejs.org 安装较新的 Node，然后再次运行 `npx delorun`。
+- 如果你的 Node 低于 24.9，那么启动器会以 `Delorun needs Node 24.9 or newer to start` 停止，并指出你的版本。请从 [nodejs.org](https://nodejs.org/en/download) 安装较新的 Node，然后再次运行 `npx delorun`。
 - 如果某项检查失败，那么不会安装任何东西（见[启动器验证什么](#what-the-launcher-verifies)）。请再次运行 `npx delorun`；如果仍然失败，请见[安装与发布检查](troubleshooting.zh.md#installs-and-release-checks)。
+- 如果 `npm install -g` 以 `EACCES`（权限被拒绝）停止，那么你的 Node 是为整个系统安装的，npm 没有 root 权限就无法写入那里。请改为安装到你自己的文件夹：`npm install -g --prefix ~/.local delorun@<version>`，并把 `~/.local/bin` 加入你的 `PATH`。
 - 如果你没有网络，那么首次安装无法下载发布版本。一旦安装了某个发布版本，启动它就不需要网络。
 - 如果你设置了 `DELORUN_HOME`，那么 home 会创建在那里，而不是 `~/.delorun`（见[你的 Delorun home](home.zh.md#where-the-home-is)）。
 
@@ -87,12 +89,13 @@ Delorun 把一切都保存在一个文件夹 `~/.delorun` 中，只有你能打�
 
 ## 通过 WSL2 使用 Windows
 
-Delorun 0.1.0 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，可在 Windows 旁边运行 Linux。它不能在 PowerShell 这类原生 Windows 终端中运行。
+Delorun 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，可在 Windows 旁边运行 Linux。它不能在 PowerShell 这类原生 Windows 终端中运行。
 
 1. 安装带有默认 Ubuntu 的 WSL2：打开 PowerShell 并运行 `wsl --install`，如果它要求，则重启 Windows。
 2. 从“开始”菜单打开 Ubuntu 应用。此后的一切都在那个终端中进行。
 3. 在 Ubuntu 内部而不是 Windows 中安装 Node.js 24.9 或更新版本（见[开始之前](#before-you-start)）。
-4. 在那里运行 `npx delorun`，并按照[安装](#install)操作。
+4. 在 Ubuntu 内部安装 bubblewrap，即 `bubblewrap` 软件包（见[开始之前](#before-you-start)）。
+5. 在那里运行 `npx delorun`，并按照[安装](#install)操作。
 
 请把你的项目放在 Ubuntu 的主目录里，例如 `~/projects`，因为 Windows 驱动器（`/mnt/c`）上的文件对 Linux 程序来说很慢。请在你的 Windows 浏览器中，用 Delorun 打印的地址打开 studio。
 
@@ -100,16 +103,17 @@ Delorun 0.1.0 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功�
 
 ## 启动器验证什么
 
-在安装任何东西之前，启动器会证明下载的内容就是 Delorun 的维护者发布的那个发布版本。它会打印每项检查：
+在安装任何东西之前，启动器会证明下载的内容就是维护者发布的那个发布版本。它会打印每项检查：
 
 ```text
-Resolving the release: the stable channel names 0.1.0.
-Checking the signature: 0.1.0 is signed under release root 1.
+Resolving the release: the stable channel names 0.1.0-preview.2.
+Checking the signature: 0.1.0-preview.2 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-linux-x64.tar.gz (…).
-Installing release 0.1.0.
+Downloading delorun-0.1.0-preview.2-linux-x64.tar.gz (…).
+Installing release 0.1.0-preview.2.
 ```
 
+- **渠道。**预览版发布在名为 `stable` 的渠道上，所以第一行这样写。
 - **签名。**Delorun 的发布密钥为发布版本签名。启动器检查这些签名以及下载的文件是否与之吻合。如果有任何不吻合，就不会安装任何东西。
 - **公开发布日志。**每个发布版本还会被记入一份公开的、仅追加的[发布日志](../reference/glossary.zh.md#release-log)。启动器会检查这个条目。如果无法访问日志，启动器只凭签名安装该发布版本，打印一条警告，并在下次能够访问日志的启动时再次检查日志。
 - **每次启动。**启动器会把已安装的文件与已签名的列表比较。已安装发布版本的启动不需要网络。
@@ -152,7 +156,7 @@ How will you use Delorun?
 1. **隐私。**这是一条说明，不是问题。它说明 Delorun 自己没有[遥测](../reference/glossary.zh.md#telemetry)，除非你开启，否则 DeepSeek Harness 的桌面分析和 DeepSeek 的会话日志上传都是关闭的，并且 Delorun 每天检查一次是否有更新的发布版本，不发送任何关于你的安装的信息。这条说明以此结尾：`Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.`
 2. **导入。**仅当你以前用过 DeepSeek Harness 且这个 Delorun home 没有 chat 时：`Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.` 答案默认为 No（见[从 DeepSeek Harness 切换](switching.zh.md)）。自动化选项从不询问它。
 3. **模型提供方。**`Which model provider should Delorun use?` 列出 **DeepSeek (recommended)**、**More providers**（Anthropic、OpenAI、Google Gemini 等，或任何支持 OpenAI API 的服务器）和 **Choose later**。
-4. **模型密钥。**这个问题会指出提供方创建 [API 密钥](../reference/glossary.zh.md#api-key)的页面，然后询问 `How should Delorun get the DeepSeek API key?` 你可以**立即粘贴**，Delorun 会把它存放在你的 Delorun 文件夹中，只有你能读取；也可以**使用 `DEEPSEEK_API_KEY`**，Delorun 每次启动时都会读取它。环境变量是你的终端传递给它所启动程序的有名字的设置。如果你选择了变量而它在这个终端中没有设置，setup 会立即说明，并告诉你如何设置。setup 用一次发往提供方的请求来检查手工输入的密钥（见[模型提供方](providers.zh.md)）。
+4. **模型密钥。**这个问题会指出提供方创建 [API 密钥](../reference/glossary.zh.md#api-key)的页面，然后询问 `How should Delorun get the DeepSeek API key?` 你可以**立即粘贴**（标为推荐），Delorun 会把它存放在你的 Delorun 文件夹中，只有你能读取；也可以**使用 `DEEPSEEK_API_KEY`**，Delorun 每次启动时都会读取它。环境变量是你的终端传递给它所启动程序的有名字的设置。如果你选择了变量而它在这个终端中没有设置，setup 会立即说明，并告诉你如何设置。setup 用一次发往提供方的请求来检查手工输入的密钥（见[模型提供方](providers.zh.md)）。
 5. **提示。**`How much should Delorun ask before it changes things?` 这就是[提示回答](../reference/glossary.zh.md#prompts-answer)。它有三个选项：
 
    ```text
@@ -173,6 +177,7 @@ Prompts: Ask me first
 Keep running in the background: yes
 Remote access: off
 Setup name: default, studio port 3080
+Changes protection: unchanged
 
 Nothing is saved until you choose Save and set up.
 ```
@@ -185,21 +190,24 @@ Nothing is saved until you choose Save and set up.
 Delorun is set up. Nothing is running yet.
 
 Next:
-  1. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.
-  2. Start Delorun and open the studio: delorun
+  1. Install the delorun command, which npx does not keep:
+     npm install -g delorun@0.1.0-preview.2
+  2. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.
+  3. Start Delorun and open the studio: delorun
      Send a first message in a new chat. The install guide's section on your first chat walks through it: https://docs.delorun.com/guide/install#the-studio-and-your-first-chat
 
 Change an answer later: delorun setup <section> (delorun setup --list shows the sections).
 If something looks wrong: delorun doctor.
 ```
 
-第 1 步只有在你选择的密钥变量尚未设置时才会出现。各步骤因选项而异。手机选项会加上 `Add your phone or another device: delorun devices approve, then type the code it shows.`，或者在远程访问关闭时加上 `Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.` 自动化选项把第 2 步替换为 `Run a task from a script or CI: delorun headless "your task"`，并加上 `To use the studio as well, start it any time with delorun.` 当 setup 由启动器启动时，第一步会用 `npm install -g delorun@<version>` 安装同一版本的 `delorun` 命令。为另一个发布渠道（例如本地渠道）构建的启动器不在 npm 注册表中，所以那一步会说明改为安装它所来自的包文件，即 `npm install -g ./delorun-<version>.tgz`；并且更新检查的声明会指出该渠道的主机，而不是 releases.delorun.com 和 GitHub。
+安装步骤只在由启动器启动 setup 时出现，密钥步骤只在你选择的密钥变量尚未设置时出现。各步骤因选项而异。手机选项会加上 `Add your phone or another device: delorun devices approve, then type the code it shows.`，或者在远程访问关闭时加上 `Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.` 自动化选项把第 2 步替换为 `Run a task from a script or CI: delorun headless "your task"`，并加上 `To use the studio as well, start it any time with delorun.`
 
 <details>
 <summary>边界情况</summary>
 
-- 如果你选择 **Choose later**，那么不会设置任何提供方，chat 暂时无法回答。setup 会这样说明。新 chat 从 DeepSeek 的 `deepseek-flash` 开始，它从 `DEEPSEEK_API_KEY` 读取密钥。之后可以用 `delorun setup key` 或在 studio 的“设置”→“Agent”→“模型”中添加提供方。
+- 如果你选择 **Choose later**，那么不会设置任何提供方，chat 暂时无法回答。setup 会这样说明。新 chat 从 DeepSeek 的 `deepseek-flash` 开始，它从 `DEEPSEEK_API_KEY` 读取密钥。之后可以用 `delorun setup key` 或在 studio 的“设置”、“Agent”、“模型”中添加提供方。
 - 如果提供方拒绝你的密钥，那么除非你选择 **Continue without a successful check**，否则 setup 不会存储它。审阅界面随后会说明密钥未经验证。
+- 如果启动器是为另一个发布渠道（例如本地渠道）构建的，那么它不在 npm 注册表中，所以安装步骤会说明改为安装它所来自的包文件，即 `npm install -g ./delorun-<version>.tgz`；并且更新检查的声明会指出该渠道的主机，而不是 releases.delorun.com 和 GitHub。
 - 如果你在任何问题上按 Ctrl-C，那么 setup 会打印 `Setup cancelled. Nothing was saved. Run delorun to start again.` 并以退出码 130 退出。在保存之前关闭终端同样不会写入任何东西。
 - 如果你在危险模式确认处选择 **← Back**，那么你会回到提示问题。
 - 如果你没有选择“更多设置”，而 3080 端口已被另一个程序占用，那么 setup 不会询问端口，启动会失败。`delorun start` 会打印 `Delorun did not start. Delorun stopped with exit code 1 before it was running.`，然后是 `Run delorun logs to see why, then delorun doctor to check your setup.` `delorun doctor` 会显示 `fail port` 和修复办法。请运行 `delorun setup profile` 选择另一个端口，然后运行 `delorun start`。
@@ -242,31 +250,31 @@ If something looks wrong: delorun doctor.
 
 ## studio 与你的第一次 chat
 
-setup 之后运行 `delorun`。它会启动 Delorun 并在浏览器中打开 studio。[studio](../reference/glossary.zh.md#studio) 是 Delorun 用来与模型聊天的网页。它会打印 studio 的地址和三条命令：
+setup 之后运行 `delorun`。它会启动 Delorun 并在浏览器中打开 studio。[studio](../reference/glossary.zh.md#studio) 是 Delorun 用来与模型聊天的网页。它会打印 studio 的位置，以及查看和停止它的命令：
 
 ```text
-Delorun is running in the background and keeps running after you close this terminal.
-Studio: http://127.0.0.1:3080/ (opened in your browser)
-  delorun status
-  delorun logs --follow
-  delorun stop
+Delorun is running in the background for the profile default at http://127.0.0.1:3080/; it keeps running after this terminal closes.
+See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.
+Run delorun open to open the studio in your browser.
+Opened the studio in your browser.
 ```
 
 studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开启了[远程访问](reach.zh.md)。浏览器通过一个只能用一次、一分钟后过期的链接登录。`delorun open` 会用新的链接再次打开 studio。
 
 第一次使用时，studio 会逐步显示一个简短的新手引导，以一次 chat 结束：
 
-1. **Welcome。**选择语言。每家模型提供方都会显示它的密钥是否有效。可以在这里添加或更改提供方。
-2. **Look。**选择颜色和主题，或 stock 外观。
-3. **Agents。**可选地添加 Claude Code 或 Codex，作为 chat 可以把工作交给的助手。
-4. **Recommended plugins。**可选地添加[插件](../reference/glossary.zh.md#plugin)，这些小型附加组件让 Delorun 拥有更多工具。
-5. **Phone access。**在远程访问尚未设置时显示。它列出 Tailscale 还需要什么。
-6. **Workspace。**为你的第一次 chat 选择[工作区](../reference/glossary.zh.md#workspace)：默认的那个、你电脑上的一个文件夹，或一个要克隆的 git 地址。
-7. **Ready。**选择 **Start a chat**。
+1. **Welcome。**选择语言。一条预览版通知会说明 Delorun 是 DeepSeek Harness 的社区分支，仍处于预览阶段；选择 Continue 表示你已知晓。
+2. **Models。**勾选你使用的模型提供方。对每一家，粘贴它的密钥并选择 **Connect**，或选择 **Skip**。环境变量中找到的密钥会显示为 “Key found”。随后一份摘要会列出已设置的内容。
+3. **Look。**选择颜色和主题，或 stock 外观。
+4. **Agents。**可选地添加 Claude Code 或 Codex，作为 chat 可以把工作交给的助手。
+5. **Recommended plugins。**可选地添加[插件](../reference/glossary.zh.md#plugin)，这些小型附加组件让 Delorun 拥有更多工具。
+6. **Phone access。**在远程访问尚未设置时显示。它列出 Tailscale 还需要什么，并提供 **Not now** 或 **I've done this**。
+7. **Workspace。**为你的第一次 chat 选择[工作区](../reference/glossary.zh.md#workspace)：默认的那个、你电脑上的一个文件夹，或要克隆的 git 地址。
+8. **Ready。**选择 **Start a chat**。
 
-每一步都有 Back、Continue 和 **Skip**，Skip 只会跳过那一步。步骤名称旁边的 **Finish later** 会关闭引导并保留你的位置，下次引导会再次显示。要重新走一遍这些步骤，请选择“设置”→“通用”→“Getting started”→ **Run setup again**。每一步都从你当前的选择开始，例如“设置”中保存的模式和主题，只有当你更改时选择才会改变。在手机上，Phone access 步骤会说明 Tailscale 是在运行 Delorun 的那台电脑上设置的。
+大多数步骤都有 Back、Continue 和 **Skip**，Skip 只会跳过那一步；Models 步骤在你逐个处理提供方时有 **Connect** 和 **Next**，Phone access 步骤有它自己的两个按钮。步骤名称旁边的 **Finish later** 会关闭引导并保留你的位置，下次引导会再次显示。要重新走一遍这些步骤，请选择“设置”、“通用”、“Getting started”、**Run setup again**。每一步都从你当前的选择开始，例如“设置”中保存的模式和主题，只有当你更改时选择才会改变。在手机上，Phone access 步骤会说明 Tailscale 是在运行 Delorun 的那台电脑上设置的。
 
-新 chat 以某个 agent [预设](../reference/glossary.zh.md#preset)开始，studio 把它们称为模式：Standard、PTC、Minimal 和 Creator。在 Creator 模式中，agent 与你一起编写插件和预设。输入一条消息即可聊天。如果你没有设置提供方或密钥，模型就无法回答；请在“设置”→“Agent”→“模型”中添加。
+新 chat 以某个 agent [预设](../reference/glossary.zh.md#preset)开始，studio 把它们称为模式：Standard、PTC、Minimal 和 Creator。PTC 具备 Standard 的全部能力，适合批量调用工具、再对结果进行筛选、去重或汇总的任务。在 Creator 模式中，agent 与你一起编写插件和预设。输入一条消息即可聊天。如果你没有设置提供方或密钥，模型就无法回答；请在“设置”、“Agent”、“模型”中添加。
 
 <details>
 <summary>边界情况</summary>
