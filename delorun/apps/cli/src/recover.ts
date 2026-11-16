@@ -21,6 +21,7 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { discardImportReviews } from '@delorun/changes/setup-transfer'
 import { DELORUN_PROFILE_BUNDLES } from '@delorun/bundle-local/profile'
 import { HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delorun/home'
@@ -279,6 +280,8 @@ export const recoverCommand: CliCommand = {
       installationBundles: DELORUN_PROFILE_BUNDLES,
       changedBy: { kind: 'person' },
     })
+    // Going back to the version saved before a setup import takes away the code reviews that import created.
+    if (action.kind === 'restore') await discardImportReviews({ home: home.path, profile, profileDir: join(home.path, 'profiles', profile) }, action.version)
     // Ending safe mode takes the overlay a safe-mode start wrote with it.
     if (action.kind === 'exit-safe-mode') removeSafeModeOverlay(home.path, profile)
     const lines = action.kind === 'status' ? [...report.lines, ...await updateLines(home.path, profile)] : report.lines

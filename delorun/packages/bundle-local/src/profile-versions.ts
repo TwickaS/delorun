@@ -17,6 +17,7 @@ import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 // Type-only: the `plugin-manager/before-record` event the history's admission runs through.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
+import { discardImportReviews } from '@delorun/plugin-changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputer, routedPathname } from '@delorun/home-auth'
 import {
   HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
@@ -168,6 +169,8 @@ export class ProfileVersions {
           profile: where.profile, profileDir: where.profileDir, homeDir: where.homeDir, version, ...where.admit === undefined ? {} : { admit: where.admit },
         })
         const changes = changesOf(report.plan!)
+        // Going back to the version saved before a setup import takes away the code reviews that import created.
+        await discardImportReviews({ home: where.homeDir, profile: where.profile, profileDir: where.profileDir }, version)
         return { ...report.saved === undefined ? {} : { saved: report.saved }, changes, restartNeeded: !changes.same }
       } catch (error) {
         throw refused('SWITCH_REFUSED', error)

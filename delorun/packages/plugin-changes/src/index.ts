@@ -399,3 +399,5 @@ function realTarget(path: string): string | undefined {
     return undefined
   }
 }
+
+export { discardImportReviews } from '@delorun/changes/setup-transfer'

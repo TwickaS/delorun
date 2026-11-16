@@ -1039,14 +1039,14 @@ function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependenc
             })
           }
         } else if (kind === 'inspect') {
-          onlyFields(body, ['file', 'token', 'settings', 'removeOthers'])
+          onlyFields(body, ['file', 'token', 'settings', 'removeOthers', 'endpointsConfirmed'])
           const source = typeof body['file'] === 'string' ? { file: body['file'] } : typeof body['token'] === 'string' ? { token: body['token'] } : undefined
           if (source === undefined) throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the file as base64 text, or a file already read by its token.')
-          answer = await inspectSetup(ctx, source, held, { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false) })
+          answer = await inspectSetup(ctx, source, held, { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false), endpointsConfirmed: flag(body, 'endpointsConfirmed', false) })
         } else {
-          onlyFields(body, ['token', 'settings', 'removeOthers'])
+          onlyFields(body, ['token', 'settings', 'removeOthers', 'endpointsConfirmed'])
           if (typeof body['token'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the inspected file by its token.')
-          const choices = { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false) }
+          const choices = { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false), endpointsConfirmed: flag(body, 'endpointsConfirmed', false) }
           answer = await applySetup(ctx, body['token'], held, choices, opened => applySetupImport(ctx, opened.document, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx), readFile: opened.readFile, choices }))
         }
       } catch (error) {

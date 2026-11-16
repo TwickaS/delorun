@@ -150,11 +150,13 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
   const named: string[] = []
   const withSettings = options.settings && document.includesSettings
   for (const plugin of document.plugins) {
+    const spec = Object.hasOwn(dependencies, plugin.name) ? dependencies[plugin.name] : undefined
     if (plugin.source === 'local' && plugin.files.length === 0) {
-      named.push(plugin.name)
+      // A plugin the profile already links and has approved stays as it is: it is kept, not left for the person to copy.
+      if (spec !== undefined && isLocalSpec(spec) && approvedOf(approved, plugin.name) !== undefined) keep.push(plugin.name)
+      else named.push(plugin.name)
       continue
     }
-    const spec = Object.hasOwn(dependencies, plugin.name) ? dependencies[plugin.name] : undefined
     const now = spec === undefined ? undefined : await currentState(ctx, plugin, spec, approved)
     if (now?.same === true) keep.push(plugin.name)
     else install.push({ plugin, kind: spec === undefined ? 'add' : 'replace', ...now === undefined ? {} : { from: now.words, was: now.was } })

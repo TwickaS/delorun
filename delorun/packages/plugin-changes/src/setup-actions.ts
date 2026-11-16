@@ -6,8 +6,9 @@
  * a plugin's code.
  *
  * An inspected file is held in memory under a random token until it is applied, replaced by the next file, or ten
- * minutes pass; applying consumes it. The token names the held file, so the apply request carries no file and cannot
- * apply anything the person was not shown.
+ * minutes pass; applying consumes it. The token names the held file and the exact choices that were planned (settings,
+ * removing other plugins, the endpoint confirmation), so the apply request carries no file and cannot apply anything
+ * the person was not shown: a changed choice plans again and issues a new token.
  *
  * @module @delorun/plugin-changes/setup-actions
  */
@@ -49,7 +50,17 @@ interface Held {
   readonly token: string
   readonly profile: string
   readonly opened: OpenedSetup
+  /** The choices the person was shown the plan for, as text. */
+  readonly choices: string
   readonly expires: number
+}
+
+/**
+ * @param choices - what the person chose.
+ * @returns the choices as comparable text, with the endpoint confirmation false when absent.
+ */
+function choicesKey(choices: ImportOptions): string {
+  return JSON.stringify({ settings: choices.settings, removeOthers: choices.removeOthers, endpointsConfirmed: choices.endpointsConfirmed === true })
 }
 
 /** The inspected files a Host holds: at most one. */
@@ -68,11 +79,12 @@ export class HeldSetups {
    * Hold a file, replacing the one held.
    * @param profile - the profile it was inspected for.
    * @param opened - the validated file.
+   * @param choices - the choices its plan was made for; the token applies only with exactly these.
    * @returns the token that applies it.
    */
-  hold(profile: string, opened: OpenedSetup): string {
+  hold(profile: string, opened: OpenedSetup, choices: ImportOptions): string {
     const token = randomBytes(24).toString('base64url')
-    this.#held = { token, profile, opened, expires: this.#now() + SETUP_HOLD_MS }
+    this.#held = { token, profile, opened, choices: choicesKey(choices), expires: this.#now() + SETUP_HOLD_MS }
     return token
   }
 
@@ -95,15 +107,18 @@ export class HeldSetups {
    * Take the held file, which can be taken once.
    * @param profile - the profile applying it.
    * @param token - the token `hold` returned.
+   * @param choices - the choices the person applies with.
    * @returns the file.
-   * @throws {SetupRefusal} `410 SETUP_EXPIRED` when the token names no file held now, or another profile's.
+   * @throws {SetupRefusal} `410 SETUP_EXPIRED` when the token names no file held now, or another profile's; `409 SETUP_CHOICES_CHANGED` when the choices differ from the ones the token was issued for, which leaves the file held so the person can plan again.
    */
-  take(profile: string, token: string): OpenedSetup {
+  take(profile: string, token: string, choices: ImportOptions): OpenedSetup {
     const held = this.#held
-    this.#held = undefined
     if (held === undefined || held.token !== token || held.profile !== profile || held.expires < this.#now()) {
+      // A request with a token that is not the held one does not discard the file the person is reviewing.
       throw new SetupRefusal(410, 'SETUP_EXPIRED', 'This setup file is no longer waiting. Choose the file again.')
     }
+    if (held.choices !== choicesKey(choices)) throw new SetupRefusal(409, 'SETUP_CHOICES_CHANGED', 'The choices changed after the plan was shown. Review the plan again.')
+    this.#held = undefined
     return held.opened
   }
 }
@@ -169,7 +184,8 @@ export async function inspectSetup(ctx: ChangesContext, file: { readonly file: s
   if ('token' in file) {
     const again = held.peek(ctx.profile, file.token)
     const { plan } = await planSetupImport(ctx, again.document, choices)
-    return view(file.token, again, plan, await readProtection(ctx.home))
+    // The plan was made for these choices, so it gets its own token and the old one stops applying.
+    return view(held.hold(ctx.profile, again, choices), again, plan, await readProtection(ctx.home))
   }
   const bytes = new Uint8Array(Buffer.from(file.file, 'base64'))
   if (bytes.length === 0) throw new SetupRefusal(400, 'BAD_REQUEST', 'The file is empty.')
@@ -187,7 +203,7 @@ export async function inspectSetup(ctx: ChangesContext, file: { readonly file: s
     throw error
   }
   const { plan } = await planSetupImport(ctx, opened.document, choices)
-  return view(held.hold(ctx.profile, opened), opened, plan, await readProtection(ctx.home))
+  return view(held.hold(ctx.profile, opened, choices), opened, plan, await readProtection(ctx.home))
 }
 
 /**
@@ -222,6 +238,7 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
     keep: plan.keep,
     settingChanges: plan.settingChanges,
     endpoints: plan.endpointItems,
+    endpointNotices: plan.endpointNotices,
     leftOut: plan.leftOutItems,
     keys: plan.keyItems,
     protection,
@@ -238,10 +255,10 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
  * @param choices - what the person chose to import.
  * @param apply - applies the held file's setup to the profile.
  * @returns what was done.
- * @throws {SetupRefusal} `410 SETUP_EXPIRED` for a token that names no file waiting; the changes errors of the application propagate.
+ * @throws {SetupRefusal} `410 SETUP_EXPIRED` for a token that names no file waiting, `409 SETUP_CHOICES_CHANGED` for choices other than the plan's; the changes errors of the application propagate.
  */
 export async function applySetup(ctx: ChangesContext, token: string, held: HeldSetups, choices: ImportOptions, apply: (opened: OpenedSetup) => Promise<SetupApplied>): Promise<SetupApplyView> {
-  const opened = held.take(ctx.profile, token)
+  const opened = held.take(ctx.profile, token, choices)
   const { plan } = await planSetupImport(ctx, opened.document, choices)
   const result = await apply(opened)
   return {

@@ -24,7 +24,7 @@ const INSPECTED: SetupInspectView = {
   token: 'tok', signer: { state: 'unverified', reason: 'key-not-trusted', fingerprint: 'FP-OTHER' }, createdBy: '0.1.0', exportedAt: '2026-11-16T10:00:00Z', sourceProfile: 'default', note: 'my work setup', includesSettings: true, named: [],
   replaces: ['plugins-listed', 'model', 'settings'],
   install: [{ name: 'plug', version: '1.0.0', kind: 'add', source: 'local' }, { name: 'left-pad', version: '1.3.0', kind: 'replace', source: 'registry', was: { kind: 'version', version: '1.2.0' } }],
-  remove: ['old-plugin'], keep: [], settingChanges: [{ kind: 'changed', label: 'llm-deepseek' }], endpoints: [{ field: 'providers.x.baseURL', url: 'https://m.example.com/v1' }], leftOut: [{ subject: 'sandbox-policy', code: 'computer' }],
+  remove: ['old-plugin'], keep: [], settingChanges: [{ kind: 'changed', label: 'llm-deepseek' }], endpoints: [{ field: 'providers.x.baseURL', url: 'https://m.example.com/v1' }], endpointNotices: [], leftOut: [{ subject: 'sandbox-policy', code: 'computer' }],
   keys: [{ kind: 'model', provider: 'deepseek-official', model: 'v4' }], protection: 'on', changes: true,
 }
 const APPLIED: SetupApplyView = { savedVersion: 'v'.repeat(40), removed: ['old-plugin'], installed: [{ name: 'plug', reviewChange: 'c0123456789' }, { name: 'left-pad' }], settingsWritten: true, keys: [{ kind: 'model', provider: 'deepseek-official', model: 'v4' }], protection: 'on' }
@@ -185,6 +185,25 @@ describe('Import setup', () => {
     expect(within(open).queryByRole('switch', { name: en['transfer.settings.switch'] })).toBeNull()
     expect(within(open).getByRole('switch', { name: en['transfer.removeOthers'] })).toBeTruthy()
     expect(within(open).queryByText(/Note from the sender/u)).toBeNull()
+  })
+
+  it('offers Replace my setup for a non-default endpoint only after the person confirms where requests and the key go, in English and Chinese', async () => {
+    const away: SetupInspectView = { ...INSPECTED, endpointNotices: [{ provider: 'custom', host: 'models.example.com' }] }
+    for (const dictionary of [en, zh]) {
+      const home = host({ [LIST]: listing, [`POST ${SETUP_PATHS.inspect}`]: { status: 200, body: away }, [`POST ${SETUP_PATHS.apply}`]: { status: 200, body: APPLIED } })
+      const { container } = renderSection(home.fetch, { dictionary })
+      await screen.findByRole('button', { name: dictionary['transfer.import'] })
+      choose(container, new Uint8Array([1]))
+      const review = await appears(container, '[data-setup-review]')
+      expect(within(review).getByText(dictionary['transfer.endpointNotice'].replace('{provider}', 'custom').replace('{host}', 'models.example.com'))).toBeTruthy()
+      expect((within(review).getByRole('button', { name: dictionary['transfer.apply'] }) as HTMLButtonElement).disabled).toBe(true)
+      fireEvent.click(within(review).getByRole('switch', { name: dictionary['transfer.endpointConfirm'] }))
+      await waitFor(() => expect(home.received.filter(request => request.key === `POST ${SETUP_PATHS.inspect}`).at(-1)!.body).toMatchObject({ endpointsConfirmed: true }))
+      fireEvent.click(within(await appears(container, '[data-setup-review]')).getByRole('button', { name: dictionary['transfer.apply'] }))
+      await appears(container, '[data-setup-done]')
+      expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.apply}`)!.body).toMatchObject({ endpointsConfirmed: true })
+      cleanup()
+    }
   })
 
   it('names an unsigned file as unverified, and Cancel applies nothing', async () => {

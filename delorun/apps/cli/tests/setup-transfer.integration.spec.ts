@@ -256,6 +256,22 @@ describe('delorun setup import', () => {
     expect(text).toContain('Add its key with delorun setup key')
   })
 
+  it('asks about an endpoint that is not the provider\'s default separately, and changes nothing when it is declined', async () => {
+    const source = await world('source', true)
+    writeFileSync(join(source.profileDir, 'cordis.patch.yml'), `${SOURCE_PATCH}- id: llm-pi-ai\n  config:\n    providers:\n      custom:\n        baseURL: https://models.example.com/v1\n        apiKeyEnv: CUSTOM_API_KEY\n`)
+    const archive = await exportFrom(source)
+    const target = await world('target', false)
+    const before = readFileSync(join(target.profileDir, 'package.json'), 'utf8')
+    const declined = driven(['y', 'n'], target.profileDir)
+    expect((await refused(runSetupTransfer(['import', archive], target.context, declined))).message).toContain('nothing was changed')
+    expect(declined.questions[1]).toBe('Requests and your custom key will go to models.example.com. Allow that? [y/N] ')
+    expect(declined.operations).toEqual([])
+    expect(readFileSync(join(target.profileDir, 'package.json'), 'utf8')).toBe(before)
+    const allowed = driven(['y', 'y'], target.profileDir)
+    expect(await runSetupTransfer(['import', archive], target.context, allowed)).toBe(EXIT.ok)
+    expect(allowed.operations.length).toBeGreaterThan(0)
+  })
+
   it('leaves the other plugins and the other settings alone when asked, and shows the sender\'s note', async () => {
     const source = await world('source', true)
     const out = join(base, 'note.delorun')

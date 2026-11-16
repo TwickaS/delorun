@@ -28,7 +28,7 @@ export const SETUP_PATHS = {
 } as const
 
 /** Why a setup leaves something out, as a code the screen words. */
-export type SetupLeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links'
+export type SetupLeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links' | 'key-variable'
 
 /** One thing a setup leaves out: a row id or plugin name, and why. */
 export interface SetupLeftOutView {
@@ -105,6 +105,8 @@ export interface SetupInspectView {
   readonly keep: readonly string[]
   readonly settingChanges: readonly { readonly kind: 'set' | 'changed' | 'default', readonly label: string }[]
   readonly endpoints: readonly { readonly field: string, readonly url: string }[]
+  /** The endpoints other than a provider's default, which the person confirms separately before the import applies. */
+  readonly endpointNotices: readonly { readonly provider: string, readonly host: string }[]
   readonly leftOut: readonly SetupLeftOutView[]
   readonly keys: readonly SetupKeyView[]
   readonly protection: 'on' | 'off'

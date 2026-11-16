@@ -248,14 +248,19 @@ function Review({ t, view, choices, onChoose, onApply, onCancel }: {
     <SwitchRow label={t('transfer.removeOthers')} checked={choices.removeOthers} onChange={(removeOthers) => { onChoose({ ...choices, removeOthers }) }} />
     <Lines title={t('transfer.named')} lines={view.named} />
     <Lines title={t('transfer.add')} lines={installs} />
+    <Lines title={t('transfer.keep')} lines={view.keep} />
     <Lines title={t('transfer.remove')} lines={view.remove} />
     <Lines title={t('transfer.settings')} lines={view.settingChanges.map(change => t(`transfer.change.${change.kind}`, { label: change.label }))} />
     <Lines title={t('transfer.endpoints')} lines={view.endpoints.map(endpoint => t('transfer.endpoint', endpoint))} />
+    {view.endpointNotices.length === 0 ? null : <>
+      <Lines title={t('transfer.endpointNotices')} lines={view.endpointNotices.map(notice => t('transfer.endpointNotice', notice))} />
+      <SwitchRow label={t('transfer.endpointConfirm')} checked={choices.endpointsConfirmed === true} onChange={(endpointsConfirmed) => { onChoose({ ...choices, endpointsConfirmed }) }} />
+    </>}
     <Lines title={t('transfer.leftOutImport')} lines={view.leftOut.map(item => leftOutSentence(t, item))} />
     <p className={css.line}>{t(view.protection === 'on' ? 'transfer.protection.on' : 'transfer.protection.off')}</p>
     {view.changes ? null : <p className={css.line}>{t('transfer.nothing')}</p>}
     <div className={css.transferButtons}>
-      {view.changes ? <Button variant="primary" size="sm" onClick={onApply}>{t('transfer.apply')}</Button> : null}
+      {view.changes ? <Button variant="primary" size="sm" disabled={view.endpointNotices.length > 0 && choices.endpointsConfirmed !== true} onClick={onApply}>{t('transfer.apply')}</Button> : null}
       <Button variant="outline" size="sm" onClick={onCancel}>{t('transfer.cancel')}</Button>
     </div>
   </div>

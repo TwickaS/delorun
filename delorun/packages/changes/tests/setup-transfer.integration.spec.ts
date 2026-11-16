@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseDocument } from 'yaml'
 import { ArchiveImporter, DirectoryWorkspaceStore, encodePublicKey, exportSetupArchive, keyFingerprint, parseSetupDocument, signManifest, type SetupDocument } from '@delorun/archive'
-import { applyPatches } from '../../../../vendor/include/src/patch.ts'
+import { composeEntries, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { listChanges } from '../src/actions.ts'
 import { type PluginOperation } from '../src/install-actions.ts'
 import { readApproved, type AtComputer } from '../src/records.ts'
@@ -541,9 +541,16 @@ describe('a setup cannot take the id of a row the profile\'s bundles hold', () =
     withBaseBundle(fx)
     const { patch } = await planSetupImport(context(fx), await craftedWithRow({ id: 'approval', name: 'approval' }), REPLACE_ALL)
     const imported = parseDocument(patch.text).toJS() as Record<string, unknown>[]
-    const base = [{ id: 'approval', name: 'dsh-approval', config: { mode: 'ask' } }]
-    const loaded = applyPatches(base, [...imported, { id: 'approval', config: { mode: 'later' } }], () => undefined)
-    expect(loaded.filter(entry => entry.id === 'approval')).toEqual([{ id: 'approval', name: 'dsh-approval', config: { mode: 'later' } }])
+    const base = loadOverlayPatches('test', join(BASE_BUNDLE, 'cordis.patch.yml'))
+    const rowsWithId = (entries: readonly { id?: string, group?: boolean | null, config?: unknown }[], id: string): unknown[] =>
+      entries.flatMap(entry => [...entry.id === id ? [entry] : [], ...entry.group === true && Array.isArray(entry.config) ? rowsWithId(entry.config as never[], id) : []])
+    const real = rowsWithId(composeEntries([base]), 'approval')
+    expect(real).toHaveLength(1)
+    const loaded = composeEntries([base, imported as never[], [{ id: 'approval', config: { marker: 'later patch' } }]])
+    const after = rowsWithId(loaded, 'approval') as { name: string, config: { marker?: string } }[]
+    expect(after).toHaveLength(1)
+    expect(after[0]!.name).toBe((real[0] as { name: string }).name)
+    expect(after[0]!.config.marker).toBe('later patch')
   })
 
   it('refuses to read a profile whose bundle cannot be read, because the rows to avoid are then unknown', async () => {

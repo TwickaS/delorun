@@ -68,10 +68,26 @@ describe('choices in the studio', () => {
     const first = json(await post(server.port, SETUP_PATHS.inspect, { file }))
     expect(first['replaces']).toContain('settings')
     const again = json(await post(server.port, SETUP_PATHS.inspect, { token: first['token'], settings: false }))
-    expect(again).toMatchObject({ token: first['token'], replaces: ['plugins-listed', 'model', 'settings-off'] })
+    expect(again).toMatchObject({ replaces: ['plugins-listed', 'model', 'settings-off'] })
+    // A changed choice plans again and issues a new token; the one before it applies nothing.
+    expect(again['token']).not.toBe(first['token'])
     expect((await post(server.port, SETUP_PATHS.inspect, { token: 'guess' })).status).toBe(410)
-    const applied = await post(server.port, SETUP_PATHS.apply, { token: first['token'], settings: false })
+    expect((await post(server.port, SETUP_PATHS.apply, { token: first['token'], settings: false })).status).toBe(410)
+    const applied = await post(server.port, SETUP_PATHS.apply, { token: again['token'], settings: false })
     expect(applied.status).toBe(200)
+  })
+
+  it('refuses to apply with choices other than the ones the token was planned for, and keeps the file for a new plan', async () => {
+    const { file } = await exportedFile()
+    const { ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    const first = json(await post(server.port, SETUP_PATHS.inspect, { file, settings: false, removeOthers: false }))
+    const differing = [{ settings: true, removeOthers: false }, { settings: false, removeOthers: true }, { settings: false, removeOthers: false, endpointsConfirmed: true }]
+    for (const choices of differing) {
+      const refused = await post(server.port, SETUP_PATHS.apply, { token: first['token'], ...choices })
+      expect(refused.status).toBe(409)
+    }
+    expect((await post(server.port, SETUP_PATHS.apply, { token: first['token'], settings: false, removeOthers: false })).status).toBe(200)
   })
 })
 

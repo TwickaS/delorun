@@ -17,7 +17,7 @@ const isPlugins: Check = fields({ plugins: listOf(fields({ name: isString, sourc
 const isExported: Check = fields({ file: isString, name: isString, plugins: isTime, local: isTime, settings: isTime, leftOut: listOf(isLeftOut), signedBy: isString, withoutCode: listOf(isString) })
 const isInspected: Check = fields({
   token: isString, signer: isSigner, createdBy: isString, exportedAt: isString, note: optional(isString), includesSettings: isBoolean, replaces: listOf(isString), named: listOf(isString), sourceProfile: isString, install: listOf(isInstall), remove: listOf(isString), keep: listOf(isString),
-  settingChanges: listOf(fields({ kind: isString, label: isString })), endpoints: listOf(fields({ field: isString, url: isString })), leftOut: listOf(isLeftOut), keys: listOf(isKey), protection: isProtection, changes: isBoolean,
+  settingChanges: listOf(fields({ kind: isString, label: isString })), endpoints: listOf(fields({ field: isString, url: isString })), endpointNotices: listOf(fields({ provider: isString, host: isString })), leftOut: listOf(isLeftOut), keys: listOf(isKey), protection: isProtection, changes: isBoolean,
 })
 const isApplied: Check = fields({
   savedVersion: isString, removed: listOf(isString), installed: listOf(fields({ name: isString, reviewChange: optional(isString) })), settingsWritten: isBoolean, keys: listOf(isKey), protection: isProtection,
@@ -36,6 +36,8 @@ export interface ExportChoices {
 export interface ImportChoices {
   readonly settings: boolean
   readonly removeOthers: boolean
+  /** Whether the person confirmed each endpoint other than a provider's default. */
+  readonly endpointsConfirmed?: boolean
 }
 
 /**
@@ -76,7 +78,7 @@ export function inspectSetupFile(fetch: HostFetch, bytes: Uint8Array, choices: I
  * @param fetch - the request function.
  * @param token - the token the first inspection returned.
  * @param choices - what the person chose to import.
- * @returns the new list of changes, with the same token.
+ * @returns the new list of changes, with a new token: the old one no longer applies.
  * @throws {HostRequestError} for a refusal (`SETUP_EXPIRED`), an unreachable Host or an unreadable answer.
  */
 export function replanSetupFile(fetch: HostFetch, token: string, choices: ImportChoices): Promise<SetupInspectView> {

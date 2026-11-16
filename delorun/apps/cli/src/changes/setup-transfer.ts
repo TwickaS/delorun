@@ -141,9 +141,13 @@ async function runImport(ctx: ChangesContext, file: string, choices: ImportOptio
     }
     const answer = await dependencies.ask(`Replace the setup of the profile ${ctx.profile} with this one? [y/N] `)
     if (!isYes(answer)) throw new CliError(EXIT.failed, 'delorun setup import: nothing was changed')
+    for (const { provider, host } of plan.endpointNotices) {
+      const allowed = await dependencies.ask(`Requests and your ${printable(provider)} key will go to ${printable(host)}. Allow that? [y/N] `)
+      if (!isYes(allowed)) throw new CliError(EXIT.failed, 'delorun setup import: nothing was changed')
+    }
     const result = await dependencies.withHost(ctx.home, ctx.profile, reload => applySetupImport(ctx, opened.document, {
       presence: presence!,
-      choices,
+      choices: { ...choices, endpointsConfirmed: true },
       reload,
       run: dependencies.pluginOperation(ctx, context),
       readFile: opened.readFile,
@@ -225,6 +229,7 @@ export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: strin
   if (plan.keep.length > 0) lines.push(`  Already as the archive names them: ${plan.keep.map(printable).join(', ')}`)
   lines.push('Model choices and settings:', ...plan.settings.length === 0 ? ['    no change'] : plan.settings.map(line => `    ${printable(line)}`))
   if (plan.endpoints.length > 0) lines.push('  Endpoints these settings send requests to:', ...plan.endpoints.map(line => `    ${printable(line)}`))
+  if (plan.endpointNotices.length > 0) lines.push('  Requests and keys go to endpoints that are not the provider\'s default; you are asked about each before anything changes:', ...plan.endpointNotices.map(({ provider, host }) => `    Requests and your ${printable(provider)} key will go to ${printable(host)}`))
   if (plan.leftOut.length > 0) lines.push('Not applied, because a setup does not carry them:', ...plan.leftOut.map(line => `    ${printable(line)}`))
   lines.push(protection === 'on'
     ? 'Protection is on: the code of a plugin from this file waits in delorun changes list until you review it.'
