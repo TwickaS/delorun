@@ -2424,6 +2424,8 @@ importers:
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
 
+  delorun/packages/install-queue: {}
+
   delorun/packages/logs:
     dependencies:
       '@delorun/contract-home-layout':
