@@ -274,15 +274,20 @@ export function withProfile(args: readonly string[], profile: string): string[] 
   return args.some(argument => argument === '--profile' || argument.startsWith('--profile=')) ? [...args] : ['--profile', profile, ...args]
 }
 
+/** The pnpm words for removing a package; `pnpm remove` takes no `--ignore-scripts` option, only the `ignore-scripts` setting. */
+const REMOVE_COMMANDS = new Set(['remove', 'rm', 'uninstall', 'un'])
+
 /**
  * The arguments that resolve an installing operation into the lockfile without installing anything or running any
- * script: pnpm runs an approved git dependency's `prepare` while it resolves unless scripts are ignored.
+ * script: pnpm runs an approved git dependency's `prepare` while it resolves unless scripts are ignored. `pnpm remove`
+ * rejects the `--ignore-scripts` option, so a removal gets the same protection as the `ignore-scripts` setting.
  * @param args - the arguments after `plugin`.
- * @returns them with `--lockfile-only` and `--ignore-scripts` added and `--frozen-lockfile` removed.
+ * @returns them with `--lockfile-only` and the script-ignoring flag added and `--frozen-lockfile` removed.
  */
 export function resolveOnly(args: readonly string[]): string[] {
   const kept = args.filter(argument => argument !== '--frozen-lockfile')
-  return [...kept, ...['--lockfile-only', '--ignore-scripts'].filter(flag => !kept.includes(flag))]
+  const ignoreScripts = REMOVE_COMMANDS.has(pnpmCommand(kept) ?? '') ? '--config.ignore-scripts=true' : '--ignore-scripts'
+  return [...kept, ...['--lockfile-only', ignoreScripts].filter(flag => !kept.includes(flag))]
 }
 
 /**

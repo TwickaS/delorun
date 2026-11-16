@@ -20,7 +20,7 @@ import { advisory, OLD, settingsFor, startStandIn, writeProfileFiles, type Stand
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { registerDataUser } from '../src/home-exclusion.ts'
-import { installsPackages, takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
+import { installsPackages, resolveOnly, takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
 import { plugin, pluginCommand, type PluginDependencies, type UpstreamOperation } from '../src/upstream.ts'
 
 // The check's own call can be made to throw; every other call passes through to the real check.
@@ -293,7 +293,7 @@ describe('delorun plugin', () => {
     const removing: PluginDependencies = { ...dependencies(runs), runUpstream: (argv) => { runs.push({ argv, registered: [] }); writeProfileFiles(profileDir, []); return Promise.resolve(0) } }
     expect(await plugin(['remove', 'good-plugin'], context, removing)).toBe(0)
     expect(runs.map(run => run.argv)).toEqual([
-      ['plugin', '--profile', 'default', 'remove', 'good-plugin', '--lockfile-only', '--ignore-scripts'],
+      ['plugin', '--profile', 'default', 'remove', 'good-plugin', '--lockfile-only', '--config.ignore-scripts=true'],
       ['plugin', '--profile', 'default', 'install', '--frozen-lockfile'],
     ])
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
@@ -591,6 +591,20 @@ describe('delorun plugin with the real pnpm', { timeout: 120_000 }, () => {
     expect(await plugin(['add', spec, '--lockfile-only'], context, realPnpm())).toBe(0)
     expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toContain('git-prepared')
     expect(existsSync(marker)).toBe(false)
+  })
+
+  it('resolves a removal with arguments the real pnpm accepts, and the lockfile loses the package', () => {
+    const dependency = join(osHome, 'removable')
+    const project = join(osHome, 'removal-project')
+    mkdirSync(dependency)
+    mkdirSync(project)
+    writeFileSync(join(dependency, 'package.json'), JSON.stringify({ name: 'removable', version: '1.0.0' }))
+    writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'removal-project', version: '1.0.0', private: true }))
+    const run = (args: string[]): string => execFileSync('pnpm', ['--dir', project, ...args], { encoding: 'utf8', timeout: 60_000, env: { ...process.env, HOME: osHome } })
+    run(['add', `file:${dependency}`, '--ignore-scripts'])
+    expect(readFileSync(join(project, 'pnpm-lock.yaml'), 'utf8')).toContain('removable')
+    run(resolveOnly(['remove', 'removable']))
+    expect(readFileSync(join(project, 'pnpm-lock.yaml'), 'utf8')).not.toContain('removable')
   })
 
   it('runs the approved postinstall only after the check passed, and records the installed files after it', async () => {
