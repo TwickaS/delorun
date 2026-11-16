@@ -17,6 +17,7 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 ## Contents
 
 - [What you need](#what-you-need)
+- [Start from nothing](#start-from-nothing)
 - [Turn remote access on](#turn-remote-access-on)
 - [Approve a device](#approve-a-device)
 - [Keep approval yours](#keep-approval-yours)
@@ -37,6 +38,18 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 - HTTPS certificates turned on for your tailnet, in the DNS page of the Tailscale admin console. Tailscale needs them to give your computer a secure address.
 - On Linux, permission for your user to set up `tailscale serve`, the Tailscale feature that forwards your phone's requests to Delorun. If your user does not have it, `delorun reach on tailscale` prints the one command to run yourself: `sudo tailscale set --operator=$USER`. Delorun never runs `sudo`.
 
+## Start from nothing
+
+Follow this path if you have no Tailscale account. Tailscale's own pages give the steps for their product, so this page links to them and does not copy them.
+
+1. **Create an account.** Sign up at [login.tailscale.com/start](https://login.tailscale.com/start) with an identity you already have. Your devices will join one private network, your tailnet, under this account.
+2. **Install Tailscale on the computer where Delorun runs.** On Linux, and inside WSL2, follow Tailscale's [Linux download page](https://tailscale.com/download/linux) and sign in with `sudo tailscale up`, which prints a link to open. Install it in the Linux system that runs Delorun, not only on Windows, because `delorun reach on tailscale` runs the `tailscale` command in the system where Delorun runs.
+3. **Install Tailscale on your phone.** Get the app from the App Store or Google Play ([download page](https://tailscale.com/download)) and sign in with the same account.
+4. **Check that both devices see each other.** On the computer, `tailscale status` lists the phone beside the computer. In the phone's app, the computer shows as connected. If either is missing, the two are signed in to different accounts; sign one out and in again.
+5. **Turn on HTTPS certificates.** In the [DNS page of the Tailscale admin console](https://login.tailscale.com/admin/dns), turn on MagicDNS if it is off, then choose **Enable HTTPS**. Tailscale's [HTTPS page](https://tailscale.com/kb/1153/enabling-https) explains it.
+6. **Let your Linux user set up `tailscale serve`.** If `delorun reach on tailscale` prints `sudo tailscale set --operator=$USER`, run that command yourself once.
+7. **Start Delorun and turn on remote access.** Run `delorun start`, then continue with [Turn remote access on](#turn-remote-access-on) and [Approve a device](#approve-a-device).
+
 ## Turn remote access on
 
 Do this once, so that your phone has an address to open. In a terminal on your computer, run:
@@ -47,9 +60,9 @@ delorun reach on tailscale
 
 You can also choose "Also from my phone or another device" when `delorun setup` asks how you will use Delorun, or answer yes to its remote access question.
 
-The command checks Tailscale, saves the setting in your [profile](../reference/glossary.md#profile) and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. When Delorun is running, it applies the change at once and prints whether the address is ready. Otherwise remote access starts the next time you run `delorun start`.
+The command checks Tailscale and asks `This changes Tailscale on this computer … Continue? (y/N)`. Answer `y`. With `--yes` it does not ask, and without a terminal and without `--yes` it refuses, so that nothing changes Tailscale unseen. It then saves the setting in your [profile](../reference/glossary.md#profile) and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. When Delorun is running, it applies the change at once and prints whether the address is ready. Otherwise remote access starts the next time you run `delorun start`.
 
-You should see a line that starts "Remote access is on for the profile default at https://" and then what Tailscale can see ([What Tailscale sees](#what-tailscale-sees)). If Delorun runs, the next lines say whether the address is ready.
+You should see a line that starts "Remote access is on for the profile default at https://", a statement of what an approved phone can and cannot do, and what Tailscale can see ([What Tailscale sees](#what-tailscale-sees)). If Delorun runs, the next lines say whether the address is ready. The last lines begin "To add your phone:" and give the two steps of [Approve a device](#approve-a-device), with your sign-in address, which ends in `/auth/sign-in`.
 
 To check later, run `delorun reach status`. It shows whether remote access is on and, while Delorun runs, whether the address is ready.
 
@@ -62,7 +75,7 @@ If the command prints a refusal instead, find its words in [Troubleshooting](tro
 - If your Linux user may not set up `tailscale serve`, then nothing is written and the refusal prints `sudo tailscale set --operator=$USER` — run it yourself once, then run the command again.
 - If another `tailscale serve` rule uses the same local port and is not this studio's own, then the command removes it. While Delorun is not serving that port, it removes every rule on it, because any program on the computer could otherwise answer your phone there.
 - If Delorun is running but the address does not become ready, then the command exits with an error and tells you to fix the line above it and run it again.
-- If you pass anything other than `tailscale` (`delorun reach on relay`), then the command exits with code 2 and says the one option this build offers is `tailscale`.
+- If you pass anything other than `tailscale`, then the command exits with code 2 and says the one option this build offers is `tailscale`.
 - If you use more than one profile, then add `--profile <name>`; remote access is a setting of one profile.
 
 </details>
@@ -79,15 +92,27 @@ If the command prints a refusal instead, find its words in [Troubleshooting](tro
 
 A device is approved only at your computer. This keeps a stranger on your tailnet from getting in. Approve a phone like this:
 
-1. If your phone is signed in to Tailscale as the same user as this computer, skip this step: the phone can ask without an approval window, and the studio at this computer shows the request. For any other device, run `delorun devices approve`, or choose **Add a device** in the studio under Settings → Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running; if it is not, start it with `delorun start`. `delorun setup reach` lets you allow every device on your tailnet to ask without a window; `delorun reach status` says who may ask.
-2. On your phone, open your address, check the device name it suggests and choose **Ask for approval**. The phone shows an 8-digit code and how long it stays valid.
-3. On your computer, the command lists every waiting device with a number, a short request id, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request. A device that asked without a window shows as a notice at the top of the studio: choose **Enter code**, type the 8 digits in the box that opens, and the box approves at the eighth digit. The notice never takes the keyboard from a field you are typing in. Under Settings → Devices you can choose who may ask, whether a request shows as a notice, a code box or only in the list, and the window and request lifetimes; on a phone this part says to change it at your computer.
+1. Open an approval window for the device. If your phone is signed in to Tailscale as the same user as this computer, skip this step: the phone can ask without a window, and the studio at this computer shows the request. For any other device:
+   - run `delorun devices approve`, or choose **Add a device** in the studio under Settings → Devices;
+   - Delorun must be running, so start it with `delorun start` first;
+   - the window lasts 5 minutes and closes at the first approval.
+2. On your phone, open your sign-in address (your address followed by `/auth/sign-in`; the command prints it). The page is titled "Add this device". Check the device name it suggests and choose **Ask for approval**. The phone shows an 8-digit code and how long it stays valid.
+3. On your computer, the command lists every waiting device with a number, a short request id, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. Three wrong codes cancel only that request.
 
 You should see "Approved <device name>. It signs in on its own now." on your computer, and the phone shows "Approved" and opens your studio. From then on the phone signs in by itself.
 
 A phone that Tailscale reports as signed in as the user you allowed can ask outside an approval window. Either way you type the 8-digit code the phone shows, at this computer, and three wrong codes cancel the request.
 
 `delorun devices list` and the Devices section list every approved device. The list shows an id, the name, the address, when it was approved and when it last signed in. With no device, `delorun devices list` says "No device is trusted on this computer yet. Add one with delorun devices approve."
+
+<details>
+<summary>Approving in the studio</summary>
+
+- In Settings → Devices, each waiting device has its own code field and a **Cancel request** button.
+- A device that asked without a window shows as a notice at the top of the studio: choose **Enter code**, type the 8 digits in the box that opens, and the box approves at the eighth digit. The notice never takes the keyboard from a field you are typing in.
+- Under Settings → Devices you can choose who may ask, whether a request shows as a notice, a code box or only in the list, and the window and request lifetimes. `delorun setup reach` lets you allow every device on your tailnet to ask without a window, and `delorun reach status` says who may ask. On a phone, this part says to change it at your computer.
+
+</details>
 
 <details>
 <summary>Edge cases</summary>
@@ -220,7 +245,7 @@ You should see "PIN mode is on, with a PIN." and a short list of what it allows.
 
 A page locks again after it sits idle. `--idle-minutes <1-60>` sets how long, and `--lock-when-hidden` also locks it at once when you switch away from it. Change either later with `delorun devices pin options`, and use `--no-lock-when-hidden` to undo the second.
 
-The mode limits wrong tries. Five wrong tries on one device remove it and sign it out; you approve it again at your computer. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
+The mode limits wrong tries. The fifth wrong try on one device removes that device and signs it out; approve it again at your computer. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
 
 | Command | What it does |
 | --- | --- |

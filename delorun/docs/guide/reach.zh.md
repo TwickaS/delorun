@@ -17,6 +17,7 @@ tailnet 上的任何设备都能打开登录页面，但只有你在电脑上批
 ## 目录
 
 - [你需要什么](#what-you-need)
+- [从零开始](#start-from-nothing)
 - [开启远程访问](#turn-remote-access-on)
 - [批准设备](#approve-a-device)
 - [让批准权掌握在你手里](#keep-approval-yours)
@@ -39,6 +40,20 @@ tailnet 上的任何设备都能打开登录页面，但只有你在电脑上批
 - 在 Tailscale 管理控制台的 DNS 页面中，为你的 tailnet 开启 HTTPS 证书。Tailscale 需要它们来给你的电脑一个安全的地址。
 - 在 Linux 上，你的用户需要有权限设置 `tailscale serve`，这是把手机的请求转发给 Delorun 的 Tailscale 功能。如果你的用户没有这个权限，`delorun reach on tailscale` 会打印出需要你自己运行的那一条命令：`sudo tailscale set --operator=$USER`。Delorun 从不运行 `sudo`。
 
+<a id="start-from-nothing"></a>
+
+## 从零开始
+
+如果你还没有 Tailscale 账户，请按这条路径做。Tailscale 自己的页面给出了它们产品的步骤，所以本页只链接过去，不抄录。
+
+1. **创建账户。**在 [login.tailscale.com/start](https://login.tailscale.com/start) 用你已有的身份注册。你的设备将在这个账户下加入同一个私有网络，即你的 tailnet。
+2. **在运行 Delorun 的电脑上安装 Tailscale。**在 Linux 上以及 WSL2 内，按 Tailscale 的 [Linux 下载页面](https://tailscale.com/download/linux)操作，并用 `sudo tailscale up` 登录，它会打印一个要打开的链接。请安装在运行 Delorun 的 Linux 系统里，而不是只装在 Windows 上，因为 `delorun reach on tailscale` 会在 Delorun 所在的系统中运行 `tailscale` 命令。
+3. **在手机上安装 Tailscale。**从 App Store 或 Google Play 获取应用（[下载页面](https://tailscale.com/download)），并用同一个账户登录。
+4. **检查两台设备能互相看到。**在电脑上，`tailscale status` 会在电脑旁列出手机。在手机的应用里，电脑显示为已连接。如果任何一个缺失，说明两者登录的是不同的账户；请让其中一个退出再重新登录。
+5. **开启 HTTPS 证书。**在 [Tailscale 管理控制台的 DNS 页面](https://login.tailscale.com/admin/dns)中，如果 MagicDNS 是关闭的就先开启，然后选择 **Enable HTTPS**。Tailscale 的 [HTTPS 页面](https://tailscale.com/kb/1153/enabling-https)对此有说明。
+6. **让你的 Linux 用户可以设置 `tailscale serve`。**如果 `delorun reach on tailscale` 打印出 `sudo tailscale set --operator=$USER`，请自己运行一次该命令。
+7. **启动 Delorun 并开启远程访问。**运行 `delorun start`，然后继续看[开启远程访问](#turn-remote-access-on)和[批准设备](#approve-a-device)。
+
 <a id="turn-remote-access-on"></a>
 
 ## 开启远程访问
@@ -51,9 +66,9 @@ delorun reach on tailscale
 
 你也可以在 `delorun setup` 询问你将如何使用 Delorun 时，选择“Also from my phone or another device”，或对它的远程访问问题回答“是”。
 
-该命令会检查 Tailscale，把设置保存到你的 [profile](../reference/glossary.zh.md#profile) 中，并打印你的地址 `https://<your computer's name>.<your tailnet>.ts.net`。当 Delorun 正在运行时，它会立即应用这项更改，并打印地址是否已就绪。否则，远程访问会在你下次运行 `delorun start` 时启动。
+该命令会检查 Tailscale，并询问 `This changes Tailscale on this computer … Continue? (y/N)`。请回答 `y`。加上 `--yes` 就不会询问；既没有终端又没有 `--yes` 时它会拒绝，这样就不会有东西在你不知情时改动 Tailscale。然后它把设置保存到你的 [profile](../reference/glossary.zh.md#profile) 中，并打印你的地址 `https://<your computer's name>.<your tailnet>.ts.net`。当 Delorun 正在运行时，它会立即应用这项更改，并打印地址是否已就绪。否则，远程访问会在你下次运行 `delorun start` 时启动。
 
-你应该会看到一行以 “Remote access is on for the profile default at https://” 开头的文字，然后是 Tailscale 能看到的内容（见 [Tailscale 能看到什么](#what-tailscale-sees)）。如果 Delorun 正在运行，接下来的几行会说明地址是否已就绪。
+你应该会看到一行以 “Remote access is on for the profile default at https://” 开头的文字，一段说明已批准的手机能做什么、不能做什么的声明，以及 Tailscale 能看到的内容（见 [Tailscale 能看到什么](#what-tailscale-sees)）。如果 Delorun 正在运行，接下来的几行会说明地址是否已就绪。最后几行以 “To add your phone:” 开头，给出[批准设备](#approve-a-device)的两个步骤，并附上你的登录地址，它以 `/auth/sign-in` 结尾。
 
 之后要检查，请运行 `delorun reach status`。它会显示远程访问是否已开启，以及在 Delorun 运行期间地址是否已就绪。
 
@@ -66,7 +81,7 @@ delorun reach on tailscale
 - 如果你的 Linux 用户无权设置 `tailscale serve`，那么不会写入任何内容，拒绝信息会打印 `sudo tailscale set --operator=$USER`：请自己运行一次，然后再次运行该命令。
 - 如果另一条 `tailscale serve` 规则使用了同一个本地端口且不属于这个 studio，那么命令会移除它。当 Delorun 没有在该端口上提供服务时，它会移除该端口上的每一条规则，因为否则电脑上的任何程序都可以在那里应答你的手机。
 - 如果 Delorun 正在运行但地址一直没有就绪，那么命令会以错误退出，并告诉你修复其上一行指出的问题后再次运行。
-- 如果你传入 `tailscale` 以外的任何值（`delorun reach on relay`），那么命令会以退出码 2 退出，并说明此构建只提供 `tailscale` 这一个选项。
+- 如果你传入 `tailscale` 以外的任何值，那么命令会以退出码 2 退出，并说明此构建只提供 `tailscale` 这一个选项。
 - 如果你使用不止一个 profile，那么请加上 `--profile <name>`；远程访问是单个 profile 的设置。
 
 </details>
@@ -85,15 +100,27 @@ delorun reach on tailscale
 
 设备只能在你的电脑上批准。这样可以防止 tailnet 上的陌生人进来。像这样批准一部手机：
 
-1. 如果你的手机以与这台电脑相同的用户登录了 Tailscale，请跳过这一步：手机无需批准窗口就可以提出请求，这台电脑上的 studio 会显示该请求。对于任何其他设备，请运行 `delorun devices approve`，或在 studio 的“设置”→“设备”下选择 **Add a device**。这会打开一个 5 分钟的批准窗口，在第一次批准时关闭。`delorun devices approve` 需要 Delorun 正在运行；如果没有运行，请用 `delorun start` 启动它。`delorun setup reach` 让你可以允许 tailnet 上的每台设备无需窗口就提出请求；`delorun reach status` 会说明谁可以提出请求。
-2. 在手机上，打开你的地址，核对它建议的设备名称，然后选择 **Ask for approval**。手机会显示一个 8 位数字代码以及它的有效时长。
-3. 在电脑上，命令会列出每台等待中的设备，附有编号、简短的请求 id、名称、平台和时间。输入你能看到其屏幕的那台设备的编号，然后输入它显示的代码。输入 `c` 和一个编号，可以取消你不认识的请求。在“设备”部分，每台等待中的设备都有自己的代码输入框和一个 **Cancel request** 按钮。输错三次代码只会取消那一个请求。无需窗口就提出请求的设备会在 studio 顶部显示为一条通知：选择 **Enter code**，在打开的输入框里输入这 8 位数字，输入框会在第八位数字时完成批准。这条通知绝不会从你正在输入的字段抢走键盘。在“设置”→“设备”下，你可以选择谁可以提出请求、请求显示为通知、代码输入框还是只出现在列表中，以及窗口和请求的有效期；在手机上，这一部分会提示你到电脑上更改。
+1. 打开设备的批准窗口。如果你的手机以与这台电脑相同的用户登录了 Tailscale，请跳过这一步：手机无需窗口就可以提出请求，这台电脑上的 studio 会显示该请求。对于任何其他设备：
+   - 运行 `delorun devices approve`，或在 studio 的“设置”→“设备”下选择 **Add a device**；
+   - Delorun 必须正在运行，所以请先用 `delorun start` 启动它；
+   - 窗口持续 5 分钟，在第一次批准时关闭。
+2. 在手机上，打开你的登录地址（你的地址加上 `/auth/sign-in`；命令会打印它）。页面标题是 “Add this device”。核对它建议的设备名称，然后选择 **Ask for approval**。手机会显示一个 8 位数字代码以及它的有效时长。
+3. 在电脑上，命令会列出每台等待中的设备，附有编号、简短的请求 id、名称、平台和时间。输入你能看到其屏幕的那台设备的编号，然后输入它显示的代码。输入 `c` 和一个编号，可以取消你不认识的请求。输错三次代码只会取消那一个请求。
 
 你应该会在电脑上看到 “Approved <device name>. It signs in on its own now.”，手机则显示 “Approved” 并打开你的 studio。从此以后，手机会自动登录。
 
 Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗口之外提出请求。无论哪种情况，你都要在这台电脑上输入手机显示的 8 位数字代码，输错三次代码就会取消该请求。
 
 `delorun devices list` 和“设备”部分列出每台已批准的设备。列表显示 id、名称、地址、批准时间和最近一次登录时间。没有设备时，`delorun devices list` 会说 “No device is trusted on this computer yet. Add one with delorun devices approve.”
+
+<details>
+<summary>在 studio 中批准</summary>
+
+- 在“设置”→“设备”中，每台等待中的设备都有自己的代码输入框和一个 **Cancel request** 按钮。
+- 无需窗口就提出请求的设备会在 studio 顶部显示为一条通知：选择 **Enter code**，在打开的输入框里输入这 8 位数字，输入框会在第八位数字时完成批准。这条通知绝不会从你正在输入的字段抢走键盘。
+- 在“设置”→“设备”下，你可以选择谁可以提出请求、请求显示为通知、代码输入框还是只出现在列表中，以及窗口和请求的有效期。`delorun setup reach` 让你可以允许 tailnet 上的每台设备无需窗口就提出请求，`delorun reach status` 会说明谁可以提出请求。在手机上，这一部分会提示你到电脑上更改。
+
+</details>
 
 <details>
 <summary>边界情况</summary>
@@ -234,7 +261,7 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 
 页面闲置一段时间后会再次锁定。`--idle-minutes <1-60>` 设置闲置多久，`--lock-when-hidden` 还会在你切换离开该页面时立即将其锁定。之后可以用 `delorun devices pin options` 更改其中任何一项，用 `--no-lock-when-hidden` 撤销第二项。
 
-该模式会限制错误尝试。同一台设备上错误尝试五次，会移除该设备并让它退出登录；你需要在电脑上重新批准它。你所有设备上累计错误尝试十次，会让所有设备的 PIN 解锁暂停，直到你运行 `delorun devices pin resume`。
+该模式会限制错误尝试。同一台设备上第五次错误尝试，会移除该设备并让它退出登录；请在你的电脑上重新批准它。你所有设备上累计错误尝试十次，会让所有设备的 PIN 解锁暂停，直到你运行 `delorun devices pin resume`。
 
 | 命令 | 作用 |
 | --- | --- |
