@@ -90,13 +90,17 @@ export class AbstractSocketConsent {
   private readonly check: () => AbstractSocketCheck
   /** Whether the host's runners make the check. */
   private readonly applies: boolean
+  private readonly ctx: Context
+  private readonly network: CommandNetwork
 
   /**
    * @param ctx - the context whose approval service carries the ask and whose sandbox policy names the chat's mode.
    * @param network - the service whose setting the acceptance changes.
    * @param options - replaceable reads for a test.
    */
-  constructor(private readonly ctx: Context, private readonly network: CommandNetwork, options: AbstractSocketConsentOptions = {}) {
+  constructor(ctx: Context, network: CommandNetwork, options: AbstractSocketConsentOptions = {}) {
+    this.ctx = ctx
+    this.network = network
     this.check = options.check ?? (() => checkAbstractSockets())
     this.applies = options.applies ?? process.platform === 'linux'
   }
