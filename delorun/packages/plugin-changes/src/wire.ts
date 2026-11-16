@@ -27,6 +27,11 @@ export const SETUP_PATHS = {
   apply: `${CHANGES_ROUTE_PREFIX}/setup-apply`,
 } as const
 
+/** What `setup-export` answers to `{ list: true }`: the plugins the profile could put in a file. */
+export interface SetupPluginsView {
+  readonly plugins: readonly { readonly name: string, readonly source: 'registry' | 'local' }[]
+}
+
 /** What `setup-export` answers: the signed file, as base64, and what went in and was left out. */
 export interface SetupExportView {
   /** The archive's bytes, base64. */
@@ -43,6 +48,8 @@ export interface SetupExportView {
   readonly leftOut: readonly string[]
   /** The fingerprint of the key that signed the file. */
   readonly signedBy: string
+  /** The plugins of one's own that went in without their code, for the person to copy. */
+  readonly withoutCode: readonly string[]
 }
 
 /** One plugin an import adds or moves. */
@@ -63,6 +70,14 @@ export interface SetupInspectView {
   readonly signer: { readonly state: 'verified' | 'unverified', readonly reason?: 'absent' | 'key-not-trusted', readonly fingerprint: string }
   readonly createdBy: string
   readonly exportedAt: string
+  /** The sender's note. */
+  readonly note?: string
+  /** Whether the file includes settings besides the model; the Include settings switch is offered only then. */
+  readonly includesSettings: boolean
+  /** The parts of the setup this import replaces, in words. */
+  readonly replaces: readonly string[]
+  /** Plugins the file names without their code. */
+  readonly named: readonly string[]
   /** The profile the file was exported from. */
   readonly sourceProfile: string
   readonly install: readonly SetupInstallView[]

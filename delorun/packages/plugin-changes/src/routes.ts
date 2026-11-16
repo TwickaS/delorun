@@ -114,7 +114,7 @@ import {
 } from './wire.ts'
 import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget, type WorkspaceChoice } from './create-actions.ts'
 import { applySetupImport } from '@delorun/changes/setup-transfer'
-import { applySetup, exportSetup, HeldSetups, inspectSetup, MAX_SETUP_FILE_BYTES, SetupRefusal } from './setup-actions.ts'
+import { applySetup, exportSetup, HeldSetups, inspectSetup, listSetupPlugins, MAX_SETUP_FILE_BYTES, SetupRefusal } from './setup-actions.ts'
 
 export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
 
@@ -984,6 +984,21 @@ function actionRoute(action: ChangesAction, dependencies: RouteDependencies): Ro
   }
 }
 
+/**
+ * A true-or-false field of a request body.
+ * @param body - the body.
+ * @param name - the field.
+ * @param fallback - the value when the field is absent.
+ * @returns the field.
+ * @throws {RouteRefusal} `400 BAD_REQUEST` when the field is present and is not true or false.
+ */
+function flag(body: Readonly<Record<string, unknown>>, name: string, fallback: boolean): boolean {
+  const value = body[name]
+  if (value === undefined) return fallback
+  if (typeof value !== 'boolean') throw new RouteRefusal(400, 'BAD_REQUEST', `${name} is true or false.`)
+  return value
+}
+
 /** The most bytes a setup upload's JSON body holds: the largest file as base64, with the field around it. */
 const MAX_SETUP_BODY_BYTES = Math.ceil(MAX_SETUP_FILE_BYTES * 4 / 3) + 1024
 
@@ -1011,16 +1026,28 @@ function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependenc
       let answer: object
       try {
         if (kind === 'export') {
-          onlyFields(body, [])
-          answer = await exportSetup(ctx, dependencies.delorunVersion())
+          onlyFields(body, ['list', 'settings', 'localCode', 'plugins', 'note'])
+          if (body['list'] === true) {
+            answer = await listSetupPlugins(ctx)
+          } else {
+            const plugins = body['plugins']
+            if (plugins !== undefined && !(Array.isArray(plugins) && plugins.every(name => typeof name === 'string'))) throw new RouteRefusal(400, 'BAD_REQUEST', 'plugins is a list of package names.')
+            if (body['note'] !== undefined && typeof body['note'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'note is text.')
+            answer = await exportSetup(ctx, dependencies.delorunVersion(), {
+              settings: flag(body, 'settings', true), localCode: flag(body, 'localCode', true),
+              ...plugins === undefined ? {} : { plugins: plugins as string[] }, ...body['note'] === undefined ? {} : { note: body['note'] },
+            })
+          }
         } else if (kind === 'inspect') {
-          onlyFields(body, ['file'])
-          if (typeof body['file'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the file as base64 text.')
-          answer = await inspectSetup(ctx, body['file'], held)
+          onlyFields(body, ['file', 'token', 'settings', 'removeOthers'])
+          const source = typeof body['file'] === 'string' ? { file: body['file'] } : typeof body['token'] === 'string' ? { token: body['token'] } : undefined
+          if (source === undefined) throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the file as base64 text, or a file already read by its token.')
+          answer = await inspectSetup(ctx, source, held, { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false) })
         } else {
-          onlyFields(body, ['token'])
+          onlyFields(body, ['token', 'settings', 'removeOthers'])
           if (typeof body['token'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the inspected file by its token.')
-          answer = await applySetup(ctx, body['token'], held, opened => applySetupImport(ctx, opened.document, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx), readFile: opened.readFile }))
+          const choices = { settings: flag(body, 'settings', true), removeOthers: flag(body, 'removeOthers', false) }
+          answer = await applySetup(ctx, body['token'], held, choices, opened => applySetupImport(ctx, opened.document, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx), readFile: opened.readFile, choices }))
         }
       } catch (error) {
         if (error instanceof SetupRefusal) throw new RouteRefusal(error.status, error.code, error.message)

@@ -43,6 +43,38 @@ describe('setup export', () => {
   })
 })
 
+describe('choices in the studio', () => {
+  it('lists the plugins one could put in, honours the export choices and carries the note', async () => {
+    const { ctx } = await approvedPlugin()
+    writeFileSync(join(ctx.profileDir, 'cordis.patch.yml'), '- id: llm-deepseek\n  config:\n    model: v\n- insert:\n    - id: r\n      name: plug\n      config:\n        a: 1\n')
+    const server = await serveRoutes(ctx)
+    expect(json(await post(server.port, SETUP_PATHS.export, { list: true }))).toEqual({ plugins: [{ name: 'plug', source: 'local' }] })
+    const quiet = json(await post(server.port, SETUP_PATHS.export, { settings: false, localCode: false, note: 'hi' }))
+    expect(quiet).toMatchObject({ plugins: 1, local: 1, settings: 1, withoutCode: ['plug'] })
+    const { ctx: target } = routeHome()
+    const there = await serveRoutes(target)
+    const inspected = json(await post(there.port, SETUP_PATHS.inspect, { file: quiet['file'] }))
+    expect(inspected).toMatchObject({ note: 'hi', includesSettings: false, named: ['plug'], install: [] })
+    expect((await post(server.port, SETUP_PATHS.export, { plugins: 'plug' })).status).toBe(400)
+    expect((await post(server.port, SETUP_PATHS.export, { plugins: ['nope'] })).status).toBe(422)
+    expect((await post(server.port, SETUP_PATHS.export, { settings: 'yes' })).status).toBe(400)
+  })
+
+  it('plans the import again with other choices from the held file, and applies with them', async () => {
+    const { file } = await exportedFile()
+    const { ctx } = routeHome()
+    writeFileSync(join(ctx.profileDir, 'cordis.patch.yml'), '- id: delorun-cost-meter\n  config:\n    enabled: true\n')
+    const server = await serveRoutes(ctx)
+    const first = json(await post(server.port, SETUP_PATHS.inspect, { file }))
+    expect(first['replaces']).toContain('other settings')
+    const again = json(await post(server.port, SETUP_PATHS.inspect, { token: first['token'], settings: false }))
+    expect(again).toMatchObject({ token: first['token'], replaces: [expect.any(String), 'model provider and model choices', 'other settings stay as they are (not included by you)'] })
+    expect((await post(server.port, SETUP_PATHS.inspect, { token: 'guess' })).status).toBe(410)
+    const applied = await post(server.port, SETUP_PATHS.apply, { token: first['token'], settings: false })
+    expect(applied.status).toBe(200)
+  })
+})
+
 describe('setup import', () => {
   it('shows an unknown signer as unverified and everything that changes, then applies once with the code left for review', async () => {
     const { file } = await exportedFile()

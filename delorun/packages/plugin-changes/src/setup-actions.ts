@@ -14,9 +14,9 @@
 import { randomBytes } from 'node:crypto'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
 import { readProtection, type ChangesContext } from '@delorun/changes'
-import { collectSetup, planSetupImport, type SetupApplied, type SetupPlan } from '@delorun/changes/setup-transfer'
+import { collectSetup, exportablePlugins, planSetupImport, type CollectOptions, type ImportOptions, type SetupApplied, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { join } from 'node:path'
-import type { SetupApplyView, SetupExportView, SetupInspectView } from './wire.ts'
+import type { SetupApplyView, SetupExportView, SetupInspectView, SetupPluginsView } from './wire.ts'
 
 /** The largest setup file the studio writes or reads, in bytes; a larger one is moved with the commands. */
 export const MAX_SETUP_FILE_BYTES = 32 * 1024 * 1024
@@ -77,6 +77,21 @@ export class HeldSetups {
   }
 
   /**
+   * Look at the held file without taking it, to plan its import again with other choices.
+   * @param profile - the profile asking.
+   * @param token - the token `hold` returned.
+   * @returns the file.
+   * @throws {SetupRefusal} `410 SETUP_EXPIRED` when the token names no file held now, or another profile's.
+   */
+  peek(profile: string, token: string): OpenedSetup {
+    const held = this.#held
+    if (held === undefined || held.token !== token || held.profile !== profile || held.expires < this.#now()) {
+      throw new SetupRefusal(410, 'SETUP_EXPIRED', 'This setup file is no longer waiting. Choose the file again.')
+    }
+    return held.opened
+  }
+
+  /**
    * Take the held file, which can be taken once.
    * @param profile - the profile applying it.
    * @param token - the token `hold` returned.
@@ -94,14 +109,24 @@ export class HeldSetups {
 }
 
 /**
+ * The plugins the person could put in a file.
+ * @param ctx - the profile.
+ * @returns the plugins the person added.
+ */
+export async function listSetupPlugins(ctx: ChangesContext): Promise<SetupPluginsView> {
+  return { plugins: await exportablePlugins(ctx) }
+}
+
+/**
  * Write the profile's setup as a signed file.
  * @param ctx - the profile.
  * @param version - the Delorun version that writes the file.
+ * @param choices - what to carry.
  * @returns the file and what went in and was left out.
  * @throws {SetupRefusal} `413 SETUP_TOO_LARGE` for a file over {@link MAX_SETUP_FILE_BYTES}, `422` with the archive's code when the document breaks the schema; the changes errors the collection throws, such as `SETUP_REFUSED` for a credential in a settings row, propagate.
  */
-export async function exportSetup(ctx: ChangesContext, version: string): Promise<SetupExportView> {
-  const collected = await collectSetup(ctx)
+export async function exportSetup(ctx: ChangesContext, version: string, choices: CollectOptions): Promise<SetupExportView> {
+  const collected = await collectSetup(ctx, choices)
   const key = (await loadHomeKey(ctx.home, { create: true }))!
   let bytes: Uint8Array
   try {
@@ -124,22 +149,29 @@ export async function exportSetup(ctx: ChangesContext, version: string): Promise
     name: 'setup.delorun',
     plugins: collected.document.plugins.length,
     local: collected.document.plugins.filter(plugin => plugin.source === 'local').length,
-    settings: collected.document.patch.length,
+    settings: collected.document.models.length + collected.document.settings.length,
     leftOut: collected.leftOut,
     signedBy: key.keyId,
+    withoutCode: collected.document.plugins.filter(plugin => plugin.source === 'local' && plugin.files.length === 0).map(plugin => plugin.name),
   }
 }
 
 /**
  * Validate a setup file and plan its import; nothing is written.
  * @param ctx - the profile.
- * @param file - the file, as base64.
+ * @param file - the file, as base64, or the token of a file already held, to plan its import again with other choices.
  * @param held - where the validated file waits for its apply.
+ * @param choices - what the person chose to import.
  * @returns who signed it and everything the import would change.
  * @throws {SetupRefusal} `413 SETUP_TOO_LARGE`, or `422` with the archive's code for a file that fails a check; `SETUP_REFUSED` from the planning propagates.
  */
-export async function inspectSetup(ctx: ChangesContext, file: string, held: HeldSetups): Promise<SetupInspectView> {
-  const bytes = new Uint8Array(Buffer.from(file, 'base64'))
+export async function inspectSetup(ctx: ChangesContext, file: { readonly file: string } | { readonly token: string }, held: HeldSetups, choices: ImportOptions): Promise<SetupInspectView> {
+  if ('token' in file) {
+    const again = held.peek(ctx.profile, file.token)
+    const { plan } = await planSetupImport(ctx, again.document, choices)
+    return view(file.token, again, plan, await readProtection(ctx.home))
+  }
+  const bytes = new Uint8Array(Buffer.from(file.file, 'base64'))
   if (bytes.length === 0) throw new SetupRefusal(400, 'BAD_REQUEST', 'The file is empty.')
   if (bytes.length > MAX_SETUP_FILE_BYTES) throw new SetupRefusal(413, 'SETUP_TOO_LARGE', `A setup file larger than ${String(MAX_SETUP_FILE_BYTES / 1024 / 1024)} MiB is imported with delorun setup import.`)
   const ownKey = await loadHomeKey(ctx.home)
@@ -154,7 +186,7 @@ export async function inspectSetup(ctx: ChangesContext, file: string, held: Held
     if (error instanceof ArchiveError) throw new SetupRefusal(422, error.code, error.message)
     throw error
   }
-  const { plan } = await planSetupImport(ctx, opened.document)
+  const { plan } = await planSetupImport(ctx, opened.document, choices)
   return view(held.hold(ctx.profile, opened), opened, plan, await readProtection(ctx.home))
 }
 
@@ -174,6 +206,10 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
       : { state: 'unverified', reason: opened.reason === 'absent' ? 'absent' : 'key-not-trusted', fingerprint: opened.signer.fingerprint },
     createdBy: opened.createdBy,
     exportedAt: opened.exportedAt,
+    ...opened.document.note === undefined ? {} : { note: opened.document.note },
+    includesSettings: opened.document.includesSettings,
+    replaces: plan.replaces,
+    named: plan.named,
     sourceProfile: opened.document.profile,
     install: plan.install.map(item => ({
       name: item.plugin.name,
@@ -199,13 +235,14 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
  * @param ctx - the profile.
  * @param token - the token the inspection returned.
  * @param held - where the validated file waits.
+ * @param choices - what the person chose to import.
  * @param apply - applies the held file's setup to the profile.
  * @returns what was done.
  * @throws {SetupRefusal} `410 SETUP_EXPIRED` for a token that names no file waiting; the changes errors of the application propagate.
  */
-export async function applySetup(ctx: ChangesContext, token: string, held: HeldSetups, apply: (opened: OpenedSetup) => Promise<SetupApplied>): Promise<SetupApplyView> {
+export async function applySetup(ctx: ChangesContext, token: string, held: HeldSetups, choices: ImportOptions, apply: (opened: OpenedSetup) => Promise<SetupApplied>): Promise<SetupApplyView> {
   const opened = held.take(ctx.profile, token)
-  const { plan } = await planSetupImport(ctx, opened.document)
+  const { plan } = await planSetupImport(ctx, opened.document, choices)
   const result = await apply(opened)
   return {
     savedVersion: result.savedVersion,
