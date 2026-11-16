@@ -87,6 +87,10 @@ describe('delorun reach', () => {
     expect(row.listenerPort).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
     expect(row.listenerPort).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
     for (const line of TRUST_STATEMENT) expect(out.stdout).toContain(line)
+    // An unlocked phone can change settings, plugins and terminals, so the statement says what the unlock adds.
+    expect(out.stdout).toContain('Without an unlock it cannot change settings')
+    expect(out.stdout).toContain('An unlocked phone can change settings, install plugins and open a terminal')
+    expect(out.stdout).not.toContain('run commands or read files on this computer')
     expect(out.stdout).toContain('It starts with Delorun')
     expect(calls.flat()).not.toContain('sudo')
     // Pins the choice made once: turning it on again keeps the recorded port.

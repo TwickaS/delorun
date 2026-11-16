@@ -220,7 +220,7 @@ You should see "PIN mode is on, with a PIN." and a short list of what it allows.
 
 A page locks again after it sits idle. `--idle-minutes <1-60>` sets how long, and `--lock-when-hidden` also locks it at once when you switch away from it. Change either later with `delorun devices pin options`, and use `--no-lock-when-hidden` to undo the second.
 
-The mode limits wrong tries. Five wrong tries on one device lock that device. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
+The mode limits wrong tries. Five wrong tries on one device remove it and sign it out; you approve it again at your computer. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
 
 | Command | What it does |
 | --- | --- |

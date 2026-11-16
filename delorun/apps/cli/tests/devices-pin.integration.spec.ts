@@ -97,6 +97,8 @@ describe('delorun devices pin', () => {
     expect(sent).toEqual([{ op: 'pin.set', args: { secret: SECRET, idleMinutes: 5, lockWhenHidden: true } }])
     expect(out.stdout).toContain('PIN mode is on, with a PIN.')
     expect(out.stdout).toContain('after 5 idle minutes, and at once when it is hidden')
+    expect(out.stdout).toContain('five on one device remove that device and sign it out')
+    expect(out.stdout).not.toContain('lock that device')
     expect(out.stdout + out.stderr).not.toContain(SECRET)
     expect(readdirSync(secrets()).join(' ')).not.toContain(SECRET)
     for (const file of readdirSync(secrets())) expect(readFileSync(join(secrets(), file), 'utf8')).not.toContain(SECRET)

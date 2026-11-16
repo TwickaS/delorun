@@ -135,7 +135,7 @@ function allowedLines(kind: string, idleMinutes: number | undefined, lockWhenHid
     `A device you approved can now unlock sensitive actions on its own page by typing the ${kind}, without a code from this computer.`,
     'It covers the Tailscale private address only. Setting or changing the PIN, turning the mode on or off, and approving a device stay at this computer.',
     `A page locks again after ${idleMinutes === undefined ? 'the idle time you set (the home\'s default when you did not)' : `${String(idleMinutes)} idle minutes`}${lockWhenHidden === true ? ', and at once when it is hidden' : ''}.`,
-    `Ten wrong tries across the home pause PIN unlocks until you run delorun devices pin resume; five on one device lock that device.`,
+    `Ten wrong tries across the home pause PIN unlocks until you run delorun devices pin resume; five on one device remove that device and sign it out, and you approve it again at this computer.`,
     'Turn it off with delorun devices pin off.',
   ]
 }

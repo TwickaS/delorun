@@ -70,6 +70,14 @@ function renderOverlay(unlock: UnlockSource, translate = t) {
     cancel={unlock.cancel} lock={unlock.lock} dismissEnded={unlock.dismissEnded} />)
 }
 
+describe('the unlock copy', () => {
+  it('states no length for the unlock, which the home\'s remote access setting decides', () => {
+    expect(en['unlock.explain']).not.toMatch(/minutes/u)
+    expect(en['unlock.explain']).toContain('ends on its own')
+    expect(zh['unlock.explain']).not.toContain('几分钟')
+  })
+})
+
 describe('the unlock routes', () => {
   it('read, ask, lock, list, approve and revoke with the routes\' JSON', async () => {
     const host = fakeHost({
