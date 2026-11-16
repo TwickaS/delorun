@@ -48,6 +48,7 @@
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/home-auth": "workspace:*",
+    "@delorun/plugin-delegation-consent": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
     "@delorun/reach": "workspace:*",
     "zod": "4.6.6"
@@ -90,6 +91,7 @@
     "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@delorun/bundle-local": "workspace:*",
+    "@delorun/plugin-delegation-consent": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
     "@testing-library/react": "^16.3.3",
     "@types/react": "~18.3.1",

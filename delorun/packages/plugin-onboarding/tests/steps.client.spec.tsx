@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AGENT_PRESETS } from '../src/client/steps/agent-presets.ts'
 import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
@@ -15,7 +16,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import type { Readiness, TailscaleReadiness } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
 import type { HostFace, StartTarget, StepServices } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
@@ -232,13 +233,17 @@ describe('the agents step', () => {
     const codexCard = cardOf('Codex')
     expect(within(claudeCard).getByText(en['agents.claude.how'], { exact: false })).toBeTruthy()
     expect(within(codexCard).getByText(en['agents.codex.how'], { exact: false })).toBeTruthy()
+    expect(within(claudeCard).getByText('Downloads about 206 MB when you add it.')).toBeTruthy()
+    expect(within(codexCard).getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
     expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
     expect(within(codexCard).getByText(en['agents.codex.risk'])).toBeTruthy()
     // Only Claude Code recommends a home connection.
     expect(en['agents.claude.risk']).toContain('home internet connection, not a VPN, proxy or cloud server')
     expect(within(codexCard).queryByText(/home internet/)).toBeNull()
     for (const card of [claudeCard, codexCard]) {
-      expect(within(card).getAllByRole('button')).toHaveLength(1)
+      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.advanced']])
+      expect(within(card).getByRole('button', { name: en['agents.advanced'] }).getAttribute('aria-expanded')).toBe('false')
+      expect(within(card).queryByRole('radio')).toBeNull()
       expect(within(card).getByRole('link', { name: en['agents.guide'] }).getAttribute('href')).toBe(AGENTS_GUIDE_URL)
     }
   })
@@ -262,6 +267,91 @@ describe('the agents step', () => {
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
     await click(screen.getByRole('button', { name: 'Add Claude Code' }))
     expect(await guide.passGates()).toBe(true)
+  })
+
+  describe('advanced options', () => {
+    const open = async (title: string): Promise<HTMLElement> => {
+      const card = screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
+      await click(within(card).getByRole('button', { name: en['agents.advanced'] }))
+      return card
+    }
+    const available = (): ReturnType<typeof installerFake> => installerFake({ [AGENT_BUNDLES[0].name]: { state: 'available' }, [AGENT_BUNDLES[1].name]: { state: 'available' } })
+
+    it('stays closed on the default path: no presets and no fields until it is opened', () => {
+      render(<AgentsStep services={stepServices({ bundles: available().installer })} guide={guideOf()} />)
+      for (const button of screen.getAllByRole('button', { name: en['agents.advanced'] })) expect(button.getAttribute('aria-expanded')).toBe('false')
+      expect(screen.queryByRole('radio')).toBeNull()
+      expect(screen.queryByRole('textbox')).toBeNull()
+    })
+
+    it.each([
+      ['Claude Code', 'claude', ['dontAsk', 'plan']],
+      ['Codex', 'codex', ['never', 'read-only']],
+    ] as const)('offers %s the default and one stricter preset only, the default selected', async (title, copy, modes) => {
+      render(<AgentsStep services={stepServices({ bundles: available().installer })} guide={guideOf()} />)
+      const card = await open(title)
+      const radios = within(card).getAllByRole('radio') as HTMLInputElement[]
+      expect(radios.map(each => each.value)).toEqual([...modes])
+      expect(radios.map(each => each.checked)).toEqual([true, false])
+      expect(within(card).getByText(en[`agents.${copy}.preset.recommended.desc`])).toBeTruthy()
+      expect(within(card).getByText(en[`agents.${copy}.preset.recommended.sets`])).toBeTruthy()
+    })
+
+    it.each([
+      ['Claude Code', 'claude', 'claude', 'plan'],
+      ['Codex', 'codex', 'codex', 'read-only'],
+    ] as const)('writes the %s read-only preset to the agent\'s row and shows what it changes', async (title, copy, fake, mode) => {
+      const agents = agentsFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+      const card = await open(title)
+      await click(within(card).getByRole('radio', { name: new RegExp(en['agents.preset.readOnly']) }))
+      expect(agents[fake].set).toHaveBeenCalledExactlyOnceWith('permissionMode', mode)
+      expect(within(card).getByText(en[`agents.${copy}.preset.readOnly.sets`])).toBeTruthy()
+    })
+
+    it('keeps a preset chosen before the agent is added and writes it once its row exists', async () => {
+      const agents = agentsFake({ rows: false })
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+      const card = await open('Claude Code')
+      await click(within(card).getByRole('radio', { name: new RegExp(en['agents.preset.readOnly']) }))
+      expect(agents.claude.set).not.toHaveBeenCalled()
+      expect(within(card).getByText(/Saved when you add Claude Code/)).toBeTruthy()
+      await act(async () => { agents.claude.publish({ status: 'ready', value: { permissionMode: 'dontAsk' } }) })
+      expect(agents.claude.set).toHaveBeenCalledExactlyOnceWith('permissionMode', 'plan')
+    })
+
+    it('writes the model from Fine-tune', async () => {
+      const agents = agentsFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+      const card = await open('Codex')
+      await click(within(card).getByRole('button', { name: en['agents.fineTune'] }))
+      const model = within(card).getByRole('textbox', { name: en['agents.model.label'] })
+      fireEvent.change(model, { target: { value: 'gpt-codex' } })
+      fireEvent.keyDown(model, { key: 'Enter' })
+      expect(agents.codex.set).toHaveBeenCalledWith('model', 'gpt-codex')
+      expect((model as HTMLInputElement).value).toBe('gpt-codex')
+    })
+
+    it('writes the run time limit from Fine-tune only as a whole number of minutes in range', async () => {
+      const agents = agentsFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+      const card = await open('Claude Code')
+      await click(within(card).getByRole('button', { name: en['agents.fineTune'] }))
+      const field = within(card).getByRole('spinbutton', { name: en['agents.limit.label'] })
+      fireEvent.change(field, { target: { value: '0' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(agents.limit.set).not.toHaveBeenCalled()
+      fireEvent.change(field, { target: { value: '45' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(agents.limit.set).toHaveBeenCalledExactlyOnceWith('runTimeoutMinutes', 45)
+    })
+
+    it('never offers a mode looser than the default', () => {
+      for (const presets of Object.values(AGENT_PRESETS)) {
+        expect(presets.map(each => each.mode)).not.toEqual(expect.arrayContaining(['acceptEdits']))
+        for (const loose of ['acceptEdits', 'auto', 'bypassPermissions', 'approve-for-me', 'dangerously-bypass-approvals-and-sandbox']) expect(presets.map(each => each.mode)).not.toContain(loose)
+      }
+    })
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([

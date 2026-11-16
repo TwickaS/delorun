@@ -1,0 +1,129 @@
+/**
+ * An agent's Advanced options: stricter presets as plain outcomes, and a Fine-tune group with the model and the run
+ * time limit. Closed by default; the default path never needs it. A choice made before the agent is added is kept and
+ * written to the agent's row once the row exists.
+ */
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { RUN_TIMEOUT_MINUTES } from '@delorun/plugin-delegation-consent/wire'
+import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
+import type { ReactNode } from 'react'
+import type { StepServices } from '../types.ts'
+import { Disclosure } from '../ui/Disclosure.tsx'
+import { AGENT_PRESETS, type AgentId } from './agent-presets.ts'
+import css from './agents.module.css'
+
+/**
+ * @param form - a settings form.
+ * @returns its current snapshot, re-rendering on change.
+ */
+function useForm<T>(form: ConfigForm<T>): ReturnType<ConfigForm<T>['getSnapshot']> {
+  return useSyncExternalStore(useCallback(listener => form.subscribe(listener), [form]), () => form.getSnapshot())
+}
+
+/** What the person chose before the agent's row existed. */
+interface Pending {
+  readonly mode?: string
+  /** An empty string clears the model. */
+  readonly model?: string
+}
+
+/** The props of the group. */
+export interface AgentAdvancedProps {
+  /** The agent's connection id. */
+  readonly agent: AgentId
+  /** The key of its copy. */
+  readonly copy: 'claude' | 'codex'
+  /** The agent's name. */
+  readonly title: string
+  /** The services. */
+  readonly services: StepServices
+}
+
+/**
+ * The Advanced options of one agent.
+ * @param props - the agent, its copy key and name, and the services.
+ * @returns the disclosure.
+ */
+export function AgentAdvanced({ agent, copy, title, services }: AgentAdvancedProps): ReactNode {
+  const { t, remote } = services
+  const form = services.agents.rows[agent]
+  const row = useForm(form)
+  const limit = useForm(services.agents.limit)
+  const [pending, setPending] = useState<Pending>({})
+  const [modelDraft, setModelDraft] = useState<string | undefined>()
+  const [minutesDraft, setMinutesDraft] = useState<string | undefined>()
+  const name = useId()
+  const presets = AGENT_PRESETS[agent]
+  const live = row.status === 'ready' && row.value !== undefined && row.writable && !remote
+  // Once the agent's row exists, what was chosen before it did is written and forgotten.
+  useEffect(() => {
+    if (!live || (pending.mode === undefined && pending.model === undefined)) return
+    const { mode, model } = pending
+    setPending({})
+    if (mode !== undefined) void form.set('permissionMode', mode).catch((error: unknown) => { console.warn('delorun onboarding: the agent preset was not saved', error) })
+    if (model !== undefined) void (model === '' ? form.unset('model') : form.set('model', model)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
+  }, [live, pending, form])
+  const mode = pending.mode ?? row.value?.permissionMode ?? presets[0].mode
+  const chosen = presets.find(each => each.mode === mode) ?? presets[0]
+  const choose = (next: string): void => {
+    if (live) void form.set('permissionMode', next).catch((error: unknown) => { console.warn('delorun onboarding: the agent preset was not saved', error) })
+    else setPending({ ...pending, mode: next })
+  }
+  const savedModel = pending.model ?? row.value?.model ?? ''
+  const commitModel = (): void => {
+    const next = (modelDraft ?? savedModel).trim()
+    setModelDraft(undefined)
+    if (next === savedModel) return
+    if (live) void (next === '' ? form.unset('model') : form.set('model', next)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
+    else setPending({ ...pending, model: next })
+  }
+  const savedMinutes = limit.value?.runTimeoutMinutes
+  const commitMinutes = (): void => {
+    const minutes = Number(minutesDraft)
+    setMinutesDraft(undefined)
+    if (Number.isInteger(minutes) && minutes >= RUN_TIMEOUT_MINUTES.min && minutes <= RUN_TIMEOUT_MINUTES.max && minutes !== savedMinutes) {
+      void services.agents.limit.set('runTimeoutMinutes', minutes).catch((error: unknown) => { console.warn('delorun onboarding: the time limit was not saved', error) })
+    }
+  }
+  const limitLive = limit.status === 'ready' && limit.writable && !remote
+  const waiting = !live && (pending.mode !== undefined || pending.model !== undefined)
+  return (
+    <Disclosure label={t('agents.advanced')}>
+      <div role="radiogroup" aria-label={t('agents.presets.label', { name: title })} className={css.presets}>
+        {presets.map(preset => (
+          <label key={preset.id} className={css.preset} data-selected={preset.id === chosen.id ? '' : undefined}>
+            <input type="radio" className={css.radio} name={name} value={preset.mode} checked={preset.id === chosen.id} disabled={remote}
+              onChange={() => { choose(preset.mode) }} />
+            <span className={css.presetTitle}>{t(`agents.preset.${preset.id}`)}</span>
+            <span className={css.presetText}>{t(`agents.${copy}.preset.${preset.id}.desc`)}</span>
+          </label>
+        ))}
+      </div>
+      <p className={css.changes} aria-live="polite">
+        <span className={css.changesLabel}>{t('agents.preset.changes')}</span>{' '}
+        {t(`agents.${copy}.preset.${chosen.id}.sets`)}{waiting ? ` ${t('agents.preset.pending', { name: title })}` : ''}
+      </p>
+      <Disclosure label={t('agents.fineTune')} size="quiet">
+        <div className={css.field}>
+          <label className={css.fieldLabel} htmlFor={`${name}-model`}>{t('agents.model.label')}</label>
+          <Input id={`${name}-model`} value={modelDraft ?? savedModel} placeholder={t('agents.model.placeholder')} disabled={remote}
+            autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            onChange={(event) => { setModelDraft(event.currentTarget.value) }}
+            onBlur={commitModel} onKeyDown={(event) => { if (event.key === 'Enter') commitModel() }} />
+          <span className={css.hint}>{t('agents.model.hint')}</span>
+        </div>
+        {savedMinutes !== undefined && (
+          <div className={css.field}>
+            <label className={css.fieldLabel} htmlFor={`${name}-limit`}>{t('agents.limit.label')}</label>
+            <Input id={`${name}-limit`} type="number" inputMode="numeric" min={RUN_TIMEOUT_MINUTES.min} max={RUN_TIMEOUT_MINUTES.max} step={1}
+              value={minutesDraft ?? String(savedMinutes)} disabled={!limitLive}
+              onChange={(event) => { setMinutesDraft(event.currentTarget.value) }}
+              onBlur={commitMinutes} onKeyDown={(event) => { if (event.key === 'Enter') commitMinutes() }} />
+            <span className={css.hint}>{t('agents.limit.hint', { min: String(RUN_TIMEOUT_MINUTES.min), max: String(RUN_TIMEOUT_MINUTES.max) })}</span>
+          </div>
+        )}
+      </Disclosure>
+    </Disclosure>
+  )
+}

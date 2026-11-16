@@ -5,14 +5,18 @@
 import type { ReactNode } from 'react'
 import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
+import { AgentAdvanced } from './AgentAdvanced.tsx'
 import { BundleCard } from './BundleCard.tsx'
 import { useBundle, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
 
-/** The delegation bundles the agents step offers, by package name, the key of their copy and their connection id. */
+/**
+ * The delegation bundles the agents step offers, by package name, the key of their copy, their connection id and the
+ * size of the pinned program Add downloads for this platform, in megabytes.
+ */
 export const AGENT_BUNDLES = [
-  { name: '@deepseek-ai/dsh-subagent-claude-code', key: 'claude', agent: 'claude-code' },
-  { name: '@deepseek-ai/dsh-subagent-codex', key: 'codex', agent: 'codex' },
+  { name: '@deepseek-ai/dsh-subagent-claude-code', key: 'claude', agent: 'claude-code', downloadMb: 206 },
+  { name: '@deepseek-ai/dsh-subagent-codex', key: 'codex', agent: 'codex', downloadMb: 320 },
 ] as const
 
 /** The state line of an agent's sign-in. */
@@ -42,12 +46,14 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
         {t(`agents.${agent.key}.how`)}{' '}
         <a href={AGENTS_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('agents.guide')}</a>
       </p>
+      {bundleState === 'available' && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
       <StateLine tone="warning">{t(`agents.${agent.key}.risk`)}</StateLine>
       {showSignIn && (
         <StateLine tone={loading ? 'loading' : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
           {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
         </StateLine>
       )}
+      <AgentAdvanced agent={agent.agent} copy={agent.key} title={title} services={services} />
     </BundleCard>
   )
 }

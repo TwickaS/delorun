@@ -7,13 +7,14 @@ import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
+import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AddOutcome, AgentRowSettings, AgentsFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
 import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
 import { DIRECTORY } from './directory.fixture.ts'
@@ -205,10 +206,18 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
 }
 
 /** Step services with every part faked; each can be replaced. */
+export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
+  const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : { permissionMode: 'dontAsk' }, { status: options.rows === false ? 'unavailable' : 'ready' })
+  const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : { permissionMode: 'never' }, { status: options.rows === false ? 'unavailable' : 'ready' })
+  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30 })
+  return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
+}
+
 export function stepServices(change: Partial<StepServices> = {}): StepServices & { readonly spies: ReturnType<typeof installerFake> } {
   const bundles = installerFake()
   const theme = liveForm<ThemeSettings>(THEME)
   return {
+    agents: agentsFake().face,
     t, appearance, remote: false, plugins: [], optionalRows: [],
     notice: undefined,
     language: languageFace().face,

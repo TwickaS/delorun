@@ -7,6 +7,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
+import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
@@ -276,8 +277,26 @@ export interface CustomEndpoint {
   readonly key: string
 }
 
+/** The fields of an agent provider's row that the agents step writes. */
+export interface AgentRowSettings {
+  /** The agent's fixed non-interactive permission mode. */
+  readonly permissionMode: string
+  /** The model the agent runs, or absent for the agent's own default. */
+  readonly model?: string | undefined
+}
+
+/** The settings the agents step reads and writes, by the agent's connection id. */
+export interface AgentsFace {
+  /** The row of an agent's provider; its form is unavailable until the package is installed and running. */
+  readonly rows: Readonly<Record<'claude-code' | 'codex', ConfigForm<AgentRowSettings>>>
+  /** The external-agent consent's row, which holds the run time limit. */
+  readonly limit: ConfigForm<DelegationConsentSettings>
+}
+
 /** The services that do not change while the dialog is open. */
 export interface StaticServices {
+  /** The agents' settings. */
+  readonly agents: AgentsFace
   /** The model providers. */
   readonly providers: ProvidersFace
   /** The preview notice, or undefined where there is none. */

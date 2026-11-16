@@ -3114,6 +3114,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme

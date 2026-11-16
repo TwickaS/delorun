@@ -42,6 +42,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@delorun/bundle-local/client'
 // Type-only: the ctx.delorunStudio merge and the 'settings.delorunAppearance' dictionary.
 import type {} from '@delorun/plugin-theme/client'
+import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
@@ -59,9 +60,10 @@ import { FinishSetupChip, FloatingFinishSetupChip, type FinishSetupInjected } fr
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
-  AddOutcome, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
+  AddOutcome, AgentRowSettings, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
 } from './types.ts'
+import { AGENT_ROWS } from './steps/agent-presets.ts'
 
 export { createBundleInstaller, stateOf } from './bundles.ts'
 export type { BundleInstaller, BundleState, BundleView, RowView } from './bundles.ts'
@@ -250,6 +252,13 @@ export function applyStudio(ctx: Context): void {
       useStockLook: () => ctx.delorunStudio.useStockLook(),
     },
     appearance: ctx.locale.bind('settings.delorunAppearance'),
+    agents: {
+      rows: {
+        'claude-code': ctx.configForms.get<AgentRowSettings>(AGENT_ROWS['claude-code']),
+        'codex': ctx.configForms.get<AgentRowSettings>(AGENT_ROWS.codex),
+      },
+      limit: ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW),
+    },
     bundles: createBundleInstaller(ctx),
     host: { ...hostApi, keyTest: () => keyStatus.refresh() },
     providers: createProvidersFace(ctx),
