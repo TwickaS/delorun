@@ -8,7 +8,7 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 
 ## 摘要
 
-本页介绍如何把 DeepSeek 网站（chat.deepseek.com）上的 chat 带入 Delorun，在这里阅读并继续对话。如果你在开始使用 Delorun 之前用过该网站，它会有帮助。你需要先让 Delorun 运行起来，并有一个用来存放这些 chat 的[工作区](../reference/glossary.zh.md#workspace)。导入是一个可选插件，在你开启之前是关闭的。它只读取你上传的文件，别的什么都不读，也不会向任何地方发送任何东西。
+本页介绍如何把 DeepSeek 网站（chat.deepseek.com）上的 chat 带入 Delorun，在这里阅读并继续对话。如果你在开始使用 Delorun 之前用过该网站，它会有帮助。你需要先让 Delorun 运行起来，并有一个用来存放这些 chat 的[工作区](../reference/glossary.zh.md#workspace)。导入是一个可选插件，在你开启之前是关闭的。导入本身只读取你上传的文件，不发送任何东西到任何地方。继续一个导入的 chat 则不同：下一次请求会把整段导入的历史发送给你的模型提供方，并像任何长 chat 一样消耗 token。
 
 ## 目录
 
@@ -23,7 +23,7 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 
 ## 从网站导出你的 chat
 
-在 chat.deepseek.com 上，打开账户设置并导出你的全部数据。网站会准备一个名称类似 `deepseek_data-2026-01-01.zip` 的文件并提供下载。请保持该文件原样，不要解压。
+在 chat.deepseek.com 上，打开账户设置并导出你的全部数据。网站会准备一个名称类似 `deepseek_data-2026-01-01.zip` 的文件并提供下载。请保持该文件原样，不要解压。网站的菜单名称可能会变，所以请在账户设置中寻找数据导出。
 
 <a id="turn-the-import-on"></a>
 
@@ -61,6 +61,7 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 - 如果某条回复没有完成，那么它的 chat 以一行说明原因的错误结束，问题则保留。
 - 如果文件大于 512 MiB，那么导入会在写入任何内容之前拒绝它。
 - 如果另一个导入正在运行，那么对话框会这样说明，并且不写入任何内容。
+- 如果每个 chat 都导入失败，那么当问题出在整个文件上时，对话框会说明原因：它不是可读取的 ZIP 文件（请重新下载且不要解压）、缺少网站的导出索引或其格式版本不是本插件能读取的，或者其中没有任何对话。当文件可以读取而每个对话都失败时，对话框只给出无法导入的 chat 数量；`delorun logs home` 会指出每一个的缺陷，[报告未列出的问题](troubleshooting.zh.md#report-a-problem-that-is-not-listed)说明如何报告。
 
 </details>
 

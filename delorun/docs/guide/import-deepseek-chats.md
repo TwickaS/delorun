@@ -8,7 +8,7 @@ English | [中文](import-deepseek-chats.zh.md)
 
 ## Summary
 
-This page shows how to bring chats from the DeepSeek website (chat.deepseek.com) into Delorun, where you can read them and carry on. It helps when you used the website before you started with Delorun. You need Delorun running and a [workspace](../reference/glossary.md#workspace) to hold the chats. The import is an optional plugin, off until you turn it on. It reads the file you upload and nothing else, and it sends nothing anywhere.
+This page shows how to bring chats from the DeepSeek website (chat.deepseek.com) into Delorun, where you can read them and carry on. It helps when you used the website before you started with Delorun. You need Delorun running and a [workspace](../reference/glossary.md#workspace) to hold the chats. The import is an optional plugin, off until you turn it on. The import itself reads the file you upload and nothing else, and sends nothing anywhere. Continuing an imported chat is different: it sends the whole imported history to your model provider as part of the next request, and costs tokens like any long chat.
 
 ## Contents
 
@@ -21,7 +21,7 @@ This page shows how to bring chats from the DeepSeek website (chat.deepseek.com)
 
 ## Export your chats from the website
 
-On chat.deepseek.com, open your account settings and export all your data. The website prepares a file named like `deepseek_data-2026-01-01.zip` and offers it for download. Keep the file as it is; do not unpack it.
+On chat.deepseek.com, open your account settings and export all your data. The website prepares a file named like `deepseek_data-2026-01-01.zip` and offers it for download. Keep the file as it is; do not unpack it. The website's menu names can change, so look for the data export in your account settings.
 
 ## Turn the import on
 
@@ -53,6 +53,7 @@ You should see the imported chats in the workspace's chat list.
 - If a reply was not finished, then its chat ends with an error row that says why, and the question stays.
 - If the file is larger than 512 MiB, then the import refuses it before writing anything.
 - If another import is running, then the dialog says so and writes nothing.
+- If every chat fails to import, then the dialog says why when the file as a whole is the problem: it is not a readable ZIP file (download it again and do not unpack it), it lacks the website's export index or is in a format version this plugin does not read, or it holds no conversations. When the file reads but each conversation fails, the count of chats it could not import is all the dialog gives; `delorun logs home` names the defect of each, and [Report a problem that is not listed](troubleshooting.md#report-a-problem-that-is-not-listed) says how to report it.
 
 </details>
 
