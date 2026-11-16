@@ -35,12 +35,11 @@ export function htmlLangOf(locale: Locale): string {
 }
 
 /**
- * The Delorun version the pages describe, which the build reads from the release tooling's package.json (vite.config.ts).
- * @returns the version string.
- * @throws Error when the build did not set `DELORUN_VERSION`.
+ * The Delorun version the pages describe: the newest version in the changelog record that the build publishes
+ * (vite.config.ts).
+ * @returns the version string; undefined when no version is assembled, which leaves the version line out.
  */
-export function delorunVersion(): string {
+export function delorunVersion(): string | undefined {
   const version = import.meta.env.DELORUN_VERSION
-  if (version === undefined || version === '') throw new Error('docs-site: DELORUN_VERSION is unset; build through vite.config.ts')
-  return version
+  return version === undefined || version === '' ? undefined : version
 }

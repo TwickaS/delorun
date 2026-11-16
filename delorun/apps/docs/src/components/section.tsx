@@ -12,7 +12,7 @@ import defaultMdxComponents from 'fumadocs-ui/mdx'
 import { use } from 'react'
 import { baseOptions } from '@/components/layout.tsx'
 import { PageFooter } from '@design/footer.tsx'
-import { SITE_URL } from '@/site/config.ts'
+import { pageHead } from '@/site/head.ts'
 import { COPY } from '@/site/copy.ts'
 import { delorunVersion, htmlLangOf, type Locale } from '@/site/locale.ts'
 import { routeOf, type Section } from '@/site/routes.ts'
@@ -51,13 +51,7 @@ export async function loadSectionPage(section: Section, locale: Locale, splat: s
  */
 export function sectionHead(data: SectionPageData | undefined) {
   if (data === undefined) return {}
-  return {
-    meta: [
-      { title: data.title },
-      ...(data.description === undefined ? [] : [{ name: 'description', content: data.description }]),
-    ],
-    links: [{ rel: 'canonical', href: `${SITE_URL}${routeOf(data.section, data.slugs, data.locale === 'zh')}` }],
-  }
+  return pageHead({ title: data.title, description: data.description, path: routeOf(data.section, data.slugs, data.locale === 'zh'), locale: data.locale })
 }
 
 /**
@@ -75,6 +69,7 @@ export function SectionPage({ section, locale, slugs }: SectionPageData) {
   const Body = page.data.body
   const copy = COPY[locale]
   const other: Locale = locale === 'en' ? 'zh' : 'en'
+  const version = delorunVersion()
   return (
     <DocsLayout {...baseOptions(locale)} tree={source.getPageTree(locale)}>
       <DocsPage toc={toc}>
@@ -82,7 +77,7 @@ export function SectionPage({ section, locale, slugs }: SectionPageData) {
           <Body components={defaultMdxComponents} />
         </DocsBody>
         <PageFooter>
-          <p>{copy.describes(delorunVersion())}</p>
+          {version === undefined ? null : <p>{copy.describes(version)}</p>}
           <p>
             <Link href={routeOf(section, slugs, other === 'zh')} hrefLang={htmlLangOf(other)} lang={htmlLangOf(other)} title={copy.switchLabel}>
               {copy.switchTo}

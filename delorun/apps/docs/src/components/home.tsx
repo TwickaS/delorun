@@ -19,27 +19,22 @@ import { routeOf } from '@/site/routes.ts'
  */
 export function Home({ locale }: { locale: Locale }) {
   const copy = COPY[locale]
+  const version = delorunVersion()
   return (
     <HomeLayout {...baseOptions(locale)}>
       <main className="mx-auto w-full max-w-3xl px-4 py-16">
         <h1 className="text-3xl font-semibold">{copy.siteTitle}</h1>
         <p className="mt-4 text-fd-muted-foreground">{copy.homeIntro}</p>
         <ul className="mt-8 space-y-4">
-          <li>
-            <Link href={routeOf('guide', ['install'], locale === 'zh')} className="font-medium">{copy.entries.newTitle}</Link>
-            <p className="text-fd-muted-foreground">{copy.entries.newText}</p>
-          </li>
-          <li>
-            <Link href={routeOf('guide', [], locale === 'zh')} className="font-medium">{copy.entries.taskTitle}</Link>
-            <p className="text-fd-muted-foreground">{copy.entries.taskText}</p>
-          </li>
-          <li>
-            <Link href={routeOf('reference', [], locale === 'zh')} className="font-medium">{copy.entries.developerTitle}</Link>
-            <p className="text-fd-muted-foreground">{copy.entries.developerText}</p>
-          </li>
+          {copy.entries.map(entry => (
+            <li key={entry.title}>
+              <Link href={routeOf(entry.section, entry.slugs, locale === 'zh')} className="font-medium">{entry.title}</Link>
+              <p className="text-fd-muted-foreground">{entry.text}</p>
+            </li>
+          ))}
         </ul>
         <WhatsNew locale={locale} />
-        <PageFooter><p>{copy.describes(delorunVersion())}</p></PageFooter>
+        {version === undefined ? null : <PageFooter><p>{copy.describes(version)}</p></PageFooter>}
       </main>
     </HomeLayout>
   )

@@ -11,6 +11,7 @@ import view from 'virtual:delorun-changelog'
 import { baseOptions } from '@/components/layout.tsx'
 import type { ViewArea, ViewVersion } from '@design/changelog.ts'
 import { COPY } from '@/site/copy.ts'
+import { pageHead } from '@/site/head.ts'
 import type { Locale } from '@/site/locale.ts'
 import { changelogRoute } from '@/site/routes.ts'
 
@@ -117,7 +118,7 @@ export function ChangelogPage({ locale }: { locale: Locale }) {
  * @returns its title.
  */
 export function changelogHead(locale: Locale) {
-  return { meta: [{ title: `${COPY[locale].changelog.title} · ${COPY[locale].siteTitle}` }] }
+  return pageHead({ title: `${COPY[locale].changelog.title} · ${COPY[locale].siteTitle}`, description: COPY[locale].changelog.intro, path: changelogRoute(locale === 'zh'), locale })
 }
 
 /**

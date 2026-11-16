@@ -15,6 +15,7 @@ This package builds Delorun's documentation website: the user guide and the refe
 | `/zh/...` | The same routes in Chinese; a page without a Chinese pair shows its English text |
 | `/llms.mdx/<section>/<page>` and `/zh/llms.mdx/...` | Each page as Markdown. A section's index is `/llms.mdx/<section>/index`, and a directory's index page is `/llms.mdx/<section>/<directory>/index` |
 | `/llms.txt`, `/zh/llms.txt` | An index of each locale's pages, linking their Markdown |
+| `/sitemap.xml`, `/robots.txt` | The sitemap of every page in both locales, written by the build, and the robots file in `public/` that names it |
 | `/search.json` | The search index of every page in both locales, which the search dialog downloads |
 | `/404` | The page a host serves, from `404.html`, for an address no file has |
 
@@ -33,7 +34,7 @@ The dead-link check runs after the build. It checks every internal link and frag
 
 ## Version
 
-Each page states the Delorun version it describes. The version is read from [`delorun/apps/release/package.json`](../release/package.json), the only source the site names.
+Each page states the Delorun version it describes: the newest version in the changelog record below. With no record, the pages state no version.
 
 ## Changelog
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
@@ -9,9 +9,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 import { repositoryRoot } from './src/site/doc-links.ts'
 import { prerenderPaths } from './src/site/pages.ts'
-
-// The release tooling's package.json is the one source of the Delorun version the pages describe.
-const release = JSON.parse(readFileSync(new URL('../release/package.json', import.meta.url), 'utf8')) as { version: string }
+import { pagePaths, sitemapXml } from './src/site/sitemap.ts'
 
 /** The static site's directory: the client build, with every prerendered page. */
 const OUT_DIR = 'out'
@@ -46,13 +44,31 @@ function changelogModule(view: ChangelogView | undefined): Plugin {
 // With no assembled version there is no record: the changelog page and the home section are left out.
 const changelog = loadView(repositoryRoot())
 
+// The pages describe the newest assembled version; with no record they name none.
+const describedVersion = changelog?.versions[0]?.version ?? ''
+
+const paths = prerenderPaths(repositoryRoot(), changelog !== undefined)
+
+/**
+ * Writes `sitemap.xml` into the client output after the pages are prerendered.
+ * @returns the plugin.
+ */
+function sitemapFile(): Plugin {
+  return {
+    name: 'delorun-sitemap',
+    apply: 'build',
+    closeBundle: { order: 'post', sequential: true, handler() { writeFileSync(join(OUT_DIR, 'sitemap.xml'), sitemapXml(pagePaths(paths))) } },
+  }
+}
+
 export default defineConfig({
-  define: { 'import.meta.env.DELORUN_VERSION': JSON.stringify(release.version) },
+  define: { 'import.meta.env.DELORUN_VERSION': JSON.stringify(describedVersion) },
   // The static site is the client build in out/; the server build under .build/ exists only to prerender it.
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
     changelogModule(changelog),
+    sitemapFile(),
     fumadocsMdx(),
     tailwindcss(),
     tanstackStart({
@@ -67,7 +83,7 @@ export default defineConfig({
         crawlLinks: false,
         failOnError: true,
       },
-      pages: prerenderPaths(repositoryRoot(), changelog !== undefined).map(path => path === '/404'
+      pages: paths.map(path => path === '/404'
         ? { path, prerender: { onSuccess: ({ html }) => writeFileSync(join(OUT_DIR, '404.html'), withoutScripts(html)) } }
         : { path }),
     }),

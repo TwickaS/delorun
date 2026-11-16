@@ -15,6 +15,7 @@
 | `/zh/...` | 同样的路由，中文版；没有中文对应页的页面显示其英文文本 |
 | `/llms.mdx/<部分>/<页面>` 和 `/zh/llms.mdx/...` | 每个页面的 Markdown 版本。部分的索引页为 `/llms.mdx/<部分>/index`，目录的索引页为 `/llms.mdx/<部分>/<目录>/index` |
 | `/llms.txt`、`/zh/llms.txt` | 每种语言页面的索引，链接到它们的 Markdown 版本 |
+| `/sitemap.xml`、`/robots.txt` | 两种语言所有页面的站点地图，由构建写出；以及 `public/` 中指向它的 robots 文件 |
 | `/search.json` | 两种语言所有页面的搜索索引，由搜索对话框下载 |
 | `/404` | 地址没有对应文件时，主机通过 `404.html` 提供的页面 |
 
@@ -33,7 +34,7 @@
 
 ## 版本
 
-每个页面都标明它描述的 Delo 版本。版本从 [`delorun/apps/release/package.json`](../release/package.json) 读取，这是站点唯一引用的来源。
+每个页面都标明它描述的 Delorun 版本：下文更新日志记录中最新的版本。没有记录时，页面不标明版本。
 
 ## 更新日志
 
