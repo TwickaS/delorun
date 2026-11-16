@@ -154,7 +154,7 @@ How will you use Delorun?
 然后每个选项都会按以下顺序询问这些问题：
 
 1. **隐私。**这是一条说明，不是问题。它说明 Delorun 自己没有[遥测](../reference/glossary.zh.md#telemetry)，除非你开启，否则 DeepSeek Harness 的桌面分析和 DeepSeek 的会话日志上传都是关闭的，并且 Delorun 每天检查一次是否有更新的发布版本，不发送任何关于你的安装的信息。这条说明以此结尾：`Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.`
-2. **导入。**仅当你以前用过 DeepSeek Harness 且这个 Delorun home 没有 chat 时：`Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.` 答案默认为 No（见[从 DeepSeek Harness 切换](switching.zh.md)）。自动化选项从不询问它。
+2. **导入。**仅当你以前用过 DeepSeek Harness 且这个 Delorun home 没有 chat 时：`Copy your DeepSeek Harness chats, attachments and workspace list? Your DeepSeek Harness folder is only read. You can also do this later with delorun import-home.` 答案默认为 No（见[从 DeepSeek Harness 切换](switching.zh.md)）。自动化选项从不询问它。
 3. **模型提供方。**`Which model provider should Delorun use?` 列出 **DeepSeek (recommended)**、**More providers**（Anthropic、OpenAI、Google Gemini 等，或任何支持 OpenAI API 的服务器）和 **Choose later**。
 4. **模型密钥。**这个问题会指出提供方创建 [API 密钥](../reference/glossary.zh.md#api-key)的页面，然后询问 `How should Delorun get the DeepSeek API key?` 你可以**立即粘贴**（标为推荐），Delorun 会把它存放在你的 Delorun 文件夹中，只有你能读取；也可以**使用 `DEEPSEEK_API_KEY`**，Delorun 每次启动时都会读取它。环境变量是你的终端传递给它所启动程序的有名字的设置。如果你选择了变量而它在这个终端中没有设置，setup 会立即说明，并告诉你如何设置。setup 用一次发往提供方的请求来检查手工输入的密钥（见[模型提供方](providers.zh.md)）。
 5. **提示。**`How much should Delorun ask before it changes things?` 这就是[提示回答](../reference/glossary.zh.md#prompts-answer)。它有三个选项：
@@ -292,7 +292,7 @@ studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开�
 
 - 用手机打开 studio：[用手机访问 studio](reach.zh.md)。
 - 查看一次 chat 的花费：[查看一次 chat 的花费](cost-meter.zh.md)。
-- 用插件、预设和 skill 重塑 Delorun：[什么该在哪里定制](https://docs.delorun.com/guide/customise)。
+- 用插件、预设和 skill 重塑 Delorun：[什么该在哪里定制](customise.zh.md)。
 
 </details>
 

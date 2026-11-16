@@ -144,7 +144,7 @@ If you are unsure, choose the first. Most people then answer three questions: th
 Every choice then asks these questions, in this order:
 
 1. **Privacy.** A note, no question. It says that Delorun has no [telemetry](../reference/glossary.md#telemetry) of its own, that DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and that once a day Delorun checks whether a newer release exists and sends nothing about your installation. The note ends: `Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.`
-2. **Import.** Only if you used DeepSeek Harness before and this Delorun home has no chats: `Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.` The answer starts on No ([Switching from DeepSeek Harness](switching.md)). The automation choice never asks it.
+2. **Import.** Only if you used DeepSeek Harness before and this Delorun home has no chats: `Copy your DeepSeek Harness chats, attachments and workspace list? Your DeepSeek Harness folder is only read. You can also do this later with delorun import-home.` The answer starts on No ([Switching from DeepSeek Harness](switching.md)). The automation choice never asks it.
 3. **Model provider.** `Which model provider should Delorun use?` lists **DeepSeek (recommended)**, **More providers** (Anthropic, OpenAI, Google Gemini and others, or any server that speaks the OpenAI API) and **Choose later**.
 4. **Model key.** The question names the provider's page for creating an [API key](../reference/glossary.md#api-key), then asks `How should Delorun get the DeepSeek API key?` You can **paste it now** (marked recommended), and Delorun stores it in your Delorun folder where only you can read it, or **use `DEEPSEEK_API_KEY`**, which Delorun reads each time it starts. An environment variable is a named setting that your terminal passes to the programs it starts. If you choose the variable and it is not set in this terminal, setup says so at once and tells you how to set it. Setup checks a typed key with one request to the provider ([Model providers](providers.md)).
 5. **Prompts.** `How much should Delorun ask before it changes things?` This is the [prompts answer](../reference/glossary.md#prompts-answer). It has three choices:
@@ -280,7 +280,7 @@ A new chat starts in one of the agent [presets](../reference/glossary.md#preset)
 
 - Open the studio from your phone: [Reach the studio from your phone](reach.md).
 - See what a chat costs: [See what a chat costs](cost-meter.md).
-- Reshape Delorun with plugins, presets and skills: [Where to customise what](https://docs.delorun.com/guide/customise).
+- Reshape Delorun with plugins, presets and skills: [Where to customise what](customise.md).
 
 </details>
 
