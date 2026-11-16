@@ -258,7 +258,7 @@ describe('delorun setup import', () => {
 
   it('asks about an endpoint that is not the provider\'s default separately, and changes nothing when it is declined', async () => {
     const source = await world('source', true)
-    writeFileSync(join(source.profileDir, 'cordis.patch.yml'), `${SOURCE_PATCH}- id: llm-pi-ai\n  config:\n    providers:\n      custom:\n        baseURL: https://models.example.com/v1\n        apiKeyEnv: CUSTOM_API_KEY\n`)
+    writeFileSync(join(source.profileDir, 'cordis.patch.yml'), `${SOURCE_PATCH}- id: llm-pi-ai\n  config:\n    providers:\n      custom:\n        baseURL: https://models.example.com/v1\n`)
     const archive = await exportFrom(source)
     const target = await world('target', false)
     const before = readFileSync(join(target.profileDir, 'package.json'), 'utf8')

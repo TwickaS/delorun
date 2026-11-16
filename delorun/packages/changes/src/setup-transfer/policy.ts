@@ -9,6 +9,7 @@
  *
  * @module @delorun/changes/setup-transfer/policy
  */
+import { PROVIDER_DATA } from '@deepseek-ai/dsh-llm-pi-ai/src/provider-data.generated.ts'
 import { SECRET_PATTERNS } from '@delorun/archive'
 
 /** The scopes of the packages that make up Delorun and upstream's harness. A setup neither carries nor removes them. */
@@ -282,10 +283,10 @@ const DEFAULT_HOSTS: Readonly<Record<string, string>> = { deepseek: 'api.deepsee
 
 /**
  * @param provider - a provider's name.
- * @returns the one environment variable a setup may name as that provider's key: `DEEPSEEK_API_KEY` for DeepSeek, otherwise the upper-cased name with `_API_KEY`.
+ * @returns the environment variables a setup may name as that provider's key: those the installed pi-ai catalog lists for it (`GEMINI_API_KEY` for `google`); none for a provider the catalog does not know.
  */
-export function defaultKeyVariable(provider: string): string {
-  return `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
+export function defaultKeyVariables(provider: string): readonly string[] {
+  return (PROVIDER_DATA as Partial<Record<string, { readonly env: readonly string[] }>>)[provider]?.env ?? []
 }
 
 /**
@@ -342,8 +343,8 @@ export function offDefaultEndpoints(row: PatchEntry): { readonly provider: strin
  */
 function keyVariableProblems(row: PatchEntry): string[] {
   return routeFields(row)
-    .filter(({ kind, provider, value }) => kind === 'key' && value !== defaultKeyVariable(provider))
-    .map(({ field, provider }) => `has ${field}, which names a variable other than ${defaultKeyVariable(provider)}, so a setup does not carry it`)
+    .filter(({ kind, provider, value }) => kind === 'key' && !defaultKeyVariables(provider).includes(value))
+    .map(({ field, provider }) => `has ${field}, which names a variable other than ${defaultKeyVariables(provider).join(', ') || 'one the catalog lists'}, so a setup does not carry it`)
 }
 
 /**

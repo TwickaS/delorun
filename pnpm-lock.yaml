@@ -2123,6 +2123,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-pi-ai
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager

@@ -122,7 +122,6 @@ const SOURCE_PATCH = `
     providers:
       custom:
         baseURL: https://models.example.com/v1
-        apiKeyEnv: CUSTOM_API_KEY
 - insert:
     - id: plug-row
       name: plug
