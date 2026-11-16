@@ -6,7 +6,7 @@
  * | --- | --- |
  * | `delorun [--profile <name>] [--foreground \| --background]` | runs setup on a home without the CLI profile; otherwise starts the home process detached from the terminal, or in this terminal, as `--background`, `--foreground` or else setup's answer says, and opens the studio |
  * | `delorun setup [<section>] [--profile <name>] [--list]` | setup by how you use Delorun, or one section again ([setup](./setup/index.ts)) |
- * | `delorun setup export --out <file>`, `delorun setup import <file> [--dry-run]` | the plugins, model choices and settings of a profile as one signed archive, and its import, which replaces the profile's setup after showing what changes ([transfer](./setup/transfer.ts)) |
+ * | `delorun setup export --out <file>`, `delorun setup import <file> [--dry-run]` | the plugins, model choices and settings of a profile as one signed archive, and its import, which replaces the profile's setup after showing what changes ([transfer](./changes/setup-transfer.ts)) |
  * | `delorun start [--foreground \| --background] [--open] [--profile <name>] [--patch <file>]... [--inspect [--yes]]` | the home process detached from the terminal, or in this terminal, with the person's overlays and, once confirmed, a debugger port ([start](./start.ts), [inspector](./inspector.ts)) |
  * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |

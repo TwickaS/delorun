@@ -19,7 +19,7 @@ const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 const HARNESS_ACTIONS = ['applyHarnessChange', 'discardHarnessChange', 'undoHarnessChange', 'discardAllHarnessChanges', 'createHarnessCopy']
 
 /** The functions that decide a change or prove presence. */
-const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange', ...HARNESS_ACTIONS]
+const GUARDED = ['applyChange', 'applyInstallChange', 'applySetupImport', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange', ...HARNESS_ACTIONS]
 
 /** The function that leaves a change out without a proof of presence, because a start failed. */
 const START_ONLY = 'leaveOutNewestChange'

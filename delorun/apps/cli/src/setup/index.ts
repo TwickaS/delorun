@@ -464,7 +464,7 @@ export const setupCommand: CliCommand = {
   summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them; export and import move a setup between computers',
   async run(args, context) {
     // `export` and `import` are not sections: they move a whole setup between computers.
-    if (args[0] === 'export' || args[0] === 'import') return (await import('./transfer.ts')).runSetupTransfer(args, context)
+    if (args[0] === 'export' || args[0] === 'import') return (await import('../changes/setup-transfer.ts')).runSetupTransfer(args, context)
     const { values, positionals } = (() => {
       try {
         return parseArgs({ args: [...args], options: {

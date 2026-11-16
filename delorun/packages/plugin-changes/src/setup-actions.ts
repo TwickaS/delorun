@@ -13,8 +13,8 @@
  */
 import { randomBytes } from 'node:crypto'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
-import { readProtection, type AtComputer, type ChangesContext, type PluginOperation, type ReloadHost } from '@delorun/changes'
-import { applySetupImport, collectSetup, planSetupImport, type SetupPlan } from '@delorun/changes/setup-transfer'
+import { readProtection, type ChangesContext } from '@delorun/changes'
+import { collectSetup, planSetupImport, type SetupApplied, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { join } from 'node:path'
 import type { SetupApplyView, SetupExportView, SetupInspectView } from './wire.ts'
 
@@ -193,29 +193,20 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
   }
 }
 
-/** What applying a held file needs besides the token. */
-export interface ApplyEnvironment {
-  /** Proof that the person is at their computer. */
-  readonly presence: AtComputer
-  /** Reloads the running Host. */
-  readonly reload: ReloadHost
-  /** Upstream's plugin operation for the profile. */
-  readonly run: PluginOperation
-}
-
 /**
- * Apply an inspected file.
+ * Apply an inspected file. The application itself is `apply`, which the routes pass in with the proof that the request
+ * came from the person at their computer, because only the routes decide a change.
  * @param ctx - the profile.
  * @param token - the token the inspection returned.
  * @param held - where the validated file waits.
- * @param environment - the person's presence, the reload and the plugin operation.
+ * @param apply - applies the held file's setup to the profile.
  * @returns what was done.
  * @throws {SetupRefusal} `410 SETUP_EXPIRED` for a token that names no file waiting; the changes errors of the application propagate.
  */
-export async function applySetup(ctx: ChangesContext, token: string, held: HeldSetups, environment: ApplyEnvironment): Promise<SetupApplyView> {
+export async function applySetup(ctx: ChangesContext, token: string, held: HeldSetups, apply: (opened: OpenedSetup) => Promise<SetupApplied>): Promise<SetupApplyView> {
   const opened = held.take(ctx.profile, token)
   const { plan } = await planSetupImport(ctx, opened.document)
-  const result = await applySetupImport(ctx, opened.document, { ...environment, readFile: opened.readFile })
+  const result = await apply(opened)
   return {
     savedVersion: result.savedVersion,
     removed: result.removed,

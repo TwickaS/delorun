@@ -7,7 +7,7 @@
  * and asks. It applies only through Changes' plugin requests, so the install checks, the build-script holds and the
  * review of a local plugin's code are the ones a hand install meets.
  *
- * @module @delorun/cli/setup/transfer
+ * @module @delorun/cli/changes/setup-transfer
  */
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -16,8 +16,8 @@ import { attestTerminal, isChangesError, readProtection, type ChangesContext, ty
 import { applySetupImport, collectSetup, planSetupImport, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { printable, quoted } from '../terminal-text.ts'
 import { parseFailure, prepareHome, type CommandContext, type CommandResult } from '../command.ts'
-import type { ChangesCommandDependencies } from '../changes/command.ts'
-import { terminalDependencies } from '../changes/command.ts'
+import type { ChangesCommandDependencies } from './command.ts'
+import { terminalDependencies } from './command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { writeNewFile } from '../export/index.ts'
 import { IMPORT_LIMITS, readArchiveFile } from '../import/index.ts'

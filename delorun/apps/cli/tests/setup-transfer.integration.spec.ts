@@ -17,7 +17,7 @@ import type { ChangesCommandDependencies } from '../src/changes/command.ts'
 import type { CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { setupCommand } from '../src/setup/index.ts'
-import { runSetupTransfer } from '../src/setup/transfer.ts'
+import { runSetupTransfer } from '../src/changes/setup-transfer.ts'
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
 

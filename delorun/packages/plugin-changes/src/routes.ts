@@ -113,6 +113,7 @@ import {
   type WorkspacesView,
 } from './wire.ts'
 import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget, type WorkspaceChoice } from './create-actions.ts'
+import { applySetupImport } from '@delorun/changes/setup-transfer'
 import { applySetup, exportSetup, HeldSetups, inspectSetup, MAX_SETUP_FILE_BYTES, SetupRefusal } from './setup-actions.ts'
 
 export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
@@ -1019,7 +1020,7 @@ function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependenc
         } else {
           onlyFields(body, ['token'])
           if (typeof body['token'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the inspected file by its token.')
-          answer = await applySetup(ctx, body['token'], held, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx) })
+          answer = await applySetup(ctx, body['token'], held, opened => applySetupImport(ctx, opened.document, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx), readFile: opened.readFile }))
         }
       } catch (error) {
         if (error instanceof SetupRefusal) throw new RouteRefusal(error.status, error.code, error.message)
