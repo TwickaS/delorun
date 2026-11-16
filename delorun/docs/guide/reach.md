@@ -122,6 +122,7 @@ A phone that Tailscale reports as signed in as the user you allowed can ask outs
 - If you type the wrong code, then you may type it again; the third wrong code cancels only that request — ask again from the phone for a new code. The phone shows "Request cancelled".
 - If a code is older than 5 minutes, then the phone shows "This code expired" — ask again.
 - If `delorun devices approve` finds no request before the window closes, then it exits with "No device asked for approval before the window closed" — run it again and ask from the phone within 5 minutes.
+- If `delorun devices approve` runs where nothing can answer its question (standard input is not a terminal or has closed), then it exits with code 1 and "this needs you at a terminal to answer; run it in one" — run it in a terminal.
 - If remote access is off, then `delorun devices approve` still works and says a phone cannot reach this computer yet — turn it on with `delorun reach on tailscale` first.
 - If Delorun is not running, then `delorun devices approve` refuses and says to run `delorun start`.
 - If a device name or platform contains control or text-direction characters, then the home refuses it and the phone asks for a different name.
