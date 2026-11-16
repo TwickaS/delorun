@@ -6,6 +6,8 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是 [约定 C19](../../docs/contracts/c19-home-process.zh.md) 中的 home 进程（home process）：每个 CLI（命令行界面）profile 一个进程，它持有该 profile 在 `~/.delorun` 下的 home 锁，每次启动写入新的启动令牌，在 `run/<profile>/update.sock` 上提供更新通道，在调用方传入监管器设置时启动 Docker 监管器（Docker supervisor，[C9](../../docs/contracts/c09-runtime-supervisor.zh.md)），并在同一进程中运行该 profile 的 Host。`delorun start` 不传入监管器设置，因此没有监管器运行（[监管器](#the-supervisor)）。更新只能经由更新通道到达它，并且只有在旧运行时上不再有对话运行后，profile 才会切换到新运行时，因此 `current` 从不在运行中的对话下切换。它将日志写入 [C20](../../docs/contracts/c20-operational-logs.zh.md) 的 `home-<profile>` 入口，写入时经由 [`@delorun/logs`](../logs/README.zh.md)。协议的类型与取值来自 [`@delorun/contract-home-process`](../contract-home-process/README.zh.md)；锁、令牌与通道的监听器来自 [`@delorun/home`](../home/README.zh.md)。`delorun start`、`stop` 与 `status`（[`delorun/apps/cli`](../../apps/cli/README.zh.md)）驱动它。

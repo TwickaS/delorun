@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/settings-controls` 重新导出 [`@delorun/brand`](../brand/README.zh.md)（唯一来源）中、每个 Delorun 设置分区所用的控件，使不同插件的分区外观与行为一致：带句首大写标题的卡片、单项设置的标题与帮助、“通用”行的框架、单选分段控件和预览图块。插件专用的控件，例如顶部图案条或对比度滑块，仍留在各自的插件中。入口是 `src/index.ts`，以 `.` 从源码导出。

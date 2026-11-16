@@ -6,6 +6,8 @@ description: "约定 C18 的客户端 release-log 验证：对已安装版本的
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 已安装的版本在清单文件旁附带一个 release-log bundle：清单文件的 Rekor v2 `hashedrekord` 条目、该条目的包含证明，以及日志签名并由见证者联签的检查点。本包按客户端自己可信根中的密钥离线验证该 bundle，在线证明与日志最新检查点的一致性，保存验证通过的检查点与每个已安装版本的检查状态，并回答启动时该怎么做：继续、带着点名未检查版本的警告继续，或停止。调用方说明缺失 bundle 的含义（`missingBundle`）：对运行时仓库安装的版本为 `failed`（`bundle-malformed`），因为该仓库会保留它验证过的 bundle；只有对安装之后才获取 bundle 的客户端才为 `unchecked`。安装器、启动器的启动与 `delorun verify` 都通过 `record` 运行它，因此检查只有一份，每种记录也只有一种格式。home 进程运行期间对 `unchecked` 版本的检查服务重试（`ReleaseVerification`）已构建，但没有任何随附的进程使用它，因此版本会一直处于 `unchecked`，直到下一次启动或 `delorun verify`。规格见[约定 C18](../../docs/contracts/c18-release-log.zh.md)。

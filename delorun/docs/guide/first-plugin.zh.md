@@ -6,6 +6,8 @@ description: "你的第一个 Delorun 插件，从零到在 studio 中看到它�
 
 [English](first-plugin.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页带你从一个空文件夹走到一个能在 studio 中看到的插件，然后再把它移除。这个插件是一个按名字问候某人的小工具。你需要一个已完成 setup 的 Delorun、Node.js 24.9 或更新版本，以及 pnpm；第一节说明如何检查它们。这里的任何步骤都不需要模型密钥。读完之后，你会制作一个插件、在 Delorun 运行时修改它，并把它卸载。[为 Delorun 编写插件](plugins.zh.md)是完整的参考，[什么该在哪里定制](customise.zh.md)帮你判断插件是否适合你的更改。

@@ -6,6 +6,8 @@ description: "更新 Delorun：更新通知以及如何关闭它，delorun updat
 
 [English](updates.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页介绍如何查看新的 Delorun 发布版本会改变什么、如何安全地应用它，以及出问题时如何回退。你需要通过启动器安装 Delorun（见[安装与首次运行](install.zh.md)），并且安装有 git。当存在更新的发布版本时 Delorun 会告诉你，在应用任何东西之前会显示它将改变什么，并且只有在你确认之后才会应用。切换之前，它会保存你的 [profile 历史](../reference/glossary.zh.md#profile-history)；当新的发布版本改变了 chat 的存储方式时，它会先复制你的 chat 数据。切换之后，它会检查新的发布版本，如果检查失败，会自行回退。你的插件、预设和 profile 更改会被保留；当某个发布版本无法保留其中某一项时，报告会在你做决定之前指出它。

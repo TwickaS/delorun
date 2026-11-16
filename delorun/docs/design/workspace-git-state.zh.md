@@ -6,6 +6,8 @@ description: "尚待决定的设计选项：在可写工作区内，让受限命
 
 [English](workspace-git-state.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 在 `workspace-write` 下，受限命令可以写入仓库的 `.git/config`、它所包含的文件、`.git/hooks` 和 `.git/info/attributes`。harness 自己的 git 命令在加固后、在 Session 的沙箱内运行，所以这类设置不会以 harness 的权限启动任何程序。此人自己的 git、编辑器以及在沙箱之外读取仓库的其他工具则没有经过加固：受限命令写在那里的设置，可以在此人下次在该仓库中运行 git 时，以此人的完全访问权限启动一个程序。本页陈述关闭这一点的一个方向，留待以后决定。它尚未被采纳。

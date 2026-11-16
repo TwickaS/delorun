@@ -6,6 +6,8 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 [English](update-and-rollback.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 在更新更改任何东西之前，Delorun 会显示一份报告，说明新的发布版本会关闭、移除或更改什么，包括它是否改变 chat 数据的存储方式。如果改变，除非此人拒绝，Delorun 会先复制 chat 数据，这样回到上一个发布版本仍然可行。每一种回退的途径都经过同一个函数和同一张表，并且回退从不删除 chat 数据：更新之后写下的 chat 会被搁置，而不是移除。更新报告的类型和规则见[约定 C3](../contracts/c03-update-report.zh.md)，home 进程的更新握手见[约定 C19](../contracts/c19-home-process.zh.md)，home 的目录见[约定 C1](../contracts/c01-home-layout.zh.md)。

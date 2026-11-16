@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-thinking-rsvp/README.md
 /delorun-plugin-thinking-rsvp:
   en: 3f8acd5118dfc9d0
-  zh: a0af86f10191e6f4
+  zh: 1fa734286e5047e4
 /delorun-plugin-thinking-rsvp/using-the-tab:
   en: 7fa6aab5c0614cba
   zh: 81220fdd0a7bcc9f

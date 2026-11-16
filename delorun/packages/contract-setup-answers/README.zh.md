@@ -6,6 +6,8 @@ description: "只含类型的包，保存 delorun setup 回答文档的类型、
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出 `delorun setup` 的回答文档：其类型、setup 提供的模型提供商、其默认值、早先文档携带而 setup 不再询问的键、「隐私」部分两项选择加入所写入的上游 profile 行，以及发布检查回答所写入的行。交互式 setup、`--yes` 与 `--config` 形式，以及 studio 的同意屏幕都导入这些定义，因此每个默认值只有一个来源。规格见[约定 C11](../../docs/contracts/c11-setup-answers.zh.md)。

@@ -6,6 +6,8 @@ description: "Delorun studio 中的回收站（C8）：chat 和工作区菜单�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 按[约定 C8](../../docs/contracts/c08-archive-and-trash.zh.md)的要求，在 studio 中删除 chat 或工作区时，条目会移到回收站，而不是被销毁。该插件在每个 chat 和每个工作区的菜单中添加「移到回收站」操作；在设置中添加「回收站」部分，列出已删除的内容及每项剩余的天数，可恢复条目，也可永久删除单个或全部条目；并在每次启动时删除所有超过 30 天的条目。[`@delorun/bundle-local`](../bundle-local/README.zh.md)在每个 Delorun CLI profile 中挂载它。回收站本身是 [`@delorun/trash`](../trash/README.zh.md)。

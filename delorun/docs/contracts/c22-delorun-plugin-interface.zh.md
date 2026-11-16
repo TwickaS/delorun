@@ -6,6 +6,8 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 
 [English](c22-delorun-plugin-interface.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 插件运行在两条版本轴上（[C17](c17-plugin-versions.zh.md)）：上游的 `engines.dsh` 和 Delorun 的 `engines.delorun`。两条轴相互独立；一条轴上的范围从不代替另一条。本页说明 Delorun 的版本对声明了 `engines.delorun` 的插件作出哪些承诺：承诺涵盖哪些接口，各类发布可以更改什么，次版本发布保持同一个上游基线，以及 1.0 之前的版本如何解读。对于会破坏该承诺的补丁发布，发布工具在能够机械检查的范围内拒绝。`delorun plugin check <directory>` 向作者展示其范围允许什么。清单的类型位于 [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.zh.md)。

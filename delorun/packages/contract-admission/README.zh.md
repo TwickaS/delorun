@@ -6,6 +6,8 @@ description: "只含类型的包，保存 home 准入的监听器 id、准入结
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出 home 准入的标识符与限值：监听器 id 及其策略、Authenticator 的 `admit` 的结果、远程访问（reach）监听器的登录前路由、拒绝代码及其 HTTP 状态、远程访问会话 cookie，以及会话有效期。上游连接与 web 服务器的编辑、`@delorun/home-auth` 与 `@delorun/reach` 都导入这些定义，因此每个代码与限值只有一处定义。规格见[约定 C4](../../docs/contracts/c04-admission.zh.md)。

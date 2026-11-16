@@ -6,6 +6,8 @@ description: "契约 C3：Delorun 更新应用之前显示的更新报告，其�
 
 [English](c03-update-report.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 更新应用之前，Delorun 会显示目标发布将在本人（the person）的 profile 中改变或破坏什么：它将停用、移除或更改的每个插件、组合包与 profile 行，以及本人修改过的 harness 的每个文件（并说明该修改是否沿用），连同原因，以及该预测是基于 Delorun 能够读取的元数据（已验证）还是不能读取的元数据（未验证）。本人确认之前，任何内容都不会应用。CLI（命令行界面）home 与桌面 Host 是彼此独立更新的两套安装，报告同时显示两者的版本与更新状态。切换之后，健康检查会在 120 秒内判定更新是否成立；检查失败会自动回滚，本人之后也可以随时回滚。profile 历史（profile history）的撤销与恢复会运行与安装相同的插件检查，并在应用之前列出它们会改变的内容。类型位于 [`@delorun/contract-update-report`](../../packages/contract-update-report/README.zh.md)。

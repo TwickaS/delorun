@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/contract-release-log` 定义发布 manifest（元数据清单）的 Rekor v2 `hashedrekord` 请求与条目主体（Ed25519ph，`PKIX_ED25519_PH`）、发布日志 bundle（它携带该条目、其包含证明与一个经见证的检查点）、客户端按已安装发布版本记录的检查状态，并以常量形式给出见证者阈值、检查点时长、重试间隔与大小上限。本包只包含导出的类型与只读常量，没有运行时代码，因此从不改变任何进程的行为；约定页面 [C18 发布日志与见证者](../../docs/contracts/c18-release-log.zh.md) 是权威，本包遵循它。其入口为 `src/index.ts`，导出为 `.`。

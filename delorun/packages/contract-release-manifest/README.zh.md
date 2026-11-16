@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/contract-release-manifest` 定义 Delo 发布的文件：Ed25519 签名信封、根与时间戳元数据及其密钥角色、发布 manifest（元数据清单）、运行时文件列表、重建记录与安全公告接受记录，并以常量形式给出有效期与大小上限。本包只包含导出的类型与只读常量，没有运行时代码，因此它从不改变进程的行为；约定页面 [C2 发布 manifest 与签名](../../docs/contracts/c02-release-manifest.zh.md)是权威依据，本包遵循它。其入口是 `src/index.ts`，导出为 `.`。

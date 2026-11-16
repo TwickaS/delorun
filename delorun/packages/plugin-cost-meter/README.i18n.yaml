@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-cost-meter/README.md
 /delorun-plugin-cost-meter:
   en: 18e5c18fd6331fce
-  zh: 8e8866efb030efff
+  zh: 2266c2d2484f650a
 /delorun-plugin-cost-meter/what-it-shows:
   en: 3772c5be76168a17
   zh: aa5e4c5d05b29691

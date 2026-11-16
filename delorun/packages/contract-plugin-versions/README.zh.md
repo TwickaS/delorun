@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/contract-plugin-versions` 定义插件接受检查的两条版本轴（上游的 `engines.dsh` 与 Delo 的 `engines.delorun`）、一次评估的按轴结果、每条轴的豁免文件与选项，以及 `delorun --version` 的输出。本包只包含导出的类型与只读常量，没有运行时代码，因此从不改变任何进程的行为；约定页面 [C17 插件版本要求](../../docs/contracts/c17-plugin-versions.zh.md) 是权威，本包遵循它。其入口为 `src/index.ts`，导出为 `.`。

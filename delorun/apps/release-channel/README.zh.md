@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 生产环境的发布渠道：保存已签名发布文件的 R2 存储桶、提供这些文件的公开 Worker、每天重新签署 `timestamp.json` 并保存高水位标记的 cron Worker，以及发布一个发布版本的命令。约定 [C2](../../docs/contracts/c02-release-manifest.zh.md) 定义这些文件；本包托管它们，自身不增加任何密码学实现。它复用 `@delorun/release-formats` 进行验证，复用 `@delorun/release` 的 `sign/timestamp.ts` 生成重新签署的时间戳的内容。
 
 - [模块](#modules)

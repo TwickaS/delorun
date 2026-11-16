@@ -6,6 +6,8 @@ description: "打开导入的 chat 与应用归档定制的设计：带有横幅
 
 [English](imported-chats.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `delorun import` 会验证归档、检查其签名，并把它的工作区存储在 home 之下，而没有任何东西读取它存储的内容。本页给出 Delorun 为使用导入内容所采纳的规则：在 studio 中把导入的 chat 作为不受信任的 chat 打开，在人信任它们之前其历史记录不进入模型上下文；在差异界面之后应用归档的定制行；以及导入 stock DeepSeek Harness 的 home。归档格式和导入的验证见[约定 C8](../contracts/c08-archive-and-trash.zh.md)。

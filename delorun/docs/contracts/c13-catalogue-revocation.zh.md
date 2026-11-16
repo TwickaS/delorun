@@ -6,6 +6,8 @@ description: "约定 C13：Discover 首先列出的已签名插件索引文件�
 
 [English](c13-catalogue-revocation.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 插件索引是一份公开的插件清单，位于 `Delo-Run` 的仓库 `Delo-Run/delo-plugins` 中，添加插件的方式是提交一个 PR（Pull Request）。它的发布任务使用 [C2](c02-release-manifest.zh.md#key-roles) 的插件索引密钥为两个文件签名，即索引文件与撤销列表，GitHub Pages 在 `catalogue.delorun.com` 上提供它们；该托管方不受信任，因为客户端会拒绝签名无法验证的文件。索引条目固定确切的插件版本及其完整性哈希，带有来自兼容性语料库的「tested with Delorun X」徽章，并且可以列出发现，studio 会把这些发现显示为插件作者或具名评审者的主张：Delorun 不执行插件审计，也不核实这些发现。撤销列表列出 Delorun 会在其下一次加载时停用的插件版本，并带有防止回放的序列号、一个过期时间以及 24 小时的最长缓存时长；超过该时长后，studio 进入陈旧状态。这些类型位于 [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.zh.md)。

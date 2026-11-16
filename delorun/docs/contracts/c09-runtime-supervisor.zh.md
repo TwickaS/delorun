@@ -6,6 +6,8 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 [English](c09-runtime-supervisor.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本约定定义工作区如何选择其命令的运行位置，以及唯一与 Docker 通信的 Delorun 组件。运行时提供方报告机器能隔离和强制执行什么，并以原生方式或以两种 Docker 形态之一运行每个工作区：S2，每个 Docker 工作区有自己的容器；受限的 S3，一个容器隔离计算机，但不隔离各工作区之间。Docker 监管器只从已校验发布所列的镜像摘要运行工作区容器，只在本人于 setup 时选择的根目录之下运行，并通过 `~/.delorun` 下一个套接字上的固定结构 API 提供服务；该套接字只接受当前 home 进程启动的令牌，且从不把请求透传给 Docker。每项限制只有在检查机器表明其生效时才报告为已强制执行。类型包 [`@delorun/contract-runtime-supervisor`](../../packages/contract-runtime-supervisor/README.zh.md) 提供接口、结构、预设与限额。

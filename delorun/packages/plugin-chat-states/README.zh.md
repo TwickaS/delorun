@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本人可以把 chat 暂缓到稍后，或把已完成的 chat 搁置，它随即移到侧栏 chat 列表下方折叠的「已暂缓」或「已搁置」搁架。harness 把每个 chat 的状态保存在自己的存储中，位于 session 日志之外，所以模型永远看不到它，每个浏览器和手机显示的侧栏也相同。studio 一半注册这些搁架，在 chat 菜单中添加「暂缓」和「搁置」，添加悬停的搁置按钮，并在设置中编辑暂缓预设和自动搁置。暂缓预设和暂缓对话框移植自 T3 Tools 的 [T3 Code](https://github.com/pingdotgg/t3code)，采用 MIT 许可（[声明](THIRD_PARTY_NOTICES.md)）。`@delorun/bundle-studio` 以行 `delorun-chat-states` 挂载本包。

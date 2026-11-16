@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/bundle-local` 是 Delorun 的 CLI profile 在上游 `web` profile 模板之后加入的组合包。它的 patch 保存 Delorun 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delorun 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面应用的分析，并在设置中新增“隐私”分区（本人在其中经同意对话框后逐项打开，也可再关闭）、“关于”分区以及发布检查所在的“通用”行（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。它挂载 Delorun 的同意与守卫插件并打开其开关：指令层写入同意（连同对已批准插件的写入同意）、MCP 添加时同意、带有唯一一次完全访问同意的按工作区权限默认值、计划任务同意、抓取防护，以及留待审查的插件变更；它还挂载更新闸门，在 `delorun update` 或 `delorun stop` 等待运行中的 chat 结束时拒绝新的轮次；并在上游的 sandbox 行上设置 C1 的 home 保护，使受限命令在 Linux 与 macOS 上无法读取 home 的 `secrets/` 之下的同意存储，Windows 运行器不隔离读取。它在上游的 `workspace-controller` 行上，把 studio 首次使用的工作区所在文件夹设为 `delorun start` 解析出的文件夹，使上游的文档目录查找找不到文档目录时，studio 仍有默认工作区。只有 CLI profile 加载本组合包：`delorun headless` 加载 [`@delorun/bundle-headless`](../bundle-headless/README.zh.md)，它挂载同样的同意与守卫插件，以同样的方式保护它们，并关闭会话日志上传；`delorun plugin` 与桌面应用运行上游自己的 profile，其中这些行都不适用，会话日志上传保持打开。它还打开上游的一次性启动令牌，因此 studio 登录链接只能在一分钟内使用一次。

@@ -6,6 +6,8 @@ description: "把你在 chat.deepseek.com 上的 chat 带入 Delorun：从网站
 
 [English](import-deepseek-chats.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页介绍如何把 DeepSeek 网站（chat.deepseek.com）上的 chat 带入 Delorun，在这里阅读并继续对话。如果你在开始使用 Delorun 之前用过该网站，它会有帮助。你需要先让 Delorun 运行起来，并有一个用来存放这些 chat 的[工作区](../reference/glossary.zh.md#workspace)。导入是一个可选插件，在你开启之前是关闭的。导入本身只读取你上传的文件，不发送任何东西到任何地方。继续一个导入的 chat 则不同：下一次请求会把整段导入的历史发送给你的模型提供方，并像任何长 chat 一样消耗 token。

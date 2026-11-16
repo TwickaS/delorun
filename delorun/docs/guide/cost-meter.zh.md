@@ -6,6 +6,8 @@ description: "查看一次 chat 花了多少钱：如何开启成本计量器，
 
 [English](cost-meter.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页介绍如何在输入框下方查看一次 [chat](../reference/glossary.zh.md#chat) 已花费金额的估算。如果你按用量向提供方付费，并想知道哪些 chat 花钱多，它会有帮助。你需要先让 Delorun 带着一家模型提供方运行起来（见[模型提供方](providers.zh.md)）。术语表介绍了[成本计量器](../reference/glossary.zh.md#cost-meter)。计量器在你开启之前是关闭的，并且它自己不发出任何请求：它只是把提供方已经报告的用量加起来。

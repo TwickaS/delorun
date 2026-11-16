@@ -6,6 +6,8 @@ description: "从 DeepSeek Harness 切换到 Delorun：哪些保持不变、哪�
 
 [English](switching.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页帮助你从 DeepSeek Harness 迁移到 Delorun，而不丢失你的 chat。DeepSeek Harness 是 Delorun 所基于的程序，指其维护者自己发布的版本。Delorun 运行 DeepSeek Harness 的代码，所以你的 [chat](../reference/glossary.zh.md#chat)、[工作区](../reference/glossary.zh.md#workspace)和 [profile](../reference/glossary.zh.md#profile) 可以复制过来，你的插件在安装之后也能工作。DeepSeek Harness 把这些保存在名为 `~/.dsh` 的文件夹中。Delorun 保有自己的 [home](../reference/glossary.zh.md#home)，即 `~/.delorun`，并把你选择的内容从 `~/.dsh` 复制进去。复制只读取 `~/.dsh`，其中的任何内容都不会改变，所以 DeepSeek Harness 会和以前完全一样地继续工作。

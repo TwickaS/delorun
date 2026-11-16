@@ -6,6 +6,8 @@ description: "Delorun 的日常命令、一次启动和一次停止要花多长�
 
 [English](commands-and-start.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 这些套件为本人在更新之外需要等待的事项计时：日常命令、启动和停止 Delorun、首次安装、恢复、导出和回收站、插件、没有模型的 chat 轮次，以及浏览器中的 studio。每个命令都通过启动器运行，就像本人的 `delorun` 那样。有了快速启动检查，大多数命令在 1 至 2.5 秒内答复；仍然较长的等待是首次安装（到 studio 约 52 秒）、home 的首次启动（21 秒）、`delorun stop`（15 秒）、`recover status`（15 秒）、`verify --offline`（17 秒）以及安装插件（到其行运行为止 14 秒）。

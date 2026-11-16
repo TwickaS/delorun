@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/plugin-schedule-consent` 提供 `scheduleConsent` 服务，它是 Schedule consent seam（[`packages/schedule`](../../../packages/schedule)）的 Service Provider：[`tool-schedule`](../../../packages/schedule/tool-schedule) 把服务的命名并入每个 `schedule_create` 与 `schedule_edit` 批准询问，Schedule 投递运行时在每次到期投递唤醒其 Session 之前向该服务询问。命名会说明该调用激活或保留的重复规则、投递到达的 chat 以及该 chat 运行的权限预设。审查只在目标 chat 仍运行该任务批准时所用的权限预设时放行；其他任何读取都以说明性的原因拒绝，运行时随之暂停被拒绝的任务，使之后的任何一次到期都不再重试，拒绝以类型化的 `schedule/consent-refused` 错误呈现。seam 是可选的：上游的 Schedule 以 `ctx.get('scheduleConsent')` 机会式地读取它，因此插件不在——或 `enabled` 关闭（schema 的默认值）时——批准与投递与上游完全一致。

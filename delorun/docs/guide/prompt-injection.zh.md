@@ -6,6 +6,8 @@ description: "Delorun 中的提示词注入与数据外泄：一次攻击需要�
 
 [English](prompt-injection.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页帮助你决定每个工作区应当拥有多少网络访问，使模型读到的文字无法让它把你的私有数据送出去。你需要先让 Delorun 运行起来（见[安装与首次运行](install.zh.md)），并至少有一个[工作区](../reference/glossary.zh.md#workspace)。

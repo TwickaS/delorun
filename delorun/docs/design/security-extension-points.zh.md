@@ -6,6 +6,8 @@ description: "Delorun 的安全扩展点设计：插件可以在哪里添加检�
 
 [English](security-extension-points.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 Delorun 的安全可以在不编辑其核心的情况下增长：插件可以在审阅更改、批准设备、Delorun 启动或 Delorun 更新的地方添加检查。添加只能让 Delorun 更严格，绝不能让它更宽松。每个扩展点的注册表先运行 Delorun 的内置检查，并合并每个结果，使任何拒绝都会拒绝，任何必需的确认都是必需的，并且没有任何注册可以移除、替换、排到内置检查之前或覆盖内置检查。这使[安全基本原则](../security/fundamentals.zh.md)无论插件添加了什么都保持成立。

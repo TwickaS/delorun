@@ -6,6 +6,8 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包实现[约定 C20](../../docs/contracts/c20-operational-logs.zh.md)：每个保存运行日志的 Delo 进程都通过本包写入日志，因此脱敏、记录格式、轮转与保留在每个入口上的行为保持一致。本包还包含 `delorun logs` 与清除所使用的读取函数、清空操作与期限检查操作，以及跨入口的拒绝测试套件，该套件在树中的每个入口上运行 C20 的拒绝测试。约定的取值与类型来自 [`@delorun/contract-operational-logs`](../contract-operational-logs/README.zh.md)；模式代码来自 [C1](../../docs/contracts/c01-home-layout.zh.md)。

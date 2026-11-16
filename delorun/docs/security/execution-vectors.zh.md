@@ -6,6 +6,8 @@ description: "Delorun 各种运行方式下的平台信任：哪些命令带有 
 
 [English](execution-vectors.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 Delorun 尚未发布；本页描述本仓库中的代码。它说明 Delorun 的每种运行方式强制了什么、不能强制什么，以及与同版本 stock DSH 的对比。
 
 [威胁模型](threat-model.zh.md) 给出各方、资产与每道防线及其契约；本页是执行侧的视图。[信任指南](../guide/trust.zh.md) 说明每一方能看到或做什么。

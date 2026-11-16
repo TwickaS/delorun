@@ -7,6 +7,8 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/plugin-theme` 拥有 C16 开关 `studio_additions`。开关开启期间，它把 Delorun 的 Soft 调色板、强调色和 Delorun 的字体叠加在上游的主题令牌之上，向设置添加「外观」和「对话」部分以及四个「通用」行，设置 Delorun 的「新建 Session」标题和词汇，并提供 `delorunStudio` 浏览器服务，每个其他 Delorun studio 插件都需要它。关闭开关会卸载所有这些内容，studio 即为上游的 studio。此后插件注册一个「通用」行（`settings.general.item`，id 为 `delorun-look`），用于重新开启该开关。

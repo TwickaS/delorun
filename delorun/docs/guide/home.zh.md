@@ -6,6 +6,8 @@ description: "你的 Delorun home：delorun 把你的数据保存在哪里，如
 
 [English](home.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页告诉你 Delorun 把你的数据保存在哪里、如何移动它、profile 如何运作，以及当 Delorun 因为其他用户可以读取某个文件而拒绝使用它时该怎么办。你不需要任何前置准备；`delorun` 首次运行时会创建这个文件夹（见[安装与首次运行](install.zh.md)）。Delorun 把一切都放在一个文件夹里，即你的 [Delorun home](../reference/glossary.zh.md#home)：`~/.delorun`。你的 chat、工作区、profile、密钥和 Delorun 自己的记录都保存在其中。`delorun` 首次运行时创建它，并把它设为只有你能读取。备份这个文件夹，就等于备份了 Delorun。

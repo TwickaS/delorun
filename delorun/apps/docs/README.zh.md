@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 本包构建 Delo 的文档网站：以静态站点的形式提供中英文的用户指南和参考资料，站点基于 TanStack Start 上的 Fumadocs 构建。站点直接读取 [`delorun/docs/guide/`](../../docs/guide/README.zh.md) 和 [`delorun/docs/reference/`](../../docs/reference/README.zh.md) 下的每一对页面，不复制任何页面。站点是一个独立的私有工作区，拥有自己的锁文件，因此不属于仓库的根工作区。
 
 ## 路由

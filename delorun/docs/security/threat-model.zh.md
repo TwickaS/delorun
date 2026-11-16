@@ -6,6 +6,8 @@ description: "Delorun 的威胁模型：绝不比 stock DSH 更不安全的目�
 
 [English](threat-model.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 Delorun 尚无发布；本页描述本仓库中的代码。
 
 ## 摘要

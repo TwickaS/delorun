@@ -6,6 +6,8 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 
 [English](c02-release-manifest.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 每个 Delorun 发布都是 GitHub Releases 上的一组文件，由一份发布 manifest（元数据清单）描述，并由离线的 targets 密钥签名。该 manifest 列出该发布所发布的每个平台的运行时归档、桌面安装程序、S2 与 S3 镜像摘要、SPDX SBOM（软件物料清单）、npm 包与安装脚本，每项都附带其长度与 SHA-256 摘要。一个在线的时间戳密钥签名一个小型时间戳文件，该文件指明每个通道当前的 manifest，并在 3 天后过期，因此扣留某个发布的托管方会在下一次安装、更新或更新检查时被察觉，这些操作会拒绝陈旧的时间戳；启动则使用已有的发布继续。同样离线的根密钥签名每个角色的密钥列表及其每次轮换。targets 密钥持有者只有在一台由自己控制的机器上、于 CI 之外依据发布分支上的已签名标签重建某个公开发布，且该发布的锁文件通过依赖安全公告检查之后，才签名该发布；本地发布（为其自己的通道签名、未经重建）不得使用生产根或生产密钥，从生产发布位置获取内容的启动器会拒绝它。npm 启动器、`delorun update`、每次启动时的启动器与 `delorun verify` 按本页所述验证这些文件，并且还要求具备 [C18](c18-release-log.zh.md) 所定义的该发布的日志条目。类型位于 [`@delorun/contract-release-manifest`](../../packages/contract-release-manifest/README.zh.md)。

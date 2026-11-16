@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包构建[约定 C3](../../docs/contracts/c03-update-report.zh.md) 的更新报告：目标发布将在本人的 profile 中改变或破坏什么，并在任何内容改变之前显示。它读取 profile 与已暂存的目标，不导入任何插件代码，并返回报告中的事实——目标将停用、移除或更改的每个插件、组合包与 profile 行，连同各自的原因、该预测是 `verified` 还是 `unverified`，以及报告给出的选项；两套安装的版本与更新状态；以及计数。报告是 [`@delorun/contract-update-report`](../contract-update-report/README.zh.md) 的实例，其类型就是报告的格式。运行时仓库 的 `prepare` 与 `reportRollback`（[`@delorun/runtime-store`](../runtime-store/README.zh.md)）通过 home 进程 的更新握手（[`@delorun/home-process`](../home-process/README.zh.md)）调用它，`delorun update` 在请求本人确认之前打印该报告。

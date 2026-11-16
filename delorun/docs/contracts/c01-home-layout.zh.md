@@ -6,6 +6,8 @@ description: "约定 C1：~/.delorun home 目录树、其权限模式与拒绝�
 
 [English](c01-home-layout.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本约定规定 Delorun 把本人的 home 存放在磁盘上的位置，以及 `delorun` 命令如何找到并切换它所运行的运行时。它定义 `~/.delorun` 目录树及每个条目的所有者，home 及其受保护文件的权限模式（组件拒绝权限更宽的文件），密钥与两个拒绝受限命令的套接字的存放位置，每次 home 进程启动时写入的令牌，与桌面应用自身 profile 并列的 CLI profile，带 `current` 与 `previous` 指针文件的运行时仓库，覆盖变量，以及 npm 启动器的下载与校验。它说明每种操作系统与沙箱方言能强制执行哪些限制规则。类型包 [`@delorun/contract-home-layout`](../../packages/contract-home-layout/README.zh.md) 以常量形式提供名称、代码与限额。

@@ -6,6 +6,8 @@ description: "只含类型的包，保存远程访问提供方的远程访问方
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出远程访问提供方（reach provider）的定义：远程访问方式 id 及每种方式所连接的监听器、提供方状态及其转换、配置行、两种 Tailscale serve 目标变体以及 spike 报告记录的证据、身份请求头规则、自有域名远程访问所指定的证书颁发机构及所检查的 CAA 参数，以及错误码。`@delorun/reach`、`@delorun/certificates`、远程访问屏幕与验证检查都导入这些定义，因此每种方式、每个状态与每个错误码只有一处定义。规格见[约定 C7](../../docs/contracts/c07-reach-providers.zh.md)。

@@ -6,6 +6,8 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 
 [English](c15-verification-checks.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

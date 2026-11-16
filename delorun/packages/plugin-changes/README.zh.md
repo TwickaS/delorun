@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 只要「变更」的保护处于开启状态，`@delorun/plugin-changes` 就会阻止 agent 更改 harness 运行哪些插件。在其 C16 开关 `plugin_changes_pending` 开启且保护开启时，动作为 `install_bundle` 或 `remove_bundle` 的 `plugin_manager` 调用不会运行：`tools/pre-execute` 监听器把它作为待处理变更记录到 profile 的变更日志中（[C21](../../docs/contracts/c21-changes.zh.md#the-agent-and-plugins)），并以模型可读的结果拒绝该调用：`Recorded as a change waiting for the person's review at their computer: delorun changes show <id>. Nothing was installed.` 对这些动作，该工具永远不会到达它自己的完全访问审批，本人在自己的电脑上通过 `delorun changes` 或在 studio 中应用或丢弃该变更。agent 其他会更改运行内容的 `plugin_manager` 动作（`set_bundle`、`set_plugin`、`configure`、`set_version_exemption`、`undo`、`restore`）以 `PLUGIN_CHANGE_AT_COMPUTER` 拒绝，且不记录任何内容。保护关闭（默认）时，每个这样的调用都继续交给上游，仅由上游的完全访问审批决定。无论开关如何，该插件都提供上游热重载的 `profileReconcileCheck`，在任何内容停止之前检查 profile 的每次重新组合（[C21](../../docs/contracts/c21-changes.zh.md#reloads-and-restores)）。无论开关如何，它还在 `/delorun/changes/` 下注册 studio 的「变更」路由，供上游的启动页读取，用于其恢复屏幕（[C21](../../docs/contracts/c21-changes.zh.md#routes-and-the-recovery-screen)），其浏览器一半添加设置中的「变更」部分和工作会话徽章，它们通过同样的路由执行操作（[C21](../../docs/contracts/c21-changes.zh.md#the-studios-changes-section)）。开关关闭（默认值，也是一致性值）时，插件不注册监听器或守卫，工具的运行和询问方式与上游相同。

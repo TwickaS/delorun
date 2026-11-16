@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置语言并显示预览版提示。「Models」连接模型提供方：勾选的卡片、逐个走完每个已勾选的提供方，以及一份摘要。「Look」在一个以该外观呈现的小 chat 旁设置配色方案、主题和强调色。「Agents」提供 Claude Code 和 Codex 及其在这台电脑上的登录状态，并请本人确认添加其中一个意味着什么。「Recommended plugins」提供已配置的插件，与本人的连接相符的排在前面。「Phone access」在远程访问关闭期间，显示 Tailscale 距离能提供 studio 服务还差多少。「Workspace」选择默认工作区，即这台电脑上的一个文件夹，或从 Git 克隆的一个仓库。「Ready」列出引导设置的内容并打开第一个 chat，其空状态根据文件夹的内容提供三个起始提示词；提示词会写入消息框，但不发送任何内容。每一步都位于同一个框架中：步骤名称和「Step n of N」连同进度条位于顶部，其中 N 只统计该本人会看到的步骤（手机上以及设置完成后会省略「Phone access」，终端设置已涵盖的步骤也会省略），正文可滚动，「Skip」「Back」和「Continue」位于底部，在任何宽度下都相同；最后一步没有「Skip」。卡片（图标位、标题、带「More」「Add」或「✓ Added」的一行摘要）和其下的整行状态，由「Models」「Agents」和「Recommended plugins」共用。引导会省略终端设置已涵盖的内容，可从设置 → 通用 → 入门再次显示，并且只在 Delorun 外观开启时加载。

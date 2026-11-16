@@ -6,6 +6,8 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 
 [English](c06-relay-protocol.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

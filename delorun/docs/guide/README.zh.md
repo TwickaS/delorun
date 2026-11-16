@@ -6,6 +6,8 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 用户指南面向安装并使用 Delorun 的人。Delorun 是一个可以按你自己的工作来塑造的 agent harness，构建在 DeepSeek Harness 之上；无论你对两者都是新手，还是从 stock DeepSeek Harness 切换而来，都适用。Delorun 运行在你自己的电脑上。本页是一张地图：找到你想做的事，再沿链接进入对应的页面与章节。如果你是新手，请先读[安装与首次运行](install.zh.md)，再读[日常使用](daily-use.zh.md)。技术术语会链接到[术语表](../reference/glossary.zh.md)。

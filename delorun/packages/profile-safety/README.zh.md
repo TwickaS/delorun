@@ -6,6 +6,8 @@ description: "@delorun/profile-safety 库：约定 C3 中拒绝会丢失本人�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 
 ## 摘要

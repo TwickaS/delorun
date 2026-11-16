@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-instruction-consent/README.md
 /delorun-plugin-instruction-consent:
   en: 842a9cb7a0449598
-  zh: aa3490af8280fd07
+  zh: 0227617fbdbc0c2a
 /delorun-plugin-instruction-consent/what-it-provides:
   en: c312eaf584be48c6
   zh: 2dac9667eebe0918

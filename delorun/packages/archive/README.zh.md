@@ -6,6 +6,8 @@ description: "Delorun 的归档格式 v1（C8）：ZIP 读取器与写入器，�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包实现[约定 C8](../../docs/contracts/c08-archive-and-trash.zh.md) 的归档一半：导出把一个或多个工作区连同其 chat 和附件写成一个 ZIP 文件，其中含清单、定制化文档和 Ed25519 签名；导入在写入任何内容之前，检查该文件的每一个字节。归档在通过全部检查之前都是不可信输入。`delorun export` 和 `delorun import`（[`@delorun/cli`](../../apps/cli/README.zh.md)）是触达它的命令。`./dsh-import` 导出项执行[stock home 导入](../../docs/contracts/c08-archive-and-trash.zh.md#the-stock-home-import)，`delorun import-home` 和安装设置会触达它。

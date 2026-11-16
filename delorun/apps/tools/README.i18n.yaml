@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/apps/tools/README.md
 /delorun-tools:
   en: 63297a751cbacbbd
-  zh: 6357b2802dcaa538
+  zh: 88dfb36335ea365e
 /delorun-tools/modules:
   en: 169b50bc063741b0
   zh: f18e117129062b1a

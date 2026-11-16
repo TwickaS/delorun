@@ -6,6 +6,8 @@ description: "约定 C10：host id、studio 客户端状态与浏览器存储所
 
 [English](c10-host-qualified-keys.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

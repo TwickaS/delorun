@@ -6,6 +6,8 @@ description: "delorun 命令：它的各个命令，它如何在上游运行之�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本应用即 `delorun` 命令。在任何上游代码运行之前，它通过 [`@delorun/home`](../../packages/home/README.zh.md) 解析并准备 Delorun home（该包实现 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的 home），选择 CLI profile，并通过上游的 profile 运行器、以 Delorun home 作为 `DSH_HOME` 运行该 profile。新 home 先进入 setup 的入口。启动会运行该 profile 的 [`@delorun/home-process`](../../packages/home-process/README.zh.md) home 进程（[约定 C19](../../docs/contracts/c19-home-process.zh.md)），它持有该 profile 的 home 锁，因此每个 profile 只运行一个 home 进程，`stop` 与 `status` 通过它的更新通道与之通信。

@@ -6,6 +6,8 @@ description: "契约 C6 的自托管中继：配置与启动拒绝、隧道令�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 概述
 
 本应用是[契约 C6](../../docs/contracts/c06-relay-protocol.zh.md) 的中继数据面：一个 Node 服务，在 TCP 443 端口接受浏览器连接与各 home 的出站 WebSocket 隧道，然后把每个浏览器连接的加密字节交给注册了该名称的 home。

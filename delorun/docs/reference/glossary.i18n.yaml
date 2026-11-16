@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/glossary.md
 /delorun-glossary:
   en: 2ceb7614565e30b4
-  zh: 7093827a68294369
+  zh: 87933c303ad02694
 /delorun-glossary/contents:
   en: 1b5b9f9ffe3fa53f
   zh: 851d5f5d1f904ca5

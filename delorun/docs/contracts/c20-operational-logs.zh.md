@@ -6,6 +6,8 @@ description: "约定 C20：每个 Delorun 进程写入其运行日志的位置�
 
 [English](c20-operational-logs.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本约定定义 Delorun 自身各进程记录其运行情况的文件，使本人或其 agent 无需 studio 就能查明故障原因。CLI home 进程、桌面 Host、Docker 监管器与自托管中继各自在固定位置写入自己的日志，格式为 JSON 行；当记录属于某个 chat 时，携带上游的会话与轮次 id。日志按 10 MiB 轮转，保留 5 个文件，并在 Delorun 运行期间于 14 天后删除，这同时限定了被清除 chat 的片段能在其中留存多久。每条记录都经过脱敏步骤，因此任何密钥、令牌、私钥、所有者验证码或 cookie 都不会进入日志。`delorun logs` 显示每个日志及其位置。会话日志是另一回事：它们记录 chat，并永久保留。类型包 [`@delorun/contract-operational-logs`](../../packages/contract-operational-logs/README.zh.md) 提供记录类型、入口与限额。

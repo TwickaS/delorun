@@ -55,7 +55,7 @@ What you still trust:
 
 ## How releases are signed in the preview
 
-Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. Until `1.0.0`, the signing keys are preview keys: they were made on the computer where the maintainer and his agents work, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
+Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. Until `1.0.0`, the signing keys are preview keys: they were made on the computer where the maintainer works with agents, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
 
 This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. With `1.0.0` the keys are made in a key ceremony on an offline machine, and the maintainer publishes every release by hand with a second factor until then, so that no long-lived publishing credential sits where agents can use it.
 
@@ -73,7 +73,7 @@ With `1.0.0` the root changes to one made in a key ceremony on an offline machin
 
 ## Outside security review
 
-No outside security review of Delorun has happened yet. The maintainer's own reviews, the denial tests that fail when a protection is removed, and the checks that replay recorded sessions are real, and they are the maintainer's and his agents' own work. An outside review is a person or firm that does not work on Delorun reading its security-critical code and reporting what they find. It comes with `1.0.0`, together with the key ceremony, and the review's report is published. Until then, treat Delorun as a preview: do not rely on it to confine an agent you would not otherwise trust ([What Delorun protects](safety.md)).
+No outside security review of Delorun has happened yet. The maintainer's own reviews, the denial tests that fail when a protection is removed, and the checks that replay recorded sessions are real, and they are the work of the maintainer and the agents the maintainer works with. An outside review is a person or firm that does not work on Delorun reading its security-critical code and reporting what they find. It comes with `1.0.0`, together with the key ceremony, and the review's report is published. Until then, treat Delorun as a preview: do not rely on it to confine an agent you would not otherwise trust ([What Delorun protects](safety.md)).
 
 ## What each reach option shows its provider
 

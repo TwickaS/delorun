@@ -6,6 +6,8 @@ description: "只含类型的包，保存 studio 的 host id 类型、host 限�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出 host id 类型、host 限定键的形式，以及 studio 写入的已持久化浏览器键清单。studio 的连接状态、各个 store、回收站屏幕与枚举规格都导入这些定义，因此每个持久化名称及其作用域只有一处定义。规格见[约定 C10](../../docs/contracts/c10-host-qualified-keys.zh.md)。

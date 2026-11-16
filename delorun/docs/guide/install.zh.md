@@ -6,6 +6,8 @@ description: "用 npx delorun 安装 Delorun，并从零开始进行第一次 ch
 
 [English](install.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页带你从零开始，直到你的第一次 chat。你只需运行一条命令：`npx delorun`。它会下载 Delorun，检查下载内容是否真实可信，问你几个问题，并完成 Delorun 的设置。之后你用 `delorun` 启动它，它会在浏览器中打开。此后一切都运行在你自己的电脑上。你需要一台 Delorun 支持的电脑、安装和启动它所需的 Node.js，以及你想与之对话的 AI 模型的密钥。chat 需要密钥；不过没有密钥 studio 也能打开，所以你可以先四处看看。

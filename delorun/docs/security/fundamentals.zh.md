@@ -6,6 +6,8 @@ description: "Delorun 的安全基本要求：Delorun 对自己约束的简短�
 
 [English](fundamentals.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 安全基本要求是关于 Delorun 做什么或拒绝什么的规则，本人可以在每个发布中依赖它。每一条都用一句话陈述，并附有强制执行它的代码，以及在该代码不再强制执行时失败的测试。`enforced` 的基本要求在今天这个仓库的代码上成立。`designed` 的基本要求是 Delorun 已采纳、但其代码尚未构建的规则；它的[设计页面](../design/README.zh.md)说明它将如何成立，构建它的变更会把该行移到 `enforced`。

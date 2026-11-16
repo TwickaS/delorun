@@ -6,6 +6,8 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包承载 [约定 C4](../../docs/contracts/c04-admission.zh.md#authenticator) 的 authenticator 提供方，同时包含 [C5](../../docs/contracts/c05-device-approval.zh.md) 的所有者认领与设备批准、[C14](../../docs/contracts/c14-oidc-passkeys.zh.md) 的身份因子，以及 C4 的服务端远程访问会话。它提供 `authenticator`，包括以已批准设备的密钥登录、批准窗口与本地批准、`tailnet-membership` 身份因子，以及已批准设备可调用内容的允许列表，每个 CLI profile 都以 `delorun-home-auth` 行加载它。回环 studio 仍由上游的启动令牌与 cookie 准入，远程访问监听器只在远程访问提供方请求时才提供服务，因此远程访问关闭时，任何远程访问路由都不应答。前半部分是所有者认领与设备列表：`~/.delorun/secrets/home-auth/` 下的记录、应答这些记录的路由，以及结束设备在线会话的移除。C4 的准入拒绝测试套件证明准入 seam 的上游一半，它位于组合 studio 的 CLI 中，即 `delorun/apps/cli/tests/denial/`：上游的 connection 声明 `Authenticator` Service Definition，并通过 `ctx.connection.openReachListener` 打开远程访问监听器；web 服务器在任何路由、upgrade 或回退之前，运行每个远程访问监听器的分发器。约定的标识符、代码与限制来自 [`@delorun/contract-admission`](../contract-admission/README.zh.md)。

@@ -6,6 +6,8 @@ description: "只含类型的包，保存归档格式 v1 的类型、定制行 k
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出归档格式 v1：manifest 与定制内容的类型、schema 允许与拒绝的行 kind、错误代码、上限与回收站保留期。归档、回收站与导入代码以及 studio 的回收站屏幕都导入这些定义，因此每个上限与每个错误代码只有一处定义。规格见[约定 C8](../../docs/contracts/c08-archive-and-trash.zh.md)。

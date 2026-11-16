@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 Delorun studio 的 chat 列表，采用 T3 Code 侧栏的风格：chat 以卡片呈现，每张卡片右上角带状态；「运行中」「已暂缓」和「已搁置」搁架固定在底部；此外还有搜索、工作区筛选、工作区文件夹、Alt 跳转、悬停时的详情卡片、工作区图标、位于侧栏顶部之后的生成式或 T3 Code 页眉图案，以及在有更新的 Delorun 发布版本时出现的安静提示。本包在上游的侧栏席位中注册列表、图案、底部和设置的「侧栏」部分，所以上游的行、菜单和对话框继续工作。行、排序规则、搁架和图案移植自 T3 Tools 的 [T3 Code](https://github.com/pingdotgg/t3code)，采用 MIT 许可（[声明](THIRD_PARTY_NOTICES.md)）；数据来自 harness 的 Session 和 Workspace。`@delorun/bundle-studio` 以行 `delorun-sidebar` 挂载本包。它只在 Delorun 外观开启时加载；使用 stock 外观时，上游的列表、底部和「新建 Session」按钮会恢复。

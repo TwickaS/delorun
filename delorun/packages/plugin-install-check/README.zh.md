@@ -6,6 +6,8 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `delorunPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delo 已有名称相近的名称。检查在 pnpm 把安装解析进锁文件之后、任何文件下载进 profile 或任何安装脚本运行之前进行。已知的严重公告，以及在包安装之前无法运行的检查，会拒绝安装，直到本人允许；其他发现都不拒绝。包安装完毕且允许的构建运行之后，它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在其 pnpm 操作周围执行同样的步骤（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delorun/bundle-local` 和 `@delorun/bundle-headless` 把它挂载为开启。

@@ -6,6 +6,8 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 
 [English](c21-changes.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 
 ## 摘要

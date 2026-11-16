@@ -6,6 +6,8 @@ description: "Delorun 的 setup 支持的模型提供方：DeepSeek、Anthropic�
 
 [English](providers.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页帮助你选择 Delorun 对接哪家 AI 模型服务、把你的密钥交给它，以及之后如何更换。你需要先安装 Delorun（见[安装与首次运行](install.zh.md)），并在某家提供方拥有账户。[模型提供方](../reference/glossary.zh.md#provider)是运行 AI 模型的公司或服务器；密钥是让 Delorun 使用你在那里的账户的秘密文本。Delorun 会使用你选择的提供方。setup 会询问使用哪一家，接收它的密钥，对大多数提供方还会询问新 chat 所用的模型。下面的每家提供方都以同样的方式设置，并按 setup 列出的顺序（按名称）排列。DeepSeek 的支持是内置的，不需要额外安装；其他所有提供方都运行在 DeepSeek Harness 自带的多提供方适配器上，所以它们同样不需要安装。studio 比 setup 列出更多的提供方，以及每家提供方的更多设置，在“设置”→“Agent”→“模型”中。

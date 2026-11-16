@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/bundle-studio` 是在每个 Delorun CLI profile 中挂载 Delorun studio 增强功能的 bundle：主题、设置布局、chat 状态、侧栏和引导，以及两个可选插件，即费用计量器和「思考」标签页，它们的行在本人开启之前保持禁用。它不含代码；其 [`cordis.patch.yml`](cordis.patch.yml) 为每个插件插入一行，并在主题行上开启 [C16](../../docs/contracts/c16-parity-composition.zh.md) 开关 `studio_additions`。设置中的一个开关即可关闭所有这些功能，只留下上游的 studio，即 stock 外观。

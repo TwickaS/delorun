@@ -6,6 +6,8 @@ description: "@delorun/runtime-store 库：约定 C1 在 ~/.delorun/runtimes 下
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是 [约定 C1](../../docs/contracts/c01-home-layout.zh.md#the-runtime-store) 所定义运行时仓库（runtime store）的唯一实现。它将经过校验的运行时发行包（runtime closure）安装到 `~/.delorun/runtimes/<version>/` 之下，以原子重命名切换 `current` 与 `previous` 指针文件，使切换过程中被终止的进程只会留下一个完整的当前版本；它保留上一版本以供回滚，并删除其余版本。每次启动 CLI 运行时之前，它都会执行[约定 C2](../../docs/contracts/c02-release-manifest.zh.md#client-verification)的启动检查，以可信根校验已存储的发布 manifest 与文件列表，并在每种校验模式下校验每个已安装文件的长度与 SHA-256。签名由 [`@delorun/release`](../../apps/release/README.zh.md) 的 C2 校验器校验。

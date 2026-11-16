@@ -6,6 +6,8 @@ description: "Delorun 文档索引：各层级的内容（用户指南、实操�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 Delorun 的文档按层级组织在 `delorun/docs/` 下，与上游位于 `docs/` 下的文档并列。每个事实只有一个归属，即承担其职责的层级，其他页面链接到那里。涉及上游的页面链接到上游文档，而不重复其内容。[指南](guide/README.zh.md)面向使用 Delorun 的人。其他每个层级面向开发者与维护者，他们需要对行为有精确的定义。
 
 - [指南](guide/README.zh.md)：面向安装并使用 Delorun 的人的用户指南，用平实的语言写成，技术术语在首次出现处加以解释，从[安装与首次运行](guide/install.zh.md)开始。[路线图与愿景](guide/roadmap.zh.md)是唯一一页关于计划工作的页面。

@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 `@delorun/release` 是 Delorun 的发布工具，一个位于 `delorun/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较、发布的 SBOM（软件物料清单）、依赖安全公告检查、发布元数据的签名与验证、发布日志（release log），以及 S2 与 S3 镜像。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
 
 ## 模块

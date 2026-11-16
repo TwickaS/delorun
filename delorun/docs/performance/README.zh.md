@@ -6,6 +6,8 @@ description: "Delorun 的等待时间基准：每个套件测量什么，如何�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `pnpm run benchmark:delorun` 测量本人需要等待 Delorun 的各个点，每个点一个套件，以便找出缓慢的步骤，并在发布之前发现退步。每个套件都在被测提交的本地发布上运行真实的产品，使用一次性的 home，没有任何请求离开这台机器。一次运行写出一个 JSON 结果并打印一张表；`--check-budgets` 在某一步的中位数超过其上限时使运行失败。[harness](../../apps/benchmarks/README.zh.md) 拥有这些代码。

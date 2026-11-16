@@ -6,6 +6,8 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 [English](c08-archive-and-trash.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

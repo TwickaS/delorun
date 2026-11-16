@@ -6,6 +6,8 @@ description: "Delorun 的回收站（约定 C8）：chat 或工作区的删除�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包实现[约定 C8](../../docs/contracts/c08-archive-and-trash.zh.md) 的回收站一半：删除 chat 或工作区会把它移入回收站，本人可以在 30 天保留期结束之前恢复它，而清除会把它从保存其内容的每个存储中移除。保留期与残留常量来自 [`@delorun/contract-archive-and-trash`](../contract-archive-and-trash/README.zh.md)，已持久化的浏览器草稿清单来自[约定 C10](../../docs/contracts/c10-host-qualified-keys.zh.md)，清理日志的提议所运行的清理效果来自 [`@delorun/logs`](../logs/README.zh.md)。

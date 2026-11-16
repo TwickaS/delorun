@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/brand` 是 Delorun 品牌的唯一来源：颜色、字体、圆角与间距、六角插头标志，以及承载这些取值的组件。每个组件都渲染上游工作室的原语，由它负责键盘、焦点与无障碍行为，再加上 Delorun 的外观与 API。本包不需要 Cordis 宿主：工作室插件、网站和文档都把它当作普通的 React 与 CSS 来导入。`@delorun/plugin-theme` 仍是在工作室中注册这套外观的插件。

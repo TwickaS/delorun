@@ -6,6 +6,8 @@ description: "只含类型的包，保存身份因子、每个远程访问地址
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出远程访问（reach）所要求的身份因子（identity factor）的定义：因子名称、在当前约定下哪些远程访问方式提供通行密钥以及如何选择依赖方（relying party）ID、通行密钥注册选项、OpenID Connect 流程用途与参数、客户端认证与动态注册字段、允许的 ID 令牌算法与必需声明、注册路由、错误代码、上限，以及 `ts.net` spike 报告记录的证据。`@delorun/home-auth`、setup 与远程访问屏幕导入这些定义，因此每条规则与上限只有一处定义。规格见[约定 C14](../../docs/contracts/c14-oidc-passkeys.zh.md)。

@@ -6,6 +6,8 @@ description: "Delorun home 布局与运行时仓库约定（C1）的类型与常
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包为实现约定 C1 的代码提供名称、权限模式、限额与错误代码的单一来源：`~/.delorun` 的条目、启动令牌的大小、运行时仓库的指针文件、启动器的下载限额，以及 `delorun verify` 报告的隔离规则。它包含类型与只读常量，以及一个纯函数，即 profile 名称检查 `profileNameProblem`。[约定页面](../../docs/contracts/c01-home-layout.zh.md)是权威来源，本包与该页面在同一个 pull request 中修改。

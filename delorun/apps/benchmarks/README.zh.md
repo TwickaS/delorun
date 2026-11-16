@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 `@delorun/benchmarks` 衡量本人等待 Delorun 的各个环节，是位于 `delorun/apps/benchmarks` 的私有包。一套 harness 为每个 suite 提供一次性 home、被测提交的本地签名发布版本、合成数据、结果格式、表格和预算检查；每个 suite 衡量一个接触点。各 suite 衡量什么、如何运行以及目前记录的数字，见[性能页面](../../docs/performance/README.zh.md)。
 
 ## 模块

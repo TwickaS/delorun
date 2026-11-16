@@ -6,6 +6,8 @@ description: "约定 C5：home 密钥、绑定到其源的设备密钥与绑定�
 
 [English](c05-device-approval.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

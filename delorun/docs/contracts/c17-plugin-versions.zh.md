@@ -6,6 +6,8 @@ description: "约定 C17：插件接受检查的两条版本轴，即上游的 e
 
 [English](c17-plugin-versions.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 Delorun 有自己的语义化版本，并基于一个上游 DSH 版本构建，因此插件要在两条轴上接受检查。上游轴保持不变：由上游的 `evaluatePluginCompatibility` 对照 `@deepseek-ai/dsh-app-boot` 的版本检查 `engines.dsh`；没有 `engines.dsh` 时，检查插件对 `@deepseek-ai/dsh*` 的对等依赖（peer dependency）。Delorun 轴是 `engines.delorun`，按相同规则对照 Delorun 的版本检查。为 stock DSH 编写的插件不声明 `engines.delorun`，在 Delorun 轴上视为兼容。每条轴都有自己的精确版本豁免，由本人（the person）在看到风险警告后授予。每条拒绝与每条更新报告条目都写明两个版本。[C22](c22-delorun-plugin-interface.zh.md) 规定 Delorun 版本对声明了 `engines.delorun` 的插件作出哪些承诺，`delorun plugin check` 让作者在安装之前看到自己的范围允许什么。类型位于 [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.zh.md)。

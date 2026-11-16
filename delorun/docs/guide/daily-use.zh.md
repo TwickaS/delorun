@@ -6,6 +6,8 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 [English](daily-use.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本页介绍你每天使用的命令，以及你对模型可以改动什么所做的选择。它假定 Delorun 已经安装并完成 setup（见[安装与首次运行](install.zh.md)）。Delorun 为每个 [profile](../reference/glossary.zh.md#profile) 作为一个后台程序运行，即 [home 进程](../reference/glossary.zh.md#home-process)，它在你的浏览器中提供 [studio](../reference/glossary.zh.md#studio)。几条命令可以启动、打开、停止和检查它。每个 chat 在一个[工作区](../reference/glossary.zh.md#workspace)中工作，这是一个模型可以读取和更改其中文件的文件夹。当你添加的某样东西使 Delorun 无法启动时，安全模式会在不带你的插件的情况下启动它，直到你修好为止。

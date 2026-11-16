@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/bundle-headless` 是为 home 的 `headless` profile 提供 Delorun 守卫的 bundle。它不含代码；其 [`cordis.patch.yml`](cordis.patch.yml) 在上游的 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-headless` bundle 之后，关闭两个隐私默认值，插入七个守卫行，并保护它们不被插件管理修改。`delorun headless` 把它链接进 profile，拒绝未加载它的 profile，并在启动前后用 [C19](../../docs/contracts/c19-home-process.zh.md#host-invariants) 的 Host 不变量检查它的各行。

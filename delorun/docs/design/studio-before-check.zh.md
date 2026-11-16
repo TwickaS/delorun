@@ -6,6 +6,8 @@ description: "后置启动检查之前的 studio 设计：只有当 Host 通过 
 
 [English](studio-before-check.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `delorun start` 启动的 Host 必须先通过 [C19](../contracts/c19-home-process.zh.md) 的后置启动检查，人才能在其中工作：防护行没有启动、或防护服务来自另一行的 Host 会被拒绝并停止。本设计大部分已经构建：studio 只能通过 home 进程在检查之后签发的一次性链接打开。剩下的是 Web 服务器开始监听到检查完成之间的时间，以及被中断的更新的健康检查所花的时间，在这些时间里，studio 的端口会接受连接，或者在 Host 得到确认之前就签发了链接。本页陈述关闭这些窗口的规则。

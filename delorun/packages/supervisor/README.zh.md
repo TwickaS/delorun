@@ -6,6 +6,8 @@ description: "@delorun/supervisor 包，供 home 进程与 Docker 运行时的�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是 [约定 C9](../../docs/contracts/c09-runtime-supervisor.zh.md) 中的 Docker 监管器，是 Delo 中唯一调用 Docker 的组件。它作为本人用户的独立进程运行，由 home 进程（home process）启动。它在 Delo home 下的 `run/<profile>/supervisor.sock` 上提供固定模式的 API，并且只接受携带当前这次 home 进程启动的令牌（[C1](../../docs/contracts/c01-home-layout.zh.md)）的请求。它通过检查探测容器构建能力报告（capability report），依据只由 `delorun setup` 写入的根目录文件解析每个工作区根目录，只运行摘要（digest）被已验证发布 manifest（release manifest）所列出的镜像，它将日志写入 [C20](../../docs/contracts/c20-operational-logs.zh.md) 的 `supervisor-<profile>` 入口，写入时经由 [`@delorun/logs`](../logs/README.zh.md)。约定的取值与类型来自 [`@delorun/contract-runtime-supervisor`](../contract-runtime-supervisor/README.zh.md)。

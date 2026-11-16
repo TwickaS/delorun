@@ -6,6 +6,8 @@ description: "约定 C7：远程访问提供方的 Service Definition 及其状�
 
 [English](c07-reach-providers.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

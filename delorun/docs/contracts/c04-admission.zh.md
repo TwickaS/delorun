@@ -6,6 +6,8 @@ description: "约定 C4：上游连接中的准入 seam、回环与远程访问�
 
 [English](c04-admission.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

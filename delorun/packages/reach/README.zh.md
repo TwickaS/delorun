@@ -6,6 +6,8 @@ description: "@delorun/reach 包，供远程访问维护者阅读：约定 C7 �
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是[约定 C7](../../docs/contracts/c07-reach-providers.zh.md) 的 Service Definition 和首个 Service Provider。`reach` 服务为每个远程访问方式持有一个提供方，并启动配置行已开启的每个选项：它请 `@delorun/home-auth` 以提供方声明的身份因子为该选项的远程访问监听器提供服务，在 `127.0.0.1` 上绑定该选项的固定监听端口，通过上游的 `ctx.connection.openReachListener` 在操作系统分配的端口上打开监听器，把固定端口的流量中继到它，并启动提供方。`reach-tailscale-private` 提供方声明 `tailnet-membership`（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md#tailnet-membership)），并把 `tailscale serve` 配置到固定端口。该服务挂载在 C16 开关 `reach`（`Config.enabled`）之后，`@delorun/bundle-local` 的行 `delorun-reach` 会开启此开关；每个选项都保持关闭，直到本人运行 `delorun reach on tailscale`，或在安装设置的完整模式中回答「是」。

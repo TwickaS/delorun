@@ -6,6 +6,8 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 [English](changing-your-harness.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 本页描述 Delorun 目前的工作方式。
 
 ## 摘要

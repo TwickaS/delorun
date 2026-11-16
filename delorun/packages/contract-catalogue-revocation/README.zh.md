@@ -7,6 +7,8 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/contract-catalogue-revocation` 定义插件索引文件及其条目、徽章记录与列出的发现，已签名的撤销列表，撤销列表的客户端状态，以及一条发现的接受台账记录，并把缓存时长、有效期、重试间隔与文本上限定义为常量。本包只包含导出的类型与只读常量，没有运行时代码，因此它从不改变任何进程的行为；约定页面 [C13 插件索引文件与撤销列表](../../docs/contracts/c13-catalogue-revocation.zh.md) 是权威依据，本包遵循它。其入口为 `src/index.ts`，以 `.` 导出。

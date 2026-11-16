@@ -6,6 +6,8 @@ description: "只含类型的包，保存 Delo 验证检查的注册表、结果
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本只含类型的包导出 Delo 的验证检查注册表，以及检查与报告读取者所用的结果、模式、阶段与报告类型。完整性包、`delorun` 命令与 studio 的验证面板都导入这些定义，因此每个检查 id 及其在 `enforce` 模式下的效果只有一处定义。规格见[约定 C15](../../docs/contracts/c15-verification-checks.zh.md)。

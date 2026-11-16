@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/harness-feedback.md
 /harness-feedback-pain-points:
   en: 99931705fab9fcdb
-  zh: 8c05eb91ea38a137
+  zh: 552b950223081f54
 /harness-feedback-pain-points/entries:
   en: 2a38f622e9c1d12f
   zh: bd21b6d5cbbbb3e0

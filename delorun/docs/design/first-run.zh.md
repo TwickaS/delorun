@@ -6,6 +6,8 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 
 [English](first-run.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 一条命令 `npx delorun` 就能带一个人从零开始到第一次 chat。启动器在下载和验证发布版本期间说明它在做什么。setup 先询问此人将如何使用 Delorun，然后问一个可用的 chat 所需的少数几个问题；审阅界面上的“更多设置”则询问其他所有会改变这台电脑的问题。然后 setup 启动 Delorun（除非此人另行选择，否则在后台），并打开 studio，由新手引导涵盖 setup 没有涵盖的内容，并且在终端和 studio 之间不会重复询问同一个问题。终端只用于 setup 和运维：聊天在 studio 中进行。setup 的答案见[约定 C11](../contracts/c11-setup-answers.zh.md)。

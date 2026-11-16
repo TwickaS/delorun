@@ -6,6 +6,8 @@ description: "在每条命令和每个平台上的原生约束的设计：Deloru
 
 [English](native-confinement.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 [约定 C1](../contracts/c01-home-layout.zh.md) 陈述了 Delorun 在上游沙箱之上增加的约束规则，以及每种方言今天强制执行什么。本页给出 Delorun 为尚未构建的约束所采纳的规则：在每条启动 Host 的命令下的同样保护、每次启动时检查每条规则在这台机器上是否成立、指出完全访问触及什么的完全访问提示、Docker Desktop 的控制套接字、Windows，以及针对命令所做写入的指令同意。[威胁模型](../security/threat-model.zh.md)陈述了今天什么成立。

@@ -6,6 +6,8 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/install` 是 [`@delorun/npm-launcher`](../npm-launcher/README.zh.md) 的 `delorun` 启动器背后的安装路径。它从约定 C1 列出的主机通过 HTTPS 获取某个发布的文件，在解压任何内容之前逐一校验它们，并把运行时归档写入运行时存储的暂存目录。运行时存储发布此包准备好的内容：这里从不切换 `current`，被拒绝的安装也不会在 `~/.delorun/runtimes/` 下留下任何目录。

@@ -6,6 +6,8 @@ description: "约定 C11：setup 所问的问题、回答的 schema、每个回�
 
 [English](c11-setup-answers.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

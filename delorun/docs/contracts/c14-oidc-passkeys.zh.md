@@ -6,6 +6,8 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 [English](c14-oidc-passkeys.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 <a id="summary"></a>
 ## 摘要
 

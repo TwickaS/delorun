@@ -6,6 +6,8 @@ description: "@delorun/plugin-mcp-consent 插件：Delorun 的 MCP 添加时同�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是 Delorun 的 MCP 添加时同意（MCP add-time consent）中 `mcpAddConsent` 服务的 Service Provider，该保护由 C16 开关 [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.zh.md) 打开。stdio MCP 服务器命令作为本地子进程在 agent（智能体）沙箱之外运行，因此在这类服务器启动之前，mcp-client 插件会询问已挂载的 `mcpAddConsent` 服务：所配置的启动是否获得许可。本包根据接受存储（acceptance store）作答——home 受保护状态下的一个 JSON 文件，每个已配置的服务器名称持有一条接受：接受恰好覆盖受审查的命令、参数、工作目录和已配置环境，以及它们解析得到的绝对可执行文件路径、命令 shell 和工作目录，且其固定文件仍保持被接受时的内容的服务器立即启动，其余每次审查都让服务器保持停止，并以写明该命令的拒绝作答。本人在 home 自己的电脑上，于 studio 的“设置 → 权限”中或用 `delorun mcp accept` 接受被挂起的服务器，服务器随即启动而无需重启；本人在同样的位置或用 `delorun mcp revoke` 拒绝它或撤销一条接受后，该服务器保持停止，直到其启动发生变化或本人接受它（[待处理的审查](#pending-reviews)）。关闭该开关，或没有已挂载的 Service Provider 时，mcp-client 启动每个已配置服务器的方式与上游完全一致；`@delorun/bundle-local` 在 `delorun` 启动的 CLI profile 中挂载并打开它，`@delorun/bundle-headless` 在 `delorun headless` 运行的 profile 中挂载并打开它，桌面应用运行上游的 profile，不挂载它。

@@ -6,6 +6,8 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 [English](customise.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 本页描述 Delorun 目前的工作方式。
 
 ## 摘要

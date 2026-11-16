@@ -6,6 +6,8 @@ description: "@delorun/home 库：每个 Delorun 组件所用的约定 C1 home�
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本包是每个 Delorun 组件都使用的、[约定 C1](../../docs/contracts/c01-home-layout.zh.md) 中 home 的唯一实现。它解析 Delorun home，以 0700 模式创建 home 及其中 Delorun 的条目，拒绝其他本人可以访问的目录或受保护文件，以 0600 模式读写受保护文件，获取按 profile 划分的 home 锁，使每个 profile 只运行一个 home 进程，并拥有每次启动的启动令牌，以及检查该令牌的两个通道（更新通道与 Docker 监管器的套接字）的监听器。名称、模式与错误代码均来自 [`@delorun/contract-home-layout`](../contract-home-layout/README.zh.md)。`delorun` 命令（[`delorun/apps/cli`](../../apps/cli/README.zh.md)）是它的首个使用者。

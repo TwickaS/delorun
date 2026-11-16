@@ -6,6 +6,8 @@ description: "约定 C19：持有 CLI profile 锁并运行其 Host 的 home 进�
 
 [English](c19-home-process.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 本约定定义让本人的 CLI home 保持运行的后台进程，以及更新抵达它所经过的握手。每个 CLI profile 有一个 home 进程，它在 `~/.delorun` 下持有该 profile 的锁，运行其 Host，并在每次启动时写入一个新的启动令牌。`delorun update` 与 studio 的「Update now」通过更新通道抵达它；更新通道是 `~/.delorun` 下的一个套接字，只接受携带当前令牌的请求。更新会等到旧运行时上没有 chat 运行，再把 profile 交给运行在新运行时上的进程，检查其是否健康，不健康时回滚，因此被中断的更新始终让一个完整版本处于当前状态。桌面应用保留上游自己的 Host 与 profile，并独立更新。类型包 [`@delorun/contract-home-process`](../../packages/contract-home-process/README.zh.md) 提供协议、状态与限额。

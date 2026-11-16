@@ -7,6 +7,8 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 `@delorun/plugin-workspaces` 提供 `delorunWorkspaces` 服务，主对话的账户工具调用它的[服务定义](src/service.ts)。它在一个已配置的根目录下创建空的工作区文件夹，用 `git clone` 把一个仓库导入新文件夹，读写工作区的 `AGENTS.md`，并把包含工作区的文件夹移入 `root/.delorun-trash`，恢复时再移回。每个工作区都是上游工作区注册表中的一项；移入回收站时注销其中的工作区，恢复时重新注册。导入与回收站记录保存在插件自己的存储域中，因此重启后仍然保留。标准组合不挂载本插件；Delo 的 studio bundle 以其配置挂载它。

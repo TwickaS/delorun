@@ -2,6 +2,8 @@
 
 [English](parity.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 对等清单记录本树中 Delorun 所对照的每个 stock DeepSeek Harness（DSH）区域，以及每项刻意差异的状态，并给出一项证据。每一行都标明其基线，即[对等组合](../contracts/c16-parity-composition.zh.md)所回放的上游记录标签 `dsh-v0.2.2-rc.3`。本页涵盖下列各区域、对等组合约定所列的开关与已变更的默认值，以及[切换页面](../guide/switching.zh.md)所指名的差异。它并不盘点 stock 的每一项功能。
 
 ## 如何判定各行

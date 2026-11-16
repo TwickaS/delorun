@@ -6,6 +6,8 @@ description: "Delorun 发布工作流的设计：构建发布版本、记录日�
 
 [English](release-workflow.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 ## 摘要
 
 [约定 C2](../contracts/c02-release-manifest.zh.md) 和[约定 C18](../contracts/c18-release-log.zh.md) 陈述了发布版本如何被签名、记录日志和验证，而对发布版本进行签名、加时间戳、记录日志和检查的命令存在于 [`delorun/apps/release`](../../apps/release/README.zh.md) 中。本页给出 Delorun 为在 CI 中运行的部分，或发布版本在 npm 启动器之外附带的部分所采纳的规则：发布工作流、定时的时间戳重新签名、作为工作流一个步骤的公告检查、无需令牌的 npm 发布、维护者开始签名之后的二选 N 重新构建、Authenticode 签名，以及安装脚本。

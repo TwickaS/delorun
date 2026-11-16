@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/parity.md
 /parity-checklist:
   en: 3cc30d4accf93241
-  zh: e3f43da17e7ec984
+  zh: 41deef7db6f6806d
 /parity-checklist/how-rows-are-judged:
   en: 11dab7226b8c9d22
   zh: 3cff5e2a5a4dd6b4

@@ -6,6 +6,8 @@ description: "从零开始编写 Delorun 插件直到运行起来：delorun plug
 
 [English](plugins.md) | 中文
 
+> 英文页面是当前版本；本页可能落后于它。
+
 本页描述 Delorun 目前的工作方式。
 
 ## 摘要
