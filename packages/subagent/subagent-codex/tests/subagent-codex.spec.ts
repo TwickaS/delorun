@@ -582,7 +582,7 @@ describe('task admission and package contracts', () => {
     await ctx.fiber.dispose()
   })
 
-  it('accepts an optional non-empty model and the three fixed permission modes', () => {
+  it('accepts an optional non-empty model and the four fixed permission modes', () => {
     expect(codex.Config({}).providerName).toBe('codex')
     expect(codex.Config({}).model).toBeUndefined()
     expect(codex.Config({ providerName: 'codex-safe' }).providerName)
@@ -638,6 +638,7 @@ describe('task admission and package contracts', () => {
       approvalsReviewer: 'auto_review',
       sandbox: 'workspace-write',
     }],
+    ['read-only', { approvalPolicy: 'never', sandbox: 'read-only' }],
     ['dangerously-bypass-approvals-and-sandbox', {
       approvalPolicy: 'never',
       sandbox: 'danger-full-access',

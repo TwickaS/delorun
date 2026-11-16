@@ -56,12 +56,14 @@ const CODEX_PACKAGE_BIN = resolve(
 export type CodexPermissionMode =
   | 'never'
   | 'approve-for-me'
+  | 'read-only'
   | 'dangerously-bypass-approvals-and-sandbox'
 
 /** Native non-interactive Codex modes mapped to official `thread/start` fields. */
 export const CODEX_PERMISSION_MODES = [
   'never',
   'approve-for-me',
+  'read-only',
   'dangerously-bypass-approvals-and-sandbox',
 ] as const satisfies readonly CodexPermissionMode[]
 
