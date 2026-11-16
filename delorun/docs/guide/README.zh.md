@@ -61,9 +61,10 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 
 ## 我想把它变成我自己的
 
-- **选择修改 Delorun 的合适方式：**[什么该在哪里定制](https://docs.delorun.com/guide/customise)比较了设置、profile 补丁、agent 预设、你自己的插件、已发布插件的改名 fork，以及直接编辑 Delorun 本身，并说明每种方式在每次更新时会让你付出什么。
-- **编写插件：**[为 Delorun 编写插件](https://docs.delorun.com/guide/plugins)从 `delorun plugin new` 讲到一个能在你的 studio 中加载的插件。
-- **查看、保护或撤销改动：**[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
+- **选择修改 Delorun 的合适方式：**[什么该在哪里定制](customise.zh.md)比较了设置、profile 补丁、agent 预设、你自己的插件、已发布插件的改名 fork，以及直接编辑 Delorun 本身，并说明每种方式在每次更新时会让你付出什么。
+- **做出第一个插件并在 studio 中看到它：**[你的第一个插件](first-plugin.zh.md)构建一个插件，在 Plugins 下展示它，然后再移除它。
+- **编写插件：**[为 Delorun 编写插件](plugins.zh.md)从 `delorun plugin new` 讲到一个能在你的 studio 中加载的插件。
+- **查看、保护或撤销改动：**[修改你的 harness](changing-your-harness.zh.md)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
 
 <a id="i-want-to-know-what-is-safe"></a>
 

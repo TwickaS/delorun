@@ -51,9 +51,10 @@ The user guide is for people who install and use Delorun, the agent harness you 
 
 ## I want to make it mine
 
-- **Choose the right way to change Delorun:** [Where to customise what](https://docs.delorun.com/guide/customise) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
-- **Write a plugin:** [Write a plugin for Delorun](https://docs.delorun.com/guide/plugins) goes from `delorun plugin new` to a plugin that loads in your studio.
-- **See, protect or undo changes:** [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records, protection, and undo.
+- **Choose the right way to change Delorun:** [Where to customise what](customise.md) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
+- **Make a first plugin and see it in the studio:** [Your first plugin](first-plugin.md) builds one, shows it under Plugins, and removes it again.
+- **Write a plugin:** [Write a plugin for Delorun](plugins.md) goes from `delorun plugin new` to a plugin that loads in your studio.
+- **See, protect or undo changes:** [Changing your harness](changing-your-harness.md) explains what `delorun changes` records, protection, and undo.
 
 ## I want to know what is safe
 
