@@ -608,7 +608,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     if (values['pre-push']) console.log(pushBase === undefined ? 'delorun checks: the full gate for this push' : `delorun checks: what changed since ${pushBase.slice(0, 10)} for this push (DELORUN_FULL_GATE=1 for the full gate)`)
   }
   // A range gate with no base fails on its own with a git error; one refusal before any check starts names the ref instead.
-  if (plan.some(check => check.history === true) && !commitExists(root, rangeRef)) throw new Error(unresolvedRangeBase(rangeRef))
+  // `--plan` runs nothing, so it prints the plan whatever the base.
+  if (!values.plan && plan.some(check => check.history === true) && !commitExists(root, rangeRef)) throw new Error(unresolvedRangeBase(rangeRef))
   const use = cacheUse({ preCommit: values['pre-commit'], tier: gateTier, only: list(values.only), noCache: values['no-cache'], noSharedCache: values['no-shared-cache'], fullGate }, env)
   const shared: SharedUse | undefined = use.shared
     ? { store: openSharedStore(sharedCacheDir(env), { root, uid: process.getuid?.() ?? -1, now: () => Date.now() }), noReads: use.noReads }

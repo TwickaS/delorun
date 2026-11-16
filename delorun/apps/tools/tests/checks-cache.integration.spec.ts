@@ -39,11 +39,12 @@ afterEach(() => {
 })
 
 /**
- * The environment git runs in: the process's, without the repository variables a hook exports.
+ * The environment git and the runner run in: the process's, without the repository variables a hook exports and without
+ * `DELORUN_RANGE_BASE`, which names a commit of the outer repository that a fixture repository lacks.
  * @returns a new environment.
  */
 function gitEnv(): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')))
+  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_') && name !== 'DELORUN_RANGE_BASE'))
 }
 
 /**
