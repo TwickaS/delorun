@@ -3,20 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
 /delorun:
-  en: 721a7bd3bad979b2
-  zh: c8efdc26d2d4e378
+  en: 235a5fb3c234bf3b
+  zh: f5c516d55f6b7549
 /delorun/status:
   en: 9762527bd8ee81f5
   zh: 8987bcd03d203f1f
-/delorun/what-delorun-provides:
-  en: 96a2e8c9cbe5e017
-  zh: 4d9b36368113bd02
+/delorun/what-you-can-do:
+  en: 067ef68361d40817
+  zh: 3cb054a228c9f2ec
+/delorun/commands:
+  en: ad810f735046f6df
+  zh: eb80dd58bca33be6
 /delorun/run:
-  en: 418c752757d0fb74
-  zh: 7e4c5e814cf79fdf
+  en: 05f8aaf737690f6a
+  zh: afb6c3d61a31e8b8
 /delorun/run/run-from-source:
-  en: 5184490ceabaf11d
-  zh: 675aebc10d2f50a7
+  en: e00192bae7a79447
+  zh: 533d3f2667e66b4d
 /delorun/known-issues-and-questions:
   en: af73d732b975032c
   zh: 556892e1c7d544f4
@@ -27,8 +30,8 @@
   en: cb6e580a65a39d92
   zh: 5879e2d916b788fa
 /delorun/compatibility-with-stock:
-  en: 6450aff22767dc8f
-  zh: c9a8ac54f7d263ac
+  en: 1ae545f43217a0bc
+  zh: c35326a5180d0f1d
 /delorun/relationship-to-upstream:
   en: 5ec7ad4628d75d55
   zh: 4e0d3b257d8825fd

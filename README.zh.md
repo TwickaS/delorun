@@ -4,28 +4,30 @@
 
 <!-- GIF SLOT: the recorded demo goes here, in the first screen, below the title and above the headline. -->
 
-**你的 harness（智能体框架），没有限制。**
+**你的 harness（智能体框架），没有限制。** 任何东西都能改，任何改动都能撤销。
 
-任何东西都能改，任何改动都能撤销。
+Delorun 是一个开源的 agent harness（智能体框架），运行在你自己的电脑上，按你的工作方式来塑造。你可以改变它的外观、它的 agent 能做什么以及运行哪些插件；可以自己写一个插件，也可以直接改 harness 本身。你试过的每一套配置都会保存为一个版本，所以改得不合适时可以切换回去。
 
-Delorun 是一个按你自己的工作方式塑造的 agent harness（智能体框架）：主题、侧边栏、插件、模式，乃至 Delorun 本身，都可以改。每一处改动都能一步撤销，所以你可以放心尝试。每次更新前，Delorun 都会保存一份你的配置副本，一条命令就能回到更新之前。
-
-撤销的范围是 harness 和你的聊天：你的配置、插件和设置都会恢复原样。它不会撤销 agent 对工作区文件所做的改动，因为工作区检查点尚未构建。
-
-运行 `npx delorun` 即可。构建于 DeepSeek Harness 之上；能运行它的插件，也能导入你的聊天。
-
-Delorun 是独立项目。它不是 DeepSeek 的产品，DeepSeek 也没有为它背书。
+运行 `npx delorun` 即可。构建于 DeepSeek Harness 之上；能运行它的插件，也能导入你的聊天。Delorun 是独立项目。它不是 DeepSeek 的产品，DeepSeek 也没有为它背书。
 
 ## 状态
 
 Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全评审。[使用 Delorun 时你要信任什么](delorun/docs/guide/trust.zh.md)说明了这意味着什么，以及何时会改变。Delorun 可在 Linux 上运行，也可通过 WSL2 在 Windows 上运行。
 
-## Delorun 提供什么
+## 你可以做什么
+
+- **按你的方式改。** 主题以及你自己的名称和图标、设置、agent 预设、插件、你自己写的插件、某个自带插件的修改副本，或 harness 本身的代码。[哪些东西在哪一层自定义](delorun/docs/guide/customise.zh.md)展示了每一层，以及更新会让它付出什么代价。
+- **试一套配置，然后保留或退回。** 保存你的配置，用平实的话看另一个版本会改变什么，然后切换。更新在应用前会显示它将改变什么，先保存你的配置，并且在新版本未通过检查时自动退回。已删除的聊天和工作区会进入回收站。这涵盖 harness 和你的聊天；它不会撤销 agent 对你的文件所做的改动，所以请用 git 管理你的项目。[更新](delorun/docs/guide/updates.zh.md)。
+- **在手机上使用。** 通过你自己的 Tailscale 网络，在手机上打开同样的聊天。每台新设备都要在你的电脑上批准。[在手机上访问 studio](delorun/docs/guide/reach.zh.md)。
+- **使用你选择的模型。** DeepSeek、Anthropic、OpenAI、Google Gemini 等，或任何兼容 OpenAI 的端点，其中包括运行在你自己机器上的模型。[模型提供方](delorun/docs/guide/providers.zh.md)。
+- **保持掌控。** 有风险的变更会先征求你的同意，每个版本在运行前都会对照其签名检查，Delorun 没有遥测；默认有两项发布检查会访问互联网。[安全](delorun/docs/guide/safety.zh.md)和[什么会离开你的机器](delorun/docs/guide/trust.zh.md#what-leaves-your-machine)。
+
+## 命令
 
 `delorun` 命令提供：
 
 - `setup`、`start`、`stop` 和 `status`：创建 Delorun home，运行 home 进程并查看其状态。
-- `doctor`：检查 home 的权限、Docker、DeepSeek API 密钥的格式，以及 studio 的端口是否空闲。
+- `doctor`：检查 home 的权限、Docker、你的模型密钥是否已设置且格式正确，以及 studio 的端口是否空闲。
 - `logs`：查找、阅读、跟随、清空和修剪 Delorun 的运行日志。
 - `update`：显示最新版本的报告，并在你确认后应用；`recover`：查看更新后配置的状态，并回滚、恢复某个版本或进入安全模式。
 - `verify`：对照已签名的清单和发布日志，检查已安装的版本。
@@ -35,10 +37,9 @@ Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全
 - `changes`：查看、应用、放弃或撤销等待你处理的变更。
 - `workspace`：在本机上，让聊天在某个文件夹中使用完全访问权限，或让外部 agent 在那里启动。
 - `mcp`：在本机上，回答聊天想要启动的工具服务器所提出的问题。
-- `import-home`：在预览之后，把 DeepSeek Harness 的 home（`~/.dsh`）复制到你的 Delorun home。
+- `import-home`：把 DeepSeek Harness 的 home（`~/.dsh`）复制到你的 Delorun home。
 - `plugin` 和 `headless`。`delorun plugin` 在你的 Delorun home 内运行 DeepSeek Harness 的插件安装器，不带 Delorun 的保护。`delorun headless` 与 `dsh headless` 一样回答一个任务后退出，但带有 Delorun 的沙箱保护、守卫和授权确认，并关闭 DeepSeek 的会话日志上传；需要询问你的授权确认会直接拒绝，因为此时没有人可以回答。
 
-“撤销一切”指的是 harness 和你的聊天，不包括 agent 在工作区里改动过的文件，所以请用 git 管理那些文件。
 
 运行本项目前，请阅读[安全说明](SAFETY.zh.md)。[用户指南](delorun/docs/guide/README.zh.md)说明如何安装和使用 Delorun。[路线图](delorun/docs/guide/roadmap.zh.md)说明正在构建什么、接下来是什么，以及更远的方向。
 
@@ -46,13 +47,13 @@ Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全
 
 ## 运行
 
-安装 Node.js 24.9 或更高版本，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/install.zh.md)带你完成设置和第一次聊天。
+安装 Node.js 24.9 或更高版本（每次启动 Delorun 都需要它），在 Linux 上还要安装 bubblewrap，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/install.zh.md)带你完成设置和第一次聊天。
 
 <a id="run-from-source"></a>
 
 ### 从源码运行
 
-要运行源码检出，请安装 Node.js 24.9 或更高版本以及 pnpm，然后运行：
+要在源码检出中开发 Delorun 的代码，请安装 Node.js 24.9 或更高版本以及 pnpm，然后运行：
 
 ```sh
 pnpm install
@@ -60,7 +61,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` 准备构建产物，`pnpm dsh web` 用这些产物启动 Web UI。`pnpm dsh --profile headless "task"` 运行单个任务，需要 `DEEPSEEK_API_KEY`。当在源码检出中运行 `delorun start` 提示缺少构建文件时，运行 `pnpm run build:artifacts` 和 `pnpm --filter @delorun/bundle-local run build`，然后再次启动。要运行覆盖你所做变更的检查，使用 `pnpm check`。[AGENTS.md](AGENTS.md) 列出了所有命令。
+`pnpm run build` 准备构建产物。`pnpm dsh web` 从检出启动 DeepSeek Harness 自己的 Web UI，`pnpm dsh --profile headless "task"` 在那里运行单个任务，需要 `DEEPSEEK_API_KEY`。要从检出运行 Delorun 自己的命令，请使用 `pnpm --filter @delorun/cli run delorun start`。当它提示缺少构建文件时，运行 `pnpm run build:artifacts` 和 `pnpm --filter @delorun/bundle-local run build`，然后再次启动。要运行覆盖你所做变更的检查，使用 `pnpm check`。[AGENTS.md](AGENTS.md) 列出了所有命令。
 
 ## 已知问题与常见问题
 
@@ -76,7 +77,7 @@ Delorun 可以通过定制插件、模式和集成，按团队的工作方式来
 
 ## 与原版的兼容性
 
-Delorun 保持上游的插件 API、profile 和 Session 格式与原版兼容。变更进入主干之前，有一项检查会在关闭所有对模型可见的 Delorun 变更的情况下回放上游录制的场景；它不会加载原版用户自己的插件或 profile。Delorun 的界面和默认设置可能与原版不同。[Delorun 与原版 DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.zh.md)列出了所有差异。
+DeepSeek Harness 的插件和你的聊天数据与 Delorun 保持兼容。其余一切，包括界面和默认设置，都是 Delorun 自己的。[Delorun 与原版 DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.zh.md)列出了所有差异。
 
 ## 与上游的关系
 

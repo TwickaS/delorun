@@ -4,28 +4,30 @@ English | [中文](README.zh.md)
 
 <!-- GIF SLOT: the recorded demo goes here, in the first screen, below the title and above the headline. -->
 
-**Your harness. No limits.**
+**Your harness. No limits.** Change anything. Undo everything.
 
-Change anything. Undo everything.
+Delorun is an open-source agent harness that runs on your own computer, and that you shape to the way you work. Change how it looks, what its agents can do and which plugins it runs; write a plugin of your own, or edit the harness itself. Each setup you try is kept as a version, so you can switch back when a change is not right.
 
-Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. Every change can be undone in one step, so you can try things without fear. A saved copy of your setup is kept before each update, and one command takes you back.
-
-Undo covers the harness and your chats: your setup, plugins and settings come back as they were. It does not undo what an agent did to the files in your workspace, because workspace checkpoints are not built.
-
-Run it with `npx delorun`. Built on DeepSeek Harness; runs its plugins and imports your chats.
-
-Delorun is independent. It is not a DeepSeek product, and DeepSeek does not endorse it.
+Run it with `npx delorun`. Built on DeepSeek Harness; runs its plugins and imports your chats. Delorun is independent. It is not a DeepSeek product, and DeepSeek does not endorse it.
 
 ## Status
 
 Delorun is a preview, signed with preview keys, and has had no outside security review yet. [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means and when it changes. Delorun runs on Linux and on Windows through WSL2.
 
-## What Delorun provides
+## What you can do
+
+- **Make it yours.** Themes and your own name and icon, settings, agent presets, plugins, a plugin you write, a changed copy of a shipped plugin, or the harness's own code. [Where to customise what](delorun/docs/guide/customise.md) shows each level and what an update costs it.
+- **Try a setup, then keep it or go back.** Save your setup, see in plain words what another version would change, and switch. An update shows what it would change before it applies, saves your setup first, and goes back by itself if the new release fails its check. Deleted chats and workspaces go to a trash. This covers the harness and your chats; it does not undo what an agent did to your files, so keep your projects in git. [Updates](delorun/docs/guide/updates.md).
+- **Use it from your phone.** Open the same chats on your phone over your own Tailscale network. Each new device is approved at your computer. [Reach the studio from your phone](delorun/docs/guide/reach.md).
+- **Use the model you choose.** DeepSeek, Anthropic, OpenAI, Google Gemini and others, or any OpenAI-compatible endpoint, which includes a model running on your own machine. [Model providers](delorun/docs/guide/providers.md).
+- **Stay in control.** Risky changes ask for your consent first, each release is checked against its signature before it runs, and Delorun has no telemetry; two release checks reach the internet by default. [Safety](delorun/docs/guide/safety.md) and [what leaves your machine](delorun/docs/guide/trust.md#what-leaves-your-machine).
+
+## Commands
 
 The `delorun` command provides:
 
 - `setup`, `start`, `stop` and `status` to create the Delorun home, run the home process and inspect it.
-- `doctor` to check the home's permissions, Docker, the DeepSeek API key's format and whether the studio's port is free.
+- `doctor` to check the home's permissions, Docker, whether your model key is set and well formed and whether the studio's port is free.
 - `logs` to find, read, follow, clear and prune Delorun's operational logs.
 - `update` to show the newest release's report and apply it after you confirm, and `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
 - `verify` to check the installed release against its signed manifest and the release log.
@@ -35,20 +37,18 @@ The `delorun` command provides:
 - `changes` to review, apply, discard or undo the changes that wait for you.
 - `workspace` to let chats use full access in a folder, or let an outside agent start there, from this computer.
 - `mcp` to answer, from this computer, the questions about tool servers that chats want to start.
-- `import-home` to copy a DeepSeek Harness home (`~/.dsh`) into your Delorun home after a preview.
+- `import-home` to copy a DeepSeek Harness home (`~/.dsh`) into your Delorun home.
 - `plugin` and `headless`. `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. `delorun headless` answers one task and exits, as `dsh headless` does, but with Delorun's sandbox protection, guards and consents, and with DeepSeek's session-log upload off; a consent that would ask you refuses instead, because nobody is there to answer.
-
-"Undo everything" means the harness and your chats. It does not mean the files an agent changed in a workspace, so keep those in git.
 
 Review the [safety notice](SAFETY.md) before running the project. The [user guide](delorun/docs/guide/README.md) explains how to install and use Delorun. The [roadmap](delorun/docs/guide/roadmap.md) says what is being built, what follows and what comes later.
 
 ## Run
 
-Install Node.js 24.9 or later, then run `npx delorun`. [Install and first run](delorun/docs/guide/install.md) walks through setup and the first chat.
+Install Node.js 24.9 or later, which Delorun needs every time it starts, and on Linux install bubblewrap, then run `npx delorun`. [Install and first run](delorun/docs/guide/install.md) walks through setup and the first chat.
 
 ### Run from source
 
-To run a checkout, install Node.js 24.9 or later and pnpm, then run:
+To work on Delorun's code from a checkout, install Node.js 24.9 or later and pnpm, then run:
 
 ```sh
 pnpm install
@@ -56,7 +56,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the artifacts, and `pnpm dsh web` starts the Web UI from them. `pnpm dsh --profile headless "task"` runs one task and needs a `DEEPSEEK_API_KEY`. When `delorun start` from a checkout says a built file is missing, run `pnpm run build:artifacts` and `pnpm --filter @delorun/bundle-local run build`, then start again. To run the checks that cover your change, use `pnpm check`. [AGENTS.md](AGENTS.md) lists every command.
+`pnpm run build` prepares the artifacts. `pnpm dsh web` starts DeepSeek Harness's own Web UI from the checkout, and `pnpm dsh --profile headless "task"` runs one task there and needs a `DEEPSEEK_API_KEY`. To run Delorun's own command from the checkout, use `pnpm --filter @delorun/cli run delorun start`. When it says a built file is missing, run `pnpm run build:artifacts` and `pnpm --filter @delorun/bundle-local run build`, then start again. To run the checks that cover your change, use `pnpm check`. [AGENTS.md](AGENTS.md) lists every command.
 
 ## Known issues and questions
 
@@ -72,7 +72,7 @@ Delorun can be shaped to a team's work with custom plugins, modes and integratio
 
 ## Compatibility with stock
 
-Delorun keeps upstream's plugin API, profile and Session formats compatible with stock. Before a change reaches the trunk, a check replays upstream's recorded scenarios with every model-visible Delorun change switched off; it does not load a stock user's own plugins or profiles. Delorun's interface and defaults may differ from stock. [Delorun and stock DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.md) lists every difference.
+DeepSeek Harness's plugins and your chat data stay compatible with Delorun. Everything else, including the interface and the defaults, is Delorun's own. [Delorun and stock DeepSeek Harness](delorun/docs/guide/delorun-vs-stock.md) lists every difference.
 
 ## Relationship to upstream
 
