@@ -68,6 +68,7 @@ Delorun adds the entries marked Delorun at the top of the home. Every other entr
   logs/                                upstream startup reports and the operational logs of C20
   runtimes/                      0700  Delorun: the runtime store
   staging/                       0700  Delorun: runtime installs in progress
+  packs/<release>/<pack>/        0700  Delorun: plugin packs, unpacked per release
   trust/                         0700  Delorun: the verified release root, timestamp and log checkpoint (C2, C18), and the installations' identity records
   status/                        0700  Delorun: each installation's update status record (C3)
   catalogue/                     0700  Delorun: the verified catalogue index and revocation list (C13)

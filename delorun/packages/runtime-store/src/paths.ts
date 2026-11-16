@@ -49,7 +49,7 @@ export function identityRecordVersion(name: string): RuntimeVersion | undefined 
 }
 
 /** The release files kept beside an installation, with the version each names. */
-const RELEASE_FILE = /^delorun-(.+?)(?:\.manifest\.json|\.manifest\.log\.json|-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.files\.json)$/u
+const RELEASE_FILE = /^delorun-(.+?)(?:\.manifest\.json|\.manifest\.log\.json|\.packs\.json|\.packs\.log\.json|-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.files\.json)$/u
 
 /**
  * The version a release file beside an installation belongs to.
@@ -127,10 +127,12 @@ export class StorePaths {
   /**
    * The release files kept beside an installation.
    * @param version - the version.
-   * @returns the manifest, this platform's file list and the release-log bundle.
+   * @returns the manifest, this platform's file list and the release-log bundle, and the packs file and its bundle.
    */
-  releaseFiles(version: RuntimeVersion): { readonly manifest: string, readonly files: string, readonly bundle: string } {
+  releaseFiles(version: RuntimeVersion): { readonly manifest: string, readonly files: string, readonly bundle: string, readonly packs: string, readonly packsBundle: string } {
     return {
+      packs: join(this.root, `delorun-${version}.packs.json`),
+      packsBundle: join(this.root, `delorun-${version}.packs.log.json`),
       manifest: join(this.root, `delorun-${version}.manifest.json`),
       files: join(this.root, `delorun-${version}-${this.platform}.files.json`),
       bundle: join(this.root, `delorun-${version}.manifest.log.json`),
