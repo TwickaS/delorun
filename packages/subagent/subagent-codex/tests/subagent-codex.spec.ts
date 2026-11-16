@@ -625,7 +625,7 @@ describe('task admission and package contracts', () => {
       { model: 'gpt-codex', displayName: 'GPT Codex' },
       { model: 'gpt-mini', displayName: 'gpt-mini' },
     ])
-    expect(child.handle.terminate).toHaveBeenCalled()
+    expect(child.terminate).toHaveBeenCalled()
   })
 
   it('resolves the safe permission default when apply is called directly', async () => {

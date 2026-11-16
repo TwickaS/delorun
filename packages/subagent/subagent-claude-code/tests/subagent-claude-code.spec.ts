@@ -349,14 +349,13 @@ describe('model listing', () => {
     const close = vi.fn()
     queryMock.mockImplementation(({ options }) => {
       options.spawnClaudeCodeProcess!(sdkSpawnOptions())
-      return {
-        ...queryFrom([], undefined, close),
+      return Object.assign(queryFrom([], undefined, close), {
         supportedModels: () => Promise.resolve([
           { value: 'default', displayName: 'Default (recommended)', description: '' },
           { value: 'sonnet', displayName: 'Sonnet', description: '' },
           { value: 'opus', displayName: 'Opus', description: '' },
         ]),
-      } as unknown as Query
+      })
     })
     await expect(listClaudeCodeModels(run.spec, new AbortController().signal)).resolves.toEqual([
       { model: 'sonnet', displayName: 'Sonnet' },
@@ -371,7 +370,7 @@ describe('model listing', () => {
     const controller = new AbortController()
     queryMock.mockImplementation(({ options }) => {
       options.spawnClaudeCodeProcess!(sdkSpawnOptions())
-      return { ...queryFrom([]), supportedModels: () => new Promise(() => {}) } as unknown as Query
+      return Object.assign(queryFrom([]), { supportedModels: () => new Promise<never>(() => {}) })
     })
     const listing = listClaudeCodeModels(run.spec, controller.signal)
     controller.abort(new Error('stop'))
