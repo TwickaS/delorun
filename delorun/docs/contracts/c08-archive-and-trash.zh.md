@@ -140,7 +140,7 @@ stock DeepSeek Harness home 的导入不是归档导入；[stock home 导入](#t
 
 `delorun setup export --out <file>` 把某人添加的插件、其模型选择与设置写成一个以 home 密钥签名的 `setup` 归档；`delorun setup import <file>` 读取它。归档含一个没有任何行的 `customisation.json`、一个 `setup-document` 条目，以及此人自己编写的插件的每个不同文件各一个 `plugin-file` 条目。`delorun import` 以 `ARCHIVE_WRONG_KIND` 拒绝 `setup` 归档，`delorun setup import` 同样拒绝 `chats` 归档。
 
-setup 文档是封闭的 JSON schema（`schemaVersion` 为 `1`）：`profile`（仅供参考）、`plugins` 与 `patch`。来自注册表的插件为 `{ name, source: "registry", version, integrity? }`，带确切版本与 lockfile 的 integrity；此人自己编写的插件为 `{ name, source: "local", version?, files }`，每个文件带经归档检查的 `path`、`sha256`、`size` 与 `executable`，且含一个 `package.json`。名称、版本与摘要遵循固定的模式，路径经过[路径规则](#archive-file)，一个插件至多 20,000 个文件，一个 setup 至多 200 个插件与 500 个补丁条目；文本值含控制字符、以 `!` 开头或含 `!!` 时被拒绝（表达式形式为 `ARCHIVE_EXPRESSION_REFUSED`）。`patch` 以数据形式保存 profile 的补丁条目。
+setup 文档是封闭的 JSON schema（`schemaVersion` 为 `1`）：`profile`（仅供参考）、可选的 `note`（至多 500 个字符，导入时显示在签名者旁边）、`includesSettings`、`plugins`、`models` 与 `settings`。`models` 保存设置默认模型、模型提供方和模型设置的补丁条目，它们总会随行；`settings` 保存其他被携带的条目，`includesSettings` 为 false 时为空。没有 `files` 的本地插件只有名称：导出方略去了它的代码，导入方既不安装也不移除它。来自注册表的插件为 `{ name, source: "registry", version, integrity? }`，带确切版本与 lockfile 的 integrity；此人自己编写的插件为 `{ name, source: "local", version?, files }`，每个文件带经归档检查的 `path`、`sha256`、`size` 与 `executable`，且含一个 `package.json`。名称、版本与摘要遵循固定的模式，路径经过[路径规则](#archive-file)，一个插件至多 20,000 个文件，一个 setup 至多 200 个插件与 500 个补丁条目；文本值含控制字符、以 `!` 开头或含 `!!` 时被拒绝（表达式形式为 `ARCHIVE_EXPRESSION_REFUSED`）。`models` 与 `settings` 以数据形式保存 profile 的补丁条目。
 
 setup 带什么，在导出时决定，在导入时由同一策略（`@delorun/changes` 的 `setup-transfer`）再决定一次：
 
@@ -149,7 +149,7 @@ setup 带什么，在导出时决定，在导入时由同一策略（`@delorun/c
 - 被携带的条目中若含凭据字段的值，或匹配密钥模式的文本，则导出与导入都会停止（`SETUP_REFUSED`），并以位置命名，从不以值命名。`!!js` 表达式不会被导出。
 - 在导出电脑上自己编写的插件，以其已批准副本的文件携带；链接不携带。
 
-`openSetup` 运行 `inspect` 的所有验证步骤，但不以签名者作为门槛：未签名的归档与由未知密钥签名的归档，会连同密钥指纹一起作为未验证返回；无法通过验证的签名仍以 `ARCHIVE_SIGNATURE_INVALID` 被拒绝。导入随后替换目标 profile 的 setup：归档中没有的插件被移除，归档没有携带的设置恢复默认，这些都在询问本人之前列出。导入先保存一个 profile 历史版本，再通过 `@delorun/changes` 的插件请求操作应用，因此安装检查、被扣留的构建脚本与对本地代码的审阅都适用。本地插件的文件被写入 `archive/setup-plugins/<profile>/` 下的新文件夹，插件从该处链接，这会把其内容记录为一个等待审阅的变更。
+`openSetup` 运行 `inspect` 的所有验证步骤，但不以签名者作为门槛：未签名的归档与由未知密钥签名的归档，会连同密钥指纹一起作为未验证返回；无法通过验证的签名仍以 `ARCHIVE_SIGNATURE_INVALID` 被拒绝。导入随后替换本人所选的部分，这些都在询问本人之前列出：模型条目总是被替换；其他设置除非本人关闭或归档不含设置，否则被替换（归档没有的设置恢复默认）；以及归档所列的插件；归档未列出的插件只有在本人选择移除时才被移除。导入先保存一个 profile 历史版本，再通过 `@delorun/changes` 的插件请求操作应用，因此安装检查、被扣留的构建脚本与对本地代码的审阅都适用。本地插件的文件被写入 `archive/setup-plugins/<profile>/` 下的新文件夹，插件从该处链接，这会把其内容记录为一个等待审阅的变更。
 
 <a id="the-stock-home-import"></a>
 ### stock home 导入

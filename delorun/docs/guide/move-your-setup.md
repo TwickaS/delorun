@@ -30,6 +30,17 @@ delorun setup export --out my-setup.delorun
 
 Delorun prints what went in, the key of this computer that signed the file, and what it left out and why. It never replaces a file that exists. Add `--profile <name>` to export another profile.
 
+You choose what goes in:
+
+| Option | Effect |
+| --- | --- |
+| `--no-settings` | Leaves out the settings besides your model choices. The file records that it has none. |
+| `--plugin <name>` (repeat it) | Puts in only the plugins you name, so a file you share holds one plugin and nothing else of yours. |
+| `--no-local-code` | Names the plugins you made without their code. Whoever imports the file copies them. |
+| `--note "…"` | A note the importer reads beside the signer. |
+
+Your model provider, models and any custom endpoint address always go in; the studio's Export setup dialog has the same choices as switches and a checklist (**Include settings**, **Include my own plugins' code**, the plugins, and a note).
+
 ## What the file holds
 
 | In the file | Left out of the file |
@@ -48,14 +59,14 @@ A setting that reads an environment variable with `!!js` stays behind, because a
 delorun setup import my-setup.delorun
 ```
 
-Add `--dry-run` to see what the file would do without a terminal and without changing anything. The import then:
+Add `--dry-run` to see what the file would do without a terminal and without changing anything. Add `--no-settings` to leave your settings exactly as they are (only your model choices are replaced), and `--remove-others` to also remove the plugins the file does not list. The import then:
 
 1. Checks the file in full before it writes anything. A file that was changed after it was signed, or that holds a path outside the plugin's folder, is refused.
 2. Says who signed it. A file from your own computer shows as signed by this computer's key. A file from another computer, or an unsigned file, is shown as **UNVERIFIED** with the key's fingerprint. Compare the fingerprint with the one the export printed on the other computer. You can still import it; what you read next is the safeguard.
-3. Lists what it would do: the plugins it adds or moves, **the plugins it removes because the file does not list them**, the settings it sets, changes or takes back to their defaults, the endpoints your model settings would send requests to, and what it does not apply.
+3. Lists what it would do and says which parts it replaces: the plugins it adds or moves, the plugins it removes (only with `--remove-others`), the settings it sets, changes or takes back to their defaults, the sender's note, the plugins the file names without code, the endpoints your model settings would send requests to, and what it does not apply.
 4. Asks `Replace the setup of the profile default with this one? [y/N]`. Your keys, chats, devices, exemptions and setup answers are never touched.
 
-The import replaces the whole setup: a plugin the file does not list is removed, and a model or plugin setting it does not carry goes back to its default. Settings that protect the computer, such as the sandbox, stay as they are.
+By default the import replaces your model choices and your other settings, and touches only the plugins the file lists, so a file holding one plugin cannot wipe your setup. A model or plugin setting the file does not carry goes back to its default. With `--remove-others` a plugin the file does not list is removed too. Settings that protect the computer, such as the sandbox, permissions and network, are never carried and stay as they are.
 
 The import installs and removes plugins the way `delorun plugin` does, with the same checks. A plugin made on another computer is written to a folder under your home and linked from there. Its code is **not approved by the import**. With [protection](../reference/glossary.md#changes-protection) on, it waits in `delorun changes list` until you review it ([Changing your harness](changing-your-harness.md)). With protection off, it loads at the next start without review, as any plugin you link from a folder does; turn protection on first with `delorun changes protection on` if you want to read it first.
 
@@ -86,7 +97,7 @@ The command prints the version. You can also choose it under Settings → Setup 
 
 ## In the studio
 
-Settings → Setup versions has an **Export setup** button and an **Import setup** button; they work only in the studio on the computer that runs Delorun, not from a phone.
+Settings → Setup versions has an **Export setup** button and an **Import setup** button; they work only in the studio on the computer that runs Delorun, not from a phone. Export setup opens a dialog with the **Include settings** and **Include my own plugins' code** switches, a checklist of your plugins and a note. Import setup shows the list of changes first, with an **Include settings** switch (only when the file has settings) and **Remove plugins not in this archive** (off), and replaces your setup only when you press **Replace my setup**.
 
 ## For the technically curious
 
