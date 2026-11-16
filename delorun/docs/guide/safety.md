@@ -38,7 +38,7 @@ Delorun does not start a [profile](../reference/glossary.md#profile) whose setti
 
 ## The sandbox
 
-The sandbox limits the commands the model runs. In a workspace on Workspace Write, which is where every new workspace starts, commands can write only inside the workspace and in the permitted temporary folders. Delorun adds rules that keep its own home folder, `~/.delorun`, out of reach:
+The sandbox limits the commands the model runs. A chat works under one of three permission levels, which you choose in the chat's permission control: **Read Only**, where commands can look but not change anything; **Workspace Write**, where every new workspace starts; and **Full access**, which runs commands outside the sandbox ([Full access](#full-access)). In a workspace on Workspace Write, commands can write only inside the workspace and in the permitted temporary folders. Delorun adds rules that keep its own home folder, `~/.delorun`, out of reach:
 
 - Commands cannot write anywhere in your Delorun home.
 - Commands cannot read your keys, Delorun's secrets or the token that controls the running Delorun. They can read only the installed releases, skills and runtimes they need, and the approved copies of your profile's plugins, so a plugin can hand the agent a tool of its own. They cannot write to those copies, and they cannot read a plugin change that is waiting for your review. Anything a plugin writes into its own approved folder, such as a cached token, is readable by sandboxed commands, so a plugin keeps its secrets in the credentials store.
@@ -52,7 +52,6 @@ On Linux, run `delorun doctor` to see which sandbox your computer runs. Its `san
 | --- | --- |
 | Linux with bubblewrap installed, WSL2 included | Every rule above. It also hides your login session's sockets, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux or screen, or use your ssh-agent, gpg-agent or keyring. Under WSL2 it also stops commands from starting Windows programs. Abstract sockets, such as the X server's and the session bus's on a Linux desktop, are tied to the network, so with the network setting on Open a command is refused while any of them is listening ([The network setting](#the-network-setting)). |
 | Linux without bubblewrap | The write and read rules only. It cannot hide your session's sockets, so on a computer with a desktop or login session Delorun refuses to run commands at all until you install bubblewrap. |
-| Windows | Writes only. Commands can read your Delorun home, its secrets and the token included. |
 
 Commands can still reach everything else your user can: other local sockets, files such as `~/.ssh` and `~/.aws`, and the network unless you limit it ([The network setting](#the-network-setting)). The sandbox limits writes and protects Delorun's home. It does not hide the rest of your account.
 
@@ -60,9 +59,9 @@ Commands can still reach everything else your user can: other local sockets, fil
 <summary>Edge cases</summary>
 
 - If a command needs your ssh-agent, such as `git push` over ssh, then it fails in the sandbox. Give that workspace [full access](../reference/glossary.md#full-access), or push from your own terminal.
+- If you run Linux without bubblewrap on a computer with no login session or program such as tmux holding a socket, then commands run under Landlock and `delorun doctor` shows `warn sandbox`.
 - If you run Linux without bubblewrap on a desktop, then every sandboxed command is refused. Install the `bubblewrap` package and start Delorun again. If it is installed but cannot create a sandbox, see [Troubleshooting](troubleshooting.md#protections-and-plugins).
 - If you run under WSL2, then the Linux rules apply and commands cannot start Windows programs.
-- If you run on Windows, then commands can read Delorun's secrets and token. Treat the model's commands there as having read access to your Delorun home.
 - If a program you start yourself, outside the sandbox, reads your Delorun home, then nothing stops it. The sandbox covers the model's commands only.
 
 </details>
@@ -129,6 +128,8 @@ Setup's prompts question decides how Delorun asks before risky changes. `delorun
 | The model creates or edits a scheduled task | Asks, showing the task's prompt, its schedule, the chat it runs in and that chat's [permission preset](../reference/glossary.md#permission-preset) | Created as in DeepSeek Harness |
 
 **Never ask (dangerous)** is a third answer. It turns the three consents off as Ask less does, and lets any chat switch to full access with no question, from the studio, a phone, a scheduled task or a script. Setup prints a warning, asks you to confirm twice and to type `full access everywhere`; it refuses the answer for the root user, and `--yes` never selects it. Choosing another answer with `delorun setup prompts` turns it off again.
+
+With Never ask, an unlocked phone has the computer's authority, so treat it as the computer.
 
 A phone or browser signed in over remote access, with its unlock running, can then do everything the computer can: it changes settings and plugin rows the computer alone changes with the other answers, runs any slash command, loosens the permission new chats start in, answers the questions for MCP servers, external agents and a workspace's network, gives the approvals that reserve full access, uses terminals (each terminal needs the unlock, and no switch or full-access workspace waives it), saves or removes provider keys (it never reads a saved key back), opens a chat's folder in an application on the computer, and reads files outside the chat's workspace (never inside the Delorun home). A preset or consent a phone loosened this way (the permission new chats start in, or the external-agent consent turned off) is set back when the mode ends, unless you changed it at your computer since. Remote access never extends itself: only the computer, through `delorun setup`, turns the mode on, approves a new device, approves an unlock or removes a device, changes the remote-access settings and resets the home, and a device signs in as before. Nothing a device does while the mode is on outlives it: a terminal switch or a workspace's full access that a device turned on is turned off when the mode ends, and chats in those workspaces go back to Workspace Write, while what you set at the computer stays. Reading files outside the chat's workspace is the same reach that full access gives the chat in this mode. A phone that has a terminal, or that prompts a chat in a full-access workspace, has the computer's authority: a shell on the computer can run `delorun devices approve`, `elevate` and `code`, so treat an unlocked phone as the computer. A device whose unlock has ended keeps every refusal it has with the other answers, and it opens no terminal. [`@delorun/home-auth`](../../packages/home-auth/README.md#dangerous-mode) lists each refusal the mode lifts.
 
@@ -268,15 +269,14 @@ They prove that you run the release Delorun's keys signed and logged publicly. T
 ## What Delorun does not protect against
 
 - **Programs running as you outside the sandbox.** Any program you run, and any command you let run with full access, can read and change everything in your Delorun home, use its token to approve a device or open the studio, and change the checks.
-- **Windows reads.** On Windows, the model's commands can read Delorun's secrets and token.
 - **Linux without bubblewrap.** Where Delorun runs commands there at all, they can connect to Docker's socket, which gives root on a rootful Docker.
-- **The network and other sockets.** Commands reach any network host unless you limit it, and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file names, and a session bus that `dbus-launch` started can too. Commands can reach both, and through such a bus start programs outside the sandbox.
+- **The network and other sockets.** Commands reach any network host unless you limit it, and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file names, and a session bus that `dbus-launch` started can too. With the network setting on Open, Delorun refuses a command while any such socket listens, unless the workspace accepts that risk ([The network setting](#the-network-setting)); a socket that starts listening after the command starts is not caught. With the risk accepted, commands can reach those sockets, and through such a bus start programs outside the sandbox.
 - **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but not its files again after install. A plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
 - **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions. The consents and the sandbox limit what follows from them. They do not detect them ([Prompt injection](prompt-injection.md)).
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.
 - **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delorun keeps its logs](logs.md)).
 
-With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change. The change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, Delorun's maintainers included, can and cannot do.
+With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change. The change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, the maintainer included, can and cannot do.
 
 ## Next
 
