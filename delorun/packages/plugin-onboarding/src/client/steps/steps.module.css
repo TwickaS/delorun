@@ -485,3 +485,12 @@
     min-width: 44px;
   }
 }
+
+/* The original-look screen's list of what it turns off. */
+.stockList {
+  margin: 0;
+  padding-left: var(--delorun-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-2);
+}

@@ -74,6 +74,18 @@ export interface Guide {
   readonly providersPhase: Store<ProvidersPhase>
   /** What the person did on Phone access, which Ready reports. */
   readonly phone: Store<PhoneOutcome>
+  /** Whether the person chose the original look; it applies when the guide finishes and is forgotten if the guide closes first. */
+  readonly stock: Store<boolean>
+  /** Whether the original-look screen is open in place of the Look step. */
+  readonly stockScreen: Store<boolean>
+  /**
+   * @param chosen - whether the original look applies when the guide finishes.
+   */
+  setStock(chosen: boolean): void
+  /**
+   * @param open - whether the original-look screen shows.
+   */
+  setStockScreen(open: boolean): void
   /**
    * @param outcome - what the person did on Phone access.
    */
@@ -144,6 +156,8 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   const clone = createSnapshotStore<CloneView>({ state: 'idle' })
   const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
   const phone = createSnapshotStore<PhoneOutcome>('untouched')
+  const stock = createSnapshotStore(false)
+  const stockScreen = createSnapshotStore(false)
   const gates = new Map<string, ContinueGate>()
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -176,7 +190,9 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   fill(readiness, host.readiness)
   fill(keys, host.keyTest)
   return {
-    readiness, keys, recommendations, workspace, mode, clone, providersPhase, phone,
+    readiness, keys, recommendations, workspace, mode, clone, providersPhase, phone, stock, stockScreen,
+    setStock: (chosen) => { stock.set(chosen) },
+    setStockScreen: (open) => { stockScreen.set(open) },
     setPhone: (outcome) => { phone.set(outcome) },
     setProvidersPhase: (phase) => { providersPhase.set(phase) },
     setGate: (key, gate) => { if (gate === undefined) gates.delete(key); else gates.set(key, gate) },

@@ -1,47 +1,17 @@
 /**
  * Look: colour scheme and theme in one chooser with a compact live sample, and a quiet line for the stock look.
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { ACCENT_PRESETS, ACCENT_PREVIEWS, customStart, lookView, PALETTE_CHOICES, PALETTE_PREVIEWS, type LookValues, type PaletteChoice } from '../previews.ts'
 import type { SchemePreference, StepServices } from '../types.ts'
 import { LookChooser, type LookSampleCopy } from '@delorun/brand'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { StepProps } from './shared.ts'
+import { useStore, type StepProps } from './shared.ts'
+import { StockLookLink, StockLookScreen } from './StockLook.tsx'
 import css from './steps.module.css'
 
 /** The colour schemes the look step offers. */
 const SCHEMES: readonly SchemePreference[] = ['light', 'dark', 'system']
-
-/**
- * The stock look as a quiet line under the choices. Choosing it asks first, because it turns Delorun's studio additions
- * off and closes the guide.
- * @param props - this plugin's copy, whether the settings can be written and what confirms the switch.
- * @returns the line, or the question.
- */
-function StockLookLine({ t, appearance, disabled, onConfirm }: { readonly t: StepServices['t']; readonly appearance: StepServices['appearance']; readonly disabled: boolean; readonly onConfirm: () => void }): ReactNode {
-  const [asking, setAsking] = useState(false)
-  const yes = useRef<HTMLButtonElement>(null)
-  // The question replaces the button that was pressed, so focus moves to its first answer.
-  useEffect(() => { if (asking) yes.current?.focus() }, [asking])
-  if (!asking) {
-    return (
-      <p className={css.hint}>
-        {t('look.stock.ask')}{' '}
-        <Button className={css.stockLink} variant="ghost" size="sm" disabled={disabled} onClick={() => { setAsking(true) }}>{appearance('look.stock')}</Button>
-      </p>
-    )
-  }
-  return (
-    <div className={css.stack} role="group" aria-label={t('look.studio')}>
-      <p className={css.hint}>{t('look.stock.confirm')}</p>
-      <div className={css.actions}>
-        <Button ref={yes} className={css.stockLink} variant="outline" size="sm" onClick={onConfirm}>{t('look.stock.yes')}</Button>
-        <Button className={css.stockLink} variant="ghost" size="sm" onClick={() => { setAsking(false) }}>{t('look.stock.no')}</Button>
-      </div>
-    </div>
-  )
-}
 
 /** The sample's copy. */
 function sampleCopy(t: StepServices['t']): LookSampleCopy {
@@ -52,13 +22,14 @@ function sampleCopy(t: StepServices['t']): LookSampleCopy {
 const HEX = /^#[0-9a-fA-F]{6}$/
 
 /**
- * Look: colour scheme and theme in one chooser with a compact live sample, and a quiet line for the stock look. Only the
- * Custom theme shows the accent pickers.
- * @param props - the services.
+ * Look: colour scheme and theme in one chooser with a compact live sample, and a quiet link to the original-look screen.
+ * Only the Custom theme shows the accent pickers.
+ * @param props - the services, the guide and what continues to the next step.
  * @returns the step body.
  */
-export function LookStep({ services }: StepProps): ReactNode {
+export function LookStep({ services, guide, next }: StepProps & { readonly next: () => void }): ReactNode {
   const { t, appearance, scheme, look } = services
+  const screen = useStore(guide.stockScreen)
   const preference = useSyncExternalStore(useCallback(listener => scheme.subscribe(listener), [scheme]), () => scheme.get())
   const settings = useSyncExternalStore(useCallback(listener => look.settings.subscribe(listener), [look]), () => look.settings.getSnapshot())
   const [failed, setFailed] = useState(false)
@@ -83,6 +54,7 @@ export function LookStep({ services }: StepProps): ReactNode {
   }
   const customColour = HEX.test(view.customAccent) ? view.customAccent : '#E5734A'
   const accentFill = view.accent === 'custom' ? customColour : ACCENT_PREVIEWS[view.accent].light
+  if (screen) return <StockLookScreen services={services} guide={guide} next={next} />
   const customTile = {
     light: { ...PALETTE_PREVIEWS.soft.light, accent: accentFill },
     dark: { ...PALETTE_PREVIEWS.soft.dark, accent: view.accent === 'custom' ? customColour : ACCENT_PREVIEWS[view.accent].dark },
@@ -111,7 +83,7 @@ export function LookStep({ services }: StepProps): ReactNode {
           isColour: text => HEX.test(text),
         }} />
       {failed && <p className={css.failure} role="alert">{t('saveFailed')}</p>}
-      <StockLookLine t={t} appearance={appearance} disabled={disabled} onConfirm={() => { save(look.useStockLook()) }} />
+      <StockLookLink services={services} guide={guide} disabled={false} />
     </div>
   )
 }
