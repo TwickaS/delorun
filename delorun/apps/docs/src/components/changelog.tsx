@@ -124,11 +124,11 @@ export function changelogHead(locale: Locale) {
  * The home page's What's new section: the latest version's number and date, its headline entries and the link to the
  * changelog page.
  * @param props.locale - the locale, which selects the labels and the page's route.
- * @returns the section, or nothing when no version is assembled.
+ * @returns the section, or nothing when no version is assembled or the latest has no headlines.
  */
 export function WhatsNew({ locale }: { locale: Locale }) {
   const latest = view?.versions[0]
-  if (latest === undefined) return null
+  if (latest === undefined || latest.headlines.length === 0) return null
   const copy = COPY[locale].changelog
   return (
     <section className="mt-12" aria-labelledby="whats-new">

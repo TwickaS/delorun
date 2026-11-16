@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildEntry, CHANGELOG_SCHEMA, renderChangelog, type ChangelogData } from '../../release/src/changelog/data.ts'
 import type { Fragment } from '../../release/src/changelog/fragment.ts'
-import { buildView, firstSentence, loadView, PREVIEW_ENV, RECORD_PATH } from '@design/changelog.ts'
+import { buildView, loadView, PREVIEW_ENV, RECORD_PATH } from '@design/changelog.ts'
 import { prerenderPaths } from '../src/site/pages.ts'
 
 const REPOSITORY = fileURLToPath(new URL('../../../..', import.meta.url))
@@ -78,26 +78,11 @@ describe('the changelog view', () => {
     }
   })
 
-  it('takes three to five first sentences as the headlines of a version', () => {
-    const [latest, earliest] = buildView(RECORD).versions
-    expect(latest?.headlines).toEqual(['`delorun update` applies a release once you confirm.', 'The sidebar shows your chats.', 'A long title no longer overflows.'])
-    expect(earliest?.headlines).toEqual(['`delorun setup` asks one question at a time.'])
-    const many = buildEntry('0.3.0', '2027-01-01', 'dsh-v0.2.2', ['Setup', 'Studio', 'Reach', 'Plugins', 'Commands', 'Compatibility', 'Install and update'].map(area => fragment(area as Fragment['area'], 'Added', `${area} changed.`)))
-    expect(buildView({ ...RECORD, versions: [many] }).versions[0]?.headlines).toHaveLength(5)
-  })
-
-  it('fills the headlines from the other sections when few Added bullets exist', () => {
-    const entry = buildEntry('0.3.0', '2027-01-01', 'dsh-v0.2.2', [fragment('Studio', 'Added', 'A.'), fragment('Studio', 'Fixed', 'B.'), fragment('Commands', 'Security', 'C.'), fragment('Setup', 'Changed', 'D.')])
-    expect(buildView({ ...RECORD, versions: [entry] }).versions[0]?.headlines).toEqual(['A.', 'D.', 'B.'])
-  })
-
-  it('cuts a long sentence at a word and never inside a code span', () => {
-    const long = `${'word '.repeat(30)}\`code span with spaces ${'x '.repeat(20)}\` tail.`
-    const cut = firstSentence(long)
-    expect(cut.endsWith('…')).toBe(true)
-    expect(cut.length).toBeLessThanOrEqual(161)
-    expect((cut.match(/`/g) ?? []).length % 2).toBe(0)
-    expect(firstSentence('Short one. Second one.')).toBe('Short one.')
+  it('carries the headlines a version was assembled with, and none otherwise', () => {
+    const withHeadlines = buildEntry('0.3.0', '2027-01-01', 'dsh-v0.2.2', [fragment('Studio', 'Added', 'A.')], [], ['You can change the theme.', 'You can undo it.'])
+    const views = buildView({ ...RECORD, versions: [withHeadlines, NEWER] }).versions
+    expect(views[0]?.headlines).toEqual(['You can change the theme.', 'You can undo it.'])
+    expect(views[1]?.headlines).toEqual([])
   })
 })
 

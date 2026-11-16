@@ -134,6 +134,32 @@ describe('the assembly of a preview sub-version', () => {
   })
 })
 
+describe('the headlines of a version', () => {
+  it('records up to three headline sentences and prints them at the top of the notes and the changelog entry', (test) => {
+    const repo = releaseRepo(test)
+    const result = assemble(repo, '--version', '0.1.0-preview.1', '--date', '2026-11-10', '--headline', 'You can change the look.', '--headline', 'You can undo it.')
+    expect(result.code).toBe(0)
+    expect(parseData(read(repo, 'delorun/changelog/changelog.json')).versions[0]?.headlines).toEqual(['You can change the look.', 'You can undo it.'])
+    expect(read(repo, `${RELEASES}/0.1.0-preview.1.md`)).toMatch(/^# Delorun 0\.1\.0-preview\.1\n\nYou can change the look\. You can undo it\.\n\n## /u)
+    expect(read(repo, 'CHANGELOG.md')).toContain('## 0.1.0-preview.1 (2026-11-10)\n\nYou can change the look. You can undo it.\n\n### ')
+  })
+
+  it('records no headlines field when none is given', (test) => {
+    const repo = releaseRepo(test)
+    expect(assemble(repo, '--version', '0.1.0-preview.1').code).toBe(0)
+    expect(read(repo, 'delorun/changelog/changelog.json')).not.toContain('headlines')
+  })
+
+  it('refuses more than three headlines and a headline that is empty or too long', (test) => {
+    const repo = releaseRepo(test)
+    const four = assemble(repo, '--version', '0.1.0-preview.1', '--dry-run', '--headline', 'A.', '--headline', 'B.', '--headline', 'C.', '--headline', 'D.')
+    expect(four.code).toBe(1)
+    expect(four.err).toContain('at most 3 headlines')
+    expect(assemble(repo, '--version', '0.1.0-preview.1', '--dry-run', '--headline', ' ').err).toContain('one non-empty line')
+    expect(assemble(repo, '--version', '0.1.0-preview.1', '--dry-run', '--headline', 'x'.repeat(241)).err).toContain('at most 240 characters')
+  })
+})
+
 describe('the refusals of the assembly', () => {
   it('refuses 1.0.0 without --first-public-release and admits it with the flag', (test) => {
     const repo = releaseRepo(test)

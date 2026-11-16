@@ -19,6 +19,12 @@ const PRINT_ORDER: readonly Section[] = ['Added', 'Changed', 'Fixed', 'Security'
 /** The sections that print a bold prefix word before their text in the Markdown. */
 const PREFIXED_SECTIONS: readonly Section[] = ['Security', 'Removed', 'Fixed']
 
+/** The most headline sentences a version carries. */
+export const MAX_HEADLINES = 3
+
+/** The longest headline, in characters. */
+export const MAX_HEADLINE_LENGTH = 240
+
 /** One bullet of the changelog. */
 export interface Item {
   /** The section the bullet's fragment names. */
@@ -69,6 +75,11 @@ export interface VersionEntry {
   readonly date: string
   /** True for a preview sub-version. */
   readonly preview: boolean
+  /**
+   * Up to {@link MAX_HEADLINES} plain sentences, written for people, that say what a person can now do. They open the
+   * release notes, feed the sites' "What's new" strip, and are absent from a version assembled without any.
+   */
+  readonly headlines?: readonly string[]
   /** The version's own bullets by area, in the fixed area order. */
   readonly areas: readonly AreaItems[]
   /** The upstream release the version is based on, and the `From upstream` bullets. */
@@ -121,6 +132,22 @@ export function byArea(items: readonly ComparedItem[]): AreaItems[] {
 }
 
 /**
+ * The refusals of a version's headline sentences.
+ * @param headlines - the sentences as given.
+ * @returns one message per violation; empty when there are at most {@link MAX_HEADLINES} sentences and each is a
+ * single non-empty line within {@link MAX_HEADLINE_LENGTH} characters.
+ */
+export function headlineErrors(headlines: readonly string[]): string[] {
+  const errors: string[] = []
+  if (headlines.length > MAX_HEADLINES) errors.push(`a version has at most ${String(MAX_HEADLINES)} headlines, not ${String(headlines.length)}`)
+  for (const headline of headlines) {
+    if (headline.trim() === '' || /[\r\n]/u.test(headline)) errors.push(`a headline is one non-empty line: "${headline}"`)
+    else if (headline.length > MAX_HEADLINE_LENGTH) errors.push(`a headline has at most ${String(MAX_HEADLINE_LENGTH)} characters: "${headline}"`)
+  }
+  return errors
+}
+
+/**
  * The refusals of the fragments' `replaces` lines and file names, over released and unreleased fragments together.
  * @param fragments - every released and unreleased fragment.
  * @returns one message per violation; empty when every name is unique and every `replaces` names another fragment.
@@ -159,14 +186,17 @@ export function buildCompared(fragments: readonly Fragment[]): ComparedItem[] {
  * @param upstreamRef - the upstream release the version is based on.
  * @param fragments - the fragments the version consumes.
  * @param previews - the previews folded into the version, newest first.
- * @returns the entry; `From upstream` fragments go to `fromUpstream`, the others to their areas.
+ * @param headlines - the version's headline sentences; none by default.
+ * @returns the entry; `From upstream` fragments go to `fromUpstream`, the others to their areas. The entry has a
+ * `headlines` field only when `headlines` is not empty.
  */
-export function buildEntry(version: string, date: string, upstreamRef: string, fragments: readonly Fragment[], previews: readonly PreviewEntry[] = []): VersionEntry {
+export function buildEntry(version: string, date: string, upstreamRef: string, fragments: readonly Fragment[], previews: readonly PreviewEntry[] = [], headlines: readonly string[] = []): VersionEntry {
   const own = ordered(itemsOf(fragments))
   return {
     version,
     date,
     preview: isPreview(version),
+    ...headlines.length === 0 ? {} : { headlines },
     areas: byArea(own.filter(item => item.section !== 'From upstream')),
     fromUpstream: { ref: upstreamRef, items: own.filter(item => item.section === 'From upstream').map(({ area, text }) => ({ area, text })) },
     previews,
@@ -257,6 +287,7 @@ function bodyLines(entry: VersionEntry, level: string): string[] {
   const { ref, items } = entry.fromUpstream
   const previewLevel = `${level}#`
   return [
+    ...entry.headlines === undefined || entry.headlines.length === 0 ? [] : [entry.headlines.join(' '), ''],
     ...areaLines(entry.areas, level),
     `${level} From upstream`,
     `- ${basedOnText(ref)}`,

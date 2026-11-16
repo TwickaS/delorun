@@ -115,6 +115,7 @@ The data file has this shape:
     "version": "0.1.0-preview.1",
     "date": "YYYY-MM-DD",
     "preview": true,
+    "headlines": ["You can ..."],
     "areas": [{ "area": "Commands", "items": [{ "section": "Added", "text": "..." }] }],
     "fromUpstream": { "ref": "dsh-v0.2.2-rc.1", "items": [{ "area": "Compatibility", "text": "..." }] },
     "previews": []
@@ -123,6 +124,8 @@ The data file has this shape:
 ```
 
 `previews` holds the previews that a final version folded in, newest first, each with its `version`, `date`, `areas` and `fromUpstream` items; it is empty for a preview and for a version that had none.
+
+`headlines` holds up to three plain sentences, written for people, that say what a person can now do with the version. They come from `--headline <sentence>` (repeat it up to three times) at assembly, open the version's entry and release notes, and feed the "What's new" strip on both sites; a version assembled without any has no field and no strip.
 
 ## Who reads the data file
 

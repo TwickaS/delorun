@@ -2,8 +2,10 @@
  * Assembles a version's changelog fragments into the changelog data file, `CHANGELOG.md` and the release notes, then
  * moves the consumed fragments into `delorun/changelog/releases/<version>/`. Run from the repository root:
  * `node_modules/.bin/tsx delorun/apps/release/src/changelog/assemble.ts --version <version> [--date <YYYY-MM-DD>] [--dry-run]
- * [--first-public-release] [--advisories <delorun-<version>.advisories.json> --manifest <delorun-<version>.manifest.json>]`,
+ * [--headline <sentence>]... [--first-public-release] [--advisories <delorun-<version>.advisories.json> --manifest <delorun-<version>.manifest.json>]`,
  * or `... --list-unreleased` to print the unreleased fragments by area and the pending ones with what they wait for.
+ * Each `--headline` is one plain sentence saying what a person can now do; up to three open the version's notes, are
+ * recorded as the entry's `headlines`, and feed the sites' "What's new" strip. A version with none has no strip.
  * The version is a release (`0.1.0`) or a preview sub-version (`0.1.0-preview.2`); assembling `0.1.0` folds the entries
  * of its previews into it.
  *
@@ -35,7 +37,7 @@ import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { RELEASE_FILE_SIZE_LIMITS, type AdvisoryAcceptance, type FileRef } from '@delorun/contract-release-manifest'
 import type { AdvisoryReport } from '../advisory/check.ts'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
-import { addVersion, buildCompared, buildEntry, foldedPreviews, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
+import { addVersion, buildCompared, buildEntry, foldedPreviews, headlineErrors, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
 import { fragmentPaths, readFragments, releasedPaths, type Fragment } from './fragment.ts'
 import { listUnreleased } from './list.ts'
 import { messageOf, type Output } from './output.ts'
@@ -120,7 +122,7 @@ function today(): string {
  * @param upstream - the upstream release and commit from the divergence ledger.
  * @param fragments - the parsed fragments the version consumes.
  * @param options - `accepted` lists the advisories the version ships with under an acceptance, which the notes list;
- * `date` is the date to record, today in UTC by default; `existing` is the data file before this version; `released`
+ * `date` is the date to record, today in UTC by default; `headlines` are the version's headline sentences; `existing` is the data file before this version; `released`
  * are the fragments earlier versions consumed, oldest first, which the standing comparison keeps.
  * @returns the entry, the data after it, the `CHANGELOG.md` and notes texts, and the fragments.
  */
@@ -129,10 +131,10 @@ export function renderAssembly(
   upstream: string | ChangelogData['upstream'],
   fragments: readonly Fragment[],
   accepted: readonly AcceptedAdvisory[] = [],
-  options: { readonly date?: string | undefined, readonly existing?: ChangelogData | undefined, readonly released?: readonly Fragment[] | undefined } = {},
+  options: { readonly date?: string | undefined, readonly headlines?: readonly string[] | undefined, readonly existing?: ChangelogData | undefined, readonly released?: readonly Fragment[] | undefined } = {},
 ): Assembly {
   const ledger = typeof upstream === 'string' ? { ref: upstream, commit: '' } : upstream
-  const entry = buildEntry(version, options.date ?? today(), ledger.ref, fragments, foldedPreviews(options.existing, version))
+  const entry = buildEntry(version, options.date ?? today(), ledger.ref, fragments, foldedPreviews(options.existing, version), options.headlines)
   const data = addVersion(options.existing, ledger, entry, buildCompared([...options.released ?? [], ...fragments]))
   const advisories = advisoryLines(accepted)
   const notes = advisories.length === 0 ? renderNotes(entry) : `${renderNotes(entry)}\n${advisories.join('\n').trimEnd()}\n`
@@ -155,14 +157,14 @@ export function readData(root: string): ChangelogData | undefined {
  * @param root - the repository root.
  * @param version - the version.
  * @param options - `firstPublicRelease` admits `1.0.0`; `accepted` lists the version's accepted advisories; `date` is
- * the date to record, today in UTC by default.
+ * the date to record, today in UTC by default; `headlines` are the version's headline sentences, at most three.
  * @returns the assembly; nothing is written.
  * @throws Error listing every refusal, when the version is not accepted, is already assembled or follows its final
  * release, a fragment does not parse or replaces nothing, a fragment name repeats, there is nothing to assemble, or
  * the upstream ledger or the data file does not read.
  */
-export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean, readonly accepted?: readonly AcceptedAdvisory[] | undefined, readonly date?: string | undefined }): Assembly {
-  const errors = versionErrors(version, options.firstPublicRelease)
+export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean, readonly accepted?: readonly AcceptedAdvisory[] | undefined, readonly date?: string | undefined, readonly headlines?: readonly string[] | undefined }): Assembly {
+  const errors = [...versionErrors(version, options.firstPublicRelease), ...headlineErrors(options.headlines ?? [])]
   const current = readFragments(root, fragmentPaths(root), 'unreleased')
   const released = readFragments(root, releasedPaths(root), 'unreleased')
   errors.push(...current.errors, ...released.errors, ...replacesErrors([...released.fragments, ...current.fragments]))
@@ -175,7 +177,7 @@ export function assembleRelease(root: string, version: string, options: { readon
   if (errors.length === 0 && current.fragments.length === 0 && foldedPreviews(existing, version).length === 0) errors.push('there is nothing to assemble: no unreleased fragment and no preview to fold')
   if (errors.length > 0) throw new Error(errors.join('\n'))
   const { ref, commit } = readManifest(root).upstream
-  return renderAssembly(version, { ref, commit }, current.fragments, options.accepted, { date: options.date, existing, released: released.fragments })
+  return renderAssembly(version, { ref, commit }, current.fragments, options.accepted, { date: options.date, headlines: options.headlines, existing, released: released.fragments })
 }
 
 /**
@@ -212,6 +214,7 @@ export function run(argv: readonly string[], root: string, output: Output): numb
       options: {
         version: { type: 'string' },
         date: { type: 'string' },
+        headline: { type: 'string', multiple: true },
         'dry-run': { type: 'boolean', default: false },
         'list-unreleased': { type: 'boolean', default: false },
         'first-public-release': { type: 'boolean', default: false },
@@ -257,7 +260,7 @@ export function run(argv: readonly string[], root: string, output: Output): numb
     const accepted = values.advisories === undefined || values.manifest === undefined
       ? []
       : acceptedAdvisories(readFileSync(values.advisories), values.version, readEnvelope('manifest', readFileSync(values.manifest)).signed.advisories)
-    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted, date: values.date })
+    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted, date: values.date, headlines: values.headline })
   } catch (error) {
     output.error(`assemble: ${messageOf(error)}`)
     return 1

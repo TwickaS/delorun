@@ -1,6 +1,6 @@
 /**
  * The changelog the site publishes, read at build time from Delorun's changelog record, `delorun/changelog/changelog.json`,
- * which the release tooling writes when it assembles a version. The page and the home page's section both read the
+ * which the release tooling writes when it assembles a version, with the version's headline sentences. The page and the home page's section both read the
  * {@link ChangelogView} this module derives from the record with the release tooling's own functions, so they state
  * what `CHANGELOG.md` and the release notes state. Unreleased fragments are never read: a version appears here only
  * once it is assembled. This module reads files and imports the release tooling, so only the build imports its values;
@@ -17,15 +17,6 @@ export const RECORD_PATH = 'delorun/changelog/changelog.json'
 
 /** The environment variable that names a record to publish instead of the repository's, for a staging review before a version is assembled. */
 export const PREVIEW_ENV = 'DOCS_CHANGELOG_PREVIEW'
-
-/** The headline entries the home page shows for the latest version, at most. */
-const MAX_HEADLINES = 5
-
-/** The headline entries the home page shows for the latest version, at least, when the version has that many. */
-const MIN_HEADLINES = 3
-
-/** The longest headline, in characters, before it is cut at a word. */
-const MAX_HEADLINE_LENGTH = 160
 
 /** One bullet as the page prints it. */
 export interface ViewItem {
@@ -57,7 +48,7 @@ export interface ViewVersion {
   /** The version's From upstream bullets, beginning with the line that names the upstream release. */
   readonly fromUpstream: readonly string[]
   readonly previews: readonly ViewPreview[]
-  /** Three to five short entries that summarise the version, for the home page. */
+  /** The version's headline sentences, written for people, at most three; empty when it has none, which shows no strip. */
   readonly headlines: readonly string[]
 }
 
@@ -76,36 +67,6 @@ export interface ChangelogView {
  */
 function viewAreas(areas: readonly AreaItems[]): ViewArea[] {
   return areas.map(({ area, items }) => ({ area, items: items.map(({ section, text }) => ({ prefix: bulletPrefix(section), text })) }))
-}
-
-/**
- * The first sentence of a bullet, cut at a word when it is long.
- * @param text - the bullet text.
- * @returns the sentence, ending with an ellipsis when it was cut.
- */
-export function firstSentence(text: string): string {
-  const sentence = text.split(/(?<=[.!?])\s/)[0] ?? text
-  if (sentence.length <= MAX_HEADLINE_LENGTH) return sentence
-  let head = sentence.slice(0, Math.max(sentence.slice(0, MAX_HEADLINE_LENGTH).lastIndexOf(' '), 1))
-  // A cut inside a code span would leave an unclosed backtick, so the cut moves back before that span.
-  if ((head.match(/`/g) ?? []).length % 2 === 1) head = head.slice(0, head.lastIndexOf('`'))
-  return `${head.trimEnd().replace(/[,;:]$/, '')}…`
-}
-
-/**
- * The entries that summarise a version: the first Added bullet of each area in the record's area order, then, when
- * that gives fewer than the minimum, the version's other bullets in record order.
- * @param areas - the version's areas.
- * @returns at most five sentences, bullets that open with a section word excluded from the first pass.
- */
-function headlinesOf(areas: readonly AreaItems[]): string[] {
-  const first = areas.flatMap(({ items }) => items.filter(item => item.section === 'Added').slice(0, 1))
-  const chosen = first.slice(0, MAX_HEADLINES)
-  if (chosen.length < MIN_HEADLINES) {
-    const rest = areas.flatMap(({ items }) => items).filter(item => !chosen.includes(item))
-    chosen.push(...rest.slice(0, MIN_HEADLINES - chosen.length))
-  }
-  return chosen.map(item => firstSentence(item.text))
 }
 
 /**
@@ -129,7 +90,7 @@ function viewVersion(entry: VersionEntry): ViewVersion {
     areas: viewAreas(entry.areas),
     fromUpstream: [basedOnText(entry.fromUpstream.ref), ...entry.fromUpstream.items.map(item => item.text)],
     previews: entry.previews.map(viewPreview),
-    headlines: headlinesOf(entry.areas),
+    headlines: entry.headlines ?? [],
   }
 }
 

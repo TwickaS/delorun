@@ -127,6 +127,7 @@ section: Added
     "version": "0.1.0-preview.1",
     "date": "YYYY-MM-DD",
     "preview": true,
+    "headlines": ["You can ..."],
     "areas": [{ "area": "Commands", "items": [{ "section": "Added", "text": "..." }] }],
     "fromUpstream": { "ref": "dsh-v0.2.2-rc.1", "items": [{ "area": "Compatibility", "text": "..." }] },
     "previews": []
@@ -135,6 +136,8 @@ section: Added
 ```
 
 `previews` 保存最终版本所折叠的各预览，最新的在前，每个带有其 `version`、`date`、`areas` 和 `fromUpstream` 条目；对预览以及没有预览的版本，它为空。
+
+`headlines` 保存最多三句写给人看的平实句子，说明一个人现在能用这个版本做什么。它们在汇编时由 `--headline <sentence>`（最多重复三次）给出，列在该版本条目和发行说明的开头，并供两个网站的“What's new”栏使用；汇编时没有给出的版本没有该字段，也没有该栏。
 
 <a id="who-reads-the-data-file"></a>
 

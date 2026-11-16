@@ -27,12 +27,12 @@ function Terminal({ command }: { command: string }) {
 }
 
 /**
- * The What's new strip: the latest assembled version's headlines. Absent until a version is assembled.
+ * The What's new strip: the latest assembled version's headlines. Absent until a version is assembled with headlines.
  * @returns the section, or nothing.
  */
 function WhatsNew() {
   const latest = view?.versions[0]
-  if (latest === undefined) return null
+  if (latest === undefined || latest.headlines.length === 0) return null
   return (
     <section aria-labelledby="whats-new" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
       <h2 id="whats-new" className="text-2xl font-semibold tracking-tight">{COPY.whatsNew.heading}</h2>
