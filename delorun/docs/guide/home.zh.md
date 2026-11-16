@@ -8,7 +8,7 @@ description: "你的 Delorun home：delorun 把你的数据保存在哪里，如
 
 ## 摘要
 
-本页告诉你 Delorun 把你的数据保存在哪里、如何移动它、profile 如何运作，以及当 Delorun 因为其他用户可以读取某个文件而拒绝使用它时该怎么办。你不需要任何前置准备；`delorun` 首次运行时会创建这个文件夹（见[安装与首次运行](install.zh.md)）。Delorun 把一切都放在一个文件夹里，即你的 [Delorun home](../reference/glossary.zh.md#home)：`~/.delorun`，在 Windows 上为 `%USERPROFILE%\.delorun`。你的 chat、工作区、profile、密钥和 Delorun 自己的记录都保存在其中。`delorun` 首次运行时创建它，并把它设为只有你能读取。备份这个文件夹，就等于备份了 Delorun。
+本页告诉你 Delorun 把你的数据保存在哪里、如何移动它、profile 如何运作，以及当 Delorun 因为其他用户可以读取某个文件而拒绝使用它时该怎么办。你不需要任何前置准备；`delorun` 首次运行时会创建这个文件夹（见[安装与首次运行](install.zh.md)）。Delorun 把一切都放在一个文件夹里，即你的 [Delorun home](../reference/glossary.zh.md#home)：`~/.delorun`。你的 chat、工作区、profile、密钥和 Delorun 自己的记录都保存在其中。`delorun` 首次运行时创建它，并把它设为只有你能读取。备份这个文件夹，就等于备份了 Delorun。
 
 ## 目录
 
@@ -49,13 +49,13 @@ delorun --profile work          # sets up the profile the first time, then start
 delorun status --profile work   # other commands take --profile after their name
 ```
 
-Profile 名称由 1 到 32 个小写字母、数字、`-` 或 `_` 组成。Delorun 会拒绝 `desktop`（留给桌面应用自己的 profile）、`headless`（`delorun headless` 使用它），以及 `con` 这类 Windows 设备名。所有 profile 共享你的 chat、工作区和密钥。
+Profile 名称由 1 到 32 个小写字母、数字、`-` 或 `_` 组成，并以字母或数字开头。Delorun 会拒绝 `desktop`（留给桌面应用自己的 profile）和 `headless`（`delorun headless` 使用它）。所有 profile 共享你的 chat、工作区和密钥。
 
 <a id="your-deepseek-harness-home"></a>
 
 ## 你的 DeepSeek Harness home
 
-Delorun 从不更改或移动 `~/.dsh`。只有当你从中导入时才会读取它（见[从 DeepSeek Harness 切换](switching.zh.md)）。如果你为 DeepSeek Harness 设置了 `DSH_HOME`，`delorun` 会忽略它并使用你的 Delorun home，`delorun status` 会告诉你这一点。
+本节只在你以前用过 DeepSeek Harness（Delorun 所基于的程序）时才有意义。Delorun 从不更改或移动 `~/.dsh`，即 DeepSeek Harness 保存数据的文件夹。只有当你从中导入时才会读取它（见[从 DeepSeek Harness 切换](switching.zh.md)）。如果你为 DeepSeek Harness 设置了 `DSH_HOME`，`delorun` 会忽略它并使用你的 Delorun home，`delorun status` 会告诉你这一点。
 
 `delorun plugin` 的行为与 `dsh plugin` 相同，只是在你的 Delorun home 内运行；`delorun headless` 像 `dsh headless` 一样回答单个任务，但带有 Delorun 的沙箱保护和防护措施（见[日常使用](daily-use.zh.md#the-plugin-and-headless-commands)）。
 
@@ -72,7 +72,7 @@ What you can do:
   Fix it with: chmod 600 /home/you/.delorun/secrets/home-auth/home-key.pem
 ```
 
-运行打印出的 `chmod` 命令，然后再次运行 `delorun`。Delorun 从不替你更改这些权限，所以错误会保持可见。如果 home、文件夹或密钥文件是符号链接，或属于其他用户，也会被拒绝，并且不会给出修复命令：请把它移走，让 `delorun` 重新创建。在 Windows 上，Delorun 目前尚不检查这些权限。
+运行打印出的 `chmod` 命令，然后再次运行 `delorun`。Delorun 从不替你更改这些权限，所以错误会保持可见。如果 home、文件夹或密钥文件是符号链接，或属于其他用户，也会被拒绝，并且不会给出修复命令：请把它移走，让 `delorun` 重新创建。
 
 <details>
 <summary>边界情况</summary>
@@ -80,10 +80,9 @@ What you can do:
 - 如果 `DELORUN_HOME` 不是绝对路径且不以 `~` 开头，那么 `delorun` 会拒绝它。
 - 如果 `DELORUN_HOME` 指向你的用户主目录、文件系统根目录，或 `~/.dsh` 及其中的文件夹，那么 `delorun` 会拒绝它。
 - 如果你设置了 `DSH_HOME`，那么 `delorun` 会忽略它，并且 `delorun status` 会说明这一点。
-- 如果 profile 名称含有大写字母、空格或超过 32 个字符，或者是 `desktop`、`headless` 或 `con` 这类 Windows 设备名，那么 `delorun` 会拒绝它。
+- 如果 profile 名称含有大写字母、空格，首字符不是字母或数字，或超过 32 个字符，或者是 `desktop` 或 `headless`，那么 `delorun` 会拒绝它。
 - 如果其他用户能读取你的 home 或某个密钥文件，那么 Delorun 会拒绝使用它，并打印修复它的 `chmod` 命令（见[修复权限](#fixing-permissions)）。
 - 如果 home 中的某个文件或文件夹是符号链接或属于其他用户，那么 Delorun 会拒绝它，且不给出修复命令。请把它移走，让 `delorun` 重新创建。
-- 如果你在 Windows 上运行 Delorun，那么它不检查这些权限。
 - 如果两条命令同时修改 home，那么第二条会以 `another process … holds the home lock` 拒绝。请等待后再运行（见[启动与停止](troubleshooting.zh.md#starting-and-stopping)）。
 
 </details>

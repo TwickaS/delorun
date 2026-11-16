@@ -8,7 +8,7 @@ English | [中文](home.zh.md)
 
 ## Summary
 
-This page tells you where Delorun keeps your data, how to move it, how profiles work, and what to do when Delorun refuses a file because other users can read it. You need nothing first; `delorun` creates the folder the first time it runs ([Install and first run](install.md)). Delorun keeps everything in one folder, your [Delorun home](../reference/glossary.md#home): `~/.delorun`, or `%USERPROFILE%\.delorun` on Windows. Your chats, workspaces, profiles, keys and Delorun's own records all live there. `delorun` creates it the first time it runs and makes it readable by you alone. Back up that folder and you have backed up Delorun.
+This page tells you where Delorun keeps your data, how to move it, how profiles work, and what to do when Delorun refuses a file because other users can read it. You need nothing first; `delorun` creates the folder the first time it runs ([Install and first run](install.md)). Delorun keeps everything in one folder, your [Delorun home](../reference/glossary.md#home): `~/.delorun`. Your chats, workspaces, profiles, keys and Delorun's own records all live there. `delorun` creates it the first time it runs and makes it readable by you alone. Back up that folder and you have backed up Delorun.
 
 ## Contents
 
@@ -43,11 +43,11 @@ delorun --profile work          # sets up the profile the first time, then start
 delorun status --profile work   # other commands take --profile after their name
 ```
 
-A profile name has 1 to 32 lowercase letters, digits, `-` or `_`. Delorun refuses `desktop`, kept for a desktop app's own profile, `headless`, which `delorun headless` uses, and Windows device names such as `con`. All profiles share your chats, workspaces and keys.
+A profile name has 1 to 32 lowercase letters, digits, `-` or `_`, and starts with a letter or a digit. Delorun refuses `desktop`, kept for a desktop app's own profile, and `headless`, which `delorun headless` uses. All profiles share your chats, workspaces and keys.
 
 ## Your DeepSeek Harness home
 
-Delorun never changes or moves `~/.dsh`. It reads it only when you import from it ([Switching from DeepSeek Harness](switching.md)). If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delorun home, and `delorun status` tells you so.
+This section matters only if you used DeepSeek Harness, the program Delorun is built on, before. Delorun never changes or moves `~/.dsh`, the folder where DeepSeek Harness keeps its data. It reads it only when you import from it ([Switching from DeepSeek Harness](switching.md)). If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delorun home, and `delorun status` tells you so.
 
 `delorun plugin` works as `dsh plugin` does, inside your Delorun home, and `delorun headless` answers one task as `dsh headless` does, with Delorun's sandbox protection and guards ([Daily use](daily-use.md#the-plugin-and-headless-commands)).
 
@@ -62,7 +62,7 @@ What you can do:
   Fix it with: chmod 600 /home/you/.delorun/secrets/home-auth/home-key.pem
 ```
 
-Run the printed `chmod` command, then run `delorun` again. Delorun never changes these permissions for you, so a mistake stays visible. A home, folder or secret file that is a symbolic link, or belongs to another user, is refused too, with no command to fix it: move it away and let `delorun` create it again. On Windows, Delorun does not check these permissions yet.
+Run the printed `chmod` command, then run `delorun` again. Delorun never changes these permissions for you, so a mistake stays visible. A home, folder or secret file that is a symbolic link, or belongs to another user, is refused too, with no command to fix it: move it away and let `delorun` create it again.
 
 <details>
 <summary>Edge cases</summary>
@@ -70,10 +70,9 @@ Run the printed `chmod` command, then run `delorun` again. Delorun never changes
 - If `DELORUN_HOME` is not an absolute path and does not start with `~`, then `delorun` refuses it.
 - If `DELORUN_HOME` names your home folder, the filesystem root, or `~/.dsh` or a folder inside it, then `delorun` refuses it.
 - If you set `DSH_HOME`, then `delorun` ignores it and `delorun status` says so.
-- If a profile name uses capitals, spaces or more than 32 characters, or is `desktop`, `headless` or a Windows device name such as `con`, then `delorun` refuses it.
+- If a profile name uses capitals, spaces, a first character other than a letter or digit, or more than 32 characters, or is `desktop` or `headless`, then `delorun` refuses it.
 - If another user can read your home or a secret file, then Delorun refuses to use it and prints the `chmod` command that fixes it ([Fixing permissions](#fixing-permissions)).
 - If a file or folder in the home is a symbolic link or belongs to another user, then Delorun refuses it with no command to fix it. Move it away and let `delorun` create it again.
-- If you run Delorun on Windows, then it does not check these permissions.
 - If two commands change the home at once, then the second refuses with `another process … holds the home lock`. Wait, then run it again ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
 
 </details>
