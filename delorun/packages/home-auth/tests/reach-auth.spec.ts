@@ -263,7 +263,7 @@ describe('sign-in', () => {
       for (let issued = 0; issued < 3; issued += 1) await home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)
       // Pins the source limit and that it reads the configured value, not the default.
       await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).rejects.toMatchObject({ code: 'CHALLENGE_RATE_LIMITED' })
-      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', '10.0.0.9')).resolves.toEqual(expect.any(String))
+      await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', '192.0.2.9')).resolves.toEqual(expect.any(String))
       home.clock.advance(60_000 + 1)
       await expect(home.auth.challenge(phone.id, 'reach-tailscale-private', SOURCE)).resolves.toEqual(expect.any(String))
     } finally {

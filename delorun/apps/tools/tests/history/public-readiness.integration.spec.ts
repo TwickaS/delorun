@@ -83,7 +83,7 @@ describe('commit identities', () => {
 describe('the tree scan and the value list', () => {
   it('reports the path and line of each match, skips binary files, symlinks and the skipped prefixes, and never prints the matched text', () => {
     const dir = directory()
-    const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'ignore' }) }
+    const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'ignore', timeout: 30_000 }) }
     git('init', '-q')
     mkdirSync(join(dir, 'vendor'))
     writeFileSync(join(dir, 'a.md'), 'fine\nsee /home/someone-real/x\n')

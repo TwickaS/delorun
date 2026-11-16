@@ -7867,7 +7867,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpConsentDecision',
-    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n    readonly spawnCommand?: string;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
+    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n    readonly spawnCommand?: string;\n    readonly spawnArgs?: readonly string[];\n    readonly verify?: () => Promise<string | undefined>;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
   },
   {
     name: 'McpManagedServerStatus',

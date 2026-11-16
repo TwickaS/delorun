@@ -5,7 +5,6 @@
     "gates:plugin-record-callers": "@delorun/plugin-main-chat writes plugin records where a release package declares SessionEventMap events.",
     "gates:client-domain-graph": "55 client imports cross sibling domain directories, such as ui-workspace's session-actions importing rows, instead of going through contract/.",
     "gates:issue-management": "Two upstream policy specs assert upstream's pull request template and issue-policy workflow, which Delorun's .github changes replace.",
-    "gates:repository-references": "delorun/docs/reference/parity-baseline.md and its Chinese pair cite main commit ids for recorded runs.",
     "gates:lint": "49 oxlint findings in upstream and Delorun-edited packages, such as no-deprecated, unbound-method and no-unsafe-assignment."
   }
 }
