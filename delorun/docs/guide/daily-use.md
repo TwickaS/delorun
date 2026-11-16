@@ -181,7 +181,7 @@ These commands change chat data the studio uses, so stop Delorun first. They ref
 
 ## The plugin and headless commands
 
-- **`delorun plugin --profile <name> …`** runs DeepSeek Harness's `dsh plugin` inside your Delorun home, so plugins install as in stock. It applies none of Delorun's protections. `delorun plugin check <directory>` reads a plugin's `package.json`, runs none of its files, and says whether this release would accept the plugin's version ranges.
+- **`delorun plugin --profile <name> …`** runs DeepSeek Harness's `dsh plugin` inside your Delorun home, so plugins install the way they do in DeepSeek Harness itself. It applies none of Delorun's protections. `delorun plugin check <directory>` reads a plugin's `package.json`, runs none of its files, and says whether this release would accept the plugin's version ranges.
 - **`delorun headless …`** answers one task and exits, as `dsh headless` does, with Delorun's sandbox protection and guards.
 
 <details>

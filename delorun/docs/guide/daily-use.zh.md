@@ -195,7 +195,7 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 ## plugin 与 headless 命令
 
-- **`delorun plugin --profile <name> …`** 在你的 Delorun home 内运行 DeepSeek Harness 的 `dsh plugin`，所以插件的安装方式与 stock 相同。它不应用 Delorun 的任何保护。`delorun plugin check <directory>` 读取插件的 `package.json`，不运行其中的任何文件，并说明此发布版本是否接受该插件的版本范围。
+- **`delorun plugin --profile <name> …`** 在你的 Delorun home 内运行 DeepSeek Harness 的 `dsh plugin`，所以插件的安装方式与在 DeepSeek Harness 本身中相同。它不应用 Delorun 的任何保护。`delorun plugin check <directory>` 读取插件的 `package.json`，不运行其中的任何文件，并说明此发布版本是否接受该插件的版本范围。
 - **`delorun headless …`** 回答一个任务然后退出，与 `dsh headless` 相同，但带有 Delorun 的沙箱保护和防护措施。
 
 <details>
