@@ -15,10 +15,10 @@ This page shows how to see what a new Delorun release would change, apply it saf
 - [The update notice](#the-update-notice)
 - [Check and read the report](#check-and-read-the-report)
 - [Apply an update](#apply-an-update)
-- [Update from files you downloaded](#update-from-files-you-downloaded)
 - [What happens during an update](#what-happens-during-an-update)
 - [Chat data that changes format](#chat-data-that-changes-format)
 - [Going back](#going-back)
+- [Update from files you downloaded](#update-from-files-you-downloaded)
 - [Try another setup in the studio](#try-another-setup-in-the-studio)
 - [Channels](#channels)
 - [Next](#next)
@@ -26,7 +26,7 @@ This page shows how to see what a new Delorun release would change, apply it saf
 
 ## The update notice
 
-Once a day, Delorun fetches the signed release files from releases.delorun.com, or from a fallback host when it is unreachable, and checks whether a newer release exists on its channel. The check sends nothing about your installation, and those hosts see your computer's address. It verifies the files' signatures and downloads no release. When a newer release exists, Delorun says so in three places:
+Once a day, Delorun fetches the signed release files from releases.delorun.com, and the newest release's manifest and log record from GitHub, and checks whether a newer release exists on its channel. The check sends nothing about your installation, and those two hosts see your computer's address. It verifies the files' signatures and downloads no release. When a newer release exists, Delorun says so in three places:
 
 - in the terminal, when Delorun starts, as a line such as `Delorun 0.1.3 is available (security fix; all your plugins stay compatible). Run: delorun update`;
 - in the studio, as a card at the bottom of the chat list, which names the kind of release, how many of your plugins it would turn off and the command to run; **Hide this notice until a newer release** hides it for that release only;
@@ -43,47 +43,27 @@ delorun update --check     # is there a newer release? applies nothing
 delorun update --report    # what would the newest release change? applies nothing
 ```
 
-`delorun update --check` runs the check now and prints either `Delorun <version> is the newest release on the <channel> channel.` or the notice line and the release's summary. It needs no running Delorun.
+`delorun update --check` runs the check now and prints either `Delorun <version> is the newest release on the <channel> channel.` or the notice line and the release's summary. It needs no running Delorun and no git.
 
-`delorun update --report` needs Delorun running. It downloads the newest release, verifies it, installs it beside the running one without switching to it, and prints the update report, then `Nothing changed. Run delorun update to apply it.` The report shows:
+`delorun update --report` needs Delorun running and git. It downloads the newest release, verifies it, installs it beside the running one without switching to it, and prints the update report, then `Nothing changed. Run delorun update to apply it.` The report shows:
 
 - the versions you go from and to, of Delorun and of the DeepSeek Harness it runs on, and the channel;
 - the release checks: the signature, the freshness of the release files and the public release log;
 - every plugin, bundle and profile entry the update would change, with the reason (a bundle is a package of plugins and settings, and a profile entry, which the report calls a row, is one plugin in your profile's list): `kept`, `changed`, `disabled` or `removed`. A plugin whose declared version ranges exclude the new release is listed as `disabled`, with the range it declares and, for a DeepSeek Harness range, the command that accepts the risk for that exact version ([Update Delorun with many plugins](updating-with-plugins.md#check-read-the-report)). An item Delorun cannot predict, such as a plugin whose `package.json` it cannot read, says so;
+- under "Your changes to Delorun's own files", each file of Delorun itself that you changed, and whether your change would be merged into the new release. A merged change keeps your version beside the new file as `<file>.mine`;
 - whether the chat data changes format, with the size of the copy and the free disk space ([Chat data that changes format](#chat-data-that-changes-format)).
 
 When nothing changes, the report says `No plugin, bundle or profile row changes.` The report covers plugins, bundles and profile entries; it does not list setting values, which carry over unchanged.
 
 ## Apply an update
 
-Run `delorun update`. It prints the same report and asks `Apply the update to Delorun <version>?`, with No as the default. A report is valid for ten minutes: confirm an older one and Delorun asks you to read a fresh report.
+Run `delorun update`. It needs Delorun running. It prints the same report and asks `Apply the update to Delorun <version>?`, with No as the default. A report is valid for ten minutes: confirm an older one and Delorun asks you to read a fresh report.
 
-- `delorun update --yes` confirms without asking, but only a report that turns nothing off, removes nothing and holds nothing Delorun cannot predict. Any other report needs you to run `delorun update` and decide.
+- `delorun update --yes` confirms without asking, but only a report that turns nothing off, removes nothing, merges none of your changes to Delorun's own files and holds nothing Delorun cannot predict, and only when the release-log check passed. Any other report needs you to run `delorun update` and decide.
 - Without a terminal to ask in, `delorun update` answers no and changes nothing.
-- An update needs git, which saves your profile's history; without git, Delorun refuses before it fetches anything. `--check` and `--report` do not need git.
+- An update needs git, which saves your profile's history; without git, Delorun refuses before it fetches anything. `--report` needs git too; only `--check` does not.
 
 Delorun never applies an update you have not confirmed, and the check applies nothing.
-
-## Update from files you downloaded
-
-When the release channel cannot be reached, for example behind a firewall, download the release's files from its release page into one folder and run:
-
-```sh
-delorun update --from ~/Downloads/delorun-0.2.0
-```
-
-The folder holds `delorun-<version>.manifest.json`, `delorun-<version>.manifest.log.json`, `delorun-<version>-<platform>.files.json`, the platform's archive, and optionally `timestamp.json` and `root/<n>.root.json`. An `https:` address that serves the same files also works; `http:` is refused. Delorun checks the files exactly as it checks a channel update: the signature, the release log, the file list and the archive digests. Then it shows the report and asks, and the rest of the update is unchanged, including the snapshot, the data copy, the health check and the automatic rollback.
-
-The one thing a folder can loosen is the channel's confirmation that this is the current release. If the timestamp is missing or out of date, Delorun asks `The release channel cannot confirm that 0.2.0 is current … Install 0.2.0 from … on its signature and release-log entry alone?`. Answer in a terminal; `--yes` never answers it, and without a terminal Delorun refuses. A release older than the one you run is refused (go back with `delorun recover rollback`), and so is a release with a wrong signature or a missing file; the refusal names the file. Delorun does not keep the out-of-date timestamp, and if it could not reach the release log, it records that the log was not checked.
-
-<details>
-<summary>Edge cases</summary>
-
-- `--from` cannot be combined with `--check` or `--report`.
-- A folder with several releases updates to the newest one.
-- A release that is already installed and intact is not fetched again.
-
-</details>
 
 ## What happens during an update
 
@@ -125,34 +105,47 @@ Delorun keeps one copy. `delorun recover status` lists it with its size, and `de
 
 A rollback does not merge. When the data format changed, the chat data as the newer release left it, with the chats you started after the update, is set aside in `data-set-aside/` in your Delorun home, not deleted, and the copy taken before the update comes back in its place; `delorun recover discard <path>` removes the folder once you no longer need it. Secrets are never rolled back.
 
+## Update from files you downloaded
+
+When the release channel cannot be reached, for example behind a firewall, download the release's files from its release page into one folder and run:
+
+```sh
+delorun update --from ~/Downloads/delorun-0.2.0
+```
+
+The folder holds `delorun-<version>.manifest.json`, `delorun-<version>.manifest.log.json`, `delorun-<version>-<platform>.files.json`, the platform's archive, and optionally `timestamp.json` and `root/<n>.root.json`. An `https:` address that serves the same files also works; `http:` is refused. Delorun checks the files exactly as it checks a channel update: the signature, the release log, the file list and the archive digests. Then it shows the report and asks, and the rest of the update is unchanged, including the snapshot, the data copy, the health check and the automatic rollback.
+
+The one thing a folder can loosen is the channel's confirmation that this is the current release. If the timestamp is missing or out of date, Delorun asks `The release channel cannot confirm that 0.2.0 is current … Install 0.2.0 from … on its signature and release-log entry alone?`. Answer in a terminal; `--yes` never answers it, and without a terminal Delorun refuses. A release older than the one you run is refused (go back with `delorun recover rollback`), and so is a release with a wrong signature or a missing file; the refusal names the file. Delorun does not keep the out-of-date timestamp, and if it could not reach the release log, it records that the log was not checked.
+
+<details>
+<summary>Edge cases</summary>
+
+- `--from` cannot be combined with `--check` or `--report`.
+- A folder with several releases updates to the newest one.
+- A release that is already installed and intact is not fetched again.
+
+</details>
+
 ## Try another setup in the studio
 
-Settings → General → Updates lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
+Settings → Data → Setup versions lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
 
 - **Save this setup** keeps the setup as it is now, with a name if you give one. If the latest version already holds it, nothing new is saved and the page says so.
 - **What changes** on a version shows, in plain words, which plugins would come back, change version or be removed, which bundles would join or leave your bundle list, whether your plugin rows and settings change, and which version exemptions and build decisions change. It writes nothing.
 - **Switch to this version** saves your current setup as a version first, then brings the chosen one back. The page tells you what changed and that Delorun runs the switched setup after a restart: run `delorun stop`, then `delorun start`. Switching back is switching to the version saved before, so keeping a setup or going back is the same step.
 
-Saving and switching work only in the studio on the computer Delorun runs on. A phone or other device you reach the studio from sees the list and the changes, and each version shows **Do this at your computer** instead of a button; the home refuses a save or a switch from such a device even if its page is changed. Safe mode and the rollback after a failed update work as before ([Going back](#going-back)). A plugin version that a release has since revoked comes back turned off, with its reason, as it does with `delorun recover restore`.
+Saving and switching work only in the studio on the computer Delorun runs on. A phone or other device you reach the studio from sees the list and the changes, and each version shows **Do this at your computer** instead of a button; the home refuses a save or a switch from such a device even if its page is changed. Safe mode and the rollback after a failed update work as before ([Going back](#going-back)).
 
 ## Channels
 
-Each release belongs to a channel, `stable` or `beta`, and checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it is newer than the running one. It never offers a lower version; `delorun recover rollback` returns to the previous release.
+Each release belongs to a channel, `stable` or `beta`; the preview releases are on `stable`. A release checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it is newer than the running one. It never offers a lower version; `delorun recover rollback` returns to the previous release.
 
 <details>
 <summary>Edge cases</summary>
 
-- If you have no terminal, then `delorun update` answers no and changes nothing.
-- If you have no git, then `delorun update` refuses before it fetches anything. `--check` and `--report` do not need git.
 - If your report is older than ten minutes, then Delorun says `Delorun did not update: the update report is unknown or older than ten minutes.` Run `delorun update` again.
-- If the report turns a plugin off, removes something, or holds something Delorun cannot predict, then `--yes` does not confirm it. Run `delorun update` and decide.
-- If chats are still running, then Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
-- If the new release fails its health check, then Delorun goes back on its own and prints which check failed.
-- If the chat-data copy does not fit on the disk, then Delorun refuses with `DATA_COPY_NO_SPACE`. Free some space or choose `--no-data-copy` knowing the consequence above.
-- If you took no copy and want to go back after a format change, then `delorun recover rollback` refuses with `ROLLBACK_NEEDS_DATA_COPY`. `delorun recover rollback --profile-only` still restores your profile.
-- If you run Delorun from a source checkout, then no update check runs.
-- If you reach the studio from a phone, then it shows the notice without its controls. Apply the update at your computer.
-- If you turned the check off, then there is no notice, and `delorun update` still works when you run it.
+- If the release-log check did not complete, then `--yes` refuses with a message saying so. Run `delorun update` without `--yes` to decide, or run it again once the log answers.
+- If the copy does not fit on the disk, then Delorun refuses with `DATA_COPY_NO_SPACE`. Free some space or choose `--no-data-copy`, knowing that you then cannot go back to the older release.
 
 </details>
 
@@ -171,7 +164,7 @@ Each release belongs to a channel, `stable` or `beta`, and checks for updates on
 
 - Update with many third-party plugins: [Update Delorun with many plugins](updating-with-plugins.md).
 - Use Delorun: [Daily use](daily-use.md).
-- Keep your own changes through updates: [Changing your harness](https://docs.delorun.com/guide/changing-your-harness).
+- Keep your own changes through updates: [Changing your harness](changing-your-harness.md).
 - If an update failed: [Updates and rollback](troubleshooting.md#updates-and-rollback).
 
 ## For the technically curious

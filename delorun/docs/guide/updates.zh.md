@@ -15,10 +15,10 @@ description: "更新 Delorun：更新通知以及如何关闭它，delorun updat
 - [更新通知](#the-update-notice)
 - [检查并阅读报告](#check-and-read-the-report)
 - [应用更新](#apply-an-update)
-- [用你下载的文件更新](#update-from-files-you-downloaded)
 - [更新期间会发生什么](#what-happens-during-an-update)
 - [改变格式的 chat 数据](#chat-data-that-changes-format)
 - [切换回去](#going-back)
+- [用你下载的文件更新](#update-from-files-you-downloaded)
 - [在 studio 中试用另一套设置](#try-another-setup-in-the-studio)
 - [渠道](#channels)
 - [接下来](#next)
@@ -28,7 +28,7 @@ description: "更新 Delorun：更新通知以及如何关闭它，delorun updat
 
 ## 更新通知
 
-Delorun 每天从 releases.delorun.com 获取一次已签名的发布文件，无法访问时则使用备用主机，并检查其渠道上是否存在更新的发布版本。这次检查不会发送任何关于你的安装的信息，而那些主机能看到你电脑的地址。它会验证文件的签名，且不下载任何发布版本。当存在更新的发布版本时，Delorun 会在三个地方告诉你：
+Delorun 每天从 releases.delorun.com 获取一次已签名的发布文件，并从 GitHub 获取最新发布版本的清单和日志记录，检查其渠道上是否存在更新的发布版本。这次检查不会发送任何关于你的安装的信息，而这两个主机能看到你电脑的地址。它会验证文件的签名，且不下载任何发布版本。当存在更新的发布版本时，Delorun 会在三个地方告诉你：
 
 - 在终端中，Delorun 启动时显示一行，例如 `Delorun 0.1.3 is available (security fix; all your plugins stay compatible). Run: delorun update`；
 - 在 studio 中，显示为 chat 列表底部的一张卡片，其中说明发布版本的类型、它会关闭你的多少个插件以及要运行的命令；**Hide this notice until a newer release** 只会针对该发布版本隐藏它；
@@ -47,13 +47,14 @@ delorun update --check     # is there a newer release? applies nothing
 delorun update --report    # what would the newest release change? applies nothing
 ```
 
-`delorun update --check` 会立即运行检查，并打印 `Delorun <version> is the newest release on the <channel> channel.`，或者打印通知行和该发布版本的摘要。它不需要 Delorun 正在运行。
+`delorun update --check` 会立即运行检查，并打印 `Delorun <version> is the newest release on the <channel> channel.`，或者打印通知行和该发布版本的摘要。它不需要 Delorun 正在运行，也不需要 git。
 
-`delorun update --report` 需要 Delorun 正在运行。它会下载最新的发布版本，验证它，把它安装在正在运行的版本旁边但不切换过去，并打印更新报告，然后打印 `Nothing changed. Run delorun update to apply it.` 报告显示：
+`delorun update --report` 需要 Delorun 正在运行，也需要 git。它会下载最新的发布版本，验证它，把它安装在正在运行的版本旁边但不切换过去，并打印更新报告，然后打印 `Nothing changed. Run delorun update to apply it.` 报告显示：
 
 - 你从哪个版本升级到哪个版本，包括 Delorun 的版本、它所运行的 DeepSeek Harness 的版本，以及渠道；
 - 发布检查：签名、发布文件的新鲜度和公开的发布日志；
 - 更新会改变的每个插件、bundle 和 profile 条目，以及原因（bundle 是插件和设置的包，profile 条目在报告中称为行，是你的 profile 列表中的一个插件）：`kept`、`changed`、`disabled` 或 `removed`。如果某个插件声明的版本范围不包含新的发布版本，它会被列为 `disabled`，并给出它声明的范围，对于 DeepSeek Harness 的范围，还给出为该确切版本接受风险的命令（见[在有大量插件时更新 Delorun](updating-with-plugins.zh.md#check-read-the-report)）。Delorun 无法预测的项目（例如它无法读取其 `package.json` 的插件）会这样说明；
+- 在“Your changes to Delorun's own files”下，列出你改动过的每个 Delorun 自身的文件，以及你的改动是否会被合并到新的发布版本中。被合并的改动会把你的版本以 `<file>.mine` 的名字保存在新文件旁边；
 - chat 数据是否改变格式，以及副本的大小和可用磁盘空间（见[改变格式的 chat 数据](#chat-data-that-changes-format)）。
 
 没有任何变化时，报告会显示 `No plugin, bundle or profile row changes.` 报告涵盖插件、bundle 和 profile 条目；它不列出设置值，设置值会原样保留。
@@ -62,36 +63,15 @@ delorun update --report    # what would the newest release change? applies nothi
 
 ## 应用更新
 
-运行 `delorun update`。它会打印同样的报告并询问 `Apply the update to Delorun <version>?`，默认答案为 No。报告的有效期是十分钟：确认一份更旧的报告，Delorun 会要求你阅读新的报告。
+运行 `delorun update`。它需要 Delorun 正在运行。它会打印同样的报告并询问 `Apply the update to Delorun <version>?`，默认答案为 No。报告的有效期是十分钟：确认一份更旧的报告，Delorun 会要求你阅读新的报告。
 
-- `delorun update --yes` 无需询问就确认，但只适用于不会关闭任何东西、不会移除任何东西、也不含 Delorun 无法预测的内容的报告。任何其他报告都需要你运行 `delorun update` 并自行决定。
+- `delorun update --yes` 无需询问就确认，但只适用于不会关闭任何东西、不会移除任何东西、不会合并你对 Delorun 自身文件的改动、也不含 Delorun 无法预测的内容的报告，而且只在发布日志检查通过时才可用。任何其他报告都需要你运行 `delorun update` 并自行决定。
 - 没有可供询问的终端时，`delorun update` 会回答“否”，且不做任何更改。
-- 更新需要 git，它保存你的 profile 历史；没有 git 时，Delorun 会在获取任何东西之前拒绝。`--check` 和 `--report` 不需要 git。
+- 更新需要 git，它保存你的 profile 历史；没有 git 时，Delorun 会在获取任何东西之前拒绝。`--report` 同样需要 git；只有 `--check` 不需要。
 
 Delorun 从不应用你没有确认过的更新，检查也不应用任何东西。
 
 <a id="update-from-files-you-downloaded"></a>
-
-## 用你下载的文件更新
-
-当无法访问发布渠道时（例如在防火墙之后），请把发布版本的文件从它的发布页面下载到一个文件夹中，然后运行：
-
-```sh
-delorun update --from ~/Downloads/delorun-0.2.0
-```
-
-该文件夹中有 `delorun-<version>.manifest.json`、`delorun-<version>.manifest.log.json`、`delorun-<version>-<platform>.files.json`、该平台的压缩包，以及可选的 `timestamp.json` 和 `root/<n>.root.json`。提供同样文件的 `https:` 地址也可以；`http:` 会被拒绝。Delorun 检查这些文件的方式与检查渠道更新完全相同：签名、发布日志、文件列表和压缩包摘要。然后它显示报告并询问，更新的其余部分保持不变，包括快照、数据副本、健康检查和自动回退。
-
-文件夹唯一可能放宽的，是渠道对“这是当前发布版本”的确认。如果时间戳缺失或已过期，Delorun 会问 `The release channel cannot confirm that 0.2.0 is current … Install 0.2.0 from … on its signature and release-log entry alone?`。请在终端中回答；`--yes` 从不回答它，没有终端时 Delorun 会拒绝。比你正在运行的版本更旧的发布版本会被拒绝（请用 `delorun recover rollback` 回退），签名错误或缺少文件的发布版本也会被拒绝；拒绝信息会指出该文件。Delorun 不会保留过期的时间戳，如果它无法访问发布日志，则会记录日志未经检查。
-
-<details>
-<summary>边界情况</summary>
-
-- `--from` 不能与 `--check` 或 `--report` 组合使用。
-- 含有多个发布版本的文件夹会更新到最新的那个。
-- 已经安装且完整的发布版本不会被再次获取。
-
-</details>
 
 <a id="what-happens-during-an-update"></a>
 
@@ -139,38 +119,51 @@ Delorun 只保留一份副本。`delorun recover status` 会列出它及其大�
 
 回退不会合并。当数据格式发生变化时，较新的发布版本留下的 chat 数据（包括你在更新之后开始的 chat）会被搁置到你的 Delorun home 的 `data-set-aside/` 中，而不是被删除，更新之前所做的副本则回到原处；一旦你不再需要这个文件夹，`delorun recover discard <path>` 就会移除它。密钥从不回退。
 
+## 用你下载的文件更新
+
+当无法访问发布渠道时（例如在防火墙之后），请把发布版本的文件从它的发布页面下载到一个文件夹中，然后运行：
+
+```sh
+delorun update --from ~/Downloads/delorun-0.2.0
+```
+
+该文件夹中有 `delorun-<version>.manifest.json`、`delorun-<version>.manifest.log.json`、`delorun-<version>-<platform>.files.json`、该平台的压缩包，以及可选的 `timestamp.json` 和 `root/<n>.root.json`。提供同样文件的 `https:` 地址也可以；`http:` 会被拒绝。Delorun 检查这些文件的方式与检查渠道更新完全相同：签名、发布日志、文件列表和压缩包摘要。然后它显示报告并询问，更新的其余部分保持不变，包括快照、数据副本、健康检查和自动回退。
+
+文件夹唯一可能放宽的，是渠道对“这是当前发布版本”的确认。如果时间戳缺失或已过期，Delorun 会问 `The release channel cannot confirm that 0.2.0 is current … Install 0.2.0 from … on its signature and release-log entry alone?`。请在终端中回答；`--yes` 从不回答它，没有终端时 Delorun 会拒绝。比你正在运行的版本更旧的发布版本会被拒绝（请用 `delorun recover rollback` 回退），签名错误或缺少文件的发布版本也会被拒绝；拒绝信息会指出该文件。Delorun 不会保留过期的时间戳，如果它无法访问发布日志，则会记录日志未经检查。
+
+<details>
+<summary>边界情况</summary>
+
+- `--from` 不能与 `--check` 或 `--report` 组合使用。
+- 含有多个发布版本的文件夹会更新到最新的那个。
+- 已经安装且完整的发布版本不会被再次获取。
+
+</details>
+
 <a id="try-another-setup-in-the-studio"></a>
 
 ## 在 studio 中试用另一套设置
 
-“设置”→“通用”→“更新”列出 Delorun 为你的设置（即你的插件、bundle 和设置）保存的版本，最新的在前。当前版本有标记，每个版本都说明它是怎么产生的：一次更新、你的一次保存，或一次切换。它与 `delorun recover` 使用的是同一份历史，所以在这里保存的版本可以在那里恢复，反之亦然。
+“设置”→“数据”→“设置版本”列出 Delorun 为你的设置（即你的插件、bundle 和设置）保存的版本，最新的在前。当前版本有标记，每个版本都说明它是怎么产生的：一次更新、你的一次保存，或一次切换。它与 `delorun recover` 使用的是同一份历史，所以在这里保存的版本可以在那里恢复，反之亦然。
 
 - **Save this setup** 保存当前的设置，如果你给出名称就带上名称。如果最新的版本已经包含它，则不会保存新的内容，页面会这样说明。
 - 版本上的 **What changes** 用平实的话显示哪些插件会回来、更改版本或被移除，哪些 bundle 会加入或离开你的 bundle 列表，你的插件行和设置是否改变，以及哪些版本豁免和构建决定会改变。它不写入任何东西。
 - **Switch to this version** 先把你当前的设置保存为一个版本，然后带回所选的那个。页面会告诉你改变了什么，以及 Delorun 在重启之后才会运行切换后的设置：请运行 `delorun stop`，再运行 `delorun start`。切换回去就是切换到之前保存的版本，所以保留一套设置和回退是同一个步骤。
 
-保存和切换只能在运行 Delorun 的那台电脑上的 studio 中进行。你用来访问 studio 的手机或其他设备能看到列表和更改内容，每个版本显示 **Do this at your computer** 而不是按钮；即使页面被改动，home 也会拒绝来自这类设备的保存或切换。安全模式和更新失败之后的回退照常工作（见[切换回去](#going-back)）。后来被发布版本撤销的插件版本会以关闭状态回来，并附带原因，与 `delorun recover restore` 相同。
+保存和切换只能在运行 Delorun 的那台电脑上的 studio 中进行。你用来访问 studio 的手机或其他设备能看到列表和更改内容，每个版本显示 **Do this at your computer** 而不是按钮；即使页面被改动，home 也会拒绝来自这类设备的保存或切换。安全模式和更新失败之后的回退照常工作（见[切换回去](#going-back)）。
 
 <a id="channels"></a>
 
 ## 渠道
 
-每个发布版本属于一个渠道，`stable` 或 `beta`，并在它自己的渠道上检查更新；没有任何设置可以把一个安装移到另一个渠道。只要渠道当前的发布版本比正在运行的更新，`delorun update` 就会提供它。它从不提供更低的版本；`delorun recover rollback` 会回到前一个发布版本。
+每个发布版本属于一个渠道，`stable` 或 `beta`；预览版本在 `stable` 上。发布版本在它自己的渠道上检查更新；没有任何设置可以把一个安装移到另一个渠道。只要渠道当前的发布版本比正在运行的更新，`delorun update` 就会提供它。它从不提供更低的版本；`delorun recover rollback` 会回到前一个发布版本。
 
 <details>
 <summary>边界情况</summary>
 
-- 如果你没有终端，那么 `delorun update` 会回答“否”，且不做任何更改。
-- 如果你没有 git，那么 `delorun update` 会在获取任何东西之前拒绝。`--check` 和 `--report` 不需要 git。
 - 如果你的报告已超过十分钟，那么 Delorun 会显示 `Delorun did not update: the update report is unknown or older than ten minutes.` 请再次运行 `delorun update`。
-- 如果报告会关闭某个插件、移除某些东西，或含有 Delorun 无法预测的内容，那么 `--yes` 不会确认它。请运行 `delorun update` 并自行决定。
-- 如果 chat 仍在运行，那么 Delorun 最多等待 30 分钟，然后以 `DRAIN_TIMEOUT` 停止更新，且不做任何更改。
-- 如果新的发布版本未通过健康检查，那么 Delorun 会自行回退，并打印哪项检查失败。
-- 如果 chat 数据副本在磁盘上放不下，那么 Delorun 会以 `DATA_COPY_NO_SPACE` 拒绝。请腾出一些空间，或在了解上述后果的前提下选择 `--no-data-copy`。
-- 如果你没有做副本而想在格式变化之后回退，那么 `delorun recover rollback` 会以 `ROLLBACK_NEEDS_DATA_COPY` 拒绝。`delorun recover rollback --profile-only` 仍然可以恢复你的 profile。
-- 如果你从源码检出运行 Delorun，那么不会运行更新检查。
-- 如果你从手机访问 studio，那么它显示没有控件的通知。请在你的电脑上应用更新。
-- 如果你关闭了检查，那么没有通知，而你运行 `delorun update` 时它仍然可用。
+- 如果发布日志检查没有完成，那么 `--yes` 会拒绝并说明这一点。请不带 `--yes` 运行 `delorun update` 自行决定，或在日志有应答之后再运行一次。
+- 如果副本在磁盘上放不下，那么 Delorun 会以 `DATA_COPY_NO_SPACE` 拒绝。请腾出一些空间，或选择 `--no-data-copy`，并了解这样之后你无法回退到旧的发布版本。
 
 </details>
 
@@ -191,7 +184,7 @@ Delorun 只保留一份副本。`delorun recover status` 会列出它及其大�
 
 - 在有大量第三方插件时更新：[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。
 - 使用 Delorun：[日常使用](daily-use.zh.md)。
-- 让你自己的更改在更新中保留：[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)。
+- 让你自己的更改在更新中保留：[修改你的 harness](changing-your-harness.zh.md)。
 - 如果更新失败：[更新与回退](troubleshooting.zh.md#updates-and-rollback)。
 
 <a id="for-the-technically-curious"></a>
