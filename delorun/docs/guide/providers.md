@@ -8,7 +8,7 @@ English | [中文](providers.zh.md)
 
 ## Summary
 
-This page helps you choose which AI model service Delorun talks to, give it your key, and change that later. You need Delorun installed ([Install and first run](install.md)) and an account with a provider. A [model provider](../reference/glossary.md#provider) is a company or server that runs the AI model; a key is the secret text that lets Delorun use your account there. Delorun works with the provider you choose. Setup asks which one to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. More providers, and more of each provider's settings, are in the studio's Settings → Agent → Models.
+This page helps you choose which AI model service Delorun talks to, give it your key, and change that later. You need Delorun installed ([Install and first run](install.md)) and an account with a provider. A [model provider](../reference/glossary.md#provider) is a company or server that runs the AI model; a key is the secret text that lets Delorun use your account there. Delorun works with the provider you choose. Setup asks which one to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. The studio lists more providers than setup does, and more of each provider's settings, in Settings → Agent → Models.
 
 ## Contents
 
@@ -32,7 +32,7 @@ Setup's model provider question is `Which model provider should Delorun use?`, w
 3. For a typed key, the key itself, which setup checks before it stores it.
 4. The model new chats start on, from the provider's model list, starting on a current general model of that provider. Setup asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash; `delorun setup key` asks it for DeepSeek too.
 
-**None for now** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a provider. You can change the model of any chat in the studio's model picker.
+**Choose later** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a provider. You can change the model of any chat in the studio's model picker.
 
 ## The providers
 
@@ -97,7 +97,7 @@ Claude Code and Codex are not model providers for Delorun's chats: they are agen
 <details>
 <summary>Edge cases</summary>
 
-- If you choose **None for now**, then chats cannot answer until you add a provider. New chats keep the profile's model, and `delorun doctor` shows `warn key`.
+- If you choose **Choose later**, then chats cannot answer until you add a provider. New chats keep the profile's model, and `delorun doctor` shows `warn key`.
 - If setup cannot reach the provider, then the key check fails with the address and HTTP status. Choose **Continue without a successful check** to store the key anyway, or fix the network first.
 - If your endpoint needs no key, then enter any text; the adapter always sends one.
 - If you use plain `http` to another computer, then setup warns you that the key and prompts cross the network unencrypted.

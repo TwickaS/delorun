@@ -8,7 +8,7 @@ description: "Delorun 的 setup 支持的模型提供方：DeepSeek、Anthropic�
 
 ## 摘要
 
-本页帮助你选择 Delorun 对接哪家 AI 模型服务、把你的密钥交给它，以及之后如何更换。你需要先安装 Delorun（见[安装与首次运行](install.zh.md)），并在某家提供方拥有账户。[模型提供方](../reference/glossary.zh.md#provider)是运行 AI 模型的公司或服务器；密钥是让 Delorun 使用你在那里的账户的秘密文本。Delorun 会使用你选择的提供方。setup 会询问使用哪一家，接收它的密钥，对大多数提供方还会询问新 chat 所用的模型。下面的每家提供方都以同样的方式设置，并按 setup 列出的顺序（按名称）排列。DeepSeek 的支持是内置的，不需要额外安装；其他所有提供方都运行在 DeepSeek Harness 自带的多提供方适配器上，所以它们同样不需要安装。更多提供方，以及每家提供方的更多设置，在 studio 的“设置”→“Agent”→“模型”中。
+本页帮助你选择 Delorun 对接哪家 AI 模型服务、把你的密钥交给它，以及之后如何更换。你需要先安装 Delorun（见[安装与首次运行](install.zh.md)），并在某家提供方拥有账户。[模型提供方](../reference/glossary.zh.md#provider)是运行 AI 模型的公司或服务器；密钥是让 Delorun 使用你在那里的账户的秘密文本。Delorun 会使用你选择的提供方。setup 会询问使用哪一家，接收它的密钥，对大多数提供方还会询问新 chat 所用的模型。下面的每家提供方都以同样的方式设置，并按 setup 列出的顺序（按名称）排列。DeepSeek 的支持是内置的，不需要额外安装；其他所有提供方都运行在 DeepSeek Harness 自带的多提供方适配器上，所以它们同样不需要安装。studio 比 setup 列出更多的提供方，以及每家提供方的更多设置，在“设置”→“Agent”→“模型”中。
 
 ## 目录
 
@@ -34,7 +34,7 @@ setup 的模型提供方问题是 `Which model provider should Delorun use?`，�
 3. 对于手工输入的密钥，询问密钥本身，setup 会在存储之前检查它。
 4. 新 chat 所用的模型，来自提供方的模型列表，默认选中该提供方当前的通用模型。除 DeepSeek 以外的每家提供方 setup 都会询问这一项，DeepSeek 则从 profile 的默认模型 DeepSeek-V4.1-Flash 开始；`delorun setup key` 对 DeepSeek 也会询问。
 
-**None for now** 不更改任何提供方设置：新 chat 保持 profile 已在使用的模型（新 profile 上是 DeepSeek-V4.1-Flash），setup 会告诉你那是哪个模型以及如何添加提供方。你可以在 studio 的模型选择器中更改任何 chat 的模型。
+**Choose later** 不更改任何提供方设置：新 chat 保持 profile 已在使用的模型（新 profile 上是 DeepSeek-V4.1-Flash），setup 会告诉你那是哪个模型以及如何添加提供方。你可以在 studio 的模型选择器中更改任何 chat 的模型。
 
 <a id="the-providers"></a>
 
@@ -113,7 +113,7 @@ Claude Code 和 Codex 不是 Delorun 的 chat 所用的模型提供方：它们�
 <details>
 <summary>边界情况</summary>
 
-- 如果你选择 **None for now**，那么在你添加提供方之前，chat 无法回答。新 chat 保持 profile 的模型，`delorun doctor` 会显示 `warn key`。
+- 如果你选择 **Choose later**，那么在你添加提供方之前，chat 无法回答。新 chat 保持 profile 的模型，`delorun doctor` 会显示 `warn key`。
 - 如果 setup 无法连到提供方，那么密钥检查会失败，并给出地址和 HTTP 状态。选择 **Continue without a successful check** 可以无论如何都存储密钥，或先修复网络。
 - 如果你的端点不需要密钥，那么输入任何文本即可；适配器总会发送一个。
 - 如果你使用纯 `http` 访问另一台电脑，那么 setup 会警告你，密钥和提示词会在网络上未经加密地传输。
