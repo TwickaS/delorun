@@ -10,6 +10,7 @@ import type { CliCommand } from '../command.ts'
 import { withHomeExclusive } from '../home-exclusion.ts'
 import { selectProfile } from '../profile.ts'
 import { takeProfile } from '../trash/command.ts'
+import { requireTerminal } from '../needs-terminal.ts'
 import { askOnTerminal } from '../trash/terminal.ts'
 import { runImport } from './index.ts'
 
@@ -22,6 +23,6 @@ export const importCommand: CliCommand = {
     const profile = selectProfile(flag, context.env)
     const home = await resolveDelorunHome(context.env)
     const exclusive = <T>(run: () => Promise<T>): Promise<T> => withHomeExclusive({ home: home.path, profile, command: 'import', instead: '' }, run)
-    return runImport(rest, { home: home.path, stdout: context.stdout, ask: askOnTerminal, exclusive })
+    return runImport(rest, { home: home.path, stdout: context.stdout, ask: async (question) => { requireTerminal('delorun import'); return askOnTerminal(question) }, exclusive })
   },
 }

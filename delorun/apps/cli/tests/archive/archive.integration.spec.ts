@@ -14,6 +14,7 @@
  * that finds a secret writes nothing until the person confirms. Each spec
  * fails when its check is removed.
  */
+import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -567,8 +568,26 @@ describe('the command rows', () => {
 
     expect(await run(['export', 'chat-a', '--out', file, '--profile', 'default'])).toBe(0)
     expect(await run(['import', file])).toBe(1)
-    expect(err).toContain('nothing was imported')
+    expect(err).toContain('this needs you at a terminal to answer')
     expect(await run(['trash', 'restore', 'missing'])).toBe(1)
     expect(err).toContain('no trash item carries the id "missing"')
+  })
+})
+
+describe('an import with no terminal to answer its question', () => {
+  it('ends with one actionable line, never Node\'s unsettled top-level await warning', async () => {
+    const { home, file } = await exportedChat()
+    const unsigned = rewrite(file, entry => entry.name === 'signature.json' ? undefined : entry)
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELORUN_|NODE_PATH$)/.test(name)))
+    const result = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx/esm'), join(import.meta.dirname, '../../src/bin.ts'), 'import', unsigned], {
+      env: { ...inherited, DELORUN_HOME: home },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      timeout: 60_000,
+    })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('delorun import: this needs you at a terminal to answer; run it in one.')
+    expect(result.stderr).not.toContain('unsettled top-level await')
+    expect(written(home)).toEqual({ imported: [], staging: [] })
   })
 })

@@ -32,6 +32,7 @@ import { parseOptions, type CliCommand, type CommandContext } from '../command.t
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
+import { requireTerminal } from '../needs-terminal.ts'
 import { printable } from '../terminal-text.ts'
 import { runPin, type PinDependencies } from './pin.ts'
 
@@ -115,9 +116,12 @@ export function createDevicesCommand(dependencies: DevicesDependencies): CliComm
 /**
  * Ask one question in the terminal.
  * @param message - the question.
+ * @param command - the command named in the failure when no terminal can answer.
  * @returns the answer, or undefined when the person cancels.
+ * @throws {CliError} `EXIT.failed` when standard input is not a terminal.
  */
-export async function askInTerminal(message: string): Promise<string | undefined> {
+export async function askInTerminal(message: string, command = 'delorun devices'): Promise<string | undefined> {
+  requireTerminal(command)
   const answer = await clack.text({ message })
   return clack.isCancel(answer) ? undefined : answer
 }
@@ -125,9 +129,12 @@ export async function askInTerminal(message: string): Promise<string | undefined
 /**
  * Ask for a secret in the terminal with the typed characters hidden.
  * @param message - the question.
+ * @param command - the command named in the failure when no terminal can answer.
  * @returns the answer, or undefined when the person cancels.
+ * @throws {CliError} `EXIT.failed` when standard input is not a terminal.
  */
-export async function askSecretInTerminal(message: string): Promise<string | undefined> {
+export async function askSecretInTerminal(message: string, command = 'delorun devices pin'): Promise<string | undefined> {
+  requireTerminal(command)
   const answer = await clack.password({ message })
   return clack.isCancel(answer) ? undefined : answer
 }
