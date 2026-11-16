@@ -425,13 +425,15 @@ describe('the documentation website check', () => {
     for (const path of ['delorun/apps/cell/src/index.ts', 'delorun/apps/release/src/index.ts', 'packages/core/session/src/index.ts', 'docs/architecture.md']) expect(selected([path])).not.toContain('docs-site')
   })
 
-  it('builds the product website through the same launcher with its name, and selects it for the site, the design both sites share and the changelog record', () => {
+  it('builds the product website through the same launcher with its name, after a stale runtime build, and selects it for the site, the design both sites share, the brand package and the changelog record', () => {
     expect(CHECKS.find(check => check.id === 'website-site')).toMatchObject({
       group: 'docs-site',
       command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/check-docs-site.ts', 'website'],
-      inputs: ['delorun/apps/website/**', 'delorun/packages/site-design/**', 'delorun/changelog/changelog.json'],
+      inputs: ['delorun/apps/website/**', 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json'],
+      needs: [],
     })
-    for (const path of ['delorun/apps/website/src/site/copy.ts', 'delorun/packages/site-design/src/mark.tsx', 'delorun/changelog/changelog.json']) expect(selected([path])).toContain('website-site')
+    expect(catalog(TREE, { ...HOST, staleRuntime: ['packages/client/ui-primitives'] }).find(check => check.id === 'website-site')?.needs).toEqual(['build:artifacts'])
+    for (const path of ['delorun/apps/website/src/site/copy.ts', 'delorun/packages/site-design/src/mark.tsx', 'delorun/packages/brand/src/settings/AppearancePickers.tsx', 'delorun/changelog/changelog.json']) expect(selected([path])).toContain('website-site')
     expect(selected(['delorun/apps/docs/source.config.ts'])).not.toContain('website-site')
     expect(selected(['delorun/packages/site-design/src/mark.tsx'])).toContain('docs-site')
     expect(packageDirOf('delorun/apps/website/src/site/copy.ts')).toBeUndefined()

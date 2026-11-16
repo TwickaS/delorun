@@ -515,8 +515,9 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       title: 'Delorun\'s product website builds, and every internal link in it names a built file or id (`pnpm --dir website run build`)',
       cwd: '',
       command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/check-docs-site.ts', 'website'],
-      needs: [],
-      inputs: [`${WEBSITE_DIR}/**`, 'delorun/packages/site-design/**', 'delorun/changelog/changelog.json'],
+      // The site's type check reaches upstream's client primitives through `@delorun/brand`, which resolve to their built `lib/`.
+      needs: built,
+      inputs: [`${WEBSITE_DIR}/**`, 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json'],
       tiers: ['changed', 'full'],
       cpus: 2,
     },
@@ -931,7 +932,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path.startsWith('delorun/docs/') || path === 'delorun/apps/release/package.json')
       if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
     } else if (check.id === WEBSITE_ID) {
-      const site = paths.find(path => path.startsWith(`${WEBSITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path === 'delorun/changelog/changelog.json')
+      const site = paths.find(path => path.startsWith(`${WEBSITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path.startsWith('delorun/packages/brand/') || path === 'delorun/changelog/changelog.json')
       if (site !== undefined) pick(check, `the product website or the design it shares changed (${site})`)
     } else if (check.id === CLOSURE_CHECK_ID && selection.changed !== undefined) {
       const closure = paths.find(path => affectsParity(path) || path === 'pnpm-lock.yaml')
