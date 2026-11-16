@@ -30,11 +30,11 @@ This page shows the commands you use every day and the choices you make about wh
 | `delorun start` | Starts Delorun without opening the studio. `--open` also opens it. |
 | `delorun start --foreground` | Runs Delorun in this terminal. Ctrl-C stops it. |
 | `delorun open` | Opens the studio in your browser with a link that signs in once. `--print` prints the link instead ([A computer without a browser](install.md#a-computer-without-a-browser)). |
-| `delorun status` | Shows the home, the profile, whether Delorun runs, its process, the running and previous release, running chats and the studio's address. `--json` prints it as JSON. |
+| `delorun status` | Shows whether Delorun runs, the studio's address, the running release and the number of running chats. `--verbose` adds the process id, the start id and the previous release. `--json` prints it as JSON. |
 | `delorun stop` | Stops Delorun once running chats end their turns. |
 | `delorun stop --now` | Stops at once. It cancels running turns and background jobs. |
 
-`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question under More settings in setup. `delorun setup background` asks it again. A background start prints `Delorun is running in the background for the profile default (process <pid>) at <address>`, then how to see, follow and stop it.
+`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question under More settings in setup. `delorun setup background` asks it again. A background start prints `Delorun is running in the background for the profile default at <address>; it keeps running after this terminal closes.`, then how to see, follow and stop it.
 
 `delorun stop` stops new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes before it stops anyway. When it is done it prints `Delorun stopped for the profile default.` `delorun stop --now` cancels the running chats instead.
 
@@ -62,7 +62,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 
 ## Check the release and your setup
 
-- **`delorun doctor`** checks your home's permissions, whether Docker answers, the format of your DeepSeek key (without sending it), whether the studio's port is free, on Linux whether bubblewrap can sandbox commands, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`. It exits with 1 when a check fails; it also reports your changes and your CLI profile's plugins.
+- **`delorun doctor`** checks your home's permissions, whether Docker answers, the format of your DeepSeek key (without sending it), whether the studio's port is free, on Linux whether bubblewrap can sandbox commands (the `sandbox` line), whether the workspace registry reads, whether a profile would run without its protections (`dangerous-mode`), the last release-log check, the last update check and the last import of a DeepSeek Harness home (`import`). Each line starts with `pass`, `warn` or `fail`. It exits with 1 when a check fails; it also reports your changes and your CLI profile's plugins. `warn docker` on a computer without Docker is harmless: workspaces on your computer's own folders work without it.
 - **`delorun verify`** checks the installed release against its signed manifest and the public release log. It runs two checks, the release signature and the installed files, and lists the others as `not run`. Its report ends with `this is not a full verification of this Delorun`.
 - **`delorun logs`** prints where each log is and the recent records of the running Delorun ([Where Delorun keeps its logs](logs.md)).
 - **`delorun --version`** prints the Delorun version and the DeepSeek Harness version it runs on.
@@ -86,7 +86,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 
 ## Workspaces and what the model may change
 
-A workspace is a folder on your computer. Every chat works in one. The workspace's permission preset decides what the commands the model runs may do:
+A workspace is a folder on your computer. Every chat works in one. Nothing undoes what an agent does to the files in a workspace: undo covers your chats and Delorun's setup, not your project ([What undo covers](known-issues.md#what-undo-covers)). Keep important workspaces in git and commit before you let an agent change many files. The workspace's permission preset decides what the commands the model runs may do:
 
 - **[Workspace Write](../reference/glossary.md#workspace-write).** The preset every new workspace starts on. Commands run in the [sandbox](../reference/glossary.md#sandbox), a fenced area: they may write inside the workspace and the permitted temporary folders. A command that needs more asks you first, and you approve or deny that one command.
 - **[Full access](../reference/glossary.md#full-access).** Commands run outside the sandbox and can write anywhere your user can, without asking.
@@ -98,7 +98,7 @@ With setup's default **Ask me first**, Delorun asks you once for each workspace 
 <details>
 <summary>Edge cases</summary>
 
-- If you choose **Ask less (like DeepSeek Harness)** in `delorun setup prompts`, then a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
+- If you choose **Ask less (like DeepSeek Harness)** in `delorun setup prompts`, then a workspace switches to full access without asking each time, as DeepSeek Harness does, after the studio's own confirmation.
 - If a chat was copied from DeepSeek Harness or another home and ran with full access there, then it opens on Workspace Write. Turn full access on for its workspace again.
 - If you pick a folder that Delorun refuses as a workspace, then it names the reason. Refused folders are the filesystem root, your home folder itself, your Delorun home, DeepSeek Harness's home, and a folder that contains either.
 - If you use the studio from a phone, then it cannot grant full access ([Reach the studio from your phone](reach.md)).
@@ -120,9 +120,9 @@ With setup's default **Ask me first**, Delorun asks you once for each workspace 
 
 Delorun is built to be reshaped. You can change plugin settings, build agent presets, skills and plugins in Creator mode, link your own plugins, or edit Delorun's own files. Delorun records each change to what it runs, so you can see it and undo it. An update carries your changes to the new release or names, before you confirm, any it cannot carry ([Updates](updates.md)).
 
-- [Where to customise what](https://docs.delorun.com/guide/customise) compares the ways to change Delorun and what each costs at an update.
-- [Write a plugin for Delorun](https://docs.delorun.com/guide/plugins) goes from a new plugin to one that loads in your studio.
-- [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records, protection, and undo.
+- [Where to customise what](customise.md) compares the ways to change Delorun and what each costs at an update.
+- [Write a plugin for Delorun](plugins.md) goes from a new plugin to one that loads in your studio.
+- [Changing your harness](changing-your-harness.md) explains what `delorun changes` records, protection, and undo.
 
 Every change Delorun makes to your profile is also a version of the profile's history, which `delorun recover` can restore.
 
@@ -161,13 +161,13 @@ Safe mode leaves out every bundle and plugin you added, including plugins instal
 
 | Command | What it does |
 | --- | --- |
-| `delorun trash list` | Lists deleted chats and workspaces. |
-| `delorun trash restore <id>` | Restores a deleted chat. A workspace is restored in the studio. |
+| `delorun trash list` | Lists deleted chats and workspaces, each with its id and the days left before it is deleted for good. |
+| `delorun trash restore <id>` | Restores a deleted chat; take the id from `trash list`. A workspace is restored in the studio. |
 | `delorun trash purge <id>`, `delorun trash empty` | Deletes one item, or every item, forever. |
-| `delorun export <chat-or-workspace> --out <file>` | Writes a chat, or a workspace with its chats, as an archive signed by this home. |
+| `delorun export <chat-or-workspace> --out <file>` | Writes a chat, or a workspace's record with its chats and attachments, as an archive signed by this home. The files in the workspace's folder are not included. |
 | `delorun import <file>` | Checks an archive, shows who signed it and what it holds, and imports it after you confirm. |
 
-These commands change chat data the studio uses, so stop Delorun first. They refuse while it runs.
+These commands change chat data the studio uses, so stop Delorun first. They refuse while it runs. A deleted item stays in the trash for 30 days. While Delorun runs, Settings → Data → Trash in the studio lists, restores and deletes items too.
 
 <details>
 <summary>Edge cases</summary>

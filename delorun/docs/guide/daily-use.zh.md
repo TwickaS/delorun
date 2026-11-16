@@ -32,11 +32,11 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 | `delorun start` | 启动 Delorun 但不打开 studio。`--open` 同时打开它。 |
 | `delorun start --foreground` | 在当前终端中运行 Delorun。按 Ctrl-C 停止。 |
 | `delorun open` | 用一次性登录链接在浏览器中打开 studio。`--print` 改为打印该链接（见[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)）。 |
-| `delorun status` | 显示 home、profile、Delorun 是否在运行、它的进程、正在运行的和上一个发布版本、正在运行的 chat 以及 studio 的地址。`--json` 以 JSON 格式打印。 |
+| `delorun status` | 显示 Delorun 是否在运行、studio 的地址、正在运行的发布版本以及正在运行的 chat 数量。`--verbose` 会加上进程 id、启动 id 和上一个发布版本。`--json` 以 JSON 格式打印。 |
 | `delorun stop` | 在正在运行的 chat 结束各自的轮次之后停止 Delorun。 |
 | `delorun stop --now` | 立即停止。它会取消正在运行的轮次和后台任务。 |
 
-`delorun` 和 `delorun start` 在后台运行 Delorun，所以你关闭终端之后它仍会继续运行，除非你在 setup 的“更多设置”下对后台问题回答了“否”。`delorun setup background` 会再次询问。后台启动会打印 `Delorun is running in the background for the profile default (process <pid>) at <address>`，然后说明如何查看、跟踪和停止它。
+`delorun` 和 `delorun start` 在后台运行 Delorun，所以你关闭终端之后它仍会继续运行，除非你在 setup 的“更多设置”下对后台问题回答了“否”。`delorun setup background` 会再次询问。后台启动会打印 `Delorun is running in the background for the profile default at <address>; it keeps running after this terminal closes.`，然后说明如何查看、跟踪和停止它。
 
 `delorun stop` 会停止新的轮次，打印 `Waiting for N running chat(s) to end…`，并最多等待 30 分钟，之后无论如何都会停止。完成后它会打印 `Delorun stopped for the profile default.` `delorun stop --now` 则改为取消正在运行的 chat。
 
@@ -66,7 +66,7 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 ## 检查发布版本与你的设置
 
-- **`delorun doctor`** 检查你的 home 的权限、Docker 是否有响应、你的 DeepSeek 密钥的格式（不发送它）、studio 的端口是否空闲、在 Linux 上 bubblewrap 是否能为命令提供沙箱、最近一次发布日志检查和最近一次更新检查。每一行以 `pass`、`warn` 或 `fail` 开头。当有检查失败时它以 1 退出；它还会报告你的更改和你的 CLI profile 的插件。
+- **`delorun doctor`** 检查你的 home 的权限、Docker 是否有响应、你的 DeepSeek 密钥的格式（不发送它）、studio 的端口是否空闲、在 Linux 上 bubblewrap 是否能为命令提供沙箱（`sandbox` 一行）、工作区注册表能否读取、profile 是否会在没有其保护的情况下运行（`dangerous-mode`）、最近一次发布日志检查、最近一次更新检查，以及最近一次导入 DeepSeek Harness home 的情况（`import`）。每一行以 `pass`、`warn` 或 `fail` 开头。当有检查失败时它以 1 退出；它还会报告你的更改和你的 CLI profile 的插件。在没有 Docker 的电脑上出现 `warn docker` 是无害的：使用你电脑自己文件夹的工作区无需它也能工作。
 - **`delorun verify`** 对照已签名的 manifest 和公开的发布日志检查已安装的发布版本。它运行两项检查，即发布签名和已安装的文件，并把其他检查列为 `not run`。它的报告以 `this is not a full verification of this Delorun` 结尾。
 - **`delorun logs`** 打印每份日志的位置，以及正在运行的 Delorun 的最近记录（见 [Delorun 的日志存放在哪里](logs.zh.md)）。
 - **`delorun --version`** 打印 Delorun 的版本以及它所运行的 DeepSeek Harness 的版本。
@@ -92,7 +92,7 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 ## 工作区与模型可以改动的内容
 
-工作区是你电脑上的一个文件夹。每个 chat 都在其中一个工作区里工作。工作区的权限预设决定模型运行的命令可以做什么：
+工作区是你电脑上的一个文件夹。每个 chat 都在其中一个工作区里工作。没有任何东西能撤销智能体对工作区文件所做的更改：撤销涵盖你的 chat 和 Delorun 的设置，不涵盖你的项目（见[撤销涵盖什么](known-issues.zh.md#what-undo-covers)）。请把重要的工作区放在 git 中，并在让智能体修改大量文件之前先提交。工作区的权限预设决定模型运行的命令可以做什么：
 
 - **[Workspace Write](../reference/glossary.zh.md#workspace-write)。**每个新工作区开始时使用的预设。命令在[沙箱](../reference/glossary.zh.md#sandbox)（一个被围起来的区域）中运行：它们可以在工作区和获许的临时文件夹内写入。需要更多权限的命令会先询问你，你批准或拒绝那一条命令。
 - **[完全访问](../reference/glossary.zh.md#full-access)。**命令在沙箱之外运行，可以写入你的用户能写入的任何地方，不再询问。
@@ -104,7 +104,7 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 <details>
 <summary>边界情况</summary>
 
-- 如果你在 `delorun setup prompts` 中选择 **Ask less (like DeepSeek Harness)**，那么工作区会像在 DeepSeek Harness 中那样，在 studio 自己的确认之后切换为完全访问。
+- 如果你在 `delorun setup prompts` 中选择 **Ask less (like DeepSeek Harness)**，那么工作区会像 DeepSeek Harness 那样不再每次询问，在 studio 自己的确认之后切换为完全访问。
 - 如果某个 chat 是从 DeepSeek Harness 或另一个 home 复制来的，并在那里以完全访问运行，那么它会以 Workspace Write 打开。请再次为它的工作区开启完全访问。
 - 如果你选择了 Delorun 拒绝作为工作区的文件夹，那么它会指出原因。被拒绝的文件夹包括文件系统根目录、你的用户主目录本身、你的 Delorun home、DeepSeek Harness 的 home，以及包含其中任一个的文件夹。
 - 如果你从手机使用 studio，那么它无法授予完全访问（见[用手机访问 studio](reach.zh.md)）。
@@ -128,9 +128,9 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 
 Delorun 就是为了被重新塑造而构建的。你可以更改插件设置，在 Creator 模式中构建 agent 预设、skill 和插件，链接你自己的插件，或编辑 Delorun 自己的文件。Delorun 会记录每一项对它所运行内容的更改，所以你可以查看并撤销它。更新会把你的更改带到新的发布版本，或在你确认之前指出它无法带过去的更改（见[更新](updates.zh.md)）。
 
-- [什么该在哪里定制](https://docs.delorun.com/guide/customise)比较了修改 Delorun 的各种方式，以及每种方式在更新时的代价。
-- [为 Delorun 编写插件](https://docs.delorun.com/guide/plugins)从一个新插件讲到一个能在你的 studio 中加载的插件。
-- [修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
+- [什么该在哪里定制](customise.zh.md)比较了修改 Delorun 的各种方式，以及每种方式在更新时的代价。
+- [为 Delorun 编写插件](plugins.zh.md)从一个新插件讲到一个能在你的 studio 中加载的插件。
+- [修改你的 harness](changing-your-harness.zh.md)说明 `delorun changes` 记录什么、如何保护，以及如何撤销。
 
 Delorun 对你的 profile 所做的每一项更改，同时也是 profile 历史的一个版本，`delorun recover` 可以恢复它。
 
@@ -173,13 +173,13 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 | 命令 | 作用 |
 | --- | --- |
-| `delorun trash list` | 列出已删除的 chat 和工作区。 |
-| `delorun trash restore <id>` | 恢复已删除的 chat。工作区在 studio 中恢复。 |
+| `delorun trash list` | 列出已删除的 chat 和工作区，每一项带有它的 id 和永久删除前剩余的天数。 |
+| `delorun trash restore <id>` | 恢复已删除的 chat；id 取自 `trash list`。工作区在 studio 中恢复。 |
 | `delorun trash purge <id>`、`delorun trash empty` | 永久删除一个项目，或所有项目。 |
-| `delorun export <chat-or-workspace> --out <file>` | 把一个 chat，或一个连同其 chat 的工作区，写成由这个 home 签名的归档。 |
+| `delorun export <chat-or-workspace> --out <file>` | 把一个 chat，或一个工作区的记录连同其 chat 和附件，写成由这个 home 签名的归档。工作区文件夹中的文件不包含在内。 |
 | `delorun import <file>` | 检查归档，显示是谁签名的以及其中有什么，并在你确认之后导入。 |
 
-这些命令会更改 studio 使用的 chat 数据，所以请先停止 Delorun。它运行期间这些命令会拒绝。
+这些命令会更改 studio 使用的 chat 数据，所以请先停止 Delorun。它运行期间这些命令会拒绝。已删除的项目会在回收站中保留 30 天。Delorun 运行期间，studio 中的“设置”→“数据”→“回收站”同样可以列出、恢复和删除项目。
 
 <details>
 <summary>边界情况</summary>
