@@ -8,8 +8,9 @@ This package builds delorun.com, Delorun's product site: a home page, a blog ind
 
 | Route | Serves |
 | --- | --- |
-| `/` | What Delorun is, the install command, the first setup question, the preview status, six short sections that each link a guide page, the roadmap's three stages, a "For teams" line, and with an assembled version a What's new section from the changelog record |
-| `/blog` | The articles in `content/blog/`, newest first, or a line saying there are none |
+| `/` | What Delorun is, a studio picture (a placeholder at `public/hero-studio.svg` until the screenshot replaces it; `HERO_IMAGE_PATH` in `src/site/config.ts` names it), the install command with the first setup question under it, the preview status, six short sections that each link a guide page, the roadmap's three stages, a "For teams" line, and with an assembled version a What's new section from the changelog record |
+| `/blog` | The articles in `content/blog/`, newest first, or a line saying there are none. The header, the footer and the sitemap link it only once an article is published |
+| `/sitemap.xml`, `/robots.txt` | The sitemap, written by the build from the pages that exist, and the robots file in `public/` that names it |
 | `/privacy` | What the site collects, what its host logs and where to read what the program sends |
 | `/404` | The page a host serves, from `404.html`, for an address no file has |
 | `POST /api/subscribe` | Takes the sign-up form: validates it, rate-limits the connection, verifies the Turnstile token with Siteverify, then stores or refreshes a `pending` record. Every accepted sign-up gets the same answer, whether or not the address was known |

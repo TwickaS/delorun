@@ -1,10 +1,12 @@
-import { writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+import { SITEMAP_PATHS } from './src/site/config.ts'
+import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
 import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 
 /** The static site's directory: the client build, with every prerendered page. */
@@ -39,6 +41,21 @@ function changelogModule(view: ChangelogView | undefined): Plugin {
   }
 }
 
+/** The number of published articles; the blog index is in the sitemap only when it is above zero. */
+const articleCount = existsSync('content/blog') ? readdirSync('content/blog').filter(name => name.endsWith('.md')).length : 0
+
+/**
+ * Writes `sitemap.xml` into the client output after the pages are prerendered.
+ * @returns the plugin.
+ */
+function sitemapFile(): Plugin {
+  return {
+    name: 'delorun-sitemap',
+    apply: 'build',
+    closeBundle: { order: 'post', sequential: true, handler() { if (existsSync(OUT_DIR)) writeFileSync(join(OUT_DIR, 'sitemap.xml'), sitemapXml(sitemapPaths(SITEMAP_PATHS, articleCount))) } },
+  }
+}
+
 // With no assembled version there is no record: the What's new section is left out.
 const changelog = loadView(resolve(process.cwd(), '../../..'))
 
@@ -47,6 +64,7 @@ export default defineConfig({
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
     changelogModule(changelog),
+    sitemapFile(),
     tailwindcss(),
     tanstackStart({
       router: { generatedRouteTree: '../routeTree.gen.ts' },

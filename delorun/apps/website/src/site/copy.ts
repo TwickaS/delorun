@@ -39,7 +39,7 @@ export const COPY = {
   description: 'Delorun is an agent harness you shape to your own work. Change anything, undo everything. Built on DeepSeek Harness; runs its plugins and imports your chats.',
   heroTitle: 'Your harness. No limits.',
   heroSubline: 'Change anything. Undo everything.',
-  heroText: 'Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. Every change can be undone in one step, so you can try things without fear. One command installs it and checks that the download is genuine.',
+  heroText: 'Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. Every change can be undone in one step, so you can try things without fear. Undo covers Delorun and your chats; it does not undo what an agent does to the files in your workspace. One command installs it and checks that the download is genuine.',
   /** The one line that names DeepSeek Harness, under Delorun\u2019s own identity. */
   factLine: 'Built on DeepSeek Harness; runs its plugins and imports your chats.',
   /** The status in one sentence; `linkText` links to `href`. */
@@ -62,6 +62,8 @@ export const COPY = {
   },
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
+  /** The alternative text of the studio picture in the hero. */
+  heroImageAlt: 'The Delorun studio in a browser, with a chat beside the sidebar.',
   /** What the install command asks first on a new home, as the setup prints it. */
   terminal: (command: string) => `$ ${command}
 ? How will you use Delorun?
@@ -79,7 +81,7 @@ export const COPY = {
     },
     {
       title: 'Try it, keep it or go back',
-      text: 'Delorun saves your setup before every update, and you can save it yourself before a change. Keep what you like, or switch back.',
+      text: 'Delorun saves your setup before every update, and you can save it yourself before a change. Keep what you like, or switch back. This covers Delorun and your chats, not the files an agent changes in a workspace.',
       href: `${DOCS_URL}/guide/updates`,
       linkText: 'Updates and going back',
     },
@@ -96,7 +98,7 @@ export const COPY = {
       linkText: 'Model providers',
     },
     {
-      title: 'Safe on your own computer',
+      title: 'Stay in control',
       text: 'Your chats and settings stay in a folder on your computer, with no account. Commands run in a sandbox and ask before risky steps, and every release is signed and checked before it runs.',
       href: `${DOCS_URL}/guide/safety`,
       linkText: 'What Delorun protects',
@@ -110,13 +112,13 @@ export const COPY = {
   ] satisfies readonly Feature[],
   roadmap: {
     heading: 'Where it is going',
-    text: 'The roadmap has no dates. Each stage starts when the one before it is ready.',
+    text: 'The roadmap has no dates and is a plan, not a promise. Each stage starts when the one before it is ready.',
     stages: [
       { title: 'Now', text: 'The preview for individuals: Linux and WSL2, the Web studio and your phone over Tailscale.' },
       { title: 'Next', text: 'The desktop app, then a free relay with accounts, then extra machines, then 1.0.0, ready for a business.' },
-      { title: 'Later', text: 'Directions without an order: Docker workspaces, more ways to reach your studio, plugin checks, workspace checkpoints and shareable setups.' },
+      { title: 'Later', text: 'Directions without an order: Docker workspaces, reaching your studio without Tailscale, workspace checkpoints that let undo cover files, and shareable setups.' },
     ],
-    earns: 'Delorun is MIT and free, and nothing is held back for payment. From 1.0.0, teams can pay for custom plugins and integrations.',
+    earns: 'Delorun is MIT and free and nothing in it is held back for payment; from 1.0.0 teams can pay for custom plugins and integrations, and whether anything else is ever sold is not decided, but if it is, it is a service and never a locked feature.',
     link: 'Read the roadmap',
     href: `${DOCS_URL}/guide/roadmap`,
   },
@@ -138,7 +140,7 @@ export const COPY = {
   },
   signup: {
     heading: 'Get release news by email',
-    text: 'Sign up for a short email when a new version of Delorun comes out. We send a message to confirm your address first, and nothing else until you open it.',
+    text: 'Sign up for a short email when a new version of Delorun comes out. We send a message to confirm your address first, and nothing else until you confirm.',
     nameLabel: 'First name',
     optional: '(optional)',
     emailLabel: 'Email address',
@@ -156,6 +158,8 @@ export const COPY = {
     docs: 'Docs',
     changelog: 'Changelog',
     roadmap: 'Roadmap',
+    questions: 'Questions and answers',
+    knownIssues: 'Known issues',
     blog: 'Blog',
     github: 'GitHub',
     privacy: 'Privacy',

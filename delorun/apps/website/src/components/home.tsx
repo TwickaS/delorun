@@ -4,7 +4,7 @@
  * @module @delorun/website/home
  */
 import view from 'virtual:delorun-changelog'
-import { DOCS_URL } from '@/site/config.ts'
+import { DOCS_URL, HERO_IMAGE_PATH } from '@/site/config.ts'
 import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
 import { CopyButton } from '@/components/copy-button.tsx'
 import { PackageManagerPicker, usePackageManager } from '@/components/package-manager.tsx'
@@ -66,12 +66,15 @@ export function Home() {
               <PackageManagerPicker value={manager} onChange={setManager} />
               <CopyButton text={command} />
             </div>
+            <div className="mt-5 max-w-xl"><Terminal command={command} /></div>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
             <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
             <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.status.before}<Link href={COPY.status.href}>{COPY.status.linkText}</Link>{COPY.status.after}</p>
             <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
           </div>
-          <Terminal command={command} />
+          <figure className="min-w-0">
+            <img src={HERO_IMAGE_PATH} alt={COPY.heroImageAlt} width={1200} height={750} className="w-full rounded-xl border border-fd-border bg-fd-card" />
+          </figure>
         </section>
         <section aria-labelledby="features" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
           <h2 id="features" className="text-2xl font-semibold tracking-tight">{COPY.featuresTitle}</h2>

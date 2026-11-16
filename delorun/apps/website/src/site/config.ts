@@ -23,6 +23,15 @@ export const SUPPORT_EMAIL = 'support@delorun.com'
 /** The site path of the image that link previews show. */
 export const OG_IMAGE_PATH = '/og.png'
 
+/**
+ * The site path of the studio picture in the home page's hero. PLACEHOLDER: `public/hero-studio.svg` holds a plain
+ * frame until the real screenshot replaces it; change this path when the screenshot has another name or type.
+ */
+export const HERO_IMAGE_PATH = '/hero-studio.svg'
+
+/** The pages the sitemap lists besides the blog index, which it lists once an article is published. */
+export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy']
+
 /** The sender of the sign-up confirmation message: an address on the domain that Cloudflare Email Service sends for. */
 export const UPDATES_EMAIL = 'updates@delorun.com'
 

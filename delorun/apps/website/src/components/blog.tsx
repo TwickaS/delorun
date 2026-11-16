@@ -3,12 +3,10 @@
  *
  * @module @delorun/website/blog-page
  */
-import { listArticles, type Article } from '@/site/blog.ts'
+import { ARTICLES } from '@/site/articles.ts'
 import { COPY } from '@/site/copy.ts'
 import { Link } from '@brand'
 import { Frame } from '@/components/layout.tsx'
-
-const ARTICLES: readonly Article[] = listArticles(import.meta.glob('../../content/blog/*.md', { query: '?raw', import: 'default', eager: true }))
 
 /**
  * The blog index.
