@@ -1,0 +1,238 @@
+/**
+ * `delorun setup export` and `delorun setup import`: one signed archive of a profile's setup, and the import of one.
+ *
+ * Export writes the plugins the person added, the model choices and the settings that travel, never a key, a chat, a
+ * device, an exemption or an answer of setup. Import verifies the archive and shows who signed it, or that nobody
+ * could be shown to have, then lists everything it would change, including every plugin and setting it would remove,
+ * and asks. It applies only through Changes' plugin requests, so the install checks, the build-script holds and the
+ * review of a local plugin's code are the ones a hand install meets.
+ *
+ * @module @delorun/cli/setup/transfer
+ */
+import { join } from 'node:path'
+import { parseArgs } from 'node:util'
+import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
+import { attestTerminal, isChangesError, readProtection, type ChangesContext, type AtComputer } from '@delorun/changes'
+import { applySetupImport, collectSetup, planSetupImport, type SetupPlan } from '@delorun/changes/setup-transfer'
+import { printable, quoted } from '../terminal-text.ts'
+import { parseFailure, prepareHome, type CommandContext, type CommandResult } from '../command.ts'
+import type { ChangesCommandDependencies } from '../changes/command.ts'
+import { terminalDependencies } from '../changes/command.ts'
+import { CliError, EXIT } from '../exit.ts'
+import { writeNewFile } from '../export/index.ts'
+import { IMPORT_LIMITS, readArchiveFile } from '../import/index.ts'
+import { hasCliProfile, profileDirectory } from '../profile.ts'
+import { isYes } from '../trash/terminal.ts'
+import { delorunVersion } from '../version.ts'
+
+/** The usage lines. */
+export const SETUP_TRANSFER_USAGE = [
+  'Usage: delorun setup export --out <file> [--profile <name>]',
+  '       delorun setup import <file> [--dry-run] [--profile <name>]',
+].join('\n')
+
+/**
+ * A count with its noun.
+ * @param count - the count.
+ * @param noun - the singular noun.
+ * @returns `1 plugin`, `2 plugins`.
+ */
+function plural(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/**
+ * Run `delorun setup export` or `delorun setup import`.
+ * @param args - the arguments after `setup`, starting with the command word.
+ * @param context - the environment and output.
+ * @param dependencies - the terminal, the profile lock and the plugin operation; this process's by default.
+ * @returns the exit code.
+ * @throws {CliError} for a wrong command line, a profile that is not set up, a refused archive, a declined question, or a failure of the import.
+ */
+export async function runSetupTransfer(args: readonly string[], context: CommandContext, dependencies: ChangesCommandDependencies = terminalDependencies()): Promise<CommandResult> {
+  const [word, ...rest] = args
+  let parsed
+  try {
+    parsed = parseArgs({ args: rest, options: { 'profile': { type: 'string' }, 'out': { type: 'string' }, 'dry-run': { type: 'boolean', default: false } }, strict: true, allowPositionals: true })
+  } catch (error: unknown) {
+    throw parseFailure(`setup ${String(word)}`, error)
+  }
+  const { home, profile } = await prepareHome(context, parsed.values.profile)
+  if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun setup ${String(word)}: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
+  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
+  if (word === 'export') {
+    const out = parsed.values.out
+    if (parsed.positionals.length > 0 || out === undefined || out.length === 0 || parsed.values['dry-run']) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
+    return runExport(ctx, out, context, dependencies)
+  }
+  const [file, ...extra] = parsed.positionals
+  if (file === undefined || extra.length > 0 || parsed.values.out !== undefined) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
+  return runImport(ctx, file, parsed.values['dry-run'], context, dependencies)
+}
+
+/**
+ * Write the profile's setup as a signed archive.
+ * @param ctx - the profile.
+ * @param out - the archive file to create.
+ * @param context - the output.
+ * @param dependencies - the profile lock.
+ * @returns the exit code.
+ * @throws {CliError} when the setup holds a key, the file exists or a plugin is too large to carry.
+ */
+async function runExport(ctx: ChangesContext, out: string, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+  try {
+    const collected = await dependencies.withHost(ctx.home, ctx.profile, async () => collectSetup(ctx))
+    const key = (await loadHomeKey(ctx.home, { create: true }))!
+    const bytes = exportSetupArchive({
+      createdBy: String(delorunVersion()),
+      origin: { homeKeyId: key.keyId, publicKey: key.publicKey },
+      document: collected.document,
+      files: collected.files,
+      sign: manifest => signManifest(manifest, key.keyId, key.privateKey),
+    })
+    await writeNewFile(out, bytes, 'delorun setup export')
+    const local = collected.document.plugins.filter(plugin => plugin.source === 'local').length
+    context.stdout(`Wrote ${quoted(out)}: ${plural(collected.document.plugins.length, 'plugin')} (${String(local)} made on this computer, carried with their files), ${String(collected.document.patch.length)} settings ${collected.document.patch.length === 1 ? 'entry' : 'entries'}, signed by this home's key ${key.keyId}.\n`)
+    if (collected.leftOut.length > 0) context.stdout(`Left out of the file:\n${collected.leftOut.map(line => `  ${printable(line)}`).join('\n')}\n`)
+    context.stdout('The file holds no key, chat, device or answer of setup. Import it on the other computer with: delorun setup import <file>\n')
+    return EXIT.ok
+  } catch (error: unknown) {
+    if (isChangesError(error)) throw new CliError(EXIT.failed, `delorun setup export: ${error.detail}`)
+    if (error instanceof ArchiveError) throw new CliError(EXIT.failed, `delorun setup export: ${error.message}`)
+    throw error
+  }
+}
+
+/**
+ * Show a setup archive, ask, and replace the profile's setup with it.
+ * @param ctx - the profile.
+ * @param file - the archive.
+ * @param dryRun - whether to show and stop.
+ * @param context - the output.
+ * @param dependencies - the terminal, the profile lock and the plugin operation.
+ * @returns the exit code.
+ * @throws {CliError} for a refused archive, a refused setup, a declined question or a failed step.
+ */
+async function runImport(ctx: ChangesContext, file: string, dryRun: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+  const presence = dryRun ? undefined : attestAtTerminal(dependencies)
+  const bytes = await readArchiveFile(file, 'delorun setup import')
+  try {
+    const opened = await openArchive(ctx.home, bytes, file)
+    const { plan } = await planSetupImport(ctx, opened.document)
+    context.stdout(importLines(opened, plan, ctx.profile, await readProtection(ctx.home)))
+    if (dryRun) {
+      context.stdout('Dry run: nothing was changed.\n')
+      return EXIT.ok
+    }
+    if (!plan.changes) {
+      context.stdout('This profile already has this setup. Nothing to do.\n')
+      return EXIT.ok
+    }
+    const answer = await dependencies.ask(`Replace the setup of the profile ${ctx.profile} with this one? [y/N] `)
+    if (!isYes(answer)) throw new CliError(EXIT.failed, 'delorun setup import: nothing was changed')
+    const result = await dependencies.withHost(ctx.home, ctx.profile, reload => applySetupImport(ctx, opened.document, {
+      presence: presence!,
+      reload,
+      run: dependencies.pluginOperation(ctx, context),
+      readFile: opened.readFile,
+      progress: line => context.stdout(`${line}\n`),
+    }))
+    context.stdout(afterLines(result.savedVersion, result.installed.flatMap(item => item.reviewChange === undefined ? [] : [item.reviewChange]), plan, await readProtection(ctx.home)))
+    return EXIT.ok
+  } catch (error: unknown) {
+    if (error instanceof ArchiveError) throw new CliError(EXIT.failed, `delorun setup import: the archive is refused (${error.code}): ${quoted(error.message)}; nothing was changed`)
+    if (isChangesError(error)) throw new CliError(EXIT.failed, `delorun setup import: ${error.detail}`)
+    throw error
+  }
+}
+
+/**
+ * @param dependencies - the streams whose being terminals proves the person is at their computer.
+ * @returns the proof.
+ * @throws {CliError} when standard input or output is not a terminal.
+ */
+function attestAtTerminal(dependencies: ChangesCommandDependencies): AtComputer {
+  try {
+    return attestTerminal(dependencies.streams)
+  } catch (error: unknown) {
+    if (!isChangesError(error)) throw error
+    throw new CliError(EXIT.failed, 'delorun setup import: This needs you at your computer: run it in a terminal. delorun setup import --dry-run shows what a file holds without one.')
+  }
+}
+
+/**
+ * Validate a setup archive with this home's own key vouched for.
+ * @param home - the Delorun home.
+ * @param bytes - the archive.
+ * @param source - the file's name.
+ * @returns the opened setup.
+ * @throws {ArchiveError} with the code of the first refusal.
+ */
+async function openArchive(home: string, bytes: Uint8Array, source: string): Promise<OpenedSetup> {
+  const ownKey = await loadHomeKey(home)
+  const root = join(home, 'archive')
+  const importer = new ArchiveImporter({
+    stagingParent: join(root, 'staging'),
+    store: new DirectoryWorkspaceStore(join(root, 'imported')),
+    trustedPublicKeys: ownKey === undefined ? [] : [ownKey.publicKey],
+    limits: IMPORT_LIMITS,
+  })
+  return importer.openSetup(bytes, { source })
+}
+
+/**
+ * What the person reads before the question: who signed the archive, what it states about itself, and every change.
+ * @param opened - the opened archive.
+ * @param plan - the plan.
+ * @param profile - the profile it would replace the setup of.
+ * @param protection - the Changes protection setting.
+ * @returns the text.
+ */
+export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: string, protection: 'on' | 'off'): string {
+  const signer = opened.state === 'verified'
+    ? `Signed by this home's key ${opened.signer.fingerprint}, which this home trusts.`
+    : opened.reason === 'absent'
+      ? 'UNVERIFIED: this file is not signed, so nothing shows who made it or that it is unchanged.'
+      : `UNVERIFIED: signed by a key this home does not know, fingerprint ${opened.signer.fingerprint}. Compare it with the fingerprint the sending computer shows.`
+  const lines = [
+    signer,
+    'What the archive states about itself:',
+    `  File ${quoted(opened.source)}, written by ${quoted(opened.createdBy)} at ${quoted(opened.exportedAt)} from the profile ${quoted(opened.document.profile)}.`,
+    '',
+    `Importing it REPLACES the setup of your profile ${profile}. Your keys, chats, devices, exemptions and answers of setup are not touched.`,
+  ]
+  const adds = plan.install.map((item) => {
+    const where = item.plugin.source === 'local' ? 'made on another computer; its code waits for your review' : 'from the registry'
+    const was = item.from === undefined ? '' : ` (now: ${printable(item.from)})`
+    return `    ${item.kind === 'add' ? '+' : '~'} ${item.plugin.name}${item.plugin.version === undefined ? '' : ` ${item.plugin.version}`}, ${where}${was}`
+  })
+  lines.push('Plugins:', ...adds.length === 0 ? ['    none to add or move'] : adds)
+  if (plan.remove.length > 0) lines.push('  Removed, because the archive does not list them:', ...plan.remove.map(name => `    - ${printable(name)}`))
+  if (plan.keep.length > 0) lines.push(`  Already as the archive names them: ${plan.keep.map(printable).join(', ')}`)
+  lines.push('Model choices and settings:', ...plan.settings.length === 0 ? ['    no change'] : plan.settings.map(line => `    ${printable(line)}`))
+  if (plan.endpoints.length > 0) lines.push('  Endpoints these settings send requests to:', ...plan.endpoints.map(line => `    ${printable(line)}`))
+  if (plan.leftOut.length > 0) lines.push('Not applied, because a setup does not carry them:', ...plan.leftOut.map(line => `    ${printable(line)}`))
+  lines.push(protection === 'on'
+    ? 'Protection is on: the code of a plugin from this file waits in delorun changes list until you review it.'
+    : 'Protection is off: the code of a plugin from this file loads at the next start without review. delorun changes protection on makes it wait for you first.')
+  return `${lines.join('\n')}\n`
+}
+
+/**
+ * What the person reads once the import is done: how to undo it, what waits for review and the key.
+ * @param saved - the history version saved before the import.
+ * @param reviews - the changes that hold a local plugin's code.
+ * @param plan - the plan that was applied.
+ * @param protection - the Changes protection setting.
+ * @returns the text.
+ */
+export function afterLines(saved: string, reviews: readonly string[], plan: SetupPlan, protection: 'on' | 'off'): string {
+  const lines = ['Done.', `To go back to the setup you had: delorun recover restore ${saved}, or Settings → Setup versions in the studio ("Before importing a setup").`]
+  if (reviews.length > 0) {
+    lines.push(protection === 'on'
+      ? `Code waiting for your review: ${reviews.map(id => `delorun changes show ${id}`).join(', ')}`
+      : 'Protection is off, so the code of the plugins made on another computer loads at the next start; delorun changes list shows what it loaded.')
+  }
+  lines.push(...plan.keyNotes)
+  return `${lines.join('\n')}\n`
+}

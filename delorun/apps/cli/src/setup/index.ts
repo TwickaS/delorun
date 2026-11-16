@@ -461,8 +461,10 @@ export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof 
 /** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
-  summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them',
+  summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them; export and import move a setup between computers',
   async run(args, context) {
+    // `export` and `import` are not sections: they move a whole setup between computers.
+    if (args[0] === 'export' || args[0] === 'import') return (await import('./transfer.ts')).runSetupTransfer(args, context)
     const { values, positionals } = (() => {
       try {
         return parseArgs({ args: [...args], options: {
