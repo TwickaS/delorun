@@ -222,13 +222,13 @@ Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 
 
 每个工作区都有一个网络设置，即 **Open**、**Allowlist** 或 **Off**，用来限制它沙箱中的命令和 `web_fetch` 可以访问哪些主机。它从 Open 开始，与 DeepSeek Harness 相同，所以全新安装在你选择之前不会改变任何东西。请在运行 Delorun 的那台电脑上，在“设置”→“安全”→“网络”中选择。收紧会立即生效。让工作区能访问更多内容则会要求你确认。
 
-在 Linux 上，Open 还会共享你电脑的网络，其中显示服务器和会话总线等程序监听的套接字是沙箱无法隐藏的。命令可能利用它们在沙箱之外行事。所以当你在 Linux 桌面上运行 Delorun 且工作区处于 Open 时，Delorun 会在每条命令启动时检查，只要有任何这类套接字在监听就拒绝它，并指出该套接字。请为工作区选择 Allowlist 或 Off，或在“设置”→“安全”→“网络”中打开 Open 旁边的 **Run commands even when desktop sockets are reachable**，无论如何都运行命令。开启它之后，命令会运行，沙箱会报告自己只是部分限制，Delorun 会记录这些套接字。检查发生在命令启动时，所以之后才开始监听的套接字不会被发现。[提示词注入与数据外泄](prompt-injection.zh.md#the-network-setting)说明了每种选择关闭了什么、又留下了什么。
+在 Linux 上，Open 还会共享你电脑的网络，其中显示服务器和会话总线等程序监听的套接字是沙箱无法隐藏的。命令可能利用它们在沙箱之外行事。所以当你在 Linux 桌面上运行 Delorun 且工作区处于 Open 时，Delorun 会在每条命令启动时检查，只要有任何这类套接字在监听就拒绝它，并指出该套接字。在某个工作区第一次遇到这种情况时，对话会在运行 Delorun 的电脑上询问你，是否让该工作区中的命令照常运行。模型无法回答这个询问。允许会记录与“设置”→“安全”→“网络”中 Open 旁边的开关 **Run commands even when desktop sockets are reachable** 相同的选择，随后命令运行；拒绝则保持拒绝，在 Delorun 重启之前，对话不会在该工作区再次询问。只有 `bash` 工具会询问；终端和无人可答的 `delorun headless` 保持拒绝并指向设置。你也可以为工作区选择 Allowlist 或 Off，或自己打开该设置。开启它之后，命令会运行，沙箱会报告自己只是部分限制，Delorun 会记录这些套接字。检查发生在命令启动时，所以之后才开始监听的套接字不会被发现。[提示词注入与数据外泄](prompt-injection.zh.md#the-network-setting)说明了每种选择关闭了什么、又留下了什么。
 
 <details>
 <summary>边界情况</summary>
 
 - 如果你的沙箱无法强制执行 Allowlist 或 Off（除了 Linux 上的 bubblewrap（包括 WSL2）之外的任何情况），那么工作区的命令会被拒绝，而不是带着你的网络运行：把它设回 Open 即可运行。
-- 如果你在 Linux 桌面上使用 Open，而某条命令被一条关于抽象 Unix 套接字的消息拒绝，那么请为工作区选择 Allowlist 或 Off，或用 **Run commands even when desktop sockets are reachable** 接受风险。
+- 如果你在 Linux 桌面上使用 Open，而某条命令被一条关于抽象 Unix 套接字的消息拒绝，那么请回答对话的询问，或为工作区选择 Allowlist 或 Off，或用 **Run commands even when desktop sockets are reachable** 接受风险。
 - 如果命令拥有完全访问，那么该设置不适用：它在沙箱之外运行。
 - 如果无法读取该设置的文件，那么每个工作区都视为 Off，更改会被拒绝：请修复或删除“设置”所指出的文件。
 - 如果你在手机上，那么无法打开该页面：请使用运行 Delorun 的那台电脑。

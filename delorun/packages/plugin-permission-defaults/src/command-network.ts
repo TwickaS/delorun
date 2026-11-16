@@ -27,6 +27,7 @@ import type {} from '@deepseek-ai/dsh-workspace'
 import { admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname } from '@delorun/home-auth'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
 import { resolveDelorunHome } from '@delorun/home'
+import { AbstractSocketConsent } from './abstract-socket-consent.ts'
 import { EgressProxy, type EgressProxyOptions, type EgressRefusal } from './egress-proxy.ts'
 import { hostAllowed, hostListed, isNetworkAccess, loosens, normalizeHost, parseHostList, type WorkspaceNetwork } from './network.ts'
 import { networkStorePath, readNetworkStore, writeNetworkStore } from './network-store.ts'
@@ -162,6 +163,11 @@ export class CommandNetwork extends Service {
     // A guard has no allow result, so no pre-execute listener's order can turn this refusal back into permission.
     this.ctx.inject(['tools'], (child) => { child.tools.guard(exec => this.reviewFetch(exec)) })
     this.ctx.inject(['connection'], (child) => { this.mountRoutes(child) })
+    // The first refusal in a workspace offers the person the acceptance in the chat; the resolver above still decides.
+    this.ctx.inject(['tools'], (child) => {
+      const consent = new AbstractSocketConsent(child, this)
+      child.on('tools/pre-execute', (exec, next) => consent.review(exec).then(decision => decision.kind === 'allow' ? next() : decision))
+    })
   }
 
   /** Why the network store could not be read, or undefined while it reads. */
@@ -218,6 +224,20 @@ export class CommandNetwork extends Service {
       await this.closeUnused()
       return wanted
     })
+  }
+
+  /**
+   * Record the person's acceptance of the abstract-socket risk for a workspace whose network is open, as the Network
+   * section's switch does: the same store entry, written through {@link CommandNetwork.set} with the loosening confirmed.
+   * A workspace whose network is no longer open is left as it is.
+   * @param cwd - the workspace directory.
+   * @returns the setting now in effect.
+   * @throws {NetworkChangeError} when the store cannot be written.
+   */
+  async acceptAbstractSockets(cwd: string): Promise<WorkspaceNetwork> {
+    const current = this.networkOf(cwd)
+    if (current.access !== 'open') return current
+    return this.set(cwd, { access: 'open', hosts: current.hosts, acceptAbstractSockets: true }, true)
   }
 
   /**

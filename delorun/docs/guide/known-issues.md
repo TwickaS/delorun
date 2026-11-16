@@ -68,11 +68,11 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 
 **What happens.** On a Linux desktop, commands with open network are refused; set the workspace's network to an allowlist or off, or accept the risk in Settings. The refusal names the sockets (the display server, the session bus) that a command could use to act outside the sandbox. The check runs when a command starts.
 
-**What to do.** In Settings, Safety, Network, choose Allowlist or Off for the workspace. To run the command anyway, switch on **Run commands even when desktop sockets are reachable** beside Open ([Safety](safety.md#the-network-setting)).
+**What to do.** The first time this happens in a workspace, the chat asks whether to let commands run anyway in that workspace; allowing it records the same choice as the switch below. Declining keeps the refusal, and the chat does not ask again in that workspace until Delorun restarts. Otherwise, in Settings, Safety, Network, choose Allowlist or Off for the workspace, or switch on **Run commands even when desktop sockets are reachable** beside Open ([Safety](safety.md#the-network-setting)).
 
 **What happens with Docker.** The refusal is not limited to a desktop. It applies while any program on the computer listens on an abstract socket, and a running `docker` command-line process, such as a foreground `docker compose up`, is one. While it runs, commands on a workspace with the Open network are refused with `the command would share this computer's network, where 1 abstract Unix socket is listening`, followed by the socket's name and the ways out.
 
-**What to do for Docker.** Stop the `docker` process, or accept the risk for the workspace in Settings, Safety, Network. The check runs when a command starts, so a command that was already running is not stopped.
+**What to do for Docker.** Stop the `docker` process, or allow commands to run anyway when the chat asks, or accept the risk for the workspace in Settings, Safety, Network. The check runs when a command starts, so a command that was already running is not stopped.
 
 ## Commands refused without bubblewrap
 
