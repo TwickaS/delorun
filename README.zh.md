@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> 本页是英文页面的模型翻译。如有出入，以英文页面为准。
+
 <!-- GIF SLOT: the recorded demo goes here, in the first screen, below the title and above the headline. -->
 
 **你的 harness（智能体框架），没有限制。** 任何东西都能改，任何改动都能撤销。

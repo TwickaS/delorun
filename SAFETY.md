@@ -4,7 +4,7 @@ English | [中文](SAFETY.zh.md)
 
 <!-- DRAFT FOR THE OWNER: rewrite every section in your own words, then delete this comment and the note below. -->
 
-> **Draft.** The maintainer has not yet rewritten this notice in his own words. The facts are right; the voice is a first pass.
+> **Draft.** The maintainer has not yet rewritten this notice in the maintainer's own words. The facts are right; the voice is a first pass.
 
 ## Preview status
 

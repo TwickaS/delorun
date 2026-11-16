@@ -6,6 +6,8 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 
 [English](known-issues.md) | 中文
 
+> 本页是英文页面的模型翻译。如有出入，以英文页面为准。
+
 ## 摘要
 
 本页列出你在预览版中可能遇到的毛边。每一条都写明会发生什么以及该怎么做。这份清单列出这些毛边，以及属于设计一部分的限制。你不需要任何前置知识。如果你遇到这里没有的问题，请告诉项目（[故障排查](troubleshooting.zh.md#when-nothing-here-fits)说明了方法）。
@@ -91,7 +93,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 <a id="the-docker-warning-in-doctor"></a>
 ## doctor 中的 Docker 警告
 
-**会发生什么。** 在没有 Docker 的电脑上，`delorun doctor` 会打印 `warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.` Delorun 不提供 Docker 工作区，所以这条警告说的不是你需要的东西。
+**会发生什么。** 在没有 Docker 的电脑上，`delorun doctor` 会打印 `warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.` Delorun 不提供 Docker 工作区，所以这条警告所说的内容与你无关。
 
 **该怎么做。** 什么都不用做。Docker 是可选的。
 

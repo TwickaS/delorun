@@ -2,6 +2,8 @@
 
 [English](SAFETY.md) | 中文
 
+> 本页是英文页面的模型翻译。如有出入，以英文页面为准。
+
 <!-- DRAFT FOR THE OWNER: rewrite every section in your own words, then delete this comment and the note below. -->
 
 > **草稿。** 维护者尚未用自己的话重写本说明。事实是准确的；语气只是初稿。

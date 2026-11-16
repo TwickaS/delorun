@@ -8,7 +8,7 @@ English | [中文](questions.zh.md)
 
 <!-- DRAFT FOR THE OWNER: rewrite every answer in your own words, then delete this comment and the note below. -->
 
-> **Draft.** The maintainer has not yet rewritten this page in his own words. The facts are right; the voice is a first pass.
+> **Draft.** The maintainer has not yet rewritten this page in the maintainer's own words. The facts are right; the voice is a first pass.
 
 ## Summary
 
