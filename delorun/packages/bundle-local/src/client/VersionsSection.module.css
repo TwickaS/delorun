@@ -127,3 +127,46 @@
   line-height: 18px;
   overflow-wrap: anywhere;
 }
+
+/* Move your setup: the two buttons, and the review of a file before it replaces the setup. */
+
+.transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.transferButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-separator-primary, rgb(128 128 128 / 40%));
+  border-radius: var(--dsw-radius-md, 8px);
+}
+
+.reviewTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.warning {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
