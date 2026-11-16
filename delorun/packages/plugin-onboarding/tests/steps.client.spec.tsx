@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep } from '../src/client/steps/Agents.tsx'
+import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
@@ -223,50 +223,45 @@ describe('the agents step', () => {
     expect(within(card).queryByText(en['agents.signIn.checking'])).toBeNull()
   })
 
-  it('asks before Continue drops an open Add confirmation: Add installs it, Don\'t add leaves it', async () => {
+  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
-    const guide = guideOf()
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
-    expect(await guide.passGates()).toBe(true)
-    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
-    let go = true
-    await act(async () => { go = await guide.passGates() })
-    expect(go).toBe(false)
-    const ask = screen.getByRole('alertdialog', { name: 'Add Claude Code first?' })
-    expect(document.activeElement).toBe(ask)
-    await click(within(ask).getByRole('button', { name: en['agents.ask.skip'] }))
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(fake.install).not.toHaveBeenCalled()
-    expect(await guide.passGates()).toBe(true)
-    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
-    await act(async () => { await guide.passGates() })
-    await click(within(screen.getByRole('alertdialog')).getByRole('button', { name: en['agents.ask.add'] }))
-    expect(fake.install).toHaveBeenCalledExactlyOnceWith(claude.name)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
+    const cardOf = (title: string): HTMLElement => screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
+    const claudeCard = cardOf('Claude Code')
+    const codexCard = cardOf('Codex')
+    expect(within(claudeCard).getByText(en['agents.claude.how'], { exact: false })).toBeTruthy()
+    expect(within(codexCard).getByText(en['agents.codex.how'], { exact: false })).toBeTruthy()
+    expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
+    expect(within(codexCard).getByText(en['agents.codex.risk'])).toBeTruthy()
+    // Only Claude Code recommends a home connection.
+    expect(en['agents.claude.risk']).toContain('home internet connection, not a VPN, proxy or cloud server')
+    expect(within(codexCard).queryByText(/home internet/)).toBeNull()
+    for (const card of [claudeCard, codexCard]) {
+      expect(within(card).getAllByRole('button')).toHaveLength(1)
+      expect(within(card).getByRole('link', { name: en['agents.guide'] }).getAttribute('href')).toBe(AGENTS_GUIDE_URL)
+    }
   })
 
-  it('shows what adding an agent means after Add, and installs only on the confirming press', async () => {
+  it('adds an agent with one press and asks nothing more', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const adds = screen.getAllByRole('button', { name: /^Add / })
     expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.add']], ['Add Codex', en['bundle.add']]])
     await click(screen.getByRole('button', { name: 'Add Codex' }))
-    expect(fake.install).not.toHaveBeenCalled()
-    const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
-    expect(within(confirm).getAllByRole('listitem').map(each => each.textContent)).toEqual([
-      en['agents.confirm.handoff'], en['agents.confirm.limits'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
-    ])
-    expect(confirm.textContent).toContain('Delorun asks here on this computer first')
-    // The frame's CSS demotes Continue while an element marked data-confirming is open.
-    expect(confirm.hasAttribute('data-confirming')).toBe(true)
-    await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
-    expect(screen.queryByRole('group')).toBeNull()
-    expect(fake.install).not.toHaveBeenCalled()
-    await click(screen.getByRole('button', { name: 'Add Codex' }))
-    await click(within(screen.getByRole('group')).getByRole('button', { name: 'Add Codex' }))
     expect(fake.install).toHaveBeenCalledExactlyOnceWith(codex.name)
     expect(screen.queryByRole('group')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('does not hold Continue back for an agent: nothing is left to confirm', async () => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'available' } })
+    const guide = guideOf()
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
+    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
+    expect(await guide.passGates()).toBe(true)
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
@@ -306,8 +301,7 @@ describe('the agents step', () => {
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(within(screen.getByRole('alert')).getByText(en['bundle.failed'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['bundle.retry'] }))
-    expect(screen.getByRole('group', { name: 'What adding Claude Code means' })).toBeTruthy()
-    expect(fake.install).not.toHaveBeenCalled()
+    expect(fake.install).toHaveBeenCalledExactlyOnceWith(claude.name)
   })
 })
 
