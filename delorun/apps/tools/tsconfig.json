@@ -23,9 +23,6 @@
       "path": "../../../vendor/loader"
     },
     {
-      "path": "../../../packages/experimental/deepseek-chat-import"
-    },
-    {
       "path": "../../../packages/core/session"
     },
     {
@@ -51,6 +48,9 @@
     },
     {
       "path": "../../../packages/workspace/workspace"
+    },
+    {
+      "path": "../../../packages/web/tool-web"
     }
   ]
 }
