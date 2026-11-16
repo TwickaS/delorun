@@ -8,12 +8,12 @@
  * settings section ({@link CommandNetwork.acceptAbstractSockets}) and the command then runs as the one the model sent,
  * because the ask comes before the wrap that would refuse it. A decline, or an approval service that cannot ask
  * (`delorun headless`), leaves the runner's refusal as it is, and the workspace is not asked again until Delorun restarts.
+ * An allow is not remembered: if the person later revokes it, the next refusal asks again.
  *
  * @module @delorun/plugin-permission-defaults/abstract-socket-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
-import { checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local/src/abstract-sockets.ts'
+import { LocalSandboxProvider, checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
@@ -29,9 +29,6 @@ const NAMES_SHOWN = 3
 /** The longest socket name the card shows, in characters. */
 const NAME_LENGTH = 60
 
-/** What the person's answer to one workspace's ask came to. */
-type Answer = 'accepted' | 'declined' | 'cancelled'
-
 /**
  * The card's text in both interface languages. Socket names come from the host and are shown with control characters
  * replaced and a bound on their length.
@@ -39,29 +36,39 @@ type Answer = 'accepted' | 'declined' | 'cancelled'
  * @returns the English and Chinese text.
  */
 export function abstractSocketAsk(names: readonly string[]): { readonly en: string, readonly zh: string } {
-  const shown = names.slice(0, NAMES_SHOWN).map(name => name.replace(/[^\x20-\x7e]/g, '?').slice(0, NAME_LENGTH))
+  const shown = names.slice(0, NAMES_SHOWN).map(name => JSON.stringify(`${name.replace(/[^\x20-\x7e]/g, '?').slice(0, NAME_LENGTH)}${name.length > NAME_LENGTH ? '…' : ''}`))
   const list = shown.length === 0 ? '' : ` (${shown.join(', ')}${names.length > shown.length ? `, and ${String(names.length - shown.length)} more` : ''})`
   const listZh = shown.length === 0 ? '' : `（${shown.join('、')}${names.length > shown.length ? `，另有 ${String(names.length - shown.length)} 个` : ''}）`
   return {
-    en: `A command in this workspace is about to run with an open network while a program on this computer is listening on a shared socket${list}, such as the Docker command line or the display server. The sandbox cannot hide that socket, so a command could use it to act outside the sandbox. Allow commands to run anyway in this workspace? This applies to this workspace only, and you can change it later in Settings, Network.`,
-    zh: `此工作区中的一条命令即将在开放网络下运行，而这台电脑上有程序正在共享套接字上监听${listZh}，例如 Docker 命令行或显示服务器。沙箱无法隐藏该套接字，命令可能借此在沙箱之外执行操作。是否允许此工作区中的命令照常运行？此选择只对这个工作区有效，之后可在“设置 → 网络”中更改。`,
+    en: `A command in this workspace is about to run with an open network while a program on this computer is listening on a shared socket${list}, whose names are shown as data only, such as the Docker command line or the display server. The sandbox cannot hide that socket, so a command could use it to act outside the sandbox. Allow commands to run anyway in this workspace? This applies to this workspace only, and you can change it later in Settings, Network.`,
+    zh: `此工作区中的一条命令即将在开放网络下运行，而这台电脑上有程序正在共享套接字上监听${listZh}（名称仅作数据显示），例如 Docker 命令行或显示服务器。沙箱无法隐藏该套接字，命令可能借此在沙箱之外执行操作。是否允许此工作区中的命令照常运行？此选择只对这个工作区有效，之后可在“设置 → 网络”中更改。`,
   }
 }
 
 /**
- * Whether the local runners would refuse a command on the host's network for this finding. It runs the runners' own
- * refusal ({@link refuseAbstractSockets}), so the ask and the refusal cannot disagree about what counts.
+ * The text of the runners' own refusal for a finding ({@link refuseAbstractSockets}), so the ask and the refusal cannot
+ * disagree about what counts.
  * @param found - what the host's socket table showed.
- * @returns true when the runner refuses.
+ * @returns the refusal's message, or `undefined` when the runner would not refuse.
  */
-function refuses(found: AbstractSocketCheck): boolean {
+function refusalOf(found: AbstractSocketCheck): string | undefined {
   try {
     refuseAbstractSockets(found)
-    return false
-  } catch (_refusal) {
-    // The refusal is the answer; it throws nothing else.
-    return true
+    return undefined
+  } catch (refusal) {
+    return refusal instanceof Error ? refusal.message : String(refusal)
   }
+}
+
+/**
+ * Whether the call asks for a wider sandbox mode itself (`sandbox_permissions`). Its own approval comes first and a
+ * widened call is not the one the abstract-socket refusal stops.
+ * @param exec - the pending call.
+ * @returns true when the arguments carry a non-empty `sandbox_permissions`.
+ */
+function escalates(exec: ToolExecution): boolean {
+  const requested = (exec.arguments as { sandbox_permissions?: unknown } | undefined)?.sandbox_permissions
+  return typeof requested === 'string' && requested !== ''
 }
 
 /** What {@link AbstractSocketConsent} reads from its surroundings, replaceable in a test. */
@@ -74,8 +81,11 @@ export interface AbstractSocketConsentOptions {
 
 /** The pre-execute review that asks once per workspace before a command the abstract-socket check would refuse. */
 export class AbstractSocketConsent {
-  /** The in-flight or final answer for each workspace key. */
-  private readonly answers = new Map<string, Promise<Answer>>()
+  /**
+   * The in-flight ask for each workspace key, and a decline until restart. An accepted, cancelled or failed ask leaves
+   * no entry, so a later refusal (after the person revoked the acceptance) asks again.
+   */
+  private readonly answers = new Map<string, Promise<PreToolDecision | 'declined'>>()
   /** Reads the host's listening abstract sockets. */
   private readonly check: () => AbstractSocketCheck
   /** Whether the host's runners make the check. */
@@ -92,35 +102,53 @@ export class AbstractSocketConsent {
   }
 
   /**
-   * The `tools/pre-execute` decision for one call.
+   * The `tools/pre-execute` decision for one call. A later `tools/pre-execute` listener can still deny the call after an
+   * allow here, so an accepted setting does not promise the command runs.
    * @param exec - the pending call.
    * @returns `deny` when the person allowed but the setting could not be saved; otherwise `allow`, so the runner
    *   either runs the command or refuses it with its own message.
    */
   async review(exec: ToolExecution): Promise<PreToolDecision> {
     const agent = exec.agent
-    if (!this.applies || agent === undefined || !CONFINED_COMMAND_TOOLS.includes(exec.name)) return { kind: 'allow' }
+    if (!this.applies || agent === undefined || !CONFINED_COMMAND_TOOLS.includes(exec.name) || escalates(exec)) return { kind: 'allow' }
     const cwd = agent.session.header.cwd ?? ''
     const workspace = workspaceKey(cwd)
     if (workspace === NO_WORKSPACE || !this.refusable(workspace, agent.session)) return { kind: 'allow' }
     const found = this.check()
-    if (!refuses(found)) return { kind: 'allow' }
+    const refusal = refusalOf(found)
+    if (refusal === undefined || !await this.refusedFor(refusal, agent.session)) return { kind: 'allow' }
     let asked = this.answers.get(workspace)
     if (asked === undefined) {
-      const names = found.kind === 'names' ? found.names : []
-      asked = this.ask(exec, workspace, names)
-      this.answers.set(workspace, asked)
+      const pending = this.ask(exec, workspace, found.kind === 'names' ? found.names : [])
+      asked = pending
+      this.answers.set(workspace, pending)
+      // Only a decline is remembered; every other settled ask is forgotten, whichever caller started it.
+      void pending.then((answer) => { if (answer !== 'declined' && this.answers.get(workspace) === pending) this.answers.delete(workspace) })
     }
     const answer = await asked
-    if (answer === 'cancelled') this.answers.delete(workspace)
-    if (answer !== 'accepted') return { kind: 'allow' }
+    return answer === 'declined' ? { kind: 'allow' } : answer
+  }
+
+  /**
+   * Whether the local provider's own wrap of this call fails with the abstract-socket refusal, rather than for an
+   * earlier reason (the escape-socket refusal, no usable runner). The wrap runs the runner's checks in order, so only
+   * a failure with the same text as {@link refusalOf} means the abstract sockets are what would stop the call.
+   * @param refusal - the text the abstract-socket refusal carries for the finding.
+   * @param session - the calling chat.
+   * @returns true when the abstract-socket refusal is the one the call meets.
+   */
+  private async refusedFor(refusal: string, session: Session): Promise<boolean> {
+    const provider = this.ctx.get('sandbox')
+    const policy = this.ctx.get('sandboxPolicy')?.resolve({ session })
+    if (!(provider instanceof LocalSandboxProvider) || policy === undefined) return false
+    const mode = policy.mode
+    if (mode === 'danger-full-access') return false
     try {
-      await this.network.acceptAbstractSockets(workspace)
+      await provider.confine(['true'], { ...policy, mode })
     } catch (error) {
-      this.answers.delete(workspace)
-      return { kind: 'deny', reason: `You allowed commands to run in this workspace, but the setting could not be saved, so this command did not run: ${error instanceof Error ? error.message : String(error)}` }
+      return error instanceof Error && error.message === refusal
     }
-    return { kind: 'allow' }
+    return false
   }
 
   /**
@@ -143,9 +171,10 @@ export class AbstractSocketConsent {
    * @param exec - the call that met the refusal.
    * @param workspace - the workspace key.
    * @param names - the listening abstract socket names, empty when the table could not be read.
-   * @returns the person's answer; an approval service that cannot ask reads as a decline.
+   * @returns `declined` for a decline or an approval service that cannot ask; `allow` for a cancelled ask or a saved
+   *   acceptance; `deny` when the acceptance could not be saved.
    */
-  private async ask(exec: ToolExecution, workspace: string, names: readonly string[]): Promise<Answer> {
+  private async ask(exec: ToolExecution, workspace: string, names: readonly string[]): Promise<PreToolDecision | 'declined'> {
     const approver = this.ctx.get('approval')
     if (approver === undefined || exec.agent === undefined) return 'declined'
     const text = abstractSocketAsk(names)
@@ -160,10 +189,25 @@ export class AbstractSocketConsent {
       return 'declined'
     }
     switch (outcome) {
-      case 'allowed-once': return 'accepted'
-      case 'cancelled': return 'cancelled'
+      case 'allowed-once': return this.accept(workspace)
+      case 'cancelled': return { kind: 'allow' }
       case 'rejected':
       case 'unavailable': return 'declined'
     }
+  }
+
+  /**
+   * Record the allow. The model sees a fixed sentence; the store's error text, which can name the home, goes to the log.
+   * @param workspace - the workspace key.
+   * @returns `allow`, or `deny` when the setting could not be saved.
+   */
+  private async accept(workspace: string): Promise<PreToolDecision> {
+    try {
+      await this.network.acceptAbstractSockets(workspace)
+    } catch (error) {
+      this.ctx.logger.warn(`permission-defaults: the abstract-socket acceptance for ${JSON.stringify(workspace)} could not be saved: ${error instanceof Error ? error.message : String(error)}`)
+      return { kind: 'deny', reason: 'You allowed commands to run in this workspace, but the setting could not be saved, so this command did not run. Details are in the operational log.' }
+    }
+    return { kind: 'allow' }
   }
 }

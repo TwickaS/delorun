@@ -197,33 +197,43 @@ export class CommandNetwork extends Service {
    *   listen or the store cannot be written.
    */
   set(cwd: string, next: WorkspaceNetwork | undefined, confirmed: boolean): Promise<WorkspaceNetwork> {
-    return this.serial(async () => {
-      const workspace = workspaceKey(cwd)
-      if (workspace === NO_WORKSPACE) throw new NetworkChangeError('INVALID', 'a network setting needs a workspace folder')
-      if (this.problem !== undefined) throw new NetworkChangeError('STORE', `the network store is refused, so no setting is recorded until it is fixed: ${this.problem}`)
-      const parsed = next === undefined ? undefined : parseHostList(next.hosts)
-      if (parsed !== undefined && 'problem' in parsed) throw new NetworkChangeError('INVALID', parsed.problem)
-      const wanted: WorkspaceNetwork = next === undefined || parsed === undefined
-        ? this.settings.defaultNetwork
-        : { access: next.access, hosts: parsed.hosts, ...next.access === 'open' && next.acceptAbstractSockets === true ? { acceptAbstractSockets: true } : {} }
-      const current = this.networkOf(workspace)
-      if (loosens(current, wanted) && !confirmed) {
-        throw new NetworkChangeError('UNCONFIRMED', 'this change lets the workspace\'s commands reach more of the network, so the person confirms it first')
-      }
-      const entries = new Map(this.entries)
-      if (next === undefined) entries.delete(workspace)
-      else entries.set(workspace, wanted)
-      if (wanted.access === 'allowlist') await this.ensureProxy(wanted.hosts)
-      try {
-        await writeNetworkStore(networkStorePath((await resolveDelorunHome(process.env)).path), entries)
-      } catch (error) {
-        throw new NetworkChangeError('STORE', `the network store could not be written: ${reasonOf(error)}`)
-      }
-      this.entries = entries
-      this.ctx.logger.info(`permission-defaults: the network of the workspace ${JSON.stringify(workspace)} is now ${wanted.access}${wanted.access === 'allowlist' ? ` (${wanted.hosts.length} hosts)` : ''}, ${loosens(current, wanted) ? 'loosened at the computer' : 'not loosened'}`)
-      await this.closeUnused()
-      return wanted
-    })
+    return this.serial(() => this.apply(cwd, next, confirmed))
+  }
+
+  /**
+   * The body of {@link CommandNetwork.set}; runs only inside {@link CommandNetwork.serial}.
+   * @param cwd - the workspace directory.
+   * @param next - the new setting, or `undefined` for the default.
+   * @param confirmed - whether the person confirmed a loosening.
+   * @returns the setting now in effect.
+   * @throws {NetworkChangeError} as {@link CommandNetwork.set} does.
+   */
+  private async apply(cwd: string, next: WorkspaceNetwork | undefined, confirmed: boolean): Promise<WorkspaceNetwork> {
+    const workspace = workspaceKey(cwd)
+    if (workspace === NO_WORKSPACE) throw new NetworkChangeError('INVALID', 'a network setting needs a workspace folder')
+    if (this.problem !== undefined) throw new NetworkChangeError('STORE', `the network store is refused, so no setting is recorded until it is fixed: ${this.problem}`)
+    const parsed = next === undefined ? undefined : parseHostList(next.hosts)
+    if (parsed !== undefined && 'problem' in parsed) throw new NetworkChangeError('INVALID', parsed.problem)
+    const wanted: WorkspaceNetwork = next === undefined || parsed === undefined
+      ? this.settings.defaultNetwork
+      : { access: next.access, hosts: parsed.hosts, ...next.access === 'open' && next.acceptAbstractSockets === true ? { acceptAbstractSockets: true } : {} }
+    const current = this.networkOf(workspace)
+    if (loosens(current, wanted) && !confirmed) {
+      throw new NetworkChangeError('UNCONFIRMED', 'this change lets the workspace\'s commands reach more of the network, so the person confirms it first')
+    }
+    const entries = new Map(this.entries)
+    if (next === undefined) entries.delete(workspace)
+    else entries.set(workspace, wanted)
+    if (wanted.access === 'allowlist') await this.ensureProxy(wanted.hosts)
+    try {
+      await writeNetworkStore(networkStorePath((await resolveDelorunHome(process.env)).path), entries)
+    } catch (error) {
+      throw new NetworkChangeError('STORE', `the network store could not be written: ${reasonOf(error)}`)
+    }
+    this.entries = entries
+    this.ctx.logger.info(`permission-defaults: the network of the workspace ${JSON.stringify(workspace)} is now ${wanted.access}${wanted.access === 'allowlist' ? ` (${wanted.hosts.length} hosts)` : ''}, ${loosens(current, wanted) ? 'loosened at the computer' : 'not loosened'}`)
+    await this.closeUnused()
+    return wanted
   }
 
   /**
@@ -234,10 +244,13 @@ export class CommandNetwork extends Service {
    * @returns the setting now in effect.
    * @throws {NetworkChangeError} when the store cannot be written.
    */
-  async acceptAbstractSockets(cwd: string): Promise<WorkspaceNetwork> {
-    const current = this.networkOf(cwd)
-    if (current.access !== 'open') return current
-    return this.set(cwd, { access: 'open', hosts: current.hosts, acceptAbstractSockets: true }, true)
+  acceptAbstractSockets(cwd: string): Promise<WorkspaceNetwork> {
+    // The check and the new value come from the entry as it is once earlier changes (a tightening in flight) have landed.
+    return this.serial(() => {
+      const current = this.networkOf(cwd)
+      if (current.access !== 'open') return Promise.resolve(current)
+      return this.apply(cwd, { access: 'open', hosts: current.hosts, acceptAbstractSockets: true }, true)
+    })
   }
 
   /**

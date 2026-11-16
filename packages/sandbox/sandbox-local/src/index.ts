@@ -58,6 +58,7 @@ import { BRIDGE_DIAGNOSTIC, RUNNER_NETWORK, bridgedArgv, networkRefusal } from '
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
 export { RUNNER_PROTECTION } from './profiles.ts'
+export { checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from './abstract-sockets.ts'
 export { BRIDGE_DIAGNOSTIC, PROXY_ENVIRONMENT, RUNNER_NETWORK, SANDBOX_PROXY_PORT } from './network.ts'
 export type { LocalSandboxRunner, RunnerProtection } from './profiles.ts'
 export { ALIAS_UNRELIABLE_FILESYSTEMS } from './mounts.ts'
