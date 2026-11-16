@@ -78,12 +78,14 @@ export {
   type ArchiveWorkspaceStore,
   type PreviewWorkspace,
   type ImportedWorkspace,
+  type OpenedSetup,
   type RecoveryReport,
   type StagedWorkspaceDocument,
 } from './importer.ts'
 export {
   exportArchive,
   findSecrets,
+  SECRET_PATTERNS,
   type ArchiveExportInput,
   type ArchiveExportResult,
   type ExportChat,
@@ -92,3 +94,18 @@ export {
   type SecretKind,
 } from './exporter.ts'
 export { HOME_AUTH_DIRECTORY, homeKeyPath, loadHomeKey, type HomeKey } from './home-key.ts'
+export {
+  SETUP_DOCUMENT_SCHEMA_VERSION,
+  SETUP_MAX_PATCH_ENTRIES,
+  SETUP_MAX_PLUGIN_FILES,
+  SETUP_MAX_PLUGINS,
+  exportSetupArchive,
+  parseSetupDocument,
+  type SetupDocument,
+  type SetupExportInput,
+  type SetupJson,
+  type SetupLocalPlugin,
+  type SetupPlugin,
+  type SetupPluginFile,
+  type SetupRegistryPlugin,
+} from './setup.ts'

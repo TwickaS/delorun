@@ -10,9 +10,11 @@
  * @module @delorun/archive/manifest
  */
 import {
+  ARCHIVE_CONTENT_KINDS,
   ARCHIVE_ENTRY_KINDS,
   ARCHIVE_FORMAT_VERSION,
   type ArchiveEntry,
+  type ArchiveContentKind,
   type ArchiveEntryKind,
   type ArchiveManifest,
   type ArchiveOrigin,
@@ -47,6 +49,12 @@ const RFC3339_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)
 /** The fields `manifest.json` defines and no others. */
 const MANIFEST_FIELDS = ['formatVersion', 'createdBy', 'exportedAt', 'origin', 'workspaces', 'entries'] as const
 
+/** The entry kinds only a `chats` archive holds. */
+const CHAT_ENTRY_KINDS: readonly ArchiveEntryKind[] = ['chat-generation', 'attachment', 'workspace-entity']
+
+/** The entry kinds only a `setup` archive holds. */
+const SETUP_ENTRY_KINDS: readonly ArchiveEntryKind[] = ['setup-document', 'plugin-file']
+
 /** The fields one manifest entry defines and no others. */
 const ENTRY_FIELDS = ['path', 'sha256', 'size', 'kind'] as const
 
@@ -69,8 +77,9 @@ const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true })
  * @throws ArchiveError `ARCHIVE_UNSUPPORTED_VERSION` for another format version, `ARCHIVE_SCHEMA_INVALID` for a document or a field that the format does not define, and the path, collision and limit refusals of {@link checkPathCollisions} and {@link checkEntrySizes}.
  */
 export function parseManifest(bytes: Uint8Array): ArchiveManifest {
-  const document = parseDocument(bytes, MANIFEST_PATH)
+  const { content: declaredContent, ...document } = parseDocument(bytes, MANIFEST_PATH)
   requireFields(document, MANIFEST_FIELDS, MANIFEST_PATH)
+  const content = parseContent(declaredContent)
   if (document.formatVersion !== ARCHIVE_FORMAT_VERSION) {
     throw new ArchiveError(
       'ARCHIVE_UNSUPPORTED_VERSION',
@@ -87,7 +96,44 @@ export function parseManifest(bytes: Uint8Array): ArchiveManifest {
   const listed = new Set(entries.map(entry => entry.path))
   const workspaces = requireArray(document.workspaces, `${MANIFEST_PATH} workspaces`).map((workspace, index) => parseWorkspace(workspace, index, listed))
   checkWorkspaceIdentifiers(workspaces)
-  return { formatVersion: ARCHIVE_FORMAT_VERSION, createdBy, exportedAt, origin, workspaces, entries }
+  checkContent(content ?? 'chats', workspaces, entries)
+  return { formatVersion: ARCHIVE_FORMAT_VERSION, ...content === undefined ? {} : { content }, createdBy, exportedAt, origin, workspaces, entries }
+}
+
+/**
+ * Read the manifest's optional `content` field.
+ * @param value - the parsed field; `undefined` when the manifest has none.
+ * @returns the content kind, or `undefined` for a manifest without the field, which is a `chats` archive.
+ * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the field names a content kind the format does not define.
+ */
+function parseContent(value: unknown): ArchiveContentKind | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !(ARCHIVE_CONTENT_KINDS as readonly string[]).includes(value)) {
+    throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${MANIFEST_PATH} content is not a content kind the format defines`)
+  }
+  return value as ArchiveContentKind
+}
+
+/**
+ * Hold a manifest to what its content kind may list: a `setup` archive holds no workspace, no chat entry and exactly
+ * one setup document; a `chats` archive holds no setup entry.
+ * @param content - the archive's content kind.
+ * @param workspaces - the manifest's workspaces.
+ * @param entries - the manifest's entries.
+ * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the manifest lists what its content kind does not hold.
+ */
+function checkContent(content: ArchiveContentKind, workspaces: readonly ArchiveWorkspace[], entries: readonly ArchiveEntry[]): void {
+  if (content === 'chats') {
+    const stray = entries.find(entry => SETUP_ENTRY_KINDS.includes(entry.kind))
+    if (stray !== undefined) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `a chats archive lists the ${stray.kind} entry ${JSON.stringify(stray.path)}, which only a setup archive holds`)
+    return
+  }
+  if (workspaces.length > 0) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', 'a setup archive lists a workspace')
+  const stray = entries.find(entry => CHAT_ENTRY_KINDS.includes(entry.kind))
+  if (stray !== undefined) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `a setup archive lists the ${stray.kind} entry ${JSON.stringify(stray.path)}, which only a chats archive holds`)
+  if (entries.filter(entry => entry.kind === 'setup-document').length !== 1) {
+    throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', 'a setup archive lists exactly one setup-document entry')
+  }
 }
 
 /**

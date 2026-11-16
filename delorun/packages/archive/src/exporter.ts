@@ -17,7 +17,7 @@
  * @module @delorun/archive/exporter
  */
 import { createHash } from 'node:crypto'
-import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION, ARCHIVE_FORMAT_VERSION, type ArchiveCustomisation, type ArchiveEntry, type ArchiveManifest, type ArchiveOrigin, type ArchiveSignature, type ArchiveWorkspace } from '@delorun/contract-archive-and-trash'
+import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION, ARCHIVE_FORMAT_VERSION, type ArchiveContentKind, type ArchiveCustomisation, type ArchiveEntry, type ArchiveManifest, type ArchiveOrigin, type ArchiveSignature, type ArchiveWorkspace } from '@delorun/contract-archive-and-trash'
 import { checkContainerDeclarations } from './limits.ts'
 import { CUSTOMISATION_PATH, MANIFEST_PATH, OBJECTS_DIRECTORY, SIGNATURE_PATH } from './manifest.ts'
 import { ZipArchive } from './zip-read.ts'
@@ -86,8 +86,8 @@ export interface ArchiveExportResult {
   readonly bytes?: Uint8Array | undefined
 }
 
-/** The patterns the secret scan looks for, each with the kind it reports. */
-const SECRET_PATTERNS: readonly { readonly kind: SecretKind, readonly pattern: RegExp }[] = [
+/** The patterns the secret scan looks for, each with the kind it reports. The setup export applies them to a profile's settings. */
+export const SECRET_PATTERNS: readonly { readonly kind: SecretKind, readonly pattern: RegExp }[] = [
   { kind: 'aws-access-key', pattern: /\bAKIA[0-9A-Z]{16}\b/u },
   { kind: 'private-key', pattern: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/u },
   { kind: 'github-token', pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}/u },
@@ -125,21 +125,75 @@ export function exportArchive(input: ArchiveExportInput): ArchiveExportResult {
   if (input.customisation.schemaVersion !== ARCHIVE_CUSTOMISATION_SCHEMA_VERSION) {
     throw new Error(`the export writes customisation schema version ${String(ARCHIVE_CUSTOMISATION_SCHEMA_VERSION)} only`)
   }
-  const writer = new ZipWriter()
-  const objects = new Map<string, { readonly bytes: Uint8Array, readonly kind: ArchiveEntry['kind'] }>()
-  const add = (bytes: Uint8Array, kind: ArchiveEntry['kind']): string => {
-    const digest = createHash('sha256').update(bytes).digest('hex')
-    if (!objects.has(digest)) objects.set(digest, { bytes, kind })
-    return `${OBJECTS_DIRECTORY}/${digest}`
-  }
+  const objects = new ObjectSet()
   const workspaces: ArchiveWorkspace[] = input.workspaces.map(workspace => ({
     id: workspace.id,
     name: workspace.name,
-    chats: workspace.chats.map(chat => add(new TextEncoder().encode(chat.text), 'chat-generation')),
-    attachments: workspace.attachments.map(bytes => add(bytes, 'attachment')),
-    objects: [add(workspace.entity, 'workspace-entity')],
+    chats: workspace.chats.map(chat => objects.add(new TextEncoder().encode(chat.text), 'chat-generation')),
+    attachments: workspace.attachments.map(bytes => objects.add(bytes, 'attachment')),
+    objects: [objects.add(workspace.entity, 'workspace-entity')],
   }))
-  const customisationBytes = new TextEncoder().encode(JSON.stringify(input.customisation, null, 2))
+  const bytes = writeArchive({ ...input, workspaces, objects })
+  return { cancelled: false, warnings, bytes }
+}
+
+/** The distinct objects of one archive, each named by its SHA-256. */
+export class ObjectSet {
+  readonly #objects = new Map<string, { readonly bytes: Uint8Array, readonly kind: ArchiveEntry['kind'] }>()
+
+  /**
+   * Add one object; adding the same bytes again keeps the first entry.
+   * @param bytes - the object's content.
+   * @param kind - the entry kind the manifest records for it.
+   * @returns the object's path in the archive.
+   */
+  add(bytes: Uint8Array, kind: ArchiveEntry['kind']): string {
+    const digest = createHash('sha256').update(bytes).digest('hex')
+    if (!this.#objects.has(digest)) this.#objects.set(digest, { bytes, kind })
+    return `${OBJECTS_DIRECTORY}/${digest}`
+  }
+
+  /** @returns every object with its digest, in the order added. */
+  entries(): IterableIterator<[string, { readonly bytes: Uint8Array, readonly kind: ArchiveEntry['kind'] }]> {
+    return this.#objects.entries()
+  }
+
+  /**
+   * @param digest - an object's digest.
+   * @returns its bytes.
+   */
+  bytesOf(digest: string): Uint8Array {
+    return this.#objects.get(digest)!.bytes
+  }
+}
+
+/** What {@link writeArchive} writes. */
+interface ArchiveParts {
+  readonly createdBy: string
+  readonly origin: ArchiveOrigin
+  readonly exportedAt?: string | undefined
+  /** The manifest's `content`; absent in a `chats` archive. */
+  readonly content?: ArchiveContentKind | undefined
+  readonly workspaces: readonly ArchiveWorkspace[]
+  readonly objects: ObjectSet
+  readonly customisation: ArchiveCustomisation
+  readonly sign?: ((manifestBytes: Uint8Array) => ArchiveSignature) | undefined
+}
+
+/**
+ * Write the ZIP of one archive: the customisation document, the objects, the manifest that lists them, and the
+ * signature when the exporting home signs. The finished container is held to the limits an import applies.
+ * @param parts - the manifest's facts, the objects and the customisation.
+ * @returns the archive bytes.
+ * @throws Error when the customisation carries another schema version than the writer writes.
+ * @throws ArchiveError when the finished archive breaks a size or ratio limit an import applies.
+ */
+export function writeArchive(parts: ArchiveParts): Uint8Array {
+  if (parts.customisation.schemaVersion !== ARCHIVE_CUSTOMISATION_SCHEMA_VERSION) {
+    throw new Error(`the export writes customisation schema version ${String(ARCHIVE_CUSTOMISATION_SCHEMA_VERSION)} only`)
+  }
+  const writer = new ZipWriter()
+  const customisationBytes = new TextEncoder().encode(JSON.stringify(parts.customisation, null, 2))
   const entries: ArchiveEntry[] = [
     {
       path: CUSTOMISATION_PATH,
@@ -147,7 +201,7 @@ export function exportArchive(input: ArchiveExportInput): ArchiveExportResult {
       size: customisationBytes.length,
       kind: 'customisation',
     },
-    ...[...objects].map(([sha256, object]) => ({
+    ...[...parts.objects.entries()].map(([sha256, object]) => ({
       path: `${OBJECTS_DIRECTORY}/${sha256}`,
       sha256,
       size: object.bytes.length,
@@ -156,24 +210,25 @@ export function exportArchive(input: ArchiveExportInput): ArchiveExportResult {
   ]
   const manifest: ArchiveManifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
-    createdBy: input.createdBy,
-    exportedAt: input.exportedAt ?? new Date().toISOString(),
-    origin: input.origin,
-    workspaces,
+    ...parts.content === undefined ? {} : { content: parts.content },
+    createdBy: parts.createdBy,
+    exportedAt: parts.exportedAt ?? new Date().toISOString(),
+    origin: parts.origin,
+    workspaces: parts.workspaces,
     entries,
   }
   const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2))
   writer.add({ name: CUSTOMISATION_PATH, bytes: customisationBytes })
-  for (const entry of [...objects.keys()].sort()) {
-    writer.add({ name: `${OBJECTS_DIRECTORY}/${entry}`, bytes: objects.get(entry)!.bytes })
+  for (const entry of [...parts.objects.entries()].map(([digest]) => digest).sort()) {
+    writer.add({ name: `${OBJECTS_DIRECTORY}/${entry}`, bytes: parts.objects.bytesOf(entry) })
   }
   writer.add({ name: MANIFEST_PATH, bytes: manifestBytes })
-  if (input.sign !== undefined) {
-    const signature = input.sign(manifestBytes)
+  if (parts.sign !== undefined) {
+    const signature = parts.sign(manifestBytes)
     writer.add({ name: SIGNATURE_PATH, bytes: new TextEncoder().encode(JSON.stringify(signature, null, 2)) })
   }
   const bytes = writer.finish()
   // The export promises an archive its own import accepts, so the finished container is re-opened and held to the declared sizes and ratios an import checks before it reads anything.
   checkContainerDeclarations(ZipArchive.open(bytes))
-  return { cancelled: false, warnings, bytes }
+  return bytes
 }

@@ -17,10 +17,20 @@ export const ARCHIVE_CUSTOMISATION_SCHEMA_VERSION = 1 as const
 export const ARCHIVE_SIGNATURE_ALGORITHM = 'ed25519' as const
 
 /** Kinds of entries in an archive manifest. */
-export const ARCHIVE_ENTRY_KINDS = ['chat-generation', 'attachment', 'workspace-entity', 'customisation'] as const
+export const ARCHIVE_ENTRY_KINDS = ['chat-generation', 'attachment', 'workspace-entity', 'customisation', 'setup-document', 'plugin-file'] as const
 
 /** One entry kind of {@link ARCHIVE_ENTRY_KINDS}. */
 export type ArchiveEntryKind = (typeof ARCHIVE_ENTRY_KINDS)[number]
+
+/**
+ * What an archive carries. `chats` is the workspaces-with-chats archive of `delorun export`; `setup` is the plugins,
+ * model choices and settings of one profile, written by `delorun setup export`. A manifest without the `content` field
+ * is a `chats` archive.
+ */
+export const ARCHIVE_CONTENT_KINDS = ['chats', 'setup'] as const
+
+/** One content kind of {@link ARCHIVE_CONTENT_KINDS}. */
+export type ArchiveContentKind = (typeof ARCHIVE_CONTENT_KINDS)[number]
 
 /** Row kinds that the customisation schema admits. */
 export const ARCHIVE_ROW_KINDS = ['bundle', 'profile-row', 'preset', 'skill', 'theme', 'plugin-declaration'] as const
@@ -64,6 +74,7 @@ export const ARCHIVE_ERROR_CODES = [
   'ARCHIVE_SCHEMA_INVALID',
   'ARCHIVE_EXPRESSION_REFUSED',
   'ARCHIVE_DENIED_ROW',
+  'ARCHIVE_WRONG_KIND',
   'ARCHIVE_SIGNATURE_INVALID',
   'ARCHIVE_SIGNER_UNTRUSTED',
   'ARCHIVE_STAGING_FAILED',
@@ -104,6 +115,8 @@ export interface ArchiveWorkspace {
 /** The archive manifest, `manifest.json`. */
 export interface ArchiveManifest {
   readonly formatVersion: typeof ARCHIVE_FORMAT_VERSION
+  /** What the archive carries; absent in a `chats` archive. A `setup` archive holds no workspace. */
+  readonly content?: ArchiveContentKind
   /** Delorun version that wrote the archive. Informational only. */
   readonly createdBy: string
   /** RFC 3339 time in UTC at which the export finished. */
