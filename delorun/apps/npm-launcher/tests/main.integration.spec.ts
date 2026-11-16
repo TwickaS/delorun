@@ -87,8 +87,8 @@ async function surroundings(options: { readonly roots?: boolean } = {}): Promise
 
 describe('the launcher’s main function', () => {
   it.each([
-    ['win32', 'Delorun 0.1.0 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
-    ['darwin', 'Delorun 0.1.0 does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. Delorun 0.1.0 runs on Linux, and on Windows through WSL2: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
+    ['win32', 'Delorun 0.4.2 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
+    ['darwin', 'Delorun 0.4.2 does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. It runs on Linux, and on Windows through WSL2: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
   ])('stops on %s before it reads the channel or creates a home', async (hostPlatform, message) => {
     const world = await surroundings()
     expect(await main([], world.context({ hostPlatform }))).toBe(1)

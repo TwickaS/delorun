@@ -41,16 +41,18 @@ export function platformOf(platform: string, arch: string): RuntimePlatform {
 export const WSL_GUIDE = 'https://docs.delorun.com/guide/install#windows-through-wsl2'
 
 /**
- * Why Delorun 0.1.0 does not run on a host, before any download.
+ * Why this Delorun does not run on a host, before any download.
  * @param platform - Node's `process.platform`.
- * @returns the refusal for native Windows or macOS, naming what works and the guide; `undefined` for every other host.
+ * @param version - the launcher package's own version, or `undefined` when it does not read; the refusal then says "Delorun" alone.
+ * @returns the refusal for native Windows or macOS, naming the version, what works and the guide; `undefined` for every other host.
  */
-export function hostRefusal(platform: string): string | undefined {
+export function hostRefusal(platform: string, version?: string): string | undefined {
+  const name = version === undefined ? 'Delorun' : `Delorun ${version}`
   switch (platform) {
     case 'win32':
-      return `Delorun 0.1.0 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: ${WSL_GUIDE}`
+      return `${name} runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: ${WSL_GUIDE}`
     case 'darwin':
-      return `Delorun 0.1.0 does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. Delorun 0.1.0 runs on Linux, and on Windows through WSL2: ${WSL_GUIDE}`
+      return `${name} does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. It runs on Linux, and on Windows through WSL2: ${WSL_GUIDE}`
     default:
       return undefined
   }

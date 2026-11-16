@@ -332,7 +332,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       context.output.stdout(usage())
       return LAUNCHER_EXIT.ok
     }
-    const host = hostRefusal(context.hostPlatform ?? process.platform)
+    const host = hostRefusal(context.hostPlatform ?? process.platform, await launcherVersion(context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url)))))
     if (host !== undefined) {
       context.output.stderr(`${host}\n`)
       return LAUNCHER_EXIT.failed
