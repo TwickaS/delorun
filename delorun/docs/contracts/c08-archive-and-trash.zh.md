@@ -145,7 +145,7 @@ setup 文档是封闭的 JSON schema（`schemaVersion` 为 `1`）：`profile`（
 setup 带什么，在导出时决定，在导入时由同一策略（`@delorun/changes` 的 `setup-transfer`）再决定一次：
 
 - `@delorun/` 与 `@deepseek-ai/` 范围内的插件从不被携带、移除或替换。
-- 补丁条目只有在设置默认模型、某个模型提供方、模型设置或 studio 的外观（`agent-default-model`、`llm-deepseek`、`llm-pi-ai`、`ui-settings-models`、`delorun-theme`、`delorun-cost-meter`、`delorun-thinking-rsvp`），或设置 setup 所带插件的行时才被携带。其余条目，包括每条沙箱、权限、网络、设备、reach 与凭据行，都留在它所保护的那台电脑上，并被列为未应用。端点必须是 `https` URL，或本机上的 `http`。
+- 补丁条目只有在设置默认模型、某个模型提供方、模型设置或 studio 的外观（`agent-default-model`、`llm-deepseek`、`llm-pi-ai`、`ui-settings-models`、`delorun-theme`、`delorun-cost-meter`、`delorun-thinking-rsvp`），或 setup 所带插件以其自有 id 插入的行（id 以该插件的名称开头，且不使用 Delorun 或上游各行的 id，如 `delorun-…`、`session-…` 或 `sandbox…`）时才被携带；以插件名义去设置已有行的条目不被携带。其余条目，如插件安装检查、隐私默认值，以及权限、变更保护、沙箱、网络、设备、reach 与凭据的行，都留在它所保护的那台电脑上，并被列为未应用。端点必须是 `https` URL，或本机上的 `http`。
 - 被携带的条目中若含凭据字段的值，或匹配密钥模式的文本，则导出与导入都会停止（`SETUP_REFUSED`），并以位置命名，从不以值命名。`!!js` 表达式不会被导出。
 - 在导出电脑上自己编写的插件，以其已批准副本的文件携带；链接不携带。
 
