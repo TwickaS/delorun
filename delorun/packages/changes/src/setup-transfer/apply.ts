@@ -24,7 +24,7 @@ import { pluginSlug } from '../paths.ts'
 import { requirePresence, type AtComputer } from '../records.ts'
 import type { ChangeId } from '../types.ts'
 import { lockfileIntegrities } from './collect.ts'
-import { planSetupImport } from './plan.ts'
+import { DEFAULT_IMPORT_OPTIONS, planSetupImport, type ImportOptions } from './plan.ts'
 
 /** The name the saved version of the setup before an import carries. */
 export const BEFORE_IMPORT_VERSION_NAME = 'Before importing a setup'
@@ -43,6 +43,8 @@ export interface SetupApplyOptions {
    * @returns the file's bytes.
    */
   readonly readFile: (sha256: string) => Uint8Array
+  /** What the person chose; settings replaced and no other plugin removed when absent. */
+  readonly choices?: ImportOptions
   /** Receives one line as each step finishes. */
   readonly progress?: (line: string) => void
 }
@@ -70,7 +72,8 @@ export interface SetupApplied {
 export async function applySetupImport(ctx: ChangesContext, document: SetupDocument, options: SetupApplyOptions): Promise<SetupApplied> {
   requirePresence(options.presence, 'setup')
   // The plan is read again now, so what is applied is what the profile holds at this moment.
-  const { plan } = await planSetupImport(ctx, document)
+  const choices = options.choices ?? DEFAULT_IMPORT_OPTIONS
+  const { plan } = await planSetupImport(ctx, document, choices)
   const saved = await saveProfileVersion({ profileDir: ctx.profileDir, homeDir: ctx.home, name: BEFORE_IMPORT_VERSION_NAME })
   options.progress?.(`Saved your current setup as the version "${BEFORE_IMPORT_VERSION_NAME}".`)
   const removed: string[] = []
@@ -89,7 +92,7 @@ export async function applySetupImport(ctx: ChangesContext, document: SetupDocum
     installed.push({ name: plugin.name, ...result.folderChange === undefined ? {} : { reviewChange: result.folderChange } })
     options.progress?.(plugin.source === 'local' ? `Added ${plugin.name}; its code waits for your review.` : `Installed ${plugin.name} ${plugin.version}.`)
   }
-  const settingsWritten = await writePatch(ctx, document)
+  const settingsWritten = await writePatch(ctx, document, choices)
   if (settingsWritten) options.progress?.('Wrote your model choices and settings.')
   return { savedVersion: saved.id, removed, installed, settingsWritten }
 }
@@ -161,11 +164,12 @@ async function removeEarlierImport(folder: string): Promise<void> {
  * Write the profile's patch layer from the setup, last, under the profile's write lock, and record a history version.
  * @param ctx - the profile.
  * @param document - the setup document.
+ * @param choices - what the person chose.
  * @returns whether the file changed.
  */
-async function writePatch(ctx: ChangesContext, document: SetupDocument): Promise<boolean> {
+async function writePatch(ctx: ChangesContext, document: SetupDocument, choices: ImportOptions): Promise<boolean> {
   return locked(ctx, async () => {
-    const { patch } = await planSetupImport(ctx, document)
+    const { patch } = await planSetupImport(ctx, document, choices)
     if (!patch.changed) return false
     const path = join(ctx.profileDir, 'cordis.patch.yml')
     await writeFileAtomic(path, patch.text, { mode: PROTECTED_FILE_MODE })

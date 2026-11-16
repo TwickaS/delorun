@@ -96,6 +96,7 @@ export {
 export { HOME_AUTH_DIRECTORY, homeKeyPath, loadHomeKey, type HomeKey } from './home-key.ts'
 export {
   SETUP_DOCUMENT_SCHEMA_VERSION,
+  SETUP_MAX_NOTE,
   SETUP_MAX_PATCH_ENTRIES,
   SETUP_MAX_PLUGIN_FILES,
   SETUP_MAX_PLUGINS,

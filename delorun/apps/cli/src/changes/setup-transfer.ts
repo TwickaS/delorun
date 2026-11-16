@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
 import { attestTerminal, isChangesError, readProtection, type ChangesContext, type AtComputer } from '@delorun/changes'
-import { applySetupImport, collectSetup, planSetupImport, type SetupPlan } from '@delorun/changes/setup-transfer'
+import { applySetupImport, collectSetup, planSetupImport, type CollectOptions, type ImportOptions, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { printable, quoted } from '../terminal-text.ts'
 import { parseFailure, prepareHome, type CommandContext, type CommandResult } from '../command.ts'
 import type { ChangesCommandDependencies } from './command.ts'
@@ -27,8 +27,8 @@ import { delorunVersion } from '../version.ts'
 
 /** The usage lines. */
 export const SETUP_TRANSFER_USAGE = [
-  'Usage: delorun setup export --out <file> [--profile <name>]',
-  '       delorun setup import <file> [--dry-run] [--profile <name>]',
+  'Usage: delorun setup export --out <file> [--no-settings] [--plugin <name>]... [--no-local-code] [--note <text>] [--profile <name>]',
+  '       delorun setup import <file> [--dry-run] [--no-settings] [--remove-others] [--profile <name>]',
 ].join('\n')
 
 /**
@@ -53,7 +53,10 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   const [word, ...rest] = args
   let parsed
   try {
-    parsed = parseArgs({ args: rest, options: { 'profile': { type: 'string' }, 'out': { type: 'string' }, 'dry-run': { type: 'boolean', default: false } }, strict: true, allowPositionals: true })
+    parsed = parseArgs({ args: rest, options: {
+      'profile': { type: 'string' }, 'out': { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, 'no-settings': { type: 'boolean', default: false },
+      'plugin': { type: 'string', multiple: true }, 'no-local-code': { type: 'boolean', default: false }, 'note': { type: 'string' }, 'remove-others': { type: 'boolean', default: false },
+    }, strict: true, allowPositionals: true })
   } catch (error: unknown) {
     throw parseFailure(`setup ${String(word)}`, error)
   }
@@ -62,26 +65,31 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
   if (word === 'export') {
     const out = parsed.values.out
-    if (parsed.positionals.length > 0 || out === undefined || out.length === 0 || parsed.values['dry-run']) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
-    return runExport(ctx, out, context, dependencies)
+    if (parsed.positionals.length > 0 || out === undefined || out.length === 0 || parsed.values['dry-run'] || parsed.values['remove-others']) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
+    const chosen = parsed.values.plugin
+    return runExport(ctx, out, {
+      settings: !parsed.values['no-settings'], localCode: !parsed.values['no-local-code'],
+      ...chosen === undefined || chosen.length === 0 ? {} : { plugins: chosen }, ...parsed.values.note === undefined ? {} : { note: parsed.values.note },
+    }, context, dependencies)
   }
   const [file, ...extra] = parsed.positionals
-  if (file === undefined || extra.length > 0 || parsed.values.out !== undefined) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
-  return runImport(ctx, file, parsed.values['dry-run'], context, dependencies)
+  if (file === undefined || extra.length > 0 || parsed.values.out !== undefined || parsed.values.plugin !== undefined || parsed.values['no-local-code'] || parsed.values.note !== undefined) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
+  return runImport(ctx, file, { settings: !parsed.values['no-settings'], removeOthers: parsed.values['remove-others'] }, parsed.values['dry-run'], context, dependencies)
 }
 
 /**
  * Write the profile's setup as a signed archive.
  * @param ctx - the profile.
  * @param out - the archive file to create.
+ * @param choices - what to carry.
  * @param context - the output.
  * @param dependencies - the profile lock.
  * @returns the exit code.
  * @throws {CliError} when the setup holds a key, the file exists or a plugin is too large to carry.
  */
-async function runExport(ctx: ChangesContext, out: string, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+async function runExport(ctx: ChangesContext, out: string, choices: CollectOptions, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
   try {
-    const collected = await dependencies.withHost(ctx.home, ctx.profile, async () => collectSetup(ctx))
+    const collected = await dependencies.withHost(ctx.home, ctx.profile, async () => collectSetup(ctx, choices))
     const key = (await loadHomeKey(ctx.home, { create: true }))!
     const bytes = exportSetupArchive({
       createdBy: String(delorunVersion()),
@@ -92,8 +100,10 @@ async function runExport(ctx: ChangesContext, out: string, context: CommandConte
     })
     await writeNewFile(out, bytes, 'delorun setup export')
     const local = collected.document.plugins.filter(plugin => plugin.source === 'local').length
-    context.stdout(`Wrote ${quoted(out)}: ${plural(collected.document.plugins.length, 'plugin')} (${String(local)} made on this computer, carried with their files), ${String(collected.document.patch.length)} settings ${collected.document.patch.length === 1 ? 'entry' : 'entries'}, signed by this home's key ${key.keyId}.\n`)
+    const withoutCode = collected.document.plugins.filter(plugin => plugin.source === 'local' && plugin.files.length === 0).map(plugin => plugin.name)
+    context.stdout(`Wrote ${quoted(out)}: ${plural(collected.document.plugins.length, 'plugin')} (${String(local)} made on this computer${withoutCode.length === 0 ? ', carried with their files' : ''}), ${String(collected.document.models.length)} model ${collected.document.models.length === 1 ? 'entry' : 'entries'}${collected.document.includesSettings ? ` and ${String(collected.document.settings.length)} other settings` : ', no other settings'}, signed by this home's key ${key.keyId}.\n`)
     if (collected.leftOut.length > 0) context.stdout(`Left out of the file:\n${collected.leftOut.map(line => `  ${printable(line)}`).join('\n')}\n`)
+    if (withoutCode.length > 0) context.stdout(`Named without their code, to copy yourself: ${withoutCode.join(', ')}\n`)
     context.stdout('The file holds no key, chat, device or answer of setup. Import it on the other computer with: delorun setup import <file>\n')
     return EXIT.ok
   } catch (error: unknown) {
@@ -107,18 +117,19 @@ async function runExport(ctx: ChangesContext, out: string, context: CommandConte
  * Show a setup archive, ask, and replace the profile's setup with it.
  * @param ctx - the profile.
  * @param file - the archive.
+ * @param choices - what the person chose.
  * @param dryRun - whether to show and stop.
  * @param context - the output.
  * @param dependencies - the terminal, the profile lock and the plugin operation.
  * @returns the exit code.
  * @throws {CliError} for a refused archive, a refused setup, a declined question or a failed step.
  */
-async function runImport(ctx: ChangesContext, file: string, dryRun: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+async function runImport(ctx: ChangesContext, file: string, choices: ImportOptions, dryRun: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
   const presence = dryRun ? undefined : attestAtTerminal(dependencies)
   const bytes = await readArchiveFile(file, 'delorun setup import')
   try {
     const opened = await openArchive(ctx.home, bytes, file)
-    const { plan } = await planSetupImport(ctx, opened.document)
+    const { plan } = await planSetupImport(ctx, opened.document, choices)
     context.stdout(importLines(opened, plan, ctx.profile, await readProtection(ctx.home)))
     if (dryRun) {
       context.stdout('Dry run: nothing was changed.\n')
@@ -132,6 +143,7 @@ async function runImport(ctx: ChangesContext, file: string, dryRun: boolean, con
     if (!isYes(answer)) throw new CliError(EXIT.failed, 'delorun setup import: nothing was changed')
     const result = await dependencies.withHost(ctx.home, ctx.profile, reload => applySetupImport(ctx, opened.document, {
       presence: presence!,
+      choices,
       reload,
       run: dependencies.pluginOperation(ctx, context),
       readFile: opened.readFile,
@@ -198,8 +210,9 @@ export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: strin
     signer,
     'What the archive states about itself:',
     `  File ${quoted(opened.source)}, written by ${quoted(opened.createdBy)} at ${quoted(opened.exportedAt)} from the profile ${quoted(opened.document.profile)}.`,
+    ...opened.document.note === undefined ? [] : [`  Note from the sender: ${quoted(opened.document.note)}`],
     '',
-    `Importing it REPLACES the setup of your profile ${profile}. Your keys, chats, devices, exemptions and answers of setup are not touched.`,
+    `Importing it replaces these parts of your profile ${profile}: ${plan.replaces.join('; ')}. Your keys, chats, devices, exemptions and answers of setup are not touched.`,
   ]
   const adds = plan.install.map((item) => {
     const where = item.plugin.source === 'local' ? 'made on another computer; its code waits for your review' : 'from the registry'
@@ -207,6 +220,7 @@ export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: strin
     return `    ${item.kind === 'add' ? '+' : '~'} ${item.plugin.name}${item.plugin.version === undefined ? '' : ` ${item.plugin.version}`}, ${where}${was}`
   })
   lines.push('Plugins:', ...adds.length === 0 ? ['    none to add or move'] : adds)
+  if (plan.named.length > 0) lines.push(`  Named without their code, which you copy yourself: ${plan.named.map(printable).join(', ')}`)
   if (plan.remove.length > 0) lines.push('  Removed, because the archive does not list them:', ...plan.remove.map(name => `    - ${printable(name)}`))
   if (plan.keep.length > 0) lines.push(`  Already as the archive names them: ${plan.keep.map(printable).join(', ')}`)
   lines.push('Model choices and settings:', ...plan.settings.length === 0 ? ['    no change'] : plan.settings.map(line => `    ${printable(line)}`))

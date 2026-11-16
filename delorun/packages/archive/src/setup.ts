@@ -33,6 +33,9 @@ export const SETUP_MAX_PLUGIN_FILES = 20_000
 /** The most patch entries one setup carries. */
 export const SETUP_MAX_PATCH_ENTRIES = 500
 
+/** The longest note, in characters. */
+export const SETUP_MAX_NOTE = 500
+
 /** The deepest nesting a patch entry may have. */
 const SETUP_MAX_DEPTH = 12
 
@@ -52,7 +55,7 @@ const INTEGRITY = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/u
 const DIGEST = /^[0-9a-f]{64}$/u
 
 /** The fields of a setup document. */
-const DOCUMENT_FIELDS = ['schemaVersion', 'profile', 'plugins', 'patch'] as const
+const DOCUMENT_FIELDS = ['schemaVersion', 'profile', 'note', 'includesSettings', 'plugins', 'models', 'settings'] as const
 
 /** The fields of a plugin the registry serves. */
 const REGISTRY_FIELDS = ['name', 'source', 'version', 'integrity'] as const
@@ -94,7 +97,7 @@ export interface SetupLocalPlugin {
   readonly source: 'local'
   /** The version its `package.json` declares, when it has one. */
   readonly version?: string
-  /** The files of the approved copy. */
+  /** The files of the approved copy; empty when the exporter left the plugin's code out, so the plugin is named only. */
   readonly files: readonly SetupPluginFile[]
 }
 
@@ -106,10 +109,16 @@ export interface SetupDocument {
   readonly schemaVersion: typeof SETUP_DOCUMENT_SCHEMA_VERSION
   /** The name of the profile it was exported from; informational. */
   readonly profile: string
+  /** A note the exporter wrote for the person who imports; optional. */
+  readonly note?: string
+  /** Whether the exporter included the settings; when false, `settings` is empty. */
+  readonly includesSettings: boolean
   /** The plugins, in the order the exporting profile lists them. */
   readonly plugins: readonly SetupPlugin[]
-  /** The entries of the profile's patch layer that the exporter carries, as data. */
-  readonly patch: readonly { readonly [key: string]: SetupJson }[]
+  /** The patch entries that set the default model, the model providers and the models settings, as data; they always travel. */
+  readonly models: readonly { readonly [key: string]: SetupJson }[]
+  /** The other patch entries a setup carries (the studio's look, the rows of the carried plugins), as data. */
+  readonly settings: readonly { readonly [key: string]: SetupJson }[]
 }
 
 /** What a setup export reads. */
@@ -184,14 +193,35 @@ export function parseSetupDocument(bytes: Uint8Array): SetupDocument {
   if (plugins.length > SETUP_MAX_PLUGINS) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} lists more than ${String(SETUP_MAX_PLUGINS)} plugins`)
   const names = plugins.map(plugin => plugin.name)
   if (new Set(names).size !== names.length) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} lists one plugin twice`)
-  const patch = requireArray(document['patch'], `${SETUP_DOCUMENT_NAME} patch`)
-  if (patch.length > SETUP_MAX_PATCH_ENTRIES) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} carries more than ${String(SETUP_MAX_PATCH_ENTRIES)} patch entries`)
+  if (typeof document['includesSettings'] !== 'boolean') throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${SETUP_DOCUMENT_NAME} includesSettings is not true or false`)
+  const includesSettings = document['includesSettings']
+  const models = entries(document['models'], 'models')
+  const settings = entries(document['settings'], 'settings')
+  if (!includesSettings && settings.length > 0) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} says it includes no settings and lists some`)
+  const note = document['note'] === undefined ? undefined : requireText(document['note'], `${SETUP_DOCUMENT_NAME} note`)
+  if (note !== undefined && note.length > SETUP_MAX_NOTE) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} note is longer than ${String(SETUP_MAX_NOTE)} characters`)
   return {
     schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION,
     profile: requireText(document['profile'], `${SETUP_DOCUMENT_NAME} profile`),
+    ...note === undefined ? {} : { note },
+    includesSettings,
     plugins,
-    patch: patch.map((entry, index) => requireObject(requireData(entry, `${SETUP_DOCUMENT_NAME} patch[${String(index)}]`, 0), `${SETUP_DOCUMENT_NAME} patch[${String(index)}]`) as { readonly [key: string]: SetupJson }),
+    models,
+    settings,
   }
+}
+
+/**
+ * Parse one list of patch entries.
+ * @param value - the parsed list.
+ * @param name - the field's name.
+ * @returns the entries, as data.
+ * @throws ArchiveError as {@link parseSetupDocument} lists for a patch entry.
+ */
+function entries(value: unknown, name: string): { readonly [key: string]: SetupJson }[] {
+  const list = requireArray(value, `${SETUP_DOCUMENT_NAME} ${name}`)
+  if (list.length > SETUP_MAX_PATCH_ENTRIES) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the ${SETUP_DOCUMENT_NAME} carries more than ${String(SETUP_MAX_PATCH_ENTRIES)} ${name} entries`)
+  return list.map((entry, index) => requireObject(requireData(entry, `${SETUP_DOCUMENT_NAME} ${name}[${String(index)}]`, 0), `${SETUP_DOCUMENT_NAME} ${name}[${String(index)}]`) as { readonly [key: string]: SetupJson })
 }
 
 /**
@@ -225,7 +255,7 @@ function parsePlugin(value: unknown, index: number): SetupPlugin {
   const files = requireArray(plugin['files'], `${where} files`).map((file, fileIndex) => parseFile(file, `${where} files[${String(fileIndex)}]`))
   if (files.length > SETUP_MAX_PLUGIN_FILES) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} carries more than ${String(SETUP_MAX_PLUGIN_FILES)} files`)
   checkPathCollisions(files.map(file => file.path))
-  if (!files.some(file => file.path === 'package.json')) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} carries no package.json`)
+  if (files.length > 0 && !files.some(file => file.path === 'package.json')) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} carries no package.json`)
   return { name, source: 'local', ...version === undefined ? {} : { version }, files }
 }
 

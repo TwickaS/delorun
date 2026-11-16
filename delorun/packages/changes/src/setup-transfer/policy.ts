@@ -25,6 +25,9 @@ export const CARRIED_ROW_IDS: ReadonlySet<string> = new Set([
   'delorun-thinking-rsvp',
 ])
 
+/** The row ids that set the model: they travel in every setup, whether or not the person includes the other settings. */
+export const MODEL_ROW_IDS: ReadonlySet<string> = new Set(['agent-default-model', 'llm-deepseek', 'llm-pi-ai', 'ui-settings-models'])
+
 /** The fields a carried patch entry, and a row it inserts, may hold. */
 const ENTRY_FIELDS: ReadonlySet<string> = new Set(['id', 'name', 'config', 'disabled'])
 
@@ -64,6 +67,15 @@ export type EntryVerdict =
  */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Whether a patch entry sets the model, as opposed to another setting.
+ * @param entry - the entry.
+ * @returns true when it sets one of the model rows.
+ */
+export function isModelEntry(entry: PatchEntry): boolean {
+  return typeof entry['id'] === 'string' && !Object.hasOwn(entry, 'insert') && MODEL_ROW_IDS.has(entry['id'])
 }
 
 /**

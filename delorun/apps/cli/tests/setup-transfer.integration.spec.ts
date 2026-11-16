@@ -166,7 +166,7 @@ describe('delorun setup export', () => {
     const out = await exportFrom(source)
     expect(statSync(out).mode & 0o777).toBe(0o600)
     const text = source.printed.join('')
-    expect(text).toContain('2 plugins (1 made on this computer, carried with their files), 3 settings entries')
+    expect(text).toContain('2 plugins (1 made on this computer, carried with their files), 2 model entries and 1 other settings')
     expect(text).toContain('signed by this home\'s key')
     expect(text).toContain('sandbox-policy')
     expect(text).toContain('holds no key, chat, device or answer of setup')
@@ -175,6 +175,20 @@ describe('delorun setup export', () => {
     expect(JSON.stringify(opened.document)).not.toContain('"mode":"off"')
     // The archive's entries are the container, the document and the plugin's two files, and nothing of the home.
     expect(ZipArchive.open(new Uint8Array(readFileSync(out))).names().filter(name => name.startsWith('objects/')).length).toBe(3)
+  })
+
+  it('leaves out the other settings, chooses plugins, names own plugins without code, and carries a note', async () => {
+    const source = await world('source', true)
+    const quiet = join(base, 'quiet.delorun')
+    expect(await runSetupTransfer(['export', '--out', quiet, '--no-settings', '--no-local-code', '--plugin', 'plug', '--note', 'hello'], source.context, driven([], source.profileDir))).toBe(EXIT.ok)
+    const text = source.printed.join('')
+    expect(text).toContain('1 plugin (1 made on this computer)')
+    expect(text).toContain('no other settings')
+    expect(text).toContain('Named without their code, to copy yourself: plug')
+    const opened = new ArchiveImporter({ stagingParent: join(base, 'st'), store: new DirectoryWorkspaceStore(join(base, 'store')), trustedPublicKeys: [] }).openSetup(new Uint8Array(readFileSync(quiet)))
+    expect(opened.document).toMatchObject({ includesSettings: false, settings: [], note: 'hello', plugins: [{ name: 'plug', files: [] }] })
+    expect((await refused(runSetupTransfer(['export', '--out', join(base, 'x'), '--plugin', 'not-added'], source.context, driven([], source.profileDir)))).message).toContain('not-added')
+    expect((await refused(runSetupTransfer(['import', quiet, '--note', 'x'], source.context, driven([], source.profileDir)))).message).toContain('Usage')
   })
 
   it('refuses an existing file, a missing --out and a settings row that holds a key, and writes nothing', async () => {
@@ -204,11 +218,11 @@ describe('delorun setup import', () => {
     const target = await world('target', false)
     const before = readFileSync(join(target.profileDir, 'package.json'), 'utf8')
     const deps = driven([], target.profileDir, false)
-    expect(await runSetupTransfer(['import', archive, '--dry-run'], target.context, deps)).toBe(EXIT.ok)
+    expect(await runSetupTransfer(['import', archive, '--dry-run', '--remove-others'], target.context, deps)).toBe(EXIT.ok)
     const text = target.printed.join('')
     expect(text).toContain('UNVERIFIED: signed by a key this home does not know, fingerprint')
     expect((await loadHomeKey(source.home))!.keyId.length).toBeGreaterThan(10)
-    expect(text).toContain('REPLACES the setup of your profile default')
+    expect(text).toContain('replaces these parts of your profile default')
     expect(text).toContain('- old-plugin')
     expect(text).toContain('plug 1.0.0, made on another computer; its code waits for your review')
     expect(text).toContain('Protection is on')
@@ -222,7 +236,7 @@ describe('delorun setup import', () => {
     const archive = await exportFrom(source)
     const target = await world('target', false)
     const deps = driven(['y'], target.profileDir)
-    expect(await runSetupTransfer(['import', archive], target.context, deps)).toBe(EXIT.ok)
+    expect(await runSetupTransfer(['import', archive, '--remove-others'], target.context, deps)).toBe(EXIT.ok)
     expect(deps.questions).toEqual(['Replace the setup of the profile default with this one? [y/N] '])
     expect(deps.operations.map(args => args[0])).toEqual(['remove', 'add', 'add'])
     const manifest = JSON.parse(readFileSync(join(target.profileDir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
@@ -240,6 +254,24 @@ describe('delorun setup import', () => {
     expect(text).toContain('delorun recover restore')
     expect(text).toContain('delorun changes show')
     expect(text).toContain('Add its key with delorun setup key')
+  })
+
+  it('leaves the other plugins and the other settings alone when asked, and shows the sender\'s note', async () => {
+    const source = await world('source', true)
+    const out = join(base, 'note.delorun')
+    expect(await runSetupTransfer(['export', '--out', out, '--note', 'my work setup'], source.context, driven([], source.profileDir))).toBe(EXIT.ok)
+    const target = await world('target', false)
+    const deps = driven(['y'], target.profileDir)
+    expect(await runSetupTransfer(['import', out, '--no-settings'], target.context, deps)).toBe(EXIT.ok)
+    const text = target.printed.join('')
+    expect(text).toContain('Note from the sender: "my work setup"')
+    expect(text).toContain('other settings stay as they are')
+    // Without --remove-others the plugin the file does not list stays; without settings only the model is replaced.
+    expect(deps.operations.map(args => args[0])).toEqual(['add', 'add'])
+    expect(Object.keys((JSON.parse(readFileSync(join(target.profileDir, 'package.json'), 'utf8')) as { dependencies: object }).dependencies).sort()).toEqual(['left-pad', 'old-plugin', 'plug'])
+    const patch = readFileSync(join(target.profileDir, 'cordis.patch.yml'), 'utf8')
+    expect(patch).toContain('deepseek-v4')
+    expect(patch).not.toContain('plug-row')
   })
 
   it('imports nothing without a yes and needs a terminal', async () => {
@@ -260,7 +292,7 @@ describe('delorun setup import', () => {
     const target = await world('target', false)
     const key = (await loadHomeKey(source.home, { create: true }))!
     const unsigned = join(base, 'unsigned.delorun')
-    writeFileSync(unsigned, exportSetupArchive({ createdBy: 'test', origin: { homeKeyId: key.keyId, publicKey: key.publicKey }, document: { schemaVersion: 1, profile: 'p', plugins: [], patch: [] }, files: new Map() }))
+    writeFileSync(unsigned, exportSetupArchive({ createdBy: 'test', origin: { homeKeyId: key.keyId, publicKey: key.publicKey }, document: { schemaVersion: 1, profile: 'p', includesSettings: true, plugins: [], models: [], settings: [] }, files: new Map() }))
     const deps = driven(['n'], target.profileDir)
     await refused(runSetupTransfer(['import', unsigned], target.context, deps))
     expect(target.printed.join('')).toContain('UNVERIFIED: this file is not signed')
@@ -271,7 +303,7 @@ describe('delorun setup import', () => {
     const source = await world('source', true)
     const key = (await loadHomeKey(source.home, { create: true }))!
     const empty = join(base, 'empty.delorun')
-    writeFileSync(empty, exportSetupArchive({ createdBy: 'test', origin: { homeKeyId: key.keyId, publicKey: key.publicKey }, document: { schemaVersion: 1, profile: 'p', plugins: [], patch: [] }, files: new Map() }))
+    writeFileSync(empty, exportSetupArchive({ createdBy: 'test', origin: { homeKeyId: key.keyId, publicKey: key.publicKey }, document: { schemaVersion: 1, profile: 'p', includesSettings: true, plugins: [], models: [], settings: [] }, files: new Map() }))
     const target = await world('bare', false)
     writeFileSync(join(target.profileDir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } })}\n`)
     writeFileSync(join(target.profileDir, 'cordis.patch.yml'), '[]\n')

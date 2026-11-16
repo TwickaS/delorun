@@ -18,7 +18,18 @@ import { ChangesError } from '../errors.ts'
 import { readProfileManifest } from '../link.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readVersion } from '../store.ts'
-import { entryClass, entryLabel, isPlainObject, isProductPackage, judgeEntry, type PatchEntry } from './policy.ts'
+import { entryClass, entryLabel, isModelEntry, isPlainObject, isProductPackage, judgeEntry, type PatchEntry } from './policy.ts'
+
+/** What the person chose for an import. */
+export interface ImportOptions {
+  /** Whether the archive's settings replace the profile's; ignored when the archive includes none. The model always does. */
+  readonly settings: boolean
+  /** Whether plugins the archive does not list are removed; otherwise only the plugins it lists are touched. */
+  readonly removeOthers: boolean
+}
+
+/** The choices an import makes when the person gives none: settings replaced, no other plugin removed. */
+export const DEFAULT_IMPORT_OPTIONS: ImportOptions = { settings: true, removeOthers: false }
 
 /** One plugin the import adds or moves. */
 export interface PluginInstall {
@@ -33,6 +44,10 @@ export interface PluginInstall {
 export interface SetupPlan {
   /** The plugins to add or move, in the archive's order. */
   readonly install: readonly PluginInstall[]
+  /** Plugins the archive names without their code, which the person copies themselves. */
+  readonly named: readonly string[]
+  /** The parts of the setup this import replaces, in words. */
+  readonly replaces: readonly string[]
   /** The plugins the profile already has exactly as the archive names them. */
   readonly keep: readonly string[]
   /** The plugins of the person's the archive lacks, which the import removes. */
@@ -66,7 +81,7 @@ export interface PatchPlan {
  * @returns the plan and the text the profile's patch file would get.
  * @throws {ChangesError} `SETUP_REFUSED` for a plugin of Delorun's or upstream's scope, an entry that holds a credential, or a patch file that is not a YAML list; `RECORD_UNREADABLE` when the profile's manifest cannot be read.
  */
-export async function planSetupImport(ctx: ChangesContext, document: SetupDocument): Promise<{ readonly plan: SetupPlan, readonly patch: PatchPlan }> {
+export async function planSetupImport(ctx: ChangesContext, document: SetupDocument, options: ImportOptions = DEFAULT_IMPORT_OPTIONS): Promise<{ readonly plan: SetupPlan, readonly patch: PatchPlan }> {
   for (const plugin of document.plugins) {
     if (isProductPackage(plugin.name)) {
       throw new ChangesError('SETUP_REFUSED', plugin.name, `The setup names ${plugin.name}, a package of Delorun's own. A setup carries plugins you added, never the product itself.`)
@@ -78,25 +93,36 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
   const wanted = new Set(document.plugins.map(plugin => plugin.name))
   const install: PluginInstall[] = []
   const keep: string[] = []
+  const named: string[] = []
+  const withSettings = options.settings && document.includesSettings
   for (const plugin of document.plugins) {
+    if (plugin.source === 'local' && plugin.files.length === 0) {
+      named.push(plugin.name)
+      continue
+    }
     const spec = Object.hasOwn(dependencies, plugin.name) ? dependencies[plugin.name] : undefined
     const now = spec === undefined ? undefined : await currentState(ctx, plugin, spec, approved)
     if (now?.same === true) keep.push(plugin.name)
     else install.push({ plugin, kind: spec === undefined ? 'add' : 'replace', ...now === undefined ? {} : { from: now.words } })
   }
-  const remove = Object.keys(dependencies).filter(name => !isProductPackage(name) && !wanted.has(name))
+  const remove = options.removeOthers ? Object.keys(dependencies).filter(name => !isProductPackage(name) && !wanted.has(name)) : []
   const known = new Set([...wanted, ...Object.keys(dependencies).filter(name => !isProductPackage(name))])
   const leftOut: string[] = []
   const carried: PatchEntry[] = []
-  for (const entry of document.patch) {
+  for (const entry of withSettings ? [...document.models, ...document.settings] : document.models) {
     const verdict = judgeEntry(entry, wanted)
     if (verdict.carry) carried.push(entry)
     else if (verdict.secret === true) throw new ChangesError('SETUP_REFUSED', 'setup', `Nothing was imported: ${verdict.reason}. A setup never carries a key.`)
     else leftOut.push(verdict.reason)
   }
-  const patch = await planPatch(ctx.profileDir, carried, known)
+  const patch = await planPatch(ctx.profileDir, carried, known, withSettings)
   const plan: SetupPlan = {
-    install, keep, remove,
+    install, keep, remove, named,
+    replaces: [
+      ...document.plugins.length > 0 ? [options.removeOthers ? 'plugins (the ones the file does not list are removed)' : 'the plugins the file lists (others stay)'] : [],
+      'model provider and model choices',
+      ...withSettings ? ['other settings'] : [document.includesSettings ? 'other settings stay as they are (not included by you)' : 'other settings stay as they are (the file has none)'],
+    ],
     settings: patch.lines,
     leftOut,
     keyNotes: keyNotes(carried),
@@ -166,7 +192,7 @@ async function localState(ctx: ChangesContext, plugin: SetupLocalPlugin, spec: s
  * @returns the new text and the sentences naming each difference.
  * @throws {ChangesError} `SETUP_REFUSED` when the file is not a YAML list of patch entries.
  */
-async function planPatch(profileDir: string, carried: readonly PatchEntry[], known: ReadonlySet<string>): Promise<PatchPlan> {
+async function planPatch(profileDir: string, carried: readonly PatchEntry[], known: ReadonlySet<string>, withSettings: boolean): Promise<PatchPlan> {
   const path = join(profileDir, 'cordis.patch.yml')
   const before = existsSync(path) ? await readFile(path, 'utf8') : ''
   const document = parseDocument(before === '' ? '[]\n' : before, { logLevel: 'silent' })
@@ -177,7 +203,7 @@ async function planPatch(profileDir: string, carried: readonly PatchEntry[], kno
   const kept: unknown[] = []
   for (const item of items.items) {
     const entry: unknown = isMap(item) ? item.toJSON() : undefined
-    if (isPlainObject(entry) && entryClass(entry, known)) current.set(keyOf(entry), entry)
+    if (isPlainObject(entry) && entryClass(entry, known) && (withSettings || isModelEntry(entry))) current.set(keyOf(entry), entry)
     else kept.push(item)
   }
   const lines: string[] = []

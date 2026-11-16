@@ -34,7 +34,9 @@ const document: SetupDocument = {
     { name: 'some-registry-plugin', source: 'registry', version: '2.3.4', integrity: 'sha512-AAAA' },
     { name: 'my-plugin', source: 'local', version: '1.0.0', files: [fileOf(PACKAGE_JSON, 'package.json'), fileOf(INDEX, 'dist/index.js')] },
   ],
-  patch: [{ id: 'llm-deepseek', config: { model: 'deepseek-chat' } }],
+  includesSettings: true,
+  models: [{ id: 'llm-deepseek', config: { model: 'deepseek-chat' } }],
+  settings: [{ id: 'delorun-theme', config: { palette: 'dark' } }],
 }
 
 const files = new Map([[sha256(PACKAGE_JSON), PACKAGE_JSON], [sha256(INDEX), INDEX]])
@@ -192,12 +194,25 @@ describe('the setup document is data under a closed schema', () => {
   })
 
   it('refuses an expression, a control character and a prototype key in a patch value', () => {
-    refused('ARCHIVE_EXPRESSION_REFUSED', (copy) => { copy['patch'] = [{ id: 'x', config: { key: '!!js process.env.HOME' } }] })
-    refused('ARCHIVE_EXPRESSION_REFUSED', (copy) => { copy['patch'] = [{ id: 'x', config: { key: ' !js 1' } }] })
-    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['patch'] = [{ id: 'x', config: { key: 'a\u001b[2Jb' } }] })
-    expect(() => parseSetupDocument(utf8('{"schemaVersion":1,"profile":"p","plugins":[],"patch":[{"id":"x","config":{"__proto__":{"a":1}}}]}')))
+    refused('ARCHIVE_EXPRESSION_REFUSED', (copy) => { copy['models'] = [{ id: 'x', config: { key: '!!js process.env.HOME' } }] })
+    refused('ARCHIVE_EXPRESSION_REFUSED', (copy) => { copy['settings'] = [{ id: 'x', config: { key: ' !js 1' } }] })
+    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['models'] = [{ id: 'x', config: { key: 'a\u001b[2Jb' } }] })
+    expect(() => parseSetupDocument(utf8('{"schemaVersion":1,"profile":"p","includesSettings":true,"plugins":[],"models":[],"settings":[{"id":"x","config":{"__proto__":{"a":1}}}]}')))
       .toThrow(expect.objectContaining({ code: 'ARCHIVE_SCHEMA_INVALID' }))
-    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['patch'] = ['not an object'] })
+    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['settings'] = ['not an object'] })
+  })
+
+  it('keeps the note short, and says no settings only when none are listed', () => {
+    expect(parseSetupDocument(documentBytes((copy) => { copy['note'] = 'for the team' })).note).toBe('for the team')
+    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['note'] = 'x'.repeat(501) })
+    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { copy['includesSettings'] = false })
+    refused('ARCHIVE_SCHEMA_INVALID', (copy) => { delete copy['includesSettings'] })
+    expect(parseSetupDocument(documentBytes((copy) => { copy['includesSettings'] = false; copy['settings'] = [] })).includesSettings).toBe(false)
+  })
+
+  it('names a plugin of one\'s own without its files', () => {
+    const named = parseSetupDocument(documentBytes((copy) => { localPlugin(copy)['files'] = [] }))
+    expect(named.plugins[1]).toMatchObject({ source: 'local', files: [] })
   })
 
   it('is not UTF-8 JSON when the bytes are not', () => {

@@ -14,13 +14,16 @@ import { ArchiveImporter, DirectoryWorkspaceStore, encodePublicKey, exportSetupA
 import { listChanges } from '../src/actions.ts'
 import { type PluginOperation } from '../src/install-actions.ts'
 import { readApproved, type AtComputer } from '../src/records.ts'
-import { applySetupImport, collectSetup, planSetupImport } from '../src/setup-transfer/index.ts'
+import { applySetupImport, collectSetup, exportablePlugins, planSetupImport, type CollectOptions } from '../src/setup-transfer/index.ts'
 import { fixture, history, migrated, NOW, PROFILE, terminal, type Fixture } from './profile-fixture.ts'
 import { rejection } from './support.ts'
 
 vi.setConfig({ testTimeout: 60_000 })
 
 const NOT_RUNNING = async () => undefined
+
+/** Settings replaced and every plugin the file does not list removed. */
+const REPLACE_ALL = { settings: true, removeOthers: true }
 
 /**
  * @param fx - the fixture.
@@ -156,7 +159,9 @@ describe('collectSetup', () => {
       { name: 'left-pad', source: 'registry', version: '1.3.0', integrity: 'sha512-AAAA' },
       { name: 'plug', source: 'local', version: '1.0.0', files: expect.arrayContaining([expect.objectContaining({ path: 'package.json' }), expect.objectContaining({ path: 'index.js' })]) },
     ])
-    expect(collected.document.patch.map(entry => entry['id'] ?? 'insert')).toEqual(['llm-deepseek', 'agent-default-model', 'llm-pi-ai', 'insert'])
+    expect(collected.document.models.map(entry => entry['id'])).toEqual(['llm-deepseek', 'agent-default-model', 'llm-pi-ai'])
+    expect(collected.document.settings.map(entry => entry['id'] ?? 'insert')).toEqual(['insert'])
+    expect(collected.document.includesSettings).toBe(true)
     expect(collected.leftOut.join('\n')).toContain('sandbox-policy')
     expect(collected.leftOut.join('\n')).toContain('holds an expression')
     expect(JSON.stringify(collected)).not.toContain('@delorun/bundle-local')
@@ -183,7 +188,7 @@ describe('collectSetup', () => {
     writePatch(fx, '- id: llm-pi-ai\n  config:\n    providers:\n      x:\n        baseURL: http://models.example.com/v1\n')
     const collected = await collectSetup(context(fx))
     expect(collected.document.plugins).toEqual([])
-    expect(collected.document.patch).toEqual([])
+    expect([...collected.document.models, ...collected.document.settings]).toEqual([])
     expect(collected.leftOut.join('\n')).toContain('mine: made on this computer and not approved yet')
     expect(collected.leftOut.join('\n')).toContain('not an https URL')
   })
@@ -202,7 +207,7 @@ describe('applySetupImport', () => {
   it('replaces the setup through plugin requests: removes, installs, holds local code for review, writes settings, saves a version first', async () => {
     const { document, read } = await exported()
     const fx = target()
-    const { plan } = await planSetupImport(context(fx), document)
+    const { plan } = await planSetupImport(context(fx), document, REPLACE_ALL)
     expect(plan.remove).toEqual(['old-plugin'])
     expect(plan.install.map(item => [item.plugin.name, item.kind])).toEqual([['left-pad', 'replace'], ['plug', 'add']])
     expect(plan.settings).toContain('back to its default: delorun-cost-meter')
@@ -210,7 +215,7 @@ describe('applySetupImport', () => {
     expect(plan.keyNotes.join('\n')).toContain('deepseek-official')
     const run = operation(fx)
     const lines: string[] = []
-    const applied = await applySetupImport(context(fx), document, { presence: terminal(), reload: NOT_RUNNING, run, readFile: read, progress: line => lines.push(line) })
+    const applied = await applySetupImport(context(fx), document, { presence: terminal(), reload: NOT_RUNNING, run, readFile: read, choices: REPLACE_ALL, progress: line => lines.push(line) })
     expect(run.calls.map(call => call.join(' '))).toEqual([
       'remove old-plugin',
       'add left-pad@1.3.0',
@@ -260,7 +265,7 @@ describe('applySetupImport', () => {
   it('does not apply an entry that belongs to a computer, and refuses one that holds a key', async () => {
     const { document, read } = await exported()
     const fx = target()
-    const crafted: SetupDocument = { ...document, plugins: [], patch: [
+    const crafted: SetupDocument = { ...document, plugins: [], models: [], settings: [
       { id: 'sandbox-policy', config: { mode: 'off' } },
       { id: 'reach-provider', config: { open: true } },
       { id: 'llm-deepseek', name: 'some-third-party-llm', config: { model: 'm' } },
@@ -273,7 +278,7 @@ describe('applySetupImport', () => {
     expect(readPatch(fx)).not.toContain('reach-provider')
     expect(readPatch(fx)).not.toContain('not-in-the-setup')
     expect(readPatch(fx)).not.toContain('some-third-party-llm')
-    const withKey: SetupDocument = { ...document, plugins: [], patch: [{ id: 'llm-deepseek', config: { apiKey: 'sk-abcdefghijklmnopqrstuvwxyz' } }] }
+    const withKey: SetupDocument = { ...document, plugins: [], settings: [], models: [{ id: 'llm-deepseek', config: { apiKey: 'sk-abcdefghijklmnopqrstuvwxyz' } }] }
     const refused = await rejection(planSetupImport(context(fx), withKey), 'SETUP_REFUSED')
     expect(refused.message).not.toContain('sk-abcdefghijklmnopqrstuvwxyz')
   })
@@ -311,13 +316,95 @@ describe('applySetupImport', () => {
     expect(refused.message).toContain('another checksum')
     const unchecked = target()
     const noLock = operation(unchecked)
-    const bare: SetupDocument = { ...document, plugins: [{ name: 'left-pad', source: 'registry', version: '1.3.0', integrity: 'sha512-CCCC' }], patch: [] }
+    const bare: SetupDocument = { ...document, plugins: [{ name: 'left-pad', source: 'registry', version: '1.3.0', integrity: 'sha512-CCCC' }], models: [], settings: [] }
     const run = Object.assign(async (args: readonly string[], folder?: string) => {
       const result = await noLock(args, folder)
       writeFileSync(join(unchecked.profileDir, 'pnpm-lock.yaml'), '')
       return result
     }, noLock)
     expect((await rejection(applySetupImport(context(unchecked), bare, { presence: terminal(), reload: NOT_RUNNING, run, readFile: read }), 'SETUP_REFUSED')).message).toContain('could not be checked')
+  })
+})
+
+/**
+ * The document and files a source profile exports with the person's choices.
+ * @param options - what to carry.
+ * @returns them.
+ */
+async function exportedWith(options: CollectOptions): Promise<{ document: SetupDocument, read: (sha256: string) => Uint8Array, files: ReadonlyMap<string, Uint8Array> }> {
+  const collected = await collectSetup(context(await source()), options)
+  return { document: collected.document, read: sha256 => collected.files.get(sha256)!, files: collected.files }
+}
+
+describe('what the person chooses to export', () => {
+  it('leaves the other settings out but keeps the model, and records that', async () => {
+    const { document } = await exportedWith({ settings: false, localCode: true })
+    expect(document.includesSettings).toBe(false)
+    expect(document.settings).toEqual([])
+    expect(document.models.map(entry => entry['id'])).toEqual(['llm-deepseek', 'agent-default-model', 'llm-pi-ai'])
+  })
+
+  it('names a plugin of one\'s own without its code, and carries a chosen subset and a note', async () => {
+    const named = await exportedWith({ settings: true, localCode: false, note: 'for the team' })
+    expect(named.document.plugins.find(plugin => plugin.name === 'plug')).toEqual({ name: 'plug', source: 'local', version: '1.0.0', files: [] })
+    expect(named.files.size).toBe(0)
+    expect(named.document.note).toBe('for the team')
+    const subset = await exportedWith({ settings: true, localCode: true, plugins: ['left-pad'] })
+    expect(subset.document.plugins.map(plugin => plugin.name)).toEqual(['left-pad'])
+    // The rows of a plugin that is not in the file stay behind.
+    expect(subset.document.settings).toEqual([])
+    expect((await exportablePlugins(context(await source()))).map(plugin => `${plugin.name}:${plugin.source}`)).toEqual(['left-pad:registry', 'plug:local'])
+    await rejection(collectSetup(context(await source()), { settings: true, localCode: true, plugins: ['not-added'] }), 'SETUP_REFUSED')
+  })
+})
+
+describe('what the person chooses to import', () => {
+  const choices = (settings: boolean, removeOthers: boolean) => ({ settings, removeOthers })
+
+  it('replaces the settings or leaves them exactly as they are, and says which', async () => {
+    for (const exportSettings of [true, false]) {
+      for (const importSettings of [true, false]) {
+        const { document, read } = await exportedWith({ settings: exportSettings, localCode: true })
+        const fx = target()
+        const before = readPatch(fx)
+        const { plan } = await planSetupImport(context(fx), document, choices(importSettings, false))
+        const replaced = exportSettings && importSettings
+        expect(plan.replaces.join(' ')).toContain(replaced ? 'other settings' : 'other settings stay as they are')
+        await applySetupImport(context(fx), document, { presence: terminal(), reload: NOT_RUNNING, run: operation(fx), readFile: read, choices: choices(importSettings, false) })
+        const after = readPatch(fx)
+        // The model always replaces; the other settings only when both sides included them.
+        expect(after).toContain('deepseek-v4')
+        expect(after).not.toContain('old-model')
+        expect(after.includes('plug-row')).toBe(replaced)
+        expect(after.includes('delorun-cost-meter')).toBe(!replaced)
+        expect(after).toContain('mode: strict')
+        expect(before).toContain('delorun-cost-meter')
+      }
+    }
+  })
+
+  it('touches only the plugins the file lists unless the person asks to remove the others', async () => {
+    const { document, read } = await exportedWith({ settings: true, localCode: true })
+    const kept = target()
+    const keptRun = operation(kept)
+    await applySetupImport(context(kept), document, { presence: terminal(), reload: NOT_RUNNING, run: keptRun, readFile: read, choices: choices(true, false) })
+    expect(keptRun.calls.map(call => call[0])).toEqual(['add', 'add'])
+    expect(JSON.parse(readFileSync(join(kept.profileDir, 'package.json'), 'utf8')).dependencies['old-plugin']).toBe('^1.0.0')
+    const removed = target()
+    const removedRun = operation(removed)
+    await applySetupImport(context(removed), document, { presence: terminal(), reload: NOT_RUNNING, run: removedRun, readFile: read, choices: choices(true, true) })
+    expect(removedRun.calls[0]).toEqual(['remove', 'old-plugin'])
+  })
+
+  it('does not install a plugin the file names without its code, and lists it', async () => {
+    const { document, read } = await exportedWith({ settings: true, localCode: false })
+    const fx = target()
+    const { plan } = await planSetupImport(context(fx), document, choices(true, false))
+    expect(plan.named).toEqual(['plug'])
+    expect(plan.install.map(item => item.plugin.name)).toEqual(['left-pad'])
+    const run = operation(fx)
+    await applySetupImport(context(fx), document, { presence: terminal(), reload: NOT_RUNNING, run, readFile: read, choices: choices(true, false) })
+    expect(run.calls).toHaveLength(1)
   })
 })
 

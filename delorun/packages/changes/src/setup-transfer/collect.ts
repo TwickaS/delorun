@@ -18,13 +18,32 @@ import { readProfileManifest } from '../link.ts'
 import { PACKAGE_NAME_PATTERN } from '../paths.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readObject, readVersion } from '../store.ts'
-import { isPlainObject, isProductPackage, judgeEntry } from './policy.ts'
+import { isModelEntry, isPlainObject, isProductPackage, judgeEntry } from './policy.ts'
 
 /** The most bytes of plugin files one setup carries: 256 MiB. */
 export const SETUP_MAX_PLUGIN_BYTES = 256 * 1024 * 1024
 
 /** An exact version, as a setup names one. */
 const EXACT_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
+
+/** What an export carries, as the person chose. */
+export interface CollectOptions {
+  /** Whether the settings other than the model's are included. */
+  readonly settings: boolean
+  /** The plugins to carry; every plugin the person added when absent. */
+  readonly plugins?: readonly string[] | undefined
+  /** Whether the code of the plugins the person made travels; when false they are named only. */
+  readonly localCode: boolean
+  /** A note shown to the person who imports. */
+  readonly note?: string | undefined
+}
+
+/** One plugin an export could carry. */
+export interface ExportablePlugin {
+  readonly name: string
+  /** `local` for a plugin the person made, whose code can travel. */
+  readonly source: 'registry' | 'local'
+}
 
 /** What an export collected. */
 export interface SetupExport {
@@ -37,12 +56,26 @@ export interface SetupExport {
 }
 
 /**
+ * The plugins a setup export could carry.
+ * @param ctx - the profile.
+ * @returns the plugins the person added, in the profile's order.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the profile's manifest cannot be read.
+ */
+export async function exportablePlugins(ctx: ChangesContext): Promise<readonly ExportablePlugin[]> {
+  const dependencies = dependenciesOf(await readProfileManifest(ctx.profileDir))
+  return Object.entries(dependencies)
+    .filter(([name]) => !isProductPackage(name) && PACKAGE_NAME_PATTERN.test(name))
+    .map(([name, spec]) => ({ name, source: isLocalSpec(spec) ? 'local' : 'registry' }))
+}
+
+/**
  * Read the profile's setup.
  * @param ctx - the profile.
+ * @param options - what to carry.
  * @returns the document, the files it names and what was left out.
- * @throws {ChangesError} `SETUP_REFUSED` for a patch entry that would be carried but holds a credential, a patch layer that is not YAML or a plugin larger than a setup carries; `RECORD_UNREADABLE` when the profile's manifest cannot be read; `STORE_CORRUPT` when the store does not hold an approved copy.
+ * @throws {ChangesError} `SETUP_REFUSED` for a chosen plugin the profile has not added, a patch entry that would be carried but holds a credential, a patch layer that is not YAML or a plugin larger than a setup carries; `RECORD_UNREADABLE` when the profile's manifest cannot be read; `STORE_CORRUPT` when the store does not hold an approved copy.
  */
-export async function collectSetup(ctx: ChangesContext): Promise<SetupExport> {
+export async function collectSetup(ctx: ChangesContext, options: CollectOptions = { settings: true, localCode: true }): Promise<SetupExport> {
   const manifest = await readProfileManifest(ctx.profileDir)
   const dependencies = dependenciesOf(manifest)
   const approved = await readApproved(ctx.profileDir)
@@ -51,8 +84,12 @@ export async function collectSetup(ctx: ChangesContext): Promise<SetupExport> {
   const files = new Map<string, Uint8Array>()
   const plugins: SetupPlugin[] = []
   let carriedBytes = 0
+  const chosen = options.plugins === undefined ? undefined : new Set(options.plugins)
+  const unknown = [...chosen ?? []].filter(name => !Object.hasOwn(dependencies, name) || isProductPackage(name))
+  if (unknown.length > 0) throw new ChangesError('SETUP_REFUSED', unknown[0]!, `${unknown.join(', ')} ${unknown.length === 1 ? 'is' : 'are'} no plugin you added to this profile, so ${unknown.length === 1 ? 'it' : 'they'} cannot go in the file.`)
   for (const [name, spec] of Object.entries(dependencies)) {
     if (isProductPackage(name)) continue
+    if (chosen !== undefined && !chosen.has(name)) continue
     if (!PACKAGE_NAME_PATTERN.test(name)) {
       leftOut.push(`${name}: not a package name`)
       continue
@@ -70,6 +107,12 @@ export async function collectSetup(ctx: ChangesContext): Promise<SetupExport> {
       continue
     }
     const version = await readVersion(ctx.home, approval.version)
+    if (!options.localCode) {
+      const manifestEntry = version.entries.find(entry => entry.type === 'file' && entry.path === 'package.json')
+      const named = manifestEntry?.type === 'file' ? packageVersion(await readObject(ctx.home, manifestEntry.digest)) : undefined
+      plugins.push({ name, source: 'local', ...named === undefined ? {} : { version: named }, files: [] })
+      continue
+    }
     const carried: SetupPluginFile[] = []
     const carriedBytesBefore = carriedBytes
     let links = 0
@@ -97,7 +140,11 @@ export async function collectSetup(ctx: ChangesContext): Promise<SetupExport> {
     plugins.push({ name, source: 'local', ...declared === undefined ? {} : { version: declared }, files: carried })
   }
   const patch = await collectPatch(ctx.profileDir, new Set(plugins.map(plugin => plugin.name)), leftOut)
-  const document: SetupDocument = { schemaVersion: 1, profile: ctx.profile, plugins, patch }
+  const models = patch.filter(entry => isModelEntry(entry))
+  const document: SetupDocument = {
+    schemaVersion: 1, profile: ctx.profile, ...options.note === undefined || options.note === '' ? {} : { note: options.note },
+    includesSettings: options.settings, plugins, models, settings: options.settings ? patch.filter(entry => !isModelEntry(entry)) : [],
+  }
   // The document is held to the schema an import applies, so an export never writes a setup its own import refuses.
   parseSetupDocument(new TextEncoder().encode(JSON.stringify(document)))
   return { document, files, leftOut }
@@ -161,7 +208,7 @@ export async function lockfileIntegrities(profileDir: string): Promise<ReadonlyM
  * @returns the entries, as data.
  * @throws {ChangesError} `SETUP_REFUSED` for a patch layer that is not a YAML list, or an entry that would be carried but holds a credential.
  */
-async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, leftOut: string[]): Promise<SetupDocument['patch']> {
+async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, leftOut: string[]): Promise<readonly Record<string, SetupJson>[]> {
   const path = join(profileDir, 'cordis.patch.yml')
   if (!existsSync(path)) return []
   const document = parseDocument(await readFile(path, 'utf8'), { logLevel: 'silent' })
