@@ -342,3 +342,15 @@
     aspect-ratio: 1 / 1;
   }
 }
+
+.contrastRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-5);
+}
+
+.contrastLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xs-13-font-size);
+}
