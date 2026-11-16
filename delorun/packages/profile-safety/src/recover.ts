@@ -9,6 +9,7 @@
  */
 import type { ProfileChangedBy, ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { ProfileSafetyError } from './errors.ts'
+import { PROFILE_PATCH_FILENAME } from './files.ts'
 import { readInventory } from './inventory.ts'
 import { readSafetyRecord, type LastUpdate } from './record.ts'
 import { enterSafeMode, exitSafeMode, readSafeMode, startInSafeMode, type SafeModeMarker } from './safe-mode.ts'
@@ -230,8 +231,20 @@ function planLines(lead: string, plan: RestorePlan): string[] {
     ...exemptions.length === 0 ? [] : [`Exemptions: ${exemptions.join('; ')}.`],
     ...plan.bundles.length === 0 ? [] : [`Bundles: ${plan.bundles.map(bundle => `${bundle.name} ${bundle.selected ? 'comes back' : 'leaves'}`).join('; ')}.`],
     ...plan.disabled.length === 0 ? [] : [`Kept disabled: ${plan.disabled.map(plugin => `${plugin.name} (${plugin.message})`).join('; ')}.`],
-    'Your rows and settings are unchanged by this.',
+    ...rowsLine(plan),
   ]
+}
+
+/**
+ * The line about the profile's own rows and settings, which says only what the plan knows.
+ * @param plan - the plan the restore or rollback applied.
+ * @returns nothing when the patch file could not be read on either side, else one line.
+ */
+function rowsLine(plan: RestorePlan): string[] {
+  if (plan.unreadable.includes(PROFILE_PATCH_FILENAME)) return []
+  return [plan.patchChanged
+    ? `Your rows and settings in ${PROFILE_PATCH_FILENAME} are now the ones that version held.`
+    : `Your rows and settings in ${PROFILE_PATCH_FILENAME} already matched that version, so they did not change.`]
 }
 
 function decision(value: boolean | 'pending' | undefined): string {

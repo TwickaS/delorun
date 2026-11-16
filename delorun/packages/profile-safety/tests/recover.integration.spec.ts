@@ -111,7 +111,11 @@ describe.skipIf(!hasGit)('recover', () => {
       const report = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'restore', version: snapshot } })
       expect(report.action).toBe('restore')
       expect(readTree(profile.profileDir)['cordis.patch.yml']).toContain('@me/tools-plugin')
+      expect(report.lines).toContain('Your rows and settings in cordis.patch.yml are now the ones that version held.')
+      expect(report.lines.join('\n')).not.toContain('unchanged')
       expect(await recoverTarget(profile.profileDir)).toBe(snapshot)
+      const again = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'restore', version: snapshot } })
+      expect(again.lines).toContain('Your rows and settings in cordis.patch.yml already matched that version, so they did not change.')
     } finally {
       profile.remove()
     }
