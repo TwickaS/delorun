@@ -26,6 +26,7 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 - [查看哪些在等待审阅](#seeing-what-waits-for-review)
 - [应用、丢弃与撤销](#applying-discarding-and-undoing)
 - [第二次确认](#the-second-confirmation)
+- [导入的 setup 中的插件代码](#plugin-code-from-an-imported-setup)
 - [开发插件](#working-on-a-plugin)
 - [当你的 agent 更改插件时](#when-your-agent-changes-a-plugin)
 - [更改 Delorun 本身](#changing-delorun-itself)
@@ -83,6 +84,12 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 在你应用更改之前，Delorun 会打印该更改能做什么的摘要：更改同意、防护或沙箱策略；添加模型可以调用的工具；运行命令；打开网络连接；读取你的 Delorun home 下的文件；或添加依赖项或安装或构建脚本。它还会指出差异没有显示的内容：Node 可以加载的非文本文件、对于差异来说太大或超出其被截断位置的文件，以及位于插件文件夹内的包的文件。当检查标记了该更改时，`apply` 会再问一次，并指出它们发现了什么，包括差异没有显示的每个文件。
 
 摘要帮助你阅读更改；它不是一种保护。插件的代码可以做 Delorun 能做的任何事。
+
+<a id="plugin-code-from-an-imported-setup"></a>
+
+## 导入的 setup 中的插件代码
+
+`delorun setup import`（[迁移你的 setup](move-your-setup.zh.md)）会把在另一台电脑上编写的插件的文件写入你 home 中 `archive/setup-plugins/` 下的文件夹，并从该处链接插件，因此上面的规则同样适用：保护开启时，它的代码在 `delorun changes list` 中等待，直到你应用；保护关闭时，它在下一次启动时加载，并被记录为一个未经审阅的变更。
 
 <a id="working-on-a-plugin"></a>
 

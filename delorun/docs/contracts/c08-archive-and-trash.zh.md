@@ -16,7 +16,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 导出、导入、回收站、清除，以及 stock DeepSeek Harness home 的导入均已构建；使用归档导入所存储的内容尚未构建。
 
-- **已构建并已使用：** `delorun export`、`delorun import`、`delorun trash`，CLI profile 中经 `@delorun/plugin-trash` 提供的 studio 回收站与清除，以及 `delorun import-home` 与 setup 的 `import` 一节（[stock home 导入](#the-stock-home-import)）。
+- **已构建并已使用：** `delorun export`、`delorun import`、`delorun setup export` 与 `delorun setup import`（[setup 归档](#the-setup-archive)）、`delorun trash`，CLI profile 中经 `@delorun/plugin-trash` 提供的 studio 回收站与清除，以及 `delorun import-home` 与 setup 的 `import` 一节（[stock home 导入](#the-stock-home-import)）。
 - **已构建，但无人使用：** 在 profile 启动之前撤回被中断的 stock home 导入（`recoverInterruptedImport`），启动路径不调用它；下一次 `delorun import-home` 会撤回被中断的导入。
 - **尚未构建：** 打开已导入的 chat，CLI profile 的任何行都不读取它们；它们的未受信任状态、横幅，以及把某个 chat 标记为受信任的操作；应用定制行（导入只列出而从不写入），及其差异界面和针对已导入技能、预设与插件声明的规则；以及 stock home 导入所复制 chat 的未受信任状态，studio 目前把它们当作本人自己的 chat 打开。这些规则见[导入 chat 设计](../design/imported-chats.zh.md)。
 
@@ -34,6 +34,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
   - [签名](#signature)
   - [上限](#limits)
   - [导入与导出](#import-and-export)
+  - [setup 归档](#the-setup-archive)
   - [stock home 导入](#the-stock-home-import)
   - [错误](#errors)
   - [已导入的 chat](#untrusted-imported-chats)
@@ -69,8 +70,9 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 | `createdBy` | 字符串。 | 写入归档的 Delorun 版本。它仅供参考，不改变归档的读取方式。 |
 | `exportedAt` | UTC 的 RFC 3339 时间。 | 导出完成的时间。 |
 | `origin` | 含 `homeKeyId` 与 `publicKey` 的对象，二者均为 base64url。 | 导出 home 的密钥。无论归档是否签名都存在。`homeKeyId` 是该密钥的指纹；任何其他值都以 `ARCHIVE_SCHEMA_INVALID` 拒绝。 |
+| `content` | `chats` 或 `setup`；可选。 | 归档所含内容。没有该字段的 manifest 是 `chats` 归档。`setup` 归档不列出工作区，也不列出 `chat-generation`、`attachment`、`workspace-entity` 类型的条目；`chats` 归档不列出 `setup-document` 或 `plugin-file` 类型的条目；违反者以 `ARCHIVE_SCHEMA_INVALID` 被拒绝。 |
 | `workspaces` | 数组。 | 每个工作区一个对象：归档所用的 `id`、名称，以及其 chat、附件与对象。 |
-| `entries` | 数组。 | 每个对象与文档一个对象：`path`、`sha256`、以字节计的 `size`，以及 `kind`。`kind` 为 `chat-generation`、`attachment`、`workspace-entity` 与 `customisation` 之一。 |
+| `entries` | 数组。 | 每个对象与文档一个对象：`path`、`sha256`、以字节计的 `size`，以及 `kind`。`kind` 为 `chat-generation`、`attachment`、`workspace-entity`、`customisation`、`setup-document` 与 `plugin-file` 之一。 |
 
 每个 `path` 都经过规范化、为相对路径，且不含 `..` 段，并指向归档中的一个条目。manifest 中每个条目只列出一次。manifest 或定制文档的任何文本字段都不得含有 C0 或 C1 控制字符、DEL 或双向控制字符，因为导入会打印这些字段；含有它们的归档以 `ARCHIVE_SCHEMA_INVALID` 拒绝。
 
@@ -133,6 +135,22 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 stock DeepSeek Harness home 的导入不是归档导入；[stock home 导入](#the-stock-home-import)对它作出规定。
 
+<a id="the-setup-archive"></a>
+### setup 归档
+
+`delorun setup export --out <file>` 把某人添加的插件、其模型选择与设置写成一个以 home 密钥签名的 `setup` 归档；`delorun setup import <file>` 读取它。归档含一个没有任何行的 `customisation.json`、一个 `setup-document` 条目，以及此人自己编写的插件的每个不同文件各一个 `plugin-file` 条目。`delorun import` 以 `ARCHIVE_WRONG_KIND` 拒绝 `setup` 归档，`delorun setup import` 同样拒绝 `chats` 归档。
+
+setup 文档是封闭的 JSON schema（`schemaVersion` 为 `1`）：`profile`（仅供参考）、`plugins` 与 `patch`。来自注册表的插件为 `{ name, source: "registry", version, integrity? }`，带确切版本与 lockfile 的 integrity；此人自己编写的插件为 `{ name, source: "local", version?, files }`，每个文件带经归档检查的 `path`、`sha256`、`size` 与 `executable`，且含一个 `package.json`。名称、版本与摘要遵循固定的模式，路径经过[路径规则](#archive-file)，一个插件至多 20,000 个文件，一个 setup 至多 200 个插件与 500 个补丁条目；文本值含控制字符、以 `!` 开头或含 `!!` 时被拒绝（表达式形式为 `ARCHIVE_EXPRESSION_REFUSED`）。`patch` 以数据形式保存 profile 的补丁条目。
+
+setup 带什么，在导出时决定，在导入时由同一策略（`@delorun/changes` 的 `setup-transfer`）再决定一次：
+
+- `@delorun/` 与 `@deepseek-ai/` 范围内的插件从不被携带、移除或替换。
+- 补丁条目只有在设置默认模型、某个模型提供方、模型设置或 studio 的外观（`agent-default-model`、`llm-deepseek`、`llm-pi-ai`、`ui-settings-models`、`delorun-theme`、`delorun-cost-meter`、`delorun-thinking-rsvp`），或设置 setup 所带插件的行时才被携带。其余条目，包括每条沙箱、权限、网络、设备、reach 与凭据行，都留在它所保护的那台电脑上，并被列为未应用。端点必须是 `https` URL，或本机上的 `http`。
+- 被携带的条目中若含凭据字段的值，或匹配密钥模式的文本，则导出与导入都会停止（`SETUP_REFUSED`），并以位置命名，从不以值命名。`!!js` 表达式不会被导出。
+- 在导出电脑上自己编写的插件，以其已批准副本的文件携带；链接不携带。
+
+`openSetup` 运行 `inspect` 的所有验证步骤，但不以签名者作为门槛：未签名的归档与由未知密钥签名的归档，会连同密钥指纹一起作为未验证返回；无法通过验证的签名仍以 `ARCHIVE_SIGNATURE_INVALID` 被拒绝。导入随后替换目标 profile 的 setup：归档中没有的插件被移除，归档没有携带的设置恢复默认，这些都在询问本人之前列出。导入先保存一个 profile 历史版本，再通过 `@delorun/changes` 的插件请求操作应用，因此安装检查、被扣留的构建脚本与对本地代码的审阅都适用。本地插件的文件被写入 `archive/setup-plugins/<profile>/` 下的新文件夹，插件从该处链接，这会把其内容记录为一个等待审阅的变更。
+
 <a id="the-stock-home-import"></a>
 ### stock home 导入
 
@@ -184,6 +202,7 @@ stock DeepSeek Harness home 的导入不是归档导入；[stock home 导入](#t
 | `ARCHIVE_SCHEMA_INVALID` | manifest 或定制文档与其 schema 不符，包括含有控制字符的文本字段，以及不是 `publicKey` 指纹的 `homeKeyId`。 |
 | `ARCHIVE_EXPRESSION_REFUSED` | 某一行含有 `!!js` 表达式，或是 `insert` 行。 |
 | `ARCHIVE_DENIED_ROW` | 某一行属于被拒绝的 kind。 |
+| `ARCHIVE_WRONG_KIND` | 归档装的是 chat 而命令读的是 setup，或者相反。 |
 | `ARCHIVE_SIGNATURE_INVALID` | `signature.json` 存在，但其签名校验失败。 |
 | `ARCHIVE_SIGNER_UNTRUSTED` | 签名密钥不是导入所在 home 所担保的密钥且本人未确认，或归档未签名而本人未接受其未校验状态。 |
 | `ARCHIVE_STAGING_FAILED` | 暂存目录或导入的日志无法写入，原子重命名失败，或暂存父目录、工作区存储根目录，或保存二者之一的目录是符号链接。 |

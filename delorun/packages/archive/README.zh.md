@@ -16,6 +16,7 @@ description: "Delorun 的归档格式 v1（C8）：ZIP 读取器与写入器，�
 - [签名者](#the-signer)
 - [导出](#export)
 - [home 密钥](#the-home-key)
+- [setup 归档](#the-setup-archive)
 - [stock home 导入](#the-stock-home-import)
 - [测试](#tests)
 
@@ -42,6 +43,12 @@ description: "Delorun 的归档格式 v1（C8）：ZIP 读取器与写入器，�
 ## home 密钥
 
 `loadHomeKey`（[`home-key.ts`](src/home-key.ts)）通过 C1 的受保护文件规则，读取[约定 C5](../../docs/contracts/c05-device-approval.zh.md) 的 home 密钥 `secrets/home-auth/home-key.pem`（PKCS #8，权限 0600）；home 中没有该密钥时，按请求创建。新密钥先完整写入临时文件再链接到位，因此两次同时进行的首次使用只会保留一个密钥。
+
+<a id="the-setup-archive"></a>
+
+## setup 归档
+
+`exportSetupArchive`（[`setup.ts`](src/setup.ts)）把一个 profile 的插件、模型选择与设置写成 `content` 为 `setup` 的归档：一个 `setup-document` 条目（其封闭 schema 由 `parseSetupDocument` 在两侧应用），以及此人自己编写的插件的每个不同文件各一个 `plugin-file` 条目。`ArchiveImporter.openSetup` 运行 `inspect` 的所有验证步骤，以 `ARCHIVE_WRONG_KIND` 拒绝 chats 归档（`inspect` 与 `import` 则拒绝 setup 归档），检查文档所列的每个文件都是大小一致的 `plugin-file` 条目，且没有未被命名的 `plugin-file` 条目，然后连同签名者状态返回文档。未签名的归档或未知密钥，会连同指纹一起作为未验证返回，而不是被拒绝，因为调用方会展示并询问；无法通过验证的签名仍被拒绝。profile 可以从 setup 取走什么，由 [`@delorun/changes`](../changes/README.zh.md) 的策略决定，而不是由这一格式决定。参见[合约](../../docs/contracts/c08-archive-and-trash.zh.md#the-setup-archive)。
 
 <a id="the-stock-home-import"></a>
 

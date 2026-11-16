@@ -12,11 +12,11 @@
   en: 0011809e6db7cb11
   zh: b8ca355fb5512944
 /contract-c8-archive-format-v1-and-trash/status:
-  en: 8df3ec7d41e4eff9
-  zh: 70f837d1cf5da6eb
+  en: 647d75c573f1267e
+  zh: 320c9444e57a88f7
 /contract-c8-archive-format-v1-and-trash/contents:
-  en: b8bd9b5bd4684917
-  zh: f188cc5fe00969ad
+  en: f1dd08a004ab4ddc
+  zh: 292fb7284b5b2ab6
 /contract-c8-archive-format-v1-and-trash/contract:
   en: f0997a1d33527593
   zh: 24ae1a953c8dd0ff
@@ -24,8 +24,8 @@
   en: 3e220645bdbbfd86
   zh: 303e7da2bafcb0d3
 /contract-c8-archive-format-v1-and-trash/contract/manifest:
-  en: 9f04bcf24ae3fdac
-  zh: a5e17a21e2d4fb3c
+  en: 77ee666641e1170b
+  zh: 19189b230abe2b33
 /contract-c8-archive-format-v1-and-trash/contract/customisation-schema:
   en: 3a30e5c831ed0806
   zh: e920e0bc92e0c001
@@ -36,14 +36,17 @@
   en: 7d985bdf6480b9fc
   zh: 223efce531ca4017
 /contract-c8-archive-format-v1-and-trash/contract/import-and-export:
-  en: 758b93ce95b757b5
-  zh: 07dc04a64ae3ce17
+  en: 156cc0f38be75802
+  zh: 7e541b49c647b478
+/contract-c8-archive-format-v1-and-trash/contract/the-setup-archive:
+  en: cd71fd7f849924b3
+  zh: 00a1ec03c49cf270
 /contract-c8-archive-format-v1-and-trash/contract/the-stock-home-import:
   en: ef403e9e10eeafa4
   zh: 7741fb9f6cb7aabc
 /contract-c8-archive-format-v1-and-trash/contract/errors:
-  en: 9f4cdefcdad4ffc5
-  zh: 522207d702a6494e
+  en: 2b691f5962367ebe
+  zh: 9fd1168dbe910c61
 /contract-c8-archive-format-v1-and-trash/contract/imported-chats:
   en: 00402cd9cc89d1ec
   zh: 87d2b1662760df3a

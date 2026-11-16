@@ -16,7 +16,7 @@ An archive is the export file of one or more workspaces with their chats, attach
 
 Export, import, trash, purge and the import of a stock DeepSeek Harness home are built; using what an archive import stores is not.
 
-- **Built and reached:** `delorun export`, `delorun import`, `delorun trash`, the studio's trash and purge through `@delorun/plugin-trash` in the CLI profile, and `delorun import-home` with setup's `import` section ([the stock-home import](#the-stock-home-import)).
+- **Built and reached:** `delorun export`, `delorun import`, `delorun setup export` and `delorun setup import` ([the setup archive](#the-setup-archive)), `delorun trash`, the studio's trash and purge through `@delorun/plugin-trash` in the CLI profile, and `delorun import-home` with setup's `import` section ([the stock-home import](#the-stock-home-import)).
 - **Built and not reached:** the withdrawal of an interrupted stock-home import before a profile starts (`recoverInterruptedImport`), which the start path does not call; the next `delorun import-home` withdraws an interrupted import.
 - **Not built:** opening imported chats, which no row of the CLI profile reads; their untrusted state, banner and the action that marks one trusted; applying customisation rows, which an import lists and never writes, with the diff screen and the rules for imported skills, presets and plugin declarations; and the untrusted state of chats the stock-home import copies, which the studio opens as the person's own. These rules are in the [imported chats design](../design/imported-chats.md).
 
@@ -34,6 +34,7 @@ The requirements and denial tests below that this list names as not built protec
   - [Signature](#signature)
   - [Limits](#limits)
   - [Import and export](#import-and-export)
+  - [The setup archive](#the-setup-archive)
   - [The stock-home import](#the-stock-home-import)
   - [Errors](#errors)
   - [Imported chats](#untrusted-imported-chats)
@@ -69,8 +70,9 @@ No other top-level entry is valid. The archive carries no project files of a wor
 | `createdBy` | String. | The Delorun version that wrote the archive. It is informational and does not change how the archive is read. |
 | `exportedAt` | RFC 3339 time in UTC. | The time the export finished. |
 | `origin` | Object with `homeKeyId` and `publicKey`, both base64url. | The exporting home's key. Present whether or not the archive is signed. `homeKeyId` is the key's fingerprint; any other value is refused with `ARCHIVE_SCHEMA_INVALID`. |
+| `content` | `chats` or `setup`; optional. | What the archive carries. A manifest without the field is a `chats` archive. A `setup` archive lists no workspace and no entry of kind `chat-generation`, `attachment` or `workspace-entity`, and a `chats` archive lists no entry of kind `setup-document` or `plugin-file`; a manifest that breaks this is refused with `ARCHIVE_SCHEMA_INVALID`. |
 | `workspaces` | Array. | One object for each workspace: its `id` as the archive names it, its name, and its chats, attachments and objects. |
-| `entries` | Array. | One object for each object and document: `path`, `sha256`, `size` in bytes, and `kind`. The `kind` is one of `chat-generation`, `attachment`, `workspace-entity` and `customisation`. |
+| `entries` | Array. | One object for each object and document: `path`, `sha256`, `size` in bytes, and `kind`. The `kind` is one of `chat-generation`, `attachment`, `workspace-entity`, `customisation`, `setup-document` and `plugin-file`. |
 
 Every `path` is normalised, relative and free of `..` segments, and it refers to an entry of the archive. The manifest lists each entry once. No text field of the manifest or of the customisation document holds a C0 or C1 control, DEL or a bidirectional control, because an import prints these fields; one that does is refused with `ARCHIVE_SCHEMA_INVALID`.
 
@@ -133,6 +135,22 @@ An import keeps a journal beside its staging root that names each workspace befo
 
 The import of a stock DeepSeek Harness home is not an archive import; [the stock-home import](#the-stock-home-import) states it.
 
+<a id="the-setup-archive"></a>
+### The setup archive
+
+`delorun setup export --out <file>` writes the plugins a person added, their model choices and their settings as a `setup` archive, signed with the home key. `delorun setup import <file>` reads one. The archive holds `customisation.json` with no rows, one `setup-document` entry and one `plugin-file` entry for each distinct file of a plugin the person made. `delorun import` refuses a `setup` archive, and `delorun setup import` a `chats` archive, with `ARCHIVE_WRONG_KIND`.
+
+The setup document is a closed JSON schema (`schemaVersion` `1`): `profile` (informational), `plugins` and `patch`. A plugin from a registry is `{ name, source: "registry", version, integrity? }` with an exact version and the lockfile's integrity; a plugin the person made is `{ name, source: "local", version?, files }` with each file's archive-checked `path`, `sha256`, `size` and `executable`, and a `package.json`. Names, versions and digests follow fixed patterns, a path goes through the [path rules](#archive-file), a plugin lists at most 20,000 files, a setup at most 200 plugins and 500 patch entries, and a text value that holds a control character, begins with `!` or carries `!!` is refused (`ARCHIVE_EXPRESSION_REFUSED` for the expression forms). `patch` holds the profile's patch entries as data.
+
+What a setup carries is decided on export and decided again on import, by the same policy (`@delorun/changes`, `setup-transfer`):
+
+- Plugins of the `@delorun/` and `@deepseek-ai/` scopes are never carried, removed or replaced.
+- A patch entry is carried only when it sets the default model, a model provider, the models settings or the studio's look (`agent-default-model`, `llm-deepseek`, `llm-pi-ai`, `ui-settings-models`, `delorun-theme`, `delorun-cost-meter`, `delorun-thinking-rsvp`), or a row of a plugin the setup carries. Every other entry, including each sandbox, permission, network, device, reach and credential row, stays on the computer it protects and is listed as not applied. An endpoint must be an `https` URL, or `http` on this computer.
+- A value for a credential field, or text a secret pattern matches, in a carried entry stops the export and the import (`SETUP_REFUSED`) and is named by its place, never by its value. A `!!js` expression is not exported.
+- A plugin made on the exporting computer is carried as the files of its approved copy; links are not carried.
+
+`openSetup` runs every validation step of `inspect` and does not gate on the signer: an unsigned archive and a signature by an unknown key are returned as unverified with the key's fingerprint, and a signature that does not verify is refused with `ARCHIVE_SIGNATURE_INVALID`. The import then replaces the target profile's setup: plugins the archive lacks are removed, and carried settings it lacks go back to their defaults, all listed before the person is asked. It saves a profile history version first and applies through the plugin-request operations of `@delorun/changes`, so the install checks, the held build scripts and the review of local code apply. A local plugin's files are written to a new folder under `archive/setup-plugins/<profile>/` and the plugin is linked from it, which records its content as a change waiting for review.
+
 <a id="the-stock-home-import"></a>
 ### The stock-home import
 
@@ -184,6 +202,7 @@ Each refusal carries one code from this table. A refusal writes nothing.
 | `ARCHIVE_SCHEMA_INVALID` | The manifest or the customisation document does not match its schema, including a text field with a control character and a `homeKeyId` that is not the fingerprint of `publicKey`. |
 | `ARCHIVE_EXPRESSION_REFUSED` | A row contains a `!!js` expression or an `insert` row. |
 | `ARCHIVE_DENIED_ROW` | A row is of a denied kind. |
+| `ARCHIVE_WRONG_KIND` | The archive carries chats and the command reads a setup, or the other way round. |
 | `ARCHIVE_SIGNATURE_INVALID` | `signature.json` is present and its signature does not verify. |
 | `ARCHIVE_SIGNER_UNTRUSTED` | The signing key is one the importing home does not vouch for and the person did not confirm, or the archive is unsigned and the person did not accept it unverified. |
 | `ARCHIVE_STAGING_FAILED` | The staging directory or the import's journal cannot be written, the atomic rename fails, or the staging parent, the workspace store root or the directory that holds either is a symbolic link. |
