@@ -12,7 +12,8 @@
  * @module @delorun/plugin-permission-defaults/abstract-socket-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { checkAbstractSockets, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local/src/abstract-sockets.ts'
+import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
+import { checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local/src/abstract-sockets.ts'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
@@ -44,6 +45,22 @@ export function abstractSocketAsk(names: readonly string[]): { readonly en: stri
   return {
     en: `A command in this workspace is about to run with an open network while a program on this computer is listening on a shared socket${list}, such as the Docker command line or the display server. The sandbox cannot hide that socket, so a command could use it to act outside the sandbox. Allow commands to run anyway in this workspace? This applies to this workspace only, and you can change it later in Settings, Network.`,
     zh: `此工作区中的一条命令即将在开放网络下运行，而这台电脑上有程序正在共享套接字上监听${listZh}，例如 Docker 命令行或显示服务器。沙箱无法隐藏该套接字，命令可能借此在沙箱之外执行操作。是否允许此工作区中的命令照常运行？此选择只对这个工作区有效，之后可在“设置 → 网络”中更改。`,
+  }
+}
+
+/**
+ * Whether the local runners would refuse a command on the host's network for this finding. It runs the runners' own
+ * refusal ({@link refuseAbstractSockets}), so the ask and the refusal cannot disagree about what counts.
+ * @param found - what the host's socket table showed.
+ * @returns true when the runner refuses.
+ */
+function refuses(found: AbstractSocketCheck): boolean {
+  try {
+    refuseAbstractSockets(found)
+    return false
+  } catch (_refusal) {
+    // The refusal is the answer; it throws nothing else.
+    return true
   }
 }
 
@@ -87,7 +104,7 @@ export class AbstractSocketConsent {
     const workspace = workspaceKey(cwd)
     if (workspace === NO_WORKSPACE || !this.refusable(workspace, agent.session)) return { kind: 'allow' }
     const found = this.check()
-    if (found.kind === 'names' && found.names.length === 0) return { kind: 'allow' }
+    if (!refuses(found)) return { kind: 'allow' }
     let asked = this.answers.get(workspace)
     if (asked === undefined) {
       const names = found.kind === 'names' ? found.names : []
@@ -116,6 +133,8 @@ export class AbstractSocketConsent {
   private refusable(workspace: string, session: Session): boolean {
     const network = this.network.networkOf(workspace)
     if (network.access !== 'open' || network.acceptAbstractSockets === true) return false
+    // Only the local provider makes the check; a remote or ssh provider never refuses for this reason.
+    if (!(this.ctx.get('sandbox') instanceof LocalSandboxProvider)) return false
     return this.ctx.get('sandboxPolicy')?.resolve({ session }).mode !== 'danger-full-access'
   }
 
@@ -132,7 +151,9 @@ export class AbstractSocketConsent {
     const text = abstractSocketAsk(names)
     let outcome: ApprovalOutcome
     try {
-      // `full-access` keeps the answer at the home's own computer, like the Network section that records the same acceptance.
+      // `grants: 'full-access'` is only a marker the home's authenticator reads: an answer from a remote (reach) device
+      // is refused with `LOOPBACK_REQUIRED` unless that device holds an unlock, like the Network section's own routes.
+      // It records nothing and grants no workspace full access; an allow only reaches `acceptAbstractSockets`.
       outcome = await approver.request({ agent: exec.agent, toolName: exec.name, callId: exec.callId, reason: text.en, displayReason: text, grants: 'full-access', signal: exec.signal })
     } catch (error) {
       this.ctx.logger.warn(`permission-defaults: the abstract-socket consent for ${JSON.stringify(workspace)} could not be asked: ${String(error)}`)

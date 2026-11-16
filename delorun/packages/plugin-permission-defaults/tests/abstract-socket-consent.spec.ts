@@ -3,7 +3,7 @@
  * the runners would refuse, an allow that records what the Network section records, a decline that does not ask again,
  * no ask without an answerer, and no way for the model's call to answer.
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +12,9 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { AbstractSocketConsent, abstractSocketAsk } from '../src/abstract-socket-consent.ts'
+import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { CommandNetwork } from '../src/command-network.ts'
+import { networkStorePath } from '../src/network-store.ts'
 
 const roots: string[] = []
 const contexts: Context[] = []
@@ -29,6 +31,7 @@ interface Mounted {
   readonly ctx: Context
   readonly network: CommandNetwork
   readonly work: string
+  readonly home: string
   readonly asked: { reason?: string, grants?: string, toolName: string }[]
   readonly mode: { value: string }
 }
@@ -47,6 +50,7 @@ async function mounted(answer: ApprovalOutcome | 'throws' | 'absent' = 'allowed-
   const mode = { value: 'workspace-write' }
   ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
   ctx.provide('workspaceRegistry', { list: () => [] } as never)
+  ctx.provide('sandbox', Object.create(LocalSandboxProvider.prototype) as never)
   ctx.provide('sandboxPolicy', { resolve: () => ({ mode: mode.value }) } as never)
   if (answer !== 'absent') {
     ctx.provide('approval', {
@@ -57,7 +61,7 @@ async function mounted(answer: ApprovalOutcome | 'throws' | 'absent' = 'allowed-
     } as never)
   }
   await ctx.plugin(CommandNetwork, { defaultNetwork: { access: 'open', hosts: [] }, proxyConnectTimeoutMs: 1_000, proxyMaxConnections: 8, proxyIdleTimeoutMs: 60_000 })
-  return { ctx, network: ctx.delorunCommandNetwork, work, asked, mode }
+  return { ctx, network: ctx.delorunCommandNetwork, work, home, asked, mode }
 }
 
 function bash(cwd: string | undefined, args: object = { command: 'docker ps' }, name = 'bash'): ToolExecution {
@@ -153,6 +157,30 @@ describe('the first-refusal consent', () => {
     await m.network.set(m.work, { access: 'off', hosts: [] }, false)
     await consent(m).review(bash(m.work))
     expect(m.asked).toHaveLength(0)
+  })
+
+  it('asks pwsh commands the same way', async () => {
+    const m = await mounted('rejected')
+    await consent(m).review(bash(m.work, { command: 'docker ps' }, 'pwsh'))
+    expect(m.asked).toMatchObject([{ toolName: 'pwsh' }])
+  })
+
+  it('does not ask where the provider is not the local one, which never refuses for this reason', async () => {
+    const m = await mounted('rejected')
+    m.ctx.sandbox = { confine: () => Promise.resolve({}) } as never
+    await consent(m).review(bash(m.work))
+    expect(m.asked).toHaveLength(0)
+  })
+
+  it('records only the abstract-socket acceptance: no full access, no preset or mode change', async () => {
+    const m = await mounted('allowed-once')
+    await consent(m).review(bash(m.work))
+    expect(m.asked[0]).toMatchObject({ grants: 'full-access' })
+    expect(m.mode.value).toBe('workspace-write')
+    const files = (readdirSync(join(m.home), { recursive: true, withFileTypes: true }))
+      .filter(entry => entry.isFile()).map(entry => join(entry.parentPath, entry.name))
+    expect(files).toEqual([networkStorePath(m.home)])
+    expect(m.ctx.get('permissionDefaults')).toBeUndefined()
   })
 
   it('does not ask for a chat without an agent or a workspace folder, and not once the risk is accepted', async () => {
