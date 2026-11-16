@@ -35,6 +35,8 @@ import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
+import { faviconIcon } from '@delorun/brand/icons'
+import { iconLinkTags } from '@delorun/brand/icon-links'
 import { answerIcon, brandedSignInPage, BRANDING_ICON_PATH, type BrandingSource, type IconReader } from './branding.ts'
 import { plainPathname } from './reach-paths.ts'
 import { fillBrand } from './sign-in-template.ts'
@@ -83,6 +85,19 @@ function asset(file: string, type: string): [string, Asset] {
   return [`${stem}-${createHash('sha256').update(body).digest('hex').slice(0, 12)}.${extension}`, { type, body }]
 }
 
+/**
+ * Name generated text by its content hash.
+ * @param stem - the file name before the hash.
+ * @param extension - the file extension.
+ * @param type - the content type.
+ * @param text - the content.
+ * @returns the hashed name and the asset.
+ */
+function namedAsset(stem: string, extension: string, type: string, text: string): [string, Asset] {
+  const body = Buffer.from(text)
+  return [`${stem}-${createHash('sha256').update(body).digest('hex').slice(0, 12)}.${extension}`, { type, body }]
+}
+
 const SCRIPT = asset('sign-in.js', 'text/javascript; charset=utf-8')
 /**
  * The page's stylesheet: the brand's `tokens.css`, the Soft theme's surface values from `@delorun/brand/soft-surfaces`
@@ -97,8 +112,15 @@ function styleAsset(): [string, Asset] {
 
 const STYLE = styleAsset()
 
+/**
+ * The tab icon's SVGs, drawn from the brand's one mark. A device that has not signed in cannot fetch the studio's own
+ * `/favicon.svg` (only a session reaches it), so the page carries these as pre-login assets.
+ */
+const FAVICON_LIGHT = namedAsset('favicon-light', 'svg', 'image/svg+xml', faviconIcon('light'))
+const FAVICON_DARK = namedAsset('favicon-dark', 'svg', 'image/svg+xml', faviconIcon('dark'))
+
 /** The sign-in page's assets by their content-hashed names: the only names the asset route answers. */
-export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE])
+export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE, FAVICON_LIGHT, FAVICON_DARK])
 
 /** The sign-in page's markup, `assets/sign-in.html`, with its two placeholders. */
 const PAGE_TEMPLATE = fillBrand(readFileSync(new URL('../assets/sign-in.html', import.meta.url), 'utf8'))
@@ -110,6 +132,7 @@ const PAGE_TEMPLATE = fillBrand(readFileSync(new URL('../assets/sign-in.html', i
  */
 export const SIGN_IN_PAGE = PAGE_TEMPLATE
   .replace('{{style}}', `${REACH_PATHS.assets}/${STYLE[0]}`)
+  .replace('{{icons}}', iconLinkTags({ fallback: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, light: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, dark: `${REACH_PATHS.assets}/${FAVICON_DARK[0]}` }))
   .replace('{{script}}', `${REACH_PATHS.assets}/${SCRIPT[0]}`)
 
 /**

@@ -25,6 +25,9 @@ describe('the paths a signed-in device reaches', () => {
     expect(reachesDevicePath('/delorun/reach/status')).toBe(true)
     expect(reachesDevicePath('/delorun/reach/status/more')).toBe(false)
     expect(reachesDevicePath('/favicon.svg.map')).toBe(false)
+    // Pins the ICO as an install file: browsers ask for it on their own, and a refused request leaves a stale icon cached.
+    expect(reachesDevicePath('/favicon.ico')).toBe(true)
+    expect(reachesDevicePath('/favicon.ico/x')).toBe(false)
     // Pins the segment boundary: `/api` does not admit `/apix`.
     expect(reachesDevicePath('/api')).toBe(true)
     expect(reachesDevicePath('/api/session.list')).toBe(true)

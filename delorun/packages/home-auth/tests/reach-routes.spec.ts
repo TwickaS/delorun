@@ -14,11 +14,12 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type StudioAddress } from '@delorun/contract-admission'
 import type { Base64Url, DevicePublicKeyJwk } from '@delorun/contract-device-approval'
 import { stampListener } from '@delorun/home'
+import { faviconIcon } from '@delorun/brand/icons'
 import { matchCode } from '../src/match-code.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { signInMessage } from '../src/sign-in.ts'
 import {
-  approvalRequestHandler, approveHandler, assetHandler, challengeHandler, landingOf, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS,
+  REACH_PRE_LOGIN_ROUTES, approvalRequestHandler, approveHandler, assetHandler, challengeHandler, landingOf, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS,
   SIGN_IN_PAGE, sessionHandler, signInLocation, signInPageHandler, windowHandler,
 } from '../src/reach-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
@@ -137,9 +138,25 @@ describe('the pre-login routes', () => {
     // Pins the page to what the reach policy allows without a nonce: no inline script, style element or handler.
     expect(SIGN_IN_PAGE).not.toMatch(/<script(?![^>]*\bsrc=)|<style|\son[a-z]+=|javascript:/i)
     const loaded = [...SIGN_IN_PAGE.matchAll(/\s(?:src|href)="([^"#][^"]*)"/g)].map(match => match[1])
-    expect(loaded).toEqual([...SIGN_IN_ASSETS.keys()].reverse().map(name => `${REACH_PATHS.assets}/${name}`).concat('https://docs.delorun.com/guide/reach'))
+    const names = [...SIGN_IN_ASSETS.keys()]
+    const [script, style, light, dark] = names.map(name => `${REACH_PATHS.assets}/${name}`)
+    expect(loaded).toEqual([light, dark, light, style, script, 'https://docs.delorun.com/guide/reach'])
     expect(SIGN_IN_PAGE).not.toContain('{{')
-    expect([...SIGN_IN_ASSETS.keys()]).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/)])
+    expect(names).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/), expect.stringMatching(/^favicon-light-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-dark-[0-9a-f]{12}\.svg$/)])
+  })
+
+  it('carry the studio\'s tab icon on the sign-in page, as assets a device that has not signed in can fetch', () => {
+    // Pins the icon links: without them the tab shows no icon on a reach address, where the studio's own files need a session.
+    const [, , light, dark] = [...SIGN_IN_ASSETS.keys()]
+    expect(SIGN_IN_PAGE).toContain(`<link rel="icon" type="image/svg+xml" href="${REACH_PATHS.assets}/${light}">`)
+    expect(SIGN_IN_PAGE).toContain(`href="${REACH_PATHS.assets}/${dark}" media="(prefers-color-scheme: dark)"`)
+    expect(SIGN_IN_ASSETS.get(light ?? '')?.body.toString()).toBe(faviconIcon('light'))
+    expect(SIGN_IN_ASSETS.get(dark ?? '')?.body.toString()).toBe(faviconIcon('dark'))
+    // Every asset the page links is on the pre-login asset route.
+    expect(REACH_PRE_LOGIN_ROUTES).toContainEqual({ method: 'GET', path: '/auth/assets/<asset>' })
+  })
+
+  it('name only symbols of its own sprite and link the guide safely', () => {
     // Every internal reference names an icon of the page's own sprite.
     for (const [, id] of SIGN_IN_PAGE.matchAll(/href="#([^"]+)"/g)) expect(SIGN_IN_PAGE).toContain(`<symbol id="${id ?? ''}"`)
     expect(SIGN_IN_PAGE).toContain('<a href="https://docs.delorun.com/guide/reach" target="_blank" rel="noopener noreferrer">')
