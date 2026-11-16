@@ -71,10 +71,33 @@ function renderOverlay(unlock: UnlockSource, translate = t) {
 }
 
 describe('the unlock copy', () => {
-  it('states no length for the unlock, which the home\'s remote access setting decides', () => {
-    expect(en['unlock.explain']).not.toMatch(/minutes/u)
-    expect(en['unlock.explain']).toContain('ends on its own')
-    expect(zh['unlock.explain']).not.toContain('几分钟')
+  /** An open ask dialog over a home that answers `state`. */
+  async function askDialog(state: unknown): Promise<void> {
+    const unlock = createUnlockSource(deviceHost(state).fetch)
+    await unlock.refresh()
+    act(() => { unlock.open() })
+    renderOverlay(unlock)
+  }
+
+  it('states the configured length before an unlock, in minutes', async () => {
+    await askDialog({ kind: 'none', unlockMinutes: 45 })
+    expect(screen.getByText(/The unlock lasts 45 minutes and ends on its own\./u)).toBeTruthy()
+  })
+
+  it('says one minute in the singular', async () => {
+    await askDialog({ kind: 'none', unlockMinutes: 1 })
+    expect(screen.getByText(/The unlock lasts 1 minute and ends on its own\./u)).toBeTruthy()
+  })
+
+  it('keeps the sentence without a length when the home does not send one', async () => {
+    await askDialog(NONE)
+    expect(screen.getByText(/The unlock ends on its own; the time shows once your computer approves it\./u)).toBeTruthy()
+  })
+
+  it('has the same keys in Chinese', () => {
+    expect(zh['unlock.lasts']).toContain('{minutes}')
+    expect(zh['unlock.lastsOne']).toBeTruthy()
+    expect(zh['unlock.lastsUnknown']).toBeTruthy()
   })
 })
 

@@ -191,11 +191,13 @@ export type ElevationEndReason = (typeof ELEVATION_END_REASONS)[number]
 
 /**
  * What a device's own studio shows about elevation: nothing, a request waiting with the code to read out at the
- * computer, or an elevation and its end, in milliseconds since the epoch.
+ * computer, or an elevation and its end, in milliseconds since the epoch. `unlockMinutes` is how long an unlock on
+ * the device's listener lasts once the computer approves one: a setting, not a secret, so it shows before any unlock.
+ * A home that predates the field omits it.
  */
 export type ElevationState =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'pending'; readonly requestId: string; readonly code: string; readonly expiresAt: number }
+  | { readonly kind: 'none'; readonly unlockMinutes?: number }
+  | { readonly kind: 'pending'; readonly requestId: string; readonly code: string; readonly expiresAt: number; readonly unlockMinutes?: number }
   | { readonly kind: 'elevated'; readonly elevationId: string; readonly endsAt: number }
 
 /** Limits of this contract. */

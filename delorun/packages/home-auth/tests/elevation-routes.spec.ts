@@ -109,13 +109,13 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
 
 describe('the device routes', () => {
   it('ask for an elevation, show the code, and lock it', async () => {
-    expect(await send('GET', `${ELEVATION_PATHS.state}?reach`)).toEqual({ status: 200, body: { kind: 'none' } })
+    expect(await send('GET', `${ELEVATION_PATHS.state}?reach`)).toEqual({ status: 200, body: { kind: 'none', unlockMinutes: 15 } })
     const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
-    expect(asked).toMatchObject({ status: 201, body: { kind: 'pending', code: expect.stringMatching(/^\d{8}$/) } })
+    expect(asked).toMatchObject({ status: 201, body: { kind: 'pending', unlockMinutes: 15, code: expect.stringMatching(/^\d{8}$/) } })
     const approved = await send('POST', ELEVATION_PATHS.approve, { requestId: asked.body.requestId, typedCode: asked.body.code })
     expect(approved).toMatchObject({ status: 200, body: { listener: LISTENER } })
     expect(await send('GET', `${ELEVATION_PATHS.state}?reach`)).toMatchObject({ body: { kind: 'elevated', elevationId: approved.body.id } })
-    expect(await send('POST', `${ELEVATION_PATHS.lock}?reach`)).toEqual({ status: 200, body: { kind: 'none' } })
+    expect(await send('POST', `${ELEVATION_PATHS.lock}?reach`)).toEqual({ status: 200, body: { kind: 'none', unlockMinutes: 15 } })
   })
 
   it('answer a reach request with a live session only, and a POST from the studio\'s own page only', async () => {

@@ -609,7 +609,7 @@ export class HomeAuth {
   requestElevation(sessionId: string, session: SessionRecord): ElevationState {
     // A request that rolled its session in flight still presents the old id; the elevation follows the current one.
     this.elevations.request({ deviceId: session.deviceId, listener: session.listener, sessionId: this.successors.get(sessionId) ?? sessionId })
-    return this.elevations.stateOf(session.deviceId, session.listener)
+    return this.stateWithMinutes(session.deviceId, session.listener)
   }
 
   /**
@@ -619,7 +619,19 @@ export class HomeAuth {
    * @returns the state.
    */
   elevationState(deviceId: string, listener: ReachListenerId): ElevationState {
-    return this.elevations.stateOf(deviceId, listener)
+    return this.stateWithMinutes(deviceId, listener)
+  }
+
+  /**
+   * The device's state, with the minutes an unlock on its listener lasts where none runs yet.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the state; `none` and `pending` carry `unlockMinutes`.
+   */
+  private stateWithMinutes(deviceId: string, listener: ReachListenerId): ElevationState {
+    const state = this.elevations.stateOf(deviceId, listener)
+    if (state.kind === 'elevated') return state
+    return { ...state, unlockMinutes: this.served.get(listener)?.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes }
   }
 
   /**

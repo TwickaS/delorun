@@ -55,10 +55,15 @@ afterEach(async () => {
 })
 
 describe('an elevation in the home', () => {
+  it('states the listener\'s configured minutes before any unlock', async () => {
+    const device = await signedIn()
+    expect(home.auth.elevationState(device.deviceId, LISTENER)).toEqual({ kind: 'none', unlockMinutes: 20 })
+  })
+
   it('waits for the code at the computer, then lasts the listener\'s minutes', async () => {
     const device = await signedIn()
     const state = home.auth.requestElevation(device.sessionId, device.session)
-    expect(state).toMatchObject({ kind: 'pending', code: expect.stringMatching(/^\d{8}$/) })
+    expect(state).toMatchObject({ kind: 'pending', unlockMinutes: 20, code: expect.stringMatching(/^\d{8}$/) })
     expect(home.auth.elevationState(device.deviceId, LISTENER)).toEqual(state)
     // The computer lists the request by the device's name, and without the code.
     expect(home.auth.elevationsAtComputer().pending).toEqual([expect.objectContaining({ deviceId: device.deviceId })])
@@ -112,7 +117,7 @@ describe('an elevation in the home', () => {
     if (state.kind !== 'pending') throw new Error('no request is waiting')
     expect(home.auth.revokeElevation(state.requestId)).toBe(true)
     expect(home.auth.revokeElevation('unknown')).toBe(false)
-    expect(home.auth.elevationState(device.deviceId, LISTENER)).toEqual({ kind: 'none' })
+    expect(home.auth.elevationState(device.deviceId, LISTENER)).toEqual({ kind: 'none', unlockMinutes: 20 })
     expect(ended()).toEqual(['locked-from-device', 'revoked-at-computer'])
   })
 
@@ -139,7 +144,7 @@ describe('an elevation in the home', () => {
     elevate(device.sessionId, device.session)
     // Pins the listener in the lookup: an unlock approved for the private listener is not the device's on another one.
     expect(home.auth.elevationOf(device.deviceId, 'reach-tailscale-funnel')).toBeUndefined()
-    expect(home.auth.elevationState(device.deviceId, 'reach-tailscale-funnel')).toEqual({ kind: 'none' })
+    expect(home.auth.elevationState(device.deviceId, 'reach-tailscale-funnel')).toEqual({ kind: 'none', unlockMinutes: ELEVATION_LIMITS.defaultMinutes })
     expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeDefined()
   })
 

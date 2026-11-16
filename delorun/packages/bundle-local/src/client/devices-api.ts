@@ -261,11 +261,12 @@ export type ElevationId = Branded<'DelorunElevationId'>
 
 /**
  * What `GET /auth/elevation` answers a device about its own unlock on the address it uses: none, a request waiting
- * with the code to type at the computer, or a running unlock. Times are milliseconds since the epoch.
+ * with the code to type at the computer, or a running unlock. Times are milliseconds since the epoch. `unlockMinutes`
+ * is the length an unlock on this address lasts, omitted by a home that predates it.
  */
 export type ElevationState =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'pending'; readonly requestId: ElevationRequestId; readonly code: string; readonly expiresAt: number }
+  | { readonly kind: 'none'; readonly unlockMinutes?: number }
+  | { readonly kind: 'pending'; readonly requestId: ElevationRequestId; readonly code: string; readonly expiresAt: number; readonly unlockMinutes?: number }
   | { readonly kind: 'elevated'; readonly elevationId: ElevationId; readonly endsAt: number }
 
 /** One request to unlock waiting at the computer, without its code, which the person reads from the device. */
@@ -316,8 +317,8 @@ export const ELEVATION_POLL_MS = 2000
 /** Interval between two reads of the unlock state while an unlock runs, which notices an unlock ended at the computer. */
 export const ELEVATED_POLL_MS = 30_000
 
-const isElevationState: Check = value => fields({ kind: kind => kind === 'none' })(value)
-  || fields({ kind: kind => kind === 'pending', requestId: isString, code: code => typeof code === 'string' && /^\d{8}$/.test(code), expiresAt: isTime })(value)
+const isElevationState: Check = value => fields({ kind: kind => kind === 'none', unlockMinutes: optional(isTime) })(value)
+  || fields({ kind: kind => kind === 'pending', requestId: isString, code: code => typeof code === 'string' && /^\d{8}$/.test(code), expiresAt: isTime, unlockMinutes: optional(isTime) })(value)
   || fields({ kind: kind => kind === 'elevated', elevationId: isString, endsAt: isTime })(value)
 const isElevationsAtComputer = fields({
   pending: listOf(fields({ requestId: isString, deviceId: isString, requestedAt: isTime, expiresAt: isTime })),

@@ -202,7 +202,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | 电脑自己的屏幕 | `settings/openSettingsDocument`、`session/openWorkspacePath`、`session/workspacePathApplications` | 它们会在电脑上打开应用，设备用不到。 |
 | 授权与设备 | 完全访问升级、工作区的完全访问同意、`workspace-management` 提示、设备批准与移除、启动、批准或延长解锁 | 电脑上的路由和答复守卫会拒绝其中每一项（[tailnet 成员身份](#tailnet-membership)）；它们都不是可由表格列出的 Remote 方法。 |
 
-- **路由。** 设备在 `GET /auth/elevation` 读取状态，在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
+- **路由。** 设备在 `GET /auth/elevation` 读取状态（`none` 与 `pending` 带有 `unlockMinutes`，即其监听器上一次解锁持续的分钟数，使工作室在解锁前就能说明时长），在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
 - **被放宽的设置。** 危险模式成立期间，已解锁的设备可以放宽默认预设，并关闭 `DANGEROUS_LIFTABLE_SWITCHES` 所列的开关。策略在调用继续之前，把每次这样的写入连同字段的先前值和调用所设的值，记录在 `~/.delorun/secrets/home-auth/reach-dangerous-settings.json` 中。当该模式不再成立时（在第一次发现它已结束的读取时，以及在启动时），home 通过设置服务把先前值写回去，除非该字段已不再保存所记录的设备值，因为本人在电脑上更改了它。失败的写入保留其记录并被重试。
 - **终端。** 每个 `terminal/*` 操作总是需要解锁，对每个 Session 和全局资源都是如此：危险模式、工作区的完全访问授权，以及终端将打开的文件夹，都不起任何作用。早先版本在 `~/.delorun/secrets/home-auth/reach-terminal.json` 中保留一个终端开关；现在没有任何东西读取该文件，仍有该文件的 home 继续工作，该文件可以删除。已打开的终端会一直运行到结束。
 - **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。设备持有解锁期间，其状态显示的是解锁而不是代码，因此设备无法延长自己的解锁。

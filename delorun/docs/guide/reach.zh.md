@@ -224,7 +224,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 ## 暂时解锁敏感操作
 
-当手机尝试敏感操作（例如更改设置）时，你需要解锁。手机会显示 “This needs a quick unlock from your computer” 并提供 **Unlock**。你也可以提前在手机上的“设置”→“设备”中解锁。
+当手机尝试敏感操作（例如更改设置）时，你需要解锁。手机会显示 “This needs a quick unlock from your computer” 并提供 **Unlock**，同时说明解锁持续多久。你也可以提前在手机上的“设置”→“设备”中解锁。
 
 1. 在手机上，选择 **Unlock**。手机会显示一个 8 位数字代码，并最多等待你的电脑 5 分钟；**Cancel** 会撤回该请求。
 2. 在电脑上，打开 studio 中的“设置”→“设备”，请求会带着代码输入框在那里等待；或者运行 `delorun devices elevate`，它会列出提出请求的手机。输入请求的编号和手机显示的代码。在 studio 中，输入代码并选择 **Approve**。

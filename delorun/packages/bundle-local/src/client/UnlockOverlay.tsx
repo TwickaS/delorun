@@ -92,6 +92,8 @@ function UnlockDialogView({ t, view, request, cancel }: {
   if (dialog === null) return null
   const close = (): void => { if (!dialog.busy) void cancel() }
   const outcome = dialog.outcome
+  const minutes = view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes
+  const lastsKey = minutes === undefined ? 'unlock.lastsUnknown' : minutes === 1 ? 'unlock.lastsOne' : 'unlock.lasts'
   const waiting = pending !== undefined && outcome !== 'expired' && outcome !== 'declined'
   return <Modal open onClose={close} title={t('unlock.title')} closeLabel={t('unlock.close')}
     footer={waiting
@@ -114,7 +116,7 @@ function UnlockDialogView({ t, view, request, cancel }: {
         </>
         : <>
           {dialog.action === undefined ? null : <p className={css.lead}>{t('unlock.needed')}</p>}
-          <p className={css.text}>{t('unlock.explain')}</p>
+          <p className={css.text}>{t('unlock.explain')} {t(lastsKey, { minutes: String(minutes) })}</p>
           {outcome === undefined ? null : <p className={css.failed} role="alert">{t(OUTCOME_KEYS[outcome])}</p>}
         </>}
     </div>

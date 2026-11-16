@@ -208,7 +208,7 @@ A workspace that you already put on full access at your computer can still be dr
 
 ## Unlock sensitive actions for a while
 
-You need an unlock when a phone tries something sensitive, such as changing a setting. The phone says "This needs a quick unlock from your computer" and offers **Unlock**. You can also unlock ahead of time from Settings, Devices on the phone.
+You need an unlock when a phone tries something sensitive, such as changing a setting. The phone says "This needs a quick unlock from your computer" and offers **Unlock**, and says how long the unlock lasts. You can also unlock ahead of time from Settings, Devices on the phone.
 
 1. On the phone, choose **Unlock**. The phone shows an 8-digit code and waits for your computer for up to 5 minutes; **Cancel** withdraws the request.
 2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the number of the request and the code the phone shows. In the studio, type the code and choose **Approve**.
