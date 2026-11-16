@@ -8,5 +8,49 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src", "tests"]
+  "include": [
+    "src",
+    "tests"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/include"
+    },
+    {
+      "path": "../../../vendor/loader"
+    },
+    {
+      "path": "../../../packages/experimental/deepseek-chat-import"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session/session-persistence-jsonl"
+    },
+    {
+      "path": "../../../packages/session/session-projection"
+    },
+    {
+      "path": "../../../packages/session/session-projection-cache"
+    },
+    {
+      "path": "../../../packages/storage/storage"
+    },
+    {
+      "path": "../../../packages/storage/storage-domain"
+    },
+    {
+      "path": "../../../packages/storage/storage-json"
+    },
+    {
+      "path": "../../../packages/typert/registry"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    }
+  ]
 }
