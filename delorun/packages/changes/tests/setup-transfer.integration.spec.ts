@@ -283,6 +283,34 @@ describe('applySetupImport', () => {
     expect(refused.message).not.toContain('sk-abcdefghijklmnopqrstuvwxyz')
   })
 
+  it('never carries the rows of a protection, with or without a plugin\'s name on them, and leaves the profile\'s own alone', async () => {
+    const { document, read } = await exported()
+    const fx = target()
+    writePatch(fx, `${readPatch(fx)}- id: delorun-plugin-install-check\n  config:\n    enabled: true\n- id: session-log-deepseek\n  config:\n    enabled: false\n`)
+    const rows = ['delorun-plugin-install-check', 'delorun-privacy', 'session-log-deepseek', 'delorun-permission-defaults', 'delorun-changes', 'sandbox-policy', 'connection', 'tool-bash']
+    const crafted: SetupDocument = {
+      ...document, plugins: [{ name: 'plug', source: 'registry', version: '1.0.0' }], models: [],
+      settings: [
+        ...rows.map(id => ({ id, config: { enabled: false } })),
+        ...rows.map(id => ({ id, name: 'plug', config: { enabled: false } })),
+        ...rows.map(id => ({ insert: [{ id, name: 'plug', config: { enabled: false } }] })),
+        { insert: [{ id: 'plug-delorun-extra', name: 'plug', config: { enabled: false } }] },
+        { insert: [{ name: 'plug', disabled: true }] },
+      ],
+    }
+    const { plan } = await planSetupImport(context(fx), crafted)
+    expect(plan.leftOut.filter(line => line.includes('install-check'))).toHaveLength(3)
+    // Only the plugin's own inserted rows are carried.
+    await applySetupImport(context(fx), crafted, { presence: terminal(), reload: NOT_RUNNING, run: operation(fx), readFile: read })
+    const patch = readPatch(fx)
+    expect(patch).toContain('id: delorun-plugin-install-check\n  config:\n    enabled: true')
+    expect(patch).toContain('id: session-log-deepseek\n  config:\n    enabled: false')
+    expect(patch).toContain('plug-delorun-extra')
+    // The profile's own session-log row and the plugin's own inserted row; no protection row took the imported value.
+    expect((patch.match(/enabled: false/gu) ?? []).length).toBe(2)
+    expect(patch).not.toContain('delorun-privacy')
+  })
+
   it('writes nothing outside the plugin\'s folder when a path climbs, and refuses a package.json that names another package', async () => {
     const { document, read } = await exported()
     const fx = target()

@@ -69,6 +69,21 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** The id prefixes of Delorun's and upstream's own rows, which no plugin's row may take. */
+const RESERVED_ID_PREFIXES: readonly string[] = ['delorun-', 'dsh-', 'ui-', 'llm-', 'sandbox', 'permission', 'session-', 'agent-', 'tool-', 'connection', 'command-', 'deepseek-']
+
+/**
+ * Whether an inserted row's id is its plugin's own: it starts with the plugin's package name (without the scope) and
+ * takes no id of Delorun's or upstream's rows.
+ * @param id - the row's id.
+ * @param plugin - the plugin the row loads.
+ * @returns true for an id that cannot name another row's protection.
+ */
+function ownRowId(id: string, plugin: string): boolean {
+  const base = plugin.replace(/^@[^/]+\//u, '')
+  return id.startsWith(base) && !CARRIED_ROW_IDS.has(id) && !RESERVED_ID_PREFIXES.some(prefix => id.startsWith(prefix))
+}
+
 /**
  * Whether a patch entry sets the model, as opposed to another setting.
  * @param entry - the entry.
@@ -141,9 +156,15 @@ function classProblem(row: unknown, plugins: ReadonlySet<string>, setsExisting: 
   if (name !== undefined && typeof name !== 'string') return 'has a plugin name that is no text'
   if (row['disabled'] !== undefined && typeof row['disabled'] !== 'boolean') return 'has a disabled value that is not true or false'
   if (row['config'] !== undefined && !isPlainObject(row['config'])) return 'has settings that are not a mapping'
-  const ofPlugin = typeof name === 'string' && plugins.has(name)
-  const ofModelOrLook = setsExisting && typeof id === 'string' && CARRIED_ROW_IDS.has(id) && (name === undefined || isProductPackage(name))
-  return ofPlugin || ofModelOrLook ? undefined : 'sets something that belongs to this computer, so it is not carried'
+  // An entry that sets a row some bundle declares is carried only for the model and the look. A plugin's own rows travel
+  // only as inserted rows: an entry that set an existing row under a plugin's name could reach a protection's row.
+  if (setsExisting) {
+    const carriedRow = typeof id === 'string' && CARRIED_ROW_IDS.has(id) && (name === undefined || isProductPackage(name))
+    return carriedRow ? undefined : 'sets something that belongs to this computer, so it is not carried'
+  }
+  if (typeof name !== 'string' || !plugins.has(name)) return 'inserts a row of a plugin the setup does not carry, so it is not carried'
+  if (id !== undefined && !(ownRowId(id, name))) return `inserts a row whose id ${JSON.stringify(id)} is not the plugin's own, so it is not carried`
+  return undefined
 }
 
 /**
