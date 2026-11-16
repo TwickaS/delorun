@@ -18,7 +18,7 @@ import { ChangesError } from '../errors.ts'
 import { readProfileManifest } from '../link.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readVersion } from '../store.ts'
-import { entryClass, entryLabel, isModelEntry, isPlainObject, isProductPackage, judgeEntry, type PatchEntry } from './policy.ts'
+import { entryClass, entryLabel, isModelEntry, isPlainObject, isProductPackage, judgeEntry, type LeftOutItem, type PatchEntry } from './policy.ts'
 
 /** What the person chose for an import. */
 export interface ImportOptions {
@@ -31,6 +31,33 @@ export interface ImportOptions {
 /** The choices an import makes when the person gives none: settings replaced, no other plugin removed. */
 export const DEFAULT_IMPORT_OPTIONS: ImportOptions = { settings: true, removeOthers: false }
 
+/** What the profile has now for a plugin the import moves, as a code the studio words in the person's language. */
+export type PluginWas =
+  | { readonly kind: 'version', readonly version: string }
+  | { readonly kind: 'not-installed', readonly spec: string }
+  | { readonly kind: 'registry', readonly spec: string }
+  | { readonly kind: 'local' | 'local-unapproved' | 'local-other' }
+
+/** A part of the setup an import replaces, as a code. */
+export type ReplaceCode = 'plugins-listed' | 'plugins-all' | 'model' | 'settings' | 'settings-off' | 'settings-none'
+
+/** One settings entry an import sets, changes or takes back to its default. */
+export interface SettingChange {
+  readonly kind: 'set' | 'changed' | 'default'
+  readonly label: string
+}
+
+/** A key the person adds after an import: the default model's provider, or a variable a provider reads. */
+export type KeyItem =
+  | { readonly kind: 'model', readonly provider: string, readonly model?: string }
+  | { readonly kind: 'variable', readonly name: string }
+
+/** An endpoint the imported model settings send requests to. */
+export interface EndpointItem {
+  readonly field: string
+  readonly url: string
+}
+
 /** One plugin the import adds or moves. */
 export interface PluginInstall {
   readonly plugin: SetupPlugin
@@ -38,6 +65,8 @@ export interface PluginInstall {
   readonly kind: 'add' | 'replace'
   /** What the profile has now, in words; absent for `add`. */
   readonly from?: string
+  /** The same as a code. */
+  readonly was?: PluginWas
 }
 
 /** What importing a setup does to one profile. */
@@ -48,6 +77,16 @@ export interface SetupPlan {
   readonly named: readonly string[]
   /** The parts of the setup this import replaces, in words. */
   readonly replaces: readonly string[]
+  /** The same as codes. */
+  readonly replaceCodes: readonly ReplaceCode[]
+  /** The settings entries this import sets, changes or takes back to their defaults. */
+  readonly settingChanges: readonly SettingChange[]
+  /** The settings entries of the archive a setup does not carry, as codes. */
+  readonly leftOutItems: readonly LeftOutItem[]
+  /** The keys to add afterwards, as codes. */
+  readonly keyItems: readonly KeyItem[]
+  /** The endpoints, as fields. */
+  readonly endpointItems: readonly EndpointItem[]
   /** The plugins the profile already has exactly as the archive names them. */
   readonly keep: readonly string[]
   /** The plugins of the person's the archive lacks, which the import removes. */
@@ -72,6 +111,8 @@ export interface PatchPlan {
   readonly changed: boolean
   /** The sentences for {@link SetupPlan.settings}. */
   readonly lines: readonly string[]
+  /** The same as fields. */
+  readonly changes: readonly SettingChange[]
 }
 
 /**
@@ -103,17 +144,21 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
     const spec = Object.hasOwn(dependencies, plugin.name) ? dependencies[plugin.name] : undefined
     const now = spec === undefined ? undefined : await currentState(ctx, plugin, spec, approved)
     if (now?.same === true) keep.push(plugin.name)
-    else install.push({ plugin, kind: spec === undefined ? 'add' : 'replace', ...now === undefined ? {} : { from: now.words } })
+    else install.push({ plugin, kind: spec === undefined ? 'add' : 'replace', ...now === undefined ? {} : { from: now.words, was: now.was } })
   }
   const remove = options.removeOthers ? Object.keys(dependencies).filter(name => !isProductPackage(name) && !wanted.has(name)) : []
   const known = new Set([...wanted, ...Object.keys(dependencies).filter(name => !isProductPackage(name))])
   const leftOut: string[] = []
+  const leftOutItems: LeftOutItem[] = []
   const carried: PatchEntry[] = []
   for (const entry of withSettings ? [...document.models, ...document.settings] : document.models) {
     const verdict = judgeEntry(entry, wanted)
     if (verdict.carry) carried.push(entry)
     else if (verdict.secret === true) throw new ChangesError('SETUP_REFUSED', 'setup', `Nothing was imported: ${verdict.reason}. A setup never carries a key.`)
-    else leftOut.push(verdict.reason)
+    else {
+      leftOut.push(verdict.reason)
+      leftOutItems.push({ subject: verdict.label, code: verdict.code })
+    }
   }
   const patch = await planPatch(ctx.profileDir, carried, known, withSettings)
   const plan: SetupPlan = {
@@ -123,13 +168,29 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
       'model provider and model choices',
       ...withSettings ? ['other settings'] : [document.includesSettings ? 'other settings stay as they are (not included by you)' : 'other settings stay as they are (the file has none)'],
     ],
+    replaceCodes: [
+      ...document.plugins.length > 0 ? [options.removeOthers ? 'plugins-all' as const : 'plugins-listed' as const] : [],
+      'model' as const,
+      withSettings ? 'settings' as const : document.includesSettings ? 'settings-off' as const : 'settings-none' as const,
+    ],
+    settingChanges: patch.changes,
+    leftOutItems,
+    keyItems: keyItems(carried),
+    endpointItems: endpointItems(carried),
     settings: patch.lines,
     leftOut,
     keyNotes: keyNotes(carried),
-    endpoints: endpointsOf(carried),
+    endpoints: endpointsOf(carried).map(({ field, url }) => `${field} sends requests to ${url}`),
     changes: install.length > 0 || remove.length > 0 || patch.changed,
   }
   return { plan, patch }
+}
+
+/** Whether the profile has a plugin as the setup names it, and what it has now. */
+interface StateOf {
+  readonly same: boolean
+  readonly words: string
+  readonly was: PluginWas
 }
 
 /**
@@ -140,7 +201,7 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
  * @param approved - the profile's approved plugins.
  * @returns whether they are the same, and what the profile has now in words.
  */
-async function currentState(ctx: ChangesContext, plugin: SetupPlugin, spec: string, approved: Awaited<ReturnType<typeof readApproved>>): Promise<{ readonly same: boolean, readonly words: string }> {
+async function currentState(ctx: ChangesContext, plugin: SetupPlugin, spec: string, approved: Awaited<ReturnType<typeof readApproved>>): Promise<StateOf> {
   if (plugin.source === 'registry') return registryState(ctx.profileDir, plugin, spec)
   return localState(ctx, plugin, spec, approved)
 }
@@ -151,8 +212,8 @@ async function currentState(ctx: ChangesContext, plugin: SetupPlugin, spec: stri
  * @param spec - the profile's spec for it.
  * @returns whether the installed version is the one named.
  */
-async function registryState(profileDir: string, plugin: SetupRegistryPlugin, spec: string): Promise<{ readonly same: boolean, readonly words: string }> {
-  if (isLocalSpec(spec)) return { same: false, words: 'a plugin made on this computer' }
+async function registryState(profileDir: string, plugin: SetupRegistryPlugin, spec: string): Promise<StateOf> {
+  if (isLocalSpec(spec)) return { same: false, words: 'a plugin made on this computer', was: { kind: 'local' } }
   const path = join(profileDir, 'node_modules', plugin.name, 'package.json')
   let version: unknown
   try {
@@ -162,7 +223,7 @@ async function registryState(profileDir: string, plugin: SetupRegistryPlugin, sp
     version = undefined
   }
   const installed = typeof version === 'string' ? version : undefined
-  return { same: installed === plugin.version, words: installed === undefined ? `${spec}, not installed` : `version ${installed}` }
+  return { same: installed === plugin.version, words: installed === undefined ? `${spec}, not installed` : `version ${installed}`, was: installed === undefined ? { kind: 'not-installed', spec } : { kind: 'version', version: installed } }
 }
 
 /**
@@ -172,15 +233,15 @@ async function registryState(profileDir: string, plugin: SetupRegistryPlugin, sp
  * @param approved - the profile's approved plugins.
  * @returns whether the profile's approved copy holds exactly the archive's files.
  */
-async function localState(ctx: ChangesContext, plugin: SetupLocalPlugin, spec: string, approved: Awaited<ReturnType<typeof readApproved>>): Promise<{ readonly same: boolean, readonly words: string }> {
-  if (!isLocalSpec(spec)) return { same: false, words: `version ${spec} from a registry` }
+async function localState(ctx: ChangesContext, plugin: SetupLocalPlugin, spec: string, approved: Awaited<ReturnType<typeof readApproved>>): Promise<StateOf> {
+  if (!isLocalSpec(spec)) return { same: false, words: `version ${spec} from a registry`, was: { kind: 'registry', spec } }
   const approval = approvedOf(approved, plugin.name)
-  if (approval === undefined) return { same: false, words: 'a plugin made on this computer, not approved yet' }
+  if (approval === undefined) return { same: false, words: 'a plugin made on this computer, not approved yet', was: { kind: 'local-unapproved' } }
   const held = await readVersion(ctx.home, approval.version)
   const files = held.entries.flatMap(entry => entry.type === 'file' ? [`${entry.path}:${entry.digest}:${String(entry.executable)}`] : [])
   const wanted = plugin.files.map(file => `${file.path}:${file.sha256}:${String(file.executable)}`)
   const same = held.entries.every(entry => entry.type === 'file') && isDeepStrictEqual([...files].sort(), [...wanted].sort())
-  return { same, words: 'a plugin made on this computer, with other content' }
+  return { same, words: 'a plugin made on this computer, with other content', was: { kind: 'local-other' } }
 }
 
 /**
@@ -207,20 +268,21 @@ async function planPatch(profileDir: string, carried: readonly PatchEntry[], kno
     else kept.push(item)
   }
   const lines: string[] = []
+  const changes: SettingChange[] = []
   const wanted = new Map(carried.map(entry => [keyOf(entry), entry]))
   for (const [key, entry] of wanted) {
     const had = current.get(key)
-    if (had === undefined) lines.push(`set: ${entryLabel(entry)}`)
-    else if (!isDeepStrictEqual(had, entry)) lines.push(`changed: ${entryLabel(entry)}`)
+    if (had === undefined) { lines.push(`set: ${entryLabel(entry)}`); changes.push({ kind: 'set', label: entryLabel(entry) }) }
+    else if (!isDeepStrictEqual(had, entry)) { lines.push(`changed: ${entryLabel(entry)}`); changes.push({ kind: 'changed', label: entryLabel(entry) }) }
   }
   for (const [key, entry] of current) {
-    if (!wanted.has(key)) lines.push(`back to its default: ${entryLabel(entry as PatchEntry)}`)
+    if (!wanted.has(key)) { lines.push(`back to its default: ${entryLabel(entry as PatchEntry)}`); changes.push({ kind: 'default', label: entryLabel(entry as PatchEntry) }) }
   }
   const rewritten = new YAMLSeq<unknown>()
   for (const node of kept) rewritten.add(node)
   for (const entry of carried) rewritten.add(document.createNode(entry))
   const after = lines.length === 0 ? before : new Document(rewritten).toString({ lineWidth: 0 })
-  return { text: after, changed: lines.length > 0, lines }
+  return { text: after, changed: lines.length > 0, lines, changes }
 }
 
 /**
@@ -265,18 +327,44 @@ function keyVariables(config: unknown): string[] {
  * @param carried - the setup's carried entries.
  * @returns each endpoint the entries name, as `<field> sends requests to <URL>`.
  */
-function endpointsOf(carried: readonly PatchEntry[]): string[] {
-  const found: string[] = []
+function endpointsOf(carried: readonly PatchEntry[]): { field: string, url: string }[] {
+  const found: { field: string, url: string }[] = []
   const walk = (value: unknown, path: string): void => {
     if (Array.isArray(value)) value.forEach((item, index) => walk(item, `${path}[${String(index)}]`))
     else if (isPlainObject(value)) {
       for (const [key, item] of Object.entries(value)) {
         const here = path === '' ? key : `${path}.${key}`
-        if (/^(?:base_?url|endpoint|api_?base)$/iu.test(key) && typeof item === 'string') found.push(`${here} sends requests to ${item}`)
+        if (/^(?:base_?url|endpoint|api_?base)$/iu.test(key) && typeof item === 'string') found.push({ field: here, url: item })
         else walk(item, here)
       }
     }
   }
   for (const entry of carried) walk(entry['config'] ?? entry['insert'], entryLabel(entry))
   return found
+}
+
+/**
+ * The keys to add after the import, as codes.
+ * @param carried - the setup's carried entries.
+ * @returns the default model's provider and each variable a provider reads its key from.
+ */
+function keyItems(carried: readonly PatchEntry[]): KeyItem[] {
+  const items: KeyItem[] = []
+  for (const entry of carried) {
+    const config = isPlainObject(entry['config']) ? entry['config'] : {}
+    if (entry['id'] === 'agent-default-model' && typeof config['provider'] === 'string') {
+      items.push({ kind: 'model', provider: config['provider'], ...typeof config['model'] === 'string' ? { model: config['model'] } : {} })
+    }
+    for (const name of keyVariables(config)) items.push({ kind: 'variable', name })
+  }
+  return items.filter((item, at) => items.findIndex(other => JSON.stringify(other) === JSON.stringify(item)) === at)
+}
+
+/**
+ * The endpoints the carried entries name, as fields.
+ * @param carried - the setup's carried entries.
+ * @returns each field and the URL it holds.
+ */
+function endpointItems(carried: readonly PatchEntry[]): EndpointItem[] {
+  return endpointsOf(carried).map(({ field, url }) => ({ field, url }))
 }

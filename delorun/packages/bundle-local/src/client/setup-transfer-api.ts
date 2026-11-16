@@ -7,17 +7,20 @@
 import { SETUP_PATHS, type SetupApplyView, type SetupExportView, type SetupInspectView, type SetupPluginsView } from '@delorun/plugin-changes/wire'
 import { call, fields, isBoolean, isString, isTime, listOf, optional, type Check, type HostFetch } from './host-api.ts'
 
-const isInstall: Check = fields({ name: isString, version: optional(isString), kind: value => value === 'add' || value === 'replace', source: value => value === 'registry' || value === 'local', from: optional(isString) })
+const isWas: Check = fields({ kind: isString, version: optional(isString), spec: optional(isString) })
+const isLeftOut: Check = fields({ subject: isString, code: isString })
+const isKey: Check = fields({ kind: isString, provider: optional(isString), model: optional(isString), name: optional(isString) })
+const isInstall: Check = fields({ name: isString, version: optional(isString), kind: value => value === 'add' || value === 'replace', source: value => value === 'registry' || value === 'local', was: optional(isWas) })
 const isSigner: Check = fields({ state: value => value === 'verified' || value === 'unverified', reason: optional(isString), fingerprint: isString })
 const isProtection: Check = value => value === 'on' || value === 'off'
 const isPlugins: Check = fields({ plugins: listOf(fields({ name: isString, source: value => value === 'registry' || value === 'local' })) })
-const isExported: Check = fields({ file: isString, name: isString, plugins: isTime, local: isTime, settings: isTime, leftOut: listOf(isString), signedBy: isString, withoutCode: listOf(isString) })
+const isExported: Check = fields({ file: isString, name: isString, plugins: isTime, local: isTime, settings: isTime, leftOut: listOf(isLeftOut), signedBy: isString, withoutCode: listOf(isString) })
 const isInspected: Check = fields({
   token: isString, signer: isSigner, createdBy: isString, exportedAt: isString, note: optional(isString), includesSettings: isBoolean, replaces: listOf(isString), named: listOf(isString), sourceProfile: isString, install: listOf(isInstall), remove: listOf(isString), keep: listOf(isString),
-  settings: listOf(isString), endpoints: listOf(isString), leftOut: listOf(isString), keyNotes: listOf(isString), protection: isProtection, changes: isBoolean,
+  settingChanges: listOf(fields({ kind: isString, label: isString })), endpoints: listOf(fields({ field: isString, url: isString })), leftOut: listOf(isLeftOut), keys: listOf(isKey), protection: isProtection, changes: isBoolean,
 })
 const isApplied: Check = fields({
-  savedVersion: isString, removed: listOf(isString), installed: listOf(fields({ name: isString, reviewChange: optional(isString) })), settingsWritten: isBoolean, keyNotes: listOf(isString), protection: isProtection,
+  savedVersion: isString, removed: listOf(isString), installed: listOf(fields({ name: isString, reviewChange: optional(isString) })), settingsWritten: isBoolean, keys: listOf(isKey), protection: isProtection,
 })
 
 /** What the person chose to put in a file. */

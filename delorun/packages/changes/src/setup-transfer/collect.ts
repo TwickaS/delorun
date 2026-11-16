@@ -18,7 +18,7 @@ import { readProfileManifest } from '../link.ts'
 import { PACKAGE_NAME_PATTERN } from '../paths.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readObject, readVersion } from '../store.ts'
-import { isModelEntry, isPlainObject, isProductPackage, judgeEntry } from './policy.ts'
+import { isModelEntry, isPlainObject, isProductPackage, judgeEntry, type LeftOutItem } from './policy.ts'
 
 /** The most bytes of plugin files one setup carries: 256 MiB. */
 export const SETUP_MAX_PLUGIN_BYTES = 256 * 1024 * 1024
@@ -53,6 +53,8 @@ export interface SetupExport {
   readonly files: ReadonlyMap<string, Uint8Array>
   /** What the setup does not carry, one sentence each, never holding a value. */
   readonly leftOut: readonly string[]
+  /** The same, as codes the studio words in the person's language. */
+  readonly leftOutItems: readonly LeftOutItem[]
 }
 
 /**
@@ -81,6 +83,7 @@ export async function collectSetup(ctx: ChangesContext, options: CollectOptions 
   const approved = await readApproved(ctx.profileDir)
   const integrities = await lockfileIntegrities(ctx.profileDir)
   const leftOut: string[] = []
+  const items: LeftOutItem[] = []
   const files = new Map<string, Uint8Array>()
   const plugins: SetupPlugin[] = []
   let carriedBytes = 0
@@ -92,18 +95,20 @@ export async function collectSetup(ctx: ChangesContext, options: CollectOptions 
     if (chosen !== undefined && !chosen.has(name)) continue
     if (!PACKAGE_NAME_PATTERN.test(name)) {
       leftOut.push(`${name}: not a package name`)
+      items.push({ subject: name, code: 'not-package-name' })
       continue
     }
     if (!isLocalSpec(spec)) {
       const installed = await installedVersion(ctx.profileDir, name)
       const integrity = installed === undefined ? undefined : integrities.get(`${name}@${installed}`)
-      if (installed === undefined) leftOut.push(`${name}: not installed in this profile, so its version is unknown`)
+      if (installed === undefined) { leftOut.push(`${name}: not installed in this profile, so its version is unknown`); items.push({ subject: name, code: 'not-installed' }) }
       else plugins.push({ name, source: 'registry', version: installed, ...integrity === undefined ? {} : { integrity } })
       continue
     }
     const approval = approvedOf(approved, name)
     if (approval === undefined) {
       leftOut.push(`${name}: made on this computer and not approved yet, so there is no copy to carry (delorun changes list)`)
+      items.push({ subject: name, code: 'not-approved' })
       continue
     }
     const version = await readVersion(ctx.home, approval.version)
@@ -132,14 +137,16 @@ export async function collectSetup(ctx: ChangesContext, options: CollectOptions 
     const packageJson = carried.find(file => file.path === 'package.json')
     if (packageJson === undefined) {
       leftOut.push(`${name}: its approved copy has no package.json at its top`)
+      items.push({ subject: name, code: 'no-package-json' })
       carriedBytes = carriedBytesBefore
       continue
     }
+    if (links > 0) items.push({ subject: name, code: 'links' })
     if (links > 0) leftOut.push(`${name}: ${String(links)} symbolic link${links === 1 ? '' : 's'} not carried; install the packages the plugin needs in its folder after the import`)
     const declared = packageVersion(files.get(packageJson.sha256)!)
     plugins.push({ name, source: 'local', ...declared === undefined ? {} : { version: declared }, files: carried })
   }
-  const patch = await collectPatch(ctx.profileDir, new Set(plugins.map(plugin => plugin.name)), leftOut)
+  const patch = await collectPatch(ctx.profileDir, new Set(plugins.map(plugin => plugin.name)), leftOut, items)
   const models = patch.filter(entry => isModelEntry(entry))
   const document: SetupDocument = {
     schemaVersion: 1, profile: ctx.profile, ...options.note === undefined || options.note === '' ? {} : { note: options.note },
@@ -147,7 +154,7 @@ export async function collectSetup(ctx: ChangesContext, options: CollectOptions 
   }
   // The document is held to the schema an import applies, so an export never writes a setup its own import refuses.
   parseSetupDocument(new TextEncoder().encode(JSON.stringify(document)))
-  return { document, files, leftOut }
+  return { document, files, leftOut, leftOutItems: items }
 }
 
 /**
@@ -205,10 +212,11 @@ export async function lockfileIntegrities(profileDir: string): Promise<ReadonlyM
  * @param profileDir - the profile directory.
  * @param plugins - the names of the plugins the setup carries.
  * @param leftOut - receives one sentence for each entry not carried.
+ * @param items - receives the same as codes.
  * @returns the entries, as data.
  * @throws {ChangesError} `SETUP_REFUSED` for a patch layer that is not a YAML list, or an entry that would be carried but holds a credential.
  */
-async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, leftOut: string[]): Promise<readonly Record<string, SetupJson>[]> {
+async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, leftOut: string[], items: LeftOutItem[]): Promise<readonly Record<string, SetupJson>[]> {
   const path = join(profileDir, 'cordis.patch.yml')
   if (!existsSync(path)) return []
   const document = parseDocument(await readFile(path, 'utf8'), { logLevel: 'silent' })
@@ -222,16 +230,21 @@ async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, le
     const entry: unknown = isMap(item) ? item.toJSON() : undefined
     if (!isPlainObject(entry)) {
       leftOut.push('a patch entry that is not a mapping')
+      items.push({ subject: '', code: 'not-mapping' })
       continue
     }
     if (tagged) {
       leftOut.push(`${typeof entry['id'] === 'string' ? entry['id'] : 'a patch entry'}: holds an expression (!!js), which a setup never carries`)
+      items.push({ subject: typeof entry['id'] === 'string' ? entry['id'] : '', code: 'expression' })
       continue
     }
     const verdict = judgeEntry(entry, plugins)
     if (verdict.carry) carried.push(entry as Record<string, SetupJson>)
     else if (verdict.secret === true) throw new ChangesError('SETUP_REFUSED', path, `Nothing was exported: ${verdict.reason}. A key belongs in the credentials file, not in a settings row; delorun setup stores it there.`)
-    else leftOut.push(verdict.reason)
+    else {
+      leftOut.push(verdict.reason)
+      items.push({ subject: verdict.label, code: verdict.code })
+    }
   }
   return carried
 }

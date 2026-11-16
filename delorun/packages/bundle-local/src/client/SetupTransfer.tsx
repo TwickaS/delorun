@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SetupApplyView, SetupInspectView } from '@delorun/plugin-changes/wire'
+import type { SetupApplyView, SetupInspectView, SetupKeyView, SetupLeftOutView, SetupWasView } from '@delorun/plugin-changes/wire'
 import { applySetupFile, exportSetupFile, fromBase64, inspectSetupFile, listSetupPlugins, replanSetupFile, type ExportChoices, type ImportChoices } from './setup-transfer-api.ts'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import type { VersionsSectionProps } from './VersionsSection.tsx'
@@ -72,7 +72,7 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
     const written = await exportSetupFile(fetch, choices)
     saveFile(written.name, fromBase64(written.file))
     setNotice(t('transfer.exported', { name: written.name, plugins: String(written.plugins), local: String(written.local), settings: String(written.settings), signedBy: written.signedBy }))
-    setLeftOut(written.withoutCode.length === 0 ? written.leftOut : [t('transfer.withoutCode', { names: written.withoutCode.join(', ') }), ...written.leftOut])
+    setLeftOut([...written.withoutCode.length === 0 ? [] : [t('transfer.withoutCode', { names: written.withoutCode.join(', ') })], ...written.leftOut.map(item => leftOutSentence(t, item))])
     setStage({ kind: 'idle' })
   })
   const chosen = (file: File | undefined): Promise<void> => attempt(t('transfer.inspecting'), async () => {
@@ -183,6 +183,38 @@ function ExportForm({ t, plugins, onWrite, onCancel }: {
 }
 
 /**
+ * A thing a setup leaves out, in the person's language.
+ * @param t - the section's copy.
+ * @param item - the home's code and subject.
+ * @returns the sentence.
+ */
+function leftOutSentence(t: Translate, item: SetupLeftOutView): string {
+  return t(`transfer.left.${item.code}`, { subject: item.subject })
+}
+
+/**
+ * What the profile has now for a plugin, in the person's language.
+ * @param t - the section's copy.
+ * @param was - the home's code.
+ * @returns the words.
+ */
+function wasSentence(t: Translate, was: SetupWasView): string {
+  return t(`transfer.was.${was.kind}`, { version: 'version' in was ? was.version : '', spec: 'spec' in was ? was.spec : '' })
+}
+
+/**
+ * A key to add, in the person's language.
+ * @param t - the section's copy.
+ * @param key - the home's code.
+ * @returns the sentence.
+ */
+function keySentence(t: Translate, key: SetupKeyView): string {
+  return key.kind === 'model'
+    ? t('transfer.key.model', { provider: key.provider, model: key.model === undefined ? '' : ` / ${key.model}` })
+    : t('transfer.key.variable', { name: key.name })
+}
+
+/**
  * A titled list.
  * @param props - the title and the lines.
  * @returns the list; nothing when there are no lines.
@@ -206,20 +238,20 @@ function Review({ t, view, choices, onChoose, onApply, onCancel }: {
   const signer = view.signer.state === 'verified'
     ? t('transfer.signer.verified', { fingerprint: view.signer.fingerprint })
     : view.signer.reason === 'absent' ? t('transfer.signer.absent') : t('transfer.signer.unknown', { fingerprint: view.signer.fingerprint })
-  const installs = view.install.map(item => `${t(item.source === 'local' ? 'transfer.add.local' : 'transfer.add.registry', { name: item.name, version: item.version ?? '' })}${item.from === undefined ? '' : t('transfer.add.now', { from: item.from })}`)
+  const installs = view.install.map(item => `${t(item.source === 'local' ? 'transfer.add.local' : 'transfer.add.registry', { name: item.name, version: item.version ?? '' })}${item.was === undefined ? '' : t('transfer.add.now', { from: wasSentence(t, item.was) })}`)
   return <div className={css.review} data-setup-review>
     <h3 className={css.reviewTitle}>{t('transfer.review.title')}</h3>
     <p className={view.signer.state === 'verified' ? css.line : css.warning}>{signer}</p>
     {view.note === undefined ? null : <p className={css.line}>{t('transfer.note.from', { note: view.note })}</p>}
-    <p className={css.line}>{t('transfer.replaces', { parts: view.replaces.join('; ') })}</p>
+    <p className={css.line}>{t('transfer.replaces', { parts: view.replaces.map(code => t(`transfer.replace.${code}`)).join('; ') })}</p>
     {view.includesSettings ? <SwitchRow label={t('transfer.settings.switch')} checked={choices.settings} onChange={(settings) => { onChoose({ ...choices, settings }) }} /> : null}
     <SwitchRow label={t('transfer.removeOthers')} checked={choices.removeOthers} onChange={(removeOthers) => { onChoose({ ...choices, removeOthers }) }} />
     <Lines title={t('transfer.named')} lines={view.named} />
     <Lines title={t('transfer.add')} lines={installs} />
     <Lines title={t('transfer.remove')} lines={view.remove} />
-    <Lines title={t('transfer.settings')} lines={view.settings} />
-    <Lines title={t('transfer.endpoints')} lines={view.endpoints} />
-    <Lines title={t('transfer.leftOutImport')} lines={view.leftOut} />
+    <Lines title={t('transfer.settings')} lines={view.settingChanges.map(change => t(`transfer.change.${change.kind}`, { label: change.label }))} />
+    <Lines title={t('transfer.endpoints')} lines={view.endpoints.map(endpoint => t('transfer.endpoint', endpoint))} />
+    <Lines title={t('transfer.leftOutImport')} lines={view.leftOut.map(item => leftOutSentence(t, item))} />
     <p className={css.line}>{t(view.protection === 'on' ? 'transfer.protection.on' : 'transfer.protection.off')}</p>
     {view.changes ? null : <p className={css.line}>{t('transfer.nothing')}</p>}
     <div className={css.transferButtons}>
@@ -239,6 +271,6 @@ function Done({ t, view }: { t: Translate; view: SetupApplyView }): ReactNode {
   return <div className={css.review} data-setup-done>
     <p className={css.notice} role="status">{t('transfer.done')}</p>
     {reviewed.length === 0 ? null : <p className={css.line}>{t(view.protection === 'on' ? 'transfer.done.review' : 'transfer.done.unreviewed', { names: reviewed.join(', ') })}</p>}
-    <Lines title={t('transfer.done.keys')} lines={view.keyNotes} />
+    <Lines title={t('transfer.done.keys')} lines={view.keys.map(key => keySentence(t, key))} />
   </div>
 }

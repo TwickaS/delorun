@@ -28,7 +28,7 @@ async function exportedFile(): Promise<{ file: string, answer: Record<string, un
 describe('setup export', () => {
   it('writes the plugins and the carried settings as one signed file and names what it left out', async () => {
     const { answer } = await exportedFile()
-    expect(answer).toMatchObject({ name: 'setup.delorun', plugins: 1, local: 1, settings: 1, leftOut: [expect.stringContaining('sandbox-policy')] })
+    expect(answer).toMatchObject({ name: 'setup.delorun', plugins: 1, local: 1, settings: 1, leftOut: [{ subject: 'sandbox-policy', code: 'computer' }] })
     expect(typeof answer['signedBy']).toBe('string')
   })
 
@@ -66,9 +66,9 @@ describe('choices in the studio', () => {
     writeFileSync(join(ctx.profileDir, 'cordis.patch.yml'), '- id: delorun-cost-meter\n  config:\n    enabled: true\n')
     const server = await serveRoutes(ctx)
     const first = json(await post(server.port, SETUP_PATHS.inspect, { file }))
-    expect(first['replaces']).toContain('other settings')
+    expect(first['replaces']).toContain('settings')
     const again = json(await post(server.port, SETUP_PATHS.inspect, { token: first['token'], settings: false }))
-    expect(again).toMatchObject({ token: first['token'], replaces: [expect.any(String), 'model provider and model choices', 'other settings stay as they are (not included by you)'] })
+    expect(again).toMatchObject({ token: first['token'], replaces: ['plugins-listed', 'model', 'settings-off'] })
     expect((await post(server.port, SETUP_PATHS.inspect, { token: 'guess' })).status).toBe(410)
     const applied = await post(server.port, SETUP_PATHS.apply, { token: first['token'], settings: false })
     expect(applied.status).toBe(200)
@@ -85,7 +85,7 @@ describe('setup import', () => {
       signer: { state: 'unverified', reason: 'key-not-trusted' },
       install: [{ name: 'plug', version: '1.0.0', kind: 'add', source: 'local' }],
       remove: [],
-      settings: ['set: llm-deepseek'],
+      settingChanges: [{ kind: 'set', label: 'llm-deepseek' }],
       changes: true,
     })
     expect(server.operations).toEqual([])

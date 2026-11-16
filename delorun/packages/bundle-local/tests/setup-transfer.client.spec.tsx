@@ -18,16 +18,16 @@ afterEach(() => {
   cleanup()
 })
 
-const EXPORTED: SetupExportView = { file: toBase64(new Uint8Array([1, 2, 3])), name: 'setup.delorun', plugins: 2, local: 1, settings: 3, leftOut: ['sandbox-policy: belongs to this computer'], signedBy: 'KEY123', withoutCode: [] }
+const EXPORTED: SetupExportView = { file: toBase64(new Uint8Array([1, 2, 3])), name: 'setup.delorun', plugins: 2, local: 1, settings: 3, leftOut: [{ subject: 'sandbox-policy', code: 'computer' }], signedBy: 'KEY123', withoutCode: [] }
 const PLUGINS = { plugins: [{ name: 'plug', source: 'local' }, { name: 'left-pad', source: 'registry' }] }
 const INSPECTED: SetupInspectView = {
   token: 'tok', signer: { state: 'unverified', reason: 'key-not-trusted', fingerprint: 'FP-OTHER' }, createdBy: '0.1.0', exportedAt: '2026-11-16T10:00:00Z', sourceProfile: 'default', note: 'my work setup', includesSettings: true, named: [],
-  replaces: ['the plugins the file lists (others stay)', 'model provider and model choices', 'other settings'],
-  install: [{ name: 'plug', version: '1.0.0', kind: 'add', source: 'local' }, { name: 'left-pad', version: '1.3.0', kind: 'replace', source: 'registry', from: 'version 1.2.0' }],
-  remove: ['old-plugin'], keep: [], settings: ['changed: llm-deepseek'], endpoints: ['providers.x.baseURL sends requests to https://m.example.com/v1'], leftOut: ['sandbox-policy: belongs to this computer'],
-  keyNotes: ['The default model is deepseek-official / v4. Add its key.'], protection: 'on', changes: true,
+  replaces: ['plugins-listed', 'model', 'settings'],
+  install: [{ name: 'plug', version: '1.0.0', kind: 'add', source: 'local' }, { name: 'left-pad', version: '1.3.0', kind: 'replace', source: 'registry', was: { kind: 'version', version: '1.2.0' } }],
+  remove: ['old-plugin'], keep: [], settingChanges: [{ kind: 'changed', label: 'llm-deepseek' }], endpoints: [{ field: 'providers.x.baseURL', url: 'https://m.example.com/v1' }], leftOut: [{ subject: 'sandbox-policy', code: 'computer' }],
+  keys: [{ kind: 'model', provider: 'deepseek-official', model: 'v4' }], protection: 'on', changes: true,
 }
-const APPLIED: SetupApplyView = { savedVersion: 'v'.repeat(40), removed: ['old-plugin'], installed: [{ name: 'plug', reviewChange: 'c0123456789' }, { name: 'left-pad' }], settingsWritten: true, keyNotes: ['The default model is deepseek-official / v4. Add its key.'], protection: 'on' }
+const APPLIED: SetupApplyView = { savedVersion: 'v'.repeat(40), removed: ['old-plugin'], installed: [{ name: 'plug', reviewChange: 'c0123456789' }, { name: 'left-pad' }], settingsWritten: true, keys: [{ kind: 'model', provider: 'deepseek-official', model: 'v4' }], protection: 'on' }
 
 type Answer = { status: number; body?: unknown }
 
@@ -102,7 +102,7 @@ describe('Export setup', () => {
     expect(bodies(home)).toEqual([{ settings: true, localCode: true }])
     expect(saved).toHaveLength(1)
     expect([...saved[0]!.bytes]).toEqual([1, 2, 3])
-    expect(screen.getByText('sandbox-policy: belongs to this computer')).toBeTruthy()
+    expect(screen.getByText('sandbox-policy belongs to this computer, so a setup does not carry it.')).toBeTruthy()
   })
 
   it('sends the choices: no settings, no code of one\'s own, one plugin, a note', async () => {
@@ -145,7 +145,9 @@ describe('Import setup', () => {
     expect(within(review).getByText('old-plugin')).toBeTruthy()
     expect(within(review).getByText('plug 1.0.0, made on another computer. Its code waits for your review.')).toBeTruthy()
     expect(within(review).getByText(/left-pad 1\.3\.0, from the registry\. \(now: version 1\.2\.0\)/u)).toBeTruthy()
-    expect(within(review).getByText('changed: llm-deepseek')).toBeTruthy()
+    expect(within(review).getByText('Changed llm-deepseek')).toBeTruthy()
+    expect(within(review).getByText('providers.x.baseURL sends requests to https://m.example.com/v1')).toBeTruthy()
+    expect(within(review).getByText('sandbox-policy belongs to this computer, so a setup does not carry it.')).toBeTruthy()
     expect(within(review).getByText(/https:\/\/m\.example\.com\/v1/u)).toBeTruthy()
     expect(within(review).getByText(en['transfer.protection.on'])).toBeTruthy()
     expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.inspect}`)!.body).toEqual({ file: toBase64(new Uint8Array([9, 8, 7])), settings: true, removeOthers: false })
@@ -157,7 +159,7 @@ describe('Import setup', () => {
     const done = await appears(container, '[data-setup-done]')
     expect(done.textContent).toContain('Before importing a setup')
     expect(done.textContent).toContain('plug')
-    expect(done.textContent).toContain('The default model is deepseek-official / v4. Add its key.')
+    expect(done.textContent).toContain('The default model is deepseek-official / v4. Add its key with delorun setup key')
     expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.apply}`)!.body).toEqual({ token: 'tok', settings: true, removeOthers: false })
   })
 
@@ -200,7 +202,7 @@ describe('Import setup', () => {
   })
 
   it('offers no Replace button when the profile already has the setup, shows a file the home refused, and a refusal to apply', async () => {
-    const same: SetupInspectView = { ...INSPECTED, install: [], remove: [], settings: [], changes: false }
+    const same: SetupInspectView = { ...INSPECTED, install: [], remove: [], settingChanges: [], changes: false }
     const refused = host({ [LIST]: listing, [`POST ${SETUP_PATHS.inspect}`]: { status: 422, body: { code: 'ARCHIVE_CHECKSUM_MISMATCH', message: 'The entry is not the content its manifest digest names.' } } })
     const first = renderSection(refused.fetch)
     await screen.findByRole('button', { name: en['transfer.import'] })
@@ -235,6 +237,23 @@ describe('Import setup', () => {
     renderSection(refused.fetch)
     fireEvent.click(await screen.findByRole('button', { name: en['transfer.export'] }))
     expect((await screen.findByRole('alert')).textContent).toBe(en.loopback)
+  })
+
+  it('words everything the home sends as codes in the Chinese dictionary, with no English left over', async () => {
+    const home = host({ [LIST]: listing, [`POST ${SETUP_PATHS.inspect}`]: { status: 200, body: INSPECTED }, [`POST ${SETUP_PATHS.apply}`]: { status: 200, body: APPLIED } })
+    const { container } = renderSection(home.fetch, { dictionary: zh })
+    await screen.findByRole('button', { name: zh['transfer.import'] })
+    choose(container, new Uint8Array([1]))
+    const review = await appears(container, '[data-setup-review]')
+    for (const text of [
+      '更改 llm-deepseek', 'providers.x.baseURL 将向 https://m.example.com/v1 发送请求', 'sandbox-policy 属于这台电脑，因此 setup 不携带它。',
+    ]) expect(within(review).getByText(text), text).toBeTruthy()
+    expect(within(review).getByText(/^导入会替换此 profile 的这些部分：文件所列的插件（其他插件保留）; 模型提供方与模型选择; 其他设置。/u)).toBeTruthy()
+    expect(within(review).getByText(/当前：版本 1\.2\.0/u)).toBeTruthy()
+    fireEvent.click(within(review).getByRole('button', { name: zh['transfer.apply'] }))
+    const done = await appears(container, '[data-setup-done]')
+    expect(done.textContent).toContain('默认模型是 deepseek-official / v4。')
+    expect(done.textContent).not.toMatch(/The default model|Add its key/u)
   })
 
   it('has every sentence in the Chinese dictionary and round trips base64', async () => {

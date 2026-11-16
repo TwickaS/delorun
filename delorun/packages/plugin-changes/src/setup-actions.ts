@@ -150,7 +150,7 @@ export async function exportSetup(ctx: ChangesContext, version: string, choices:
     plugins: collected.document.plugins.length,
     local: collected.document.plugins.filter(plugin => plugin.source === 'local').length,
     settings: collected.document.models.length + collected.document.settings.length,
-    leftOut: collected.leftOut,
+    leftOut: collected.leftOutItems,
     signedBy: key.keyId,
     withoutCode: collected.document.plugins.filter(plugin => plugin.source === 'local' && plugin.files.length === 0).map(plugin => plugin.name),
   }
@@ -208,7 +208,7 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
     exportedAt: opened.exportedAt,
     ...opened.document.note === undefined ? {} : { note: opened.document.note },
     includesSettings: opened.document.includesSettings,
-    replaces: plan.replaces,
+    replaces: plan.replaceCodes,
     named: plan.named,
     sourceProfile: opened.document.profile,
     install: plan.install.map(item => ({
@@ -216,14 +216,14 @@ function view(token: string, opened: OpenedSetup, plan: SetupPlan, protection: '
       ...item.plugin.version === undefined ? {} : { version: item.plugin.version },
       kind: item.kind,
       source: item.plugin.source,
-      ...item.from === undefined ? {} : { from: item.from },
+      ...item.was === undefined ? {} : { was: item.was },
     })),
     remove: plan.remove,
     keep: plan.keep,
-    settings: plan.settings,
-    endpoints: plan.endpoints,
-    leftOut: plan.leftOut,
-    keyNotes: plan.keyNotes,
+    settingChanges: plan.settingChanges,
+    endpoints: plan.endpointItems,
+    leftOut: plan.leftOutItems,
+    keys: plan.keyItems,
     protection,
     changes: plan.changes,
   }
@@ -249,7 +249,7 @@ export async function applySetup(ctx: ChangesContext, token: string, held: HeldS
     removed: result.removed,
     installed: result.installed.map(item => ({ name: item.name, ...item.reviewChange === undefined ? {} : { reviewChange: item.reviewChange } })),
     settingsWritten: result.settingsWritten,
-    keyNotes: plan.keyNotes,
+    keys: plan.keyItems,
     protection: await readProtection(ctx.home),
   }
 }

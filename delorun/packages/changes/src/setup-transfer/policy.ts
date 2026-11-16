@@ -55,11 +55,29 @@ export function isProductPackage(name: string): boolean {
 /** One patch entry as a plain object. */
 export type PatchEntry = Readonly<Record<string, unknown>>
 
+/**
+ * Why a setup leaves something out, as a code the studio words in the person's language: `computer` for what belongs to
+ * one computer, `form` for an entry of a form a setup does not carry, `endpoint` for an endpoint that is not https,
+ * `expression` for a `!!js` expression, `secret` for a credential, `not-mapping`, `not-package-name`, `not-installed`,
+ * `not-approved`, `no-package-json` and `links` for a plugin's state.
+ */
+export type LeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links'
+
+/** One thing a setup leaves out: what it is and why. */
+export interface LeftOutItem {
+  /** The row id, the plugin name or a short label; never a value. */
+  readonly subject: string
+  readonly code: LeftOutCode
+}
+
+/** The words of a class problem that mean the entry belongs to one computer. */
+const COMPUTER_PROBLEMS: readonly string[] = ['belongs to this computer', 'plugin the setup does not carry']
+
 /** Whether a patch entry is carried, and why not when it is not. */
 export type EntryVerdict =
   | { readonly carry: true }
   /** `secret` is set when the entry would be carried but for a value that looks like a credential, which stops an export. */
-  | { readonly carry: false, readonly reason: string, readonly secret?: true }
+  | { readonly carry: false, readonly reason: string, readonly code: LeftOutCode, readonly label: string, readonly secret?: true }
 
 /**
  * @param value - any value.
@@ -120,24 +138,32 @@ export function judgeEntry(entry: PatchEntry, plugins: ReadonlySet<string>): Ent
   if (Object.hasOwn(entry, 'insert')) {
     const inserted = entry['insert']
     if (Object.keys(entry).some(key => !INSERT_FIELDS.has(key)) || !Array.isArray(inserted) || inserted.length === 0) {
-      return { carry: false, reason: `${label}: an insert entry of a form a setup does not carry` }
+      return { carry: false, reason: `${label}: an insert entry of a form a setup does not carry`, code: 'form', label }
     }
     rows = inserted
     for (const row of rows) {
       const problem = classProblem(row, plugins, false)
-      if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}` }
+      if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}`, code: codeOf(problem), label }
     }
   } else {
     rows = [entry]
     const problem = classProblem(entry, plugins, true)
-    if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}` }
+    if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}`, code: codeOf(problem), label }
   }
   const settings = rows.map(row => (row as Record<string, unknown>)['config'])
   const secret = settings.flatMap(config => secretPlaces(config))[0]
-  if (secret !== undefined) return { carry: false, secret: true, reason: `${label}: ${secret}` }
+  if (secret !== undefined) return { carry: false, secret: true, reason: `${label}: ${secret}`, code: 'secret', label }
   const endpoint = settings.flatMap(config => endpointProblems(config))[0]
-  if (endpoint !== undefined) return { carry: false, reason: `${label}: ${endpoint}` }
+  if (endpoint !== undefined) return { carry: false, reason: `${label}: ${endpoint}`, code: 'endpoint', label }
   return { carry: true }
+}
+
+/**
+ * @param problem - a class problem's words.
+ * @returns the code the studio words it by.
+ */
+function codeOf(problem: string): LeftOutCode {
+  return COMPUTER_PROBLEMS.some(words => problem.includes(words)) ? 'computer' : problem === 'is not a mapping' ? 'not-mapping' : 'form'
 }
 
 /**

@@ -27,6 +27,26 @@ export const SETUP_PATHS = {
   apply: `${CHANGES_ROUTE_PREFIX}/setup-apply`,
 } as const
 
+/** Why a setup leaves something out, as a code the screen words. */
+export type SetupLeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links'
+
+/** One thing a setup leaves out: a row id or plugin name, and why. */
+export interface SetupLeftOutView {
+  readonly subject: string
+  readonly code: SetupLeftOutCode
+}
+
+/** What the profile has now for a plugin an import moves. */
+export type SetupWasView =
+  | { readonly kind: 'version', readonly version: string }
+  | { readonly kind: 'not-installed' | 'registry', readonly spec: string }
+  | { readonly kind: 'local' | 'local-unapproved' | 'local-other' }
+
+/** A key to add after an import: the default model's provider, or a variable a provider reads. */
+export type SetupKeyView =
+  | { readonly kind: 'model', readonly provider: string, readonly model?: string }
+  | { readonly kind: 'variable', readonly name: string }
+
 /** What `setup-export` answers to `{ list: true }`: the plugins the profile could put in a file. */
 export interface SetupPluginsView {
   readonly plugins: readonly { readonly name: string, readonly source: 'registry' | 'local' }[]
@@ -44,8 +64,8 @@ export interface SetupExportView {
   readonly local: number
   /** The settings entries in the file. */
   readonly settings: number
-  /** What the file does not carry, one sentence each. */
-  readonly leftOut: readonly string[]
+  /** What the file does not carry, as codes. */
+  readonly leftOut: readonly SetupLeftOutView[]
   /** The fingerprint of the key that signed the file. */
   readonly signedBy: string
   /** The plugins of one's own that went in without their code, for the person to copy. */
@@ -60,7 +80,7 @@ export interface SetupInstallView {
   /** Where it comes from: the registry, or files made on another computer whose code waits for review. */
   readonly source: 'registry' | 'local'
   /** What the profile has now, when it replaces one. */
-  readonly from?: string
+  readonly was?: SetupWasView
 }
 
 /** What `setup-inspect` answers: who signed the file, and everything the import would change. */
@@ -74,8 +94,8 @@ export interface SetupInspectView {
   readonly note?: string
   /** Whether the file includes settings besides the model; the Include settings switch is offered only then. */
   readonly includesSettings: boolean
-  /** The parts of the setup this import replaces, in words. */
-  readonly replaces: readonly string[]
+  /** The parts of the setup this import replaces. */
+  readonly replaces: readonly ('plugins-listed' | 'plugins-all' | 'model' | 'settings' | 'settings-off' | 'settings-none')[]
   /** Plugins the file names without their code. */
   readonly named: readonly string[]
   /** The profile the file was exported from. */
@@ -83,10 +103,10 @@ export interface SetupInspectView {
   readonly install: readonly SetupInstallView[]
   readonly remove: readonly string[]
   readonly keep: readonly string[]
-  readonly settings: readonly string[]
-  readonly endpoints: readonly string[]
-  readonly leftOut: readonly string[]
-  readonly keyNotes: readonly string[]
+  readonly settingChanges: readonly { readonly kind: 'set' | 'changed' | 'default', readonly label: string }[]
+  readonly endpoints: readonly { readonly field: string, readonly url: string }[]
+  readonly leftOut: readonly SetupLeftOutView[]
+  readonly keys: readonly SetupKeyView[]
   readonly protection: 'on' | 'off'
   /** Whether the import changes anything. */
   readonly changes: boolean
@@ -99,7 +119,7 @@ export interface SetupApplyView {
   readonly removed: readonly string[]
   readonly installed: readonly { readonly name: string, readonly reviewChange?: string }[]
   readonly settingsWritten: boolean
-  readonly keyNotes: readonly string[]
+  readonly keys: readonly SetupKeyView[]
   readonly protection: 'on' | 'off'
 }
 
