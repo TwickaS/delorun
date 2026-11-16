@@ -63,7 +63,7 @@ export const COPY = {
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
   /** The alternative text of the studio picture in the hero. */
-  heroImageAlt: 'The Delorun studio in a browser, with a chat beside the sidebar.',
+  heroImageAlt: 'The Delorun studio in a browser: a list of chats and workspaces on the left, and on the right a chat about laying out four raised beds, with a table of the beds and a JSON file the assistant wrote.',
   /** What the install command asks first on a new home, as the setup prints it. */
   terminal: (command: string) => `$ ${command}
 ? How will you use Delorun?

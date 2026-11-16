@@ -24,10 +24,10 @@ export const SUPPORT_EMAIL = 'support@delorun.com'
 export const OG_IMAGE_PATH = '/og.png'
 
 /**
- * The site path of the studio picture in the home page's hero. PLACEHOLDER: `public/hero-studio.svg` holds a plain
- * frame until the real screenshot replaces it; change this path when the screenshot has another name or type.
+ * The site path of the studio picture in the home page's hero: a 1440 by 900 screenshot of the demonstration home
+ * (`delorun/apps/tools/README.md` lists how it is taken). Change this path when the picture has another name or type.
  */
-export const HERO_IMAGE_PATH = '/hero-studio.svg'
+export const HERO_IMAGE_PATH = '/hero-studio.webp'
 
 /** The pages the sitemap lists besides the blog index, which it lists once an article is published. */
 export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy']

@@ -150,6 +150,8 @@ Approval is meant for you, at your computer. Three facts help you keep it that w
 
 An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions need a short [unlock](../reference/glossary.md#unlock) that you approve at your computer, and a few things never work from a phone.
 
+![The studio at phone width: a chat about laying out raised beds, with the assistant's reply and a JSON block above the message box.](pictures/phone-chat.webp)
+
 Without an unlock, the phone can:
 
 - read your chats and workspaces, and follow a chat while it runs;

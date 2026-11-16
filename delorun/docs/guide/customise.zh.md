@@ -33,6 +33,8 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 1. 在侧边栏底部选择 Settings。在左侧列表中，选择 General 下的 Appearance。
 2. 在 Theme 下你会看到 Soft、Slate、Berry、Grove、Ocean、Ember 和 Iris。Soft 是 Delorun 起初使用的主题。选择 Ocean。
+
+   ![Settings 中的 Appearance，已选中 Soft 主题：studio 呈现 Delorun 起初的颜色，Theme 下列出七个主题。](pictures/theme-soft.webp)
 3. studio 的颜色立即改变。Delorun 已把你的选择保存在你的 profile 中：`~/.delorun/profiles/default/` 下的 `cordis.patch.yml` 现在以主题的一个[行](../reference/glossary.zh.md#row)结尾，Settings → Setup versions 列出了一个名为 Changed the settings of Theme 的版本。
 
    ```yaml
@@ -42,6 +44,8 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
        studioAdditions: true
        palette: ocean
    ```
+
+   ![Settings 中的 Appearance，选择 Ocean 之后：studio 的颜色和所选控件的高亮都变成了蓝色。](pictures/theme-ocean.webp)
 
 4. 要撤销它，在 Theme 下选择 Soft。颜色恢复，该行再次写着 `palette: soft`。
 

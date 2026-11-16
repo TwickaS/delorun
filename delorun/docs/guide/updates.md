@@ -130,6 +130,8 @@ The one thing a folder can loosen is the channel's confirmation that this is the
 
 Settings → Data → Setup versions lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
 
+![Settings, Setup versions: one saved version, Changed the settings of Theme, marked Current, with a What changes button and a field to save this setup.](pictures/setup-versions.webp)
+
 - **Save this setup** keeps the setup as it is now, with a name if you give one. If the latest version already holds it, nothing new is saved and the page says so.
 - **What changes** on a version shows, in plain words, which plugins would come back, change version or be removed, which bundles would join or leave your bundle list, whether your plugin rows and settings change, and which version exemptions and build decisions change. It writes nothing.
 - **Switch to this version** saves your current setup as a version first, then brings the chosen one back. The page tells you what changed and that Delorun runs the switched setup after a restart: run `delorun stop`, then `delorun start`. Switching back is switching to the version saved before, so keeping a setup or going back is the same step.

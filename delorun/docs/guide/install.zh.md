@@ -265,6 +265,8 @@ studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开�
 
 第一次使用时，studio 会逐步显示一个简短的新手引导，以一次 chat 结束：
 
+![新 home 上 studio 的首次运行向导：欢迎步骤，列出语言选项和预发布说明，背后是空的 chat 列表。](pictures/first-run-guide.webp)
+
 1. **Welcome。**选择语言。一条预览版通知会说明 Delorun 是 DeepSeek Harness 的社区分支，仍处于预览阶段；选择 Continue 表示你已知晓。
 2. **Models。**勾选你使用的模型提供方。对每一家，粘贴它的密钥并选择 **Connect**，或选择 **Skip**。环境变量中找到的密钥会显示为 “Key found”。随后一份摘要会列出已设置的内容。
 3. **Look。**选择颜色和主题，或 stock 外观。

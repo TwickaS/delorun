@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { cpSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
@@ -61,6 +61,19 @@ function sitemapFile(): Plugin {
   }
 }
 
+/**
+ * Copies the guide's pictures into the client output at `/guide/pictures/`. The pages' HTML bundles each picture with a
+ * content hash; the Markdown routes keep the relative path `pictures/<file>`, which resolves there.
+ * @returns the plugin.
+ */
+function guidePictures(): Plugin {
+  return {
+    name: 'delorun-guide-pictures',
+    apply: 'build',
+    closeBundle: { order: 'post', sequential: true, handler() { cpSync(join(repositoryRoot(), 'delorun/docs/guide/pictures'), join(OUT_DIR, 'guide/pictures'), { recursive: true }) } },
+  }
+}
+
 export default defineConfig({
   define: { 'import.meta.env.DELORUN_VERSION': JSON.stringify(describedVersion) },
   // The static site is the client build in out/; the server build under .build/ exists only to prerender it.
@@ -69,6 +82,7 @@ export default defineConfig({
   plugins: [
     changelogModule(changelog),
     sitemapFile(),
+    guidePictures(),
     fumadocsMdx(),
     tailwindcss(),
     tanstackStart({

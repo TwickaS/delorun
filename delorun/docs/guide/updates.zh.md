@@ -148,6 +148,8 @@ delorun update --from ~/Downloads/delorun-0.2.0
 
 “设置”→“数据”→“设置版本”列出 Delorun 为你的设置（即你的插件、bundle 和设置）保存的版本，最新的在前。当前版本有标记，每个版本都说明它是怎么产生的：一次更新、你的一次保存，或一次切换。它与 `delorun recover` 使用的是同一份历史，所以在这里保存的版本可以在那里恢复，反之亦然。
 
+![Settings 中的 Setup versions：一个已保存的版本“Changed the settings of Theme”，标有 Current，旁边有 What changes 按钮和保存此设置的输入框。](pictures/setup-versions.webp)
+
 - **Save this setup** 保存当前的设置，如果你给出名称就带上名称。如果最新的版本已经包含它，则不会保存新的内容，页面会这样说明。
 - 版本上的 **What changes** 用平实的话显示哪些插件会回来、更改版本或被移除，哪些 bundle 会加入或离开你的 bundle 列表，你的插件行和设置是否改变，以及哪些版本豁免和构建决定会改变。它不写入任何东西。
 - **Switch to this version** 先把你当前的设置保存为一个版本，然后带回所选的那个。页面会告诉你改变了什么，以及 Delorun 在重启之后才会运行切换后的设置：请运行 `delorun stop`，再运行 `delorun start`。切换回去就是切换到之前保存的版本，所以保留一套设置和回退是同一个步骤。

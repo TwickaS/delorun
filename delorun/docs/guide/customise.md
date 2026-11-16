@@ -29,6 +29,8 @@ The quickest visible change is the studio's theme. It needs no file, no restart 
 
 1. At the foot of the sidebar, choose Settings. In the list on the left, choose Appearance, under General.
 2. Under Theme you see Soft, Slate, Berry, Grove, Ocean, Ember and Iris. Soft is the theme Delorun starts with. Choose Ocean.
+
+   ![Settings, Appearance, with the Soft theme chosen: the studio in the colours Delorun starts with and the seven themes listed under Theme.](pictures/theme-soft.webp)
 3. The studio's colours change at once. Delorun saved your choice in your profile: `cordis.patch.yml` under `~/.delorun/profiles/default/` now ends with a [row](../reference/glossary.md#row) for the theme, and Settings → Setup versions lists a version called Changed the settings of Theme.
 
    ```yaml
@@ -38,6 +40,8 @@ The quickest visible change is the studio's theme. It needs no file, no restart 
        studioAdditions: true
        palette: ocean
    ```
+
+   ![Settings, Appearance, after choosing Ocean: the studio's colours and the highlight on the chosen controls have turned blue.](pictures/theme-ocean.webp)
 
 4. To undo it, choose Soft under Theme. The colours return and the row says `palette: soft`.
 
