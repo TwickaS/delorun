@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PALETTES } from '../src/config.ts'
+import { PRESET_PALETTES as PALETTES } from '../src/config.ts'
 import { parseT3Constants, parseT3Themes } from '../src/palette/t3-source.ts'
 import { t3Palette, T3_THEME_IDS } from '../src/palette/t3.ts'
 import { T3_THEMES } from '../src/palette/t3-themes.ts'

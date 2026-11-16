@@ -9,6 +9,7 @@ import { CONTRAST, DENSITY_SCALE, type Density, type ThemeSettings } from '../co
 import { formatRgb, type Rgb } from './color.ts'
 import { t3Palette } from './t3.ts'
 import { applyLayers, requireResolved, type TokenLayer } from './generate.ts'
+import { lookOf } from './migrate.ts'
 import { accentFromColor, accentLayer, ACCENTS, fontLayer, paletteLayer, parseHex, SOFT } from './soft.ts'
 import type { AccentSpec } from './soft.ts'
 import { STOCK_TOKENS } from './stock.ts'
@@ -29,11 +30,13 @@ export interface ThemeLayers {
 
 /**
  * The accent a setting names.
- * @param settings - the theme settings.
- * @returns a T3 Code theme's own accent, the preset, or the custom colour's accent; a custom colour that does not parse falls back to Peach.
+ * @param stored - the theme settings, as stored; read through {@link lookOf}.
+ * @returns a preset palette's own accent, the custom theme's accent preset, or the custom colour's accent; a custom colour that does not parse falls back to Peach.
  */
-export function chosenAccent(settings: ThemeSettings): AccentSpec {
-  if (settings.palette !== 'soft') return t3Palette(settings.palette).accent
+export function chosenAccent(stored: ThemeSettings): AccentSpec {
+  const settings = lookOf(stored)
+  if (settings.palette === 'soft') return ACCENTS.peach
+  if (settings.palette !== 'custom') return t3Palette(settings.palette).accent
   if (settings.accent !== 'custom') return ACCENTS[settings.accent]
   const color = parseHex(settings.customAccent)
   return color === undefined ? ACCENTS.peach : accentFromColor(color)
@@ -41,18 +44,19 @@ export function chosenAccent(settings: ThemeSettings): AccentSpec {
 
 /**
  * Build the layers for a set of settings.
- * @param settings - the theme settings.
+ * @param stored - the theme settings, as stored; read through {@link lookOf}.
  * @returns the layers to apply.
  */
-export function themeLayers(settings: ThemeSettings): ThemeLayers {
+export function themeLayers(stored: ThemeSettings): ThemeLayers {
+  const settings = lookOf(stored)
   if (!settings.studioAdditions) return {}
-  const palette = settings.palette === 'soft' ? SOFT : t3Palette(settings.palette).palette
+  const palette = settings.palette === 'soft' || settings.palette === 'custom' ? SOFT : t3Palette(settings.palette).palette
   const colour = { palette: paletteLayer(palette), accent: accentLayer(chosenAccent(settings), palette) }
   return {
     ...colour,
     ...settings.typeface === 'delorun' ? { type: fontLayer() } : {},
     density: densityLayer(settings.density),
-    ...settings.contrast === CONTRAST.default ? {} : { contrast: contrastLayer([colour.palette, colour.accent], settings.contrast) },
+    ...settings.palette !== 'custom' || settings.contrast === CONTRAST.default ? {} : { contrast: contrastLayer([colour.palette, colour.accent], settings.contrast) },
   }
 }
 

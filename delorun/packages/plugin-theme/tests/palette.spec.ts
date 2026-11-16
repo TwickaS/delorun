@@ -8,7 +8,7 @@ import { accentFromColor, accentLayer, ACCENT_IDS, ACCENTS, BRAND_RAMP, fontLaye
 import type { AccentSpec, PaletteSpec } from '../src/palette/soft.ts'
 import { bootStyle, chosenAccent, CONTRAST_ROLES, contrastLayer, densityLayer, previewColors, STOCK_ATTRIBUTE, themeLayers } from '../src/palette/layers.ts'
 import { t3Palette, T3_THEME_IDS } from '../src/palette/t3.ts'
-import { DEFAULT_SETTINGS as STORED_DEFAULTS, PALETTES } from '../src/config.ts'
+import { DEFAULT_SETTINGS as STORED_DEFAULTS, PRESET_PALETTES as PALETTES } from '../src/config.ts'
 import { STOCK_FONT_STACKS, STOCK_TOKENS } from '../src/palette/stock.ts'
 import { parseRootTokens, parseStockTokens } from '../src/palette/stock-css.ts'
 

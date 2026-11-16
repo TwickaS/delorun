@@ -13,6 +13,7 @@
     "src/palette/color.ts",
     "src/palette/generate.ts",
     "src/palette/layers.ts",
+    "src/palette/migrate.ts",
     "src/palette/soft.ts",
     "src/palette/stock.ts",
     "src/palette/stock-css.ts",
