@@ -117,10 +117,12 @@ const STYLE = styleAsset()
  * `/favicon.svg` (only a session reaches it), so the page carries these as pre-login assets.
  */
 const FAVICON_LIGHT = namedAsset('favicon-light', 'svg', 'image/svg+xml', faviconIcon('light'))
+const FAVICON_PNG = asset('favicon-32.png', 'image/png')
+const APPLE_TOUCH_ICON = asset('apple-touch-icon.png', 'image/png')
 const FAVICON_DARK = namedAsset('favicon-dark', 'svg', 'image/svg+xml', faviconIcon('dark'))
 
 /** The sign-in page's assets by their content-hashed names: the only names the asset route answers. */
-export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE, FAVICON_LIGHT, FAVICON_DARK])
+export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE, FAVICON_LIGHT, FAVICON_DARK, FAVICON_PNG, APPLE_TOUCH_ICON])
 
 /** The sign-in page's markup, `assets/sign-in.html`, with its two placeholders. */
 const PAGE_TEMPLATE = fillBrand(readFileSync(new URL('../assets/sign-in.html', import.meta.url), 'utf8'))
@@ -132,7 +134,7 @@ const PAGE_TEMPLATE = fillBrand(readFileSync(new URL('../assets/sign-in.html', i
  */
 export const SIGN_IN_PAGE = PAGE_TEMPLATE
   .replace('{{style}}', `${REACH_PATHS.assets}/${STYLE[0]}`)
-  .replace('{{icons}}', iconLinkTags({ fallback: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, light: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, dark: `${REACH_PATHS.assets}/${FAVICON_DARK[0]}` }))
+  .replace('{{icons}}', iconLinkTags({ fallback: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, light: `${REACH_PATHS.assets}/${FAVICON_LIGHT[0]}`, dark: `${REACH_PATHS.assets}/${FAVICON_DARK[0]}`, png: `${REACH_PATHS.assets}/${FAVICON_PNG[0]}`, appleTouch: `${REACH_PATHS.assets}/${APPLE_TOUCH_ICON[0]}` }))
   .replace('{{script}}', `${REACH_PATHS.assets}/${SCRIPT[0]}`)
 
 /**

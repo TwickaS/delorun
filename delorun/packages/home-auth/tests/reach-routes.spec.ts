@@ -139,15 +139,20 @@ describe('the pre-login routes', () => {
     expect(SIGN_IN_PAGE).not.toMatch(/<script(?![^>]*\bsrc=)|<style|\son[a-z]+=|javascript:/i)
     const loaded = [...SIGN_IN_PAGE.matchAll(/\s(?:src|href)="([^"#][^"]*)"/g)].map(match => match[1])
     const names = [...SIGN_IN_ASSETS.keys()]
-    const [script, style, light, dark] = names.map(name => `${REACH_PATHS.assets}/${name}`)
-    expect(loaded).toEqual([light, dark, light, style, script, 'https://docs.delorun.com/guide/reach'])
+    const [script, style, light, dark, png, touch] = names.map(name => `${REACH_PATHS.assets}/${name}`)
+    expect(loaded).toEqual([light, dark, light, png, touch, style, script, 'https://docs.delorun.com/guide/reach'])
     expect(SIGN_IN_PAGE).not.toContain('{{')
-    expect(names).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/), expect.stringMatching(/^favicon-light-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-dark-[0-9a-f]{12}\.svg$/)])
+    expect(names).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/), expect.stringMatching(/^favicon-light-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-dark-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-32-[0-9a-f]{12}\.png$/), expect.stringMatching(/^apple-touch-icon-[0-9a-f]{12}\.png$/)])
   })
 
   it('carry the studio\'s tab icon on the sign-in page, as assets a device that has not signed in can fetch', () => {
     // Pins the icon links: without them the tab shows no icon on a reach address, where the studio's own files need a session.
-    const [, , light, dark] = [...SIGN_IN_ASSETS.keys()]
+    const [, , light, dark, png, touch] = [...SIGN_IN_ASSETS.keys()]
+    // iOS Safari draws no SVG tab icon: it takes the PNG favicon and the home-screen icon.
+    expect(SIGN_IN_PAGE).toContain(`<link rel="icon" type="image/png" sizes="32x32" href="${REACH_PATHS.assets}/${png}">`)
+    expect(SIGN_IN_PAGE).toContain(`<link rel="apple-touch-icon" href="${REACH_PATHS.assets}/${touch}">`)
+    expect(SIGN_IN_ASSETS.get(png ?? '')).toMatchObject({ type: 'image/png' })
+    expect(SIGN_IN_ASSETS.get(touch ?? '')).toMatchObject({ type: 'image/png' })
     expect(SIGN_IN_PAGE).toContain(`<link rel="icon" type="image/svg+xml" href="${REACH_PATHS.assets}/${light}">`)
     expect(SIGN_IN_PAGE).toContain(`href="${REACH_PATHS.assets}/${dark}" media="(prefers-color-scheme: dark)"`)
     expect(SIGN_IN_ASSETS.get(light ?? '')?.body.toString()).toBe(faviconIcon('light'))

@@ -15,6 +15,10 @@ export interface IconLinkHrefs {
   readonly fallback: string
   /** The multi-size `favicon.ico`, when the page's origin serves it. */
   readonly ico?: string
+  /** The 32 pixel PNG favicon, for browsers that do not draw SVG tab icons. */
+  readonly png?: string
+  /** The 180 pixel home-screen icon iOS Safari takes from `apple-touch-icon`. */
+  readonly appleTouch?: string
 }
 
 /**
@@ -28,5 +32,7 @@ export function iconLinkTags(hrefs: IconLinkHrefs): string {
     `<link rel="icon" type="image/svg+xml" href="${hrefs.dark}" media="(prefers-color-scheme: dark)">`,
     `<link rel="icon" type="image/svg+xml" href="${hrefs.light}" media="(prefers-color-scheme: light)">`,
     ...hrefs.ico === undefined ? [] : [`<link rel="icon" href="${hrefs.ico}" sizes="any">`],
+    ...hrefs.png === undefined ? [] : [`<link rel="icon" type="image/png" sizes="32x32" href="${hrefs.png}">`],
+    ...hrefs.appleTouch === undefined ? [] : [`<link rel="apple-touch-icon" href="${hrefs.appleTouch}">`],
   ].join('\n')
 }

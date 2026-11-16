@@ -46,7 +46,10 @@ if (args.includes('--write')) {
   writeFileSync(join(web, 'favicon.svg'), faviconIcon('light'))
   writeFileSync(join(web, 'favicon-dark.svg'), faviconIcon('dark'))
   writeFileSync(join(web, 'favicon.ico'), buildIco(await Promise.all(FAVICON_ICO_SIZES.map(async size => ({ size, png: await png(webIcon(0, 0.62), size) })))))
-  execFileSync('node_modules/.bin/tsx', ['scripts/render-tray-icon.ts'], { cwd: join(root, 'apps/desktop'), stdio: 'inherit' })
+  const reachAssets = join(root, 'delorun/packages/home-auth/assets')
+  writeFileSync(join(reachAssets, 'favicon-32.png'), await png(webIcon(0, 0.62), 32))
+  writeFileSync(join(reachAssets, 'apple-touch-icon.png'), await png(webIcon(0, 0.62), 180))
+  execFileSync(join(root, 'node_modules/.bin/tsx'), ['scripts/render-tray-icon.ts'], { cwd: join(root, 'apps/desktop'), stdio: 'inherit' })
 }
 
 const previews = args[args.indexOf('--previews') + 1]

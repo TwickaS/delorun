@@ -5,12 +5,14 @@ import { iconLinkTags } from '../src/icon-links.ts'
 
 describe('the tab icon tags', () => {
   it('list a plain SVG first, the themed variants after it, and the ICO last', () => {
-    const tags = iconLinkTags({ fallback: '/a.svg', light: '/l.svg', dark: '/d.svg', ico: '/f.ico' }).split('\n')
+    const tags = iconLinkTags({ fallback: '/a.svg', light: '/l.svg', dark: '/d.svg', ico: '/f.ico', png: '/p.png', appleTouch: '/t.png' }).split('\n')
     expect(tags).toEqual([
       '<link rel="icon" type="image/svg+xml" href="/a.svg">',
       '<link rel="icon" type="image/svg+xml" href="/d.svg" media="(prefers-color-scheme: dark)">',
       '<link rel="icon" type="image/svg+xml" href="/l.svg" media="(prefers-color-scheme: light)">',
       '<link rel="icon" href="/f.ico" sizes="any">',
+      '<link rel="icon" type="image/png" sizes="32x32" href="/p.png">',
+      '<link rel="apple-touch-icon" href="/t.png">',
     ])
     expect(iconLinkTags({ fallback: '/a.svg', light: '/l.svg', dark: '/d.svg' }).split('\n')).toHaveLength(3)
   })

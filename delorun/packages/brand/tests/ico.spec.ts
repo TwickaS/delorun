@@ -56,3 +56,18 @@ describe('apps/web/public/favicon.ico', () => {
     }
   })
 })
+
+describe('the sign-in page\'s PNG icons', () => {
+  const asset = (name: string): Buffer => readFileSync(new URL(`delorun/packages/home-auth/assets/${name}`, root))
+
+  it.each([['favicon-32.png', 32], ['apple-touch-icon.png', 180]] as const)('%s is the web icon rendered at %i pixels', async (name, size) => {
+    const bytes = asset(name)
+    const render = sharp(Buffer.from(webIcon(0, 0.62).replace('<svg ', `<svg width="${String(size)}" height="${String(size)}" `)))
+    expect(Buffer.compare(await sharp(bytes).ensureAlpha().raw().toBuffer(), await render.ensureAlpha().raw().toBuffer())).toBe(0)
+    expect((await sharp(bytes).metadata()).width).toBe(size)
+  })
+
+  it('keeps the home-screen icon equal to the web app\'s', () => {
+    expect(Buffer.compare(asset('apple-touch-icon.png'), readFileSync(new URL('apps/web/public/apple-touch-icon.png', root)))).toBe(0)
+  })
+})
