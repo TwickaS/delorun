@@ -6,8 +6,6 @@ description: "在你运行大量第三方插件时更新 Delorun：Delorun 在�
 
 [English](updating-with-plugins.md) | 中文
 
-本页描述 Delorun 目前的工作方式。
-
 ## 摘要
 
 本页面向运行大量他人所写插件的人。如果某个发布版本不在某个插件声明的版本范围之内，它就会排除该插件，更新会把该插件关闭。你可以在决定之前看到是哪些插件，可以强行尝试其中一个，如果新的发布版本对你不适用，也可以回退。你需要通过启动器安装 Delorun，并安装有 git（前提条件见[更新](updates.zh.md)）。各步骤按顺序进行：之前、检查、更新、之后。
@@ -32,7 +30,7 @@ Delorun 自己保存你的设置，所以你不必手工复制。在切换之前
 delorun update --data-copy
 ```
 
-对于不能丢失的工作，还要用 `delorun export <chat-or-workspace> --out <file>` 把它导出，它会把一个 chat，或一个连同其 chat 的工作区，保存为另一个 home 可以导入的文件（见[日常使用](daily-use.zh.md#trash-export-and-import)）。导出涵盖 chat 和工作区，不涵盖插件。
+为了保住你的 chat，还要用 `delorun export <chat-or-workspace> --out <file>` 把它们导出，它会把一个 chat，或一个工作区的记录连同其 chat 和附件，保存为另一个 home 可以导入的文件（见[日常使用](daily-use.zh.md#trash-export-and-import)）。导出不包含工作区文件夹中的文件，也不包含你的插件，所以它不是项目的备份。
 
 <a id="check-read-the-report"></a>
 
@@ -77,7 +75,7 @@ Delorun 在保存豁免之前会打印风险。请使用报告中点名的插件
 
 ## 更新：健康检查
 
-运行 `delorun update`。它会再次打印报告并询问 `Apply the update to Delorun <version>?`。`delorun update --yes` 只确认不会关闭任何东西、不会移除任何东西、也不含 Delorun 无法预测的内容的报告，所以插件很多时，你通常需要自己回答这个问题。报告的有效期是十分钟。
+运行 `delorun update`。它会再次打印报告并询问 `Apply the update to Delorun <version>?`。`delorun update --yes` 只确认不会关闭任何东西、不会移除任何东西、不会合并你对 Delorun 自身文件的改动、也不含 Delorun 无法预测的内容的报告，而且只在发布日志检查通过时才可用，所以插件很多时，你通常需要自己回答这个问题。报告的有效期是十分钟。
 
 切换之后，新的发布版本有两分钟时间通过它的健康检查。该检查验证：
 

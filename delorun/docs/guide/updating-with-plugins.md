@@ -6,8 +6,6 @@ description: "Updating Delorun when you run many third-party plugins: what Delor
 
 English | [中文](updating-with-plugins.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 This page is for people who run many plugins that other people wrote. A release can exclude a plugin whose declared version range does not admit it, and the update turns that plugin off. You can see which ones before you decide, try one anyway, and go back if the new release does not work for you. You need Delorun installed with its launcher and git ([Updates](updates.md) lists the prerequisites). The steps run in order: before, check, update, after.
@@ -30,7 +28,7 @@ Your chats are not part of that snapshot. Most releases store them as the releas
 delorun update --data-copy
 ```
 
-For work you cannot lose, also write it out with `delorun export <chat-or-workspace> --out <file>`, which saves a chat, or a workspace with its chats, as a file another home imports ([Daily use](daily-use.md#trash-export-and-import)). Export covers chats and workspaces, not plugins.
+To keep your chats safe, also write them out with `delorun export <chat-or-workspace> --out <file>`, which saves a chat, or a workspace's record with its chats and attachments, as a file another home imports ([Daily use](daily-use.md#trash-export-and-import)). Export does not hold the files in a workspace's folder or your plugins, so it is not a backup of a project.
 
 ## Check: read the report
 
@@ -71,7 +69,7 @@ Run `delorun update --report` again to see the line change, then decide.
 
 ## Update: the health check
 
-Run `delorun update`. It prints the report again and asks `Apply the update to Delorun <version>?`. `delorun update --yes` confirms only a report that turns nothing off, removes nothing and holds nothing Delorun cannot predict, so with many plugins you will usually answer the question yourself. A report is valid for ten minutes.
+Run `delorun update`. It prints the report again and asks `Apply the update to Delorun <version>?`. `delorun update --yes` confirms only a report that turns nothing off, removes nothing, merges none of your changes to Delorun's own files and holds nothing Delorun cannot predict, and only when the release-log check passed, so with many plugins you will usually answer the question yourself. A report is valid for ten minutes.
 
 After the switch, the new release has two minutes to pass its health check. The check verifies that:
 
