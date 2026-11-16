@@ -34,6 +34,7 @@ export const REACH_DEVICE_PATHS: readonly ReachDevicePath[] = [
   { path: '/manifest.webmanifest', match: 'exact', reason: INSTALL_FILE },
   { path: '/favicon.svg', match: 'exact', reason: INSTALL_FILE },
   { path: '/favicon-dark.svg', match: 'exact', reason: INSTALL_FILE },
+  { path: '/favicon.ico', match: 'exact', reason: INSTALL_FILE },
   { path: '/apple-touch-icon.png', match: 'exact', reason: INSTALL_FILE },
   { path: '/icon-192.png', match: 'exact', reason: INSTALL_FILE },
   { path: '/icon-512.png', match: 'exact', reason: INSTALL_FILE },

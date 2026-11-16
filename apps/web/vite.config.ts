@@ -40,8 +40,9 @@ function clientDocumentTitle(): Plugin {
     },
     async closeBundle() {
       const path = resolve(outputDirectory, 'manifest.webmanifest')
-      // A build without public assets writes no manifest; there is then nothing to rename.
-      if (!existsSync(path)) return
+      // A build without public assets writes no manifest; there is then nothing to rename. A build without a title
+      // variable keeps the source manifest's own name rather than the document title's "DSH Local Build" default.
+      if (process.env.DSH_CLIENT_TITLE === undefined || !existsSync(path)) return
       const manifest = JSON.parse(await readFile(path, 'utf8')) as { name?: string, short_name?: string }
       await writeFile(path, `${JSON.stringify({ ...manifest, name: rawTitle, short_name: rawTitle }, null, 2)}\n`)
     },

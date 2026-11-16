@@ -3,7 +3,7 @@
  *
  * `node --experimental-strip-types delorun/packages/brand/scripts/render-icon.ts --write` rewrites the desktop and web icon
  * files in the repository: `apps/desktop/resources/icon*.svg|png`, the tray icon (through
- * `apps/desktop/scripts/render-tray-icon.ts`) and the web app's favicons and PNG icons.
+ * `apps/desktop/scripts/render-tray-icon.ts`) and the web app's favicons (SVG and `favicon.ico`) and PNG icons.
  * `... --previews <dir>` writes `icon-<size>-<light|dark>.png` previews at 16, 32, 256 and 1024 px, where 16 and 32 show
  * the enlarged tray hex. Needs `sharp` from `apps/desktop`.
  *
@@ -14,10 +14,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildIco } from '../src/ico.ts'
 import { faviconIcon, macosIcon, plainIcon, webIcon, windowsIcon } from '../src/icons.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const sharp = createRequire(join(root, 'apps/desktop/package.json'))('sharp') as typeof import('sharp')
+/** The edges `favicon.ico` holds: the ink tile with the mark, which reads on a light and a dark tab strip. */
+const FAVICON_ICO_SIZES = [16, 32, 48] as const
 const args = process.argv.slice(2)
 
 /** Rasterize an SVG document to a square PNG of `size` pixels. */
@@ -42,7 +45,11 @@ if (args.includes('--write')) {
   }
   writeFileSync(join(web, 'favicon.svg'), faviconIcon('light'))
   writeFileSync(join(web, 'favicon-dark.svg'), faviconIcon('dark'))
-  execFileSync('node_modules/.bin/tsx', ['scripts/render-tray-icon.ts'], { cwd: join(root, 'apps/desktop'), stdio: 'inherit' })
+  writeFileSync(join(web, 'favicon.ico'), buildIco(await Promise.all(FAVICON_ICO_SIZES.map(async size => ({ size, png: await png(webIcon(0, 0.62), size) })))))
+  const reachAssets = join(root, 'delorun/packages/home-auth/assets')
+  writeFileSync(join(reachAssets, 'favicon-32.png'), await png(webIcon(0, 0.62), 32))
+  writeFileSync(join(reachAssets, 'apple-touch-icon.png'), await png(webIcon(0, 0.62), 180))
+  execFileSync(join(root, 'node_modules/.bin/tsx'), ['scripts/render-tray-icon.ts'], { cwd: join(root, 'apps/desktop'), stdio: 'inherit' })
 }
 
 const previews = args[args.indexOf('--previews') + 1]

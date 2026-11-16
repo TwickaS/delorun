@@ -156,7 +156,7 @@
       "path": "apps/web/vite.config.ts",
       "class": "delorun-feature",
       "feature": "product-name",
-      "reason": "The build title variable DSH_CLIENT_TITLE also names the iOS home-screen title and the built web manifest, so Delorun's build sets the product name in every place the page presents it. Default values are unchanged."
+      "reason": "The build title variable DSH_CLIENT_TITLE also names the iOS home-screen title and the built web manifest, so Delorun's build sets the product name in every place the page presents it. Without the variable the manifest keeps its source name, Delorun, instead of taking the document title's default; the other defaults are unchanged."
     },
     {
       "path": "native/system/package.json",
@@ -2665,6 +2665,18 @@
       "class": "security",
       "reason": "Abstract Unix sockets on the host's network, new module: parses `/proc/net/unix` and returns each abstract name that listens (`__SO_ACCEPTCON`) or is a bound datagram socket, with no name list; a connected stream socket is not counted. `refuseAbstractSockets` throws `SandboxUnsupportedPolicyError` naming the sockets and the ways out, and also when the table cannot be read. Used by the provider at each wrap that shares the host's network namespace. Stricter only.",
       "sha256": "c9e250afb6cb05a8bc165da61abb3122020a4a93a7ba8bcac8264677699b77f0"
+    },
+    {
+      "path": "apps/web/index.html",
+      "class": "delorun-feature",
+      "feature": "tab-icon",
+      "reason": "Adds a plain SVG icon link without a media query and the `favicon.ico` link beside the dark and light variants, so a browser that ignores the media-scoped links or asks for `/favicon.ico` on its own still shows Delorun's mark and drops a stale cached icon."
+    },
+    {
+      "path": "apps/web/public/manifest.webmanifest",
+      "class": "delorun-feature",
+      "feature": "product-name",
+      "reason": "The source manifest names the product Delorun, so a build without `DSH_CLIENT_TITLE` (such as `build:artifacts`) no longer installs as `DeepSeek Harness`; the build still renames it from the variable when set."
     }
   ],
   "retired": []
