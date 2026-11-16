@@ -6,9 +6,9 @@
  */
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SetupApplyView, SetupInspectView } from '@delorun/plugin-changes/wire'
-import { fromBase64, applySetupFile, exportSetupFile, inspectSetupFile } from './setup-transfer-api.ts'
+import { applySetupFile, exportSetupFile, fromBase64, inspectSetupFile, listSetupPlugins, replanSetupFile, type ExportChoices, type ImportChoices } from './setup-transfer-api.ts'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import type { VersionsSectionProps } from './VersionsSection.tsx'
 import css from './VersionsSection.module.css'
@@ -19,7 +19,8 @@ type Translate = VersionsSectionProps['t']
 type Stage =
   | { readonly kind: 'idle' }
   | { readonly kind: 'busy', readonly text: string }
-  | { readonly kind: 'review', readonly view: SetupInspectView }
+  | { readonly kind: 'exporting', readonly plugins: readonly { readonly name: string, readonly source: 'registry' | 'local' }[] }
+  | { readonly kind: 'review', readonly view: SetupInspectView, readonly choices: ImportChoices }
   | { readonly kind: 'done', readonly view: SetupApplyView }
 
 /**
@@ -64,11 +65,14 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
       setFailure(failureText(t, error))
     }
   }
-  const exportFile = (): Promise<void> => attempt(t('transfer.exporting'), async () => {
-    const written = await exportSetupFile(fetch)
+  const openExport = (): Promise<void> => attempt(t('transfer.listing'), async () => {
+    setStage({ kind: 'exporting', plugins: (await listSetupPlugins(fetch)).plugins })
+  })
+  const exportFile = (choices: ExportChoices): Promise<void> => attempt(t('transfer.exporting'), async () => {
+    const written = await exportSetupFile(fetch, choices)
     saveFile(written.name, fromBase64(written.file))
     setNotice(t('transfer.exported', { name: written.name, plugins: String(written.plugins), local: String(written.local), settings: String(written.settings), signedBy: written.signedBy }))
-    setLeftOut(written.leftOut)
+    setLeftOut(written.withoutCode.length === 0 ? written.leftOut : [t('transfer.withoutCode', { names: written.withoutCode.join(', ') }), ...written.leftOut])
     setStage({ kind: 'idle' })
   })
   const chosen = (file: File | undefined): Promise<void> => attempt(t('transfer.inspecting'), async () => {
@@ -76,10 +80,19 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
       setStage({ kind: 'idle' })
       return
     }
-    setStage({ kind: 'review', view: await inspectSetupFile(fetch, new Uint8Array(await file.arrayBuffer())) })
+    setStage({ kind: 'review', view: await inspectSetupFile(fetch, new Uint8Array(await file.arrayBuffer()), DEFAULT_CHOICES), choices: DEFAULT_CHOICES })
   })
-  const apply = (token: string): Promise<void> => attempt(t('transfer.applying'), async () => {
-    setStage({ kind: 'done', view: await applySetupFile(fetch, token) })
+  const choose = async (view: SetupInspectView, choices: ImportChoices): Promise<void> => {
+    setFailure(undefined)
+    try {
+      setStage({ kind: 'review', view: await replanSetupFile(fetch, view.token, choices), choices })
+    } catch (error) {
+      setStage({ kind: 'idle' })
+      setFailure(failureText(t, error))
+    }
+  }
+  const apply = (token: string, choices: ImportChoices): Promise<void> => attempt(t('transfer.applying'), async () => {
+    setStage({ kind: 'done', view: await applySetupFile(fetch, token, choices) })
     await onChanged()
   })
   const busy = stage.kind === 'busy'
@@ -87,8 +100,8 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
     <h3 className={css.reviewTitle}>{t('transfer.title')}</h3>
     <p className={css.line}>{t('transfer.intro')}</p>
     <div className={css.transferButtons}>
-      <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review'} onClick={() => { void exportFile() }}>{t('transfer.export')}</Button>
-      <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review'} onClick={() => { input.current?.click() }}>{t('transfer.import')}</Button>
+      <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review' || stage.kind === 'exporting'} onClick={() => { void openExport() }}>{t('transfer.export')}</Button>
+      <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review' || stage.kind === 'exporting'} onClick={() => { input.current?.click() }}>{t('transfer.import')}</Button>
       <input ref={input} className={css.hiddenInput} type="file" accept=".delorun,application/zip" aria-label={t('transfer.import')} data-setup-file
         onChange={(event) => {
           const file = event.target.files?.[0]
@@ -100,8 +113,72 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
     {notice === undefined ? null : <p className={css.notice} role="status">{notice}</p>}
     {leftOut.length === 0 ? null : <Lines title={t('transfer.leftOut')} lines={leftOut} />}
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
-    {stage.kind === 'review' ? <Review t={t} view={stage.view} onApply={() => { void apply(stage.view.token) }} onCancel={() => { setStage({ kind: 'idle' }) }} /> : null}
+    {stage.kind === 'exporting' ? <ExportForm t={t} plugins={stage.plugins} onWrite={(choices) => { void exportFile(choices) }} onCancel={() => { setStage({ kind: 'idle' }) }} /> : null}
+    {stage.kind === 'review' ? <Review t={t} view={stage.view} choices={stage.choices} onChoose={(choices) => { void choose(stage.view, choices) }}
+      onApply={() => { void apply(stage.view.token, stage.choices) }} onCancel={() => { setStage({ kind: 'idle' }) }} /> : null}
     {stage.kind === 'done' ? <Done t={t} view={stage.view} /> : null}
+  </div>
+}
+
+/** An import replaces the settings and keeps the plugins the file does not list, until the person chooses otherwise. */
+const DEFAULT_CHOICES: ImportChoices = { settings: true, removeOthers: false }
+
+/**
+ * A switch with its visible label.
+ * @param props - the label, the state and what a click does.
+ * @returns the row.
+ */
+function SwitchRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }): ReactNode {
+  return <div className={css.switchRow}>
+    <Switch checked={checked} onChange={onChange} label={label} />
+    <span>{label}</span>
+  </div>
+}
+
+/**
+ * The Export setup dialog: what goes in the file.
+ * @param props - the copy, the plugins one could include and what the buttons do.
+ * @returns the dialog.
+ */
+function ExportForm({ t, plugins, onWrite, onCancel }: {
+  t: Translate
+  plugins: readonly { readonly name: string, readonly source: 'registry' | 'local' }[]
+  onWrite: (choices: ExportChoices) => void
+  onCancel: () => void
+}): ReactNode {
+  const [settings, setSettings] = useState(true)
+  const [localCode, setLocalCode] = useState(true)
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set(plugins.map(plugin => plugin.name)))
+  const [note, setNote] = useState('')
+  const toggle = (name: string): void => {
+    const next = new Set(chosen)
+    if (!next.delete(name)) next.add(name)
+    setChosen(next)
+  }
+  const write = (): void => {
+    onWrite({ settings, localCode, ...chosen.size === plugins.length ? {} : { plugins: [...chosen] }, ...note.trim() === '' ? {} : { note: note.trim() } })
+  }
+  return <div className={css.review} data-setup-export-form>
+    <h3 className={css.reviewTitle}>{t('transfer.export.title')}</h3>
+    <SwitchRow label={t('transfer.settings.switch')} checked={settings} onChange={setSettings} />
+    {plugins.some(plugin => plugin.source === 'local')
+      ? <SwitchRow label={t('transfer.localCode')} checked={localCode} onChange={setLocalCode} />
+      : null}
+    {plugins.length === 0 ? null : <fieldset className={css.plugins}>
+      <legend className={css.description}>{t('transfer.plugins')}</legend>
+      {plugins.map(plugin => <label key={plugin.name} className={css.pluginRow}>
+        <input type="checkbox" checked={chosen.has(plugin.name)} onChange={() => { toggle(plugin.name) }} />
+        <span>{plugin.name}</span>
+      </label>)}
+    </fieldset>}
+    <label className={css.saveLabel}>
+      <span>{t('transfer.note')}</span>
+      <Input value={note} maxLength={500} autoComplete="off" onChange={(event) => { setNote(event.target.value) }} />
+    </label>
+    <div className={css.transferButtons}>
+      <Button variant="primary" size="sm" onClick={write}>{t('transfer.write')}</Button>
+      <Button variant="outline" size="sm" onClick={onCancel}>{t('transfer.cancel')}</Button>
+    </div>
   </div>
 }
 
@@ -123,7 +200,9 @@ function Lines({ title, lines }: { title: string; lines: readonly string[] }): R
  * @param props - the copy, the inspection and what the two buttons do.
  * @returns the review.
  */
-function Review({ t, view, onApply, onCancel }: { t: Translate; view: SetupInspectView; onApply: () => void; onCancel: () => void }): ReactNode {
+function Review({ t, view, choices, onChoose, onApply, onCancel }: {
+  t: Translate; view: SetupInspectView; choices: ImportChoices; onChoose: (choices: ImportChoices) => void; onApply: () => void; onCancel: () => void
+}): ReactNode {
   const signer = view.signer.state === 'verified'
     ? t('transfer.signer.verified', { fingerprint: view.signer.fingerprint })
     : view.signer.reason === 'absent' ? t('transfer.signer.absent') : t('transfer.signer.unknown', { fingerprint: view.signer.fingerprint })
@@ -131,7 +210,11 @@ function Review({ t, view, onApply, onCancel }: { t: Translate; view: SetupInspe
   return <div className={css.review} data-setup-review>
     <h3 className={css.reviewTitle}>{t('transfer.review.title')}</h3>
     <p className={view.signer.state === 'verified' ? css.line : css.warning}>{signer}</p>
-    <p className={css.line}>{t('transfer.replaces')}</p>
+    {view.note === undefined ? null : <p className={css.line}>{t('transfer.note.from', { note: view.note })}</p>}
+    <p className={css.line}>{t('transfer.replaces', { parts: view.replaces.join('; ') })}</p>
+    {view.includesSettings ? <SwitchRow label={t('transfer.settings.switch')} checked={choices.settings} onChange={(settings) => { onChoose({ ...choices, settings }) }} /> : null}
+    <SwitchRow label={t('transfer.removeOthers')} checked={choices.removeOthers} onChange={(removeOthers) => { onChoose({ ...choices, removeOthers }) }} />
+    <Lines title={t('transfer.named')} lines={view.named} />
     <Lines title={t('transfer.add')} lines={installs} />
     <Lines title={t('transfer.remove')} lines={view.remove} />
     <Lines title={t('transfer.settings')} lines={view.settings} />

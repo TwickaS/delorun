@@ -170,3 +170,29 @@
   line-height: 20px;
   overflow-wrap: anywhere;
 }
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.plugins {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pluginRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}

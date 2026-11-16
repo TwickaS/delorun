@@ -18,9 +18,11 @@ afterEach(() => {
   cleanup()
 })
 
-const EXPORTED: SetupExportView = { file: toBase64(new Uint8Array([1, 2, 3])), name: 'setup.delorun', plugins: 2, local: 1, settings: 3, leftOut: ['sandbox-policy: belongs to this computer'], signedBy: 'KEY123' }
+const EXPORTED: SetupExportView = { file: toBase64(new Uint8Array([1, 2, 3])), name: 'setup.delorun', plugins: 2, local: 1, settings: 3, leftOut: ['sandbox-policy: belongs to this computer'], signedBy: 'KEY123', withoutCode: [] }
+const PLUGINS = { plugins: [{ name: 'plug', source: 'local' }, { name: 'left-pad', source: 'registry' }] }
 const INSPECTED: SetupInspectView = {
-  token: 'tok', signer: { state: 'unverified', reason: 'key-not-trusted', fingerprint: 'FP-OTHER' }, createdBy: '0.1.0', exportedAt: '2026-11-16T10:00:00Z', sourceProfile: 'default',
+  token: 'tok', signer: { state: 'unverified', reason: 'key-not-trusted', fingerprint: 'FP-OTHER' }, createdBy: '0.1.0', exportedAt: '2026-11-16T10:00:00Z', sourceProfile: 'default', note: 'my work setup', includesSettings: true, named: [],
+  replaces: ['the plugins the file lists (others stay)', 'model provider and model choices', 'other settings'],
   install: [{ name: 'plug', version: '1.0.0', kind: 'add', source: 'local' }, { name: 'left-pad', version: '1.3.0', kind: 'replace', source: 'registry', from: 'version 1.2.0' }],
   remove: ['old-plugin'], keep: [], settings: ['changed: llm-deepseek'], endpoints: ['providers.x.baseURL sends requests to https://m.example.com/v1'], leftOut: ['sandbox-policy: belongs to this computer'],
   keyNotes: ['The default model is deepseek-official / v4. Add its key.'], protection: 'on', changes: true,
@@ -86,22 +88,47 @@ function appears(container: HTMLElement, selector: string): Promise<HTMLElement>
 }
 
 describe('Export setup', () => {
-  it('hands the file the home wrote to the browser and says what went in and what was left out', async () => {
-    const home = host({ [LIST]: listing, [`POST ${SETUP_PATHS.export}`]: { status: 200, body: EXPORTED } })
-    const { saved } = renderSection(home.fetch)
+  const EXPORT = `POST ${SETUP_PATHS.export}`
+  const bodies = (home: ReturnType<typeof host>): unknown[] => home.received.filter(request => request.key === EXPORT).map(request => request.body)
+
+  it('asks what goes in, then hands the file the home wrote to the browser and says what was left out', async () => {
+    const home = host({ [LIST]: listing, [EXPORT]: { status: 200, body: EXPORTED } })
+    const { saved } = renderSection((input, init) => typeof init?.body === 'string' && (JSON.parse(init.body) as { list?: boolean }).list === true
+      ? Promise.resolve(new Response(JSON.stringify(PLUGINS), { status: 200 }))
+      : home.fetch(input, init))
     fireEvent.click(await screen.findByRole('button', { name: en['transfer.export'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['transfer.write'] }))
     expect((await screen.findByText(/Wrote setup\.delorun/u)).textContent).toContain('2 plugins (1 made on this computer')
+    expect(bodies(home)).toEqual([{ settings: true, localCode: true }])
     expect(saved).toHaveLength(1)
-    expect(saved[0]!.name).toBe('setup.delorun')
     expect([...saved[0]!.bytes]).toEqual([1, 2, 3])
     expect(screen.getByText('sandbox-policy: belongs to this computer')).toBeTruthy()
-    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.export}`)!.body).toEqual({})
+  })
+
+  it('sends the choices: no settings, no code of one\'s own, one plugin, a note', async () => {
+    const home = host({ [LIST]: listing, [EXPORT]: { status: 200, body: { ...EXPORTED, withoutCode: ['plug'] } } })
+    renderSection((input, init) => typeof init?.body === 'string' && (JSON.parse(init.body) as { list?: boolean }).list === true
+      ? Promise.resolve(new Response(JSON.stringify(PLUGINS), { status: 200 }))
+      : home.fetch(input, init))
+    fireEvent.click(await screen.findByRole('button', { name: en['transfer.export'] }))
+    const form = await waitFor(() => screen.getByRole('button', { name: en['transfer.write'] }).closest('[data-setup-export-form]') as HTMLElement)
+    fireEvent.click(within(form).getByRole('switch', { name: en['transfer.settings.switch'] }))
+    fireEvent.click(within(form).getByRole('switch', { name: en['transfer.localCode'] }))
+    fireEvent.click(within(form).getByRole('checkbox', { name: 'left-pad' }))
+    fireEvent.change(within(form).getByLabelText(en['transfer.note']), { target: { value: ' for the team ' } })
+    fireEvent.click(within(form).getByRole('button', { name: en['transfer.write'] }))
+    await screen.findByText(/Wrote setup\.delorun/u)
+    expect(bodies(home)).toEqual([{ settings: false, localCode: false, plugins: ['plug'], note: 'for the team' }])
+    expect(screen.getByText(/These plugins of yours went in without their code\. Copy them to the other computer yourself: plug\./u)).toBeTruthy()
   })
 
   it('shows the home\'s sentence when a settings row holds a key', async () => {
-    const home = host({ [LIST]: listing, [`POST ${SETUP_PATHS.export}`]: { status: 422, body: { code: 'SETUP_REFUSED', message: 'Nothing was exported: llm-deepseek holds a value for the credential field apiKey.' } } })
-    const { saved } = renderSection(home.fetch)
+    const home = host({ [LIST]: listing, [EXPORT]: { status: 422, body: { code: 'SETUP_REFUSED', message: 'Nothing was exported: llm-deepseek holds a value for the credential field apiKey.' } } })
+    const { saved } = renderSection((input, init) => typeof init?.body === 'string' && (JSON.parse(init.body) as { list?: boolean }).list === true
+      ? Promise.resolve(new Response(JSON.stringify(PLUGINS), { status: 200 }))
+      : home.fetch(input, init))
     fireEvent.click(await screen.findByRole('button', { name: en['transfer.export'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['transfer.write'] }))
     expect((await screen.findByRole('alert')).textContent).toContain('llm-deepseek holds a value for the credential field apiKey')
     expect(saved).toEqual([])
   })
@@ -121,7 +148,9 @@ describe('Import setup', () => {
     expect(within(review).getByText('changed: llm-deepseek')).toBeTruthy()
     expect(within(review).getByText(/https:\/\/m\.example\.com\/v1/u)).toBeTruthy()
     expect(within(review).getByText(en['transfer.protection.on'])).toBeTruthy()
-    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.inspect}`)!.body).toEqual({ file: toBase64(new Uint8Array([9, 8, 7])) })
+    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.inspect}`)!.body).toEqual({ file: toBase64(new Uint8Array([9, 8, 7])), settings: true, removeOthers: false })
+    expect(within(review).getByText(/Note from the sender: my work setup/u)).toBeTruthy()
+    expect(within(review).getByText(/Importing replaces these parts of this profile: the plugins the file lists \(others stay\); model provider and model choices; other settings\./u)).toBeTruthy()
     // Nothing is applied before the second click.
     expect(home.received.some(request => request.key === `POST ${SETUP_PATHS.apply}`)).toBe(false)
     fireEvent.click(within(review).getByRole('button', { name: en['transfer.apply'] }))
@@ -129,7 +158,31 @@ describe('Import setup', () => {
     expect(done.textContent).toContain('Before importing a setup')
     expect(done.textContent).toContain('plug')
     expect(done.textContent).toContain('The default model is deepseek-official / v4. Add its key.')
-    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.apply}`)!.body).toEqual({ token: 'tok' })
+    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.apply}`)!.body).toEqual({ token: 'tok', settings: true, removeOthers: false })
+  })
+
+  it('plans again when Include settings or Remove plugins not in this archive is switched, and offers the first only when the file has settings', async () => {
+    const home = host({ [LIST]: listing, [`POST ${SETUP_PATHS.inspect}`]: { status: 200, body: INSPECTED }, [`POST ${SETUP_PATHS.apply}`]: { status: 200, body: APPLIED } })
+    const { container } = renderSection(home.fetch)
+    await screen.findByRole('button', { name: en['transfer.import'] })
+    choose(container, new Uint8Array([1]))
+    const review = await appears(container, '[data-setup-review]')
+    fireEvent.click(within(review).getByRole('switch', { name: en['transfer.settings.switch'] }))
+    await waitFor(() => expect(home.received.filter(request => request.key === `POST ${SETUP_PATHS.inspect}`).at(-1)!.body).toEqual({ token: 'tok', settings: false, removeOthers: false }))
+    fireEvent.click(within(await appears(container, '[data-setup-review]')).getByRole('switch', { name: en['transfer.removeOthers'] }))
+    await waitFor(() => expect(home.received.filter(request => request.key === `POST ${SETUP_PATHS.inspect}`).at(-1)!.body).toEqual({ token: 'tok', settings: false, removeOthers: true }))
+    fireEvent.click(within(await appears(container, '[data-setup-review]')).getByRole('button', { name: en['transfer.apply'] }))
+    await appears(container, '[data-setup-done]')
+    expect(home.received.find(request => request.key === `POST ${SETUP_PATHS.apply}`)!.body).toEqual({ token: 'tok', settings: false, removeOthers: true })
+    cleanup()
+    const bare = host({ [LIST]: listing, [`POST ${SETUP_PATHS.inspect}`]: { status: 200, body: { ...INSPECTED, includesSettings: false, note: undefined } } })
+    const second = renderSection(bare.fetch)
+    await screen.findByRole('button', { name: en['transfer.import'] })
+    choose(second.container, new Uint8Array([1]))
+    const open = await appears(second.container, '[data-setup-review]')
+    expect(within(open).queryByRole('switch', { name: en['transfer.settings.switch'] })).toBeNull()
+    expect(within(open).getByRole('switch', { name: en['transfer.removeOthers'] })).toBeTruthy()
+    expect(within(open).queryByText(/Note from the sender/u)).toBeNull()
   })
 
   it('names an unsigned file as unverified, and Cancel applies nothing', async () => {
