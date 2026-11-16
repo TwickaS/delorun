@@ -253,7 +253,7 @@ describe('runUpdate', () => {
     Object.defineProperty(process, 'platform', { ...real, value: platform })
     try {
       await expect(update([])).rejects.toThrow(message)
-      await expect(update(['--from', '/no/such/folder'])).rejects.toThrow(/^delorun update: Delorun 0\.1\.0 /u)
+      await expect(update(['--from', '/no/such/folder'])).rejects.toThrow(/^delorun update: Delorun (?:runs in WSL2,|does not run on macOS)/u)
     } finally {
       Object.defineProperty(process, 'platform', real)
     }
