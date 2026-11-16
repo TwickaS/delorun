@@ -166,8 +166,8 @@ Model: DeepSeek, default model. Key: read from DEEPSEEK_API_KEY at each start.
 Prompts: Ask me first
 Keep running in the background: yes
 Remote access: off
-Setup name: default, studio port 3080
 Changes protection: unchanged
+Setup name: default, studio port 3080
 
 Nothing is saved until you choose Save and set up.
 ```
