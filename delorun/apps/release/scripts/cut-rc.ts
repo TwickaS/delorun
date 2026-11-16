@@ -3,7 +3,7 @@
  * signs and logs the release into the local channel with `local-release.ts`, and verifies the channel as a client does.
  * See "Cutting a preview or release candidate" in `delorun/apps/release/README.md`.
  *
- * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N|0.1.0-rc.N> --channel <dir> --state <signer state file> --keys <dir>
+ * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N[.M]|0.1.0-rc.N[.M]> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
  * [--log-poll-seconds <n>] [--dry-run]`
@@ -15,6 +15,10 @@
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
  * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
  * which is also how to rerun after a timestamp or logging failure without rebuilding.
+ *
+ * A private test build `<x.y.z>-preview.<n>.<m>` (M from 1) sits between `preview.<n>` and `preview.<n+1>`. It updates from
+ * `preview.<n>` for M = 1, and from `preview.<n>.<m-1>` otherwise; the next candidate `preview.<n+1>` updates from the
+ * newest lower candidate of its series in the channel.
  *
  * The command stops, exit 3, when assembling the changelog changed tracked files: commit them and run it again with the
  * new `--commit`. It never tags, pushes or touches an installed home; it prints those commands for the lead.
@@ -34,6 +38,7 @@ import { parseData } from '../src/changelog/data.ts'
 import { DATA_PATH } from '../src/changelog/paths.ts'
 import { BUILD_ROOT_MARKER } from '../src/closure/build-root.ts'
 import { readRecipe } from '../src/closure/config.ts'
+import { compareVersions } from '../src/changelog/version.ts'
 
 /** The log endpoints the release runbook names, used when no `--log-*` flag is given. */
 const REKOR = {
@@ -42,17 +47,22 @@ const REKOR = {
   tiles: 'https://log2025-1.rekor.sigstore.dev/api/v2/',
 } as const
 
-/** A preview or release candidate version: group 1 the core, group 2 `preview` or `rc`, group 3 the number. */
-const CANDIDATE = /^(\d+\.\d+\.\d+)-(preview|rc)\.([1-9]\d*)$/u
+/**
+ * A preview or release candidate version: group 1 the core, group 2 `preview` or `rc`, group 3 the number, group 4 the
+ * iteration of a private test build.
+ */
+const CANDIDATE = /^(\d+\.\d+\.\d+)-(preview|rc)\.([1-9]\d*)(?:\.([1-9]\d*))?$/u
 
 /** What the command needs. */
 export interface CutRequest {
-  /** The candidate's version, `<x.y.z>-preview.<n>` or `<x.y.z>-rc.<n>`. */
+  /** The candidate's version, `<x.y.z>-preview.<n>[.<m>]` or `<x.y.z>-rc.<n>[.<m>]`. */
   readonly version: string
   /** Which series the version belongs to. */
   readonly kind: 'preview' | 'rc'
   /** The candidate's number within its series. */
   readonly number: number
+  /** The private test build's iteration `m` in `<n>.<m>`; undefined for a candidate without one. */
+  readonly iteration: number | undefined
   /** The channel directory `local-release.ts` writes. */
   readonly channel: string
   /** The timestamp signer's state file. */
@@ -129,18 +139,20 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
   const channel = resolve(required('channel'))
   const kind = match[2] as 'preview' | 'rc'
   const number = Number(match[3])
+  const iteration = match[4] === undefined ? undefined : Number(match[4])
   const work = resolve(values.work ?? dirname(channel))
   return {
     version,
     kind,
     number,
+    iteration,
     channel,
     state: resolve(required('state')),
     keys: resolve(required('keys')),
     root: resolve(required('root')),
     commit: required('commit'),
     highlights: resolve(values.highlights ?? join(work, `notes-${version}.txt`)),
-    summary: values.summary ?? `${kind === 'preview' ? 'Preview' : 'Release candidate'} ${String(number)}.`,
+    summary: values.summary ?? `${kind === 'preview' ? 'Preview' : 'Release candidate'} ${match[3]}${iteration === undefined ? '' : `.${String(iteration)}`}.`,
     work,
     closuresFrom: values['closures-from'] === undefined ? undefined : resolve(values['closures-from']),
     artifacts: values.artifacts,
@@ -159,6 +171,36 @@ export interface PlannedStep {
   readonly title: string
   /** The commands it runs, as printable lines; key files appear by path only. */
   readonly commands: readonly string[]
+}
+
+/**
+ * The candidate a request updates from. An iteration `N.M` updates from `N.M-1`, or from `N` when M is 1. A plain
+ * candidate `N` updates from the newest candidate of its core and series below it in the channel; `N = 1` has none.
+ * @param request - the request.
+ * @param released - the versions the channel holds, without the leading `v`.
+ * @returns the previous candidate; undefined for `N = 1`, and for a plain `N > 1` when the channel holds no lower candidate.
+ */
+export function previousCandidate(request: CutRequest, released: readonly string[]): string | undefined {
+  const core = CANDIDATE.exec(request.version)![1]!
+  const prefix = `${core}-${request.kind}.${String(request.number)}`
+  if (request.iteration !== undefined) return request.iteration > 1 ? `${prefix}.${String(request.iteration - 1)}` : prefix
+  if (request.number === 1) return undefined
+  const lower = released.filter((version) => {
+    const match = CANDIDATE.exec(version)
+    return match !== null && match[1] === core && match[2] === request.kind && compareVersions(version, request.version) < 0
+  })
+  return lower.sort(compareVersions).at(-1)
+}
+
+/**
+ * The versions the channel holds.
+ * @param channel - the channel directory.
+ * @returns the versions with a release directory, without the leading `v`.
+ */
+function releasedVersions(channel: string): string[] {
+  const directory = join(channel, 'releases', 'download')
+  if (!existsSync(directory)) return []
+  return readdirSync(directory).filter(name => name.startsWith('v')).map(name => name.slice(1))
 }
 
 /** The closure directory of a candidate. */
@@ -355,7 +397,9 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   const logFile = join(request.work, `cut-rc-${request.version}.log`)
   const steps = planSteps(request)
   const tsx = join(deps.repository, 'node_modules/.bin/tsx')
-  const previous = `${CANDIDATE.exec(request.version)![1]}-${request.kind}.${String(request.number - 1)}`
+  const released = releasedVersions(request.channel)
+  const previous = previousCandidate(request, released)
+  const predecessorRequired = request.iteration !== undefined || request.number > 1
   /** Run a step's command; true when it exits 0. */
   const command = async (executable: string, args: readonly string[]): Promise<RunResult> => deps.run(executable, args, logFile)
   let stepNumber = 0
@@ -371,8 +415,10 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
     return { code }
   }
 
-  const released = existsSync(join(request.channel, 'releases', 'download', `v${previous}`))
-  if (request.number > 1 && !released) return failed(`the channel has no ${previous} to update from; cut candidates in order`, 'check --channel')
+  if (predecessorRequired && (previous === undefined || !released.includes(previous))) {
+    const expected = previous ?? `${CANDIDATE.exec(request.version)![1]}-${request.kind}.${String(request.number - 1)}`
+    return failed(`the channel has no ${expected} to update from; cut candidates in order`, 'check --channel')
+  }
   if (existsSync(join(request.channel, 'releases', 'download', `v${request.version}`))) return failed(`the channel already holds ${request.version}`, 'pick the next candidate; a published version is never replaced')
   for (const key of ['targets.pem', 'timestamp.pem']) if (!existsSync(join(request.keys, key))) return failed(`${join(request.keys, key)} does not exist`, 'check --keys')
   if (!existsSync(request.root)) return failed(`${request.root} does not exist`, 'check --root')
@@ -427,7 +473,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   try {
     verified = verifyChannel(request.channel, request.version, Math.floor(deps.now() / 1000))
     if ((verified.notes === undefined || !verified.notes.equals(readFileSync(request.highlights)))) throw new Error('the manifest does not sign the release notes written for this candidate')
-    if (!verified.others.includes(previous) && request.number > 1) throw new Error(`${previous} is no longer in the channel`)
+    if (previous !== undefined && !verified.others.includes(previous)) throw new Error(`${previous} is no longer in the channel`)
   } catch (error) {
     return failed((error as Error).message, 'do not tag; inspect the channel and the log')
   }

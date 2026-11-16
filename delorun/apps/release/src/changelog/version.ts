@@ -1,21 +1,25 @@
 /**
  * The versions the assembly accepts: `0.x.y` with an optional `-alpha.N`, `-beta.N`, `-rc.N` or `-preview.N`
  * pre-release, and `1.0.0` only when the first public release is named. A preview sub-version `0.x.y-preview.N`
- * (N from 1) is one batch of changes on the way to `0.x.y` and sorts before it. The pattern is strict semver with no
- * leading zeros, so a version is always safe as a path segment.
+ * (N from 1) is one batch of changes on the way to `0.x.y` and sorts before it. A private iteration `0.x.y-preview.N.M`
+ * (M from 1) is a further build between `preview.N` and `preview.N+1`. The pattern is strict semver with no leading
+ * zeros, so a version is always safe as a path segment.
  *
  * @module @delorun/release/changelog/version
  */
 
-/** Strict semver for the accepted forms; group 1 is the major number, group 5 the pre-release tag, group 6 its number. */
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta|rc|preview)\.(0|[1-9]\d*))?$/
+/**
+ * Strict semver for the accepted forms; group 1 is the major number, group 5 the pre-release tag, group 6 its number,
+ * group 8 the iteration of a preview build, when present.
+ */
+const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta|rc|preview)\.(0|[1-9]\d*)(\.([1-9]\d*))?)?$/
 
 /** The numbers and the pre-release of a version that {@link versionErrors} accepts. */
 interface ParsedVersion {
   /** The numbers before the pre-release. */
   readonly core: { readonly major: number; readonly minor: number; readonly patch: number }
-  /** The pre-release tag and number; undefined for a release version. */
-  readonly pre: { readonly tag: string; readonly number: number } | undefined
+  /** The pre-release tag, its number and the iteration after it; undefined for a release version. */
+  readonly pre: { readonly tag: string; readonly number: number; readonly iteration: number | undefined } | undefined
 }
 
 /**
@@ -27,7 +31,7 @@ interface ParsedVersion {
 function parse(version: string): ParsedVersion {
   const match = VERSION.exec(version)
   if (match === null) throw new Error(`version "${version}" is not semver of the accepted forms`)
-  const pre = match[5] === undefined ? undefined : { tag: match[5], number: Number(match[6]) }
+  const pre = match[5] === undefined ? undefined : { tag: match[5], number: Number(match[6]), iteration: match[8] === undefined ? undefined : Number(match[8]) }
   return { core: { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) }, pre }
 }
 
@@ -39,7 +43,7 @@ function parse(version: string): ParsedVersion {
  */
 export function versionErrors(version: string, firstPublicRelease: boolean): string[] {
   const match = VERSION.exec(version)
-  if (match === null) return [`version "${version}" is not semver of the form 0.x.y, 0.x.y-preview.N, 0.x.y-alpha.N, 0.x.y-beta.N or 0.x.y-rc.N`]
+  if (match === null) return [`version "${version}" is not semver of the form 0.x.y, 0.x.y-preview.N, 0.x.y-preview.N.M, 0.x.y-alpha.N, 0.x.y-beta.N or 0.x.y-rc.N`]
   if (match[5] === 'preview' && match[6] === '0') return [`version "${version}" starts previews at 1: use 0.x.y-preview.1`]
   if (match[1] === '0') return []
   if (version !== '1.0.0') return [`version "${version}" is past the pre-release line; only 0.x.y and 1.0.0 are assembled`]
@@ -47,7 +51,7 @@ export function versionErrors(version: string, firstPublicRelease: boolean): str
 }
 
 /**
- * Whether a version is a preview sub-version `x.y.z-preview.N`.
+ * Whether a version is a preview sub-version `x.y.z-preview.N`, or a private iteration `x.y.z-preview.N.M`.
  * @param version - an accepted version.
  * @returns true for a preview.
  */
@@ -67,7 +71,8 @@ export function releaseOf(version: string): string {
 
 /**
  * Order two accepted versions by semver precedence: a pre-release sorts before its release, and pre-release tags sort
- * alphabetically (`alpha`, `beta`, `preview`, `rc`) before their numbers, which compare as numbers.
+ * alphabetically (`alpha`, `beta`, `preview`, `rc`) before their numbers, which compare as numbers. An iteration sorts
+ * after the bare number it extends and before the next number (`preview.1` < `preview.1.1` < `preview.2`).
  * @param a - the first version.
  * @param b - the second version.
  * @returns a negative number when `a` is older, positive when newer, 0 when equal.
@@ -81,5 +86,9 @@ export function compareVersions(a: string, b: string): number {
   if (left.pre === undefined) return right.pre === undefined ? 0 : 1
   if (right.pre === undefined) return -1
   if (left.pre.tag !== right.pre.tag) return left.pre.tag < right.pre.tag ? -1 : 1
-  return left.pre.number - right.pre.number
+  if (left.pre.number !== right.pre.number) return left.pre.number - right.pre.number
+  if (left.pre.iteration === right.pre.iteration) return 0
+  if (left.pre.iteration === undefined) return -1
+  if (right.pre.iteration === undefined) return 1
+  return left.pre.iteration - right.pre.iteration
 }

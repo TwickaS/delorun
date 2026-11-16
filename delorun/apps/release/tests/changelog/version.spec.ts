@@ -1,19 +1,21 @@
+import semver from 'semver'
 import { describe, expect, it } from 'vitest'
 import { compareVersions, isPreview, releaseOf, versionErrors } from '../../src/changelog/version.ts'
 
 describe('a release version', () => {
   it('accepts 0.x pre-releases, previews and 0.x finals', () => {
-    for (const version of ['0.1.0-alpha.1', '0.2.0-beta.12', '0.2.1-rc.0', '0.3.0', '0.1.0-preview.1', '0.1.0-preview.12']) expect(versionErrors(version, false)).toEqual([])
+    for (const version of ['0.1.0-alpha.1', '0.2.0-beta.12', '0.2.1-rc.0', '0.3.0', '0.1.0-preview.1', '0.1.0-preview.12', '0.1.0-preview.1.1', '0.1.0-preview.2.10', '0.1.0-rc.1.2']) expect(versionErrors(version, false)).toEqual([])
   })
 
   it('refuses anything that is not strict semver of those forms', () => {
-    for (const version of ['0.1', 'v0.1.0-alpha.1', '0.01.0', '0.1.0-dev.1', '0.1.0-alpha.01', '0.1.0-alpha', '0.1.0/../x', '0.1.0-preview', '0.1.0-preview.01']) {
+    for (const version of ['0.1', 'v0.1.0-alpha.1', '0.01.0', '0.1.0-dev.1', '0.1.0-alpha.01', '0.1.0-alpha', '0.1.0/../x', '0.1.0-preview', '0.1.0-preview.01', '0.1.0-preview.1.0', '0.1.0-preview.1.01', '0.1.0-preview.1.1.1', '0.1.0-preview.1.']) {
       expect(versionErrors(version, false)).toEqual([expect.stringContaining('is not semver')])
     }
   })
 
   it('starts previews at 1', () => {
     expect(versionErrors('0.1.0-preview.0', false)).toEqual([expect.stringContaining('starts previews at 1')])
+    expect(versionErrors('0.1.0-preview.0.1', false)).toEqual([expect.stringContaining('starts previews at 1')])
   })
 
   it('refuses 1.0.0 without the first-public-release flag and admits it with the flag', () => {
@@ -43,11 +45,27 @@ describe('version order', () => {
     expect(compareVersions('0.1.0', '0.1.0-rc.1')).toBeGreaterThan(0)
   })
 
+  it('places a private iteration between its preview and the next one', () => {
+    expect(compareVersions('0.1.0-preview.1.1', '0.1.0-preview.1')).toBeGreaterThan(0)
+    expect(compareVersions('0.1.0-preview.1.1', '0.1.0-preview.2')).toBeLessThan(0)
+    expect(compareVersions('0.1.0-preview.1.10', '0.1.0-preview.1.9')).toBeGreaterThan(0)
+    expect(compareVersions('0.1.0-preview.2', '0.1.0-preview.1.99')).toBeGreaterThan(0)
+  })
+
+  it('agrees with the semver package on every pair of a table of accepted versions', () => {
+    const table = ['0.1.0-alpha.1', '0.1.0-alpha.2', '0.1.0-beta.1', '0.1.0-preview.1', '0.1.0-preview.1.1', '0.1.0-preview.1.10', '0.1.0-preview.1.2', '0.1.0-preview.2', '0.1.0-preview.10', '0.1.0-rc.0', '0.1.0-rc.1', '0.1.0-rc.1.1', '0.1.0', '0.2.0-preview.1', '0.2.0-preview.1.1', '1.0.0-rc.1']
+    for (const left of table) {
+      for (const right of table) expect(Math.sign(compareVersions(left, right))).toBe(Math.sign(semver.compare(left, right)))
+    }
+  })
+
   it('names a preview and the release it leads to, and refuses a version it cannot read', () => {
     expect(isPreview('0.1.0-preview.3')).toBe(true)
+    expect(isPreview('0.1.0-preview.1.1')).toBe(true)
     expect(isPreview('0.1.0-rc.1')).toBe(false)
     expect(releaseOf('0.1.0-preview.3')).toBe('0.1.0')
     expect(releaseOf('0.4.2')).toBe('0.4.2')
+    expect(releaseOf('0.1.0-preview.1.1')).toBe('0.1.0')
     expect(() => compareVersions('nope', '0.1.0')).toThrow('not semver')
   })
 })

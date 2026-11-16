@@ -28,7 +28,7 @@
 
 ## 汇总
 
-`node_modules/.bin/tsx delorun/apps/release/src/changelog/assemble.ts --version <version> [--date <YYYY-MM-DD>] [--dry-run] [--first-public-release]` 把未发布的片段汇总为一个版本。版本可以是预览子版本 `0.x.y-preview.N`（N 从 1 开始）、正式版本 `0.x.y`，或 `-alpha.N`、`-beta.N`、`-rc.N` 预发布版本；除非传入 `--first-public-release`，否则 `1.0.0` 会被拒绝。汇总 `0.x.y` 时，会把它各个预览版本的条目并入其中。
+`node_modules/.bin/tsx delorun/apps/release/src/changelog/assemble.ts --version <version> [--date <YYYY-MM-DD>] [--dry-run] [--first-public-release]` 把未发布的片段汇总为一个版本。版本可以是预览子版本 `0.x.y-preview.N`（N 从 1 开始）、位于 `N` 与 `N+1` 之间的私有测试版本 `0.x.y-preview.N.M`（M 从 1 开始）、正式版本 `0.x.y`，或 `-alpha.N`、`-beta.N`、`-rc.N` 预发布版本；除非传入 `--first-public-release`，否则 `1.0.0` 会被拒绝。汇总 `0.x.y` 时，会把它各个预览版本与测试版本的条目并入其中。
 
 汇总会写入 `delorun/changelog/changelog.json`（与 `delorun/upstream-patches.json` 中 `upstream.ref` 所指上游发布的常设比较，以及每个版本），据此在仓库根目录渲染 `CHANGELOG.md`，把发布说明写入 `delorun/changelog/releases/<version>.md`，并把每个已用片段移入 `delorun/changelog/releases/<version>/`。待定的片段从不会被汇总。已经汇总过的版本会被拒绝。把 `CHANGELOG.md` 加入仓库的发布提交，同时也加入它的分歧台账条目。
 
@@ -158,16 +158,16 @@ WantedBy=default.target
 
 ## 切出预览版或发布候选版
 
-`node_modules/.bin/tsx delorun/apps/release/scripts/cut-rc.ts --version 0.1.0-preview.<n>|0.1.0-rc.<n> --channel <dir> --state <signer state file> --keys <dir> --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>] [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>] [--log-poll-seconds <n>] [--dry-run]` 把发布运行手册的各步骤变成一条命令，在 `--commit` 的检出中运行。先带 `--dry-run` 运行：它打印计划和命令，不执行任何内容。
+`node_modules/.bin/tsx delorun/apps/release/scripts/cut-rc.ts --version 0.1.0-preview.<n>[.<m>]|0.1.0-rc.<n>[.<m>] --channel <dir> --state <signer state file> --keys <dir> --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>] [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>] [--log-poll-seconds <n>] [--dry-run]` 把发布运行手册的各步骤变成一条命令，在 `--commit` 的检出中运行。先带 `--dry-run` 运行：它打印计划和命令，不执行任何内容。
 
 1. **目录树。** `--commit` 必须是 `HEAD`，且受跟踪文件必须干净。
 2. **变更日志。** 当 `delorun/changelog/changelog.json` 中没有该版本的条目时，它用 [`assemble.ts`](#assembly) 汇总出一条，并以退出码 3 停止，以便你评审并提交变更的文件；用新的 `--commit` 再次运行。已有条目时，它继续往下。
 3. **发布说明。** 它把说明（`assemble.ts --highlights`）写入 `--highlights`（默认 `<work>/notes-<version>.txt`），并通过 `local-release.ts --notes` 把它们作为 `notes` 签入 manifest。
 4. **发行包。** 它先清理过期的构建暂存（构建根目录旁带有其标记的目录，以及进程已不存在的锁），然后把 [`build-closure.ts`](#runtime-closures) 运行到 `<work>/closure-<version>`。`--closures-from` 会为先前一次运行构建的发行包文件签名，并跳过这两步，这是日志记录失败后的重跑方式。
 5. **签名。** [`local-release.ts`](#local-release) 用 `--keys` 中的密钥文件（`targets.pem`、`timestamp.pem`）和 `--state` 中的签名者状态，对候选版本签名、记入日志，并写入 `--channel`。计划和日志中只出现密钥文件的路径。日志端点默认是运行手册中的公共 Rekor v2 实例；等待检查点最多可能需要 30 分钟（`--log-poll-seconds`，60 次轮询），所以要在后台运行该命令。
-6. **验证。** 它像客户端那样检查渠道：根链、时间戳、时间戳指名的 manifest、对照字节检查的签名说明，以及渠道中其他每个发布的 manifest 签名，使上一个候选版本仍在那里供更新使用。preview.N 要求渠道中有 preview.N-1，rc.N 要求有 rc.N-1，preview.1 与 rc.1 不要求有更早的发布，已在渠道中的版本会被拒绝。版本的顺序是 preview.1、preview.2、rc.1、rc.2，然后是 0.1.0。
+6. **验证。** 它像客户端那样检查渠道：根链、时间戳、时间戳指名的 manifest、对照字节检查的签名说明，以及渠道中其他每个发布的 manifest 签名，使上一个候选版本仍在那里供更新使用。私有测试版本 `preview.N.M`（M 从 1 开始）在 M = 1 时要求渠道中有 `preview.N`，否则要求有 `preview.N.(M-1)`。普通候选版本要求其系列中较低的最新候选版本，它可以是测试版本：在 `preview.1` 与 `preview.1.1` 之后的 `preview.2` 要求有 `preview.1.1`。preview.1 与 rc.1 不要求有更早的发布，已在渠道中的版本会被拒绝。版本的顺序是 preview.1、preview.1.1、preview.2、rc.1、rc.2，然后是 0.1.0。
 
-每一步都连同耗时记入日志；所有命令输出都写入 `<work>/cut-rc-<version>.log`。失败时会指出步骤和下一步操作，渠道仍提供原来所提供的内容。如果日志提交已成功但等待超时，用相同的端点运行 `log-release.ts`，而不要再次提交。该命令从不打标签、推送，也不触碰已安装的 home。它最后打印这些命令：标签及其推送、保持[本地渠道](#the-local-rc-channel)持续提供服务，以及在已安装的 `~/delorun-rc` home 中用运行手册的包装器执行 `rc update --check` / `rc update`。`tests/local/cut-rc.integration.spec.ts` 用一次性密钥把两个候选版本切入一个临时渠道，检查第二个会为其说明签名，且第一个仍作为供更新使用的发布而被提供。
+每一步都连同耗时记入日志；所有命令输出都写入 `<work>/cut-rc-<version>.log`。失败时会指出步骤和下一步操作，渠道仍提供原来所提供的内容。如果日志提交已成功但等待超时，用相同的端点运行 `log-release.ts`，而不要再次提交。该命令从不打标签、推送，也不触碰已安装的 home。它最后打印这些命令：标签及其推送、保持[本地渠道](#the-local-rc-channel)持续提供服务，以及在已安装的 `~/delorun-rc` home 中用运行手册的包装器执行 `rc update --check` / `rc update`。`tests/local/cut-rc.integration.spec.ts` 用一次性密钥把 `preview.1`、其测试版本 `preview.1.1` 与 `preview.2` 切入一个临时渠道，检查每一个都为其说明签名，且其前一个仍作为供更新使用的发布而被提供。
 
 ## 重建比较
 

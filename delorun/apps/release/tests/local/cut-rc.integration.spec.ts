@@ -15,7 +15,7 @@ import { fixtureClosure, keyFile, serveLog, trust } from './support.ts'
 const NOTES = 'What is new in this candidate:\n- The studio opens faster.\n'
 
 describe('cutting two candidates', () => {
-  it('signs each candidate\'s notes and offers the update from the first', async (test) => {
+  it('signs each candidate\'s notes, cuts a private iteration between two previews and offers each update from the one before', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
     const log = await serveLog(test, trusted)
@@ -66,11 +66,16 @@ describe('cutting two candidates', () => {
     const first = verifyChannel(join(directory, 'channel'), '0.1.0-preview.1', Math.floor(Date.now() / 1000))
     expect(first.notes?.toString()).toBe(NOTES)
 
+    expect(await cut('0.1.0-preview.1.1', '\n// preview.1.1\n')).toBe(0)
+    const iteration = verifyChannel(join(directory, 'channel'), '0.1.0-preview.1.1', Math.floor(Date.now() / 1000))
+    expect(iteration.others).toEqual(['0.1.0-preview.1'])
+    expect(iteration.timestampVersion).toBeGreaterThan(first.timestampVersion)
+
     expect(await cut('0.1.0-preview.2', '\n// preview.2\n')).toBe(0)
     const second = verifyChannel(join(directory, 'channel'), '0.1.0-preview.2', Math.floor(Date.now() / 1000))
     expect(second.notes?.toString()).toBe(NOTES)
-    expect(second.others).toEqual(['0.1.0-preview.1'])
-    expect(second.timestampVersion).toBeGreaterThan(first.timestampVersion)
+    expect(second.others).toEqual(['0.1.0-preview.1', '0.1.0-preview.1.1'])
+    expect(second.timestampVersion).toBeGreaterThan(iteration.timestampVersion)
     expect(existsSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0-preview.2', 'delorun-0.1.0-preview.2.notes.txt'))).toBe(true)
     expect(readFileSync(join(directory, 'work', 'cut-rc-0.1.0-preview.2.log'), 'utf8')).not.toContain('PRIVATE KEY')
     expect(lines.join('\n')).toContain('signed notes')

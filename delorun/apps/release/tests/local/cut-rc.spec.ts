@@ -2,7 +2,7 @@
  * The `cut-rc.ts` command line and plan: which flags it requires, that every candidate signs its notes, what `--dry-run` prints, and that key material never reaches the plan.
  */
 import { describe, expect, it } from 'vitest'
-import { localReleaseArgs, parseCutArgs, planSteps, printPlan } from '../../scripts/cut-rc.ts'
+import { localReleaseArgs, parseCutArgs, planSteps, previousCandidate, printPlan } from '../../scripts/cut-rc.ts'
 
 const BASE = ['--version', '0.1.0-rc.2', '--channel', '/c/channel', '--state', '/k/state.json', '--keys', '/k', '--root', '/k/1.root.json', '--commit', 'abc123']
 
@@ -18,6 +18,10 @@ describe('cut-rc arguments', () => {
   it('refuses a version that is not a preview or release candidate, an unknown platform and an unknown flag', () => {
     expect(() => parseCutArgs(['--version', '0.1.0', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
     expect(() => parseCutArgs(['--version', '0.1.0-preview.0', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-preview.1.0', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-preview.01', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-preview.1.01', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
+    expect(() => parseCutArgs(['--version', '0.1.0-preview.1.1.1', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
     expect(() => parseCutArgs(['--version', '0.1.0-beta.1', ...BASE.slice(2)])).toThrow('not a preview or release candidate')
     expect(() => parseCutArgs([...BASE, '--platform', 'plan9-x64'])).toThrow('not one of')
     expect(() => parseCutArgs([...BASE, '--artifacts', 'maybe'])).toThrow('build or existing')
@@ -49,6 +53,27 @@ describe('cut-rc plan', () => {
       expect(localReleaseArgs(request)).toContain('--notes')
       expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify'])
     }
+  })
+
+  it('accepts a private test build between two candidates and names it in the default summary', () => {
+    expect(parseCutArgs(['--version', '0.1.0-preview.1.1', ...BASE.slice(2)])).toMatchObject({ kind: 'preview', number: 1, iteration: 1, summary: 'Preview 1.1.', highlights: '/c/notes-0.1.0-preview.1.1.txt' })
+    expect(parseCutArgs(BASE)).toMatchObject({ iteration: undefined, summary: 'Release candidate 2.' })
+  })
+
+  it('updates an iteration from the one before it and the first iteration from its preview', () => {
+    const at = (version: string) => parseCutArgs(['--version', version, ...BASE.slice(2)])
+    expect(previousCandidate(at('0.1.0-preview.1.1'), ['0.1.0-preview.1'])).toBe('0.1.0-preview.1')
+    expect(previousCandidate(at('0.1.0-preview.1.2'), ['0.1.0-preview.1', '0.1.0-preview.1.1'])).toBe('0.1.0-preview.1.1')
+    expect(previousCandidate(at('0.1.0-preview.1'), [])).toBeUndefined()
+  })
+
+  it('updates a plain candidate from the newest lower candidate of its series, which may be an iteration', () => {
+    const at = (version: string) => parseCutArgs(['--version', version, ...BASE.slice(2)])
+    expect(previousCandidate(at('0.1.0-preview.2'), ['0.1.0-preview.1', '0.1.0-preview.1.1'])).toBe('0.1.0-preview.1.1')
+    expect(previousCandidate(at('0.1.0-preview.2'), ['0.1.0-preview.1'])).toBe('0.1.0-preview.1')
+    expect(previousCandidate(at('0.1.0-preview.2'), ['0.1.0-preview.1.1', '0.1.0-preview.3', '0.1.0-rc.1', '0.2.0-preview.1'])).toBe('0.1.0-preview.1.1')
+    expect(previousCandidate(at('0.1.0-preview.2'), ['0.1.0-rc.1'])).toBeUndefined()
+    expect(previousCandidate(at('0.1.0-rc.1'), ['0.1.0-preview.2'])).toBeUndefined()
   })
 
   it('plans the highlights step and drops the build steps with --closures-from', () => {
