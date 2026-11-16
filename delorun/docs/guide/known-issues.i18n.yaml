@@ -9,11 +9,11 @@
   en: e3589c221a833c82
   zh: 7febe445236c4067
 /known-issues/summary:
-  en: 4cfcd84d83903165
-  zh: af888c428bbd00cb
+  en: a842818431de962e
+  zh: 65f76f8d7302cbbd
 /known-issues/contents:
-  en: e5b7b776584bda79
-  zh: 1f2586a253238058
+  en: aa909ef871c466bd
+  zh: e16a98189d1f0166
 /known-issues/where-delorun-runs:
   en: 3b558c1809beffab
   zh: 8706ea6cb8937a55
@@ -33,8 +33,14 @@
   en: edb2b7836275e6e6
   zh: afb0a3d8b414a13e
 /known-issues/commands-refused-with-an-open-network:
-  en: 68f80b5f4a75e8c4
-  zh: 68a7eaa3492dd55a
+  en: 50e2957b01d5732e
+  zh: bb8a4ab046794884
+/known-issues/commands-refused-without-bubblewrap:
+  en: d9b9d7a3b70f2772
+  zh: bfeb12add4f96a51
+/known-issues/the-docker-warning-in-doctor:
+  en: bfeb799854f52ae6
+  zh: f0cfd0e6c9c4be8d
 /known-issues/installing-a-plugin:
   en: e2725152050aece5
   zh: 144143fff4ccab79

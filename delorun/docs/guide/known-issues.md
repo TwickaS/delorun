@@ -8,7 +8,7 @@ English | [中文](known-issues.zh.md)
 
 ## Summary
 
-This page lists the rough edges you may meet in the preview. Each one says what happens and what to do. Anything that breaks install, the first chat, updates, your data or safety is fixed before a release, so this list holds the smaller problems and the limits that are part of the design. You need nothing first. If you meet something that is not here, tell the project ([Troubleshooting](troubleshooting.md#when-nothing-here-fits) says how).
+This page lists the rough edges you may meet in the preview. Each one says what happens and what to do. This list holds the rough edges and the limits that are part of the design. You need nothing first. If you meet something that is not here, tell the project ([Troubleshooting](troubleshooting.md#when-nothing-here-fits) says how).
 
 ## Contents
 
@@ -19,6 +19,8 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 - [Phone-width spacing](#phone-width-spacing)
 - [The right sidebar button on a touch screen](#the-right-sidebar-button-on-a-touch-screen)
 - [Commands refused with an open network](#commands-refused-with-an-open-network)
+- [Commands refused without bubblewrap](#commands-refused-without-bubblewrap)
+- [The Docker warning in doctor](#the-docker-warning-in-doctor)
 - [Installing a plugin](#installing-a-plugin)
 - [Documentation languages](#documentation-languages)
 
@@ -67,6 +69,22 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 **What happens.** On a Linux desktop, commands with open network are refused; set the workspace's network to an allowlist or off, or accept the risk in Settings. The refusal names the sockets (the display server, the session bus) that a command could use to act outside the sandbox. The check runs when a command starts.
 
 **What to do.** In Settings, Safety, Network, choose Allowlist or Off for the workspace. To run the command anyway, switch on **Run commands even when desktop sockets are reachable** beside Open ([Safety](safety.md#the-network-setting)).
+
+**What happens with Docker.** The refusal is not limited to a desktop. It applies while any program on the computer listens on an abstract socket, and a running `docker` command-line process, such as a foreground `docker compose up`, is one. While it runs, commands on a workspace with the Open network are refused with `the command would share this computer's network, where 1 abstract Unix socket is listening`, followed by the socket's name and the ways out.
+
+**What to do for Docker.** Stop the `docker` process, or accept the risk for the workspace in Settings, Safety, Network. The check runs when a command starts, so a command that was already running is not stopped.
+
+## Commands refused without bubblewrap
+
+**What happens.** On Linux without bubblewrap, a computer with a login session, or a program such as tmux that holds a socket in `/tmp`, makes Delorun refuse every sandboxed command, because the fallback sandbox cannot hide those sockets. The refusal says to install bubblewrap. On a computer with no such socket, commands run and `delorun doctor` shows `warn sandbox`.
+
+**What to do.** Install the `bubblewrap` package and start Delorun again ([What Delorun protects](safety.md#the-sandbox)). If bubblewrap is installed but cannot create a sandbox, see [Troubleshooting](troubleshooting.md#protections-and-plugins).
+
+## The Docker warning in doctor
+
+**What happens.** On a computer without Docker, `delorun doctor` prints `warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.` Delorun offers no Docker workspaces, so the warning describes nothing you need.
+
+**What to do.** Nothing. Docker is optional.
 
 ## Installing a plugin
 

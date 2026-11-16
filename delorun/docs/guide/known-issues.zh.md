@@ -8,7 +8,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 
 ## 摘要
 
-本页列出你在预览版中可能遇到的毛边。每一条都写明会发生什么以及该怎么做。任何影响安装、第一次聊天、更新、你的数据或安全的问题，都会在发布前修复，所以这份清单里是较小的问题，以及属于设计一部分的限制。你不需要任何前置知识。如果你遇到这里没有的问题，请告诉项目（[故障排查](troubleshooting.zh.md#when-nothing-here-fits)说明了方法）。
+本页列出你在预览版中可能遇到的毛边。每一条都写明会发生什么以及该怎么做。这份清单列出这些毛边，以及属于设计一部分的限制。你不需要任何前置知识。如果你遇到这里没有的问题，请告诉项目（[故障排查](troubleshooting.zh.md#when-nothing-here-fits)说明了方法）。
 
 ## 目录
 
@@ -19,6 +19,8 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 - [手机宽度下的间距](#phone-width-spacing)
 - [触摸屏上的右侧边栏按钮](#the-right-sidebar-button-on-a-touch-screen)
 - [开放网络下命令被拒绝](#commands-refused-with-an-open-network)
+- [没有 bubblewrap 时命令被拒绝](#commands-refused-without-bubblewrap)
+- [doctor 中的 Docker 警告](#the-docker-warning-in-doctor)
 - [安装插件](#installing-a-plugin)
 - [文档语言](#documentation-languages)
 
@@ -74,6 +76,24 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 **会发生什么。** 在 Linux 桌面上，网络为开放的命令会被拒绝；请把工作区的网络设为白名单或关闭，或在设置中接受风险。拒绝信息会指出命令可能借以在沙箱之外执行操作的套接字（显示服务器、会话总线）。检查在命令启动时进行。
 
 **该怎么做。** 在“设置”→“安全”→“网络”中，为该工作区选择白名单或关闭。若仍要运行命令，请打开“开放”旁的“即使桌面套接字可被访问也运行命令”（[安全](safety.zh.md#the-network-setting)）。
+
+**使用 Docker 时会发生什么。** 这种拒绝并不只限于桌面。只要电脑上有任何程序在抽象套接字上监听，它就会生效，而正在运行的 `docker` 命令行进程（例如前台运行的 `docker compose up`）就是其中之一。它运行期间，网络为开放的工作区中的命令会被拒绝，信息为 `the command would share this computer's network, where 1 abstract Unix socket is listening`，后面跟着套接字的名称和解决办法。
+
+**使用 Docker 时该怎么做。** 停止该 `docker` 进程，或在“设置”→“安全”→“网络”中为该工作区接受风险。检查在命令启动时进行，所以已经在运行的命令不会被停止。
+
+<a id="commands-refused-without-bubblewrap"></a>
+## 没有 bubblewrap 时命令被拒绝
+
+**会发生什么。** 在没有 bubblewrap 的 Linux 上，如果电脑有登录会话，或有 tmux 这类程序在 `/tmp` 中持有套接字，Delorun 会拒绝每一条沙箱命令，因为后备沙箱无法隐藏这些套接字。拒绝信息会说明要安装 bubblewrap。在没有这类套接字的电脑上，命令会运行，`delorun doctor` 显示 `warn sandbox`。
+
+**该怎么做。** 安装 `bubblewrap` 软件包，然后再次启动 Delorun（见 [Delorun 保护什么](safety.zh.md#the-sandbox)）。如果 bubblewrap 已安装但无法创建沙箱，请见[故障排查](troubleshooting.zh.md#protections-and-plugins)。
+
+<a id="the-docker-warning-in-doctor"></a>
+## doctor 中的 Docker 警告
+
+**会发生什么。** 在没有 Docker 的电脑上，`delorun doctor` 会打印 `warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.` Delorun 不提供 Docker 工作区，所以这条警告说的不是你需要的东西。
+
+**该怎么做。** 什么都不用做。Docker 是可选的。
 
 <a id="installing-a-plugin"></a>
 ## 安装插件
