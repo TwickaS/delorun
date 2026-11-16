@@ -24,6 +24,7 @@ import { pluginSlug } from '../paths.ts'
 import { requirePresence, type AtComputer } from '../records.ts'
 import type { ChangeId } from '../types.ts'
 import { lockfileIntegrities } from './collect.ts'
+import { recordImportReviews } from './import-reviews.ts'
 import { DEFAULT_IMPORT_OPTIONS, planSetupImport, type ImportOptions } from './plan.ts'
 
 /** The name the saved version of the setup before an import carries. */
@@ -74,6 +75,10 @@ export async function applySetupImport(ctx: ChangesContext, document: SetupDocum
   // The plan is read again now, so what is applied is what the profile holds at this moment.
   const choices = options.choices ?? DEFAULT_IMPORT_OPTIONS
   const { plan } = await planSetupImport(ctx, document, choices)
+  if (plan.endpointNotices.length > 0 && choices.endpointsConfirmed !== true) {
+    const where = plan.endpointNotices.map(({ provider, host }) => `${provider} to ${host}`).join(', ')
+    throw new ChangesError('SETUP_REFUSED', 'setup', `Nothing was imported: the setup sends requests and your key to ${where}, which you have not confirmed.`)
+  }
   const saved = await saveProfileVersion({ profileDir: ctx.profileDir, homeDir: ctx.home, name: BEFORE_IMPORT_VERSION_NAME })
   options.progress?.(`Saved your current setup as the version "${BEFORE_IMPORT_VERSION_NAME}".`)
   const removed: string[] = []
@@ -87,12 +92,18 @@ export async function applySetupImport(ctx: ChangesContext, document: SetupDocum
   for (const { plugin } of plan.install) {
     const spec = plugin.source === 'registry' ? `${plugin.name}@${plugin.version}` : `link:${await stageLocalPlugin(ctx, plugin, options.readFile)}`
     const entry = await recordPluginRequest(ctx, { action: 'install', spec })
-    const result = await applyInstallChange(ctx, entry.id, options.presence, { reload: options.reload, run: options.run })
-    if (plugin.source === 'registry' && plugin.integrity !== undefined) await requireIntegrity(ctx, plugin.name, plugin.version, plugin.integrity)
+    const checked = plugin.source === 'registry' && plugin.integrity !== undefined ? plugin : undefined
+    // The integrity is checked before the Host reloads, so a swapped package is never loaded.
+    const result = await applyInstallChange(ctx, entry.id, options.presence, {
+      reload: options.reload,
+      run: options.run,
+      ...checked === undefined ? {} : { verify: async () => requireIntegrity(ctx, checked.name, checked.version, checked.integrity!) },
+    })
+    if (result.folderChange !== undefined) await recordImportReviews(ctx, saved.id, [result.folderChange])
     installed.push({ name: plugin.name, ...result.folderChange === undefined ? {} : { reviewChange: result.folderChange } })
     options.progress?.(plugin.source === 'local' ? `Added ${plugin.name}; its code waits for your review.` : `Installed ${plugin.name} ${plugin.version}.`)
   }
-  const settingsWritten = await writePatch(ctx, document, choices)
+  const settingsWritten = await writePatch(ctx, document, choices, removed)
   if (settingsWritten) options.progress?.('Wrote your model choices and settings.')
   return { savedVersion: saved.id, removed, installed, settingsWritten }
 }
@@ -165,11 +176,12 @@ async function removeEarlierImport(folder: string): Promise<void> {
  * @param ctx - the profile.
  * @param document - the setup document.
  * @param choices - what the person chose.
+ * @param removed - the plugins the import removed, whose rows go with them.
  * @returns whether the file changed.
  */
-async function writePatch(ctx: ChangesContext, document: SetupDocument, choices: ImportOptions): Promise<boolean> {
+async function writePatch(ctx: ChangesContext, document: SetupDocument, choices: ImportOptions, removed: readonly string[]): Promise<boolean> {
   return locked(ctx, async () => {
-    const { patch } = await planSetupImport(ctx, document, choices)
+    const { patch } = await planSetupImport(ctx, document, choices, removed)
     if (!patch.changed) return false
     const path = join(ctx.profileDir, 'cordis.patch.yml')
     await writeFileAtomic(path, patch.text, { mode: PROTECTED_FILE_MODE })

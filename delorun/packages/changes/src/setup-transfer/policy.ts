@@ -34,8 +34,18 @@ const ENTRY_FIELDS: ReadonlySet<string> = new Set(['id', 'name', 'config', 'disa
 /** The fields of a patch entry that inserts rows. */
 const INSERT_FIELDS: ReadonlySet<string> = new Set(['insert'])
 
-/** A config field name that holds a credential's value: a key, secret, token, password, passphrase or credential. */
-const SECRET_FIELD = /(?:key|secret|token|password|passphrase|credential)s?$/iu
+/** A config field name that holds a credential's value: a key, secret, token, password, passphrase, credential, cookie or authorization. */
+const SECRET_FIELD = /(?:key|secret|token|password|passphrase|credential|cookie|auth|authorization)s?$/iu
+
+/** A config field that holds HTTP header values, every one of which may carry a credential. */
+const HEADER_FIELD = /^(?:headers?|extra_?headers?|default_?headers?)$/iu
+
+/** Text that is a credential whatever field holds it: a JWT, a Google API key, or a URL query parameter that carries one. */
+const SECRET_TEXT: readonly RegExp[] = [
+  /\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*/u,
+  /\bAIza[\w-]{35}/u,
+  /[?&](?:api[_-]?key|key|token|access[_-]?token|auth|secret|password|sig|signature)=[^&\s#]+/iu,
+]
 
 /** A suffix that makes such a field the name of a place a credential is read from, which a setup carries. */
 const REFERENCE_FIELD = /(?:env|ref|name|file|path|var|id|url)$/iu
@@ -59,9 +69,9 @@ export type PatchEntry = Readonly<Record<string, unknown>>
  * Why a setup leaves something out, as a code the studio words in the person's language: `computer` for what belongs to
  * one computer, `form` for an entry of a form a setup does not carry, `endpoint` for an endpoint that is not https,
  * `expression` for a `!!js` expression, `secret` for a credential, `not-mapping`, `not-package-name`, `not-installed`,
- * `not-approved`, `no-package-json` and `links` for a plugin's state.
+ * `not-approved`, `no-package-json` and `links` for a plugin's state, and `key-variable` for a key variable that is not its provider's own.
  */
-export type LeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links'
+export type LeftOutCode = 'computer' | 'form' | 'endpoint' | 'expression' | 'secret' | 'not-mapping' | 'not-package-name' | 'not-installed' | 'not-approved' | 'no-package-json' | 'links' | 'key-variable'
 
 /** One thing a setup leaves out: what it is and why. */
 export interface LeftOutItem {
@@ -95,11 +105,13 @@ const RESERVED_ID_PREFIXES: readonly string[] = ['delorun-', 'dsh-', 'ui-', 'llm
  * takes no id of Delorun's or upstream's rows.
  * @param id - the row's id.
  * @param plugin - the plugin the row loads.
+ * @param reserved - the row ids the profile's bundles hold, which no inserted row's id or plugin name may equal.
  * @returns true for an id that cannot name another row's protection.
  */
-function ownRowId(id: string, plugin: string): boolean {
+function ownRowId(id: string, plugin: string, reserved: ReadonlySet<string>): boolean {
   const base = plugin.replace(/^@[^/]+\//u, '')
-  return id.startsWith(base) && !CARRIED_ROW_IDS.has(id) && !RESERVED_ID_PREFIXES.some(prefix => id.startsWith(prefix))
+  const collides = reserved.has(id) || reserved.has(base) || reserved.has(plugin)
+  return id.startsWith(base) && !collides && !CARRIED_ROW_IDS.has(id) && !RESERVED_ID_PREFIXES.some(prefix => id.startsWith(prefix))
 }
 
 /**
@@ -130,9 +142,10 @@ export function entryLabel(entry: PatchEntry): string {
  * Decide whether a setup carries one patch entry.
  * @param entry - the entry, as data.
  * @param plugins - the names of the non-product plugins the setup carries; rows of these plugins may travel.
+ * @param reserved - the row ids the profile's bundles hold.
  * @returns the verdict.
  */
-export function judgeEntry(entry: PatchEntry, plugins: ReadonlySet<string>): EntryVerdict {
+export function judgeEntry(entry: PatchEntry, plugins: ReadonlySet<string>, reserved: ReadonlySet<string>): EntryVerdict {
   const label = entryLabel(entry)
   let rows: readonly unknown[]
   if (Object.hasOwn(entry, 'insert')) {
@@ -142,12 +155,12 @@ export function judgeEntry(entry: PatchEntry, plugins: ReadonlySet<string>): Ent
     }
     rows = inserted
     for (const row of rows) {
-      const problem = classProblem(row, plugins, false)
+      const problem = classProblem(row, plugins, false, reserved)
       if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}`, code: codeOf(problem), label }
     }
   } else {
     rows = [entry]
-    const problem = classProblem(entry, plugins, true)
+    const problem = classProblem(entry, plugins, true, reserved)
     if (problem !== undefined) return { carry: false, reason: `${label}: ${problem}`, code: codeOf(problem), label }
   }
   const settings = rows.map(row => (row as Record<string, unknown>)['config'])
@@ -155,6 +168,8 @@ export function judgeEntry(entry: PatchEntry, plugins: ReadonlySet<string>): Ent
   if (secret !== undefined) return { carry: false, secret: true, reason: `${label}: ${secret}`, code: 'secret', label }
   const endpoint = settings.flatMap(config => endpointProblems(config))[0]
   if (endpoint !== undefined) return { carry: false, reason: `${label}: ${endpoint}`, code: 'endpoint', label }
+  const variable = (rows as readonly PatchEntry[]).flatMap(row => keyVariableProblems(row))[0]
+  if (variable !== undefined) return { carry: false, reason: `${label}: ${variable}`, code: 'key-variable', label }
   return { carry: true }
 }
 
@@ -171,9 +186,10 @@ function codeOf(problem: string): LeftOutCode {
  * @param row - the row or entry.
  * @param plugins - the non-product plugins the setup carries.
  * @param setsExisting - true for an entry that sets a row some bundle declares, false for a row an entry inserts.
+ * @param reserved - the row ids the profile's bundles hold.
  * @returns why it is not carried, or undefined when it is.
  */
-function classProblem(row: unknown, plugins: ReadonlySet<string>, setsExisting: boolean): string | undefined {
+function classProblem(row: unknown, plugins: ReadonlySet<string>, setsExisting: boolean, reserved: ReadonlySet<string>): string | undefined {
   if (!isPlainObject(row)) return 'is not a mapping'
   const stray = Object.keys(row).find(key => !ENTRY_FIELDS.has(key))
   if (stray !== undefined) return `uses the field ${JSON.stringify(stray)}, which a setup does not carry`
@@ -189,7 +205,7 @@ function classProblem(row: unknown, plugins: ReadonlySet<string>, setsExisting: 
     return carriedRow ? undefined : 'sets something that belongs to this computer, so it is not carried'
   }
   if (typeof name !== 'string' || !plugins.has(name)) return 'inserts a row of a plugin the setup does not carry, so it is not carried'
-  if (id !== undefined && !(ownRowId(id, name))) return `inserts a row whose id ${JSON.stringify(id)} is not the plugin's own, so it is not carried`
+  if (id !== undefined && !(ownRowId(id, name, reserved))) return `inserts a row whose id ${JSON.stringify(id)} is not the plugin's own, so it is not carried`
   return undefined
 }
 
@@ -198,14 +214,15 @@ function classProblem(row: unknown, plugins: ReadonlySet<string>, setsExisting: 
  * profile's entries of this class with the setup's and leaves every other entry alone.
  * @param entry - the entry.
  * @param plugins - the non-product plugins whose rows count as carried.
+ * @param reserved - the row ids the profile's bundles hold.
  * @returns true when the entry is of the carried class.
  */
-export function entryClass(entry: PatchEntry, plugins: ReadonlySet<string>): boolean {
+export function entryClass(entry: PatchEntry, plugins: ReadonlySet<string>, reserved: ReadonlySet<string>): boolean {
   if (Object.hasOwn(entry, 'insert')) {
     const inserted = entry['insert']
-    return Object.keys(entry).every(key => INSERT_FIELDS.has(key)) && Array.isArray(inserted) && inserted.length > 0 && inserted.every(row => classProblem(row, plugins, false) === undefined)
+    return Object.keys(entry).every(key => INSERT_FIELDS.has(key)) && Array.isArray(inserted) && inserted.length > 0 && inserted.every(row => classProblem(row, plugins, false, reserved) === undefined)
   }
-  return classProblem(entry, plugins, true) === undefined
+  return classProblem(entry, plugins, true, reserved) === undefined
 }
 
 /**
@@ -216,11 +233,18 @@ export function entryClass(entry: PatchEntry, plugins: ReadonlySet<string>): boo
  * @returns each place, such as `providers.openai.apiKey`.
  */
 export function secretPlaces(config: unknown, path = ''): string[] {
-  if (typeof config === 'string') return SECRET_PATTERNS.some(({ pattern }) => pattern.test(config)) ? [`holds text that looks like a credential at ${path === '' ? 'the top' : path}`] : []
+  const top = path === '' ? 'the top' : path
+  if (typeof config === 'string') {
+    const looks = SECRET_PATTERNS.some(({ pattern }) => pattern.test(config)) || SECRET_TEXT.some(pattern => pattern.test(config))
+    return looks ? [`holds text that looks like a credential at ${top}`] : []
+  }
   if (Array.isArray(config)) return config.flatMap((item, index) => secretPlaces(item, `${path}[${String(index)}]`))
   if (!isPlainObject(config)) return []
   return Object.entries(config).flatMap(([key, value]) => {
     const here = path === '' ? key : `${path}.${key}`
+    if (HEADER_FIELD.test(key) && isPlainObject(value)) {
+      return Object.entries(value).filter(([, header]) => typeof header === 'string' && header !== '').map(([name]) => `holds a header value at ${here}.${name}`)
+    }
     const named = SECRET_FIELD.test(key) && !REFERENCE_FIELD.test(key) && typeof value === 'string' && value !== ''
     return named ? [`holds a value for the credential field ${here}`] : secretPlaces(value, here)
   })
@@ -240,6 +264,86 @@ export function endpointProblems(config: unknown, path = ''): string[] {
     if (ENDPOINT_FIELD.test(key) && typeof value === 'string') return endpointProblem(value, here)
     return endpointProblems(value, here)
   })
+}
+
+/** One key variable or endpoint a carried row names, with the provider it belongs to. */
+export interface RouteField {
+  /** The provider the field is under: the `providers` key above it, `deepseek` for the DeepSeek row, otherwise the row's own name. */
+  readonly provider: string
+  /** The field's path, such as `providers.custom.baseURL`. */
+  readonly field: string
+  /** `key` for `apiKeyEnv`, `endpoint` for an endpoint field. */
+  readonly kind: 'key' | 'endpoint'
+  readonly value: string
+}
+
+/** The host a provider's default endpoint has, for the providers whose endpoint Delorun knows; any other host needs the person's confirmation. */
+const DEFAULT_HOSTS: Readonly<Record<string, string>> = { deepseek: 'api.deepseek.com' }
+
+/**
+ * @param provider - a provider's name.
+ * @returns the one environment variable a setup may name as that provider's key: `DEEPSEEK_API_KEY` for DeepSeek, otherwise the upper-cased name with `_API_KEY`.
+ */
+export function defaultKeyVariable(provider: string): string {
+  return `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
+}
+
+/**
+ * @param row - a carried patch entry, or a row it inserts.
+ * @returns each key variable and endpoint in its config, with its provider.
+ */
+export function routeFields(row: PatchEntry): RouteField[] {
+  const id = typeof row['id'] === 'string' ? row['id'] : undefined
+  const name = typeof row['name'] === 'string' ? row['name'] : undefined
+  const base = id === 'llm-deepseek' ? 'deepseek' : (name ?? id ?? 'row')
+  const found: RouteField[] = []
+  const walk = (value: unknown, provider: string, path: string): void => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, provider, `${path}[${String(index)}]`))
+    } else if (isPlainObject(value)) {
+      for (const [key, item] of Object.entries(value)) {
+        const here = path === '' ? key : `${path}.${key}`
+        if (key === 'apiKeyEnv' && typeof item === 'string') found.push({ provider, field: here, kind: 'key', value: item })
+        else if (ENDPOINT_FIELD.test(key) && typeof item === 'string') found.push({ provider, field: here, kind: 'endpoint', value: item })
+        else if (key === 'providers' && isPlainObject(item)) {
+          for (const [providerName, profile] of Object.entries(item)) walk(profile, providerName, `${here}.${providerName}`)
+        } else walk(item, provider, here)
+      }
+    }
+  }
+  walk(row['config'], base, '')
+  return found
+}
+
+/**
+ * The endpoints a carried row sends requests, and the provider's key, to that are not the provider's known default.
+ * @param row - a carried patch entry, or a row it inserts.
+ * @returns each provider and the host it would send to; an endpoint that is no URL is not listed, because the endpoint check refuses it.
+ */
+export function offDefaultEndpoints(row: PatchEntry): { readonly provider: string, readonly host: string }[] {
+  return routeFields(row).flatMap(({ provider, kind, value }) => {
+    if (kind !== 'endpoint') return []
+    let host: string
+    try {
+      host = new URL(value).host
+    } catch {
+      // The endpoint check refuses a value that is no URL.
+      return []
+    }
+    return host === DEFAULT_HOSTS[provider] ? [] : [{ provider, host }]
+  })
+}
+
+/**
+ * Where a carried row names a key variable that is not its provider's own default. A variable the setup could choose
+ * freely would let an archive send any key the process environment holds to the endpoint it names.
+ * @param row - a carried patch entry, or a row it inserts.
+ * @returns a sentence for the first such field.
+ */
+function keyVariableProblems(row: PatchEntry): string[] {
+  return routeFields(row)
+    .filter(({ kind, provider, value }) => kind === 'key' && value !== defaultKeyVariable(provider))
+    .map(({ field, provider }) => `has ${field}, which names a variable other than ${defaultKeyVariable(provider)}, so a setup does not carry it`)
 }
 
 /**

@@ -18,6 +18,7 @@ import { readProfileManifest } from '../link.ts'
 import { PACKAGE_NAME_PATTERN } from '../paths.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readObject, readVersion } from '../store.ts'
+import { composedRowIds } from './composed-ids.ts'
 import { isModelEntry, isPlainObject, isProductPackage, judgeEntry, type LeftOutItem } from './policy.ts'
 
 /** The most bytes of plugin files one setup carries: 256 MiB. */
@@ -223,6 +224,7 @@ async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, le
   if (document.errors.length > 0) throw new ChangesError('SETUP_REFUSED', path, "The profile's cordis.patch.yml is not YAML, so its settings cannot be exported.")
   if (document.contents === null) return []
   if (!isSeq(document.contents)) throw new ChangesError('SETUP_REFUSED', path, "The profile's cordis.patch.yml is not a list of patch entries, so its settings cannot be exported.")
+  const reserved = composedRowIds(profileDir)
   const carried: Record<string, SetupJson>[] = []
   for (const item of document.contents.items) {
     let tagged = false
@@ -238,7 +240,7 @@ async function collectPatch(profileDir: string, plugins: ReadonlySet<string>, le
       items.push({ subject: typeof entry['id'] === 'string' ? entry['id'] : '', code: 'expression' })
       continue
     }
-    const verdict = judgeEntry(entry, plugins)
+    const verdict = judgeEntry(entry, plugins, reserved)
     if (verdict.carry) carried.push(entry as Record<string, SetupJson>)
     else if (verdict.secret === true) throw new ChangesError('SETUP_REFUSED', path, `Nothing was exported: ${verdict.reason}. A key belongs in the credentials file, not in a settings row; delorun setup stores it there.`)
     else {

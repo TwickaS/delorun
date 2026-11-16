@@ -18,7 +18,8 @@ import { ChangesError } from '../errors.ts'
 import { readProfileManifest } from '../link.ts'
 import { approvedOf, readApproved } from '../records.ts'
 import { readVersion } from '../store.ts'
-import { entryClass, entryLabel, isModelEntry, isPlainObject, isProductPackage, judgeEntry, type LeftOutItem, type PatchEntry } from './policy.ts'
+import { composedRowIds } from './composed-ids.ts'
+import { entryClass, entryLabel, isModelEntry, isPlainObject, isProductPackage, judgeEntry, offDefaultEndpoints, routeFields, type LeftOutItem, type PatchEntry } from './policy.ts'
 
 /** What the person chose for an import. */
 export interface ImportOptions {
@@ -26,6 +27,8 @@ export interface ImportOptions {
   readonly settings: boolean
   /** Whether plugins the archive does not list are removed; otherwise only the plugins it lists are touched. */
   readonly removeOthers: boolean
+  /** Whether the person confirmed that requests and the provider's key go to each endpoint that is not the provider's default; an import with such an endpoint refuses without it. */
+  readonly endpointsConfirmed?: boolean
 }
 
 /** The choices an import makes when the person gives none: settings replaced, no other plugin removed. */
@@ -58,6 +61,12 @@ export interface EndpointItem {
   readonly url: string
 }
 
+/** An endpoint other than a provider's default that the imported settings send requests, and the provider's key, to. */
+export interface EndpointNotice {
+  readonly provider: string
+  readonly host: string
+}
+
 /** One plugin the import adds or moves. */
 export interface PluginInstall {
   readonly plugin: SetupPlugin
@@ -87,6 +96,8 @@ export interface SetupPlan {
   readonly keyItems: readonly KeyItem[]
   /** The endpoints, as fields. */
   readonly endpointItems: readonly EndpointItem[]
+  /** The endpoints the person confirms separately: each provider and host that is not the provider's default. */
+  readonly endpointNotices: readonly EndpointNotice[]
   /** The plugins the profile already has exactly as the archive names them. */
   readonly keep: readonly string[]
   /** The plugins of the person's the archive lacks, which the import removes. */
@@ -119,10 +130,12 @@ export interface PatchPlan {
  * Plan an import.
  * @param ctx - the profile.
  * @param document - the setup document an archive passed validation with.
+ * @param options - what the person chose.
+ * @param removedAlready - plugins the import has removed from the manifest already, whose rows are still the import's to take away.
  * @returns the plan and the text the profile's patch file would get.
  * @throws {ChangesError} `SETUP_REFUSED` for a plugin of Delorun's or upstream's scope, an entry that holds a credential, or a patch file that is not a YAML list; `RECORD_UNREADABLE` when the profile's manifest cannot be read.
  */
-export async function planSetupImport(ctx: ChangesContext, document: SetupDocument, options: ImportOptions = DEFAULT_IMPORT_OPTIONS): Promise<{ readonly plan: SetupPlan, readonly patch: PatchPlan }> {
+export async function planSetupImport(ctx: ChangesContext, document: SetupDocument, options: ImportOptions = DEFAULT_IMPORT_OPTIONS, removedAlready: readonly string[] = []): Promise<{ readonly plan: SetupPlan, readonly patch: PatchPlan }> {
   for (const plugin of document.plugins) {
     if (isProductPackage(plugin.name)) {
       throw new ChangesError('SETUP_REFUSED', plugin.name, `The setup names ${plugin.name}, a package of Delorun's own. A setup carries plugins you added, never the product itself.`)
@@ -147,12 +160,13 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
     else install.push({ plugin, kind: spec === undefined ? 'add' : 'replace', ...now === undefined ? {} : { from: now.words, was: now.was } })
   }
   const remove = options.removeOthers ? Object.keys(dependencies).filter(name => !isProductPackage(name) && !wanted.has(name)) : []
-  const known = new Set([...wanted, ...Object.keys(dependencies).filter(name => !isProductPackage(name))])
+  const known = new Set([...wanted, ...removedAlready, ...Object.keys(dependencies).filter(name => !isProductPackage(name))])
+  const reserved = composedRowIds(ctx.profileDir)
   const leftOut: string[] = []
   const leftOutItems: LeftOutItem[] = []
   const carried: PatchEntry[] = []
   for (const entry of withSettings ? [...document.models, ...document.settings] : document.models) {
-    const verdict = judgeEntry(entry, wanted)
+    const verdict = judgeEntry(entry, wanted, reserved)
     if (verdict.carry) carried.push(entry)
     else if (verdict.secret === true) throw new ChangesError('SETUP_REFUSED', 'setup', `Nothing was imported: ${verdict.reason}. A setup never carries a key.`)
     else {
@@ -160,7 +174,8 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
       leftOutItems.push({ subject: verdict.label, code: verdict.code })
     }
   }
-  const patch = await planPatch(ctx.profileDir, carried, known, withSettings)
+  const stay = new Set(Object.keys(dependencies).filter(name => !isProductPackage(name) && !wanted.has(name) && !remove.includes(name)))
+  const patch = await planPatch(ctx.profileDir, carried, known, withSettings, reserved, stay)
   const plan: SetupPlan = {
     install, keep, remove, named,
     replaces: [
@@ -177,6 +192,7 @@ export async function planSetupImport(ctx: ChangesContext, document: SetupDocume
     leftOutItems,
     keyItems: keyItems(carried),
     endpointItems: endpointItems(carried),
+    endpointNotices: endpointNotices(carried),
     settings: patch.lines,
     leftOut,
     keyNotes: keyNotes(carried),
@@ -250,10 +266,13 @@ async function localState(ctx: ChangesContext, plugin: SetupLocalPlugin, spec: s
  * @param profileDir - the profile directory.
  * @param carried - the setup's entries.
  * @param known - the plugins the profile will have, whose rows are of the carried class.
+ * @param withSettings - whether the setup's other settings are replaced, not only the model's.
+ * @param reserved - the row ids the profile's bundles hold.
+ * @param stay - the plugins the profile keeps that the setup does not list, whose rows the import leaves as they are.
  * @returns the new text and the sentences naming each difference.
  * @throws {ChangesError} `SETUP_REFUSED` when the file is not a YAML list of patch entries.
  */
-async function planPatch(profileDir: string, carried: readonly PatchEntry[], known: ReadonlySet<string>, withSettings: boolean): Promise<PatchPlan> {
+async function planPatch(profileDir: string, carried: readonly PatchEntry[], known: ReadonlySet<string>, withSettings: boolean, reserved: ReadonlySet<string>, stay: ReadonlySet<string>): Promise<PatchPlan> {
   const path = join(profileDir, 'cordis.patch.yml')
   const before = existsSync(path) ? await readFile(path, 'utf8') : ''
   const document = parseDocument(before === '' ? '[]\n' : before, { logLevel: 'silent' })
@@ -264,7 +283,7 @@ async function planPatch(profileDir: string, carried: readonly PatchEntry[], kno
   const kept: unknown[] = []
   for (const item of items.items) {
     const entry: unknown = isMap(item) ? item.toJSON() : undefined
-    if (isPlainObject(entry) && entryClass(entry, known) && (withSettings || isModelEntry(entry))) current.set(keyOf(entry), entry)
+    if (isPlainObject(entry) && !rowsStay(entry, stay) && entryClass(entry, known, reserved) && (withSettings || isModelEntry(entry))) current.set(keyOf(entry), entry)
     else kept.push(item)
   }
   const lines: string[] = []
@@ -328,19 +347,35 @@ function keyVariables(config: unknown): string[] {
  * @returns each endpoint the entries name, as `<field> sends requests to <URL>`.
  */
 function endpointsOf(carried: readonly PatchEntry[]): { field: string, url: string }[] {
-  const found: { field: string, url: string }[] = []
-  const walk = (value: unknown, path: string): void => {
-    if (Array.isArray(value)) value.forEach((item, index) => walk(item, `${path}[${String(index)}]`))
-    else if (isPlainObject(value)) {
-      for (const [key, item] of Object.entries(value)) {
-        const here = path === '' ? key : `${path}.${key}`
-        if (/^(?:base_?url|endpoint|api_?base)$/iu.test(key) && typeof item === 'string') found.push({ field: here, url: item })
-        else walk(item, here)
-      }
-    }
-  }
-  for (const entry of carried) walk(entry['config'] ?? entry['insert'], entryLabel(entry))
-  return found
+  return carried.flatMap(entry => rowsOf(entry).flatMap(row => routeFields(row).flatMap(({ kind, field, value }) => kind === 'endpoint' ? [{ field: `${entryLabel(entry)}.${field}`, url: value }] : [])))
+}
+
+/**
+ * @param entry - a carried patch entry.
+ * @returns the entry itself, or the rows it inserts.
+ */
+function rowsOf(entry: PatchEntry): PatchEntry[] {
+  const inserted = entry['insert']
+  return Array.isArray(inserted) ? inserted.filter(isPlainObject) : [entry]
+}
+
+/**
+ * @param entry - a patch entry of the profile.
+ * @param stay - the plugins the profile keeps that the setup does not list.
+ * @returns whether it only inserts rows of plugins the import keeps without listing them, which the import leaves alone.
+ */
+function rowsStay(entry: PatchEntry, stay: ReadonlySet<string>): boolean {
+  const inserted = entry['insert']
+  return Array.isArray(inserted) && inserted.length > 0 && inserted.every(row => isPlainObject(row) && typeof row['name'] === 'string' && stay.has(row['name']))
+}
+
+/**
+ * @param carried - the setup's carried entries.
+ * @returns each provider and host the entries send requests to that is not the provider's default, without repeats.
+ */
+function endpointNotices(carried: readonly PatchEntry[]): EndpointNotice[] {
+  const found = carried.flatMap(entry => rowsOf(entry).flatMap(row => offDefaultEndpoints(row)))
+  return found.filter((item, at) => found.findIndex(other => other.provider === item.provider && other.host === item.host) === at)
 }
 
 /**
