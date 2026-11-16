@@ -2430,6 +2430,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@delorun/changes':
         specifier: workspace:*
         version: link:../changes

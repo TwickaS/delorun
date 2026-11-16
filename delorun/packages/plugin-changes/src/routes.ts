@@ -89,6 +89,7 @@ import {
   DECIDE_AT_TERMINAL,
   LOOPBACK_REQUIRED,
   SHOW_PATH,
+  SETUP_PATHS,
   STATE_PATH,
   WORKSPACES_PATH,
   type ActionView,
@@ -112,8 +113,9 @@ import {
   type WorkspacesView,
 } from './wire.ts'
 import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget, type WorkspaceChoice } from './create-actions.ts'
+import { applySetup, exportSetup, HeldSetups, inspectSetup, MAX_SETUP_FILE_BYTES, SetupRefusal } from './setup-actions.ts'
 
-export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
+export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
 
 /** The largest body an action reads, in bytes; a body names one change or plugin. */
 export const MAX_BODY_BYTES = 16 * 1024
@@ -186,6 +188,11 @@ export interface RouteDependencies {
    * @param folder - a created plugin's folder.
    */
   readonly reveal: (folder: string) => void
+  /**
+   * The Delorun version a setup file names as its writer.
+   * @returns the version.
+   */
+  readonly delorunVersion: () => string
 }
 
 /** A refusal a route answers with: its status, its code and the sentence the person reads. */
@@ -231,6 +238,7 @@ const CHANGES_STATUS: Readonly<Record<ChangesCode, number>> = {
   HARNESS_CHANGED: 409,
   HARNESS_CHANGES_PENDING: 409,
   HARNESS_COPY_UNREADABLE: 409,
+  SETUP_REFUSED: 422,
 }
 
 /**
@@ -306,17 +314,18 @@ export function isCrossSite(request: IncomingMessage): boolean {
 }
 
 /**
- * Read a request's JSON object body, at most {@link MAX_BODY_BYTES}.
+ * Read a request's JSON object body, at most {@link MAX_BODY_BYTES} unless the route names another limit.
  * @param request - the request.
+ * @param limit - the most bytes the body may hold.
  * @returns the object; an empty body reads as `{}`.
  * @throws {RouteRefusal} `413 BODY_TOO_LARGE` or `400 BAD_REQUEST` for a body that is not one JSON object.
  */
-async function readBody(request: IncomingMessage): Promise<Readonly<Record<string, unknown>>> {
+async function readBody(request: IncomingMessage, limit = MAX_BODY_BYTES): Promise<Readonly<Record<string, unknown>>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request as AsyncIterable<Buffer>) {
     size += chunk.length
-    if (size > MAX_BODY_BYTES) throw new RouteRefusal(413, 'BODY_TOO_LARGE', `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.`)
+    if (size > limit) throw new RouteRefusal(413, 'BODY_TOO_LARGE', limit === MAX_BODY_BYTES ? `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.` : `A setup file larger than ${String(limit / 1024 / 1024)} MiB is imported with delorun setup import.`)
     chunks.push(chunk)
   }
   const text = Buffer.concat(chunks).toString('utf8')
@@ -974,6 +983,55 @@ function actionRoute(action: ChangesAction, dependencies: RouteDependencies): Ro
   }
 }
 
+/** The most bytes a setup upload's JSON body holds: the largest file as base64, with the field around it. */
+const MAX_SETUP_BODY_BYTES = Math.ceil(MAX_SETUP_FILE_BYTES * 4 / 3) + 1024
+
+/**
+ * Build one setup route. The arrival and the site are decided before the body is read, exactly as for an action: a
+ * setup changes what the profile runs and a file leaves the computer, so only the person at their computer asks.
+ * @param kind - `export`, `inspect` or `apply`.
+ * @param dependencies - what the routes reach.
+ * @param held - where an inspected file waits for its apply.
+ * @returns the handler.
+ */
+function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependencies, held: HeldSetups): RouteHandler {
+  return async (request, response) => {
+    const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
+    if (admission === undefined) return
+    let home: HomeWords | undefined
+    try {
+      if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'A setup is moved with a POST.')
+      if (!atComputer(admission.arrival)) throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
+      const presence = attestStudio(admission.arrival)
+      if (isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
+      const ctx = profileOf(dependencies)
+      home = homeWords(ctx.home, dependencies.logger)
+      const body = await readBody(request, kind === 'inspect' ? MAX_SETUP_BODY_BYTES : MAX_BODY_BYTES)
+      let answer: object
+      try {
+        if (kind === 'export') {
+          onlyFields(body, [])
+          answer = await exportSetup(ctx, dependencies.delorunVersion())
+        } else if (kind === 'inspect') {
+          onlyFields(body, ['file'])
+          if (typeof body['file'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the file as base64 text.')
+          answer = await inspectSetup(ctx, body['file'], held)
+        } else {
+          onlyFields(body, ['token'])
+          if (typeof body['token'] !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'The request names the inspected file by its token.')
+          answer = await applySetup(ctx, body['token'], held, { presence, reload: dependencies.reload, run: dependencies.pluginOperation(ctx) })
+        }
+      } catch (error) {
+        if (error instanceof SetupRefusal) throw new RouteRefusal(error.status, error.code, error.message)
+        throw error
+      }
+      sendJson(response, 200, withoutHome(answer, home.homes), admission.setCookie)
+    } catch (error) {
+      sendThrown(response, error, dependencies, home, admission.setCookie)
+    }
+  }
+}
+
 /** One route and its handler, as the web server registers it. */
 export interface ChangesRoute {
   readonly kind: 'exact'
@@ -987,10 +1045,12 @@ export interface ChangesRoute {
  * @returns the routes, `state` and `show` first.
  */
 export function changesRoutes(dependencies: RouteDependencies): readonly ChangesRoute[] {
+  const held = new HeldSetups()
   return [
     { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, atComputer, home) => stateOf(ctx, atComputer, home), dependencies) },
     { kind: 'exact', path: SHOW_PATH, handler: readingRoute((ctx, url) => shownOf(ctx, url), dependencies) },
     { kind: 'exact', path: WORKSPACES_PATH, handler: readingRoute((_ctx, _url, atComputer) => Promise.resolve(workspacesOf(dependencies.workspaces(), atComputer)), dependencies) },
     ...(Object.keys(ACTION_PATHS) as ChangesAction[]).map((action): ChangesRoute => ({ kind: 'exact', path: ACTION_PATHS[action], handler: actionRoute(action, dependencies) })),
+    ...(Object.keys(SETUP_PATHS) as (keyof typeof SETUP_PATHS)[]).map((kind): ChangesRoute => ({ kind: 'exact', path: SETUP_PATHS[kind], handler: setupRoute(kind, dependencies, held) })),
   ]
 }

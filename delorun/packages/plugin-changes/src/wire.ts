@@ -20,6 +20,74 @@ export const SHOW_PATH = `${CHANGES_ROUTE_PREFIX}/show`
 /** The workspaces a plugin may be created in, and whether this request is at the computer. */
 export const WORKSPACES_PATH = `${CHANGES_ROUTE_PREFIX}/workspaces`
 
+/** The setup routes, each a `POST` at the computer: write the profile's setup as a file, read a file and plan its import, apply a planned import. */
+export const SETUP_PATHS = {
+  export: `${CHANGES_ROUTE_PREFIX}/setup-export`,
+  inspect: `${CHANGES_ROUTE_PREFIX}/setup-inspect`,
+  apply: `${CHANGES_ROUTE_PREFIX}/setup-apply`,
+} as const
+
+/** What `setup-export` answers: the signed file, as base64, and what went in and was left out. */
+export interface SetupExportView {
+  /** The archive's bytes, base64. */
+  readonly file: string
+  /** A name for the download. */
+  readonly name: string
+  /** The plugins in the file. */
+  readonly plugins: number
+  /** How many of them are carried with their files. */
+  readonly local: number
+  /** The settings entries in the file. */
+  readonly settings: number
+  /** What the file does not carry, one sentence each. */
+  readonly leftOut: readonly string[]
+  /** The fingerprint of the key that signed the file. */
+  readonly signedBy: string
+}
+
+/** One plugin an import adds or moves. */
+export interface SetupInstallView {
+  readonly name: string
+  readonly version?: string
+  readonly kind: 'add' | 'replace'
+  /** Where it comes from: the registry, or files made on another computer whose code waits for review. */
+  readonly source: 'registry' | 'local'
+  /** What the profile has now, when it replaces one. */
+  readonly from?: string
+}
+
+/** What `setup-inspect` answers: who signed the file, and everything the import would change. */
+export interface SetupInspectView {
+  /** The token `setup-apply` takes; it applies once and expires. */
+  readonly token: string
+  readonly signer: { readonly state: 'verified' | 'unverified', readonly reason?: 'absent' | 'key-not-trusted', readonly fingerprint: string }
+  readonly createdBy: string
+  readonly exportedAt: string
+  /** The profile the file was exported from. */
+  readonly sourceProfile: string
+  readonly install: readonly SetupInstallView[]
+  readonly remove: readonly string[]
+  readonly keep: readonly string[]
+  readonly settings: readonly string[]
+  readonly endpoints: readonly string[]
+  readonly leftOut: readonly string[]
+  readonly keyNotes: readonly string[]
+  readonly protection: 'on' | 'off'
+  /** Whether the import changes anything. */
+  readonly changes: boolean
+}
+
+/** What `setup-apply` answers. */
+export interface SetupApplyView {
+  /** The profile history version saved before the import, which restores the setup as it was. */
+  readonly savedVersion: string
+  readonly removed: readonly string[]
+  readonly installed: readonly { readonly name: string, readonly reviewChange?: string }[]
+  readonly settingsWritten: boolean
+  readonly keyNotes: readonly string[]
+  readonly protection: 'on' | 'off'
+}
+
 /** The actions, each a `POST` whose body names the change or the plugin. */
 export const ACTION_PATHS = {
   apply: `${CHANGES_ROUTE_PREFIX}/apply`,
