@@ -140,7 +140,7 @@ Saving and switching work only in the studio on the computer Delorun runs on. A 
 
 ## Channels
 
-Each release belongs to a channel, `stable` or `beta`; the preview releases are on `stable`. A release checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it is newer than the running one. It never offers a lower version; `delorun recover rollback` returns to the previous release.
+Each release belongs to a channel, `stable` or `beta`; the preview releases are on `stable`, so 0.1.0 arrives as an ordinary update. A release checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it is newer than the running one. It never offers a lower version; `delorun recover rollback` returns to the previous release.
 
 <details>
 <summary>Edge cases</summary>

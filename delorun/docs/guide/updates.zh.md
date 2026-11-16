@@ -160,7 +160,7 @@ delorun update --from ~/Downloads/delorun-0.2.0
 
 ## 渠道
 
-每个发布版本属于一个渠道，`stable` 或 `beta`；预览版本在 `stable` 上。发布版本在它自己的渠道上检查更新；没有任何设置可以把一个安装移到另一个渠道。只要渠道当前的发布版本比正在运行的更新，`delorun update` 就会提供它。它从不提供更低的版本；`delorun recover rollback` 会回到前一个发布版本。
+每个发布版本属于一个渠道，`stable` 或 `beta`；预览版本在 `stable` 上，所以 0.1.0 会作为一次普通更新到来。发布版本在它自己的渠道上检查更新；没有任何设置可以把一个安装移到另一个渠道。只要渠道当前的发布版本比正在运行的更新，`delorun update` 就会提供它。它从不提供更低的版本；`delorun recover rollback` 会回到前一个发布版本。
 
 <details>
 <summary>边界情况</summary>
