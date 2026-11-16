@@ -10,7 +10,7 @@ interface Row {
   availability: 'installation' | 'profile' | 'missing'
   enabled: boolean
   installTarget?: { spec: string; version: string }
-  error?: { code: string; message: string }
+  error?: { code: string; message?: string; diagnostic?: string }
   readOnlyReason?: string
   installed?: boolean
   meta?: { title?: string | { en: string }; description?: string }
@@ -62,8 +62,30 @@ describe('where a listed bundle stands', () => {
     ['ships with the installation and is switched on', row({ name: 'a', enabled: true }), 'installed'],
     ['ships with the installation and is switched off', row({ name: 'a' }), 'available'],
     ['is installed in the profile and switched off', row({ name: 'a', availability: 'profile' }), 'available'],
+    ['ships with the installation, is switched off, and cannot run on this platform', row({ name: 'a', error: { code: 'unsupported-platform', message: 'x' } }), 'unavailable'],
   ])('says a bundle that %s is %s', (_, bundle, state) => {
     expect(stateOf(bundle as never)).toBe(state)
+  })
+})
+
+describe('the agent bundles the installation ships switched off', () => {
+  const agents = ['@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex']
+
+  it('are available to add from the installation, and adding switches them on without a download', async () => {
+    const { installer, pluginManager, state } = bench(agents.map(name => row({ name })))
+    installer.refresh(agents)
+    await flush()
+    expect(agents.map(name => state(name)?.state)).toEqual(['available', 'available'])
+    await installer.install(agents[0]!)
+    expect(pluginManager.setBundleEnabled).toHaveBeenCalledWith(agents[0], true)
+    expect(pluginManager.installBundle).not.toHaveBeenCalled()
+  })
+
+  it('say why a shipped bundle is unavailable on this platform', async () => {
+    const { installer, state } = bench([row({ name: agents[0]!, error: { code: 'unsupported-platform', diagnostic: 'macOS only' } })])
+    installer.refresh([agents[0]!])
+    await flush()
+    expect(state(agents[0]!)).toMatchObject({ state: 'unavailable', reason: 'macOS only' })
   })
 })
 

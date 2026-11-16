@@ -30,6 +30,8 @@ export interface BundleView {
   readonly title?: LocalizedText
   /** The package's own description, when the plugin manager lists one. */
   readonly description?: LocalizedText
+  /** Why the bundle is `unavailable` on this platform, when the plugin manager says so. */
+  readonly reason?: string
 }
 
 /** One offered bundled row as the steps draw it: a bundle view with the row's icon, when its package has one. */
@@ -85,6 +87,8 @@ export function stateOf(bundle: BundleInfo | undefined): BundleState {
     if (bundle.installed) return 'failed'
     return bundle.installTarget === undefined || bundle.error !== undefined ? 'unavailable' : 'available'
   }
+  // A shipped bundle that cannot run on this platform is not an error: it is unavailable here, with the manager's reason.
+  if (bundle.error?.code === 'unsupported-platform') return 'unavailable'
   if (bundle.error !== undefined || bundle.readOnlyReason !== undefined) return 'failed'
   return bundle.enabled ? 'installed' : 'available'
 }
@@ -167,6 +171,7 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
         state: stateOf(bundle),
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
+        ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},
       })
     }
   }
