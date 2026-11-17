@@ -31,10 +31,11 @@ const CLASSES = {
 /**
  * The one link at the end of a living section to the guide page that teaches it.
  * @param props.link - the text and address.
+ * @param props.className - extra classes for the line.
  * @returns the line.
  */
-function GuideLink({ link }: { link: { readonly text: string, readonly href: string } }) {
-  return <p className="col-span-full mt-4"><Link href={link.href}>{link.text}</Link></p>
+function GuideLink({ link, className = '' }: { link: { readonly text: string, readonly href: string }, className?: string }) {
+  return <p className={`col-span-full mt-4 ${className}`.trim()}><Link href={link.href}>{link.text}</Link></p>
 }
 
 /** The responsive replica's frame is 960 px wide (`REPLICA_BOXES`); from 1200 px it sits in the middle of the grid with its caption and rail. */
@@ -106,7 +107,7 @@ function Replays() {
       <div className={CONTENT}>
         <ReplicaFrame session="changes-and-versions" width="responsive" className={CENTRED} />
       </div>
-      <GuideLink link={copy.link} />
+      <GuideLink link={copy.link} className={`w-full ${CENTRED}`} />
     </Section>
   )
 }
