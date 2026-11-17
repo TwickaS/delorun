@@ -22,7 +22,7 @@ import { boundedDiff, compareVersions, reviewInputOf } from './diff.ts'
 import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { harnessCopyDirectory, harnessRuntimeDirectory, harnessScanCachePath, versionsDirectory } from './paths.ts'
-import { findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, readProtection, requirePresence, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
+import { decisionOf, findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, readProtection, requirePresence, withEntry, withoutDecision, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
 import { reviewChange } from './review.ts'
 import { readObject, readVersion, storeEmptyVersion, storeFileVersion } from './store.ts'
 import { byteLimitWords, compareCodeUnits, CONTENT_LIMITS, openRegularFile, readChunks, scanFolder, versionOf, type FileEntry, type ScanLimits, type ScannedFolder } from './tree.ts'
@@ -747,15 +747,22 @@ async function currentVersion(ctx: HarnessContext, record: HarnessRecord, path: 
  * @param ctx - the runtime.
  * @param id - the change id the person reviewed.
  * @param presence - proof that the person is at their computer.
+ * @param options - `reviewedTo`, the full content version the review showed as the change's new content; the studio
+ *   sends it, because the id binds that content through a truncated digest only.
  * @returns the change's log entry.
  * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `CHANGED_SINCE_REVIEW` when
- *   the copy no longer holds what the id names; `UNKNOWN_CHANGE`; `NOT_ALLOWED` for a change decided already.
+ *   the copy no longer holds what the id names, or the change's new content is not `reviewedTo`; `UNKNOWN_CHANGE`;
+ *   `NOT_ALLOWED` for a change decided already.
  */
-export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer): Promise<ChangeEntry> {
+export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer, options: { readonly reviewedTo?: ContentVersion } = {}): Promise<ChangeEntry> {
   requirePresence(presence, id)
   return withHarnessLock(ctx.home, async () => {
     const log = await readHarnessLog(ctx.home)
     const found = await requireFound(ctx, log, id)
+    const to = found.kind === 'pending' ? found.change.to : found.entry.to
+    if (options.reviewedTo !== undefined && to !== options.reviewedTo) {
+      throw new ChangesError('CHANGED_SINCE_REVIEW', id, `Change ${id} does not hold the content you were shown; look at it again.`)
+    }
     const at = timeOf(ctx)
     if (found.kind === 'logged') {
       const { entry } = found
@@ -765,7 +772,7 @@ export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, pres
         throw new ChangesError('NOT_ALLOWED', id, `Delorun no longer has what change ${id} applied, so there is nothing to apply again. See the changes: delorun changes list`)
       }
       const { leftOut: _leftOut, lastFailure: _lastFailure, ...applied } = entry
-      const done: ChangeEntry = { ...applied, state: 'applied', decidedAt: at, decidedFrom: presence.kind }
+      const done: ChangeEntry = { ...withoutDecision(applied), state: 'applied', ...decisionOf(at, presence) }
       await writeHarnessLog(ctx.home, withEntry(log, done))
       return done
     }
@@ -773,7 +780,7 @@ export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, pres
     await storeSides(ctx, change)
     const record = await readHarnessRecord(ctx.home, ctx.runtime)
     await writeHarnessRecord(ctx.home, await approving(ctx, record, change.file, change.to, id, at))
-    const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, id)?.createdAt ?? at), state: 'applied', decidedAt: at, decidedFrom: presence.kind }
+    const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, id)?.createdAt ?? at), state: 'applied', ...decisionOf(at, presence) }
     await writeHarnessLog(ctx.home, withEntry(log, done))
     return done
   })
@@ -878,7 +885,7 @@ async function discardLocated(ctx: HarnessContext, change: Located, at: string, 
   if (expected.approved !== undefined) await putInCopy(ctx.home, copy, change.file, expected.approved)
   else if (expected.signed === undefined) await rm(join(copy, ...change.file.split('/')), { force: true, recursive: true })
   else await writeCopyFile(join(copy, ...change.file.split('/')), await readSignedFile(await ctx.signed(), expected.signed), expected.signed.executable)
-  return { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+  return { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', ...decisionOf(at, presence) }
 }
 
 /**
@@ -934,7 +941,7 @@ async function undoEntry(ctx: HarnessContext, record: HarnessRecord, entry: Chan
   const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
   if (await pathExists(copy)) await putInCopy(ctx.home, copy, file, from)
   const { lastFailure: _lastFailure, ...rest } = entry
-  return { record: next, entry: { ...rest, state: 'undone', decidedAt: at, decidedFrom: presence.kind } }
+  return { record: next, entry: { ...withoutDecision(rest), state: 'undone', ...decisionOf(at, presence) } }
 }
 
 /**
@@ -964,7 +971,7 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
       unread = unreadReason(error)
     }
     for (const change of located) {
-      const entry: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+      const entry: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', ...decisionOf(at, presence) }
       discarded.push(entry)
       log = withEntry(log, entry)
     }
@@ -976,7 +983,7 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
       const approved = Object.hasOwn(record.files, file) ? record.files[file] : undefined
       if (approved?.version !== entry.to) continue
       const { lastFailure: _lastFailure, ...rest } = entry
-      undone.push({ ...rest, state: 'undone', decidedAt: at, decidedFrom: presence.kind })
+      undone.push({ ...withoutDecision(rest), state: 'undone', ...decisionOf(at, presence) })
     }
     for (const entry of undone) log = withEntry(log, entry)
     await writeHarnessRecord(ctx.home, { ...record, files: {} })
@@ -1090,4 +1097,16 @@ export function loggedHarnessChange(entry: ChangeEntry): HarnessChange | undefin
   if (entry.kind !== 'harness-edit' || file === undefined || runtime === undefined || entry.from === undefined || entry.to === undefined) return undefined
   const empty = versionOf([])
   return { id: entry.id, kind: 'harness-edit', runtime, file, status: entry.from === empty ? 'added' : entry.to === empty ? 'removed' : 'modified', from: entry.from, to: entry.to }
+}
+
+/**
+ * The running runtime's harness as the home process gives it to the Host (the `changesHarness` service), so the studio's
+ * Changes routes decide changes to Delorun itself against the signed file list the home process verified.
+ */
+export interface ChangesHarnessHost {
+  /**
+   * The running runtime's harness.
+   * @returns it, or undefined when Delorun does not run an installed release from the runtime store.
+   */
+  context(): HarnessContext | undefined
 }

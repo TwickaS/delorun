@@ -34,6 +34,7 @@ import { checkStoredBranding } from '@delorun/brand/branding'
 import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/workspace-icon'
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
+import type { PhonePowersLevel } from './phone-powers.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
@@ -540,6 +541,22 @@ export const REACH_ELEVATED_ACTIONS = {
  * starts with after its approval at the computer.
  */
 export const GRACE_REFUSED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')))
+
+/**
+ * The actions only Phone powers' Full level lets a device take: every `terminal/*` action, a new one included. Under
+ * Careful a terminal stays at the computer, because a shell outside the sandbox runs the same `delorun changes` commands
+ * that Careful keeps there; each is refused with {@link PHONE_POWERS_REFUSAL}, unlocked or not, in every mode.
+ */
+export const FULL_POWERS_ACTIONS: ReadonlySet<string> = GRACE_REFUSED_ACTIONS
+
+/**
+ * The refusal of an action Phone powers keeps at the computer.
+ * @param action - the refused action.
+ * @returns `loopback-required: <action> needs Phone powers set to Full`.
+ */
+export function phonePowersRefusal(action: string): string {
+  return `loopback-required: ${action} needs Phone powers set to Full at the computer`
+}
 
 /**
  * Assert that no action is in two of the tables.
@@ -1088,8 +1105,9 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. Every `terminal/*` action needs an unlock, always: no switch, workspace grant or
- * dangerous mode waives it, and the approval grace is not one ({@link GRACE_REFUSED_ACTIONS}).
+ * call an unlock admits with the unlock's id. Every `terminal/*` action needs Phone powers set to Full
+ * ({@link FULL_POWERS_ACTIONS}, refused first with {@link phonePowersRefusal}) and an unlock, always: no switch, workspace
+ * grant or dangerous mode waives either, and the approval grace is not an unlock ({@link GRACE_REFUSED_ACTIONS}).
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
@@ -1106,7 +1124,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs' | 'phonePowers'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1135,6 +1153,8 @@ export function createCondition(
   }
   let renew: string | undefined
   const decide: ReachCondition = ({ action, resource, args }) => {
+    // Phone powers keeps a terminal at the computer under Careful: no unlock, PIN page or mode lifts it.
+    if (FULL_POWERS_ACTIONS.has(action) && facts.phonePowers() !== 'full') return { kind: 'deny', reason: phonePowersRefusal(action) }
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
@@ -1315,6 +1335,12 @@ export interface ReachAccessFacts {
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
    */
   readonly dangerousMode: () => boolean
+  /**
+   * The Phone powers level in force, read on every check: under `careful` every `terminal/*` action is refused to a
+   * device ({@link FULL_POWERS_ACTIONS}).
+   * @returns the level; Careful while the record cannot be read.
+   */
+  readonly phonePowers: () => PhonePowersLevel
 }
 
 /**

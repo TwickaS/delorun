@@ -124,6 +124,9 @@ function Fix({ fix, t, onOpenSettings }: { readonly fix: RequirementFix } & Pick
       return <Button variant="outline" size="sm" className={`${css.button} ${css.alignStart}`} onClick={() => { onOpenSettings(fix.section) }}>{t('browser.fix.settings')}</Button>
     case 'docs':
       return <a className={css.link} href={fix.url} target="_blank" rel="noopener noreferrer">{t('browser.fix.docs')}</a>
+    case 'browse-pair':
+      // The pairing steps belong to the own-browser pack's Needs setup panel in Plugins; Browser's choices never meet this fix.
+      return null
     /* v8 ignore next 2 -- closed-union default only defends a future widening of RequirementFix */
     default:
       return assertNever(fix)

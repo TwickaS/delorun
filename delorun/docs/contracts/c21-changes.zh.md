@@ -48,6 +48,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 | `changes/` 之下的路径 | 保存的内容 |
 | --- | --- |
 | `protection.json` | `{"schema":"delorun.changes-protection/1","level":"on"\|"off","setAt":<ISO time>}`；缺失表示 `off` |
+| `notices.json` | `{"schema":"delorun.changes-notices/1","notices":[…]}`：最多 20 条由已配对设备所做的保护设置更改，按从旧到新排列，每条为 `{"id","kind":"protection","level","at","deviceId","device"}`；更改日志保持其模式 |
 | `store/objects/<sha256>` | 一个文件的字节，以其 SHA-256 命名，从不被重写 |
 | `store/versions/<sha256>.json` | 一个内容版本：`{"schema":"delorun.changes-version/1","entries":[…]}`，条目按路径排序；其名称是其规范条目的 SHA-256 |
 | `store.lock` | 存储的锁，保存其持有者的进程 id：存储文件夹和回收都持有它（[回收存储](#collecting-the-store)） |
@@ -77,7 +78,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 | `harness-edit` | harness 自身的某个文件与已签名发布的不同 |
 | `guard-weakening` | 某项设置削弱了同意或防护，或者保护被关闭 |
 
-更改处于 `pending`、`applied`、`discarded`、`left-out-at-start` 或 `undone` 之一。决定的 `decidedFrom` 是：`terminal` 或 `studio`，表示本人自己的决定；`upgrade`，表示 Changes 下的首次启动；`start`，表示失败的启动所遗漏的更改；`update`，表示本人确认的更新带到它所安装的运行时的 harness 文件；以及 `unreviewed`，表示保护关闭期间 Delorun 未经审查而加载的内容（[保护设置](#the-protection-setting)）。其 id 是 `c` 加上其种类、主体和两个版本的 SHA-256 的十个十六进制数字，因此 id 恰好指名了所展示的内容。每项已应用的更改是 profile 历史的一个版本。
+更改处于 `pending`、`applied`、`discarded`、`left-out-at-start` 或 `undone` 之一。决定的 `decidedFrom` 是：`terminal` 或 `studio`，表示本人自己的决定（`studio` 是电脑上的 studio，或已解锁的已配对设备的 studio；设备的决定还会在 `decidedOn` 中记录该设备的 id 和名称，之后的决定会清除它）；`upgrade`，表示 Changes 下的首次启动；`start`，表示失败的启动所遗漏的更改；`update`，表示本人确认的更新带到它所安装的运行时的 harness 文件；以及 `unreviewed`，表示保护关闭期间 Delorun 未经审查而加载的内容（[保护设置](#the-protection-setting)）。其 id 是 `c` 加上其种类、主体和两个版本的 SHA-256 的十个十六进制数字，因此 id 恰好指名了所展示的内容。每项已应用的更改是 profile 历史的一个版本。
 
 <a id="loading-approved-content"></a>
 
@@ -115,7 +116,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 
 每项决定都在 `harness.lock` 之下运行，并以 `decidedFrom` 记入日志；本人的每项决定都需要在场证明，并在读取或写入任何内容之前，拒绝 attest 函数未签发的证明：
 
-- **应用。** 先存储两侧；副本的内容成为记录中该文件的已批准内容，当它等于已签名的文件，或已签名的发布没有这样的文件而副本也不持有时，该条目被移除。它打印审查和风险摘要，并像插件的应用那样请求第二次确认。`runtimes/` 从不被写入。更改从下一次启动起运行。失败的启动所遗漏的更改，在记录仍持有其内容期间会再次被应用。
+- **应用。** 先存储两侧；副本的内容成为记录中该文件的已批准内容，当它等于已签名的文件，或已签名的发布没有这样的文件而副本也不持有时，该条目被移除。它打印审查和风险摘要，并像插件的应用那样请求第二次确认。`runtimes/` 从不被写入。更改从下一次启动起运行。失败的启动所遗漏的更改，在记录仍持有其内容期间会再次被应用。studio 的 `harness-apply` 还接收审查所显示的完整内容版本，因为 id 只通过十个数字绑定内容，对其他版本以 `CHANGED_SINCE_REVIEW` 拒绝。
 - **丢弃。** 副本再次持有运行时对该文件所运行的内容：已批准或已签名的字节，或没有文件。该更改记入日志为已丢弃。
 - **撤销。** 只在记录中该文件的内容（记录没有指名时为已签名的文件）是该更改的 `to` 期间：文件回到该更改的 `from`，当它是已签名的文件时该条目被移除，副本持有它，该更改记入日志为已撤销。否则 `NOT_ALLOWED` 写明较晚的更改。
 - **丢弃每项更改。** `delorun changes edit-harness --discard` 询问 harness 是否回到已签名的发布，把每项待处理的更改记入日志为已丢弃，把记录持有其内容的每项已应用或被遗漏的更改记入日志为已撤销，清空记录并移除副本，先使其目录可写，被移除处的链接不被跟随。无法读取的副本（`HARNESS_COPY_UNREADABLE` 或 `CHANGED_WHILE_READING`）不会使其停止：在那里等待的更改随副本一起被移除而不记入日志，并且该命令打印副本无法读取的原因。下一次启动原样运行已签名的发布。
@@ -137,7 +138,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 
 **跨越一次更新。** 更新通过与目标的已签名文件的三向合并，把运行中的运行时所运行的、非其已签名的文件，带到它所安装的运行时，如 [C3](c03-update-report.zh.md#harness-files-across-an-update) 所述：当有更改在副本中等待审查时，它以 `HARNESS_CHANGES_PENDING` 拒绝，当副本无法扫描时以 `HARNESS_COPY_UNREADABLE` 拒绝；它连同差异一起显示合并成双方都没有的内容的文件，并要求本人对它确认；当在 harness 锁之下重新规划的合并与本人确认的报告不同时，它以 `HARNESS_REPORT_STALE` 拒绝；它替换较早的安装在 `harness/<to>/` 之下留下的任何内容，写入带有每个所带文件的目标记录，并以 `decidedFrom: "update"` 把它记入日志为目标运行时的已应用 `harness-edit`，并把本人对每个冲突文件的内容保留为目标可写副本中的 `<file>.mine`。运行中运行时的记录、副本和日志条目保持不变，因此回滚会再次运行它们。库是 [`harness-merge.ts`](../../packages/changes/src/harness-merge.ts)。
 
-**studio。** Changes 一节列出 harness 已记入日志的更改及其差异（从存储读取），以及每项决定的终端命令；没有任何路由决定 harness 更改（[studio 的 Changes 一节](#the-studios-changes-section)）。
+**studio。** studio 的 harness 路由依据正在运行的运行时的签名文件列表来决定对 Delorun 本身的更改，home 进程把该列表作为根服务 `changesHarness` 交给 Host；没有它的 Host（例如从源码检出运行的 Host）在这些路由上应答 `409 HARNESS_UNAVAILABLE`。Changes 一节列出 harness 已记入日志的更改及其差异，从存储读取（[路由与恢复画面](#routes-and-the-recovery-screen)，[studio 的 Changes 一节](#the-studios-changes-section)）。
 
 <a id="reloads-and-restores"></a>
 
@@ -173,10 +174,12 @@ profile 写锁决定它是否可以写入。当 Host 自己的进程持有该锁
 
 ## 保护设置
 
-`changes/protection.json` 保存 `on` 或 `off`；没有该记录的 home 为 `off`，这是默认值，审查是本人开启的事项。只有终端证明才能更改它：`delorun changes protection on|off`（[命令](#commands)），或 setup 的 Full 模式（它只开启保护，[C11](c11-setup-answers.zh.md)）；将其关闭会在 profile 的更改日志中记为一项已应用的 `guard-weakening` 更改，`subject.setting` 为 `protection`，摘要为 `Protection turned off: changes load without review`。每项取决于该设置的决定都在作出决定时读取它：启动、重新加载之前的检查、home 进程的监视器、启动的 harness 步骤，以及 `@delorun/plugin-changes` 在每次 `plugin_manager` 调用时。设置的更改在下一次决定时生效，无需重启。
+`changes/protection.json` 保存 `on` 或 `off`；没有该记录的 home 为 `off`，这是默认值，审查是本人开启的事项。终端证明或 studio 证明可以更改它：`delorun changes protection on|off`（[命令](#commands)）、setup 的 Full 模式（它只开启保护，[C11](c11-setup-answers.zh.md)），以及 studio 的 `protection-on` 和 `protection-off` 路由，来自电脑或来自本人已解锁的已配对设备（[谁可以从何处做什么](#who-may-do-what-from-where)）。将其关闭会在 profile 的更改日志中记为一项已应用的 `guard-weakening` 更改，`subject.setting` 为 `protection`，摘要为 `Protection turned off: changes load without review`，`decidedFrom` 按证明为 `terminal` 或 `studio`。每项取决于该设置的决定都在作出决定时读取它：启动、重新加载之前的检查、home 进程的监视器、启动的 harness 步骤，以及 `@delorun/plugin-changes` 在每次 `plugin_manager` 调用时。设置的更改在下一次决定时生效，无需重启。
 
 - **保护关闭。** 更改无需审查即加载，并且仍被记录（[无需审查的加载](#loading-without-review)）。已链接插件的文件夹或 harness 可写副本的任何写入者，都会在没有人先审查的情况下更改 harness 所加载的代码：在完全访问工作区中工作的模型、下载的程序，或本人用户的任何其他进程。每个这样的更改都是日志中的一项已应用更改，`delorun changes list`、`show`、`verify` 和 `doctor` 会写明它，`undo` 会撤销它。仍受保护的是：受限工作区的命令和文件工具的写入仍然只去往沙箱允许的地方，受限命令仍然无法写入 Delorun home（`~/.delorun`），其中包括 `changes/` 和 harness 的可写副本（[C1](c01-home-layout.zh.md#security)）；沙箱允许受限工作区写入的插件文件夹（例如位于该工作区之内的文件夹）会无需审查就加载其所写入的内容。文件工具向 profile 的活动目录的写入，在两种设置下都被拒绝（[智能体与插件](#the-agent-and-plugins)）。
 - **保护开启。** 已更改的插件加载其已批准的内容，直到本人应用该更改，没有已批准内容的插件不加载任何内容；harness 编辑只在被应用之后才运行；智能体的插件安装和移除要等待本人；并且智能体在 chat 中首次通过文件工具向已批准插件的文件夹写入时会询问（[智能体与插件](#the-agent-and-plugins)）。终端检查和沙箱对 home 的写入规则使受限的模型无法关闭保护或批准某项更改（[谁可以从何处做什么](#who-may-do-what-from-where)）。
+- **第二次询问。** 关闭保护在终端和 studio 中都会询问两次。第二次询问指出等待中的更改会立即加载的插件，以及本人的 Delorun 副本中会在下次启动时应用的文件数量；在请求带 `confirmed: true` 重发之前，studio 的路由以 `409 CONFIRM_PROTECTION` 和 `willLoad {plugins, harnessFiles}` 应答它。第二次询问防的是误点，不是防在电脑前的人：能回答它的人就能关闭保护。
+- **来自手机的更改。** 从已配对设备对该设置所做的更改（无论哪个方向）会在 `notices.json` 中添加一条通知。电脑的 `state.notices` 列出它，`delorun changes list` 把它打印在 “Changed from a phone:” 下，并在列表到达终端时清除它，`notice-seen` 在电脑上的 studio 中清除它。设备无法清除通知，因此手机无法隐藏它所做的更改。
 
 已签名安装中被更改的文件，在两种设置下都会被运行时仓库的启动检查拒绝；从仓库启动的 home 进程在全新启动时像启动器那样检查其运行时。本人对 harness 文件的编辑，在两种设置下都只作为已应用的 harness 更改，从组合树运行（[harness 编辑](#harness-edits)）。
 
@@ -267,16 +270,21 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 
 | 操作 | 允许从何处 |
 | --- | --- |
-| 开启或关闭保护 | 仅在终端运行 `delorun changes protection on\|off`，以及 setup 的 Full 模式（它只开启保护），经由同一个终端证明；没有任何 studio 路由更改它 |
-| 应用、丢弃或撤销一项更改；关闭或再开启一个插件 | 在终端运行 `delorun changes`，或在电脑上的 studio（[路由与恢复屏幕](#routes-and-the-recovery-screen)） |
-| 创建 harness 的可写副本；应用、丢弃或撤销一项 harness 更改；丢弃每项 harness 更改 | 仅在终端、针对已安装的发布运行 `delorun changes`；没有任何 studio 路由和模型工具决定其中任何一项 |
-| 打开或关闭工作会话 | 在终端运行 `delorun changes work` 和 `done`，或在电脑上使用 studio 的 `work` 和 `done` 路由；Delorun 停止、崩溃之后的启动以及会话的结束时间都会在没有人参与的情况下关闭会话，不批准任何内容 |
-| 启动安全模式 | `delorun recover safe-mode`，或在电脑上的恢复屏幕 |
+| 开启保护 | 在终端运行 `delorun changes protection on`、setup 的 Full 模式（它只开启保护，经由同一个终端证明）、电脑上的 studio，以及本人已解锁的已配对设备（在两个手机权限级别下） |
+| 关闭保护 | 在终端运行 `delorun changes protection off`、电脑上的 studio，以及只在手机权限为 Full 时本人已解锁的已配对设备；studio 会再问一次（[保护设置](#the-protection-setting)） |
+| 撤销或丢弃插件的更改；丢弃对 Delorun 本身的更改 | 在终端运行 `delorun changes`、电脑上的 studio，以及本人已解锁的已配对设备（在两个手机权限级别下） |
+| 应用插件的更改；关闭或再开启一个插件；打开或关闭工作会话；制作插件、把其安装请求排队、在电脑上显示其文件夹；导出、检查或应用设置；启动安全模式；重启 | 在有该命令的情况下在终端运行 `delorun changes`，或电脑上的 studio（[路由与恢复屏幕](#routes-and-the-recovery-screen)）；只在手机权限为 Full 时本人已解锁的已配对设备。`delorun recover safe-mode` 和电脑上的恢复屏幕也会启动安全模式 |
+| 创建 harness 的可写副本；应用或撤销对 Delorun 本身的更改 | 在终端针对已安装的发布运行 `delorun changes`，或电脑上 studio 的 harness 路由；只在手机权限为 Full 时本人已解锁的已配对设备。没有任何模型工具决定其中任何一项 |
+| 丢弃对 Delorun 本身的每项更改 | 仅在终端运行 `delorun changes edit-harness --discard` |
+| 清除设备所做更改的通知 | 电脑上的 studio，以及在终端运行 `delorun changes list`；从不是设备 |
 | 读取更改 | 本人自己的命令，以及 studio 准入的任何会话，包括远程会话 |
 | 遗漏某项更改 | 引导失败的全新启动（[启动失败时](#when-a-start-fails)），不需要在场证明；它只写更改日志 |
+| 在没有人参与的情况下结束工作会话 | Delorun 停止、崩溃之后的启动以及会话的结束时间会关闭它，不批准任何内容 |
 | 无需审查就加载内容 | 仅在保护关闭时：启动的启动前步骤和重新加载之前针对插件文件夹的检查、Delorun 运行期间针对保存操作的 home 进程监视器，以及针对 harness 可写副本的已签名安装的启动（[无需审查的加载](#loading-without-review)），每一种都不需要在场证明 |
 
-在场证明只由 `attestTerminal`（标准输入和输出是终端）和 `attestStudio`（电脑上的 studio 请求，只有 studio 的 Changes 路由调用它）签发，并且写入者拒绝它们没有签发的任何值。保护设置的写入者还拒绝 studio 证明。
+已配对设备是远程访问分发器准入、且其设备列在 home 中的远程会话。它只凭本人为它输入的解锁行动，即在电脑上批准的验证码或 PIN（[C14](c14-oidc-passkeys.zh.md#elevation)）；批准宽限期（设备被批准之后的几分钟）从不算数，处于宽限期的设备与锁定的设备一样以 `403 ELEVATION_REQUIRED` 应答。在表格说设备只能在手机权限为 Full 时行动的地方，Careful 下的设备以 `403 LOOPBACK_REQUIRED` 应答（[手机权限](c14-oidc-passkeys.zh.md#phone-powers)）。[`access.ts`](../../packages/plugin-changes/src/access.ts) 中的 `CONTROL_LEVELS` 给每个控件一个级别：`unlocked`（两个手机权限级别下已解锁的设备）、`phone-powers`（只限 Full）或 `computer`。
+
+在场证明只由 `attestTerminal`（标准输入和输出是终端）、`attestStudio`（电脑上的 studio 请求）和 `attestDevice`（来自持有新解锁的已配对设备的 studio 请求，它还指明该设备）签发，并且写入者拒绝它们没有签发的任何值。只有 studio 的 Changes 路由调用 `attestStudio` 和 `attestDevice`。因此关闭保护依赖于三种证明之一：终端的证明；studio 的证明，即回环监听器、studio 的凭据和同源请求；或者在手机权限为 Full 时，已配对设备的证明，带本人输入的新解锁。更改日志把电脑的证明和设备的证明都记录为 `decidedFrom: "studio"`，设备的决定会在 `decidedOn` 中指明该设备。
 
 终端检查无法区分人和模型：模型的终端工具会给它的命令一个真实的伪终端。两条规则共同使受限工作区中的模型无法关闭保护或批准某项更改：终端检查，以及沙箱对 home 的写入规则，在该规则之下，受限命令不能在 Delorun home 之下（包括 `changes/`）写入任何内容，并且包含该 home 的工作区会被拒绝（[C1](c01-home-layout.zh.md#security)）。具有完全访问权限的工作区以本人自己的权限运行命令：在那里工作的模型可以像本人一样关闭保护并批准更改，并且保护关闭时，它对已链接插件文件夹的写入无需审查即加载。因此基本要求 [F16](../security/fundamentals.zh.md) 保持为设计目标：按其措辞它也涵盖完全访问工作区，而此处没有任何东西阻止它们，并且它在保护开启时适用。
 
@@ -288,15 +296,25 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 
 | 路由 | 谁 | 它做什么 |
 | --- | --- | --- |
-| `GET /delorun/changes/state` | studio 准入的任何会话，包括远程会话 | 只根据记录，不写入任何内容，也不读取任何插件的文件夹：上次启动失败了什么（`changes-boot.json`）、在启动时被遗漏的更改以及每次启动记录的失败（`leftOut`）、Changes 下的插件及其文件夹（`folders`，插件没有任何已批准内容时为 `plugin-install`）、等待审查的智能体请求、最新的 20 项已决定的更改及每项是否可以撤销、来自 harness 日志的最新 20 项对 Delorun 自身的已决定更改（`harness`：id、状态、文件、运行时、摘要、时间和被遗漏的失败）、保护设置、安全模式、工作会话、每条无法读取的记录对应的一句话，以及 `atComputer` |
-| `GET /delorun/changes/show?id=<id>`、`?work=<plugin>`、`?pending` | 相同 | 一项更改：其插件、文件夹、文件、风险摘要和有界差异，或其日志条目；对于没有任何插件更改拥有而 harness 日志拥有的 id，则是带有文件、风险摘要和其两个版本的有界差异的条目，当回收移除了已丢弃或已撤销更改的内容时则不带这些；打开的工作会话的文件夹版本与其开始时的内容相比；或者插件文件夹中等待审查的每项更改及其文件数量、风险种类和最近一次失败。每个都读取它所指名的文件夹并存储其内容，如 `delorun changes list` 所做的那样 |
-| `POST /delorun/changes/apply`、`discard`、`undo` | 电脑上的 studio | `{ "id", "confirmedRisk"? }`：与 `delorun changes` 相同；`apply` 在 `confirmedRisk` 为 `true` 之前回答 `409 CONFIRM_RISK`，附带种类和差异不显示的每个文件，对于智能体的插件请求，在 `confirmedRisk` 为 `true` 之前回答 `409 CONFIRM_RISK`，写明其规格（Delorun 在 pnpm 解析它之前不显示其内容），然后按[智能体与插件](#the-agent-and-plugins)所述应用它，并回答条目、运行中的 Host 如何重新加载，以及对于指名文件夹的规格，持有文件夹内容的那项更改；每个路由都在任何操作运行之前，对 harness 日志拥有的 id 以 `409 DECIDE_AT_TERMINAL` 和 `delorun changes apply\|discard\|undo <id>` 拒绝，并且没有任何路由调用 harness 操作 |
+| `GET /delorun/changes/state` | studio 准入的任何会话，包括远程会话 | 只根据记录，不写入任何内容，也不读取任何插件的文件夹：`access`（请求者的 `actor`、带本人是否作出选择的 `phonePowers`，以及 `may`，对每个控件为 `ok` 或它所 `needs` 的内容）、`harnessAvailable`、`unreviewedSinceOff`（自上次关闭保护以来未经审查而加载的更改）、`notices`（只限电脑）、上次启动失败了什么（`changes-boot.json`）、在启动时被遗漏的更改以及每次启动记录的失败（`leftOut`）、Changes 下的插件及其文件夹（`folders`，插件没有任何已批准内容时为 `plugin-install`）、等待审查的智能体请求、最新的 20 项已决定的更改及每项是否可以撤销、来自 harness 日志的最新 20 项对 Delorun 自身的已决定更改（`harness`：id、状态、文件、运行时、摘要、时间和被遗漏的失败）、保护设置、安全模式、工作会话、每条无法读取的记录对应的一句话，以及 `atComputer` |
+| `GET /delorun/changes/show?id=<id>`、`?work=<plugin>`、`?pending` | 相同 | 一项更改：其插件、文件夹、文件、风险摘要和有界差异，或其日志条目；对于没有任何插件更改拥有而 harness 日志拥有的 id，则是带有文件、风险摘要和其两个版本的有界差异的条目，当回收移除了已丢弃或已撤销更改的内容时则不带这些；打开的工作会话的文件夹版本与其开始时的内容相比；或者插件文件夹中等待审查的每项更改及其文件数量、风险种类和最近一次失败，以及在 `harness` 之下，本人的 Delorun 副本中等待的每项更改及其完整的 `to` 版本。每个都读取它所指名的文件夹并存储其内容，如 `delorun changes list` 所做的那样 |
+| `POST /delorun/changes/apply`、`discard`、`undo` | 电脑；按[级别表](#who-may-do-what-from-where)的已配对设备 | `{ "id", "confirmedRisk"? }`：与 `delorun changes` 相同；`apply` 在 `confirmedRisk` 为 `true` 之前回答 `409 CONFIRM_RISK`，附带种类和差异不显示的每个文件，对于智能体的插件请求，在 `confirmedRisk` 为 `true` 之前回答 `409 CONFIRM_RISK`，写明其规格（Delorun 在 pnpm 解析它之前不显示其内容），然后按[智能体与插件](#the-agent-and-plugins)所述应用它，并回答条目、运行中的 Host 如何重新加载，以及对于指名文件夹的规格，持有文件夹内容的那项更改；每个路由都在任何操作运行之前，对 harness 日志拥有的 id 以 `409 HARNESS_ROUTE` 拒绝，因为对 Delorun 本身的更改在 harness 路由上决定 |
 | `POST /delorun/changes/off`、`on` | 相同 | `{ "plugin" }`：关闭或开启该插件 |
 | `POST /delorun/changes/work`、`done` | 相同 | `work` 接受 `{ "plugin", "minutes"? }`，默认 120 分钟；`done` 接受 `{ "plugin", "version", "confirmedRisk"? }`，即 `show?work=` 所显示的版本，对其他版本以 `409 CHANGED_SINCE_REVIEW` 拒绝，并像 `apply` 那样请求第二次确认 |
 | `POST /delorun/changes/safe-mode` | 相同 | `{}`：profile safety 的安全模式，带有该插件的行的 `installationBundles`，即 Delorun 的 profile bundle 列表；没有它时，`503 SAFE_MODE_UNAVAILABLE` 写明 `delorun recover safe-mode` |
+| `POST /delorun/changes/harness-apply`、`harness-undo`、`harness-discard`、`harness-copy` | 相同 | 对 Delorun 本身的更改，依据正在运行的运行时的签名文件列表。`harness-apply` 接收 `{ "id", "to", "confirmedRisk"? }`，其中 `to` 是 `show?pending` 为该更改列出的完整 64 位十六进制内容版本，对其他版本回答 `409 CHANGED_SINCE_REVIEW`；它像 `apply` 那样请求第二次确认。`harness-undo` 和 `harness-discard` 接收 `{ "id" }`，`harness-copy` 接收 `{}` 并制作本人的运行时 `app/` 目录的可写副本。没有正在运行的运行时的 harness 的 Host 上，每个都回答 `409 HARNESS_UNAVAILABLE`；已应用或已撤销的更改的回答写明它是实时生效还是重启之后生效 |
+| `POST /delorun/changes/protection-on`、`protection-off` | 相同 | `protection-on` 接收 `{}`，并回答保护关闭期间未经审查而加载的更改。`protection-off` 接收 `{ "confirmed"? }`，在 `confirmed` 为 `true` 之前回答 `409 CONFIRM_PROTECTION` 和 `willLoad {plugins, harnessFiles}`，这是挡住误点、而不是挡住电脑前的人的第二次询问（[保护设置](#the-protection-setting)）。来自已配对设备的更改还会写入一条通知 |
+| `POST /delorun/changes/notice-seen` | 只限电脑 | `{ "id" }`：清除设备所做保护更改的通知；设备以 `403 LOOPBACK_REQUIRED` 被拒绝 |
+| `POST /delorun/changes/create`、`request`、`reveal` | 与 `apply` 相同 | 在工作区的 `plugins/` 文件夹中制作的插件、作为等待审查的更改排队的其安装请求，以及在电脑的文件管理器中显示的其文件夹；没有一个开启插件或批准内容 |
 | `POST /delorun/changes/setup-export`、`setup-inspect`、`setup-apply` | 相同 | setup 的迁移方式见 [C8](c08-archive-and-trash.zh.md#the-setup-archive)。`setup-export` 接收 `{ "list": true }` 并返回本人添加的插件，或接收选择 `{ "settings"?, "localCode"?, "plugins"?, "note"? }` 并以 base64 返回已签名的文件（至多 32 MiB，否则 `413 SETUP_TOO_LARGE`），并给出放进了什么、略去了什么；被携带的设置含凭据时返回 `422 SETUP_REFUSED`。`setup-inspect` 接收 `{ "file" }`（base64）或已保存文件的 `{ "token" }`，并带导入选择 `"settings"`（默认 true）、`"removeOthers"`（默认 false）与 `"endpointsConfirmed"`（默认 false）；它运行 `delorun setup import` 的全部检查，不写入任何内容，返回签名者（未签名或由未知密钥签名的文件为 `unverified` 并带密钥指纹）、每个将添加、移动或移除的插件、每个将设置或恢复默认的设置、端点、未应用的内容、要添加的密钥与保护设置，并带提供方默认值之外的端点（`endpointNotices`）和一个令牌；未通过某项检查的文件返回 `422` 及归档的错误码。令牌保留那份被检查的文件十分钟，并绑定到规划时所用的选择：用该令牌和其他选择再次检查会重新规划并返回新令牌，旧令牌为 `410 SETUP_EXPIRED`。`setup-apply` 接收 `{ "token", "settings"?, "removeOthers"?, "endpointsConfirmed"? }`，先保存版本“Before importing a setup”，再通过 `applyInstallChange` 的插件请求只应用一次，返回该版本、被移除与已安装的内容（在另一台电脑上编写的插件附带保存其代码以待审阅的变更），以及设置是否已写入；其他令牌或已用过的令牌为 `410 SETUP_EXPIRED`，与令牌不同的选择为 `409 SETUP_CHOICES_CHANGED`，它会保留已保存的文件；含未确认端点的导入在任何更改之前以 `SETUP_REFUSED` 被拒绝。setup 的应答携带代码和字段（略去了什么及原因、替换了什么、设置或更改了哪些设置、要添加的密钥、端点），而不是句子，因此界面用本人的语言来表述它们。 |
 
-没有任何路由更改保护设置；`state` 以只读方式写明它，studio 据此说明更改是否无需审查即加载。每个请求首先由 Connection、Host/Origin 屏障，然后由 studio 的签名 cookie 或 `authenticator` 提供方准入：没有凭据的请求回答 `401 NOT_SIGNED_IN` 或 `403 FORBIDDEN`，其他什么都不运行。随后 `POST` 需要本人在电脑上，这在读取请求体之前决定：请求到达时 `Host` 指名回环 authority，携带了凭据，并且 Connection 的 `isReachPeer` 没有指名其会话。该闸门依赖这两项检查：每个远程访问监听器都拒绝不是它自己地址的 `Host`，该地址从不是回环地址，并且 `isReachPeer` 指名了远程访问分发器准入的每个会话。这些路由还读取 `@delorun/home` 的监听器戳记 `REQUEST_LISTENER`（`home-auth` 的 authenticator 在远程访问监听器所准入的每个请求上设置它），并拒绝带有另一个监听器戳记的请求。没有 `isReachPeer` 的 Connection 不注册任何路由。目前还不存在会话因子，之后对远程访问的更改会用会话因子取代这一点。任何其他请求都回答 `403 LOOPBACK_REQUIRED`，附带「This needs you at your computer.」。另一个站点发送的浏览器请求（按 `Sec-Fetch-Site`，或按不是该请求自己回环 origin 的 `Origin`）回答 `403 CROSS_SITE`，同样在读取请求体之前。请求体随后是一个最多 16 KiB、只含上述字段的 JSON 对象，路由用 `attestStudio` 为该请求作证。更改 Host 所运行内容的操作，用 `reloadProfile` 和 Host 的热重载在 Host 自己的进程中重新加载它。回答是带 `cache-control: no-store` 的 JSON，只含面向本人的字段：不含 home 之下的路径，也不含内容版本（`done` 批准的那个除外）；文件名、差异和失败是 JSON 字符串。其文字写明 Delorun home 的拒绝回答其代码，附带「Its details name files Delorun keeps; the Host log has them.」，`state` 中因这种原因而无法读取的部分用该句子写明这一部分，Host 日志保留原文；已记录的失败文本（加载、启动或重新加载失败）把 home 写作 `<Delorun home>`。Changes 的拒绝保留其代码，`UNKNOWN_CHANGE` 为 404，`NOT_AT_COMPUTER` 为 403，无法读取的记录为 500，其他为 409。
+每个请求首先由 Connection、Host/Origin 屏障，然后由 studio 的签名 cookie 或 `authenticator` 提供方准入：没有凭据的请求回答 `401 NOT_SIGNED_IN` 或 `403 FORBIDDEN`，其他什么都不运行。随后 `POST` 在读取请求体之前按以下顺序决定：
+
+1. **站点。** 在电脑上，`Sec-Fetch-Site` 指名另一个站点、或 `Origin` 不是该请求自己回环 origin 的请求，回答 `403 CROSS_SITE`。来自已配对设备时，外来的 `Sec-Fetch-Site`，或缺少 `Origin`、或 `Origin` 不是远程访问监听器所检查的 studio 地址 `https://<Host>`，同样回答 `403 CROSS_SITE`。
+2. **控件的级别**（[谁可以从何处做什么](#who-may-do-what-from-where)）。既不在电脑上、也不来自已配对设备的请求，以及其控件需要电脑、或在 Careful 下需要手机权限 Full 的设备，回答 `403 LOOPBACK_REQUIRED`，附带「This needs you at your computer.」。没有新解锁的设备（锁定或只处于批准宽限期）回答 `403 ELEVATION_REQUIRED`。
+3. **证明。** 电脑用 `attestStudio` 作证，设备用 `attestDevice` 作证。两者都记录为 `decidedFrom: "studio"`；设备的决定还把设备的 id 和名称记录为 `decidedOn`，`state` 把它显示为条目的 `decidedOn` 名称。
+
+当请求到达时 `Host` 指名回环 authority、携带了凭据、并且 Connection 的 `isReachPeer` 没有指名其会话时，该请求就在电脑上。这依赖两项检查：每个远程访问监听器都拒绝不是它自己地址的 `Host`，该地址从不是回环地址，并且 `isReachPeer` 指名了远程访问分发器准入的每个会话。这些路由还读取 `@delorun/home` 的监听器戳记 `REQUEST_LISTENER`（`home-auth` 的 authenticator 在远程访问监听器所准入的每个请求上设置它），并拒绝带有另一个监听器戳记的请求。没有 `isReachPeer` 的 Connection 不注册任何路由。已配对设备是远程访问分发器为 home 列出的设备所准入的会话。目前还不存在会话因子，之后对远程访问的更改会用会话因子取代电脑检查。请求体随后是一个最多 16 KiB、只含上述字段的 JSON 对象，路由为该请求作证。设备所执行的操作成功之后，它的解锁会被续期。更改 Host 所运行内容的操作，用 `reloadProfile` 和 Host 的热重载在 Host 自己的进程中重新加载它。回答是带 `cache-control: no-store` 的 JSON，只含面向本人的字段：不含 home 之下的路径，也不含内容版本（`done` 批准的那个以及 `show?pending` 中对 Delorun 本身的更改的 `to` 除外）；文件名、差异和失败是 JSON 字符串。其文字写明 Delorun home 的拒绝回答其代码，附带「Its details name files Delorun keeps; the Host log has them.」，`state` 中因这种原因而无法读取的部分用该句子写明这一部分，Host 日志保留原文；已记录的失败文本（加载、启动或重新加载失败）把 home 写作 `<Delorun home>`。Changes 的拒绝保留其代码，`UNKNOWN_CHANGE` 为 404，`NOT_AT_COMPUTER` 为 403，无法读取的记录为 500，其他为 409。
 
 恢复屏幕是上游引导页的一部分，不需要客户端插件。在其索引写明 `dshRecoveryRoutes` 的页面上，它在以下情况显示于失败报告之下：客户端入口无法加载或激活，或引导在 studio 挂载之前抛出异常；引导开始 30 秒后 studio 仍未挂载；以及在 `/recovery`，上游的 frontend-static 服务器只在索引注入行写明 `dshRecoveryRoutes` 时，才在同一屏障之后把它渲染为索引，否则像任何缺失的路径那样回答；在那里引导页不加载任何客户端插件。它读取 `state` 并显示失败了什么、上次启动的插件及其 Turn off、近期的更改以及可撤销处的 Undo，以及 Start in safe mode；每个操作都请求浏览器的确认，并 POST 到其路由。远程会话可以读取该屏幕，并且在 `atComputer` 为 false 时，以及在某个操作回答 `403 LOOPBACK_REQUIRED` 时，被告知「This needs you at your computer.」。其文字按浏览器语言为英文或中文，它只用 DOM 文本构建其元素，因此在远程访问监听器的 Content Security Policy 和 Trusted Types 之下运行，并且它是一个带有获取焦点的标题的带标签区域，对拒绝使用 alert，对结果使用 polite 状态。
 
@@ -322,20 +340,20 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 
 | 子命令 | 它做什么 |
 | --- | --- |
-| `list`（默认）`[--json]` | 等待审查的更改（根据每个文件夹现在的状态计算）和等待审查的智能体插件请求（`requests`，标为 `asked in a chat`），然后是失败的启动所遗漏且仍被遗漏的更改（`leftOut`），然后是其他每项已记入日志的更改（最新的在前）、文件夹已消失的每个插件、保护设置以及任何工作会话 |
+| `list`（默认）`[--json]` | 等待审查的更改（根据每个文件夹现在的状态计算）和等待审查的智能体插件请求（`requests`，标为 `asked in a chat`），然后是失败的启动所遗漏且仍被遗漏的更改（`leftOut`），然后是其他每项已记入日志的更改（最新的在前）、文件夹已消失的每个插件、保护设置、已配对设备所做的保护更改（在 “Changed from a phone:” 之下）以及任何工作会话；在终端上它会清除它所打印的通知，在其他地方则保留它们 |
 | `show <id> [--diff] [--json]` | 一项更改：插件、其文件夹、其文件（依赖文件分组）、风险摘要的各行，以及带 `--diff` 时的有界差异，并说明差异何时被截短 |
 | `apply <id>` | 插件的已批准内容变为该 id 所指名的版本；当其文件夹持有任何其他内容时为 `CHANGED_SINCE_REVIEW`。对于智能体的插件请求，上游的插件操作针对其规格运行（[智能体与插件](#the-agent-and-plugins)）；失败时为 `OPERATION_FAILED`。在启动时被遗漏的更改再次加载（[启动失败时](#when-a-start-fails)） |
 | `discard <id>` | 该更改变为 `discarded`：它从不加载，并且在文件夹持有该内容期间不被列出；文件夹从不被写入 |
 | `undo <id>` | 已应用的插件更改，或在启动时被遗漏的更改：已批准的内容回到该更改的 `from`，或者在撤销其安装之后该插件没有任何已批准内容，并且其活动目录持有它；保护关闭时，它所撤销的文件夹内容在文件夹持有其他内容之前不再加载（[无需审查的加载](#loading-without-review)）；`plugin-off` 会开启该插件，`plugin-on` 会关闭它；当该插件的较晚更改已被应用，以及对于其他种类，为 `NOT_ALLOWED` |
 | `off <plugin>`、`on <plugin>` | 包名离开 profile 的 `package.json` 中的 `dsh.profile.bundles`，或被追加到其中，如上游的插件管理器所写；对 `@delorun/bundle-local` 以及 profile 没有处于该状态的插件为 `NOT_ALLOWED` |
-| `protection [on\|off]` | 打印该设置及其含义，或在说明新设置的含义并询问之后更改它；将其关闭会记为一项已应用的 `guard-weakening` 更改（[保护设置](#the-protection-setting)） |
+| `protection [on\|off]` | 打印该设置及其含义，或在说明新设置的含义并询问之后更改它；将其关闭会再问一次，指出届时哪些内容会不经审查就加载，并记为一项已应用的 `guard-weakening` 更改（[保护设置](#the-protection-setting)） |
 | `work <plugin> [--for <minutes>]` | 打开一个持续 `--for` 分钟（默认 120，最多 480）的工作会话，并打印 `Working on <plugin>: edits in <folder> load live until delorun changes done <plugin>, at the latest until <endsAt>.`；当文件夹的内容无法立即加载时，它还会报告失败，并以 1 退出而会话保持打开 |
 | `done <plugin>` | 打印文件夹的版本、其文件、风险摘要以及相对于已批准内容的有界差异，询问（检查发现了问题时询问两次），并恰好批准该版本；当文件夹在此期间发生变化时为 `CHANGED_SINCE_REVIEW`，当该版本加载失败时以 1 退出而会话保持打开 |
 | `edit-harness [--discard]` | 创建运行中运行时的 `app/` 目录的可写副本并打印其文件夹，或在它已存在时打印它而不改变任何内容；`--discard` 先询问，然后丢弃运行中运行时的每项 harness 更改（[harness 编辑](#harness-edits)）。在源码检出中被拒绝，因为那里没有可更改的已安装发布 |
 
 `list`、`show`、`apply`、`discard` 和 `undo` 在没有任何插件更改拥有某个 id 之后，按 id 到达 harness 更改：`list` 把每个等待中的更改写作 `<id>  Delorun <runtime> itself: <file> (<status>)`，然后是 harness 被遗漏的和已记入日志的更改、副本的文件夹、其被跳过的条目以及保留在旁的文件；`show --diff` 打印两个单文件版本之间的有界差异，该文件算作 harness 自己的而不是依赖的，尽管它位于 `node_modules` 之下。无法读取的副本（例如超过扫描上限的副本）会在列表中被写明而不是使列表失败。
 
-- **在场与确认。** 每个更改任何内容的子命令首先需要标准输入和输出是终端，否则在读取或写入任何内容之前以「This needs you at your computer: run it in a terminal.」拒绝。然后它询问一个是或否的问题；`y` 或 `yes` 之外的任何回答都不改变任何内容。`apply` 首先打印该更改的摘要和风险行以及有界差异，在终端上分页显示（Enter 显示下一页，`a` 显示其余部分），并且当检查标记了该更改时，询问写明各种类和差异不显示内容的每个文件的第二个问题。`protection off` 首先说「Changes will load without your review.」以及关闭意味着什么，`protection on` 说「Changes will wait for your review.」以及开启意味着什么；两者随后都询问，并且该命令说明它在 Delorun 的下一次决定时生效，无需重启。
+- **在场与确认。** 每个更改任何内容的子命令首先需要标准输入和输出是终端，否则在读取或写入任何内容之前以「This needs you at your computer: run it in a terminal.」拒绝。然后它询问一个是或否的问题；`y` 或 `yes` 之外的任何回答都不改变任何内容。`apply` 首先打印该更改的摘要和风险行以及有界差异，在终端上分页显示（Enter 显示下一页，`a` 显示其余部分），并且当检查标记了该更改时，询问写明各种类和差异不显示内容的每个文件的第二个问题。`protection off` 首先说「Changes will load without your review.」以及关闭意味着什么，`protection on` 说「Changes will wait for your review.」以及开启意味着什么；两者随后都询问。`protection off` 接着在指出等待中的更改会立即加载的插件，以及本人的 Delorun 副本中会在下次启动时应用的文件数量之后，再问一次；第二次询问防的是误点，不是防在电脑前的人。该命令说明更改在 Delorun 的下一次决定时生效，无需重启。
 - **一个历史版本。** 每个操作都在上游的 profile 写锁之下运行，并记录一个 profile 历史版本（`kind: person`），其主题写明该更改的 id：`Applied <id>: …`、`Undid <id>: …`、`Turned off <plugin> (<id>)`。丢弃和保护设置不更改任何 profile 文件，也不记录历史版本。
 - **重新加载运行中的 Home。** 当 profile 的 home 进程应答时，该操作在 profile 写锁之下运行，然后发送 [C19](c19-home-process.zh.md) 的 `changes.reload`，它不携带任何内容：Host 通过上游的热重载重新组合 profile。热重载关闭、插件加载或启动失败，或该更改需要重启时，重新加载失败。当没有 home 进程应答时，该命令在该操作期间持有 profile 的 home 锁，因此其间不会运行任何启动，并且下一次启动加载该更改。
 - **失败的重新加载会回退。** 已批准的记录、插件的活动目录和 `active.json`，或 bundle 列表，回到该操作之前所持有的内容；第二个历史版本 `Went back: <id> failed to load` 记录这一点；条目回到 `pending`，对于撤销则保持 `applied`，带有 `lastFailure` `{at, failure}`；Host 再重新加载一次；该命令报告失败并以 1 退出。被关闭或开启而加载失败的插件连同其失败一起被列出，并按其 id 再次应用。
@@ -381,25 +399,26 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 1. 在工作会话之外，从文件夹链接的插件从不从该文件夹加载：profile 的依赖、锁文件条目和链接指名其活动目录，该目录持有已批准的版本。保护开启时，只有本人的决定才能更改已批准的版本。
 2. 没有已批准内容的插件不加载任何内容。
 3. 受限命令不能写入 `changes/`：它位于受保护的 home 之下，且不是读取豁免（[C1](c01-home-layout.zh.md#security)）。因此在伪终端中运行、通过终端检查的受限命令，仍然无法关闭保护或批准某项更改（[F16](../security/fundamentals.zh.md)），也无法写入 harness 的可写副本。
-4. 只有终端证明才能更改保护设置。只有终端证明或电脑上的 studio 证明才能打开或关闭工作会话，没有本人参与的结束（Delorun 停止、崩溃之后的启动、其结束时间）除外，它不批准任何内容，并经由 `@delorun/changes/stop`，该入口只有 CLI 的启动模块导入。
+4. 只有终端证明或 studio 证明才能更改保护设置：终端的证明、电脑上 studio 的证明（回环监听器、studio 的凭据和同源请求），或者在手机权限为 Full 时，带新解锁的已配对设备的证明（要求 23）。只有终端证明或 studio 证明才能打开或关闭工作会话，没有本人参与的结束（Delorun 停止、崩溃之后的启动、其结束时间）除外，它不批准任何内容，并经由 `@delorun/changes/stop`，该入口只有 CLI 的启动模块导入。
 5. 存储的对象和版本在每次读取时都对照其名称检查。
-6. 每个改变 profile 所运行内容的操作，在读取或写入任何内容之前，都会拒绝 attest 函数未签发的证明；`delorun changes` 只在终端获得其证明；并且除 `delorun changes`（`delorun/apps/cli/src/changes/`，包括只开启保护的 setup 一节）、`@delorun/changes` 和 studio 的 Changes 路由（`delorun/packages/plugin-changes/src/routes.ts`）之外，Delorun 或上游的任何模块都不导入某个操作或 attest 函数；这些路由既不导入 `attestTerminal`，也不导入保护设置的写入者。
+6. 每个改变 profile 所运行内容的操作，在读取或写入任何内容之前，都会拒绝 attest 函数未签发的证明；`delorun changes` 只在终端获得其证明；并且除 `delorun changes`（`delorun/apps/cli/src/changes/`，包括只开启保护的 setup 一节）、`@delorun/changes` 和 studio 的 Changes 路由（`delorun/packages/plugin-changes/src/routes.ts`）之外，Delorun 或上游的任何模块都不导入某个操作或 attest 函数；这些路由导入 `attestStudio`、`attestDevice`、`changeProtection`、`dismissNotice` 和 harness 操作，而不导入 `attestTerminal`、`setProtection` 和 `discardAllHarnessChanges` 中的任何一个。
 7. 在工作会话中，失败的重新加载使最近加载的内容或已批准的内容继续运行，且会话保持打开。没有本人参与的会话结束不批准任何内容：已批准的内容保持为会话开始时的版本。`done` 只批准它所显示的版本。会话在其 `endsAt` 结束，最晚在开始后 480 分钟，此后没有任何启动加载其文件夹。
 8. 保护开启且 `plugin_changes_pending` 开启时，智能体的 `plugin_manager` 安装、更新或移除不更改任何 profile 文件，也从不到达该工具的批准；指名文件夹的智能体规格在本人审查该文件夹的内容之前不加载任何内容，范围指名另一个来源的则被拒绝；保护开启且 `approved_plugin_write_consent` 开启时，智能体在 chat 中首次通过文件工具向已批准插件的文件夹写入时会询问，无论路径如何拼写；该开关开启时，文件工具向 profile 活动目录的写入在两种设置下都被拒绝。应用智能体的请求不会运行 profile 的 `allowBuilds` 不允许的构建脚本，也不会安装与此 Delorun 不兼容的版本。
 9. `delorun changes`、`verify`、`doctor` 和 `status` 从文件、日志条目或插件的失败中打印的内容，无法移动光标、另起一行或重新排列其周围的文本。差异不显示其新内容的更改、Node 会加载的二进制文件、超过差异上限的文件或文件夹内依赖的文件，会请求第二次确认并写明该文件。在 Changes 下的首次启动之后创建的 profile，不在升级时批准其任何链接。
 10. 在对运行中 profile 的每次重新组合之前以及每次启动时，每个链接都指名其插件的活动目录，并且每个活动目录都持有 Changes 所保持的内容，否则不加载任何东西：指向文件夹的链接在 profile 写锁允许处先被移动，任何其他不同之处都使启动或重新加载被拒绝（[重新加载与恢复](#reloads-and-restores)）。已批准插件的已安装依赖从已批准的副本按哈希加载，从不从其安装位置加载，只因其已安装的包而超过内容上限、且保护关闭时的插件除外。
 11. 无法作为一个内容版本读取的文件夹使已批准的内容继续运行，且从不使启动停止；存储只保留记录所引用的内容，宽限期内写入的版本除外（[回收存储](#collecting-the-store)）。
 12. 在某项更改之后立即失败的启动，只遗漏该项更改，方法是只写更改日志，并且只加载在它之前已批准的内容或什么都不加载，直到本人再次应用它或撤销它，或者在保护关闭时，文件夹持有其他内容；第二次启动不遗漏任何内容（[启动失败时](#when-a-start-fails)）。
-13. Changes 路由只回答 Connection 以 studio 的凭据准入的请求。操作只对电脑上的请求生效，即回环监听器上、在没有任何远程访问分发器准入的回环 `Host` 之下的请求，并在读取请求体之前拒绝任何其他请求以及另一个站点发送的请求；没有任何路由更改保护设置（[路由与恢复屏幕](#routes-and-the-recovery-screen)）。
+13. Changes 路由只回答 Connection 以 studio 的凭据准入的请求。操作只对电脑上的请求生效，即回环监听器上、在没有任何远程访问分发器准入的回环 `Host` 之下的请求，或者按要求 23 对已配对设备的请求，并在读取请求体之前拒绝任何其他请求以及另一个站点发送的请求（[路由与恢复屏幕](#routes-and-the-recovery-screen)）。
 14. 存储插件的内容从不读取 Delorun home 或 `/proc`、`/sys`、`/dev` 中的文件，只跟随文件夹之外的链接到它所包含的已安装包、同级工作区包或 `.git` 目录，并且对每个文件的读取不超过计入内容上限的大小（[加载已批准的内容](#loading-approved-content)）。
 15. 没有任何 harness 操作写入 `runtimes/` 之下，并且已签名安装的启动检查在两种保护设置下相同。从安装读取的每个字节都对照经过验证的已签名文件列表检查（[harness 编辑](#harness-edits)）。
 16. 待处理的 harness 更改从不运行：启动运行的是已签名的安装，或记录的组合树，而后者只由已应用的更改写入。
 17. 启动只在检查了每个未编辑的路径都是安装的文件、每个已批准的路径都持有已批准的内容且不存在其他任何内容之后，才运行组合树；两次失败的树使启动被拒绝。只有已签名安装的代码才把启动交接给组合树，并且失败之后启动的第二次运行启动已签名的安装。
-18. 只有终端证明才创建可写副本或决定 harness 更改；受限命令不能写入 `changes/harness/`（要求 3），并且没有任何路由或模型工具到达 harness 操作，保护关闭时启动的未经审查的应用除外（要求 22）。
+18. 只有终端证明、电脑上的 studio，或按要求 23 解锁的已配对设备才创建可写副本或决定 harness 更改；受限命令不能写入 `changes/harness/`（要求 3），没有任何模型工具到达 harness 操作，并且路由依据正在运行的运行时的签名文件列表决定，否则回答 `409 HARNESS_UNAVAILABLE`，保护关闭时启动的未经审查的应用除外（要求 22）。studio 只应用审查所显示的内容版本。
 19. 丢弃每项 harness 更改会清空该运行时的记录，因此下一次启动原样运行已签名的发布。紧接着一项 harness 更改之后失败的启动，只遗漏该更改，记在 harness 的日志中，并且不写入 profile 的任何文件；其 `delorun` 在启动运行之前就失败的组合树同样如此，第二次这样的失败不再遗漏更多内容。处于安全模式的 profile 运行不带任何 harness 更改的已签名发布。
 20. 保护关闭时，无需审查就加载的内容在 Host 加载它之前被记录：它是 profile 的 `delorun.changes` 记录或运行时的 harness 记录中的已批准内容，也是更改日志中决定为 `unreviewed` 的已应用更改，`delorun changes list`、`show`、`undo`、`verify` 和 `doctor` 都能到达它；加载了任何内容的启动以及每次实时重新加载还会记录一个 profile 历史版本。
 21. 保护关闭时，本人拒绝的内容不加载：当某个插件最新被决定的内容更改被撤销或丢弃，且带来的恰好是其文件夹所持有的内容时，该插件保留其已批准的内容。实时重新加载失败的内容不会再次加载，直到文件夹持有其他内容，并且失败的启动所遗漏的更改，在文件夹持有它所带来的内容期间一直被遗漏。
 22. 只有启动的启动前步骤和重新加载之前的检查、home 进程的插件文件夹监视器（`loadUnreviewed`，在 `@delorun/changes` 之外只被 `delorun/apps/cli/src/changes/unreviewed-watch.ts` 指名），以及针对 harness 可写副本的已签名安装的启动（`applyUnreviewedHarnessChanges`，只被 `delorun/apps/cli/src/changes/harness-start.ts` 指名）无需审查就加载内容。每一个都在 profile 写锁（或 `harness.lock`）之下读取保护设置，并在它开启时不写入任何内容；没有任何路由、模型工具或插件指名它们。
+23. 已配对设备只凭本人输入的解锁（在电脑上批准的验证码或 PIN）使用 studio 控件，并且只在其手机权限级别允许的地方：撤销插件的更改、丢弃更改和开启保护在两个级别下都可以；其他每个插件操作、应用或撤销对 Delorun 本身的更改、Make my copy、关闭保护和重启只在 Full 下可以；清除通知从不可以。批准宽限期从不算数。站点、级别和证明按此顺序在读取请求体之前决定，无法读取的手机权限记录为 Careful。设备对保护设置的更改会留下一条设备无法清除的通知。关闭保护的第二次询问只防误点，不算作对电脑前的人的防御（[C14](c14-oidc-passkeys.zh.md#phone-powers)）。
 
 ### 拒绝测试
 
@@ -444,7 +463,6 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 | `GET state writes nothing under the home`, `GET state reads no plugin's folder` | [路由与恢复屏幕](#routes-and-the-recovery-screen)：home 的条目、大小和修改时间不变，没有 `node:fs/promises` 调用指名该文件夹中的路径，而 `show?pending` 读取并存储它（`delorun/packages/plugin-changes/tests/routes-state.integration.spec.ts`；`delorun/packages/changes/tests/state.integration.spec.ts` 中只有 `recordedChanges`） |
 | `reads the plugins' folders only through show?pending: when it opens, after an action and when asked, never on the state's poll` | [studio 的 Changes 一节](#the-studios-changes-section)（`changes-section.client.spec.tsx`） |
 | `/recovery is not served when Delorun's Changes service is not mounted` | [路由与恢复屏幕](#routes-and-the-recovery-screen)：没有写明 `dshRecoveryRoutes` 的索引行时，已登录的 `/recovery` 是 `404`（`packages/host/frontend-static/tests/frontend-static.spec.ts`） |
-| `the studio cannot change the protection setting` | 要求 4 和 13：没有任何路由指名它，并且该设置的写入者拒绝 studio 证明（`routes.spec.ts`；`records.spec.ts` 有 `refuses a studio proof for the protection setting`） |
 | `apply asks the second confirmation when the change has a risk` | [路由与恢复屏幕](#routes-and-the-recovery-screen)：`409 CONFIRM_RISK` 写明各种类和差异不显示的文件，并且在 `confirmedRisk` 之前不批准任何内容（`delorun/packages/plugin-changes/tests/routes.integration.spec.ts`） |
 | `the recovery screen renders with every plugin's client code failing` | [路由与恢复屏幕](#routes-and-the-recovery-screen)：每个插件 bundle 都加载失败，而该屏幕提供 Turn off、Undo 和安全模式（`packages/client/web/tests/boot.client.spec.ts`） |
 | `the recovery screen shows This needs you at your computer for a remote session` | 屏幕上的要求 13（`packages/client/web/tests/boot-page.client.spec.ts`） |
@@ -508,7 +526,12 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 | `runs the signed installation without the approved harness changes` | 针对安全模式的要求 19（`changes-harness.spec.ts`） |
 | `runtimeOfFile maps a composed path to its runtime` | [harness 编辑](#harness-edits)（`changes-harness.spec.ts`） |
 | `verify never prints a plain pass when the composed tree fails its check` | [verify 与 doctor 报告什么](#what-verify-and-doctor-report)（`changes-harness.spec.ts`） |
-| `a harness change cannot be applied, discarded or undone from the studio` | 要求 18：`409 DECIDE_AT_TERMINAL`，记录和日志不变，位于远程会话和跨站拒绝之后（`delorun/packages/plugin-changes/tests/routes.spec.ts`；`reach.spec.ts` 把每个 harness 操作排除在路由之外） |
+| `a phone uses a control only where Phone powers lets it, and only with an unlock it entered`、`the state says what each control needs, with the same decisions the routes make`、`a phone's request from another site is refused before its level or its body` | 要求 23：每个路由对每个手机权限级别、对新解锁、批准宽限期和没有解锁，都在读取请求体之前回答 `LOOPBACK_REQUIRED` 或 `ELEVATION_REQUIRED`，或者首先回答 `CROSS_SITE`（`delorun/packages/plugin-changes/tests/decisions.spec.ts`） |
+| `a harness decision in the studio needs the studio proof`、`a remote session cannot apply, discard or undo a harness change`、`under Full an unlocked phone applies a harness change, recorded as decided in the studio`、`a Host that runs no installed release decides no change to Delorun itself` | 要求 18：拒绝之后记录和日志不变，设备只在 Full 下应用，没有正在运行的运行时的 harness 时回答 `409 HARNESS_UNAVAILABLE`（`decisions.spec.ts`） |
+| `a plugin's action route refuses a change to Delorun itself` | 对 `apply`、`discard` 和 `undo` 上的 harness 更改 id 回答 `409 HARNESS_ROUTE`（`routes.spec.ts`） |
+| `the studio turns protection off only after the second confirmation`、`a remote session cannot change protection`、`a cross-site request cannot change protection` | 要求 13 和 23：在 `confirmed` 之前回答 `409 CONFIRM_PROTECTION`，记录 `decidedFrom: "studio"`，设备在 Careful 下和处于宽限期时被拒绝，设备的更改留下设备无法清除的通知，并在读取请求体之前回答 `CROSS_SITE`（`decisions.spec.ts`） |
+| `the studio sets protection, and a paired device only with an unlock the person entered` | 要求 4 和 23：`attestDevice` 拒绝没有新解锁的设备，伪造的证明仍被拒绝（`delorun/packages/changes/tests/records.spec.ts`） |
+| `lists the protection changes a phone made, and a list at a terminal dismisses them`、`protection off states what off means and asks twice; only y to both writes it, and the log records the weakening` | [保护设置](#the-protection-setting)和[命令](#commands)（`changes-command.spec.ts`） |
 | `the studio lists changes to Delorun itself with their diff and offers no action for them` | [studio 的 Changes 一节](#the-studios-changes-section)（`changes-section.client.spec.tsx`） |
 | `is off when the home has no record` | 保护关闭：[保护设置](#the-protection-setting)的默认值（`records.spec.ts`；`changes-command.spec.ts` 有 `prints the setting with on\|off without a terminal, and off for a home without a protection record`） |
 | `protection off states what off means and asks; only y writes it, and the log records the weakening`, `protection on states what on means and asks; only y writes it, and the log records no weakening`, `refuses the old settings warn and block, and anything else, as a usage error that asks nothing` | [命令](#commands)（`changes-command.spec.ts`） |

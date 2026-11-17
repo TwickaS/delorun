@@ -107,7 +107,7 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 `delorun plugin dev <folder>`（见[为 Delorun 编写插件](plugins.zh.md#run-it-while-you-work-on-it)）也遵循这些规则。保护关闭时，它构建的每次编辑都会实时加载。保护开启时，编辑和文件夹中的其他编辑一样等待你的审阅，在你应用它或启动 `delorun changes work <plugin>` 之前，`delorun plugin dev` 不会从该文件夹加载任何内容。
 
-两条命令都只在你电脑上的终端中运行；studio 的 Changes 部分在那台电脑的浏览器中做同样的事（见[在 studio 中](#in-the-studio)）。远程会话和你的 agent 无法开始或结束开发会话。
+两条命令都只在你电脑上的终端中运行；studio 的 Changes 部分在那台电脑的浏览器中做同样的事（见[在 studio 中](#in-the-studio)）。只有当你为[手机权限](reach.zh.md#choose-how-much-an-unlocked-phone-may-do)选择了 Full，并用代码或你的 PIN 解锁了手机时，手机才能开始或结束开发会话。你的 agent 无法开始或结束它。
 
 <a id="when-your-agent-changes-a-plugin"></a>
 
@@ -133,7 +133,9 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 | `delorun changes undo <id>` | Delorun 从下次启动时起像以前一样运行该文件。 |
 | `delorun changes edit-harness --discard` | 询问，然后撤回对 Delorun 本身的每一项更改并移除你的副本；下一次启动原样运行已安装的发布版本。 |
 
-这些命令只在终端中运行，并且只在已安装的 Delorun 中运行，不在源码检出中运行。当 Delorun 在你应用了对它的更改之后立即无法启动时（包括某个被更改的文件使 Delorun 在启动之前就停止的情况），它会像对插件那样，在没有你最新更改的情况下再启动一次。如果没有那项更改它也不能启动，它会对你最新应用的更改指出 `delorun changes undo <id>`，并指出 `delorun changes edit-harness --discard`，后者撤回对 Delorun 本身的每一项更改。安全模式（`delorun recover safe-mode`）在你离开安全模式之前，运行不带你对它的任何更改的已安装发布版本。`delorun verify` 和 `delorun doctor` 会列出你改动过的文件。你的更改属于已安装的版本：更新之后，更新报告会说明每一项如何被保留。
+这些命令只在终端中运行，并且只在已安装的 Delorun 中运行，不在源码检出中运行。studio 的 Changes 部分在你的电脑上应用、撤销和丢弃同样的更改，那里的 Make my copy 会制作你的副本。已解锁的手机在手机权限的两个级别下都可以丢弃更改，只有在 Full 下才能应用或撤销更改，或制作你的副本。当 Delorun 在你应用了对它的更改之后立即无法启动时（包括某个被更改的文件使 Delorun 在启动之前就停止的情况），它会像对插件那样，在没有你最新更改的情况下再启动一次。如果没有那项更改它也不能启动，它会对你最新应用的更改指出 `delorun changes undo <id>`，并指出 `delorun changes edit-harness --discard`，后者撤回对 Delorun 本身的每一项更改。安全模式（`delorun recover safe-mode`）在你离开安全模式之前，运行不带你对它的任何更改的已安装发布版本。`delorun verify` 和 `delorun doctor` 会列出你改动过的文件。你的更改属于已安装的版本：更新之后，更新报告会说明每一项如何被保留。
+
+你的 agent 可以替你编辑你的副本。在拥有完全访问的 chat 中，`delorun-harness-copy` 技能把它指向你的 Delorun 副本，它只在那里起作用。它从不应用、撤销或丢弃更改，也从不更改保护：这些决定始终由你作出。
 
 <a id="turning-one-plugin-off"></a>
 
@@ -166,13 +168,17 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 
 保护关闭时，任何能写入已链接插件文件夹的东西，都可以在你看到之前改变 Delorun 运行的内容：以完全访问工作的 agent、你下载的程序、任何以你的身份运行的程序。受限工作区中的命令只在沙箱允许的地方写入：该工作区内的插件文件夹，绝不是你的 Delorun home，所以它们无法改变你的 Delorun 本身的副本。当你想先审阅每一项更改时，请开启保护。
 
-`delorun changes protection` 打印该设置及其含义。`delorun changes protection on` 或 `off` 更改它，只在你电脑上的终端中进行；studio 无法更改它。每条命令都会说明新设置的含义（例如对 `off` 说明 “Changes will load without your review.”），并要求你确认；新设置立即生效，无需重启。完整的 setup 也会提议开启保护。
+`delorun changes protection` 打印该设置及其含义。`delorun changes protection on` 或 `off` 在你电脑上的终端中更改它，studio 的 Changes 部分在你的电脑上更改它。已解锁的手机可以打开它，只有当你为[手机权限](reach.zh.md#choose-how-much-an-unlocked-phone-may-do)选择了 Full 时才能关闭它。每种方式都会说明新设置的含义（例如对 `off` 说明 “Changes will load without your review.”），并要求你确认；新设置立即生效，无需重启。完整的 setup 也会提议开启保护。
+
+关闭保护时会再问一次，并说明届时哪些内容会不经审阅就加载：等待中的更改会立即加载的插件，以及会在下次启动时应用的你 Delorun 副本中的文件。第二个问题能挡住一次手滑。它挡不住在你电脑前的人，因为他们也能回答它。
+
+当手机更改该设置时，你的电脑会保留一条通知。studio 会显示它，`delorun changes list` 会把它打印在 “Changed from a phone:” 下，并在它打印到终端之后清除它。
 
 <a id="in-the-studio"></a>
 
 ## 在 studio 中
 
-“设置”中有一个 Changes 部分，显示 `delorun changes list` 所显示的内容：你正在开发的插件、失败的启动所略去的更改及其错误、等待你审阅的更改及其文件夹、文件数量和检查发现的内容、你的 agent 的插件请求、你最近的更改、你对 Delorun 本身的更改及其差异以及在终端中决定每一项的命令，还有保护设置；保护关闭时，它会说明更改不经你的审阅就加载，并且已链接的插件在你每次保存时实时重新加载。
+“设置”中有一个 Changes 部分，显示 `delorun changes list` 所显示的内容：你正在开发的插件、失败的启动所略去的更改及其错误、等待你审阅的更改及其文件夹、文件数量和检查发现的内容、你的 agent 的插件请求、你最近的更改、你对 Delorun 本身的更改及其差异，还有保护设置；保护关闭时，它会说明更改不经你的审阅就加载，并且已链接的插件在你每次保存时实时重新加载。
 
 | 操作 | 发生什么 |
 | --- | --- |
@@ -183,6 +189,6 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 | Start working | 先询问，然后实时加载插件的编辑，持续两小时。会话持续期间，侧边栏底部的徽章会指出该插件。 |
 | Done | 显示你的文件夹的版本（例如 `3f9a2c1`）及其差异，并批准正是那个版本；被标记的版本会再问一次。 |
 
-agent 安装、更新或移除插件的请求，可以在第二次确认（说明 Delorun 在运行之前无法显示它安装什么）之后被应用，或被丢弃。保护设置连同更改它的命令 `delorun changes protection on|off` 一起显示；studio 没有用于更改它的控件。每个结果都会在窗口底部短暂显示，包括更改加载失败而 Delorun 回到之前运行的内容时的错误。
+agent 安装、更新或移除插件的请求，可以在第二次确认（说明 Delorun 在运行之前无法显示它安装什么）之后被应用，或被丢弃。studio 还会应用、撤销和丢弃对 Delorun 本身的更改，制作你的 Delorun 副本，以及打开或关闭保护，关闭时有上面所说的第二个问题。每个结果都会在窗口底部短暂显示，包括更改加载失败而 Delorun 回到之前运行的内容时的错误。
 
-这个部分只在运行 Delorun 的那台电脑上的浏览器中起作用。远程会话可以看到一切，但每个操作都被禁用，该部分会显示 “This needs you at your computer.”
+在你的电脑上，每个操作都可以用。在手机上，该部分显示一切，并在[手机权限](reach.zh.md#choose-how-much-an-unlocked-phone-may-do)允许的范围内起作用：有你输入的解锁时，撤销和丢弃以及打开保护在两个级别下都可以，其他每个操作只在 Full 下可以。手机不可以做的任何事都会显示 “This needs you at your computer.”

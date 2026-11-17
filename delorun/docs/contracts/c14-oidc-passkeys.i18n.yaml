@@ -15,8 +15,8 @@
   en: b4a089315f01a0be
   zh: 4452aa45478cf719
 /contract-c14-openid-connect-and-passkeys/contents:
-  en: ba0206131f7f04e4
-  zh: 15bc1d3277230031
+  en: 44e97bc906c48b82
+  zh: cb683a7118080ec1
 /contract-c14-openid-connect-and-passkeys/contract:
   en: 01be7ced4357bf93
   zh: d0b98165ff86d494
@@ -57,8 +57,11 @@
   en: 382c2e3ce48f7817
   zh: 54292edb4cfad2e5
 /contract-c14-openid-connect-and-passkeys/contract/elevation:
-  en: 009e06b5c08b56d7
-  zh: 3378a534dbfb1ad0
+  en: 04cfe3c059d74540
+  zh: c387d067fb98bba7
+/contract-c14-openid-connect-and-passkeys/contract/phone-powers:
+  en: 8c374818ad102bb5
+  zh: d8a55e8213185912
 /contract-c14-openid-connect-and-passkeys/contract/pin-mode:
   en: 4da2e8dee8ace14e
   zh: abc89d0d3c7cf490
@@ -78,11 +81,11 @@
   en: 33920b0a42258627
   zh: 1dbaa430a41344f7
 /contract-c14-openid-connect-and-passkeys/security:
-  en: fb38bcefffde8d6c
-  zh: 53ec38ced3c76c62
+  en: 80dd0d0e9aad9984
+  zh: a3d27d62121f5c8f
 /contract-c14-openid-connect-and-passkeys/security/what-this-does-not-prove:
-  en: f3c64d28162bc1a6
-  zh: 366e111e39f78631
+  en: 134c82e18ecbfe44
+  zh: 93fc3f89577ff910
 /contract-c14-openid-connect-and-passkeys/decided-values:
   en: c175f66a9360e197
   zh: 5d19f3bcff819d78

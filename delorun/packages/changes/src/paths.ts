@@ -39,6 +39,7 @@ export const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][
 /** Files and directories under `changes/`. */
 export const CHANGES_ENTRIES = {
   protection: 'protection.json',
+  notices: 'notices.json',
   store: 'store',
   objects: 'objects',
   versions: 'versions',
@@ -61,6 +62,14 @@ export const CHANGES_ENTRIES = {
  */
 export function changesDirectory(home: string): string {
   return join(home, DELORUN_HOME_ENTRIES.changes)
+}
+
+/**
+ * @param home - the Delorun home.
+ * @returns the path of the notices for the person at the computer.
+ */
+export function noticesPath(home: string): string {
+  return join(changesDirectory(home), CHANGES_ENTRIES.notices)
 }
 
 /**

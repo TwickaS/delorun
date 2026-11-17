@@ -152,8 +152,70 @@ export const CONFIRM_RISK = 'CONFIRM_RISK'
 /** The refusal code of `done` when the folder holds another version than the one the person was shown. */
 export const CHANGED_SINCE_REVIEW = 'CHANGED_SINCE_REVIEW'
 
-/** The refusal code of `apply`, `discard` and `undo` for a change to Delorun itself, which only a terminal decides. */
-export const DECIDE_AT_TERMINAL = 'DECIDE_AT_TERMINAL'
+/**
+ * The routes that decide a change to Delorun itself and make the person's copy of it, each a `POST`: `apply` takes
+ * `{ id, to, confirmedRisk? }`, `undo` and `discard` take `{ id }`, `copy` takes `{}`.
+ */
+export const HARNESS_PATHS = {
+  apply: `${CHANGES_ROUTE_PREFIX}/harness-apply`,
+  undo: `${CHANGES_ROUTE_PREFIX}/harness-undo`,
+  discard: `${CHANGES_ROUTE_PREFIX}/harness-discard`,
+  copy: `${CHANGES_ROUTE_PREFIX}/harness-copy`,
+} as const
+
+/** One harness route. */
+export type HarnessAction = keyof typeof HARNESS_PATHS
+
+/** The routes that turn protection on (a `POST` of `{}`) and off (a `POST` of `{ confirmed? }`). */
+export const PROTECTION_PATHS = {
+  on: `${CHANGES_ROUTE_PREFIX}/protection-on`,
+  off: `${CHANGES_ROUTE_PREFIX}/protection-off`,
+} as const
+
+/** The route the person at the computer dismisses a notice with: a `POST` of `{ id }`. */
+export const NOTICE_SEEN_PATH = `${CHANGES_ROUTE_PREFIX}/notice-seen`
+
+/** The refusal code of a plugin's action route asked for a change to Delorun itself, which the harness routes decide. */
+export const HARNESS_ROUTE = 'HARNESS_ROUTE'
+
+/** The refusal code of a device's request whose unlock is missing or is only the approval grace. */
+export const ELEVATION_REQUIRED = 'ELEVATION_REQUIRED'
+
+/** The refusal code of turning protection off until the person confirms it a second time. */
+export const CONFIRM_PROTECTION = 'CONFIRM_PROTECTION'
+
+/** The refusal code of a harness route on a Host that does not run an installed release under `delorun start`. */
+export const HARNESS_UNAVAILABLE = 'HARNESS_UNAVAILABLE'
+
+/** Where a request came from. A device in its approval grace counts as locked for every Changes write. */
+export type ActorView = 'computer' | 'device-unlocked' | 'device-grace' | 'device-locked'
+
+/** The Phone powers level in force and whether the person chose it. */
+export interface PhonePowersView {
+  readonly level: 'careful' | 'full'
+  /** False while the home has no recorded choice, and `level` is the one it applies. */
+  readonly chosen: boolean
+}
+
+/** One control of the Changes section. */
+export type ChangesControl =
+  | 'harness-apply' | 'harness-undo' | 'harness-discard'
+  | 'protection-off' | 'protection-on'
+  | 'make-copy' | 'restart'
+  | 'plugin-apply' | 'plugin-undo' | 'plugin-discard' | 'plugin-other'
+  | 'notice-seen'
+
+/** Whether a request may use a control now, and if not, what it needs: the computer, or an unlock entered on the device. */
+export type MayView =
+  | { readonly ok: true }
+  | { readonly ok: false, readonly needs: 'computer' | 'unlock' }
+
+/** Who may use what, for the request that read `state`. */
+export interface AccessView {
+  readonly actor: ActorView
+  readonly phonePowers: PhonePowersView
+  readonly may: Readonly<Record<ChangesControl, MayView>>
+}
 
 /** What a change changes. */
 export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' | 'plugin-remove' | 'plugin-off' | 'plugin-on' | 'harness-edit' | 'guard-weakening'
@@ -196,6 +258,8 @@ export interface EntryView {
   /** ISO 8601. */
   readonly decidedAt?: string
   readonly decidedFrom?: DecidedFromView
+  /** The name of the paired device whose studio made the decision; absent for a decision at the computer or a terminal. */
+  readonly decidedOn?: string
   /** Why applying it failed to load. */
   readonly lastFailure?: FailureView
   /** What the start that left it out failed with. */
@@ -204,10 +268,7 @@ export interface EntryView {
   readonly undoable: boolean
 }
 
-/**
- * One decided change to a file of Delorun itself, as `state` lists it from the log the home keeps for every runtime. A
- * terminal decides it: no route applies, discards or undoes it.
- */
+/** One decided change to a file of Delorun itself, as `state` lists it from the log the home keeps for every runtime. */
 export interface HarnessEntryView {
   readonly id: string
   readonly state: Exclude<ChangeStateView, 'pending'>
@@ -223,6 +284,38 @@ export interface HarnessEntryView {
   readonly decidedAt?: string
   /** What the start that left it out failed with. */
   readonly leftOut?: FailureView
+  readonly decidedFrom?: DecidedFromView
+  /** The name of the paired device whose studio made the decision; absent for a decision at the computer or a terminal. */
+  readonly decidedOn?: string
+  /** Whether `harness-undo` takes it back: an applied change, or one a failed start left out, of the running runtime. */
+  readonly undoable: boolean
+}
+
+/** A change waiting for review in the person's copy of Delorun, as `show?pending` lists it. */
+export interface HarnessPendingView {
+  readonly id: string
+  /** The file, relative to the runtime's directory, under `app/`. */
+  readonly file: string
+  /** The Delorun version whose file it changes. */
+  readonly runtime: string
+  readonly status: 'added' | 'modified' | 'removed'
+  /** The full content version the copy holds for the file; `harness-apply` sends it back. */
+  readonly to: string
+}
+
+/** Whether this Host can change Delorun's own files: only an installed release that `delorun start` runs can. */
+export type HarnessAvailableView =
+  | { readonly kind: 'available', readonly runtime: string, readonly copy: boolean }
+  | { readonly kind: 'unavailable' }
+
+/** A change of the protection setting made from a paired device, shown at the computer until the person dismisses it. */
+export interface ProtectionNoticeView {
+  readonly id: string
+  readonly level: ProtectionView
+  /** ISO 8601. */
+  readonly at: string
+  /** The name the person gave the device. */
+  readonly device: string
 }
 
 /** A change computed from a folder that waits for review, as `show?pending` lists it. */
@@ -254,6 +347,10 @@ export interface FolderView {
 export interface PendingListView {
   readonly kind: 'pending-list'
   readonly pending: readonly PendingView[]
+  /** The changes waiting in the person's copy of Delorun; empty without a copy or on a Host that cannot read it. */
+  readonly harness: readonly HarnessPendingView[]
+  /** Why the copy could not be read, when it could not; `harness` is then empty. */
+  readonly harnessProblem?: string
 }
 
 /** The open work session. */
@@ -278,8 +375,10 @@ export interface StartPluginView {
 
 /** `GET state`. */
 export interface ChangesStateView {
-  /** Whether this request could act: the person at their computer. */
+  /** Whether this request is the person at their computer. */
   readonly atComputer: boolean
+  /** What this request may use, and what each other control needs. */
+  readonly access: AccessView
   readonly profile: string
   readonly protection?: ProtectionView
   readonly safeMode?: { readonly since: string, readonly reason: string, readonly skipped: readonly string[] }
@@ -294,6 +393,11 @@ export interface ChangesStateView {
   readonly recent: readonly EntryView[]
   /** The newest decided changes to Delorun itself, newest first. */
   readonly harness: readonly HarnessEntryView[]
+  readonly harnessAvailable: HarnessAvailableView
+  /** How many changes loaded without review since protection was last turned off. */
+  readonly unreviewedSinceOff: number
+  /** Protection changes a paired device made, oldest first; only the computer's request carries them. */
+  readonly notices: readonly ProtectionNoticeView[]
   readonly workSession?: WorkSessionView
   /** One sentence per record that cannot be read. */
   readonly problems: readonly string[]
@@ -358,6 +462,7 @@ export type ShownView =
   | { readonly kind: 'pending', readonly change: ChangeView }
   | { readonly kind: 'logged', readonly entry: EntryView }
   | { readonly kind: 'harness', readonly entry: HarnessEntryView, readonly review?: HarnessReviewView }
+  | { readonly kind: 'harness-pending', readonly change: HarnessPendingView, readonly review: HarnessReviewView }
 
 /** `GET show?work=`: the open session's folder against the content it started from. */
 export interface WorkReviewView {
@@ -404,6 +509,50 @@ export interface InstallView {
 /** `discard`. */
 export interface DiscardView {
   readonly entry: EntryView
+}
+
+/** When a decided change to Delorun itself takes effect; the live-apply module decides it. */
+export type HarnessEffectView =
+  | { readonly kind: 'live' }
+  | { readonly kind: 'restart' }
+  | { readonly kind: 'not-running' }
+
+/** `harness-apply` and `harness-undo`. */
+export interface HarnessActionView {
+  readonly kind: 'harness'
+  readonly entry: HarnessEntryView
+  readonly effect: HarnessEffectView
+}
+
+/** `harness-discard`. */
+export interface HarnessDiscardView {
+  readonly kind: 'harness'
+  readonly entry: HarnessEntryView
+}
+
+/** `harness-copy`: the person's copy of Delorun, made or found. */
+export interface HarnessCopyView {
+  readonly kind: 'copy'
+  /** Whether this request made it; false when it existed. */
+  readonly created: boolean
+  readonly runtime: string
+  /** The copy's `app/` folder, with the Delorun home written as `<Delorun home>`. */
+  readonly place: string
+}
+
+/** What turning protection off lets load without review: the second ask names it. */
+export interface WillLoadView {
+  /** The plugins whose folders hold changes waiting for review. */
+  readonly plugins: readonly string[]
+  /** How many files of the person's copy of Delorun wait for review. */
+  readonly harnessFiles: number
+}
+
+/** `protection`. */
+export interface ProtectionChangedView {
+  readonly protection: ProtectionView
+  /** How many changes loaded without review while protection was off; 0 after turning it off. */
+  readonly unreviewedSinceOff: number
 }
 
 /** `work`. */

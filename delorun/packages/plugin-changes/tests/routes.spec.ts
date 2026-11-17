@@ -1,15 +1,16 @@
 /**
  * The studio's Changes routes over a real HTTP server, without a profile history: a caller without the studio's
- * credential, a remote session and another site are refused before anything is read, the body included; no route
- * changes the protection setting; and every malformed request is refused with its own code.
+ * credential, a remote session that is no paired device's and another site are refused before anything is read, the
+ * body included; and every malformed request is refused with its own code. What a paired device may decide is
+ * [decisions.spec](./decisions.spec.ts)'s.
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
  */
 import { lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { attestStudio, harnessLogPath, protectionPath, readHarnessLog, readProtection, setProtection, writeChangeLog } from '@delorun/changes'
+import { harnessLogPath, protectionPath, readHarnessLog, writeChangeLog } from '@delorun/changes'
 import { describe, expect, it, vi } from 'vitest'
-import { ACTION_PATHS, arrivalOf, changesRoutes, HOME_IN_ANSWERS, HOME_WITHHELD_SENTENCE, LOOPBACK_REQUIRED_SENTENCE, MAX_BODY_BYTES, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
+import { ACTION_PATHS, arrivalOf, HOME_IN_ANSWERS, HOME_WITHHELD_SENTENCE, LOOPBACK_REQUIRED_SENTENCE, MAX_BODY_BYTES, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
 import { CREDENTIAL, get, json, logHarnessChanges, post, routeHome, RUNTIME, send, serveRoutes } from './routes-fixture.ts'
 
 // Each case starts a server on a loopback port and writes a temporary home; under a loaded host that takes longer than vitest's default.
@@ -56,7 +57,7 @@ describe('who reaches the Changes routes', () => {
     ]
     for (const action of ACTIONS) {
       for (const request of remote) {
-        // Pins `attestStudio` before the body: without it a remote session turns plugins off or starts safe mode.
+        // Pins the gate before the body: without it a remote session turns plugins off or starts safe mode.
         const reply = await send(server.port, ACTION_PATHS[action], { method: 'POST', ...request, body: { plugin: 'plug' }, withholdBody: true })
         expect(reply.status, `${action} ${JSON.stringify(request)}`).toBe(403)
         expect(json(reply)).toEqual({ code: 'LOOPBACK_REQUIRED', message: LOOPBACK_REQUIRED_SENTENCE })
@@ -87,17 +88,6 @@ describe('who reaches the Changes routes', () => {
       const reply = await send(server.port, ACTION_PATHS['safe-mode'], { method: 'POST', headers: [CREDENTIAL, ...headers], body: {} })
       expect(json(reply), headers.join()).toMatchObject({ code: 'SAFE_MODE_UNAVAILABLE' })
     }
-  })
-
-  it('the studio cannot change the protection setting', async () => {
-    const { ctx } = routeHome()
-    const server = await serveRoutes(ctx)
-    // No route names the protection setting, and the studio's proof is refused by the setting's writer.
-    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), pluginOperation: () => () => Promise.resolve({ exitCode: 0 }), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined, scaffold: () => { throw new Error('unused') }, workspaces: () => [], reveal: () => {}, delorunVersion: () => '0.0.0' }).map(route => route.path)
-    expect(paths.filter(path => path.includes('protection'))).toEqual([])
-    expect((await post(server.port, '/delorun/changes/protection', { level: 'off' })).status).toBe(404)
-    await expect(setProtection(ctx.home, 'on', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })
-    expect(await readProtection(ctx.home)).toBe('off')
   })
 
   it('decides the arrival from the listener, the Host and the admission', () => {
@@ -163,7 +153,7 @@ describe('what a route refuses', () => {
     for (const query of ['', '?id=c0123456789&work=plug', '?other=1', '?id=nope', '?work=..%2Fescape', '?pending=1', '?pending&id=c0123456789']) {
       expect(json(await get(server.port, `${SHOW_PATH}${query}`)), query).toMatchObject({ code: 'BAD_REQUEST' })
     }
-    expect(json(await get(server.port, `${SHOW_PATH}?pending`))).toEqual({ kind: 'pending-list', pending: [] })
+    expect(json(await get(server.port, `${SHOW_PATH}?pending`))).toEqual({ kind: 'pending-list', pending: [], harness: [] })
     const unknown = await get(server.port, `${SHOW_PATH}?id=c0123456789`)
     expect(unknown.status).toBe(404)
     expect(json(unknown)).toMatchObject({ code: 'UNKNOWN_CHANGE' })
@@ -188,7 +178,7 @@ describe('what a route refuses', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     const state = json(await get(server.port, STATE_PATH))
-    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'off', leftOut: [], folders: [], requests: [], recent: [], harness: [], problems: [] })
+    expect(state).toEqual({ atComputer: true, access: expect.objectContaining({ actor: 'computer' }) as object, profile: 'default', protection: 'off', leftOut: [], folders: [], requests: [], recent: [], harness: [], harnessAvailable: { kind: 'unavailable' }, unreviewedSinceOff: 0, notices: [], problems: [] })
     const broken = await serveRoutes({ ...ctx, home: `${ctx.home}/missing`, profileDir: `${ctx.profileDir}/missing` })
     const problems = json(await get(broken.port, STATE_PATH)).problems as string[]
     expect(problems.map(problem => problem.split(':')[0])).toEqual(['The changes waiting for review cannot be read'])
@@ -315,8 +305,9 @@ describe('changes to Delorun itself', () => {
     const state = json(await get(server.port, STATE_PATH))
     const harness = state.harness as Record<string, unknown>[]
     expect(harness).toEqual([
-      { id: leftOut!.id, state: 'left-out-at-start', file: 'app/node_modules/delorun/lib/added.js', runtime: RUNTIME, summary: `Delorun ${RUNTIME} itself: app/node_modules/delorun/lib/added.js`, createdAt: '2026-11-10T11:00:00.000Z', decidedAt: '2026-11-10T11:00:00.000Z', leftOut: { at: '2026-11-10T11:00:00.000Z', failure: 'SyntaxError: no' } },
-      { id: applied!.id, state: 'applied', file: SELF_FILE, runtime: RUNTIME, summary: `Delorun ${RUNTIME} itself: ${SELF_FILE}`, createdAt: '2026-11-10T10:00:00.000Z', decidedAt: '2026-11-10T10:00:00.000Z' },
+      // A Host that runs no installed release undoes none of them.
+      { id: leftOut!.id, state: 'left-out-at-start', file: 'app/node_modules/delorun/lib/added.js', runtime: RUNTIME, summary: `Delorun ${RUNTIME} itself: app/node_modules/delorun/lib/added.js`, createdAt: '2026-11-10T11:00:00.000Z', decidedAt: '2026-11-10T11:00:00.000Z', decidedFrom: 'terminal', undoable: false, leftOut: { at: '2026-11-10T11:00:00.000Z', failure: 'SyntaxError: no' } },
+      { id: applied!.id, state: 'applied', file: SELF_FILE, runtime: RUNTIME, summary: `Delorun ${RUNTIME} itself: ${SELF_FILE}`, createdAt: '2026-11-10T10:00:00.000Z', decidedAt: '2026-11-10T10:00:00.000Z', decidedFrom: 'terminal', undoable: false },
       expect.objectContaining({ id: discarded!.id, state: 'discarded' }),
       expect.objectContaining({ id: undone!.id, state: 'undone' }),
       expect.objectContaining({ id: lost!.id, state: 'applied' }),
@@ -345,7 +336,7 @@ describe('changes to Delorun itself', () => {
     expect(corrupt.status).toBe(500)
     expect(json(corrupt)).toEqual({ code: 'STORE_CORRUPT', message: HOME_WITHHELD_SENTENCE })
     expect(json(await get(server.port, `${SHOW_PATH}?id=${unnamed!.id}`))).toMatchObject({ code: 'UNKNOWN_CHANGE' })
-    // A change waiting for review in the copy of Delorun is listed by the terminal only.
+    // A pending log entry is no decided change, and a Host without the running runtime's harness reads no copy.
     expect(json(await get(server.port, `${SHOW_PATH}?id=${pending!.id}`))).toMatchObject({ code: 'UNKNOWN_CHANGE' })
   })
 
@@ -357,7 +348,7 @@ describe('changes to Delorun itself', () => {
     expect(listed).toEqual(logged.slice(1).reverse().map(entry => entry.id))
   })
 
-  it('a harness change cannot be applied, discarded or undone from the studio', async () => {
+  it('a plugin\'s action route refuses a change to Delorun itself', async () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     const logged = await logHarnessChanges(ctx.home, [
@@ -368,10 +359,11 @@ describe('changes to Delorun itself', () => {
     const log = await readHarnessLog(ctx.home)
     for (const { id } of logged) {
       for (const action of ['apply', 'discard', 'undo'] as const) {
-        // Pins `refuseHarnessChange` in `act`: without it the route runs a profile's action on the id.
+        // Pins `refuseHarnessChange` in `act`: without it the route runs a profile's action on the id, under the plugin
+        // route's level instead of the harness route's.
         const reply = await post(server.port, ACTION_PATHS[action], { id })
         expect(reply.status, `${action} ${id}`).toBe(409)
-        expect(json(reply)).toEqual({ code: 'DECIDE_AT_TERMINAL', message: `Change ${id} changes Delorun itself, which you ${action} at a terminal: delorun changes ${action} ${id}` })
+        expect(json(reply)).toEqual({ code: 'HARNESS_ROUTE', message: `Change ${id} changes Delorun itself; decide it under Changes to Delorun itself.` })
         // The refusals of a remote session and of another site still come first.
         expect(json(await send(server.port, ACTION_PATHS[action], { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: { id }, withholdBody: true }))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
         expect(json(await send(server.port, ACTION_PATHS[action], { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: { id }, withholdBody: true }))).toMatchObject({ code: 'CROSS_SITE' })

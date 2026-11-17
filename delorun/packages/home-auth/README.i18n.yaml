@@ -12,14 +12,14 @@
   en: 337ba6cb76aac5a3
   zh: 8d6d749e7bffe884
 /delorun-home-auth/contents:
-  en: 2812305b7c348f8a
-  zh: 5143fb0858452e5e
+  en: 4aa5d92accc29725
+  zh: b728a7536ad49cb5
 /delorun-home-auth/the-owner-claim-and-device-list:
   en: 26a7956d9bc10f44
   zh: 9bfe0deb009d56bf
 /delorun-home-auth/reach-sign-in:
-  en: c23ec9604a7adda0
-  zh: 796d246115f03174
+  en: 16d7c8e495417264
+  zh: 6fc14c6fc1dbe557
 /delorun-home-auth/the-admission-denial-suite:
   en: 158ff271168e9fed
   zh: 32ce754ee9bcf5fe
@@ -27,11 +27,14 @@
   en: af84381bb0d02831
   zh: 91d543a534b6ba1e
 /delorun-home-auth/dangerous-mode:
-  en: 541dfe0328e34384
-  zh: 1ba2c4a7c5f47528
+  en: ab8b4abf48a11285
+  zh: 479a32399720e830
 /delorun-home-auth/pin-mode:
   en: 5793ccbfdd1322be
-  zh: 025b0a03607145d4
+  zh: 6876e78bd7f335d3
+/delorun-home-auth/phone-powers:
+  en: c8c5ba6342ba32c7
+  zh: 05c5c54f03c82945
 /delorun-home-auth/notes-for-the-provider:
   en: d670eede8687ab13
   zh: a29a1c520d60df0f

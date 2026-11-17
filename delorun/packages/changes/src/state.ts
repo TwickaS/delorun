@@ -9,7 +9,7 @@
 import type { ChangesContext } from './actions.ts'
 import { managedPlugins } from './boot-record.ts'
 import { isPluginRequest } from './install-actions.ts'
-import { approvedOf, readApproved, readChangeLog } from './records.ts'
+import { approvedOf, readApproved, readChangeLog, readHarnessLog } from './records.ts'
 import type { ChangeEntry } from './types.ts'
 
 /** One plugin under Changes, as its records name it. */
@@ -46,4 +46,30 @@ export async function recordedChanges(ctx: Pick<ChangesContext, 'home' | 'profil
     folders: managedPlugins(approved, log).map(({ plugin, source }) => ({ plugin, source, kind: approvedOf(approved, plugin) === undefined ? 'plugin-install' : 'plugin-edit' })),
     requests: log.entries.filter(entry => entry.state === 'pending' && isPluginRequest(entry)),
   }
+}
+
+/**
+ * How many changes loaded without review since protection was last turned off: the entries of the profile's log and
+ * of the log of changes to Delorun itself decided `unreviewed` at or after the newest applied `guard-weakening` entry of
+ * the protection setting. Reads the records only.
+ * @param ctx - the profile.
+ * @returns the count; 0 when protection was never turned off.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when a log is not one Delorun wrote.
+ */
+export async function unreviewedSinceOff(ctx: Pick<ChangesContext, 'home' | 'profile'>): Promise<number> {
+  return countUnreviewedSinceOff((await readChangeLog(ctx.home, ctx.profile)).entries, (await readHarnessLog(ctx.home)).entries)
+}
+
+/**
+ * {@link unreviewedSinceOff} over logs already read.
+ * @param profile - the entries of the profile's log.
+ * @param harness - the entries of the log of changes to Delorun itself.
+ * @returns the count; 0 when protection was never turned off.
+ */
+export function countUnreviewedSinceOff(profile: readonly ChangeEntry[], harness: readonly ChangeEntry[]): number {
+  const off = profile.findLast(entry => entry.kind === 'guard-weakening' && entry.state === 'applied' && entry.subject.setting === 'protection')
+  if (off === undefined) return 0
+  const since = Date.parse(off.decidedAt ?? off.createdAt)
+  const loaded = (entry: ChangeEntry): boolean => entry.decidedFrom === 'unreviewed' && Date.parse(entry.decidedAt ?? entry.createdAt) >= since
+  return profile.filter(loaded).length + harness.filter(loaded).length
 }

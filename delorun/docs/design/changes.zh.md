@@ -46,7 +46,7 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 
 ## 规则
 
-1. **一个界面，Changes。**已作为用于插件和 harness 自己文件的 `delorun changes` 构建（[C21，命令](../contracts/c21-changes.zh.md#commands)）；studio 的部分以只读方式显示 harness 更改，决定在终端中做出。
+1. **一个界面，Changes。**已作为用于插件和 harness 自己文件的 `delorun changes` 构建（[C21，命令](../contracts/c21-changes.zh.md#commands)）；studio 也能决定它们，可以在电脑上，也可以在本人在手机权限下解锁的已配对手机上（[C21，谁可以在哪里做什么](../contracts/c21-changes.zh.md#who-may-do-what-from-where)）。
 2. **运行的是已批准的内容，而不是文件夹。**已构建（[C21，加载已批准的内容](../contracts/c21-changes.zh.md#loading-approved-content)）。
 3. **开发会话提供实时重载。**已在终端中构建（[C21，开发会话](../contracts/c21-changes.zh.md#work-sessions)）；Delorun 自己的监视器把文件夹复制到插件的活动目录中，而不是用上游的源代码监视，因为文件夹中的文件并不是已加载的那些。studio 的按钮和徽章尚未构建。
 4. **批准。**已构建（[C21，风险摘要](../contracts/c21-changes.zh.md#the-risk-summary)）。
@@ -83,7 +83,8 @@ Delorun 原样运行上游的插件加载，所以这也是 Delorun 今天所做
 
 - `a changed harness file is refused in both protection settings`
 - `a changed plugin does not load with protection on`
-- `no route, tool or remote session can apply a change, start or end a work session, or change the protection setting`
+- `no tool can apply a change, start or end a work session, or change the protection setting`
+- `a phone uses a control only where Phone powers lets it, and only with an unlock it entered`
 - `the agent's first write to an approved plugin asks`
 - `a plugin outside a work session never loads from its folder`
 - `a work session's badge is shown while it lasts`
