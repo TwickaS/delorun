@@ -127,6 +127,10 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** The recommended plugins step shows the plugins your profile already holds without waiting for the plugin packs list, which only the plugins you could download need.
 - **Fixed:** The Phone access step no longer says "Phone access is ready" when Tailscale is set up but remote access is still off. It says remote access is off and keeps the command that turns it on, and the final step says the same.
 - **Fixed:** Commands that ask a question, such as `delorun devices approve`, now stop with "this needs you at a terminal to answer; run it in one" when they run where nobody can answer (a script, or a tool's one-shot shell), instead of ending with a Node warning about an unsettled top-level await.
+- **Fixed:** Pressing Escape on the setup guide closes it for that page only. It comes back the next time you open Delorun; only "Complete setup later" keeps it closed.
+- **Fixed:** The Phone access step offers "Skip step", like the other steps, instead of "Not now".
+- **Fixed:** The setup guide keeps its title row and its buttons in the same place from step to step, including on Ready and on a phone.
+- **Fixed:** Delorun no longer asks whether your key works every five seconds while no key is saved. It asks when you open it and when you return to the window.
 - **Security:** `delorun setup` installs the `delorun` command at the exact version of the launcher you ran, `npm install -g delorun@<version>`, never whatever version npm serves as newest, and offers no install when that version is unknown. `delorun verify` prints the launcher's version with the integrity the signed release lists for it, which you compare with `npm view delorun@<version> dist.integrity` as the Trust page describes.
 
 ### Studio
@@ -427,6 +431,12 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** New chats start again after you add the Browser pack and before you allow its playwright-mcp server; in 0.1.0-preview.1.6 every new chat failed with "McpConsentRefusedError" until the server was allowed. The chat now starts without the browser tools, home.log notes why, and the notice reads "MCP tools are off until you allow playwright-mcp" with the action that reviews and allows it. Once allowed, the server starts in your next new chat.
 - **Fixed:** Plugins no longer shows "Update available" and an Update button on a plugin pack you installed (such as Claude Code or Codex) when it already runs the version this Delorun offers. The tag compared the reviewed copy in Changes with the pack folder; a pack whose approved source is the offered pack folder now counts as the same source, and a different version still shows the tag.
 - **Fixed:** Adding several plugin packs no longer stalls for two minutes at a time or fails with "timed out waiting for the writer lock". Packs still download two at a time, but install one after another, and Delorun reads a plugin's folder before it locks the profile, so other changes to the profile no longer wait for that read.
+- **Fixed:** A chat that was open before you pressed "Allow and start" for Browser now gets the Browser tools straight away. Before, a new chat that reused that earlier draft had none, and the agent fell back to other tools.
+- **Fixed:** Adding several plugins in quick succession no longer takes minutes or fails. Delorun no longer watches the files of its own signed plugin packs for edits, so a pack install and a restart do not queue behind each other. A second Add waits for the first instead of failing with "STORE_BUSY", the setup guide's Try again sends the request again, and a failed add says so in plain words without file paths or process numbers.
+- **Fixed:** The downloads panel and the setup guide's plugin rows follow an install promptly. Delorun used to read and check every file of every installed plugin pack at each progress report; it now checks a pack once every 30 seconds (`verifyCacheMs` in the packs plugin) and again when its install ends.
+- **Fixed:** The "plugins added" panel no longer comes back at every page load or restart and covers the message box; it shows only for installs you watched. Pack rows in the setup guide describe themselves before they are added, use one name throughout, and "Adding…" no longer shifts when its progress bar appears.
+- **Fixed:** Adding a plugin pack checks its files against the release's signed list at the moment of the install, and a refusal from the plugin manager, such as protection holding the add for review, now reaches you in its own words.
+- **Fixed:** A plugin that needs something from your computer now says "Needs setup" with the reason and the fix on its card in the Plugins list, not only on its own page. Browser shows it when its Chromium download is missing.
 - **Security:** Installing a plugin checks it and every package it brings before any of its files are fetched or any install script runs: a package without an integrity hash, a git source not pinned to a full commit, a registry or download URL that is plain http, a known GitHub advisory, a version published in the last 24 hours and a name close to one you already have are each shown where you install it, on the Plugins page and in `delorun plugin`'s output. A known critical advisory stops the installation until you choose to install it anyway, with "Install anyway" or `--allow-advisory <id>`; everything else only warns. When the advisory or publish-time lookup cannot run, you are told so. Scopes and git owners you trust can be listed so their plugins show only critical advisories; linked and local plugin folders are not checked.
 - **Security:** Delorun records every file of each plugin it installs, checks them at every start and fully in `delorun verify`, and warns when a plugin changed since it was installed. Installed plugins get their own copies of their files, so an edit to pnpm's shared store no longer reaches them.
 - **Security:** Plugins no longer fall back to the npmmirror registry unless you turn it on, in Settings → Privacy or with `delorun plugin mirror on`, and a package installed under the name of one of Delorun's own components cannot stand in for it.
@@ -484,6 +494,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - Setup checks that the studio port is free and uses the next free one, saying which. Times read as `17 Nov 2026, 01:07`, and `delorun status` shows `source build` as the version of a source copy.
 - `delorun start`, `status`, `doctor` and `update --check` mark each line (✓ done, ! needs a look, ✗ failed, ● for information), show the commands you can type next, and ring the start with a spinner on a terminal. Colour follows `NO_COLOR` and `FORCE_COLOR` and is off when the output goes to a file. `delorun doctor` ends with a count of passed, warned and failed checks.
 - `delorun --help` groups the commands (Everyday, Setup, Phone, Safety, Data, Advanced) and wraps to the width of the terminal. The first setup question shows one short line per choice, and "What does each one mean?" opens the longer text.
+- **Fixed:** `delorun doctor` no longer warns that an added plugin pack "did not load at the last start" when it did. It now finds a pack by the plugins it adds.
 - **Security:** The release an update starts does not inherit variables that load code into Node, its loader or OpenSSL, such as `NODE_OPTIONS` or `LD_PRELOAD`, even when a `.env` file set them for the running release; the launcher already dropped them from every start.
 - **Security:** `delorun verify` hashes every runtime file before its own code runs, whatever the start check's record says, and then checks every file again. The record has no key, so a program running as you can rewrite it to hide a changed file, the runtime's Node and `delorun` itself included, from ordinary starts until the next full check, which comes at least every 7 days; `delorun verify` still finds it.
 
@@ -497,6 +508,28 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - A script that changes something through a Host's HTTP API over plain HTTP at an address other than this computer's, such as a name in `trustedHosts` or the address the Host listens on, must send an `Origin` header naming that address, such as `Origin: http://192.0.2.5:3080`; without one the Host answers "forbidden", because a web page could send the same request. Requests on this computer, over HTTPS and from the studio itself are unaffected.
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-preview.1.8 (2026-11-17)
+
+### Setup
+- **Fixed:** Pressing Escape on the setup guide closes it for that page only. It comes back the next time you open Delorun; only "Complete setup later" keeps it closed.
+- **Fixed:** The Phone access step offers "Skip step", like the other steps, instead of "Not now".
+- **Fixed:** The setup guide keeps its title row and its buttons in the same place from step to step, including on Ready and on a phone.
+- **Fixed:** Delorun no longer asks whether your key works every five seconds while no key is saved. It asks when you open it and when you return to the window.
+
+### Plugins
+- **Fixed:** A chat that was open before you pressed "Allow and start" for Browser now gets the Browser tools straight away. Before, a new chat that reused that earlier draft had none, and the agent fell back to other tools.
+- **Fixed:** Adding several plugins in quick succession no longer takes minutes or fails. Delorun no longer watches the files of its own signed plugin packs for edits, so a pack install and a restart do not queue behind each other. A second Add waits for the first instead of failing with "STORE_BUSY", the setup guide's Try again sends the request again, and a failed add says so in plain words without file paths or process numbers.
+- **Fixed:** The downloads panel and the setup guide's plugin rows follow an install promptly. Delorun used to read and check every file of every installed plugin pack at each progress report; it now checks a pack once every 30 seconds (`verifyCacheMs` in the packs plugin) and again when its install ends.
+- **Fixed:** The "plugins added" panel no longer comes back at every page load or restart and covers the message box; it shows only for installs you watched. Pack rows in the setup guide describe themselves before they are added, use one name throughout, and "Adding…" no longer shifts when its progress bar appears.
+- **Fixed:** Adding a plugin pack checks its files against the release's signed list at the moment of the install, and a refusal from the plugin manager, such as protection holding the add for review, now reaches you in its own words.
+- **Fixed:** A plugin that needs something from your computer now says "Needs setup" with the reason and the fix on its card in the Plugins list, not only on its own page. Browser shows it when its Chromium download is missing.
+
+### Commands
+- **Fixed:** `delorun doctor` no longer warns that an added plugin pack "did not load at the last start" when it did. It now finds a pack by the plugins it adds.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-preview.1.7 (2026-11-17)
 
