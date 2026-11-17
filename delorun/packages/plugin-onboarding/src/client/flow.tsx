@@ -103,7 +103,7 @@ export function buildSteps({ services, guide, record, extra, reach, phone, targe
   // A phone cannot set the PIN, so it says so and offers to leave it for the computer; a step already deferred or already done is left out.
   if (reach === 'remote' && !pinOn && record.deferred?.includes('pin') !== true) {
     built.push({
-      ...STEPS.pin, title: () => t('step.pin'), continueLabel: () => t('computer.defer'),
+      ...STEPS.pin, title: () => t('computer.title.pin'), continueLabel: () => t('computer.defer'),
       onContinue: () => { void services.host.defer('pin', true) },
       render: () => <ComputerOnlyStep services={services} id="pin" />,
     })

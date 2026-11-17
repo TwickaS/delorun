@@ -60,7 +60,6 @@ import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
 import { DeferredSetupEntry, type DeferredSetupInjected } from './DeferredSetupEntry.tsx'
-import { FinishSetupChip, FloatingFinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
@@ -114,14 +113,8 @@ export const KEY_BANNER_ENTRY = { id: 'delorun-onboarding.key-banner', order: 5 
 /** The set-aside notice's place in the input dock: beside the no-key banner, above the starter prompts. */
 export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } as const
 
-/** The Finish setup chip's place in the input dock: just above the message box, below the notices. */
-export const FINISH_SETUP_ENTRY = { id: 'delorun-onboarding.finish-setup', order: 8 } as const
-
 /** The `sidebar.footer.action` id and order of the entry that counts the steps a phone left for this computer. */
 export const DEFERRED_ENTRY = { id: 'delorun-onboarding.deferred-steps', order: 40 } as const
-
-/** The floating Finish setup chip's place over the studio, used while no chat has a dock. */
-export const FINISH_SETUP_OVERLAY = { id: 'delorun-onboarding.finish-setup.floating', order: 8 } as const
 
 /** The wire name of the model tool whose row {@link RenameRow} draws; `@delorun/plugin-workspaces` defines the tool. */
 export const RENAME_TOOL = 'rename_workspace'
@@ -382,21 +375,11 @@ export function applyStudio(ctx: Context): void {
     loadRecord: loadSetupRecord,
     fetch: (input, init) => globalThis.fetch(input, init),
     atComputer: () => isLoopbackHostname(location.hostname),
+    progress,
     deferredOnly,
     changed: deferredChanged,
     open: () => {
       laterStore.set(false)
-      ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
-    },
-  }
-  const dockedStore = createSnapshotStore(false)
-  const finishSetup: FinishSetupInjected = {
-    later: laterStore,
-    docked: dockedStore,
-    progress,
-    reopen: () => {
-      laterStore.set(false)
-      // Where the seat was released after Finish later, Settings opens the guide again at the saved step.
       ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
     },
   }
@@ -451,13 +434,6 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
       }, StarterPrompts)),
-      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-        name: 'conversation.input.dock', id: FINISH_SETUP_ENTRY.id, order: FINISH_SETUP_ENTRY.order, locale: NS, inject: () => finishSetup,
-      }, FinishSetupChip)),
-      // The dock exists only inside a chat; before the first chat the chip floats instead.
-      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-        name: 'shell.overlay', id: FINISH_SETUP_OVERLAY.id, order: FINISH_SETUP_OVERLAY.order, locale: NS, inject: () => finishSetup,
-      }, FloatingFinishSetupChip)),
       ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
         name: 'sidebar.footer.action', id: DEFERRED_ENTRY.id, order: DEFERRED_ENTRY.order, locale: NS, inject: () => deferredEntry,
       }, DeferredSetupEntry)),

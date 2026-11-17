@@ -1,6 +1,7 @@
 /**
- * The quiet "Finish setup · N left" entry at the sidebar's foot on the computer: it counts the steps a phone deferred
- * to this computer, opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
+ * The quiet "Finish setup" entry at the sidebar's foot on the computer, the way back into the guide. While the guide is
+ * unfinished it reads "Finish setup" and reopens it at the saved step. Once the guide is finished it counts the steps a
+ * phone deferred to this computer ("Finish setup · N left"), opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
  * done (phone access is on, a PIN is set) is cleared when the entry reads, so it never counts a finished step.
  */
 import { IconChecklistOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -11,6 +12,8 @@ import { readPinMode } from '@delorun/bundle-local/pin-api'
 import type { HostFetch } from '@delorun/bundle-local/host-api'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { OnboardingSettings } from '../config.ts'
 import type { DeferrableStep, SetupRecord } from '../wire.ts'
 import { withSteps } from './flow.tsx'
 import type { HostFace, LaterStore } from './types.ts'
@@ -30,6 +33,8 @@ export interface DeferredSetupInjected {
   readonly deferredOnly: LaterStore
   /** Bumps when a step is deferred or cleared, so the entry reads again. */
   readonly changed: { getSnapshot(): number; subscribe(listener: () => void): () => void }
+  /** The guide's saved progress; the entry shows while it is unfinished. */
+  readonly progress: ConfigForm<OnboardingSettings>
   /** Open the guide at its saved place. */
   readonly open: () => void
 }
@@ -64,7 +69,7 @@ export async function readWaiting({ host, loadRecord, fetch }: Pick<DeferredSetu
  * @param props - the foot's width, the copy and the services.
  * @returns the entry, or nothing.
  */
-export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atComputer, deferredOnly, changed, open }: DeferredSetupEntryProps): ReactNode {
+export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atComputer, progress, deferredOnly, changed, open }: DeferredSetupEntryProps): ReactNode {
   const [waiting, setWaiting] = useState<readonly DeferrableStep[]>([])
   const revision = useSyncExternalStore(changed.subscribe, changed.getSnapshot)
   const guideOpen = useSyncExternalStore(deferredOnly.subscribe, deferredOnly.getSnapshot)
@@ -75,12 +80,14 @@ export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atCompute
     void readWaiting({ host, loadRecord, fetch }).then((steps) => { if (live) setWaiting(steps) }, (error: unknown) => { console.warn('delorun onboarding: the deferred steps were not read', error) })
     return () => { live = false }
   }, [computer, guideOpen, revision, host, loadRecord, fetch])
+  const saved = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
+  const unfinished = saved.status === 'ready' && saved.value !== undefined && !saved.value.done
   const start = useCallback((): void => {
-    deferredOnly.set(true)
+    deferredOnly.set(!unfinished)
     open()
-  }, [deferredOnly, open])
-  if (!computer || waiting.length === 0) return null
-  const label = t('deferred.entry', { n: String(waiting.length) })
+  }, [deferredOnly, open, unfinished])
+  if (!computer || (!unfinished && waiting.length === 0)) return null
+  const label = waiting.length === 0 ? t('finishSetup') : t('deferred.entry', { n: String(waiting.length) })
   const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} onClick={start}>
     <IconChecklistOutlineRegular aria-hidden="true" />
     {wide ? <span className={css.text}>{label}</span> : <span className={css.count}>{waiting.length}</span>}

@@ -18,9 +18,7 @@ export function ComputerOnlyStep({ services, id }: { readonly services: StepServ
   const { t } = services
   return (
     <div className={css.stack} data-computer-only={id}>
-      <p className={css.lead}>{t(`computer.lead.${id}`)}</p>
-      <p className={css.hint}>{t(`computer.why.${id}`)}</p>
-      <p className={css.hint}>{t('computer.how')}</p>
+      <p className={css.lead}>{t(`computer.why.${id}`)}</p>
     </div>
   )
 }

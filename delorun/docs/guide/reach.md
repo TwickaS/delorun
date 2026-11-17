@@ -181,7 +181,7 @@ With an unlock, the phone can also:
 - loosen a workspace's network, run a trust check, and send a problem report, which can hold paths from your computer;
 - keep what you changed: nothing is set back when the unlock ends, and undo and the saved setup versions are how you roll a change back.
 
-A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never covers the actions that only the computer does.
+A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never covers protected settings or the four actions that loosen what Delorun allows (accepting an MCP server, allowing an external agent, granting full access and loosening a workspace's network). Those still ask for a code from your computer. In PIN mode there is no such start at all: every action that needs an unlock asks for the PIN.
 
 Only your computer, even when the phone is unlocked:
 
@@ -226,7 +226,7 @@ A workspace that you already put on full access at your computer can still be dr
 
 ## Unlock sensitive actions for a while
 
-You need an unlock when a phone tries something sensitive, such as changing a setting. The phone says "This needs a quick unlock from your computer" and offers **Unlock**, and says how long the unlock lasts. You can also unlock ahead of time from Settings, Devices on the phone.
+A code unlock stays on while you keep using it: each action that changes something and needs the unlock pushes its end back by the unlock time, up to 8 hours in all. Reading, polling and checking a clone do not extend it. You need an unlock when a phone tries something sensitive, such as changing a setting. The phone says "This needs a quick unlock from your computer" and offers **Unlock**, and says how long the unlock lasts. You can also unlock ahead of time from Settings, Devices on the phone.
 
 1. On the phone, choose **Unlock**. The phone shows an 8-digit code and waits for your computer for up to 5 minutes; **Cancel** withdraws the request.
 2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the number of the request and the code the phone shows. In the studio, type the code and choose **Approve**.

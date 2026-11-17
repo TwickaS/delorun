@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DeferredSetupEntry, readWaiting } from '../src/client/DeferredSetupEntry.tsx'
 import { en } from '../src/client/locales.ts'
 import type { DeferrableStep, SetupRecord } from '../src/wire.ts'
-import { t } from './fixtures.client.ts'
+import type { OnboardingSettings } from '../src/config.ts'
+import { liveForm, settings, t } from './fixtures.client.ts'
 
 afterEach(cleanup)
 
@@ -17,7 +18,7 @@ const PIN_OFF = { enabled: false, idleMinutes: 15, lockWhenHidden: false, paused
 const PIN_ON = { enabled: true, kind: 'pin', idleMinutes: 15, lockWhenHidden: false, paused: false }
 
 /** The entry over fakes: the record, the reach read, the PIN read and where the page is. */
-function services(options: { readonly deferred?: readonly DeferrableStep[]; readonly reach?: 'set-up' | 'off'; readonly pin?: object; readonly computer?: boolean } = {}) {
+function services(options: { readonly deferred?: readonly DeferrableStep[]; readonly reach?: 'set-up' | 'off'; readonly pin?: object; readonly computer?: boolean; readonly done?: boolean } = {}) {
   const record: SetupRecord = { reachSetUp: false, ...options.deferred === undefined ? {} : { deferred: [...options.deferred] } }
   const cleared: DeferrableStep[] = []
   const defer = vi.fn((id: DeferrableStep, deferred: boolean) => { if (!deferred) cleared.push(id); return Promise.resolve([] as readonly DeferrableStep[]) })
@@ -26,7 +27,8 @@ function services(options: { readonly deferred?: readonly DeferrableStep[]; read
   const deferredOnly = createSnapshotStore(false)
   const changed = createSnapshotStore(0)
   const open = vi.fn()
-  return { host: { reach, defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
+  const progress = liveForm<OnboardingSettings>(settings({ done: options.done ?? true })).form
+  return { progress, host: { reach, defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
 }
 
 const mount = async (face: ReturnType<typeof services>, wide = true) => {
@@ -62,6 +64,21 @@ describe('readWaiting', () => {
 })
 
 describe('the Finish setup entry', () => {
+  it('reads Finish setup while the guide is unfinished and reopens the whole guide, not only the deferred steps', async () => {
+    const face = services({ done: false })
+    await mount(face)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.finishSetup })) })
+    expect(face.deferredOnly.getSnapshot()).toBe(false)
+    expect(face.open).toHaveBeenCalledOnce()
+  })
+
+  it('counts the deferred steps even while the guide is unfinished, and reopens the guide', async () => {
+    const face = services({ done: false, deferred: ['pin'] })
+    await mount(face)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })) })
+    expect(face.deferredOnly.getSnapshot()).toBe(false)
+  })
+
   it('names the number of steps left and opens the guide for them only', async () => {
     const face = services({ deferred: ['reach', 'pin'] })
     await mount(face)

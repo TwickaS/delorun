@@ -586,21 +586,20 @@ describe('finishing later and the last step', () => {
 })
 
 describe('on a phone, the steps only the computer can do', () => {
-  const PIN_LEAD = en['computer.lead.pin']
+  const PIN_LEAD = en['computer.why.pin']
 
   it('shows the PIN step as done on the computer, with the reason, before Workspace', async () => {
     await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    expect(titles().slice(-3)).toEqual([en['step.pin'], en['step.workspace'], en['step.ready']])
-    await forward(titles().indexOf(en['step.pin']))
-    expect(heading().textContent).toBe(en['step.pin'])
+    expect(titles().slice(-3)).toEqual([en['computer.title.pin'], en['step.workspace'], en['step.ready']])
+    await forward(titles().indexOf(en['computer.title.pin']))
+    expect(heading().textContent).toBe(en['computer.title.pin'])
     expect(screen.getByText(PIN_LEAD)).toBeTruthy()
-    expect(screen.getByText(en['computer.why.pin'])).toBeTruthy()
     expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
   })
 
   it('records the step as deferred and goes on when the person chooses Do it on my computer', async () => {
     const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    await forward(titles().indexOf(en['step.pin']))
+    await forward(titles().indexOf(en['computer.title.pin']))
     await click(button(en['computer.defer']))
     expect(view.host.defer).toHaveBeenCalledWith('pin', true)
     expect(heading().textContent).toBe(en['step.workspace'])
@@ -608,7 +607,7 @@ describe('on a phone, the steps only the computer can do', () => {
 
   it('leaves the step undone and unrecorded on Skip', async () => {
     const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    await forward(titles().indexOf(en['step.pin']))
+    await forward(titles().indexOf(en['computer.title.pin']))
     await click(button(en.skip))
     expect(view.host.defer).not.toHaveBeenCalled()
     expect(heading().textContent).toBe(en['step.workspace'])
@@ -619,7 +618,7 @@ describe('on a phone, the steps only the computer can do', () => {
     ['PIN mode is already on', { pinState: { kind: 'on', secret: 'pin', idleMinutes: 15, paused: false, unlock: null } }],
   ])('leaves the step out when %s', async (_, options) => {
     await mountEntry({ reach: 'remote', record: { reachSetUp: false }, ...options })
-    expect(titles().includes(en['step.pin'])).toBe(false)
+    expect(titles().includes(en['computer.title.pin'])).toBe(false)
   })
 
   it('does not show the computer-only step at the computer', async () => {
