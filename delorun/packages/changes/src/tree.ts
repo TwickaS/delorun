@@ -433,6 +433,16 @@ interface Walk {
 }
 
 /**
+ * What a person can do about a plugin folder over the limits.
+ * @param walk - the scan.
+ * @returns the sentence to append to the refusal; empty for an active directory, which a person does not edit.
+ */
+function tooLargeAdvice(walk: Walk): string {
+  if (walk.dependencies === 'active') return ''
+  return ` Remove its development packages with \`npm prune --omit=dev\` in ${walk.folder}, or link a folder that holds only the built plugin, then start again.`
+}
+
+/**
  * Count one entry of the version, and its bytes, against the limits.
  * @param walk - the scan.
  * @param bytes - the bytes it adds; zero for a link or a directory.
@@ -442,10 +452,10 @@ function admit(walk: Walk, bytes: number): void {
   walk.count += 1
   walk.bytes += bytes
   if (walk.count > walk.limits.entries) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${String(walk.limits.entries)} files, links and directories, so Delorun does not copy it.`)
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${String(walk.limits.entries)} files, links and directories, so Delorun does not copy it.${tooLargeAdvice(walk)}`)
   }
   if (walk.bytes > walk.limits.bytes) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delorun does not copy it.`)
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delorun does not copy it.${tooLargeAdvice(walk)}`)
   }
 }
 

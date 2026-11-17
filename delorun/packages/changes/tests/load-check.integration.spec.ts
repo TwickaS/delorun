@@ -85,6 +85,7 @@ describe('a start whose folder cannot be read', () => {
     oversized(join(source, 'big.bin'))
     const changes = await start(fx)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining('so Delorun does not copy it') }])
+    expect(changes.failed[0]?.detail).toContain(`Remove its development packages with \`npm prune --omit=dev\` in ${source}, or link a folder that holds only the built plugin, then start again.`)
     expect(changes.pending).toEqual([])
     expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
