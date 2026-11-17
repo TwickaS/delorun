@@ -53,6 +53,9 @@ A release with version `<version>` (Delorun's semantic version, without a leadin
 | `delorun-<version>-<platform>.tar.gz` | The runtime closure for a Linux or macOS platform. |
 | `delorun-<version>-win32-x64.zip` | The runtime closure for native Windows, which the recipe can build; releases up to and including 0.1.0 publish none, because Windows runs the Linux runtime in WSL2. |
 | `delorun-<version>-<platform>.files.json` | The runtime file list of that platform's archive. |
+| `delorun-<version>.packs.json` | The release's plugin packs ([Packs](#packs)), in the signature envelope; absent from a release with none. |
+| `delorun-<version>.packs.log.json` | The packs file's release-log bundle ([C18](c18-release-log.md)). |
+| `delorun-<version>-pack-<name>.<platform or any>.tar.gz` | One pack's archive. |
 | `delorun-<version>.spdx.json` | The SPDX 2.3 JSON SBOM of every archive, installer and image in the release, and of the pinned packages of the builder image that compiled the archives' native code. |
 | `delorun-<version>.rebuild.json` | The rebuild record of the targets-key holder's rebuild. |
 | `delorun-<version>.advisories.json` | The dependency advisory check's result. |
@@ -161,6 +164,12 @@ A manifest carries no expiry: freshness is the timestamp's job, so a manifest st
 | `files` | list of `{ "path", "length", "sha256", "mode" }` | Every regular file of the extracted archive; `path` is relative, `/`-separated and normalised, `mode` is `0644` or `0755`. |
 
 The archive holds no symbolic link, hard link, device or path outside its root, and its entries are exactly the list's files. The installed list sits beside the installation at the path [C1](c01-home-layout.md) names.
+
+## Packs
+
+`delorun-<version>.packs.json`, schema `delorun.release-packs/1`, signed by the targets key with its own release-log record, lists the plugin packages the install does not carry. It is a separate file so that a reader of `delorun.release-manifest/1` never meets it. Fields: `version`; `manifest`, the SHA-256 of the release's manifest file, which binds the file to that release; and `packs`, a list of `{ name, version, experimental, variants }`. `variants` maps a platform, or `any`, to `{ archive, files, external, peers }`: `peers` names the packages that platform's runtime provides, which the install links into the pack; the archive is a `FileRef` with `sha512`, `files` lists every regular file as a runtime file list does, and `external` lists packages the pack never carries because their licence forbids redistribution, each with its exact `version`, its tarball `url` on `https://registry.npmjs.org/`, its `sha512` and its `length`. Pack, peer and external names are lower-case npm names; an archive's and an external's `length` is at most 512 MiB. A client fetches the archive only by its signed name from the release channel and an external only by its signed URL, follows no redirect, and stops reading at the signed length. A pack archive is named `delorun-<version>-pack-<name>.<platform or any>.tar.gz`, so it never reads as a runtime archive. The install seals the pack's tree (files 0444, or 0555 when executable; directories 0555), records the digests of the external files under `trust/runtime-files/packs/<version>/`, and the start check and `delorun verify` hash every installed file against the signed list and that record.
+
+Turning a pack on verifies the packs file with the installed release's root, checks that it names the installed manifest's SHA-256 and that its log record verifies, downloads the archive named there and each external package, and refuses any whose length or digest differs. Nothing appears under `packs/<version>/` before every check passes. A pack is installed for one release only; an update fetches and verifies the packs the person added for the new release before it switches.
 
 ## Client verification
 

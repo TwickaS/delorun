@@ -1,0 +1,14 @@
+{
+  "name": "@delorun/install-queue",
+  "description": "The Host's plugin install queue: one list of plugin downloads and installs that survives a reload, runs a configured number at once, isolates failures and applies one Host reload when the queue drains",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

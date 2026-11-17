@@ -1,0 +1,31 @@
+{
+  "name": "@delorun/bundle-code-intelligence",
+  "description": "Code intelligence as an optional bundle: lets the agent ask a language server for definitions, references and hover information. Needs typescript-language-server on your PATH. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-lsp": "workspace:*",
+    "@deepseek-ai/dsh-lsp-stdio": "workspace:*",
+    "@deepseek-ai/dsh-tool-lsp": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped",
+    "pack": true
+  }
+}

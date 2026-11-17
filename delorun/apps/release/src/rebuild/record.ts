@@ -7,12 +7,14 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstat, readdir } from 'node:fs/promises'
+import { lstat, readdir, readFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import type { FileRef, RebuildRecord, RuntimePlatform, Sha256Hex } from '@delorun/contract-release-manifest'
 import { compareEntryPaths } from '@delorun/release-formats/archive/entry'
 import { fileDigest } from '@delorun/release-formats/archive/sink'
+import { packsName } from '@delorun/release-formats/log/bundle'
 import { sha256Hex } from '@delorun/release-formats/brands'
+import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { ClosureRecipe, parseRecipeText, RebuildExceptions, releasePlatformProblems, Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
 import { ImagesRecipe, imagesName, seccompLicenceName, type ReleaseImages } from '../images/build.ts'
@@ -107,6 +109,26 @@ export function requiredOutputs(version: string, platforms: readonly RuntimePlat
     return profile === undefined ? [] : [profile.name, seccompLicenceName(version, image)]
   })
   return [...platforms.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version), imagesName(version), ...new Set(profiles)]
+}
+
+/**
+ * The files of a directory's packs file: the file and every archive it names, which the rebuild must reproduce byte
+ * for byte exactly as it does the runtime archives.
+ * @param directory - a release or rebuild output directory.
+ * @param version - the release.
+ * @returns their names; none when the directory holds no packs file.
+ * @throws Error when the packs file does not read.
+ */
+export async function packOutputs(directory: string, version: string): Promise<string[]> {
+  let bytes: Buffer
+  try {
+    bytes = await readFile(join(directory, packsName(version)))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
+  const archives = readEnvelope('packs', bytes).signed.packs.flatMap(pack => Object.values(pack.variants).map(variant => variant.archive.name))
+  return [packsName(version), ...new Set(archives)]
 }
 
 /**

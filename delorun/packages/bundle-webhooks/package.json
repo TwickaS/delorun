@@ -1,0 +1,31 @@
+{
+  "name": "@delorun/bundle-webhooks",
+  "description": "Webhooks as an optional bundle: starts a chat when a signed GitHub webhook arrives. Needs a secret in DELORUN_GITHUB_WEBHOOK_SECRET and a rule of your own. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/dsh-webhook": "workspace:*",
+    "@deepseek-ai/dsh-webhook-github": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental",
+    "pack": true
+  }
+}

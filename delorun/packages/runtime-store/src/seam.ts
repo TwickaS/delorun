@@ -148,6 +148,13 @@ export interface HomeRuntimeStoreOptions {
    * @throws when the check stops the start.
    */
   readonly preLaunch?: (version: RuntimeVersion, root: RootMetadata) => Promise<void>
+  /**
+   * Installs the target's version of every plugin pack this home added, before `current` moves; none by default.
+   * @param from - the version `current` names.
+   * @param to - the installed target.
+   * @throws when a pack cannot be fetched, verified or installed; the update fails and `current` stays.
+   */
+  readonly carryPacks?: (from: RuntimeVersion, to: RuntimeVersion) => Promise<unknown>
 }
 
 /** A version ready to switch to: the installed, verified target with its update report. */
@@ -304,6 +311,13 @@ export class HomeRuntimeStore {
         await channel.recordInstalled(resolved)
       }
       version = resolved.version
+    }
+    if (this.options.carryPacks !== undefined) {
+      try {
+        await this.options.carryPacks(current, version)
+      } catch (error) {
+        throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', this.options.store.paths.packs, `the plugin packs of release ${version} could not be prepared, so the update stopped before it switched: ${(error as Error).message}`, [], { cause: error })
+      }
     }
     phase('reporting')
     const report = await this.options.report.build(version, 'update')

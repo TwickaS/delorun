@@ -49,7 +49,7 @@ export function identityRecordVersion(name: string): RuntimeVersion | undefined 
 }
 
 /** The release files kept beside an installation, with the version each names. */
-const RELEASE_FILE = /^delorun-(.+?)(?:\.manifest\.json|\.manifest\.log\.json|-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.files\.json)$/u
+const RELEASE_FILE = /^delorun-(.+?)(?:\.manifest\.json|\.manifest\.log\.json|\.packs\.json|\.packs\.log\.json|-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.files\.json)$/u
 
 /**
  * The version a release file beside an installation belongs to.
@@ -71,6 +71,8 @@ export class StorePaths {
   readonly layout: string
   /** `runtimes/store.lock`. */
   readonly lock: string
+  /** `<home>/packs`, the unpacked plugin packs by release. */
+  readonly packs: string
   /** `trust/runtime-files`, the installations' identity records, outside every read exemption of confined commands. */
   readonly identityRecords: string
 
@@ -88,9 +90,50 @@ export class StorePaths {
     this.platform = platform
     this.root = join(home, DELORUN_HOME_ENTRIES.runtimes)
     this.staging = join(home, DELORUN_HOME_ENTRIES.staging)
+    this.packs = join(home, DELORUN_HOME_ENTRIES.packs)
     this.layout = join(this.root, STORE_ENTRIES.layout)
     this.lock = join(this.root, STORE_ENTRIES.lock)
     this.identityRecords = join(home, DELORUN_HOME_ENTRIES.trust, IDENTITY_RECORDS)
+  }
+
+  /**
+   * A pack's directory for one release.
+   * @param version - the release version.
+   * @param name - the pack's package name.
+   * @returns `packs/<version>/<name>`, with `/` in a scoped name written `__`.
+   */
+  pack(version: RuntimeVersion, name: string): string {
+    return join(this.packs, version, name.replaceAll('/', '__'))
+  }
+
+  /**
+   * The `app/node_modules` of an installation: what provides a pack's peers.
+   * @param version - the installed version.
+   * @returns `runtimes/<version>/app/node_modules`.
+   */
+  runtimeNodeModules(version: RuntimeVersion): string {
+    return join(this.root, version, 'app', 'node_modules')
+  }
+
+  /**
+   * The folder a profile links a pack through: `packs/current/<name>/package`, which names the running release's pack
+   * whichever release runs ({@link pointPacks}).
+   * @param name - the pack's package name.
+   * @returns the path, with `/` in a scoped name written `__`.
+   */
+  packLink(name: string): string {
+    return join(this.packs, 'current', name.replaceAll('/', '__'), 'package')
+  }
+
+  /**
+   * An installed pack's identity record, outside the pack so a confined command that can write the pack cannot
+   * rewrite what the pack is checked against.
+   * @param version - the release version.
+   * @param name - the pack's package name.
+   * @returns `trust/runtime-files/packs/<version>/<name>.json`, with `/` in a scoped name written `__`.
+   */
+  packRecord(version: RuntimeVersion, name: string): string {
+    return join(this.identityRecords, 'packs', version, `${name.replaceAll('/', '__')}.json`)
   }
 
   /**
@@ -114,10 +157,12 @@ export class StorePaths {
   /**
    * The release files kept beside an installation.
    * @param version - the version.
-   * @returns the manifest, this platform's file list and the release-log bundle.
+   * @returns the manifest, this platform's file list and the release-log bundle, and the packs file and its bundle.
    */
-  releaseFiles(version: RuntimeVersion): { readonly manifest: string, readonly files: string, readonly bundle: string } {
+  releaseFiles(version: RuntimeVersion): { readonly manifest: string, readonly files: string, readonly bundle: string, readonly packs: string, readonly packsBundle: string } {
     return {
+      packs: join(this.root, `delorun-${version}.packs.json`),
+      packsBundle: join(this.root, `delorun-${version}.packs.log.json`),
       manifest: join(this.root, `delorun-${version}.manifest.json`),
       files: join(this.root, `delorun-${version}-${this.platform}.files.json`),
       bundle: join(this.root, `delorun-${version}.manifest.log.json`),

@@ -56,6 +56,7 @@
     "@delorun/npm-launcher": "workspace:*",
     "@delorun/plugin-install-check": "workspace:*",
     "@delorun/plugin-mcp-consent": "workspace:*",
+    "@delorun/plugin-packs": "workspace:*",
     "@delorun/plugin-delegation-consent": "workspace:*",
     "@delorun/plugin-permission-defaults": "workspace:*",
     "@delorun/plugin-scaffold": "workspace:*",
