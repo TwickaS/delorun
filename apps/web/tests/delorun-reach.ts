@@ -8,8 +8,9 @@ import { createServer as createTcpServer, type AddressInfo } from 'node:net'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { onTestFinished } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
+import { LOOPBACK_LISTENER } from '@deepseek-ai/dsh-client-connection/authenticator'
 import {
-  Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PeerScope, type ReachListener,
+  Authenticator, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PeerScope, type ReachListener,
 } from '@deepseek-ai/dsh-client-connection'
 import type { TestAuthority } from '../../../delorun/apps/tools/src/stack/certificates.ts'
 import type { WebScaffold } from './scaffold.ts'

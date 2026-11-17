@@ -30,9 +30,9 @@
  */
 import { type BigIntStats, lstatSync, opendirSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, sep } from 'node:path'
-import { DEFAULT_INSTRUCTION_FILE_NAMES } from '@deepseek-ai/dsh-agent-instructions'
+import { DEFAULT_INSTRUCTION_FILE_NAMES } from '@deepseek-ai/dsh-agent-instructions/config'
 import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { HOME_SKILL_DIR, PROJECT_SKILL_DIRS } from '@deepseek-ai/dsh-skill-filesystem'
+import { HOME_SKILL_DIR, PROJECT_SKILL_DIRS } from '@deepseek-ai/dsh-skill-filesystem/skill-dirs'
 import type { WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs'
 
 /**
