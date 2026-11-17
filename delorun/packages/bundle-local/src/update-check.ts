@@ -17,7 +17,7 @@ import { Service, type Context, type Fiber, type Volatile } from '@deepseek-ai/c
 // Type-only: the ctx.connection merge.
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { REACH_DEVICE, type ComputerOnlySwitch } from '@delorun/home-auth'
+import { REACH_DEVICE, admitApprovedDevice, type ComputerOnlySwitch } from '@delorun/home-auth'
 import { readChannelRecord } from '@delorun/install'
 import { UPDATE_CHANNEL_PATH, UPDATE_NOTES_PATH, UPDATE_NOTICE_PATH, type UpdateChannelResponse, type UpdateNotesResponse, type UpdateNotice, type UpdateNoticeResponse } from '@delorun/contract-update-report'
 
@@ -241,6 +241,7 @@ function mountCheck(ctx: Context, config: Config): void {
       path: UPDATE_NOTICE_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
+      admitPeer: admitApprovedDevice(),
       fetch: async () => {
         const body: UpdateNoticeResponse = { notice: await service.notice() ?? null }
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
@@ -250,6 +251,7 @@ function mountCheck(ctx: Context, config: Config): void {
       path: UPDATE_NOTES_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
+      admitPeer: admitApprovedDevice(),
       fetch: async () => {
         const found = await service.notes()
         const body: UpdateNotesResponse = { version: found?.version ?? null, notes: found?.text ?? null }

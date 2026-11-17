@@ -31,6 +31,7 @@ interface FakeWorkspace {
 interface Harness {
   readonly ctx: Context
   readonly routes: Map<string, (request: Request) => Promise<Response>>
+  readonly admits: Map<string, (request: Request, peer: object) => boolean>
   readonly archived: Set<string>
   readonly archiveCalls: { id: string, stopActivity: boolean | undefined }[]
   readonly workspaces: FakeWorkspace[]
@@ -75,6 +76,7 @@ async function mount(options: { forget?: boolean, spillRoot?: string | null, wor
   const state: Harness = {
     ctx,
     routes: new Map(),
+    admits: new Map(),
     archived: new Set(),
     archiveCalls: [],
     workspaces: options.workspaces ?? [],
@@ -87,7 +89,7 @@ async function mount(options: { forget?: boolean, spillRoot?: string | null, wor
   const fail = (key: keyof Harness['failures']): void => {
     if (key in state.failures) throw state.failures[key]
   }
-  ctx.provide('connection', { fetch: { register: (route: { readonly path: string, readonly fetch: (request: Request) => Promise<Response> }) => { state.routes.set(route.path, route.fetch); return () => { state.routes.delete(route.path) } } } })
+  ctx.provide('connection', { fetch: { register: (route: { readonly path: string, readonly fetch: (request: Request) => Promise<Response>, readonly admitPeer?: (request: Request, peer: object) => boolean }) => { state.routes.set(route.path, route.fetch); if (route.admitPeer !== undefined) state.admits.set(route.path, route.admitPeer); return () => { state.routes.delete(route.path); state.admits.delete(route.path) } } } })
   ctx.provide('workspaceRegistry', {
     get archivedSessionIds() { return [...state.archived] },
     archiveSession: async (id: SessionId, archiveOptions: { stopActivity?: boolean }) => {
@@ -398,6 +400,29 @@ describe('the routes', () => {
 
     expect([failed.status, failed.json.code]).toEqual([500, 'TRASH_FAILED'])
     expect(harness.warnings.join('\n')).toContain('the registry crashed')
+  })
+
+  it('admit a reach device to every route and no other Peer, and answer a locked device ELEVATION_REQUIRED on deleting forever only', async () => {
+    await mount()
+    harness.ctx.provide('homeAuth', { elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+    const asDevice = async (path: string, deviceId: string) => {
+      const request = new Request(`http://localhost${path}`, { method: 'POST', body: '{}' })
+      if (harness.admits.get(path)?.(request, { principal: device(deviceId) }) !== true) return new Response('forbidden', { status: 403 })
+      return harness.routes.get(path)!(request)
+    }
+    for (const path of Object.values(TRASH_PATHS)) {
+      expect(harness.admits.get(path)?.(new Request(`http://localhost${path}`), { principal: { kind: 'sdk' } }), path).toBe(false)
+    }
+    for (const path of [TRASH_PATHS.list, TRASH_PATHS.deleteChat, TRASH_PATHS.deleteWorkspace, TRASH_PATHS.restore]) {
+      expect((await asDevice(path, 'locked-phone')).status, path).not.toBe(403)
+    }
+    // Pins the unlock check on the two routes that delete for good.
+    for (const path of [TRASH_PATHS.purge, TRASH_PATHS.empty]) {
+      const locked = await asDevice(path, 'locked-phone')
+      expect([locked.status, await locked.json()], path).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      expect((await asDevice(path, 'unlocked-phone')).status, path).not.toBe(403)
+    }
   })
 
   it('are withdrawn when the plugin is disposed', async () => {

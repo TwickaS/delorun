@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import {
+  admitApprovedDevice,
   admitKeyDevice,
   admitUnlockedDevice,
   requireComputer,
@@ -292,6 +293,15 @@ describe('admitUnlockedDevice', () => {
     expect(admits(home(LISTENER, true, false), device)).toBe(false)
     expect(admits(home(LISTENER, true), peer('anonymous'))).toBe(false)
     expect(admits(undefined, device)).toBe(false)
+  })
+})
+
+describe('admitApprovedDevice', () => {
+  it('admits a reach device whether or not it is unlocked, and no other Peer', () => {
+    const admit = admitApprovedDevice()
+    expect(admit({} as never, { principal: { kind: 'reach-device' } })).toBe(true)
+    expect(admit({} as never, { principal: { kind: 'sdk' } })).toBe(false)
+    expect(admit({} as never, { principal: { kind: 'owner' } })).toBe(false)
   })
 })
 
