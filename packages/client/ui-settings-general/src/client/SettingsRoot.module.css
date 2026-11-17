@@ -559,7 +559,7 @@
   margin: -10px 0 -10px -12px;
   padding: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
@@ -571,7 +571,6 @@
 }
 
 .back:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-focus, currentColor);
   outline-offset: -2px;
 }
 
