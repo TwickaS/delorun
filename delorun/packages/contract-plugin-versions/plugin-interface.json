@@ -8,6 +8,9 @@
     { "kind": "manifest-field", "name": "engines.delorun", "source": "packages/boot/app-boot/src/plugin-compatibility.ts" }
   ],
   "internal": [
+    { "kind": "service", "name": "delorunChatGate", "side": "host", "source": "delorun/packages/plugin-packs/src/index.ts" },
+    { "kind": "service", "name": "packsEnvironment", "side": "host", "source": "delorun/packages/plugin-packs/src/index.ts" },
+    { "kind": "service", "name": "packInstallTargets", "side": "host", "source": "delorun/packages/plugin-packs/src/index.ts" },
     { "kind": "service", "name": "delorunTurnGate", "side": "host", "source": "delorun/packages/bundle-local/src/update-gate.ts" },
     { "kind": "service", "name": "delorunUpdateCheck", "side": "host", "source": "delorun/packages/bundle-local/src/update-check.ts" },
     { "kind": "service", "name": "delorunPluginTrust", "side": "host", "source": "delorun/packages/plugin-install-check/src/index.ts" },

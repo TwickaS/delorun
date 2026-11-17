@@ -137,6 +137,17 @@ describe('the pack hub', () => {
     expect(existsSync(paths.pack(V1, 'one'))).toBe(true)
   })
 
+  it('dismisses a failed or cancelled row but never a ready one', async () => {
+    const { hub } = await setup({ archive: () => Promise.reject(new PackRefusal('x needs a connection', 'OFFLINE')) })
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'failed')
+    expect((await hub.dismiss('one'))).toMatchObject({ ok: true, value: { queue: [] } })
+    const ready = await setup()
+    await ready.hub.enqueue(['one'])
+    await until(ready.hub, each => each.queue[0]?.state === 'ready')
+    expect((await ready.hub.dismiss('one'))).toMatchObject({ ok: true, value: { queue: [{ state: 'ready' }] } })
+  })
+
   it('refuses an unknown pack and keeps the list as it was', async () => {
     const { hub } = await setup()
     expect(await hub.enqueue(['nope'])).toMatchObject({ ok: false, error: { code: 'unknown-pack' } })

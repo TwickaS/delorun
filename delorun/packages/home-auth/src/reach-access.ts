@@ -141,6 +141,7 @@ export const REACH_ALLOWED_ACTIONS = {
   'pluginManager/inspect': 'read what a plugin package contains before it is installed; installing it needs an unlock',
   'pluginManager/listBundles': 'read the installed bundles',
   'packs/list': 'read the plugin packs the release publishes and the install list',
+  'packs/dismiss': 'clear a failed or cancelled row of the plugin install list; it only clears a queue record and never touches installed files (A408)',
   'packs/cancel': 'cancel a plugin pack that is queued or downloading; it only stops an install and never adds, changes or removes an installed pack (A408)',
   'pluginManager/listPlugins': 'read the installed plugins',
   'pluginManager/listVersionExemptions': 'read the pinned plugin versions',

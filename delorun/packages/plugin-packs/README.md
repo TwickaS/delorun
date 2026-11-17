@@ -37,6 +37,7 @@ An item is `queued`, `downloading`, `verifying`, `installing`, `needs-reload`, `
 | `packs/list` | none | `PacksSnapshot`: `supported`, `reason`, `release`, `packs` (`PackInfo`: name, version, `experimental`, `downloadBytes`, `availability`) and `queue` (`InstallItem[]`) |
 | `packs/enqueue` | `{ names }` | `PacksResult` |
 | `packs/cancel` | `{ name }` | `PacksResult` |
+| `packs/dismiss` | `{ name }` | `PacksResult` |
 | `packs/remove` | `{ name }` (a finished, failed or cancelled item) | `PacksResult` |
 | `packs/retry` | `{ name }` | `PacksResult` |
 
@@ -52,7 +53,7 @@ The service announces every item of the list on the plugin manager's `plugin-man
 
 ## Phones
 
-`packs/list` is a read action every paired phone may take, and so is `packs/cancel`: cancelling stops a queued or downloading install and never touches an installed pack (A408). `packs/enqueue`, `packs/remove` and `packs/retry` are elevated actions of contract C14: a phone takes them only while it holds an unlock (A408).
+`packs/list` is a read action every paired phone may take, and so are `packs/cancel` (stops a queued or downloading install) and `packs/dismiss` (clears a failed or cancelled row, a queue record only); neither touches an installed pack (A408). `packs/enqueue`, `packs/remove` and `packs/retry` are elevated actions of contract C14: a phone takes them only while it holds an unlock (A408).
 
 ## Where the Host connects it
 

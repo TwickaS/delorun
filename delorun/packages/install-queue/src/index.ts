@@ -187,6 +187,18 @@ export class InstallQueue {
     this.publish()
   }
 
+  /**
+   * Remove a failed or cancelled item from the list, which is only a queue record: a `ready` item stays.
+   * @param key - the package name.
+   * @returns whether an item was removed.
+   */
+  dismiss(key: string): boolean {
+    const item = this.items.find(each => each.key === key)
+    if (item === undefined || (item.state !== 'failed' && item.state !== 'cancelled')) return false
+    this.remove(key)
+    return true
+  }
+
   /** Tell the queue a chat finished, so a reload that waited for the chats can run. */
   chatsChanged(): void {
     this.settle()

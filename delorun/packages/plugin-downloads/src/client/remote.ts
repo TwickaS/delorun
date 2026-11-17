@@ -26,7 +26,13 @@ export interface PacksPanelRemote {
    */
   retry(request: { readonly name: string }): Promise<PacksResult>
   /**
-   * Take a finished, failed or cancelled item off the list.
+   * Clear a failed or cancelled item from the list; allowed without an unlock.
+   * @param request - the package name.
+   * @returns the new snapshot.
+   */
+  dismiss(request: { readonly name: string }): Promise<PacksResult>
+  /**
+   * Take a finished item off the list.
    * @param request - the package name.
    * @returns the new snapshot.
    */
@@ -146,6 +152,9 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
     },
     cancel: (key) => { act(key, request => remote.cancel(request)) },
     retry: (key) => { act(key, request => remote.retry(request)) },
-    remove: (key) => { act(key, request => remote.remove(request)) },
+    remove: (key) => {
+      const state = items.find(item => item.key === key)?.state
+      act(key, request => (state === 'failed' || state === 'cancelled' ? remote.dismiss(request) : remote.remove(request)))
+    },
   }
 }

@@ -47,6 +47,7 @@ export function createRemoteDownloadsSource(ctx: Context): DownloadsSource {
     list: () => remote()?.list() ?? missing(),
     cancel: request => remote()?.cancel(request) ?? missing(),
     retry: request => remote()?.retry(request) ?? missing(),
+    dismiss: request => remote()?.dismiss(request) ?? missing(),
     remove: request => remote()?.remove(request) ?? missing(),
   }, {
     pollMs: POLL_MS,

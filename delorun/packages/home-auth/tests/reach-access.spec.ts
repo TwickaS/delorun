@@ -553,6 +553,13 @@ describe('an elevated action', () => {
 describe('the plugin pack actions (A408)', () => {
   const UNLOCK = { id: 'elevation-1' }
 
+  it('lets a paired phone clear a failed or cancelled row without an unlock, while removing a row stays elevated', () => {
+    const call = { action: 'packs/dismiss', resource: GLOBAL, args: { name: 'x' } } as const
+    expect(createCondition(facts(), DEVICE)(call)).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ELEVATED_ACTIONS)).toContain('packs/remove')
+    expect(createCondition(facts(), DEVICE)({ action: 'packs/remove', resource: GLOBAL, args: { name: 'x' } })).toEqual({ kind: 'deny', reason: 'elevation-required: packs/remove' })
+  })
+
   it('lets a paired phone cancel a queued or downloading pack without an unlock, which only stops an install', () => {
     const call = { action: 'packs/cancel', resource: GLOBAL, args: { name: 'x' } } as const
     expect(createCondition(facts(), DEVICE)(call)).toEqual({ kind: 'allow' })

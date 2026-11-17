@@ -174,6 +174,16 @@ export class PacksHub {
   }
 
   /**
+   * Clear a failed or cancelled item from the list. It only clears a queue record and never touches installed files.
+   * @param name - the package name.
+   * @returns the new snapshot.
+   */
+  async dismiss(name: string): Promise<PacksResult> {
+    this.queue.dismiss(name)
+    return { ok: true, value: await this.snapshot() }
+  }
+
+  /**
    * Start a failed or cancelled item again.
    * @param name - the package name.
    * @returns the new snapshot, or why nothing happened.

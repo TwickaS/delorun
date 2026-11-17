@@ -14,7 +14,7 @@ import type { PacksNamesRequest, PacksResult, PacksSnapshot } from './wire.ts';
 import { packRequestId, type PacksNameRequest } from './wire.ts'
 
 /** What the remote needs of the hub. */
-export type PacksOperations = Pick<PacksHub, 'subscribe' | 'snapshot' | 'enqueue' | 'cancel' | 'remove' | 'retry'>
+export type PacksOperations = Pick<PacksHub, 'subscribe' | 'snapshot' | 'enqueue' | 'cancel' | 'remove' | 'dismiss' | 'retry'>
 
 /** The remote. */
 export class PacksService extends TypertRemoteService {
@@ -69,6 +69,16 @@ export class PacksService extends TypertRemoteService {
   @Remote('remove')
   remove(request: PacksNameRequest): Promise<PacksResult> {
     return this.hub.remove(request.name)
+  }
+
+  /**
+   * Clear a failed or cancelled item from the list; a phone may do this without an unlock because it only clears a record (A408).
+   * @param request - the package name.
+   * @returns the new snapshot.
+   */
+  @Remote('dismiss')
+  dismiss(request: PacksNameRequest): Promise<PacksResult> {
+    return this.hub.dismiss(request.name)
   }
 
   /**

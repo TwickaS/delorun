@@ -24,6 +24,7 @@ function fake(initial: InstallItem[]) {
     cancel: guarded('cancel', key => { queue = queue.map(item => (item.key === key ? { ...item, state: 'cancelled' } : item)) }),
     retry: guarded('retry', key => { queue = queue.map(item => (item.key === key ? { ...item, state: 'queued', failure: undefined } : item)) }),
     remove: guarded('remove', key => { queue = queue.filter(item => item.key !== key) }),
+    dismiss: guarded('dismiss', key => { queue = queue.filter(item => item.key !== key) }),
   }
   return { remote, calls, state, set: (next: InstallItem[]) => { queue = next } }
 }
@@ -85,6 +86,11 @@ describe('the downloads source over the packs remote', () => {
     source.remove('b')
     await vi.advanceTimersByTimeAsync(0)
     expect(source.snapshot().map(item => item.key)).toEqual(['a'])
+    expect(f.calls).toContain('remove:b')
+    source.remove('a')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.calls).toContain('dismiss:a')
+    expect(source.snapshot()).toEqual([])
   })
 
   it('shows waiting-for-unlock when remote access wants an unlock, and clears it when the call goes through', async () => {
