@@ -8,8 +8,7 @@
  */
 import { useEffect, useId, useState } from 'react'
 import { Button, Link } from '@brand'
-// The brand's link drawn as its button is a web-only file outside the library's index.
-import { ButtonLink } from '../../../../packages/brand/src/button-link.web.tsx'
+import { ButtonLink } from '@brand/button-link.web.tsx'
 import { DESKTOP_DOWNLOAD_PLACES, DESKTOP_DOWNLOADS, DESKTOP_PLATFORMS, type DesktopPlatform } from '../site/config.ts'
 import { COPY } from '../site/copy.ts'
 
