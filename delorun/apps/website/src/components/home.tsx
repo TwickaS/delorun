@@ -22,6 +22,9 @@ import { ChunkBoundary } from './chunk-boundary.tsx'
 const below = import.meta.env.SSR ? await import('./home-below.tsx') : undefined
 const HomeBelow = below?.HomeBelow ?? lazy(() => import('./home-below.tsx').then(module => ({ default: module.HomeBelow })))
 
+/** The hero's sub-line: in the text colour, at a size between the headline and the body. */
+const SUBLINE = 'block max-w-[34ch] text-[clamp(20px,1rem_+_0.8vw,28px)] font-medium leading-[1.25] tracking-[-0.02em] text-(--dl-text) text-balance'
+
 /**
  * The hero: the statement, the install command, the desktop button and the platform line on the left, the studio at
  * work on the right. On a phone they stack in that order.
@@ -33,7 +36,8 @@ function Hero({ install }: { install: ReactNode }) {
   return (
     <section aria-labelledby="hero" className={`${GRID} gap-y-12 pt-10 lg:items-start lg:pt-20`}>
       <div className="col-span-full flex flex-col gap-8 lg:col-span-5">
-        <SectionHeading level={1} id="hero" title={copy.title} lead={copy.subline} />
+        {/* The sub-line names what Delorun is, so it is set as part of the statement rather than as a muted lead. */}
+        <SectionHeading level={1} id="hero" title={copy.title} lead={<span className={SUBLINE}>{copy.subline}</span>} />
         <div className="grid max-w-xl gap-5">
           {install}
           <DesktopButton />

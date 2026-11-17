@@ -54,10 +54,11 @@ describe('the page’s words', () => {
     }
   })
 
-  it('carry five numbered claims, one sentence each, each with its guide page', () => {
+  it('carry five numbered claims, each a one-sentence headline and a one-sentence second line, with its guide page', () => {
     expect(SECTIONS_EN.claims.items).toHaveLength(5)
     for (const claim of SECTIONS_EN.claims.items) {
-      expect(claim.text.match(/[.!?](\s|$)/g), claim.text).toHaveLength(1)
+      for (const line of [claim.text, claim.detail]) expect(line.match(/[.!?](\s|$)/g), line).toHaveLength(1)
+      expect(claim.text.length, claim.text).toBeLessThanOrEqual(48)
       expect(claim.href.startsWith(`${DOCS_URL}/guide/`)).toBe(true)
     }
   })
@@ -78,7 +79,7 @@ describe('the page’s words', () => {
   })
 
   it('keep the limits beside the promises', () => {
-    const claims = SECTIONS_EN.claims.items.map(claim => claim.text)
+    const claims = SECTIONS_EN.claims.items.map(claim => `${claim.text} ${claim.detail}`)
     expect(claims[1]).toMatch(/not the files an agent changed/)
     expect(claims[2]).toMatch(/your own Tailscale network/)
     expect(`${COPY.hero.platform.before}${COPY.hero.platform.linkText}`).toBe('Runs on Linux and on Windows through WSL2')

@@ -13,23 +13,28 @@ export const SECTIONS_EN = {
     heading: 'What Delorun does',
     items: [
       {
-        text: 'Change its look, its settings and its plugins, write your own, or edit Delorun itself.',
+        text: 'Change its look, its plugins and its code.',
+        detail: 'Pick a theme, add plugins, write your own, or edit Delorun itself.',
         href: `${DOCS_URL}/guide/customise`,
       },
       {
-        text: 'Save your setup before a change and switch back later at your computer; going back covers Delorun and your chats, not the files an agent changed.',
+        text: 'Go back to an earlier setup.',
+        detail: 'Switch at your computer; going back covers Delorun and your chats, not the files an agent changed.',
         href: `${DOCS_URL}/guide/updates#going-back`,
       },
       {
-        text: 'Carry on a chat from your phone over your own Tailscale network, once you approve the phone at your computer.',
+        text: 'Carry on a chat from your phone.',
+        detail: 'Over your own Tailscale network, once you approve the phone at your computer.',
         href: `${DOCS_URL}/guide/reach`,
       },
       {
-        text: 'Commands run in a sandbox unless you grant full access, and risky changes ask for your consent first.',
+        text: 'Risky changes ask for your consent first.',
+        detail: 'Commands run in a sandbox unless you grant full access.',
         href: `${DOCS_URL}/guide/safety`,
       },
       {
-        text: 'Open source under MIT and built on DeepSeek Harness: one command brings your DeepSeek Harness chats across.',
+        text: 'Open source, built on DeepSeek Harness.',
+        detail: 'MIT licensed, and one command brings your DeepSeek Harness chats across.',
         href: `${DOCS_URL}/guide/switching`,
       },
     ],

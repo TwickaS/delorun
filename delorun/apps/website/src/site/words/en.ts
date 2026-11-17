@@ -4,7 +4,7 @@
  *
  * @module @delorun/website/words/en
  */
-import { DOCS_URL } from '../config.ts'
+import { DOCS_URL, TRADING_NAME } from '../config.ts'
 
 /** The roadmap entry that the desktop button's note links to: the "Next" section, which lists the desktop app first. */
 export const ROADMAP_DESKTOP_HREF = `${DOCS_URL}/guide/roadmap#next`
@@ -14,10 +14,10 @@ export const EN = {
   language: 'en-GB',
   siteTitle: 'Delorun',
   tagline: 'Your harness. No limits.',
-  description: 'Delorun is an open source agent harness on your own computer that you shape to your work: its look, its plugins, even Delorun itself. Built on DeepSeek Harness.',
+  description: 'Delorun is an open source AI agent for your own computer, in a harness you shape to your work: its look, its plugins, even Delorun itself. Built on DeepSeek Harness.',
   hero: {
     title: 'Your harness. No limits.',
-    subline: 'An agent harness on your own computer that bends to your work: its look, its plugins, even Delorun itself.',
+    subline: 'An AI agent that works on your own computer, in a harness you can reshape: its look, its plugins, even Delorun itself.',
     packageManagerLabel: 'Package manager',
     copyLabel: 'Copy command',
     copiedLabel: 'Copied',
@@ -74,7 +74,7 @@ export const EN = {
     privacy: 'Privacy',
     licence: 'MIT licence',
     upstream: 'Built on DeepSeek Harness',
-    owner: 'Delo Run',
+    owner: `Delorun is published by ${TRADING_NAME}`,
     skip: 'Skip to the content',
     primaryNav: 'Main',
     footerNav: 'Footer',

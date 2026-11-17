@@ -8,6 +8,10 @@ import { NearScreen } from '../src/components/near-screen.tsx'
 import { forgetPackageManager, PACKAGE_MANAGER_KEY } from '../src/components/package-manager.tsx'
 import { INSTALL_COMMANDS, PACKAGE_MANAGERS } from '../src/site/copy.ts'
 import { softwareData } from '../src/site/structured-data.ts'
+import { pageHead } from '../src/site/head.ts'
+import { SITE_URL } from '../src/site/config.ts'
+import { SECTIONS_EN } from '../src/site/words/sections-en.ts'
+import { Claims, type Claim } from '../src/components/claims.tsx'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -77,5 +81,40 @@ describe('the structured data', () => {
     const data = softwareData('0.1.0-preview.2')
     expect(data).toMatchObject({ '@type': 'SoftwareApplication', softwareVersion: '0.1.0-preview.2', offers: { price: '0' }, isAccessibleForFree: true })
     expect(data.license).toMatch(/\/LICENSE$/)
+  })
+})
+
+describe('a page’s own head tags', () => {
+  it('name the page in its title, its link preview and its canonical address', () => {
+    const head = pageHead('Privacy · Delorun', '/privacy')
+    expect(head.meta).toEqual([
+      { title: 'Privacy · Delorun' },
+      { property: 'og:title', content: 'Privacy · Delorun' },
+      { name: 'twitter:title', content: 'Privacy · Delorun' },
+      { property: 'og:url', content: `${SITE_URL}/privacy` },
+    ])
+    expect(head.links).toEqual([{ rel: 'canonical', href: `${SITE_URL}/privacy` }])
+  })
+})
+
+describe('the five claims', () => {
+  /** Renders the claims and returns each row's number and text parts. */
+  function rows(items?: readonly Claim[]) {
+    const html = renderToStaticMarkup(createElement(Claims, items === undefined ? {} : { items }))
+    const body = new DOMParser().parseFromString(html, 'text/html').body
+    return [...body.querySelectorAll('ol > li > a')].map(row => ({ href: row.getAttribute('href'), parts: [...row.children].map(part => part.textContent) }))
+  }
+
+  it('set each claim as a headline and a second line beside its number, each row a link to its guide page', () => {
+    const shown = rows()
+    expect(shown).toHaveLength(5)
+    expect(shown.map(row => row.href)).toEqual(SECTIONS_EN.claims.items.map(claim => claim.href))
+    expect(shown[0]!.parts).toEqual(['1', `${SECTIONS_EN.claims.items[0].text}${SECTIONS_EN.claims.items[0].detail}`])
+  })
+
+  it('also lay out a claim that is one sentence with no second line', () => {
+    const sentence = 'Save your setup before a change and switch back later at your computer; going back covers Delorun and your chats, not the files an agent changed.'
+    const shown = rows([{ text: sentence, href: `${SITE_URL}/x` }])
+    expect(shown).toEqual([{ href: `${SITE_URL}/x`, parts: ['1', sentence] }])
   })
 })

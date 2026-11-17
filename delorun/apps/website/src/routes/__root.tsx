@@ -17,6 +17,9 @@ export const Route = createRootRoute({
       { property: 'og:image', content: `${SITE_URL}${OG_IMAGE_PATH}` },
       { property: 'og:image:alt', content: COPY.linkPreviewAlt },
       { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:description', content: COPY.description },
+      { name: 'twitter:image', content: `${SITE_URL}${OG_IMAGE_PATH}` },
+      { name: 'twitter:image:alt', content: COPY.linkPreviewAlt },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },

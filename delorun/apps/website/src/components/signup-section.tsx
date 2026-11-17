@@ -5,7 +5,7 @@
  */
 import { SECTIONS_EN } from '@/site/words/sections-en.ts'
 import { HOME_SIGNUP_PAGE } from '@/site/signup.ts'
-import { GRID } from '@/components/grid.ts'
+import { GRID, SPACE } from '@/components/grid.ts'
 import { SignupForm } from '@/components/signup.tsx'
 
 /**
@@ -16,7 +16,7 @@ import { SignupForm } from '@/components/signup.tsx'
 export function SignupSection() {
   const copy = SECTIONS_EN.signup
   return (
-    <section aria-labelledby="updates" className={`${GRID} pt-32 lg:pt-48`}>
+    <section aria-labelledby="updates" className={`${GRID} ${SPACE.normal}`}>
       <div className="col-span-full border-t border-(--dl-border) pt-8 lg:col-span-4">
         <h2 id="updates" className="text-2xl font-semibold tracking-tight">{copy.heading}</h2>
         <p className="mt-3 max-w-sm leading-7 text-(--dl-text-muted)">{copy.text}</p>

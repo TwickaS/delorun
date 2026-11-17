@@ -16,6 +16,7 @@ import { SetupStripStill } from '@/strip/still.tsx'
 import { NearScreen } from '@/components/near-screen.tsx'
 import { PluginBrowserStill } from '@/plugin-browser/PluginBrowserStill.tsx'
 import { GRID, SPACE } from '@/components/grid.ts'
+import { Claims } from '@/components/claims.tsx'
 
 /**
  * The home page's own rules as Tailwind classes, which compile into the site's one stylesheet, so this chunk's
@@ -23,10 +24,7 @@ import { GRID, SPACE } from '@/components/grid.ts'
  * brand's tokens.
  */
 const CLASSES = {
-  claims: 'col-span-full m-0 list-none border-b border-(--dl-border) p-0',
-  claim: 'group grid grid-cols-4 items-baseline gap-x-(--grid-gap) border-t border-(--dl-border) py-(--dl-space-5) text-(--dl-text) no-underline focus-visible:rounded-(--dl-radius-xs) focus-visible:[outline:var(--dl-focus-ring)] focus-visible:[outline-offset:var(--dl-focus-ring-offset)] lg:grid-cols-12',
-  number: 'text-[clamp(16px,0.9rem_+_0.4vw,20px)] text-(--dl-text-muted) tabular-nums lg:col-span-4',
-  sentence: 'col-span-3 max-w-[34ch] text-[clamp(20px,0.95rem_+_1.1vw,32px)] font-medium leading-[1.2] tracking-[-0.02em] text-pretty underline decoration-transparent decoration-1 underline-offset-[0.18em] transition-[text-decoration-color] duration-(--dl-duration-quick) ease-(--dl-ease) group-focus-visible:decoration-current pointer-fine:group-hover:decoration-current lg:col-span-8',
+  lead: 'max-w-md text-lg text-(--dl-text-muted)',
   headline: 'text-[clamp(22px,1rem_+_1.2vw,36px)] font-medium leading-[1.15] tracking-[-0.02em] text-balance',
 } as const
 
@@ -36,8 +34,11 @@ const CLASSES = {
  * @returns the line.
  */
 function GuideLink({ link }: { link: { readonly text: string, readonly href: string } }) {
-  return <p className="col-span-full mt-6 lg:col-start-9 lg:col-end-13"><Link href={link.href}>{link.text}</Link></p>
+  return <p className="col-span-full mt-4 lg:col-start-9 lg:col-end-13"><Link href={link.href}>{link.text}</Link></p>
 }
+
+/** The space between a section's heading and its content. */
+const CONTENT = 'col-span-full mt-8 lg:mt-10'
 
 /**
  * A section of the page on the grid.
@@ -51,29 +52,6 @@ function Section({ id, space, children }: { id: string, space: keyof typeof SPAC
 }
 
 /**
- * The five claims: numbered rows, one sentence each, each row a link to the guide page that states it.
- * @returns the section.
- */
-function Claims() {
-  const copy = WORDS.claims
-  return (
-    <section aria-labelledby="claims" className={`${GRID} ${SPACE.normal}`}>
-      <h2 id="claims" className="sr-only">{copy.heading}</h2>
-      <ol role="list" className={CLASSES.claims}>
-        {copy.items.map((claim, index) => (
-          <li key={claim.href}>
-            <a href={claim.href} className={CLASSES.claim}>
-              <span className={CLASSES.number} aria-hidden="true">{index + 1}</span>
-              <span className={CLASSES.sentence}>{claim.text}</span>
-            </a>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )
-}
-
-/**
  * Make it yours: the setup strip, the page's signature, with its heading on the left and its lead from column 9.
  * @returns the section.
  */
@@ -82,9 +60,9 @@ function MakeItYours() {
   return (
     <Section id="make-it-yours" space="far">
       <SectionHeading id="make-it-yours" title={copy.heading} className="col-span-full lg:col-span-6" />
-      <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
-      <div className="col-span-full mt-10 lg:mt-14">
-        {/* The strip and its still set their own heights: 640 px from 1024 px wide, 1280 px below. */}
+      <p className={`col-span-full mt-4 lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end ${CLASSES.lead}`}>{copy.lead}</p>
+      <div className={CONTENT}>
+        {/* The strip and its still set their own heights. */}
         <NearScreen load={() => import('@/strip/setup-strip.tsx')} still={<SetupStripStill />} />
       </div>
       <GuideLink link={copy.link} />
@@ -93,20 +71,18 @@ function MakeItYours() {
 }
 
 /**
- * Made of parts you can change: the plugin browser, with the heading and lead hanging from column 5.
+ * Made of parts you can change: the plugin browser, with the lead under the heading on the left half.
  * @returns the section.
  */
 function Parts() {
   const copy = WORDS.sections.parts
   return (
     <Section id="parts" space="normal">
-      <SectionHeading id="parts" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-start-5 lg:col-end-12" />
-      <div className="col-span-full mt-10 lg:mt-14">
+      <SectionHeading id="parts" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-span-7" />
+      <div className={CONTENT}>
         <NearScreen
           load={() => import('@/plugin-browser/PluginBrowser.tsx').then(module => ({ default: () => <module.PluginBrowser words={WORDS.plugins} /> }))}
           still={<PluginBrowserStill words={WORDS.plugins} />}
-          // The plugin browser's box: the still fills it, and the live browser sets the same heights.
-          className="h-[640px] min-[960px]:h-[560px]"
         />
       </div>
       <GuideLink link={copy.link} />
@@ -115,16 +91,16 @@ function Parts() {
 }
 
 /**
- * Watch it change: the replayed sessions edge to edge, with the heading on the left and the lead from column 9.
+ * Watch it change: the replayed sessions edge to edge, with the heading on the left and the lead from column 5.
  * @returns the section.
  */
 function Replays() {
   const copy = WORDS.sections.replays
   return (
     <Section id="replays" space="far">
-      <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-6" />
-      <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
-      <div className="col-span-full mt-10 lg:mt-14">
+      <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-4" />
+      <p className={`col-span-full mt-4 lg:col-start-5 lg:col-end-10 lg:mt-0 lg:self-end ${CLASSES.lead}`}>{copy.lead}</p>
+      <div className={CONTENT}>
         <ReplicaFrame session="changes-and-versions" width="responsive" />
       </div>
       <GuideLink link={copy.link} />
@@ -141,9 +117,9 @@ function Phone() {
   const copy = WORDS.sections.phone
   return (
     <Section id="phone" space="normal">
-      <SectionHeading id="phone" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-span-7" />
-      <div className="col-span-full mt-10 lg:mt-14">
-        <ReplicaPair session="changes-and-versions" />
+      <SectionHeading id="phone" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-span-5" />
+      <div className={CONTENT}>
+        <ReplicaPair session="ordinary-work" />
       </div>
       <GuideLink link={copy.link} />
     </Section>
@@ -181,7 +157,7 @@ function WhatsNew() {
 function Next() {
   const copy = WORDS.next
   return (
-    <Section id="next" space="far">
+    <Section id="next" space="normal">
       <h2 id="next" className="col-span-full text-2xl font-semibold tracking-tight lg:col-span-4">{copy.heading}</h2>
       <p className="col-span-full mt-4 max-w-sm leading-7 lg:col-start-5 lg:col-end-9 lg:mt-0">
         {copy.roadmap.before}<Link href={copy.roadmapHref}>{copy.roadmap.linkText}</Link>{copy.roadmap.after}

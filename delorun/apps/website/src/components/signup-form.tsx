@@ -152,11 +152,14 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
         <label htmlFor={`${id}-consent`} className="text-sm leading-6">{CONSENT_TEXT}</label>
       </div>
       <div ref={widgetRef} />
-      <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" variant="secondary" disabled={status.kind === 'working'}>{copy.submit}</Button>
-        <p className="text-sm text-(--dl-text-muted)">{copy.privacyNote.before}<Link href="/privacy#updates">{copy.privacyNote.link}</Link>{copy.privacyNote.after}</p>
+      {/* The answer sits directly under the button: progress and success in a polite status region, a refusal in an
+          alert, which is announced at once. Both regions stay in the page, empty, so assistive technology hears changes. */}
+      <div className="flex flex-col items-start">
+        <Button type="submit" variant="solid" disabled={status.kind === 'working'} aria-describedby={status.kind === 'error' ? `${id}-error` : undefined}>{copy.submit}</Button>
+        <p role="status" aria-live="polite" className="m-0 mt-2 text-sm font-medium empty:mt-0">{status.kind === 'working' || status.kind === 'done' ? status.text : ''}</p>
+        <p id={`${id}-error`} role="alert" className="m-0 mt-2 text-sm font-medium text-(--dl-error) empty:mt-0">{status.kind === 'error' ? status.text : ''}</p>
       </div>
-      <p role="status" aria-live="polite" className={`text-sm font-medium ${status.kind === 'error' ? 'text-(--dl-error)' : ''}`}>{status.kind === 'idle' ? '' : status.text}</p>
+      <p className="m-0 text-sm text-(--dl-text-muted)">{copy.privacyNote.before}<Link href="/privacy#updates">{copy.privacyNote.link}</Link>{copy.privacyNote.after}</p>
       <noscript><p className="text-sm text-(--dl-text-muted)">{copy.noScript(SUPPORT_EMAIL)}</p></noscript>
     </form>
   )
