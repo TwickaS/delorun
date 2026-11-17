@@ -10,12 +10,15 @@
   },
   "include": ["src", "tests"],
   "references": [
+    { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
     { "path": "../../../packages/core/agent" },
     { "path": "../../../packages/core/session" },
     { "path": "../../../packages/llm/llm" },
     { "path": "../../../packages/subprocess/subprocess" },
     { "path": "../../../packages/util/values" },
+    { "path": "../../../packages/subagent/subagent" },
+    { "path": "../../../packages/test-support/agent-loop-testkit" },
     { "path": "../../../packages/client/connection/tsconfig.host.json" }
   ]
 }

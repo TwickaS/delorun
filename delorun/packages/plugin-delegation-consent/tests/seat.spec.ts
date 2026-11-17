@@ -360,3 +360,25 @@ describe('the consent row id the gate reads', () => {
     expect(DELEGATION_CONSENT_ROW_ID).toBe(DELEGATION_CONSENT_ROW)
   })
 })
+
+describe('a one-shot run while the plan limit is reached', () => {
+  const sentence = 'Claude Code was not started: your Claude plan\'s 5-hour limit is reached until 14:10 (in 2 h 5 min).'
+
+  it('is refused with the gate\'s sentence, before the grant and the card', async () => {
+    const w = await world()
+    await grant(w.home, w.workspace)
+    w.ctx.provide('externalAgents', { limitRefusal: (provider: string) => Promise.resolve(provider === 'claude-code' ? sentence : undefined) } as never)
+    const review = { provider: 'claude-code', parent: chat('root', w.workspace), cwd: w.workspace, label: 'x', signal: new AbortController().signal }
+    await expect(w.consent.review(review)).resolves.toEqual({ kind: 'refuse', reason: sentence })
+    await expect(w.consent.review({ ...review, provider: 'codex' })).resolves.toMatchObject({ kind: 'allow' })
+    expect(w.asks.map(ask => ask.toolName)).toEqual(['codex'])
+  })
+
+  it('runs as before when the gate reports nothing reached, as with stale figures or the switch off', async () => {
+    const w = await world()
+    w.ctx.provide('externalAgents', { limitRefusal: () => Promise.resolve(undefined) } as never)
+    const review = { provider: 'claude-code', parent: chat('root', w.workspace), cwd: w.workspace, label: 'x', signal: new AbortController().signal }
+    await expect(w.consent.review(review)).resolves.toMatchObject({ kind: 'allow' })
+    expect(w.asks).toHaveLength(1)
+  })
+})

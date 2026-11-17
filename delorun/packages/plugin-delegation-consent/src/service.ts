@@ -7,8 +7,10 @@
  *    composed to tell.
  * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
- * 4. A grant for the provider in the chat's workspace allows the start.
- * 5. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
+ * 4. A plan limit of Claude Code or Codex that the start gate reports reached refuses, while its C16 switch
+ *    `external_agent_limit_refusal` is on.
+ * 5. A grant for the provider in the chat's workspace allows the start.
+ * 6. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
  *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
  *    start, and it records nothing. A chat whose approval policy is `never`, the full-access preset's, is refused
  *    without anyone being asked.
@@ -135,6 +137,8 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const session = parent.session
     const rules = await this.rules({ provider, readOnlyOf: [session], workspaceOf: session, cwd: review.cwd })
     if (rules.kind === 'refuse') return rules
+    const limited = await this.limitRefusal(provider)
+    if (limited !== undefined) return { kind: 'refuse', reason: limited }
     const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs() } as const
     if (rules.granted) return allowed
     const outcome = await this.ask(parent, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
@@ -165,6 +169,17 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
 
   addRunRule(child: SessionId, rule: ProgramRunRule): boolean {
     return this.leases.addRule(child, rule)
+  }
+
+  /**
+   * The start gate's refusal while the agent's plan limit is reached, for Claude Code and Codex.
+   * @param provider - the provider the start selects.
+   * @returns the sentence, or undefined without the gate, for another provider, or when nothing is reached.
+   */
+  private async limitRefusal(provider: string): Promise<string | undefined> {
+    const gate = this.ctx.get('externalAgents')
+    if (gate === undefined || (provider !== 'claude-code' && provider !== 'codex')) return undefined
+    return gate.limitRefusal(provider)
   }
 
   /**
