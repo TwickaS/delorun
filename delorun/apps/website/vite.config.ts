@@ -8,7 +8,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { SITEMAP_PATHS } from './src/site/config.ts'
 import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
 import { readNotices, type Notice } from '../../packages/site-design/scripts/notices.ts'
-import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
+import { headlinesOnly, loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 
 /** The static site's directory: the client build, with every prerendered page. */
 const OUT_DIR = 'out'
@@ -82,7 +82,7 @@ export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
-    changelogModule(changelog),
+    changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
     tailwindcss(),
