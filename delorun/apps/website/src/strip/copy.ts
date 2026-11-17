@@ -26,7 +26,7 @@ const EN = {
   /** The line under the default entry. */
   bundleNote: 'You have not changed anything yet, so the default applies. Choose a look and Delorun writes your own entry in your cordis.patch.yml.',
   /** The line under every entry, which says what its one switch does. */
-  additionsNote: 'studioAdditions: true keeps the studio\'s own typefaces and theme colours switched on.',
+  additionsNote: 'studioAdditions: true switches on Delorun\'s own look and settings in the studio: its theme, typefaces, headline and wording.',
   /** The line under the studio's sentence for no versions. */
   saveNote: 'Saving a version is done in the studio, under Settings, Setup versions.',
   /**

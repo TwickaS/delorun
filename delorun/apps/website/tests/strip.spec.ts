@@ -314,6 +314,11 @@ describe('the still', () => {
     expect(readFileSync(resolve(DELORUN, 'apps/website/src/strip/copy.ts'), 'utf8')).not.toMatch(/^import /m)
   })
 
+  it('names the entry\'s scrolling code as a focusable region, as the live strip does', () => {
+    const html = renderToStaticMarkup(createElement(SetupStripStill))
+    expect(html).toMatch(new RegExp(`<pre[^>]*tabindex="0"[^>]*role="region"[^>]*aria-label="${STRIP_COPY.en.entry}"`))
+  })
+
   it('shows the studio\'s own words, chosen as a fresh studio chooses them', () => {
     const words = STRIP_COPY.en.still
     expect(words.themes).toBe(studio.palette)
