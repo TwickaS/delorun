@@ -31,6 +31,7 @@ The requirements and denial tests below that this list names as not built or rea
 - [The update handshake](#the-update-handshake)
 - [Interrupted updates](#interrupted-updates)
 - [Rollback](#rollback)
+- [The restart](#the-restart)
 - [The desktop app](#the-desktop-app)
 - [Limits](#limits)
 - [Errors](#errors)
@@ -196,6 +197,17 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 - **Profile.** [C3](c03-update-report.md) owns the rollback triggers and the restore of the profile snapshot; this contract owns the runtime switch.
 - **Desktop app.** The desktop app's rollback does not use the runtime store. The app keeps the previous signed release in its update cache; its feed refuses an automatic downgrade and accepts a rollback the person requests to a signed, logged earlier release ([C2](c02-release-manifest.md)). A rollback reinstalls that release from the cache and restores the desktop profile from its history.
 
+## The restart
+
+The studio's Restart ([C21](c21-changes.md#harness-edits)) restarts the CLI's Host on the version it runs, so decided changes to Delorun's own files that are not live run. No channel request reaches it: the home process gives the Host it boots its restart in process, as the `changesRestart` service, and the studio's route decides who may use it. It runs these steps:
+
+1. **Refusals.** A restart is refused with `RESTART_IN_PROGRESS` while another runs; with `UPDATE_IN_PROGRESS` while an update or rollback runs, while the process is not `running`, or while an update record exists whose phase is not `committed`; and with `NO_RUNTIME_STORE` when the process runs outside the runtime store. While a restart runs, every update and rollback request is refused with `RESTART_IN_PROGRESS`; `stop` and `update.cancel` end a restart that still waits for chats, and `stop` is refused with `RESTART_IN_PROGRESS` once it is starting a new Host.
+2. **Waiting.** As in an update's `waiting` phase, new turns are refused with `UPDATE_PENDING` and the restart waits for running chats to reach zero for at most the studio's wait; with `stopChats`, running turns and jobs are cancelled first. A wait that ends by its limit keeps the Host running with nothing changed, and the studio's cancel, `update.cancel` and `stop` end the wait the same way.
+3. **Starting.** The Host stops as for a switch; a Host that does not stop runs again with nothing started. The home process then starts a successor on the same version with a handover line whose `type` is `restart` and whose `from` and `to` both name it. The successor's health check is H1 to H5 against the running Host: it fails when the successor disables at boot any plugin the running Host did not. A successor that passes takes over the lock as in `committed`, and the predecessor exits.
+4. **Failure.** A successor that fails its health check, exits or does not report `ready` within 120 seconds is stopped as in an update's failure. The runtime's newest applied harness change is left out when the running Host does not run it and it is still applied with its content in the record ([C21](c21-changes.md#harness-edits)), and the predecessor boots its Host again on the files it ran before.
+
+A restart writes no pointer, update record, stash, session-data copy or retention: a successor started for a restart does not settle any update record.
+
 ## The desktop app
 
 - The desktop Host keeps upstream's `desktop` profile and runs on the desktop app's own bundled runtime. It takes no CLI lock, has no start token and has no update channel.
@@ -234,7 +246,8 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `REQUEST_TIMEOUT` | No request line arrived within 5 seconds |
 | `REQUEST_TOO_LARGE` | The request line exceeds 16,384 bytes |
 | `BUSY` | 8 connections are already open |
-| `UPDATE_IN_PROGRESS` | An update or rollback already runs |
+| `UPDATE_IN_PROGRESS` | An update or rollback already runs; for a restart, also an update record whose phase is not `committed` |
+| `RESTART_IN_PROGRESS` | An update, rollback or second restart was requested while a restart runs, or a `stop` while it starts a new Host ([the restart](#the-restart)) |
 | `REPORT_EXPIRED` | `update.apply` named a report that is unknown or older than 600 seconds |
 | `UPDATE_PENDING` | A new turn was refused because an update is waiting for running chats |
 | `CHATS_RUNNING` | `abort-if-busy` found running chats, or another profile's home process or another user of the chat data is registered ([other profiles](#the-home-process)) |
@@ -278,7 +291,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 
 - The protocol version `v` is 1. A home process answers a request with an unknown `v` with `SCHEMA_VIOLATION`. A change that removes or renames an operation, a field or a phase raises `v`, and a runtime that raises it accepts both versions for one release, so a `delorun` from the previous release can still update it.
 - New operations, optional fields and new error codes keep `v`; callers ignore unknown response fields.
-- The handover line has its own `v`, 1. A successor checks every field it knows and drops every field it does not, at the top, in `health`, in a row and in `previousProtection`, so a predecessor may add an optional field that a successor which ignores it still checks safely without. A field a successor must read to check safely, or a changed meaning of an existing field, raises the handover's `v`; a successor refuses a line with a `v` it does not know, and the predecessor then rolls back as for a failed health check. `v` 1 includes `health.previousProtection` and the sandbox row's `configHash`, which does not cover the row's protection.
+- The handover line has its own `v`, 1. A successor checks every field it knows and drops every field it does not, at the top, in `health`, in a row and in `previousProtection`, so a predecessor may add an optional field that a successor which ignores it still checks safely without. A field a successor must read to check safely, or a changed meaning of an existing field, raises the handover's `v`; a successor refuses a line with a `v` it does not know, and the predecessor then rolls back as for a failed health check. `v` 1 includes `health.previousProtection` and the sandbox row's `configHash`, which does not cover the row's protection. Its `type` is `handover` or `restart`; a restart's successor runs the predecessor's own version, so it always knows `restart`.
 - The login item paths and the command flags above are external interfaces; changing one is a breaking change with an upgrade guide under `delorun/docs/upgrade-guide/`.
 - The types package follows Delorun's version and changes in the same pull request as this page.
 
@@ -320,6 +333,9 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `requester-killed` | Killing the requesting terminal in each phase leaves the home process running and `current` naming a whole version |
 | `home-killed-mid-switch` | Killing the home process in `switching` and in `health-check` leaves `current` naming a whole version, and the next start with a failing `to` rolls back to `from` |
 | `a handed-off successor that hangs at boot is gone, parent and child, after stop()` | Stopping a successor that does not answer ends its process group: the composed tree's `delorun` a signed successor handed off to stops with it (`delorun/apps/cli/tests/update/successor-stop.integration.spec.ts`) |
+| `restart never runs during an update` | A restart is refused with `UPDATE_IN_PROGRESS` while an update waits or a record that is not `committed` exists, and an update is refused with `RESTART_IN_PROGRESS` while a restart waits (`delorun/packages/home-process/tests/restart.integration.spec.ts`) |
+| `restart keeps previous and its runtime` | A restart leaves the pointers, the committed update record, the stash and every installed runtime as they were |
+| `a failed restart keeps the old Host and leaves the newest harness change out` | A successor that fails H2 or disables a plugin the running Host did not is stopped, the running Host's lock and process stay, and the newest applied harness change is left out |
 | `health-check-rollback` | A successor that disables a plugin the report did not name is rolled back, and the predecessor's Host runs again on `from` |
 | `escalation-prompt-before-full-access` | A confined workspace command that requests `danger-full-access` to send an update request is shown [C1](c01-home-layout.md)'s escalation prompt, which names the update channel; while the prompt is declined or unanswered the command stays confined and its request is refused or never sent |
 

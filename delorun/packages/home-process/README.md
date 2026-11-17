@@ -16,6 +16,7 @@ This package is the home process of [contract C19](../../docs/contracts/c19-home
 - [The update channel](#the-update-channel)
 - [The update handshake](#the-update-handshake)
 - [The handover](#the-handover)
+- [The restart](#the-restart)
 - [Interrupted updates](#interrupted-updates)
 - [Stopping](#stopping)
 - [The supervisor](#the-supervisor)
@@ -64,6 +65,10 @@ The consent operations (`src/consents.ts`) reach the Host's consents through `Ru
 ## The handover
 
 The predecessor starts the successor from the target's runtime with the store's command and a pipe inherited as file descriptor 3, in its own process group so a signal to the requester's terminal does not reach it, and with its own environment less the variables that load code into a Node, its loader or OpenSSL (`DROPPED_LAUNCH_ENV`, which a `.env` file may have set after the launcher dropped them) and less `DELORUN_START_CHECK`, which describes its own start (`successorEnvironment`), and writes one handover line: the home, the profile, both versions, the start id it assigns to the successor and the plugins the report named as disabled. No token passes. `HomeProcess.takeOver` boots the successor's Host in `standby` and runs its C3 health check against the handover line's expectations: the plugins and rows the report named, the bundle list it predicted, the rows the predecessor's Host could not load and every row it had at boot, read before that Host stopped. It answers `ready` or `failed`. On `ready` the predecessor rewrites the lock atomically with the successor's process id and start id (`HomeLock.handOver`), sends the requester the final `committed` line, closes its channel, removes its token file and writes `commit`; the successor then adopts the lock, writes a new start token, listens, launches its supervisor, enters `running` and settles the record: an update's record is marked `committed`, only its copy is kept (`SessionDataCopies.commit`) and the stash goes; a rollback's record goes and the stashed record returns. A successor whose predecessor dies before `commit` takes over only when the lock already names it.
+
+## The restart
+
+`Restart` ([`src/restart.ts`](src/restart.ts)) is C19's restart ([C19](../../docs/contracts/c19-home-process.md#the-restart)): the Host this process boots receives it as `HomeControls.restart`, and the CLI gives it to the studio as `changesRestart`. It refuses with `RESTART_IN_PROGRESS`, `UPDATE_IN_PROGRESS` (an update or rollback runs, the process is not `running`, or an update record that is not `committed` exists) or `NO_RUNTIME_STORE` (no `RestartSupport`), and while it runs every update and rollback is refused with `RESTART_IN_PROGRESS`; a stop or `update.cancel` ends a restart that still waits for chats, and a stop is refused once it starts a new Host. It holds the chat gate and waits for running chats, or cancels them with `stopChats`, for at most the request's `drainTimeoutS`; then it stops the Host and starts a successor of the same version with a handover line of `type` `restart`, whose health check expects no plugin disabled beyond the running Host's. A successor that takes over settles no update record. One that fails is stopped, `RestartSupport.leaveOut` leaves the newest harness change out, and this process boots its Host again; `view()` then says `failed` with the reason and the change left out until `clearFailure`.
 
 ## Interrupted updates
 
