@@ -6,7 +6,7 @@ import { COPY } from '@/site/copy.ts'
 /** The blog index. */
 export const Route = createFileRoute('/blog')({
   head: () => ({
-    ...pageHead(`${COPY.blog.title} · ${COPY.siteTitle}`, '/blog'),
+    ...pageHead(`${COPY.blog.title} · ${COPY.siteTitle}`, '/blog', COPY.blog.description),
   }),
   component: Blog,
 })

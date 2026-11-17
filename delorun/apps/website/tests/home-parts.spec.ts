@@ -95,6 +95,15 @@ describe('a page’s own head tags', () => {
     ])
     expect(head.links).toEqual([{ rel: 'canonical', href: `${SITE_URL}/privacy` }])
   })
+
+  it('carry the page’s own description in the three description tags when one is given', () => {
+    const head = pageHead('Blog · Delorun', '/blog', 'About the blog.')
+    expect(head.meta).toEqual(expect.arrayContaining([
+      { name: 'description', content: 'About the blog.' },
+      { property: 'og:description', content: 'About the blog.' },
+      { name: 'twitter:description', content: 'About the blog.' },
+    ]))
+  })
 })
 
 describe('the five claims', () => {

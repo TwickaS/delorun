@@ -54,6 +54,7 @@ export const EN = {
   },
   blog: {
     title: 'Blog',
+    description: 'Articles on how Delorun is built, how to shape it, and what each release changes.',
     intro: 'Research, how Delorun is built, guides and releases.',
     empty: 'No articles yet.',
     read: 'Read',
@@ -81,6 +82,7 @@ export const EN = {
   },
   privacy: {
     title: 'Privacy',
+    description: 'What delorun.com collects about you, and what the Delorun program sends: no cookies, no tracking, one sign-up form.',
   },
   /** The link-preview image's text alternative. */
   linkPreviewAlt: 'The Delorun mark and the words Delorun, an agent harness that runs on your own computer.',

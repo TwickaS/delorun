@@ -5,6 +5,7 @@
  */
 export const NOTICES_COPY = {
   title: 'Notices',
+  description: 'The licences of the themes, typefaces and libraries that delorun.com shows or uses.',
   footerLabel: 'Notices',
   intro: 'Delorun is built on other people’s work. This page gives the licence of each part that this site shows or uses.',
   covers: {
@@ -13,4 +14,4 @@ export const NOTICES_COPY = {
     'jetbrains-mono': 'The typeface of commands, file names and the settings entry.',
     sonner: 'The library behind the small message that appears when you change the look.',
   },
-} as const satisfies { title: string; footerLabel: string; intro: string; covers: Record<string, string> }
+} as const satisfies { title: string; description: string; footerLabel: string; intro: string; covers: Record<string, string> }

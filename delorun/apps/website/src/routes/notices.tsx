@@ -7,7 +7,7 @@ import { COPY } from '@/site/copy.ts'
 /** The notices page. */
 export const Route = createFileRoute('/notices')({
   head: () => ({
-    ...pageHead(`${NOTICES_COPY.title} · ${COPY.siteTitle}`, '/notices'),
+    ...pageHead(`${NOTICES_COPY.title} · ${COPY.siteTitle}`, '/notices', NOTICES_COPY.description),
   }),
   component: Notices,
 })

@@ -6,7 +6,7 @@ import { COPY } from '@/site/copy.ts'
 /** The privacy page. */
 export const Route = createFileRoute('/privacy')({
   head: () => ({
-    ...pageHead(`${COPY.privacy.title} · ${COPY.siteTitle}`, '/privacy'),
+    ...pageHead(`${COPY.privacy.title} · ${COPY.siteTitle}`, '/privacy', COPY.privacy.description),
   }),
   component: Privacy,
 })
