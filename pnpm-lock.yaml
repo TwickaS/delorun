@@ -4305,9 +4305,6 @@ importers:
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../../packages/host/webserver
-      '@delorun/bundle-local':
-        specifier: workspace:*
-        version: link:../bundle-local
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
