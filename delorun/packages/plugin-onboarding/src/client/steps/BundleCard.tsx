@@ -39,7 +39,7 @@ function AddButton({ label, name, onAdd }: { readonly label: string; readonly na
 }
 
 /**
- * The Adding state of a row: the label and, when the install queue reports bytes, a thin progress bar.
+ * The Adding state of a row: the label and a thin progress bar under it, empty until the install queue reports bytes.
  * @param props - the label and how far the download has come, from 0 to 1.
  * @returns the state.
  */
@@ -47,7 +47,10 @@ function Adding({ label, progress }: { readonly label: string; readonly progress
   return (
     <span className={css.adding} role="status">
       <span>{label}</span>
-      {progress !== undefined && <span className={css.bar} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}><span style={{ width: `${String(Math.round(progress * 100))}%` }} /></span>}
+      {progress === undefined
+        // The bar's space stays reserved, so the label does not move when the first bytes arrive.
+        ? <span className={`${css.bar} ${css.barIdle}`} aria-hidden="true" />
+        : <span className={css.bar} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}><span style={{ width: `${String(Math.round(progress * 100))}%` }} /></span>}
     </span>
   )
 }

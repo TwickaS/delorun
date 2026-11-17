@@ -120,6 +120,9 @@ export const MAX_STALL_SECONDS = 3600
 /** The longest `progressIntervalMs`: ten seconds, so a download's progress still moves. */
 export const MAX_PROGRESS_INTERVAL_MS = 10_000
 
+/** The longest `verifyCacheMs`: ten minutes. */
+export const MAX_VERIFY_CACHE_MS = 600_000
+
 /** The plugin's configuration. */
 export interface Config {
   /** How many pack downloads and installs run at once; at least 1. */
@@ -128,6 +131,8 @@ export interface Config {
   readonly stallSeconds: number
   /** The least time between two progress reports of one download, in milliseconds, so a large download does not rewrite the install list and every device's view at each piece. From 0 to 10000. */
   readonly progressIntervalMs: number
+  /** How long a pack's file check against its signed list stands, in milliseconds, before the pack's files are read and hashed again; 0 checks at every read. From 0 to 600000. */
+  readonly verifyCacheMs: number
 }
 
 /** The plugin's configuration schema. */
@@ -135,6 +140,7 @@ export const Config: z<Config> = z.object({
   concurrency: z.number().step(1).min(1).default(2),
   stallSeconds: z.number().min(1).max(MAX_STALL_SECONDS).default(DEFAULT_STALL_SECONDS),
   progressIntervalMs: z.number().min(0).max(MAX_PROGRESS_INTERVAL_MS).default(500),
+  verifyCacheMs: z.number().min(0).max(MAX_VERIFY_CACHE_MS).default(30_000),
 })
 
 /** No required services: a profile without the plugin manager still mounts the plugin and lists no packs. */
@@ -191,6 +197,7 @@ export function apply(ctx: Context, config: Config): void {
         file: join(profile.home, 'run', profile.name, 'installs.json'),
         concurrency: config.concurrency,
         progressIntervalMs: config.progressIntervalMs,
+        verifyCacheMs: config.verifyCacheMs,
         logFailure: (key, error) => { ctx.logger.warn(`${name}: installing ${key} failed: ${describeFailure(error)}`) },
         requestId: packRequestId,
       })

@@ -14,7 +14,8 @@
  *
  * @module @delorun/changes/unreviewed
  */
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
+import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { locked, recordVersion, timeOf } from './action-support.ts'
 import type { ChangesContext, ReloadHost, ReloadOutcome } from './actions.ts'
 import { holdContent, namesDirectory, storeFolderContent } from './enforce.ts'
@@ -137,6 +138,18 @@ export interface WatchedFolder {
 }
 
 /**
+ * Whether a folder is an unpacked plugin pack of the home. A pack's files are the release's signed list and no one edits
+ * them live; watching them would scan each pack and queue it for the profile write lock, which a pack install holds
+ * for minutes. A start or a reload approves a linked pack's content under that lock.
+ * @param home - the Delorun home.
+ * @param folder - a plugin's folder.
+ * @returns true for a folder under `packs/`.
+ */
+function inPackStore(home: string, folder: string): boolean {
+  return resolve(folder).startsWith(`${resolve(home, DELORUN_HOME_ENTRIES.packs)}${sep}`)
+}
+
+/**
  * The folders whose content loads without review: with protection off, each plugin the profile links to its active
  * directory, with the folder its approval names, or for a plugin with none, the folder its newest install names.
  * @param ctx - the profile.
@@ -153,7 +166,7 @@ export async function unreviewedFolders(ctx: Pick<ChangesContext, 'home' | 'prof
   for (const [plugin, approval] of Object.entries(approved.plugins)) sources.set(plugin, approval.source)
   return (await readLinks(ctx.profileDir)).flatMap((link): WatchedFolder[] => {
     const source = sources.get(link.name)
-    return source !== undefined && resolve(link.target) === resolve(activeDirectory(ctx.home, ctx.profile, link.name)) ? [{ plugin: link.name, source }] : []
+    return source !== undefined && !inPackStore(ctx.home, source) && resolve(link.target) === resolve(activeDirectory(ctx.home, ctx.profile, link.name)) ? [{ plugin: link.name, source }] : []
   })
 }
 
@@ -176,7 +189,7 @@ async function loadTarget(ctx: ChangesContext, plugin: string): Promise<LoadTarg
   const approved = await readApproved(ctx.profileDir)
   const log = await readChangeLog(ctx.home, ctx.profile)
   const source = approvedOf(approved, plugin)?.source ?? log.entries.findLast(entry => entry.kind === 'plugin-install' && entry.subject.plugin === plugin && entry.subject.source !== undefined)?.subject.source
-  if (!linked || source === undefined || (await readWorkSession(ctx.home, ctx.profile))?.plugin === plugin || !await namesDirectory(source)) return { kind: 'skipped', plugin }
+  if (!linked || source === undefined || inPackStore(ctx.home, source) || (await readWorkSession(ctx.home, ctx.profile))?.plugin === plugin || !await namesDirectory(source)) return { kind: 'skipped', plugin }
   return { kind: 'load', source, directory, approved, log }
 }
 

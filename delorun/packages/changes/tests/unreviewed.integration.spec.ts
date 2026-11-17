@@ -1,4 +1,4 @@
-import { chmodSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
@@ -270,5 +270,19 @@ describe('unreviewedFolders', () => {
     expect(await unreviewedFolders(contextOf(fx))).toEqual([{ plugin: 'plug', source }, { plugin: 'added', source: added }])
     await setProtection(fx.home, 'on', terminal())
     expect(await unreviewedFolders(contextOf(fx))).toEqual([])
+  })
+  it('leaves out an unpacked plugin pack, which no one edits live and whose load would queue for the profile lock', async () => {
+    const { fx, source } = await migrated({ protection: 'off' })
+    const pack = join(fx.home, 'packs', 'current', 'packed', 'package')
+    mkdirSync(pack, { recursive: true })
+    writeFileSync(join(pack, 'package.json'), '{"name":"packed","version":"1.0.0"}\n')
+    writeFileSync(join(pack, 'index.js'), 'export default "one"\n')
+    linkAs(fx, 'packed', pack)
+    await start(fx)
+    expect(await unreviewedFolders(contextOf(fx))).toEqual([{ plugin: 'plug', source }])
+    writeFileSync(join(pack, 'index.js'), 'export default "two"\n')
+    const host = reloads({ ok: true })
+    expect(await loadUnreviewed(contextOf(fx), 'packed', host.reload)).toEqual({ kind: 'skipped', plugin: 'packed' })
+    expect(host.calls()).toBe(0)
   })
 })

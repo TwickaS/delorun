@@ -587,6 +587,10 @@
   background: var(--dsw-alias-border-l3);
 }
 
+.barIdle {
+  visibility: hidden;
+}
+
 .bar > span {
   display: block;
   height: 100%;

@@ -5,13 +5,15 @@
  *
  * Downloads run as many at a time as the queue allows, but the plugin manager's install runs one pack at a time: it holds
  * the profile write lock while pnpm runs and the Host reloads, which takes up to minutes for a large pack, so a second
- * install would spend that time waiting for the lock and could run out of its wait.
+ * install would spend that time waiting for the lock and could run out of its wait. Putting a fetched pack into the
+ * runtime store also runs one pack at a time, because it holds the store lock, which a second install would give up on
+ * after 30 seconds.
  *
  * @module @delorun/plugin-packs/runner
  */
 import { InstallRefusal, type InstallOutcome, type InstallProgress } from '@delorun/install-queue'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
-import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks, requireRunningRelease, type InstalledRelease, type PackFiles } from '@delorun/runtime-store'
+import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks, requireRunningRelease, RuntimeStoreError, type InstalledRelease, type PackFiles } from '@delorun/runtime-store'
 import type { PacksEnvironment } from './environment.ts'
 
 /** The part of the plugin manager's `installBundle` the runner uses. */
@@ -40,7 +42,9 @@ export function failureOf(error: unknown): InstallRefusal {
     if (error.code === 'OFFLINE') return new InstallRefusal('offline', 'This plugin needs a connection to download the first time. Connect and try again.')
     return new InstallRefusal('failed', error.message)
   }
-  return new InstallRefusal('failed', error instanceof Error ? error.message : String(error))
+  if (error instanceof RuntimeStoreError && error.code === 'STORE_BUSY') return new InstallRefusal('failed', 'Another plugin is being added. Try again in a moment.')
+  // Anything else carries paths and process ids; the Host's log keeps them ({@link RunnerDeps.logFailure}).
+  return new InstallRefusal('failed', 'Delorun could not add this plugin. Try again, and see the Delorun log if it fails again.')
 }
 
 /**
@@ -90,6 +94,9 @@ export function oneAtATime(): <T>(signal: AbortSignal, work: () => Promise<T>) =
  */
 export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortSignal, progress: InstallProgress) => Promise<InstallOutcome> {
   const installs = oneAtATime()
+  // `installFetchedPack` holds `store.lock`, which gives up after 30 seconds; two packs landing together wait in this line
+  // instead of failing with `STORE_BUSY` while the first fetches its external packages.
+  const stores = oneAtATime()
   return async (key, signal, progress) => {
     try {
       progress.stage('downloading')
@@ -103,7 +110,7 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       signal.throwIfAborted()
       progress.stage('verifying')
       progress.stage('installing')
-      await installFetchedPack(release, fetched)
+      await stores(signal, () => installFetchedPack(release, fetched))
       signal.throwIfAborted()
       // The pack is linked through `packs/current`; after an update switched, that names another release.
       await requireRunningRelease(release.paths, release.version)

@@ -37,7 +37,7 @@ interface Setup {
   readonly failures: Array<readonly [string, unknown]>
 }
 
-async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array, names?: readonly string[], install?: InstallBundle } = {}): Promise<Setup> {
+async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array, names?: readonly string[], install?: InstallBundle, verifyCacheMs?: number } = {}): Promise<Setup> {
   await fixture.install('0.1.0')
   const paths = new StorePaths(fixture.home, PLATFORM)
   const manifestBytes = readFileSync(paths.releaseFiles(V1).manifest)
@@ -63,7 +63,7 @@ async function setup(options: { application?: string, archive?: (signal?: AbortS
   }
   const file = join(fixture.home, 'run', 'default', 'installs.json')
   const failures: Array<readonly [string, unknown]> = []
-  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, progressIntervalMs: 0, logFailure: (key, error) => { failures.push([key, error]) }, requestId: key => `pack:${key}` })
+  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, progressIntervalMs: 0, verifyCacheMs: options.verifyCacheMs ?? 0, logFailure: (key, error) => { failures.push([key, error]) }, requestId: key => `pack:${key}` })
   return { hub, installs, reloads, file, paths, chats, files, failures }
 }
 
@@ -201,6 +201,17 @@ describe('the pack hub', () => {
     expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
   })
 
+  it('reads and hashes a pack\'s files once per cache period, however many snapshots the queue asks for', async () => {
+    const { hub, paths } = await setup({ verifyCacheMs: 60_000 })
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    makeWritable(paths.pack(V1, 'one'))
+    writeFileSync(join(paths.pack(V1, 'one'), 'package', 'package.json'), '{"name":"one","version":"9.9.9","type":"module"}')
+    // Within the period the earlier check stands; this is what keeps a progress report from hashing every pack again.
+    expect((await hub.snapshot()).packs.find(pack => pack.name === 'one')?.availability).toBe('installed')
+    expect(hub.installedTarget('one', '0.1.0')).toBeDefined()
+  })
+
   it('refuses an install once an update has switched away from this Host\'s release, changing nothing in the profile', async () => {
     const { hub, paths, installs } = await setup()
     await fixture.install('0.2.0')
@@ -249,7 +260,7 @@ describe('the pack hub', () => {
   })
 
   it('says why a Host without an installed release has no packs', async () => {
-    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, progressIntervalMs: 0, logFailure: () => undefined, requestId: key => key })
+    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, progressIntervalMs: 0, verifyCacheMs: 0, logFailure: () => undefined, requestId: key => key })
     expect(await hub.snapshot()).toEqual({ supported: false, reason: 'not an installation', packs: [], queue: [] })
     expect(await hub.enqueue(['one'])).toMatchObject({ ok: false, error: { code: 'unsupported' } })
   })

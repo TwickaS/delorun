@@ -56,7 +56,12 @@ export function useDownloadsModel(source: DownloadsSource, summaryMs: number = S
   const knownFailures = useRef(new Set<string>())
   const acknowledged = useRef(new Set<string>())
   for (const key of acknowledged.current) if (!items.some(item => item.key === key && isDone(item))) acknowledged.current.delete(key)
-  const visible = items.filter(item => item.state !== 'cancelled' && !acknowledged.current.has(item.key))
+  // An item the Host lists as finished from an earlier page load or restart is old news. One counts when this page saw it
+  // work, or saw it finished beside work still running, which is the batch in progress.
+  const witnessed = useRef(new Set<string>())
+  const working = items.some(isActive)
+  for (const item of items) if (isActive(item) || (working && isDone(item))) witnessed.current.add(item.key)
+  const visible = items.filter(item => item.state !== 'cancelled' && !acknowledged.current.has(item.key) && (!isDone(item) || witnessed.current.has(item.key)))
   const active = visible.filter(isActive)
   const failedItems = visible.filter(item => item.state === 'failed')
   for (const item of visible) if (isDone(item)) finished.current.add(item.key)
