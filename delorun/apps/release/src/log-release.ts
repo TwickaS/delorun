@@ -46,8 +46,9 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     const root = trustRootChain([readFileSync(resolve(rootPath))], Math.floor(Date.now() / 1000)).at(-1)!.metadata
     const manifest = readFileSync(resolve(manifestPath))
-    const version = (logKind(values.kind) === 'packs' ? readEnvelope('packs', manifest) : readEnvelope('manifest', manifest)).signed.version
-    const bundle = await logRelease({ submit, checkpoint, tiles }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000))
+    const kind = logKind(values.kind)
+    const version = (kind === 'packs' ? readEnvelope('packs', manifest) : readEnvelope('manifest', manifest)).signed.version
+    const bundle = await logRelease({ submit, checkpoint, tiles }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000), kind)
     writeFileSync(resolve(out), `${JSON.stringify(bundle, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     console.log(`log-release: ${basename(manifestPath)} is entry ${String(bundle.entry.logIndex)}, witnessed at tree size ${String(bundle.inclusion.treeSize)}`)
     return 0

@@ -116,19 +116,21 @@ export interface VerifiedBundle {
  * @param manifest - the manifest file's bytes, already verified under contract C2.
  * @param version - the manifest's release version.
  * @param bundle - the bundle.
+ * @param document - which signed release file the bundle covers: the manifest, or the packs file whose bundle is
+ *   `delorun-<version>.packs.log.json`.
  * @returns the checkpoint facts.
  * @throws LogVerificationError naming the failed step's reason code.
  */
-export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: string, bundle: ReleaseLogBundle): VerifiedBundle {
+export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: string, bundle: ReleaseLogBundle, document: 'manifest' | 'packs' = 'manifest'): VerifiedBundle {
   if (semver.valid(version) === null) {
     // Contract C18 has no code of its own for a version no key can be shown valid for; it is a step 2 failure.
     throw new LogVerificationError('entry-signature-invalid', `release version ${JSON.stringify(version)} is not a semantic version, so no targets key can be shown valid for it`)
   }
-  // Contract C2 names the release's manifest file, so a bundle naming another file covers another manifest whatever
-  // digest it carries.
-  const name = `delorun-${version}.manifest.json`
+  // Contract C2 names the release's manifest and packs files, so a bundle naming another file covers another document
+  // whatever digest it carries.
+  const name = `delorun-${version}.${document}.json`
   if (bundle.manifest.name !== name) {
-    throw new LogVerificationError('manifest-digest-mismatch', `the bundle names ${JSON.stringify(bundle.manifest.name)}, not the release's manifest file ${JSON.stringify(name)}`)
+    throw new LogVerificationError('manifest-digest-mismatch', `the bundle names ${JSON.stringify(bundle.manifest.name)}, not the release's ${document} file ${JSON.stringify(name)}`)
   }
   const digest = createHash('sha256').update(manifest).digest('hex')
   if (bundle.manifest.sha256 !== digest) throw new LogVerificationError('manifest-digest-mismatch', `the bundle covers manifest ${bundle.manifest.sha256}, not ${digest}`)

@@ -63,7 +63,7 @@ async function fetchTile(prefix: string, path: string): Promise<Uint8Array | und
 }
 
 /**
- * Log a manifest and assemble its verified bundle.
+ * Log a signed release file, the manifest or the packs file, and assemble its verified bundle.
  * @param endpoints - the log's and the distributor's URLs.
  * @param root - the trusted root, whose log and witness keys the bundle must verify with.
  * @param manifestName - the manifest file's name.
@@ -72,12 +72,13 @@ async function fetchTile(prefix: string, path: string): Promise<Uint8Array | und
  * @param entry - the request the signing command wrote.
  * @param attempts - how many times to ask for a witnessed checkpoint that covers the entry.
  * @param wait - waits between attempts.
+ * @param document - which signed release file is logged: the manifest, or the packs file, whose bundle names it.
  * @returns the bundle, verified offline.
  * @throws Error when the log refuses the entry, a checkpoint does not parse, a tile the proof needs is not served or
  * has the wrong length, no checkpoint a listed witness cosigned covers the entry in time, or the bundle fails any
  * other step.
  */
-export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, manifestName: string, manifest: Uint8Array, version: string, entry: HashedRekordRequest, attempts: number, wait: () => Promise<void>): Promise<ReleaseLogBundle> {
+export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, manifestName: string, manifest: Uint8Array, version: string, entry: HashedRekordRequest, attempts: number, wait: () => Promise<void>, document: 'manifest' | 'packs' = 'manifest'): Promise<ReleaseLogBundle> {
   const answer: unknown = await (await respond(endpoints.submit, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) })).json()
   const submitted = Submitted.parse(answer)
   // Protobuf JSON omits an int64 that is zero, so an absent index or time is 0.
@@ -95,7 +96,7 @@ export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, ma
         checkpoint,
       }
       try {
-        verifyBundle(root, manifest, version, bundle)
+        verifyBundle(root, manifest, version, bundle, document)
         return bundle
       } catch (error) {
         if (!(error instanceof LogVerificationError && error.failure === 'witness-cosignature-missing')) throw error

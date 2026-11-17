@@ -41,12 +41,13 @@ import {
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
-import { logEntryName } from '@delorun/release-formats/log/bundle'
+import { logEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
 import { logRelease, type LogEndpoints } from '../log/client.ts'
-import { entryRequest } from '@delorun/release-formats/log/entry'
+import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { LOCAL_RELEASE_BUILDER, ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delorun/release-formats/sign/schemas'
+import { signPacks } from '../sign/packs.ts'
 import { initialState, nextTimestamp, readTimestampState, stateAfter } from '../sign/timestamp.ts'
 import { rootKeyIds, type ProductionKeys } from './production-keys.ts'
 import { trustRootChain, verifyTimestamp } from '@delorun/release-formats/sign/verify'
@@ -275,6 +276,15 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
     await writeFile(join(work, manifestName), manifestBytes)
     await writeFile(join(work, logEntryName(request.version)), `${JSON.stringify(entry, undefined, 2)}\n`)
     await writeFile(join(work, `delorun-${request.version}.manifest.log.json`), `${JSON.stringify(bundle, undefined, 2)}\n`)
+    // The packs file, when the closure build wrote one, is signed against this manifest and logged as a second record, as sign/release.ts and log-release.ts do for a published release.
+    const packOutputs = await signPacks(work, request.version, manifestBytes, request.targetsKey)
+    if (packOutputs.length > 0) {
+      const packs = packOutputs.find(([name]) => name === packsName(request.version))![1]
+      const packsEntry = packOutputs.find(([name]) => name !== packsName(request.version))![1]
+      const packsBundle = await logRelease(request.log, newest.metadata, packsName(request.version), Buffer.from(packs), request.version, readEntryRequest(Buffer.from(packsEntry)), request.logAttempts, request.logWait, 'packs')
+      for (const [name, bytes] of packOutputs) await writeFile(join(work, name), bytes)
+      await writeFile(join(work, packsLogName(request.version)), `${JSON.stringify(packsBundle, undefined, 2)}\n`)
+    }
     const state = existsSync(request.state) ? readTimestampState(await readFile(request.state)) : initialState(roots[0]!)
     const manifestFile = { name: manifestName, bytes: manifestBytes }
     const content = nextTimestamp({ state, roots, first: state.timestamp === null, manifests: { stable: manifestFile, beta: manifestFile }, replaced: [], now })
@@ -295,12 +305,13 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
 
 /**
  * Copy a closure build's files of the given platforms, such as `build-closure.ts --platform <platform>` wrote, into a
- * directory.
- * @param source - the directory holding each platform's `delorun-<version>-<platform>` archive and its `.files.json`.
+ * directory. When the build wrote the release's packs file `delorun-<version>.packs.json`, it is copied with every pack
+ * archive it names, whatever the platform of each, so a release that publishes packs has all of them.
+ * @param source - the directory holding each platform's `delorun-<version>-<platform>` archive and its `.files.json`, and the packs file and archives.
  * @param version - the release version the files are named for.
  * @param platforms - the platforms to copy.
  * @param directory - the directory to copy into.
- * @throws Error when any file is absent.
+ * @throws Error when any file, or a pack archive the packs file names, is absent.
  */
 export async function copyClosureFiles(source: string, version: string, platforms: readonly RuntimePlatform[], directory: string): Promise<void> {
   for (const platform of platforms) {
@@ -310,4 +321,12 @@ export async function copyClosureFiles(source: string, version: string, platform
       await copyFile(join(source, name), join(directory, name))
     }
   }
+  const packs = join(source, packsName(version))
+  if (!existsSync(packs)) return
+  const named = readEnvelope('packs', await readFile(packs)).signed.packs.flatMap(pack => Object.values(pack.variants).map(variant => variant.archive.name))
+  for (const name of new Set(named)) {
+    if (!existsSync(join(source, name))) throw new Error(`${packs} names ${join(source, name)}, which does not exist; build it with build-closure.ts --version ${version}`)
+    await copyFile(join(source, name), join(directory, name))
+  }
+  await copyFile(packs, join(directory, packsName(version)))
 }

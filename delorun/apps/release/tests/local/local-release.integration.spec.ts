@@ -5,7 +5,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,9 +16,11 @@ import { main, upstreamVersion } from '../../src/local-release.ts'
 import { buildLocalRelease, copyClosureFiles, LOCAL_BUILDER, PRODUCTION_REFUSAL, releaseDirectory, type LocalReleaseRequest } from '../../src/local/release.ts'
 import { PRODUCTION_KEYS_PATH, PRODUCTION_KEYS_SCHEMA, readProductionKeys, readProductionKeysFile, type ProductionKeys } from '../../src/local/production-keys.ts'
 import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
-import { verifySignedManifest, trustRootChain, verifyFileList, verifyTimestamp } from '@delorun/release-formats/sign/verify'
+import { verifySignedManifest, trustRootChain, verifyFileList, verifyPacks, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 import { readBundle, verifyBundle } from '@delorun/release-formats/log/bundle'
+import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
+import { verifyChannel } from '../../scripts/cut-rc.ts'
 import { REPO, scratch } from '../support.ts'
 import { fixtureClosure, keyFile, serveLog, trust, type Trust } from './support.ts'
 
@@ -517,3 +519,104 @@ function writeKey(directory: string, trusted: Trust): void {
   keyFile(directory, 'timestamp.pem', trusted.keys.timestamp)
   writeFileSync(join(directory, 'root.json'), trusted.root)
 }
+
+describe('a local release with plugin packs', () => {
+  /**
+   * A closure build directory as `build-closure.ts` leaves it: the runtime files, and the unsigned packs file with its one archive.
+   * @param test - the running test.
+   * @param version - the release version.
+   * @param archive - whether the pack archive the packs file names is written.
+   * @returns the directory.
+   */
+  async function closureWithPacks(test: Parameters<typeof scratch>[0], version: string, archive = true): Promise<string> {
+    const source = scratch(test)
+    await fixtureClosure(test, version)(source)
+    const name = `delorun-${version}-pack-demo.any.tar.gz`
+    const built = await buildPackArchive(name, [{ path: 'package.json', mode: '0644', data: Buffer.from('{}') }], 1_800_000_000)
+    const draft = { schema: 'delorun.release-packs/1', version, manifest: '0'.repeat(64), packs: [{ name: 'demo', version: '1.0.0', experimental: false, variants: { any: { ...built.variant, external: [], peers: [] } } }] }
+    writeFileSync(join(source, `delorun-${version}.packs.json`), `${JSON.stringify({ signed: draft, signatures: [] }, undefined, 2)}\n`)
+    if (archive) writeFileSync(join(source, name), built.bytes)
+    return source
+  }
+
+  it('publishes the signed packs file, its archive, its log entry request and its log bundle, and the channel verifies them', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    const source = await closureWithPacks(test, '0.1.0')
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0', { closures: target => copyClosureFiles(source, '0.1.0', ['linux-x64'], target) }))
+    const channel = join(directory, 'channel')
+    const release = releaseDirectory(channel, '0.1.0')
+    expect(readdirSync(release).sort()).toEqual([
+      'delorun-0.1.0-linux-x64.files.json',
+      'delorun-0.1.0-linux-x64.tar.gz',
+      'delorun-0.1.0-pack-demo.any.tar.gz',
+      'delorun-0.1.0.manifest.entry.json',
+      'delorun-0.1.0.manifest.json',
+      'delorun-0.1.0.manifest.log.json',
+      'delorun-0.1.0.packs.entry.json',
+      'delorun-0.1.0.packs.json',
+      'delorun-0.1.0.packs.log.json',
+    ])
+    const root = trustRootChain([trusted.root], Math.floor(Date.now() / 1000)).at(-1)!
+    const manifestBytes = readFileSync(join(release, 'delorun-0.1.0.manifest.json'))
+    const packsBytes = readFileSync(join(release, 'delorun-0.1.0.packs.json'))
+    expect(verifyPacks(root.metadata, manifestBytes, packsBytes).packs.map(pack => pack.name)).toEqual(['demo'])
+    const bundle = readBundle(readFileSync(join(release, 'delorun-0.1.0.packs.log.json')))
+    expect(bundle.manifest.name).toBe('delorun-0.1.0.packs.json')
+    expect(verifyBundle(root.metadata, packsBytes, '0.1.0', bundle, 'packs').treeSize).toBe(2)
+    expect(verifyChannel(channel, '0.1.0', Math.floor(Date.now() / 1000)).packs).toBe(1)
+  })
+
+  it('does not accept the packs bundle as the manifest\'s, nor the manifest\'s as the packs file\'s', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    const source = await closureWithPacks(test, '0.1.0')
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0', { closures: target => copyClosureFiles(source, '0.1.0', ['linux-x64'], target) }))
+    const release = releaseDirectory(join(directory, 'channel'), '0.1.0')
+    const root = trustRootChain([trusted.root], Math.floor(Date.now() / 1000)).at(-1)!
+    const manifestBytes = readFileSync(join(release, 'delorun-0.1.0.manifest.json'))
+    const packsBytes = readFileSync(join(release, 'delorun-0.1.0.packs.json'))
+    expect(() => verifyBundle(root.metadata, manifestBytes, '0.1.0', readBundle(readFileSync(join(release, 'delorun-0.1.0.packs.log.json'))))).toThrow(/manifest file/u)
+    expect(() => verifyBundle(root.metadata, packsBytes, '0.1.0', readBundle(readFileSync(join(release, 'delorun-0.1.0.manifest.log.json'))), 'packs')).toThrow(/packs file/u)
+  })
+
+  it('refuses to copy a packs file whose archive is missing, and copies nothing about packs when there is no packs file', async (test) => {
+    const without = await closureWithPacks(test, '0.1.0', false)
+    await expect(copyClosureFiles(without, '0.1.0', ['linux-x64'], scratch(test))).rejects.toThrow('delorun-0.1.0-pack-demo.any.tar.gz, which does not exist')
+    const plain = scratch(test)
+    await fixtureClosure(test, '0.1.0')(plain)
+    const target = scratch(test)
+    await copyClosureFiles(plain, '0.1.0', ['linux-x64'], target)
+    expect(readdirSync(target).filter(name => name.includes('packs') || name.includes('-pack-'))).toEqual([])
+  })
+
+  it('fails the channel check when the packs bundle is missing or a pack archive changed', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    const source = await closureWithPacks(test, '0.1.0')
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0', { closures: target => copyClosureFiles(source, '0.1.0', ['linux-x64'], target) }))
+    const channel = join(directory, 'channel')
+    const release = releaseDirectory(channel, '0.1.0')
+    const now = Math.floor(Date.now() / 1000)
+    const archive = join(release, 'delorun-0.1.0-pack-demo.any.tar.gz')
+    const original = readFileSync(archive)
+    writeFileSync(archive, Buffer.concat([original, Buffer.from('x')]))
+    expect(() => verifyChannel(channel, '0.1.0', now)).toThrow('does not match the signed packs file')
+    writeFileSync(archive, original)
+    const bundlePath = join(release, 'delorun-0.1.0.packs.log.json')
+    const bundle = readFileSync(bundlePath)
+    rmSync(bundlePath)
+    expect(() => verifyChannel(channel, '0.1.0', now)).toThrow('has no delorun-0.1.0.packs.log.json')
+    writeFileSync(bundlePath, bundle)
+    expect(verifyChannel(channel, '0.1.0', now).packs).toBe(1)
+  })
+
+  it('stays as it was for a closure with no packs file: no packs file, no packs bundle', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0'))
+    const channel = join(directory, 'channel')
+    expect(readdirSync(releaseDirectory(channel, '0.1.0')).filter(name => name.includes('packs'))).toEqual([])
+    expect(verifyChannel(channel, '0.1.0', Math.floor(Date.now() / 1000)).packs).toBe(0)
+  })
+})
