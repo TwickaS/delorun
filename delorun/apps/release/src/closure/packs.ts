@@ -29,7 +29,7 @@ export interface PackSources {
   /** The staged closure's `app/node_modules` for a platform. */
   closureNodeModules(platform: RuntimePlatform): string
   /** The lockfile's exact version and `sha512-` integrity of a package for a platform. */
-  locked(name: string, platform: RuntimePlatform): { readonly version: string, readonly integrity: string } | undefined
+  locked(name: string, platform: RuntimePlatform): LockedPackage | undefined
   /** Download a registry tarball. */
   download(url: string): Promise<Buffer>
 }
@@ -40,6 +40,13 @@ export interface BuiltPack {
   readonly entry: PackEntry
   /** Archive file name to bytes, to write beside the release. */
   readonly archives: ReadonlyMap<string, Buffer>
+}
+
+/** One package version the lockfile pins: `source` is the registry name when it differs from the dependency name. */
+export interface LockedPackage {
+  readonly version: string
+  readonly integrity: string
+  readonly source?: string
 }
 
 /**
@@ -82,7 +89,7 @@ export function packArchiveName(release: string, name: string, platform: Runtime
 async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources): Promise<PackExternal> {
   const locked = sources.locked(name, platform)
   if (locked === undefined) throw new Error(`the lockfile does not pin ${name} for ${platform}`)
-  const url = tarballUrl(name, locked.version)
+  const url = tarballUrl(locked.source ?? name, locked.version)
   const bytes = await sources.download(url)
   const sha512 = createHash('sha512').update(bytes).digest('base64')
   if (`sha512-${sha512}` !== locked.integrity) throw new Error(`${url} does not match the lockfile's integrity; the registry served other bytes than the lockfile pins`)
@@ -181,14 +188,30 @@ export function packsDocument(version: string, packs: readonly PackEntry[]): Rel
 }
 
 /** The lockfile's resolution of one package: `packages` keys are `<name>@<version>`. */
-export function lockedFrom(lockfile: string, name: string): { readonly version: string, readonly integrity: string } | undefined {
-  const packages = (parseYaml(lockfile) as { packages?: Record<string, { resolution?: { integrity?: string } }> }).packages ?? {}
+export function lockedFrom(lockfile: string, name: string): LockedPackage | undefined {
+  const document = parseYaml(lockfile) as { packages?: Record<string, { resolution?: { integrity?: string } }>, snapshots?: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }> }
+  const packages = document.packages ?? {}
   const found = Object.entries(packages).filter(([key]) => key.startsWith(`${name}@`) && /^\d/u.test(key.slice(name.length + 1)))
-  if (found.length === 0) return undefined
+  if (found.length === 0) return aliasedLock(packages, document.snapshots ?? {}, name)
   if (found.length > 1) throw new Error(`the lockfile pins ${name} at ${found.length} versions; a pack external needs exactly one`)
   const [key, value] = found[0]!
   const integrity = value.resolution?.integrity
   return integrity === undefined ? undefined : { version: key.slice(name.length + 1), integrity }
+}
+
+/** A package the lockfile pins under another registry name (`name: 'real@version'`), as `@openai/codex-<platform>` is. */
+function aliasedLock(packages: Record<string, { resolution?: { integrity?: string } }>, snapshots: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }>, name: string): LockedPackage | undefined {
+  const targets = new Set<string>()
+  for (const snapshot of Object.values(snapshots)) {
+    const target = snapshot.optionalDependencies?.[name] ?? snapshot.dependencies?.[name]
+    if (target !== undefined && /^@?[^@]+@\d/u.test(target)) targets.add(target)
+  }
+  if (targets.size > 1) throw new Error(`the lockfile pins ${name} at ${targets.size} versions; a pack external needs exactly one`)
+  const target = [...targets][0]
+  const integrity = target === undefined ? undefined : packages[target]?.resolution?.integrity
+  if (target === undefined || integrity === undefined) return undefined
+  const at = target.lastIndexOf('@')
+  return { version: target.slice(at + 1), integrity, source: target.slice(0, at) }
 }
 
 /** What a release's pack step needs from the build. */

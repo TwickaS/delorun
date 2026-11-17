@@ -100,6 +100,11 @@ describe('the lockfile and the pack candidates', () => {
     expect(() => lockedFrom(lock, 'twice')).toThrow(/2 versions/u)
   })
 
+  it('finds a package the lockfile pins under another registry name, with the name to download from', () => {
+    const lock = "packages:\n  '@openai/codex@0.153.4-linux-x64':\n    resolution: {integrity: sha512-AAAA}\nsnapshots:\n  '@openai/codex@0.153.4':\n    optionalDependencies:\n      '@openai/codex-linux-x64': '@openai/codex@0.153.4-linux-x64'\n"
+    expect(lockedFrom(lock, '@openai/codex-linux-x64')).toEqual({ version: '0.153.4-linux-x64', integrity: 'sha512-AAAA', source: '@openai/codex' })
+  })
+
   it('makes the bundles the default install lacks packs: Claude Code and Codex, not what the closure carries', () => {
     const packages = readWorkspacePackages(join(import.meta.dirname, '../../../../..'))
     const names = packCandidates(packages, selectClosurePackages(packages), new Set(['@deepseek-ai/dsh-base'])).map(each => each.name)
