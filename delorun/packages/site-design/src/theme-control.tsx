@@ -16,6 +16,9 @@ import type { ThemeCopy } from './shell-copy.ts'
 /** The themes the menu offers; Custom is the setup strip's. */
 const PRESETS = KNOWN_LOOKS.filter((id): id is Exclude<LookId, 'custom'> => id !== 'custom')
 
+/** The button that opens the menu. */
+const TRIGGER = 'flex size-9 items-center justify-center rounded-(--dl-radius-sm) border border-(--dl-border) bg-(--dl-surface) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--dl-accent-text) active:scale-[0.97]' // us-spelling: quoted output (Tailwind class names)
+
 /**
  * Whether the page has scripts running; false during server rendering and until the first effect.
  * @returns true once the component has mounted.
@@ -55,7 +58,7 @@ export function ThemeControl({ copy }: { copy: ThemeCopy }) {
   return (
     <>
       <button type="button" popoverTarget={menu} aria-label={copy.open}
-        className="flex size-9 items-center justify-center rounded-(--dl-radius-sm) border border-(--dl-border) bg-(--dl-surface) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--dl-accent-text) active:scale-[0.97]">
+        className={TRIGGER}>
         <span aria-hidden="true" className="size-4 rounded-full bg-(--dl-accent)" />
       </button>
       <div id={menu} popover="auto" role="dialog" aria-label={copy.title}

@@ -10,6 +10,9 @@ import type { FooterCopy, ShellLink } from './shell-copy.ts'
 import { SiteLink, useLinkHref } from './site-header.tsx'
 import { BackToStart } from './theme-control.tsx'
 
+/** The link list's layout. */
+const LIST = 'flex flex-wrap items-center gap-x-6 gap-y-2' // us-spelling: quoted output (Tailwind class names)
+
 /**
  * One link of the list.
  * @param props.link - the link.
@@ -34,7 +37,7 @@ export function SiteFooter({ copy, links, top, closing }: { copy: FooterCopy; li
         {top}
         {closing}
         <nav aria-label={copy.navLabel}>
-          <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <ul className={LIST}>
             {links.map(link => <li key={link.href}><FooterLink link={link} /></li>)}
           </ul>
         </nav>
