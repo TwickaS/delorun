@@ -378,8 +378,9 @@ export interface RunningHost {
    */
   failedRows(): readonly BootRow[]
   /**
-   * Every row the Host had at boot, which a successor's H3 compares with its own.
-   * @returns their ids and plugin names.
+   * Every row the Host had at boot, which a successor's H3 compares with its own. A protected row whose new config the
+   * Host applied while it ran, outside the Loader, carries the hash of that config, which the successor boots with.
+   * @returns their ids, plugin names and protected rows' config hashes.
    */
   rows(): readonly BootRow[]
   /** The local device approval, when the profile loads `@delorun/home-auth`; `devices.approve` drives it. */

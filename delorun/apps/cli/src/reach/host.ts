@@ -11,6 +11,7 @@ import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import type { LocalReach } from '@delorun/home-process'
 import type { ReachStatus } from '@delorun/reach'
+import { isRecord } from '../patch-layers.ts'
 import type { TailscalePrivateRow } from './row.ts'
 
 /**
@@ -20,6 +21,18 @@ import type { TailscalePrivateRow } from './row.ts'
  */
 export function reachRowsOf(row: TailscalePrivateRow): ReachConfigRows {
   return { tailscalePrivate: { ...row, address: brandString<StudioAddress>(row.address) } }
+}
+
+/**
+ * The `delorun-reach` row's config as a running Host holds it after a `reach.apply`: its boot config with
+ * `tailscalePrivate` replaced by the option the service restarted from. An apply changes nothing else: the switch
+ * `reach` (`enabled`) and every other key take effect only at the next start.
+ * @param bootConfig - the row's config at boot.
+ * @param option - the option the service restarted from, as `readReachRow` read it.
+ * @returns the config.
+ */
+export function appliedReachConfig(bootConfig: unknown, option: TailscalePrivateRow): Record<string, unknown> {
+  return { ...isRecord(bootConfig) ? bootConfig : {}, tailscalePrivate: { ...option } }
 }
 
 /**

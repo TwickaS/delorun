@@ -47,8 +47,8 @@ import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home
 import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
 import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delorun/home-process'
-import { localReach, reachRowsOf } from './reach/host.ts'
-import { readReachRow } from './reach/row.ts'
+import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
+import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
@@ -81,7 +81,7 @@ import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.t
 import { configSchemasOf, guardSecretFields, reportSecretSettlement, settleSecretValues, type SecretSettlement } from './secret-fields.ts'
 import { secretFieldAdmission, type ConfigSchemasOf } from '@delorun/profile-safety'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
-import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
+import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats, withAppliedConfig } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { fullCheckDaysOf, storeUpdateSupport, successorStartCheckRecord } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
@@ -791,7 +791,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
 
 /**
  * The home process's Host over a booted profile: its chats counted into the home process's gate, its studio address,
- * the rows it had at boot, C3's health check, and its two ways to stop. `close` stops it as the process stops, through
+ * the rows it had at boot (with the reach option a `reach.apply` since applied), C3's health check, and its two ways to stop. `close` stops it as the process stops, through
  * upstream's bounded shutdown, which may end the process when the teardown overruns its 5 seconds. `suspend` stops it
  * for an update's or a rollback's switch through the profile's own teardown, which ends no process; the home process
  * bounds that wait itself, so a slow teardown never ends the process in the middle of a switch.
@@ -809,11 +809,12 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   booted.watchChats(chats)
   const atBoot = booted.rows()
   const failed = inactiveRows(atBoot)
-  const atBootRows = bootRowsOf(atBoot)
+  let handedRows = bootRowsOf(atBoot)
+  const bootReach = atBoot.find(row => row.id === REACH_ROW_ID)?.config
   const atBootProtection = bootProtectionOf(atBoot, startOnly)
   return {
     ...withDevices(booted),
-    ...withReach(booted, request),
+    ...withReach(booted, request, (option) => { handedRows = withAppliedConfig(handedRows, REACH_ROW_ID, appliedReachConfig(bootReach, option)) }),
     chats,
     studio: () => {
       const address = booted.studio()
@@ -822,7 +823,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
     studioLink: booted.studioLink,
     reload: () => booted.reload(),
     failedRows: () => failed,
-    rows: () => atBootRows,
+    rows: () => handedRows,
     protection: () => atBootProtection,
     check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
     close: async () => {
@@ -855,11 +856,27 @@ function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApp
  * profile's own `delorun-reach` row, which `delorun reach on|off` wrote, when it arrives.
  * @param booted - the booted profile.
  * @param request - the home and profile.
+ * @param applied - receives the Tailscale private option the service restarted from, once the service ran an apply.
  * @returns `reach` when the profile loads `@delorun/reach`, otherwise nothing.
  */
-function withReach(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>): { readonly reach?: LocalReach } {
-  const reach = booted.reach?.(() => reachRowsOf(readReachRow(request.home, request.profile)))
-  return reach === undefined ? {} : { reach }
+function withReach(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, applied: (option: TailscalePrivateRow) => void): { readonly reach?: LocalReach } {
+  let option: TailscalePrivateRow | undefined
+  const reach = booted.reach?.(() => {
+    option = readReachRow(request.home, request.profile)
+    return reachRowsOf(option)
+  })
+  if (reach === undefined) return {}
+  return {
+    reach: {
+      status: () => reach.status(),
+      apply: async () => {
+        option = undefined
+        const options = await reach.apply()
+        if (options !== undefined && option !== undefined) applied(option)
+        return options
+      },
+    },
+  }
 }
 
 /**
