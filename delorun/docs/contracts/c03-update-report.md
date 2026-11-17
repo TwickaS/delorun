@@ -191,7 +191,7 @@ Automatic rollback runs when:
 
 On request, the person rolls back at any later time with `delorun recover rollback`. The studio has no update screen, and the desktop app has no Delorun rollback.
 
-A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)), which is not built. After an automatic rollback `delorun update` names the criterion that failed. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
+The studio's Go back sends the same request as `delorun recover rollback`, and its wording is this table's. A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)), which is not built. After an automatic rollback `delorun update` names the criterion that failed. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
 
 ## Rollback
 
