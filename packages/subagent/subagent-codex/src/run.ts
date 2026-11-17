@@ -20,6 +20,7 @@ import {
   subprocessRunHandle,
   type SubagentResult,
   type SubagentRun,
+  type SubagentSafetyLevel,
   type SubagentStartRequest,
   type SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
@@ -59,6 +60,12 @@ export type CodexPermissionMode =
   | 'never'
   | 'approve-for-me'
   | 'dangerously-bypass-approvals-and-sandbox'
+
+/**
+ * What one run applies: a profile-selected {@link CodexPermissionMode}, or the safety level the deployment's
+ * delegation consent supplies for this start, which replaces the mode.
+ */
+export type CodexRunPermissions = CodexPermissionMode | SubagentSafetyLevel
 
 /** Native non-interactive Codex modes mapped to official `thread/start` fields. */
 export const CODEX_PERMISSION_MODES = [
@@ -194,7 +201,7 @@ export interface CodexRunSpec {
   /** Profile-selected native model; omitted to preserve Codex settings. */
   readonly model?: string
   /** Profile-selected native non-interactive permission mode. */
-  readonly permissionMode: CodexPermissionMode
+  readonly permissionMode: CodexRunPermissions
   /** Explicit deployment/test environment layered after the shared scrub. */
   readonly env: Record<string, string>
   /** Subprocess termination grace passed to the shared managed-range owner. */

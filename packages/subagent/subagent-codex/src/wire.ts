@@ -12,7 +12,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
-import type { CodexPermissionMode } from './run.ts'
+import type { CodexRunPermissions } from './run.ts'
 
 type JsonObject = Record<string, unknown>
 
@@ -52,7 +52,12 @@ const MAX_MODEL_PAGES = 10
  * `approve-for-me` starts a read-only thread and widens the sandbox per turn
  * (see {@link turnSandboxPolicy}).
  */
-const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>> = {
+const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexRunPermissions, JsonObject>> = {
+  // Safety levels (see `SubagentSafetyLevel`): `own` sends no field, so the person's Codex settings decide.
+  careful: { approvalPolicy: 'never', sandbox: 'read-only' },
+  standard: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' },
+  own: {},
+  unrestricted: { approvalPolicy: 'never', sandbox: 'danger-full-access' },
   never: { approvalPolicy: 'never' },
   'approve-for-me': {
     approvalPolicy: 'on-request',
@@ -66,10 +71,18 @@ const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>
 }
 
 /** Per-turn sandbox widening that matches the mode's former thread-level `workspace-write`. */
-function turnSandboxPolicy(mode: CodexPermissionMode, cwd: string): JsonObject | undefined {
-  return mode === 'approve-for-me'
-    ? { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd] } }
-    : undefined
+function turnSandboxPolicy(mode: CodexRunPermissions, cwd: string): JsonObject | undefined {
+  switch (mode) {
+    case 'approve-for-me':
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd] } }
+    case 'careful':
+      // Only the task folder is writable and commands have no network; temporary folders stay read-only.
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true } }
+    case 'standard':
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: true } }
+    default:
+      return undefined
+  }
 }
 
 function object(value: unknown, label: string): JsonObject {
@@ -190,7 +203,7 @@ function turnErrorMessage(turn: JsonObject): string {
 }
 
 function unattendedDiagnostic(
-  mode: CodexPermissionMode,
+  mode: CodexRunPermissions,
   request: 'command approval' | 'file approval' | 'permission grant' | 'user input' | 'MCP elicitation' | 'command execution' | 'file change' | 'sandbox execution',
   decision: 'cancelled' | 'declined' | 'denied' | 'empty response' | 'failed',
   reason: string,
@@ -268,7 +281,7 @@ export class CodexAppServerWire {
   constructor(
     private readonly input: Readable,
     output: Writable,
-    private readonly permissionMode: CodexPermissionMode,
+    private readonly permissionMode: CodexRunPermissions,
     private readonly model?: string,
   ) {
     this.transport = new JsonRpcLineTransport(input, output)

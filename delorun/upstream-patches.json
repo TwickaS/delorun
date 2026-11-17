@@ -2154,13 +2154,13 @@
       "path": "packages/subagent/subagent/src/consent.ts",
       "class": "security",
       "reason": "External-agent delegation consent seam, new module: the optional `delegationConsent` service (`describe`, `review`), `assertExternalDelegationConsent` (only `allow` starts; a throw, a reasonless refusal or an invalid time limit refuses), `limitExternalRunTime` (disposes the run when the limit passes and reports a diagnostic), and `findDelegationConsent`, which waits for Loader rows whose plugin exports `providesDelegationConsent` and refuses with `DELEGATION_CONSENT_UNAVAILABLE` while such a row is not running. Without a declaring row behaviour is upstream's. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "27d0faf629ce7ce633c93bda587292c2e3c54f23dc59b88321394bf9e839532f"
+      "sha256": "27c556b861b3b679b82db333e6719f9242b6a402ef141d739e93234614e79017"
     },
     {
       "path": "packages/subagent/subagent/src/index.ts",
       "class": "security",
       "reason": "`startExternal` finds the consent, has it review the start (provider, parent, cwd, label, signal) before `provider.start`, and bounds the run with the consent's time limit; exports the consent names. Local providers are never checked. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "4c4b291fdb6427e28ce2740b449ead552855c78dae7da3136574be44bd91c098"
+      "sha256": "7fb4914fdafa491509142e749537cf6522fee81e8354fb6017fce52817d5617a"
     },
     {
       "path": "packages/subagent/tool-subagent/src/index.ts",
