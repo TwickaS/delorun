@@ -3,7 +3,7 @@
  * to this computer, opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
  * done (phone access is on, a PIN is set) is cleared when the entry reads, so it never counts a finished step.
  */
-import { IconShieldOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the 'sidebar.footer.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -82,7 +82,7 @@ export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atCompute
   if (!computer || waiting.length === 0) return null
   const label = t('deferred.entry', { n: String(waiting.length) })
   const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} onClick={start}>
-    <IconShieldOutlineRegular aria-hidden="true" />
+    <IconChecklistOutlineRegular aria-hidden="true" />
     {wide ? <span className={css.text}>{label}</span> : <span className={css.count}>{waiting.length}</span>}
   </button>
   return wide ? button : <Tooltip label={label}>{button}</Tooltip>

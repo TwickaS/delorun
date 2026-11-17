@@ -224,7 +224,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   return (
     <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last ? {} : { later: { label: t('later'), onClick: later } }} footer={footer}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: later } }} footer={footer}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>

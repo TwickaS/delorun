@@ -632,6 +632,13 @@ describe('at the computer, opened from the Finish setup entry', () => {
     expect(titles()).toEqual([en['step.pin']])
   })
 
+  it('offers Finish later on its only step, since Skip has nothing after it', async () => {
+    const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    await click(button(en.later))
+    expect(view.aside.getSnapshot()).toBe(true)
+    expect(view.deferredOnly.getSnapshot()).toBe(false)
+  })
+
   it('closes after the last deferred step without starting a chat or saving the place', async () => {
     const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
     await click(button(en.continue))
