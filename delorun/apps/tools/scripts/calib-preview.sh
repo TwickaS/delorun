@@ -34,8 +34,10 @@ case "${1:-start}" in
 YAML
     fi
     [ -d apps/web/dist ] || nice -n 19 pnpm run build:artifacts
+    [ -f delorun/packages/bundle-local/lib/index.js ] || nice -n 19 pnpm --no-sort --workspace-concurrency=2 --filter "./delorun/packages/**" run build
     nice -n 19 node_modules/.bin/tsx scripts/dev-web.ts --poll --skip-build --no-serve >"$HOME_DIR/watch.log" 2>&1 &
     echo $! >"$HOME_DIR/watch.pid"
+    trap 'kill -INT "$(cat "$HOME_DIR/watch.pid")" 2>/dev/null || true' EXIT
     cli start --foreground
     ;;
 esac
