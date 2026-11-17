@@ -226,8 +226,33 @@ export function bootRowsOf(rows: readonly BootedRow[]): BootRow[] {
     id: row.id,
     name: row.name,
     generated: isGeneratedRowId(row.id),
-    ...protectedPlugins.has(row.name) ? { configHash: createHash('sha256').update(canonicalJson((row.id === SANDBOX_ROW ? settingsBeyondProtection(row.config) : row.config) ?? null)).digest('hex') } : {},
+    ...protectedPlugins.has(row.name) ? { configHash: configHashOf(row.id, row.config) } : {},
   }))
+}
+
+/**
+ * The hash H3 compares for a protected plugin's row: the SHA-256 of its config as canonical JSON, the sandbox row's
+ * without its protection. Every release since 0.1.0-preview.1.1 computes it this way, so a predecessor's hash and a
+ * successor's agree for the same config.
+ * @param id - the row's id.
+ * @param config - the row's config.
+ * @returns the hexadecimal hash.
+ */
+function configHashOf(id: string, config: unknown): string {
+  return createHash('sha256').update(canonicalJson((id === SANDBOX_ROW ? settingsBeyondProtection(config) : config) ?? null)).digest('hex')
+}
+
+/**
+ * The rows a Host hands its successor after it applied a protected row's new config while it ran, outside the Loader:
+ * the boot rows with that row's hash taken from the config it applied, which the next start boots from the same file.
+ * A row that is not there, or not a protected plugin's, keeps what it had.
+ * @param rows - the rows as {@link bootRowsOf} gave them at boot.
+ * @param id - the row's id.
+ * @param config - the config the Host applied.
+ * @returns the rows.
+ */
+export function withAppliedConfig(rows: readonly BootRow[], id: string, config: unknown): BootRow[] {
+  return rows.map(row => (row.id === id && row.configHash !== undefined ? { ...row, configHash: configHashOf(id, config) } : row))
 }
 
 /**

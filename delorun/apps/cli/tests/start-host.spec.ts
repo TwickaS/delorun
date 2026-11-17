@@ -3,13 +3,20 @@
  * states and configs, by the fiber numbers Cordis's own source declares; the services of the root context; and the
  * Host the home process runs, with its studio address and its health check.
  */
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { stringify } from 'yaml'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
+import type { ReachOptionStatus } from '@delorun/contract-home-process'
+import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { FAIL_CLOSED_STUB } from '@delorun/home'
+import type { RunningHost } from '@delorun/home-process'
+import type { BootedRow } from '../src/delorun-bundles.ts'
 import { bootedRows, FIBER_STATES, runningHost, serviceProvider, type BootedProfile } from '../src/start.ts'
+import { bootRowsOf } from '../src/update/host.ts'
 
 
 /**
@@ -116,5 +123,52 @@ describe('runningHost', () => {
     await host.suspend()
     await host.close()
     expect(calls).toEqual(['watch', 'reload', 'end changes', 'dispose', 'end changes', 'shutdown 0'])
+  })
+
+  describe('after a reach.apply', () => {
+    const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delorun/reach'] } }
+    const reachRow = (config: unknown): BootedRow => ({ id: 'delorun-reach', name: '@delorun/reach', disabled: false, state: 'active', config })
+    const off = { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60000, elevationMinutes: 15 } }
+    const on = { enabled: true, tailscalePrivate: { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 } }
+    const homes: string[] = []
+    afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }) })
+
+    /**
+     * A Host booted with the reach row off whose reach service answers each apply with `answer`, in a home whose
+     * profile patch holds `patch`.
+     * @param patch - the profile's `cordis.patch.yml` rows, or undefined for no file.
+     * @param answer - what the service's apply answers.
+     * @returns the Host and the options each apply restarted from.
+     */
+    function reachHost(patch: readonly object[] | undefined, answer: readonly ReachOptionStatus[] | undefined): { readonly host: RunningHost, readonly restarted: ReachConfigRows[] } {
+      const home = mkdtempSync(join(tmpdir(), 'dsr-'))
+      homes.push(home)
+      mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+      if (patch !== undefined) writeFileSync(join(home, 'profiles', 'default', 'cordis.patch.yml'), stringify(patch))
+      const restarted: ReachConfigRows[] = []
+      const booted: BootedProfile = {
+        ...profile(undefined).booted,
+        rows: () => [manager, reachRow(off)],
+        reach: rows => ({ status: () => [], apply: () => { restarted.push(rows()); return Promise.resolve(answer) } }),
+      }
+      return { host: runningHost(booted, { home, profile: 'default' }, [], () => Promise.resolve(), () => Promise.resolve()), restarted }
+    }
+
+    it('hands over the reach row\'s hash of the config the service restarted from, as a boot from that file gives it', async () => {
+      const { host, restarted } = reachHost([{ id: 'delorun-reach', config: on }], [{ option: 'tailscale-private', state: 'ready' }])
+      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow(off)]))
+      await host.reach?.apply()
+      expect(restarted.map(rows => rows.tailscalePrivate?.address)).toEqual(['https://home.example-tailnet.ts.net'])
+      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow(on)]))
+    })
+
+    it('keeps the boot hash when the service did not run the apply or the profile has no reach row of its own', async () => {
+      const notRunning = reachHost([{ id: 'delorun-reach', config: on }], undefined)
+      await notRunning.host.reach?.apply()
+      expect(notRunning.host.rows()).toEqual(bootRowsOf([manager, reachRow(off)]))
+      const noRow = reachHost(undefined, [{ option: 'tailscale-private', state: 'off' }])
+      await noRow.host.reach?.apply()
+      expect(noRow.host.rows()).toEqual(bootRowsOf([manager, reachRow(off)]))
+    })
   })
 })

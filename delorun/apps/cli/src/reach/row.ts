@@ -54,17 +54,45 @@ export function readReachRow(home: string, profile: string): TailscalePrivateRow
 }
 
 /**
+ * The whole `config` of the `delorun-reach` row in the profile's own patch, as the file holds it: what the Loader gives
+ * the row when no later layer sets it, since a patch replaces the row's whole `config`.
+ * @param home - the Delorun home.
+ * @param profile - the CLI profile.
+ * @returns the config, or undefined when the file has no such row or the row no `config`.
+ */
+export function readReachRowConfig(home: string, profile: string): unknown {
+  return reachRowConfigAt(profilePatchPath(home, profile))
+}
+
+/**
+ * The whole `config` of the `delorun-reach` row in a profile patch file.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @returns the config, or undefined when the file is missing, is not a list of rows, or has no such row with a `config`.
+ */
+function reachRowConfigAt(path: string): unknown {
+  if (!existsSync(path)) return undefined
+  const rows: unknown = parse(readFileSync(path, 'utf8'))
+  if (!Array.isArray(rows)) return undefined
+  const list: readonly unknown[] = rows
+  const row = list.find((entry): entry is object => typeof entry === 'object' && entry !== null && Reflect.get(entry, 'id') === REACH_ROW_ID)
+  return row === undefined ? undefined : Reflect.get(row, 'config')
+}
+
+/**
  * Read the Tailscale private option from a profile patch file.
  * @param path - the profile's `cordis.patch.yml`.
  * @returns the option, or {@link REACH_OFF} when the file sets none.
  */
 export function readReachRowAt(path: string): TailscalePrivateRow {
-  if (!existsSync(path)) return REACH_OFF
-  const rows: unknown = parse(readFileSync(path, 'utf8'))
-  if (!Array.isArray(rows)) return REACH_OFF
-  const list: readonly unknown[] = rows
-  const row = list.find((entry): entry is object => typeof entry === 'object' && entry !== null && Reflect.get(entry, 'id') === REACH_ROW_ID)
-  const config: unknown = row === undefined ? undefined : Reflect.get(row, 'config')
+  return reachOptionOf(reachRowConfigAt(path))
+}
+
+/**
+ * The Tailscale private option of a `delorun-reach` row's config, each missing or mistyped field at its default.
+ * @param config - the row's whole config, as {@link readReachRowConfig} reads it.
+ * @returns the option, or {@link REACH_OFF} when the config sets none.
+ */
+export function reachOptionOf(config: unknown): TailscalePrivateRow {
   const option: unknown = typeof config === 'object' && config !== null ? Reflect.get(config, 'tailscalePrivate') : undefined
   if (typeof option !== 'object' || option === null) return REACH_OFF
   const enabled: unknown = Reflect.get(option, 'enabled')

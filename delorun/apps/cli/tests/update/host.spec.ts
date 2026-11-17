@@ -4,6 +4,7 @@
  * which booted rows count as inactive, and each of C3's health criteria H1 to H5 against local HTTP servers and a
  * profile `package.json` in a temporary directory.
  */
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import type { AddressInfo, Socket } from 'node:net'
@@ -18,7 +19,7 @@ import * as UpdateGate from '@delorun/bundle-local/update-gate'
 import { CountingChatGate, type HealthExpectations } from '@delorun/home-process'
 import type { BootedRow } from '../../src/delorun-bundles.ts'
 import { sandboxProtection, type SandboxProtection } from '../../src/sandbox-protection.ts'
-import { arrivedOnLoopbackListener, bootProtectionOf, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
+import { arrivedOnLoopbackListener, bootProtectionOf, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, withAppliedConfig, type HostHealthFacts } from '../../src/update/host.ts'
 
 /** An agent that records the cancellations it is asked for. */
 interface FakeAgent {
@@ -256,6 +257,21 @@ describe('rows', () => {
     expect(reordered?.configHash).toBe(first?.configHash)
     expect(changed?.configHash).not.toBe(first?.configHash)
     expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })])[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
+  })
+
+  it('hashes a config as SHA-256 of its canonical JSON, as every release since 0.1.0-preview.1.1 does', () => {
+    const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delorun/plugin-fetch-guard'] } })
+    const [, guard] = bootRowsOf([manager, row({ id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard', config: { hosts: ['a'], block: true } })])
+    expect(guard?.configHash).toBe(createHash('sha256').update('{"block":true,"hosts":["a"]}').digest('hex'))
+  })
+
+  it('takes an applied config\'s hash for that protected row only, as a boot with that config gives it', () => {
+    const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delorun/reach'] } })
+    const reach = (config: unknown): BootedRow => row({ id: 'delorun-reach', name: '@delorun/reach', config })
+    const atBoot = bootRowsOf([manager, reach({ enabled: false }), row({ id: 'other', config: { a: 1 } })])
+    expect(withAppliedConfig(atBoot, 'delorun-reach', { enabled: true })).toEqual(bootRowsOf([manager, reach({ enabled: true }), row({ id: 'other', config: { a: 1 } })]))
+    expect(withAppliedConfig(atBoot, 'other', { a: 2 })).toEqual(atBoot)
+    expect(withAppliedConfig(atBoot, 'absent', { a: 2 })).toEqual(atBoot)
   })
 })
 
@@ -646,6 +662,38 @@ describe('checkHealth', () => {
       passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delorun-fetch-guard changed and the report did not name it',
     })
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, namedRows: ['delorun-fetch-guard'], previousRows: previous })).toEqual({ passed: true })
+  })
+
+  describe('a reach row the predecessor applied while it ran', () => {
+    const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delorun/reach'] } }
+    const reach = (config: unknown): BootedRow => ({ id: 'delorun-reach', name: '@delorun/reach', disabled: false, state: 'active', config })
+    const option = { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
+    // The bundle's row, which the predecessor booted with before `delorun reach on` wrote the profile's own.
+    const off = { enabled: true, tailscalePrivate: option }
+    const on = { enabled: true, tailscalePrivate: { ...option, enabled: true, address: 'https://home.example-tailnet.ts.net', listenerPort: 31318 } }
+    // The successor's release adds rows elsewhere and changes nothing of the reach row.
+    const added: BootedRow[] = [{ id: 'delorun-packs', name: '@delorun/plugin-packs', disabled: false, state: 'active', config: { concurrency: 2 } }, { id: 'delorun-requirements', name: '@delorun/bundle-local/requirements', disabled: false, state: 'active' }]
+    const changed = { passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delorun-reach changed and the report did not name it' }
+
+    it('fails H3 against the boot config alone, which the successor no longer boots with', async () => {
+      const port = await studioAnswering(204)
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(on), ...added] }), { ...NOTHING_NAMED, previousRows: bootRowsOf([manager, reach(off)]) })).toEqual(changed)
+    })
+
+    it('passes H3 against the config the predecessor applied, whatever other rows the successor adds', async () => {
+      const port = await studioAnswering(204)
+      const handed = withAppliedConfig(bootRowsOf([manager, reach(off)]), 'delorun-reach', on)
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(on), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual({ passed: true })
+    })
+
+    it('still fails H3 when the successor boots reach settings other than the ones applied, unless the report names the row', async () => {
+      const port = await studioAnswering(204)
+      const handed = withAppliedConfig(bootRowsOf([manager, reach(off)]), 'delorun-reach', on)
+      const longer = reach({ ...on, tailscalePrivate: { ...on.tailscalePrivate, elevationMinutes: 60 } })
+      expect(await checkHealth(facts(port, { rows: () => [manager, longer, ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(off), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
+      expect(await checkHealth(facts(port, { rows: () => [manager, longer, ...added] }), { ...NOTHING_NAMED, namedRows: ['delorun-reach'], previousRows: handed })).toEqual({ passed: true })
+    })
   })
 
   describe('the sandbox row\'s protection', () => {
