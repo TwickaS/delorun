@@ -36,6 +36,11 @@ export { readableName }
  * before it downloads.
  */
 const PACK_CARDS: Readonly<Record<string, { readonly title: OnboardingLocaleKey, readonly description: OnboardingLocaleKey }>> = {
+  '@delorun/bundle-browser': { title: 'plugins.pack.browser.title', description: 'plugins.pack.browser.description' },
+  '@delorun/bundle-code-intelligence': { title: 'plugins.pack.codeIntelligence.title', description: 'plugins.pack.codeIntelligence.description' },
+  '@delorun/bundle-agent-hooks': { title: 'plugins.pack.agentHooks.title', description: 'plugins.pack.agentHooks.description' },
+  '@delorun/bundle-webhooks': { title: 'plugins.pack.webhooks.title', description: 'plugins.pack.webhooks.description' },
+  '@delorun/bundle-external-agents': { title: 'plugins.pack.externalAgents.title', description: 'plugins.pack.externalAgents.description' },
   '@delorun/bundle-computer-use-driver': { title: 'plugins.pack.computerUseDriver.title', description: 'plugins.pack.computerUseDriver.description' },
 }
 

@@ -51,7 +51,8 @@ interface ExamplePlugin {
   name: string
 }
 
-interface EventRelation {
+/** The packages that dispatch one event, each with its dispatch methods, and the packages that listen to it. */
+export interface EventRelation {
   dispatchers: Map<string, Set<string>>
   listeners: Set<string>
 }
@@ -1664,6 +1665,52 @@ function listenerPackages(listeners: Set<string>, pkgsByShort: Map<string, Pkg>)
   return [...listeners].sort().map(pkg => pkgLink(pkgsByShort.get(pkg), pkg)).join(', ')
 }
 
+/**
+ * Declared events whose only dispatcher lives outside the host aggregate Program this matrix reads, by full event name,
+ * each naming that dispatcher. The matrix shows the entry in the event's Dispatchers column; an entry whose event is not
+ * declared, or that the Program now sees a dispatcher for, fails as stale.
+ */
+const DISPATCHED_OUTSIDE_PROGRAM: Record<string, string> = {
+  'browser-use/admission-changed': 'Delorun\'s `@delorun/plugin-new-workspace` (`parallel`), outside this Program',
+}
+
+/**
+ * Check that every declared event has a dispatcher. Zero dispatchers means dead vocabulary or an unrecognized semantic
+ * dispatch form. Listener-free extension points remain valid. Client-declared events are exempt: the relation scan
+ * seeds the HOST aggregate program only (host+client cannot share one program — the cordis Context merges collide), so
+ * client dispatch sites are structurally invisible here; their rows stay in the table for the declarations' sake. An
+ * event named in `outside` has its dispatcher outside the Program; an entry whose event is not declared, or that the
+ * Program sees a dispatcher for, is stale.
+ * @param events - the declared events.
+ * @param relations - the dispatchers and listeners the Program shows, by event name.
+ * @param outside - events dispatched outside the Program, by name.
+ * @returns one message per problem; empty when there is none.
+ */
+export function dispatchProblems(
+  events: readonly Pick<EventEntry, 'name' | 'source'>[],
+  relations: ReadonlyMap<string, EventRelation>,
+  outside: Readonly<Record<string, string>>,
+): string[] {
+  const dispatched = (name: string): boolean => (relations.get(name)?.dispatchers.size ?? 0) > 0
+  const undispatched = events
+    .filter(event => !event.source.startsWith('packages/client/') && !dispatched(event.name) && !Object.hasOwn(outside, event.name))
+    .map(event => event.name)
+    .sort()
+  const stale = Object.keys(outside).filter(name => !events.some(event => event.name === name) || dispatched(name)).sort()
+  const problems: string[] = []
+  if (stale.length > 0) {
+    problems.push(`DISPATCHED_OUTSIDE_PROGRAM names ${stale.map(name => `"${name}"`).join(', ')}, which is not declared or now has a dispatcher in the Program; remove the stale entry`)
+  }
+  if (undispatched.length > 0) {
+    problems.push(
+      `no dispatcher found for declared event${undispatched.length > 1 ? 's' : ''} `
+      + `${undispatched.map(name => `"${name}"`).join(', ')} — dead vocabulary, or a dispatch form the semantic scan misses `
+      + '(teach scripts/gen-doc-graphs.ts that form)',
+    )
+  }
+  return problems
+}
+
 function renderEventRelations(pkgs: Pkg[], events: readonly EventEntry[]): string {
   const relations = collectEventRelations()
   const pkgsByShort = new Map(pkgs.map(pkg => [pkg.short, pkg]))
@@ -1678,27 +1725,12 @@ function renderEventRelations(pkgs: Pkg[], events: readonly EventEntry[]): strin
   const rows = ['| Event | Mode | Declared in | Dispatchers | Listeners |', '| --- | --- | --- | --- | --- |']
   for (const event of [...events].sort((a, b) => a.name.localeCompare(b.name))) {
     const relation = relations.get(event.name) ?? { dispatchers: new Map<string, Set<string>>(), listeners: new Set<string>() }
-    rows.push(`| \`${event.name}\` | \`${event.mode}\` | ${sourceLink(event.source)} | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
+    const outside = relation.dispatchers.size === 0 ? DISPATCHED_OUTSIDE_PROGRAM[event.name] : undefined
+    rows.push(`| \`${event.name}\` | \`${event.mode}\` | ${sourceLink(event.source)} | ${outside ?? relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
   }
   lines.push(renderGeneratedRegion('event-producer-consumer:events', rows.join('\n')))
-  // Every declared event needs a dispatcher: zero means dead vocabulary or an
-  // unrecognized semantic dispatch form. Listener-free extension points remain
-  // valid. Client-declared events are exempt: the relation scan seeds the HOST
-  // aggregate program only (host+client cannot share one program — the cordis
-  // Context merges collide), so client dispatch sites are structurally
-  // invisible here; their rows stay in the table for the declarations' sake.
-  const undispatched = [...events]
-    .filter(event => !event.source.startsWith('packages/client/'))
-    .filter(event => (relations.get(event.name)?.dispatchers.size ?? 0) === 0)
-    .map(event => event.name)
-    .sort()
-  if (undispatched.length > 0) {
-    throw new Error(
-      `event-producer-consumer matrix: no dispatcher found for declared event${undispatched.length > 1 ? 's' : ''} `
-      + `${undispatched.map(name => `"${name}"`).join(', ')} — dead vocabulary, or a dispatch form the semantic scan misses `
-      + '(teach scripts/gen-doc-graphs.ts that form)',
-    )
-  }
+  const problems = dispatchProblems(events, relations, DISPATCHED_OUTSIDE_PROGRAM)
+  if (problems.length > 0) throw new Error(`event-producer-consumer matrix: ${problems.join('; ')}`)
   const declared = new Set(events.map(event => event.name))
   const extra = [...relations.keys()].filter(event => !declared.has(event)).sort()
   if (extra.length > 0) {

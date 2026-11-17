@@ -258,7 +258,7 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     expect([...PROTECTED].sort()).toEqual([
       '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delorun/bundle-local/trust', '@delorun/bundle-local/update-check', '@delorun/bundle-local/update-gate',
       '@delorun/home-auth', '@delorun/plugin-changes', '@delorun/plugin-delegation-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-install-check', '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent',
-      '@delorun/plugin-permission-defaults', '@delorun/plugin-schedule-consent', '@delorun/reach',
+      '@delorun/plugin-permission-defaults', '@delorun/plugin-schedule-consent', '@delorun/plugin-tool-failure-guard', '@delorun/reach',
     ])
   })
 
@@ -417,10 +417,11 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
   })
 })
 
-/** The packs 0.1.0-preview.1.3 publishes, by package name: Delorun's optional bundles and upstream's two agent bundles. */
+/** The packs the release publishes, by package name: Delorun's optional bundles and upstream's two agent bundles. */
 const RELEASE_PACKS = [
   '@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex', '@delorun/bundle-agent-hooks', '@delorun/bundle-browser',
-  '@delorun/bundle-code-intelligence', '@delorun/bundle-computer-use-driver', '@delorun/bundle-external-agents', '@delorun/bundle-webhooks',
+  '@delorun/bundle-code-intelligence', '@delorun/bundle-computer-use-driver', '@delorun/bundle-external-agents', '@delorun/bundle-real-browser',
+  '@delorun/bundle-webhooks',
 ] as const
 
 /** Every workspace package's folder by name, under `packages/<group>/` and `delorun/packages/`. */
