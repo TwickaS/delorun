@@ -15,6 +15,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
+  agentSignInFailureText,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,
@@ -102,6 +103,13 @@ function failureDiagnostic(facts: CodexFailureFacts): string {
     if (value !== null && value !== undefined) fields.push(`${label}: ${value}`)
   }
   return `Product subagent failure (${fields.join('; ')})`
+}
+
+/** The text the chat shows for a failed run: a sign-in instruction, or the fixed facts. */
+function failureText(facts: CodexFailureFacts): string {
+  return facts.category === 'sign-in'
+    ? agentSignInFailureText('Codex', 'codex')
+    : failureDiagnostic(facts)
 }
 
 class CodexRunFailure extends Error {
@@ -385,7 +393,7 @@ export async function startCodexRun(
   const collectOutput = (): ContentBlock[] => wire.collectOutput()
   let diagnostic: string | undefined
   const recordFailureDiagnostic = (facts: CodexFailureFacts): string => {
-    const failure = failureDiagnostic(facts)
+    const failure = failureText(facts)
     const permission = wire.collectDiagnostic()
     diagnostic = permission === undefined
       ? failure

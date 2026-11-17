@@ -2707,6 +2707,18 @@
       "class": "delorun-feature",
       "feature": "agents-setup",
       "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
+    },
+    {
+      "path": "packages/subagent/subagent/src/out-of-process.ts",
+      "class": "delorun-feature",
+      "feature": "agent-sign-in-failures",
+      "reason": "Adds helpers that recognise an external agent sign-in failure and word the chat result, shared by the Codex and Claude Code providers."
+    },
+    {
+      "path": "apps/web/public/favicon.ico",
+      "class": "delorun-feature",
+      "feature": "studio-favicon",
+      "reason": "Adds the favicon.ico the studio serves for its tab icon."
     }
   ],
   "retired": []
