@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { findDelegationConsent } from '@deepseek-ai/dsh-subagent'
-import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
+import { SENSITIVE_ENV_PATTERN, type SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import {
   DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
   type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent,
@@ -65,8 +65,14 @@ interface Live {
 }
 
 /**
- * The environment overlay a spawn gets: the driver's entries, then `NODE_OPTIONS` and every `DELORUN_*` name removed
- * (review D16).
+ * Credential and ambient-authority names a driver's overlay may not set, beyond upstream's `SENSITIVE_ENV_PATTERN`: the
+ * names the subprocess owner's scrub drops from the Host's own environment, which an explicit overlay would bypass.
+ */
+const CREDENTIAL_NAME = /^(?:SSH_AUTH_SOCK|DOCKER_HOST|KUBECONFIG|KRB5CCNAME|MYSQL_PWD|(?:AWS|AZURE|SLACK|DISCORD)_.*|.*_CREDENTIALS|.*_WEBHOOK.*|.*PASSPHRASE.*|.*_PASSWD)$/iu
+
+/**
+ * The environment overlay a spawn gets: the driver's entries, then `NODE_OPTIONS`, every `DELORUN_*` name (review
+ * D16) and every credential-named entry of the overlay removed, so a program signs in only with its own login files.
  * @param overlay - the driver's entries.
  * @param env - the Host's environment.
  * @returns the overlay with the removals.
@@ -75,6 +81,9 @@ export function spawnEnvironment(overlay: NodeJS.ProcessEnv | undefined, env: Re
   const result: NodeJS.ProcessEnv = { ...overlay, NODE_OPTIONS: undefined }
   for (const name of [...Object.keys(env), ...Object.keys(overlay ?? {})]) {
     if (name.toUpperCase().startsWith('DELORUN_')) result[name] = undefined
+  }
+  for (const name of Object.keys(overlay ?? {})) {
+    if (SENSITIVE_ENV_PATTERN.test(name) || CREDENTIAL_NAME.test(name)) result[name] = undefined
   }
   return result
 }

@@ -13,7 +13,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DELEGATION_CONSENT_ROW_ID, ExternalAgentsService, GateRefusedError, type AccountRecord, type ExternalAgentDriver,
+  DELEGATION_CONSENT_ROW_ID, ExternalAgentsService, GateRefusedError, spawnEnvironment, type AccountRecord, type ExternalAgentDriver,
   type ExternalAgentName, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent, type ProgramOpenRequest,
   type ProgramRunRule, type ProgramSession, type SeatConsent, type SeatLease, type SeatLeaseEnd, type SeatReview,
   type SeatStartRequest, type SeatVerdict,
@@ -391,6 +391,18 @@ describe('the spawn a driver gets', () => {
     expect(spec?.graceMs).toBe(100)
     expect(spec?.signal).toBe(w.driver.opens[0]?.signal)
     expect(spec?.env).toEqual({ PROGRAM_MODE: 'seat', NODE_OPTIONS: undefined, DELORUN_HOME: undefined, DELORUN_TOKEN_FILE: undefined })
+  })
+
+  it('removes credential-named entries the driver sets, keeping its other entries', () => {
+    const overlay = {
+      CODEX_HOME: '/h/codex', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 't', OPENAI_API_KEY: 'k', AWS_PROFILE: 'p',
+      GOOGLE_APPLICATION_CREDENTIALS: '/c', SSH_AUTH_SOCK: '/s', DB_PASSWORD: 'p', SLACK_WEBHOOK_URL: 'u', GPG_PASSPHRASE: 'p',
+    }
+    expect(spawnEnvironment(overlay, {})).toEqual({
+      CODEX_HOME: '/h/codex', NODE_OPTIONS: undefined, ANTHROPIC_API_KEY: undefined, CLAUDE_CODE_OAUTH_TOKEN: undefined, OPENAI_API_KEY: undefined,
+      AWS_PROFILE: undefined, GOOGLE_APPLICATION_CREDENTIALS: undefined, SSH_AUTH_SOCK: undefined, DB_PASSWORD: undefined,
+      SLACK_WEBHOOK_URL: undefined, GPG_PASSPHRASE: undefined,
+    })
   })
 
   it('refuses to start a process once the program has ended', async () => {
