@@ -31,6 +31,12 @@ describe('the looks stylesheet', () => {
     expect(css).toContain('--dsw-alias-label-tertiary: var(--look-tertiary)')
   })
 
+  it('draws the focus ring in the text colour, not the accent', () => {
+    const css = buildLooks()
+    expect(css).toContain('--dl-focus-ring: 2px solid var(--look-text);')
+    expect(css).toContain('--dsw-focus-ring-color: var(--look-text);')
+  })
+
   it('keeps the T3 Code copyright comment', () => {
     expect(buildLooks()).toMatch(/T3 Code \(MIT licence\), commit [0-9a-f]{40}\.\n \* Copyright \(c\) \d{4} T3 Tools Inc\./)
   })
