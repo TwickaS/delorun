@@ -24,7 +24,7 @@ export type DefaultsDeps = LocationDeps
  * @param deps - the environment and the log.
  * @returns the path, or undefined when the home cannot be resolved.
  */
-async function storePath(deps: DefaultsDeps): Promise<string | undefined> {
+export async function storePath(deps: DefaultsDeps): Promise<string | undefined> {
   try {
     return defaultsStorePath((await resolveDelorunHome(deps.env)).path)
   } catch (error) {

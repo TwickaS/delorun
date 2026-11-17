@@ -155,7 +155,11 @@ describe('the add-workspace route', () => {
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ result: 'failed' })
     expect(registry.create).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledExactlyOnceWith(`${name}: the Delorun home could not be resolved, so no folder is used: HOME_INVALID`)
+    // The mount's read of the browser choices says the same first.
+    expect(warn.mock.calls).toEqual([
+      [`${name}: the Delorun home could not be resolved, so no workspace default is read or kept: HOME_INVALID`],
+      [`${name}: the Delorun home could not be resolved, so no folder is used: HOME_INVALID`],
+    ])
   })
 
   it('names the same location codes as @delorun/home', () => {

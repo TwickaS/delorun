@@ -129,6 +129,15 @@ describe('the routes of the plugin', () => {
   it('registers none of them without the workspace registry', async () => {
     expect([...(await mount({ registry: false })).routes.keys()]).toEqual([])
   })
+
+  it('provides the browser admission, and a "no browser" choice recorded through .setDefaults closes it for the next chat', async () => {
+    const { ctx, routes } = await mount({ homeAuth: homeAuthOn('loopback') })
+    const admission: { admitted(agent: { session: { header: { cwd?: string } } }): boolean } | undefined = ctx.get('browserUseAdmission')
+    const chat = { session: { header: { cwd: projects } } }
+    expect(admission?.admitted(chat)).toBe(true)
+    expect((await routes.get(SET_DEFAULTS_PATH)!.fetch(post(SET_DEFAULTS_PATH, { path: projects, defaults: { browser: 'none' } }))).status).toBe(200)
+    expect(admission?.admitted(chat)).toBe(false)
+  })
 })
 
 describe.each(CASES)('the route $path', ({ path, body, status, renews }) => {

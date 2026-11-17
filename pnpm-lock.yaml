@@ -1919,6 +1919,70 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/browser-use-browse:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-experimental-browser-use-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-runtime
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:*
+        version: link:../../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../../packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../../packages/core/tool-executor-native
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../../packages/session/working-directory
+
   delorun/packages/bundle-agent-hooks:
     dependencies:
       '@deepseek-ai/dsh-experimental-claude-code-mods':
@@ -2020,6 +2084,12 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../../packages/util/native-command
       '@deepseek-ai/dsh-official-bundles':
         specifier: workspace:*
         version: link:../../../packages/util/official-bundles
@@ -2165,9 +2235,6 @@ importers:
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:*
         version: link:../../../packages/llm/deepseek-llm-api-extensions
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:*
-        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
@@ -12030,6 +12097,9 @@ importers:
       '@deepseek-ai/dsh-experimental-browser-use-runtime':
         specifier: workspace:*
         version: link:../browser-use-runtime
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@playwright/mcp':
         specifier: 0.0.80
         version: 0.0.80
@@ -12055,6 +12125,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../util/native-command
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session

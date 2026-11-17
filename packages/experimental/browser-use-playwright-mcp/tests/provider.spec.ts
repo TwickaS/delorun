@@ -283,3 +283,20 @@ it('offers no other tool that runs model-written code in the server process in t
   const tools = withVm.flatMap(file => [...file.matchAll(/name: "(browser_[a-z_]+)"/gu)].map(match => match[1]))
   expect(tools).toEqual([...Provider.SERVER_CODE_TOOLS])
 })
+
+it('serves every Session while no browser admission is provided, and asks a provided one at each ask', async () => {
+  const ctx = new Context()
+  Provider.apply(ctx, Provider.Config({ mode: 'launch' }))
+  const admission = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].admission!
+  const agent = { session: { header: { cwd: '/home/person/src/quiet' } } } as Parameters<typeof admission.admitted>[0]
+  expect(admission.admitted(agent)).toBe(true)
+  const asked = vi.fn((_agent: unknown) => false)
+  const changed = vi.fn((_listener: unknown) => () => {})
+  ctx.provide('browserUseAdmission', { admitted: asked, changed })
+  // The denial: once a provider says no, the mount is told no for that Session.
+  expect(admission.admitted(agent)).toBe(false)
+  expect(asked).toHaveBeenCalledWith(agent)
+  const listener = async () => {}
+  admission.changed(listener)
+  expect(changed).toHaveBeenCalledWith(listener)
+})
