@@ -23,7 +23,8 @@ describe('the brand faces in the studio', () => {
 
   it('copies @delorun/brand fonts.css and its woff2 files into the build input, byte for byte', () => {
     expect(readText('../src/client/fonts.css')).toBe(readText('../../brand/src/fonts.css'))
-    const brandFonts = readdirSync(at('../../brand/src/assets/fonts')).sort()
+    // The licence texts beside the font files stay in brand; the build copies the font files only.
+    const brandFonts = readdirSync(at('../../brand/src/assets/fonts')).filter(name => name.endsWith('.woff2')).sort()
     expect(readdirSync(at('../src/client/assets/fonts')).sort()).toEqual(brandFonts)
     for (const name of brandFonts) {
       expect(readBytes(`../src/client/assets/fonts/${name}`).equals(readBytes(`../../brand/src/assets/fonts/${name}`))).toBe(true)
