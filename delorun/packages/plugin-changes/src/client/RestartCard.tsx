@@ -93,7 +93,7 @@ export function RestartDialog({ runningChats, t, busy, onClose, onRestart }: {
   readonly onClose: () => void
   readonly onRestart: (stopChats: boolean) => void
 }) {
-  return <Modal open onClose={onClose} title={t('restart.title')} closeLabel={t('confirm.close')}
+  return <Modal open onClose={onClose} title={t('restart.title')} closeLabel={t('confirm.close')} className={String(css.restartDialog)}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
       {runningChats === 0 ? null : <Button variant="outline" className={css.danger} disabled={busy} onClick={() => { onRestart(true) }}>{t('restart.stopChats')}</Button>}

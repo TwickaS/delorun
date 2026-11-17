@@ -399,3 +399,8 @@
 .reviewLead {
   margin-bottom: 12px;
 }
+
+/* The restart dialog: wide enough for its three answers on one line, and as wide as the screen on a phone. */
+.restartDialog {
+  width: min(560px, 100%);
+}
