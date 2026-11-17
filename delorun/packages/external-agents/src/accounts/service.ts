@@ -2,12 +2,14 @@
  * The account service behind `ctx.agentAccounts`: it reads each provider's stored figures, folds in what runs and
  * limits checks observe, and starts a limits check through the start gate when one is due.
  *
- * A check is a short-lived start of the provider's own program with no task. It runs only when {@link
- * AgentAccountsService.refresh} is called: once when a provider's driver registers (its pack was added), after a
- * sign-in, and on "Check now". Reading never starts one. Checks are throttled to one per provider per
- * `probeMinIntervalMinutes`, counted from the last check that answered or failed, as the store records it, so a
- * restart does not check again; `signed-in` skips the throttle, because the figures it brings are new. One check per
- * provider runs at a time: a refresh while one runs waits for it and answers with its outcome.
+ * A check is a short-lived start of the provider's own program with no task, through the gate's `probe`. It runs only
+ * on an explicit act about that agent, and only when the profile's Config lists that act: its pack was just added
+ * (its driver registered and the store holds nothing for it), a sign-in finished (`delorun agents login`, directly
+ * through the running Host or by the mark it leaves for the next start), or "Check now". Reading never starts one, and
+ * a Host start alone starts none. `probeMinIntervalMinutes` is a floor between two checks of one provider, counted
+ * from the last check that answered or failed as the store records it, never a timer; a finished sign-in is not held
+ * to it, because the figures it brings are new. One check per provider runs at a time: a refresh while one runs waits
+ * for it and answers with its outcome.
  *
  * Observations are best effort: a write that fails is reported through `report` and the figures stay as they were.
  * Free of Cordis, so it is testable with a fake gate and a fake clock.
@@ -19,7 +21,7 @@ import { reachedLimit, type ReachedLimit } from './limit.ts'
 import { EMPTY_ACCOUNTS, mergeObservation, problemOf, readAccountsFile, sanitiseObservation, UNKNOWN_ACCOUNT, writeAccountsFile } from './store.ts'
 import { ACCOUNT_PROVIDERS, type AccountsAnswer, type AccountsFile, type AccountState, type AccountView, type RefreshAnswer, type RefreshOutcome } from './wire.ts'
 
-/** Why a check is asked for. `signed-in` skips the throttle; the others honour it. */
+/** The explicit act about an agent that asks for a check. `signed-in` is not held to the floor between checks. */
 export type RefreshReason = 'pack-added' | 'signed-in' | 'check-now'
 
 /** What the start gate answered a limits check. */
@@ -43,6 +45,11 @@ export interface AgentAccountsDependencies {
    * @returns milliseconds.
    */
   readonly probeMinIntervalMs: () => number
+  /**
+   * The acts that may start a check, read at each refresh so a saved change applies at once.
+   * @returns the reasons the profile's Config lists.
+   */
+  readonly triggers: () => readonly RefreshReason[]
   /**
    * Whether a provider's pack is added, so its driver is registered.
    * @param provider - the provider.
@@ -92,16 +99,29 @@ export interface AgentAccountsService {
    */
   refresh(provider: ExternalAgentName, reason: RefreshReason): Promise<RefreshAnswer>
   /**
-   * Check a provider once its driver registers, in the background; a failure is reported.
+   * Hear that a provider's driver registered. It checks in the background only when the store holds nothing for the
+   * provider (its pack was just added) or holds the mark a sign-in left while Delorun was not running; a failure is
+   * reported. A registration at an ordinary Host start checks nothing.
    * @param provider - the provider whose driver registered.
    */
   driverAdded(provider: ExternalAgentName): void
   /**
-   * The reached limit that refuses a start of a provider now, from its stored figures.
-   * @param provider - the provider.
+   * The reached limit that refuses a start now, from an agent's figures. Pure: stale figures never refuse.
+   * @param record - the agent's figures, as {@link AgentAccountsService.read} answers them.
+   * @param now - the time asked about, in milliseconds since the epoch.
    * @returns the limit, or undefined when nothing refuses.
    */
-  limitReached(provider: ExternalAgentName): Promise<ReachedLimit | undefined>
+  reachedLimit(record: AccountView, now: number): ReachedLimit | undefined
+}
+
+/**
+ * An account without the mark a sign-in left, once a check used it up.
+ * @param account - the stored account.
+ * @returns the same figures without `checkRequestedAt`.
+ */
+function withoutMark(account: AccountState): AccountState {
+  const { checkRequestedAt: _used, ...rest } = account
+  return rest
 }
 
 /**
@@ -175,7 +195,7 @@ export function createAgentAccounts(dependencies: AgentAccountsDependencies): Ag
         return { kind: 'checked' }
       case 'failed': {
         const at = now()
-        await change(provider, account => ({ ...(account ?? UNKNOWN_ACCOUNT), checkFailedAt: at })).catch((error: unknown) => {
+        await change(provider, account => ({ ...withoutMark(account ?? UNKNOWN_ACCOUNT), checkFailedAt: at })).catch((error: unknown) => {
           report(`the ${provider} limits check time could not be saved (${problemOf(error)})`)
         })
         return { kind: 'failed', problem: result.problem }
@@ -193,15 +213,16 @@ export function createAgentAccounts(dependencies: AgentAccountsDependencies): Ag
    * @returns the refresh's answer.
    */
   const start = async (provider: ExternalAgentName, reason: RefreshReason): Promise<RefreshAnswer> => {
-    if (!dependencies.installed(provider)) return { outcome: { kind: 'not-installed' }, account: await read(provider), now: now() }
+    if (!dependencies.triggers().includes(reason)) return { outcome: { kind: 'turned-off' }, record: await read(provider), now: now() }
+    if (!dependencies.installed(provider)) return { outcome: { kind: 'not-installed' }, record: await read(provider), now: now() }
     if (reason !== 'signed-in') {
       const stored = (await load()).accounts[provider]
       const last = Math.max(stored?.checkedAt ?? 0, stored?.checkFailedAt ?? 0)
       const nextAt = last + dependencies.probeMinIntervalMs()
-      if (last > 0 && nextAt > now()) return { outcome: { kind: 'throttled', nextAt }, account: view(provider, stored), now: now() }
+      if (last > 0 && nextAt > now()) return { outcome: { kind: 'throttled', nextAt }, record: view(provider, stored), now: now() }
     }
     const outcome = await run(provider)
-    return { outcome, account: await read(provider), now: now() }
+    return { outcome, record: await read(provider), now: now() }
   }
 
   const refresh = (provider: ExternalAgentName, reason: RefreshReason): Promise<RefreshAnswer> => {
@@ -221,10 +242,15 @@ export function createAgentAccounts(dependencies: AgentAccountsDependencies): Ag
     observe,
     refresh,
     driverAdded: (provider) => {
-      refresh(provider, 'pack-added').catch((error: unknown) => {
-        report(`the ${provider} limits check after its pack was added failed (${problemOf(error)})`)
+      const due = async (): Promise<RefreshReason | undefined> => {
+        const stored = (await load()).accounts[provider]
+        if (stored === undefined) return 'pack-added'
+        return stored.checkRequestedAt === undefined ? undefined : 'signed-in'
+      }
+      due().then(reason => reason === undefined ? undefined : refresh(provider, reason)).catch((error: unknown) => {
+        report(`the ${provider} limits check after its driver registered failed (${problemOf(error)})`)
       })
     },
-    limitReached: async provider => reachedLimit((await load()).accounts[provider], now()),
+    reachedLimit,
   }
 }

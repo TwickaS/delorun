@@ -40,7 +40,7 @@ const PRIVATE_DIR_MODE = 0o700
 /** An account nothing has been seen for. */
 export const UNKNOWN_ACCOUNT: AccountState = { signedIn: 'unknown', windows: [] }
 
-const Kind = z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/u)
+const Kind = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,47}$/u)
 const Plan = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,47}$/u)
 const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u)
 // A display name is free text from the program; no control characters and no `@`, so no address passes as one.
@@ -62,6 +62,7 @@ const AccountItem = z.object({
   offeredModels: z.array(OfferedModelItem).max(MAX_OFFERED_MODELS).exactOptional(),
   checkedAt: Time.exactOptional(),
   checkFailedAt: Time.exactOptional(),
+  checkRequestedAt: Time.exactOptional(),
 })
 const AccountsFileItem = z.object({
   v: z.literal(ACCOUNTS_FILE_VERSION),
@@ -78,8 +79,9 @@ const RefreshAnswerItem = z.object({
     z.object({ kind: z.literal('throttled'), nextAt: Time }),
     z.object({ kind: z.literal('not-installed') }),
     z.object({ kind: z.literal('refused'), problem: Problem }),
+    z.object({ kind: z.literal('turned-off') }),
   ]),
-  account: AccountViewItem,
+  record: AccountViewItem,
   now: Time,
 })
 
@@ -195,6 +197,8 @@ export function mergeObservation(account: AccountState | undefined, observation:
     ...present('offeredModels', observation.offeredModels ?? previous.offeredModels),
     ...present('checkedAt', observation.source === 'probe' ? now : previous.checkedAt),
     ...present('checkFailedAt', previous.checkFailedAt),
+    // A check answered, so the mark a sign-in left is used up; a run's figures leave it for the check.
+    ...present('checkRequestedAt', observation.source === 'probe' ? undefined : previous.checkRequestedAt),
   }
 }
 
@@ -260,6 +264,21 @@ export async function readAccountsFile(path: string): Promise<AccountsRead> {
 export async function writeAccountsFile(path: string, file: AccountsFile): Promise<void> {
   await mkdir(join(path, '..'), { recursive: true, mode: PRIVATE_DIR_MODE })
   await writeProtectedFile(path, `${JSON.stringify(file, null, 2)}\n`)
+}
+
+/**
+ * Leave the mark that asks the Host to check an agent once at its next start, after `delorun agents login` finished a
+ * sign-in while Delorun was not running. The rest of the file is kept; a file that cannot be read is replaced by one
+ * holding only the mark.
+ * @param path - the accounts file's absolute path.
+ * @param provider - the agent signed in.
+ * @param now - the time of the sign-in, in milliseconds since the epoch.
+ */
+export async function requestCheck(path: string, provider: ExternalAgentName, now: number): Promise<void> {
+  const read = await readAccountsFile(path)
+  const file = read.kind === 'readable' ? read.file : EMPTY_ACCOUNTS
+  const account = file.accounts[provider] ?? UNKNOWN_ACCOUNT
+  await writeAccountsFile(path, { v: file.v, accounts: { ...file.accounts, [provider]: { ...account, checkRequestedAt: now } } })
 }
 
 /**

@@ -6,27 +6,30 @@
  *
  * @module @delorun/external-agents/accounts/limit
  */
+import type { ExternalAgentName } from '../contract.ts'
 import type { AccountState, StoredWindow } from './wire.ts'
 
 /** A reached limit that refuses a start. */
 export interface ReachedLimit {
-  /** The window's kind, such as `five-hour`; the latest-resetting one when several are reached. */
-  readonly kind: string
+  /** The agent. */
+  readonly provider: ExternalAgentName
+  /** The window's kind, such as `five_hour`; the latest-resetting one when several are reached. */
+  readonly window: string
   /** When it resets, in milliseconds since the epoch; always after the `now` it was found at. */
   readonly resetsAt: number
 }
 
 /**
  * The reached limit that refuses a start now, if any.
- * @param account - the provider's stored figures, or undefined when none are stored.
+ * @param record - the agent's stored figures.
  * @param now - the current time, in milliseconds since the epoch.
  * @returns the reached window that resets last, or undefined when no window refuses.
  */
-export function reachedLimit(account: AccountState | undefined, now: number): ReachedLimit | undefined {
+export function reachedLimit(record: Pick<AccountState, 'windows'> & { readonly provider: ExternalAgentName }, now: number): ReachedLimit | undefined {
   let found: ReachedLimit | undefined
-  for (const window of account?.windows ?? []) {
+  for (const window of record.windows) {
     if (window.status !== 'reached' || window.resetsAt === undefined || window.resetsAt <= now) continue
-    if (found === undefined || window.resetsAt > found.resetsAt) found = { kind: window.kind, resetsAt: window.resetsAt }
+    if (found === undefined || window.resetsAt > found.resetsAt) found = { provider: record.provider, window: window.kind, resetsAt: window.resetsAt }
   }
   return found
 }

@@ -42,6 +42,11 @@ export interface AccountState {
   readonly checkedAt?: number
   /** When a limits check last failed, in milliseconds since the epoch. */
   readonly checkFailedAt?: number
+  /**
+   * When `delorun agents login` finished a sign-in while Delorun was not running, in milliseconds since the epoch: the
+   * Host checks this agent once when its driver registers at the next start, and the check clears the mark.
+   */
+  readonly checkRequestedAt?: number
 }
 
 /** The accounts file's content. */
@@ -76,11 +81,12 @@ export interface RefreshRequest {
 
 /**
  * What a refresh did:
- * - `checked`: a check ran and answered; `account` holds its figures;
+ * - `checked`: a check ran and answered; `record` holds its figures;
  * - `failed`: a check ran and did not answer; the figures stay as they were seen;
  * - `throttled`: the last check was too recent; `nextAt` is when the next may run;
  * - `not-installed`: the provider's pack is not added, so nothing started;
- * - `refused`: the start gate refused the check, with its sentence for the person.
+ * - `refused`: the start gate refused the check, with its sentence for the person;
+ * - `turned-off`: the profile's Config does not let this kind of act start a check.
  */
 export type RefreshOutcome =
   | { readonly kind: 'checked' }
@@ -88,37 +94,44 @@ export type RefreshOutcome =
   | { readonly kind: 'throttled'; readonly nextAt: number }
   | { readonly kind: 'not-installed' }
   | { readonly kind: 'refused'; readonly problem: string }
+  | { readonly kind: 'turned-off' }
 
 /** The `refresh` route's answer. */
 export interface RefreshAnswer {
   /** What the refresh did. */
   readonly outcome: RefreshOutcome
   /** The provider's figures after it. */
-  readonly account: AccountView
+  readonly record: AccountView
   /** The time the answer was made, in milliseconds since the epoch. */
   readonly now: number
 }
 
-/** The names a person knows each limit window kind by; any other kind is shown as its own words. */
+/** The names a person knows each limit window kind by, as the drivers name them; any other kind is shown in words. */
 export const WINDOW_TITLES: Readonly<Record<string, string>> = {
-  'five-hour': '5-hour limit',
-  'seven-day': 'Weekly limit',
-  'seven-day-opus': 'Weekly Opus limit',
-  'seven-day-sonnet': 'Weekly Sonnet limit',
-  'thirty-day': '30-day limit',
-  'overage': 'Extra usage',
+  five_hour: '5-hour limit',
+  seven_day: 'Weekly limit',
+  seven_day_opus: 'Weekly Opus limit',
+  seven_day_sonnet: 'Weekly Sonnet limit',
+  seven_day_overage_included: 'Weekly limit with extra usage',
+  overage: 'Extra usage',
+  unknown: 'Plan limit',
 }
 
 /**
  * The name a person knows a limit window by.
- * @param kind - the window's kind, such as `five-hour`.
- * @returns its title, such as `5-hour limit`, or the kind in words for a kind with no title.
+ * @param kind - the window's kind, such as `five_hour` or Codex's `window_43200m`.
+ * @returns its title, such as `5-hour limit` or `30-day limit`, or the kind in words for a kind with no title.
  */
 export function windowTitle(kind: string): string {
   const titled = WINDOW_TITLES[kind]
   if (titled !== undefined) return titled
-  const minutes = /^(\d+)-minute$/u.exec(kind)?.[1]
-  if (minutes !== undefined) return `${minutes}-minute limit`
-  const words = kind.replaceAll('-', ' ')
+  const minutes = /^window_(\d+)m$/u.exec(kind)?.[1]
+  if (minutes !== undefined) {
+    const count = Number(minutes)
+    if (count > 0 && count % 1440 === 0) return `${String(count / 1440)}-day limit`
+    if (count > 0 && count % 60 === 0) return `${String(count / 60)}-hour limit`
+    return `${minutes}-minute limit`
+  }
+  const words = kind.replaceAll(/[-_]+/gu, ' ')
   return `${words.charAt(0).toUpperCase()}${words.slice(1)} limit`
 }

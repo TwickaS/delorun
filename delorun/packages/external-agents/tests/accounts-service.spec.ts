@@ -8,10 +8,11 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccountObservation, ExternalAgentName } from '../src/contract.ts'
 import { reachedLimit, windowStanding } from '../src/accounts/limit.ts'
-import { createAgentAccounts, type AgentAccountsService, type CheckResult } from '../src/accounts/service.ts'
-import { accountsFilePath, readAccountsFile } from '../src/accounts/store.ts'
+import { createAgentAccounts, type AgentAccountsService, type CheckResult, type RefreshReason } from '../src/accounts/service.ts'
+import { accountsFilePath, readAccountsFile, requestCheck } from '../src/accounts/store.ts'
 
 const MINUTE = 60_000
+const NOW_ISH = 60 * MINUTE
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
@@ -24,6 +25,8 @@ interface FakeState {
   /** What the next check answers; a function runs when the check starts. */
   answer: CheckResult | (() => Promise<CheckResult>)
   readonly installed: Set<ExternalAgentName>
+  /** The acts the profile's Config lets start a check. */
+  triggers: RefreshReason[]
 }
 
 /** A fake gate, clock and home around one service. */
@@ -35,7 +38,7 @@ interface Fixture extends FakeState {
 
 const OBSERVED: AccountObservation = {
   provider: 'claude-code', signedIn: 'yes', plan: 'max', source: 'probe',
-  windows: [{ kind: 'five-hour', usedPercent: 20, resetsAt: 10 * 60 * MINUTE, status: 'allowed' }],
+  windows: [{ kind: 'five_hour', usedPercent: 20, resetsAt: 10 * 60 * MINUTE, status: 'allowed' }],
 }
 
 /**
@@ -47,6 +50,7 @@ function serviceOver(state: FakeState): AgentAccountsService {
     storePath: state.path,
     now: () => state.clock.now,
     probeMinIntervalMs: () => 30 * MINUTE,
+    triggers: () => state.triggers,
     installed: provider => state.installed.has(provider),
     check: async (provider) => {
       state.checks.push(provider)
@@ -68,6 +72,7 @@ function fixture(path?: string): Fixture {
     path: path ?? accountsFilePath(root), checks: [], reports: [], clock: { now: 60 * MINUTE },
     answer: { kind: 'observed', observation: OBSERVED },
     installed: new Set(['claude-code', 'codex']),
+    triggers: ['pack-added', 'signed-in', 'check-now'],
   }
   // The fixture is the state itself, so a test's change is what the service sees.
   return Object.assign(state, { accounts: serviceOver(state), restart: () => serviceOver(state) })
@@ -79,7 +84,7 @@ describe('a refresh', () => {
     f.installed.delete('codex')
     const answer = await f.accounts.refresh('codex', 'check-now')
     expect(answer.outcome).toEqual({ kind: 'not-installed' })
-    expect(answer.account).toMatchObject({ provider: 'codex', installed: false, signedIn: 'unknown' })
+    expect(answer.record).toMatchObject({ provider: 'codex', installed: false, signedIn: 'unknown' })
     expect(f.checks).toEqual([])
   })
 
@@ -88,8 +93,8 @@ describe('a refresh', () => {
     const answer = await f.accounts.refresh('claude-code', 'pack-added')
     expect(f.checks).toEqual(['claude-code'])
     expect(answer.outcome).toEqual({ kind: 'checked' })
-    expect(answer.account).toMatchObject({ provider: 'claude-code', installed: true, signedIn: 'yes', plan: 'max', checkedAt: 60 * MINUTE })
-    expect(answer.account.windows).toEqual([{ ...OBSERVED.windows[0], seenAt: 60 * MINUTE, source: 'probe' }])
+    expect(answer.record).toMatchObject({ provider: 'claude-code', installed: true, signedIn: 'yes', plan: 'max', checkedAt: 60 * MINUTE })
+    expect(answer.record.windows).toEqual([{ ...OBSERVED.windows[0], seenAt: 60 * MINUTE, source: 'probe' }])
   })
 
   it('stores a check\'s figures under the provider it was asked for, whatever the driver named', async () => {
@@ -140,8 +145,8 @@ describe('a refresh', () => {
     f.answer = { kind: 'failed', problem: 'the program exited with code 1' }
     const failed = await f.accounts.refresh('claude-code', 'check-now')
     expect(failed.outcome).toEqual({ kind: 'failed', problem: 'the program exited with code 1' })
-    expect(failed.account).toMatchObject({ signedIn: 'yes', plan: 'max', checkedAt: 60 * MINUTE, checkFailedAt: 100 * MINUTE })
-    expect(failed.account.windows[0]?.seenAt).toBe(60 * MINUTE)
+    expect(failed.record).toMatchObject({ signedIn: 'yes', plan: 'max', checkedAt: 60 * MINUTE, checkFailedAt: 100 * MINUTE })
+    expect(failed.record.windows[0]?.seenAt).toBe(60 * MINUTE)
     f.clock.now += MINUTE
     expect((await f.accounts.refresh('claude-code', 'check-now')).outcome.kind).toBe('throttled')
   })
@@ -174,8 +179,7 @@ describe('reading', () => {
         { provider: 'codex', installed: true, signedIn: 'unknown', windows: [] },
       ],
     })
-    await f.accounts.read('codex')
-    await f.accounts.limitReached('codex')
+    f.accounts.reachedLimit(await f.accounts.read('codex'), NOW_ISH)
     expect(f.checks).toEqual([])
   })
 
@@ -184,7 +188,7 @@ describe('reading', () => {
     mkdirSync(join(f.path, '..'), { recursive: true })
     writeFileSync(f.path, '{"v":1,"accounts":', { mode: 0o600 })
     expect(await f.accounts.read('claude-code')).toMatchObject({ signedIn: 'unknown', windows: [] })
-    expect(await f.accounts.limitReached('claude-code')).toBeUndefined()
+    expect(f.accounts.reachedLimit(await f.accounts.read('claude-code'), 0)).toBeUndefined()
     await f.accounts.observe(OBSERVED)
     expect((await f.accounts.read('claude-code')).plan).toBe('max')
   })
@@ -193,9 +197,9 @@ describe('reading', () => {
 describe('observing a run', () => {
   it('stores a run\'s windows as a run\'s and leaves the check time alone', async () => {
     const f = fixture()
-    await f.accounts.observe({ provider: 'codex', signedIn: 'yes', source: 'run', windows: [{ kind: 'five-hour', usedPercent: 81, status: 'near' }] })
+    await f.accounts.observe({ provider: 'codex', signedIn: 'yes', source: 'run', windows: [{ kind: 'five_hour', usedPercent: 81, status: 'near' }] })
     const codex = await f.accounts.read('codex')
-    expect(codex.windows).toEqual([{ kind: 'five-hour', usedPercent: 81, status: 'near', seenAt: 60 * MINUTE, source: 'run' }])
+    expect(codex.windows).toEqual([{ kind: 'five_hour', usedPercent: 81, status: 'near', seenAt: 60 * MINUTE, source: 'run' }])
     expect(codex.checkedAt).toBeUndefined()
   })
 
@@ -210,6 +214,16 @@ describe('observing a run', () => {
     expect(f.reports).toEqual([expect.stringContaining('claude-code limit figures could not be saved'), expect.stringContaining('codex limits check time could not be saved')])
   })
 
+  it('logs no personal field of an observation whose write failed', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ea1-limits-service-'))
+    roots.push(root)
+    writeFileSync(join(root, 'secrets'), 'a file where the folder should be')
+    const f = fixture(accountsFilePath(root))
+    await f.accounts.observe(Object.assign({}, OBSERVED, { email: 'person@example.com', organization: 'Example Org Ltd', accountUuid: 'acct_4f2a9c' }))
+    expect(f.reports).toHaveLength(1)
+    for (const value of ['person@example.com', 'Example Org Ltd', 'acct_4f2a9c', 'max']) expect(f.reports[0]).not.toContain(value)
+  })
+
   it('serialises writes, so two observations at once both land', async () => {
     const f = fixture()
     await Promise.all([
@@ -222,17 +236,52 @@ describe('observing a run', () => {
 })
 
 describe('once a driver registers', () => {
-  it('checks that provider in the background', async () => {
+  it('checks an agent the store holds nothing for, as its pack was just added', async () => {
     const f = fixture()
     f.accounts.driverAdded('codex')
     await vi.waitFor(async () => { expect((await f.accounts.read('codex')).checkedAt).toBe(60 * MINUTE) })
     expect(f.checks).toEqual(['codex'])
   })
 
+  it('checks nothing at an ordinary Host start, however old the figures are', async () => {
+    const f = fixture()
+    await f.accounts.observe({ provider: 'codex', signedIn: 'no', source: 'run', windows: [] })
+    f.clock.now += 365 * 24 * 60 * MINUTE
+    const restarted = f.restart()
+    restarted.driverAdded('codex')
+    restarted.driverAdded('codex')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    // Pins D17: a Host restart alone starts no check, even with stale or signed-out figures.
+    expect(f.checks).toEqual([])
+  })
+
+  it('checks once for the mark a sign-in left while Delorun was not running, inside the floor, and clears it', async () => {
+    const f = fixture()
+    await f.accounts.refresh('claude-code', 'check-now')
+    await requestCheck(f.path, 'claude-code', 61 * MINUTE)
+    f.clock.now += 2 * MINUTE
+    const restarted = f.restart()
+    restarted.driverAdded('claude-code')
+    await vi.waitFor(() => { expect(f.checks).toEqual(['claude-code', 'claude-code']) })
+    await vi.waitFor(async () => { expect((await restarted.read('claude-code')).checkRequestedAt).toBeUndefined() })
+    restarted.driverAdded('claude-code')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(f.checks).toEqual(['claude-code', 'claude-code'])
+  })
+
+  it('clears the mark after a check that did not answer too', async () => {
+    const f = fixture()
+    await requestCheck(f.path, 'codex', 1)
+    f.answer = { kind: 'failed', problem: 'gone' }
+    f.accounts.driverAdded('codex')
+    await vi.waitFor(async () => { expect(await f.accounts.read('codex')).toMatchObject({ checkFailedAt: 60 * MINUTE }) })
+    expect((await f.accounts.read('codex')).checkRequestedAt).toBeUndefined()
+  })
+
   it('reports a check that could not run', async () => {
     const reports: string[] = []
     const accounts = createAgentAccounts({
-      storePath: accountsFilePath('/nonexistent'), now: () => 0, probeMinIntervalMs: () => 0,
+      storePath: accountsFilePath('/nonexistent'), now: () => 0, probeMinIntervalMs: () => 0, triggers: () => ['pack-added'],
       installed: () => { throw new Error('the driver list is gone') },
       check: () => Promise.resolve({ kind: 'not-installed' }),
       report: (message) => { reports.push(message) },
@@ -240,24 +289,39 @@ describe('once a driver registers', () => {
     })
     accounts.driverAdded('claude-code')
     await vi.waitFor(() => { expect(reports).toHaveLength(1) })
-    expect(reports).toEqual(['the claude-code limits check after its pack was added failed (the driver list is gone)'])
+    expect(reports).toEqual(['the claude-code limits check after its driver registered failed (the driver list is gone)'])
+  })
+})
+
+describe('the Config list of acts that start a check', () => {
+  it('starts nothing for an act it does not list, and nothing for a model or a page, which have no act at all', async () => {
+    const f = fixture()
+    f.triggers = ['check-now']
+    expect((await f.accounts.refresh('codex', 'signed-in')).outcome).toEqual({ kind: 'turned-off' })
+    expect((await f.accounts.refresh('codex', 'pack-added')).outcome).toEqual({ kind: 'turned-off' })
+    f.accounts.driverAdded('claude-code')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(f.checks).toEqual([])
+    f.triggers = []
+    expect((await f.accounts.refresh('codex', 'check-now')).outcome).toEqual({ kind: 'turned-off' })
+    expect(f.checks).toEqual([])
   })
 })
 
 describe('the reached-limit rule', () => {
-  const window = (status: 'allowed' | 'near' | 'reached' | 'unknown', resetsAt?: number, kind = 'five-hour') =>
+  const window = (status: 'allowed' | 'near' | 'reached' | 'unknown', resetsAt?: number, kind = 'five_hour') =>
     ({ kind, status, seenAt: 0, source: 'run' as const, ...(resetsAt === undefined ? {} : { resetsAt }) })
 
   it('refuses until the latest reset of the reached windows, and only while it is ahead', () => {
-    const account = { signedIn: 'yes' as const, windows: [window('reached', 500), window('reached', 900, 'seven-day'), window('near', 2_000, 'thirty-day')] }
-    expect(reachedLimit(account, 100)).toEqual({ kind: 'seven-day', resetsAt: 900 })
-    expect(reachedLimit(account, 600)).toEqual({ kind: 'seven-day', resetsAt: 900 })
-    expect(reachedLimit(account, 900)).toBeUndefined()
+    const record = { provider: 'codex' as const, windows: [window('reached', 500), window('reached', 900, 'seven_day'), window('near', 2_000, 'window_43200m')] }
+    expect(reachedLimit(record, 100)).toEqual({ provider: 'codex', window: 'seven_day', resetsAt: 900 })
+    expect(reachedLimit(record, 600)).toEqual({ provider: 'codex', window: 'seven_day', resetsAt: 900 })
+    expect(reachedLimit(record, 900)).toBeUndefined()
   })
 
   it('never refuses on a reached window without a reset time, on other statuses or with no figures', () => {
-    expect(reachedLimit({ signedIn: 'yes', windows: [window('reached'), window('near', 999), window('unknown', 999)] }, 0)).toBeUndefined()
-    expect(reachedLimit(undefined, 0)).toBeUndefined()
+    expect(reachedLimit({ provider: 'codex', windows: [window('reached'), window('near', 999), window('unknown', 999)] }, 0)).toBeUndefined()
+    expect(reachedLimit({ provider: 'codex', windows: [] }, 0)).toBeUndefined()
   })
 
   it('calls a window whose reset time has passed reset, and one without a reset time current', () => {

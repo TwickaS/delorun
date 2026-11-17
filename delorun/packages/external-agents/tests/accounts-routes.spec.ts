@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ExternalAgentName } from '../src/contract.ts'
 import { registerAccountRoutes } from '../src/accounts/routes.ts'
-import { createAgentAccounts } from '../src/accounts/service.ts'
+import { createAgentAccounts, type AgentAccountsService } from '../src/accounts/service.ts'
 import { accountsFilePath } from '../src/accounts/store.ts'
 import { ACCOUNT_ROUTES } from '../src/accounts/wire.ts'
 
@@ -26,6 +26,10 @@ interface Route {
 /** The routes over a fake Connection, and the checks the fake gate saw. */
 interface Mounted {
   readonly checks: ExternalAgentName[]
+  /** The service the routes call. */
+  readonly accounts: AgentAccountsService
+  /** The context members the registration used. */
+  readonly used: ReadonlySet<string>
   /** The `connection/request` hook. */
   readonly hook: (request: { url: string, headers: Record<string, string> }, response: object, next: () => Promise<void>) => Promise<void>
   /** Run a route at the computer, which the hook already placed there. */
@@ -44,7 +48,7 @@ function mounted(listener: string | undefined): Mounted {
   roots.push(root)
   const checks: ExternalAgentName[] = []
   const accounts = createAgentAccounts({
-    storePath: accountsFilePath(root), now: () => 1_000, probeMinIntervalMs: () => 60_000, installed: () => true,
+    storePath: accountsFilePath(root), now: () => 1_000, probeMinIntervalMs: () => 60_000, triggers: () => ['check-now'], installed: () => true,
     check: async (provider) => {
       checks.push(provider)
       return Promise.resolve({ kind: 'observed', observation: { provider, signedIn: 'yes', windows: [], source: 'probe' } })
@@ -59,9 +63,13 @@ function mounted(listener: string | undefined): Mounted {
     get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => false, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } : undefined),
     connection: { fetch: { register: (route: Route & { path: string }) => { routes.set(route.path, route) } } },
   }
-  registerAccountRoutes(ctx as never, accounts)
+  const used = new Set<string>()
+  const recorded = new Proxy(ctx, { get: (target, key, receiver) => { used.add(String(key)); return Reflect.get(target, key, receiver) } })
+  registerAccountRoutes(recorded as never, accounts)
   return {
     checks,
+    accounts,
+    used,
     hook: (request, response, next) => hook!(request, response, next),
     atComputer: async (path, init) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, init)),
     asPeer: async (path, principal, init) => {
@@ -136,5 +144,21 @@ describe('the account routes', () => {
         if (!expected) expect(JSON.parse(answered.body ?? '{}')).toMatchObject({ error: 'LOOPBACK_REQUIRED' })
       }
     }
+  })
+
+  it('register two routes and the arrival hook only: no tool a model could call to start a check', () => {
+    const routes = mounted('loopback')
+    // Pins D17's "a model tool call starts no check": the module offers nothing but the person's routes.
+    expect([...routes.used].sort()).toEqual(['connection', 'on'])
+  })
+
+  it('answer a read with none of the personal fields a program reply carried', async () => {
+    const routes = mounted('reach-tailscale-private')
+    const reply = Object.assign({}, { provider: 'codex' as const, signedIn: 'yes' as const, windows: [], source: 'run' as const }, {
+      email: 'person@example.com', organization: 'Example Org Ltd', accountId: 'acct_4f2a9c', plan: 'person@example.com',
+    })
+    await routes.accounts.observe(reply)
+    const text = await (await routes.asPeer(ACCOUNT_ROUTES.accounts, device('locked-phone'))).text()
+    for (const value of ['person@example.com', 'Example Org Ltd', 'acct_4f2a9c']) expect(text).not.toContain(value)
   })
 })
