@@ -169,6 +169,28 @@ describe('a hand-off', () => {
     expect(text(result)).toContain('the session store is full')
   })
 
+  it('fails, asking nobody, when no agent calls the tool', async () => {
+    const { ctx, call, gate } = await stack()
+    const starts = watchStarts(ctx)
+    const result = await call(undefined, 'claude_code', { description: 'Task', prompt: 'Do it.' })
+    expect(result.isError).toBe(true)
+    expect(refusalText(result)).toContain('requires a calling agent')
+    expect(starts).not.toHaveBeenCalled()
+    expect(gate.asked).toEqual([])
+  })
+
+  it('fails, starting nothing, while no model service can resolve the route', async () => {
+    const { ctx, agent, call } = await stack()
+    const starts = watchStarts(ctx)
+    const lead = await agent('lead')
+    const get = ctx.get.bind(ctx) as (key: string) => unknown
+    vi.spyOn(ctx, 'get').mockImplementation(((key: string) => key === 'llm' ? undefined : get(key)) as typeof ctx.get)
+    const result = await call(lead, 'claude_code', { description: 'Task', prompt: 'Do it.' })
+    expect(result.isError).toBe(true)
+    expect(refusalText(result)).toContain('llm service is unavailable')
+    expect(starts).not.toHaveBeenCalled()
+  })
+
   it('may run beside the lead\'s other tool calls', async () => {
     const { ctx } = await stack()
     expect(ctx.tools.get('claude_code')?.isConcurrencySafe?.({ description: 'Task', prompt: 'Do it.' })).toBe(true)

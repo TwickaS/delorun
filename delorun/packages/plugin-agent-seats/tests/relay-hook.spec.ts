@@ -12,6 +12,7 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import { Config } from '../src/config.ts'
 import { seatRelay } from '../src/relay/index.ts'
 import type { SeatStateMount } from '../src/state/index.ts'
+import { captureWarnings } from './mount-support.ts'
 import { describeSeat } from './state/support.ts'
 
 interface Calls {
@@ -20,7 +21,7 @@ interface Calls {
 }
 
 /** A context with the approval service and a seat child, and the hook built over a stand-in state. */
-async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending: () => void, notice: () => void, approval: boolean }>) {
+async function hooked(state: Partial<{ recorded: (child: unknown, callId: string, signal: AbortSignal) => Promise<void>, setPending: () => void, notice: () => void, approval: boolean, pendingShown: boolean, provider: string }>) {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
   await ctx.plugin(SessionStore)
@@ -39,8 +40,8 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
   const mount = {
     records: { recorded: state.recorded ?? (() => Promise.resolve()) },
     store: {
-      viewOf: () => ({ pending: { since: 1 } }),
-      providerOf: () => 'claude-code-seat',
+      viewOf: () => ({ pending: state.pendingShown === false ? undefined : { since: 1 } }),
+      providerOf: () => state.provider ?? 'claude-code-seat',
       delegationPinned: () => false,
       notice: state.notice ?? ((notified: SessionId, kind: string, text: string) => { calls.notices.push({ child: notified, kind, text }) }),
     },
@@ -49,7 +50,7 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
   let approver: ReturnType<typeof seatRelay> | undefined
   await ctx.plugin(class {
     constructor(scope: Context) {
-      approver = seatRelay({ ctx: scope, state: mount, seatProviders: new Set(['claude-code-seat']), seats: Config(null).seats })
+      approver = seatRelay({ ctx: scope, state: mount, seatProviders: new Set(['claude-code-seat', 'custom-seat', 'ghost-seat']), seats: [...Config(null).seats, { ...Config(null).seats[0]!, provider: 'custom', route: 'custom-route', toolName: 'custom' }] })
     }
   })
   if (approver === undefined) throw new Error('the hook did not build')
@@ -93,5 +94,67 @@ describe('the relay hook', () => {
   it('still rejects when the notice cannot be logged', async () => {
     const w = await hooked({ approval: false, notice: () => { throw new Error('not loaded') } })
     await expect(w.approver(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+  })
+})
+
+describe('the relay hook beside a seat whose agent it has no title for', () => {
+  it('names the agent by its configured provider in the question', async () => {
+    const w = await hooked({ provider: 'custom-seat' })
+    const asked: string[] = []
+    w.ctx.on('approval/request', (request) => { asked.push(request.reason ?? ''); return new Promise<never>(() => {}) }, { prepend: true })
+    w.child.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('call-2'), name: 'custom.Bash', arguments: '{}' })
+    const stop = new AbortController()
+    const answer = w.approver(w.child, stop.signal)({ ...question(), callId: 'call-2' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(asked.join('\n')).toContain('custom')
+    stop.abort()
+    await answer
+  })
+})
+
+describe('the relay hook when the wait ends', () => {
+  it('swallows a ledger failure that comes after the wait was aborted', async () => {
+    const stop = new AbortController()
+    const w = await hooked({ recorded: (_child, _callId, signal) => new Promise<void>((_resolve, reject) => { signal.addEventListener('abort', () => { reject(new Error('aborted')) }) }) })
+    const answer = w.approver(w.child, stop.signal)(question())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    stop.abort()
+    await expect(answer).resolves.toBe('cancel')
+  })
+
+  it('does not clear a waiting question the seat state no longer shows', async () => {
+    const w = await hooked({ pendingShown: false })
+    const stop = new AbortController()
+    const answer = w.approver(w.child, stop.signal)(question())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    stop.abort()
+    await answer
+    expect(w.calls.pending).toEqual([expect.any(Number)])
+  })
+
+  it('reports a failure that is no Error when the waiting question cannot be shown', async () => {
+    const w = await hooked({ setPending: () => { throw 'plain text' } })
+    const warnings = captureWarnings(w.ctx)
+    const stop = new AbortController()
+    const answer = w.approver(w.child, stop.signal)(question())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    stop.abort()
+    await answer
+    expect(warnings.join('\n')).toMatch(/waiting question .* could not be shown.* plain text/)
+  })
+
+  it('reports a refusal notice failure that is no Error', async () => {
+    const w = await hooked({ approval: false, notice: () => { throw 'not loaded' } })
+    const warnings = captureWarnings(w.ctx)
+    await expect(w.approver(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(warnings.join('\n')).toMatch(/refused question .* could not be shown.* not loaded/)
+  })
+})
+
+describe('the relay hook given a seat provider no configured seat serves', () => {
+  it('rejects its question rather than guess a record name for it', async () => {
+    const w = await hooked({ provider: 'ghost-seat' })
+    const answer = w.approver(w.child, new AbortController().signal)(question())
+    await expect(answer).resolves.toBe('reject')
   })
 })

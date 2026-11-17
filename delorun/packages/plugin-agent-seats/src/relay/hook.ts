@@ -24,7 +24,6 @@ export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) =
   const seatOf = (child: Agent): SeatConfig => {
     const provider = state.store.providerOf(child.id)
     const seat = seats.find(candidate => seatProviderName(candidate.provider) === provider)
-    /* v8 ignore next -- seatProviders is built from the same seats, so a child the relay serves always has one */
     if (seat === undefined) throw new Error(`delorun-agent-seats: ${child.id} is no configured seat, so its calls have no record name`)
     return seat
   }

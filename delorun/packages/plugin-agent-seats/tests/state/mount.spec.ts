@@ -203,6 +203,11 @@ describe('the model pick', () => {
     await expect(loadModelChoices(join(w.dir, 'number.json'), () => undefined)).rejects.toThrow('must be a string')
   })
 
+  it('refuses a choices path it cannot read for a reason other than a missing file', async () => {
+    const w = await stateWorld()
+    await expect(loadModelChoices(w.dir, () => undefined)).rejects.toMatchObject({ code: 'EISDIR' })
+  })
+
   it('reports a pick it could not save and keeps it for this run', async () => {
     const w = await stateWorld()
     const { writeFile } = await import('node:fs/promises')
@@ -381,5 +386,74 @@ describe('the seatPrograms service', () => {
     await tick()
     expect(w.mount.programs.program(w.child)).toBe(w.adapter.runOf(w.child))
     await finishTurn(w, running)
+  })
+})
+
+describe('what the adapter reports about a program that cannot start', () => {
+  it('names Claude Code in the notice about an unresumable program of a chat with no seat view', async () => {
+    const w = await stateWorld()
+    const plain = w.ctx.sessions.create().header.id
+    w.mount.events.onTurnFailure?.(plain, { category: 'resume-failed' })
+    const [notice] = w.ctx.sessions.get(plain)?.snapshotEvents().flatMap((event) => {
+      const record = pluginRecordOf(event)
+      return record?.type === SEAT_NOTICE_RECORD ? [record.data] : []
+    }) ?? []
+    expect(notice).toMatchObject({ kind: expect.any(String), text: expect.stringContaining('Claude Code') })
+  })
+
+  it('leaves the chat as it was when a start fails while the chat is not "Starting"', async () => {
+    const w = await stateWorld()
+    const before = records(w, SEAT_STATUS_RECORD).length
+    w.mount.events.onStartFailed?.(w.child)
+    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+    expect(view(w)?.state).toBe('idle')
+  })
+
+  it('checks nothing after a resumed program starts when the chat is no seat view', async () => {
+    const w = await stateWorld({ tail: () => Promise.reject(new Error('must not read')) })
+    const plain = w.ctx.sessions.create().header.id
+    w.mount.store.write(plain, { programSessionId: 'program-1' })
+    w.mount.events.onStarting?.(plain, 'claude-code')
+    w.mount.events.onStarted?.(plain)
+    await tick()
+    expect(w.warnings).toEqual([])
+  })
+
+  it('checks nothing after a resumed program starts when the program session was dropped meanwhile', async () => {
+    const w = await stateWorld({ tail: () => Promise.reject(new Error('must not read')) })
+    w.mount.store.write(w.child, { programSessionId: 'program-1' })
+    w.mount.events.onStarting?.(w.child, 'claude-code')
+    w.mount.store.write(w.child, {})
+    w.mount.events.onStarted?.(w.child)
+    await tick()
+    expect(w.warnings).toEqual([])
+  })
+
+  it.each([
+    ['takes the plan\'s default model as the suggestion', [{ id: 'a', displayName: 'A', isDefault: false }, { id: 'b', displayName: 'B', isDefault: true }], 'b'],
+    ['suggests the first model when the plan marks no default', [{ id: 'a', displayName: 'A', isDefault: false }, { id: 'b', displayName: 'B', isDefault: false }], 'a'],
+    ['suggests the configured model when the plan offers none', [], 'configured-model'],
+  ] as const)('%s', (_label, offered, planDefault) => {
+    return stateWorld().then((w) => {
+      w.mount.events.onModelNotOffered?.({ child: w.child, provider: 'claude-code', configured: 'configured-model', offered })
+      expect(view(w)?.modelPicker?.planDefault).toBe(planDefault)
+    })
+  })
+
+  it('shows a reached limit without a reset time when the program gave none', async () => {
+    const w = await stateWorld()
+    w.mount.events.onTurnFailure?.(w.child, { category: 'limit' })
+    expect(view(w)).toMatchObject({ state: 'limit' })
+    expect(view(w)?.resetAt).toBeUndefined()
+  })
+
+  it.each([
+    ['a time limit', { category: 'time-limit', limitMs: 60_000 }],
+    ['a failed turn', { category: 'program', detail: 'boom' }],
+  ] as const)('changes nothing in the chat\'s state for %s', async (_label, failure) => {
+    const w = await stateWorld()
+    const before = records(w, SEAT_STATUS_RECORD).length
+    w.mount.events.onTurnFailure?.(w.child, failure)
+    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
   })
 })

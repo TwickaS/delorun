@@ -12,8 +12,9 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalRequest, ProgramRunRule } from '@delorun/external-agents/contract'
 import { appendDelegatedPolicyOverrides, captureDelegatedPolicyOverrides, foldSubagentDescriptor, SUBAGENT_DESCRIPTOR_VERSION } from '@deepseek-ai/dsh-subagent'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { assertMarked, EXTERNAL_AGENT_GRANT, RUN_ANSWER, SeatRelay } from '../src/relay/index.ts'
+import { captureWarnings } from './mount-support.ts'
 import { agentOf, question, RULE, settle, UnmountedRunScope, world, type World } from './relay-world.ts'
 
 
@@ -577,5 +578,182 @@ describe('Allow for this run', () => {
     await settle()
     w.answer('computer', 'allowed-once')
     await expect(second).resolves.toBe('allow-once')
+  })
+})
+
+describe('the relay beside things it does not own', () => {
+  it('leaves the step of a chat that is no seat to the rest of the loop', async () => {
+    const w = await world()
+    const next = vi.fn(() => Promise.resolve({}))
+    await w.ctx.waterfall('agent/pre-step', { agent: w.root, messages: [], turn: 1, step: 1, signal: new AbortController().signal } as never, next as never)
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('takes no chat for a seat while its descriptor is missing', async () => {
+    const w = await world()
+    w.descriptors.delete(w.child.id)
+    expect(w.relay.isSeat(w.child)).toBe(false)
+    expect(w.relay.prepareChild(w.child)).toBe('not-a-seat')
+  })
+
+  it('keeps nothing of a tool call made in a chat that is no seat', async () => {
+    const w = await world()
+    expect(() => { w.root.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('root-call'), name: 'claude_code.Bash', arguments: '{}' }) }).not.toThrow()
+    expect(w.events(w.root, 'approval/asked')).toEqual([])
+  })
+})
+
+describe('when a question cannot be decided', () => {
+  const bareQuestion = (signal?: AbortSignal) => question(signal === undefined ? {} : { signal })
+
+  it('cancels at once for a program whose question was withdrawn before it was asked', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const withdrawn = new AbortController()
+    withdrawn.abort()
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(bareQuestion(withdrawn.signal))).resolves.toBe('cancel')
+    expect(w.waiting).toHaveLength(0)
+  })
+
+  it('cancels, not rejects, a question whose asking failed after the program withdrew it', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const withdrawn = new AbortController()
+    vi.spyOn(w.ctx.approval, 'request').mockImplementation(() => { withdrawn.abort(); return Promise.reject(new Error('gone')) })
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(bareQuestion(withdrawn.signal))).resolves.toBe('cancel')
+  })
+
+  it.each([
+    ['an Error', new Error('the approval service broke'), 'the approval service broke'],
+    ['something that is no Error', 'plain text', 'plain text'],
+  ])('rejects, saying so in the log, when asking fails with %s', async (_label, failure, logged) => {
+    const w = await world()
+    const warnings = captureWarnings(w.ctx)
+    w.relay.prepareChild(w.child)
+    vi.spyOn(w.ctx.approval, 'request').mockRejectedValue(failure)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(warnings.join('\n')).toContain(logged)
+  })
+
+  it('rejects, saying so in the log, an outcome it does not know', async () => {
+    const w = await world()
+    const warnings = captureWarnings(w.ctx)
+    w.relay.prepareChild(w.child)
+    vi.spyOn(w.ctx.approval, 'request').mockResolvedValue('weird' as never)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(warnings.join('\n')).toContain('unexpected approval outcome: weird')
+  })
+})
+
+describe('Full access when its pieces are missing', () => {
+  it('asks as usual when the root chat is no longer loaded', async () => {
+    const w = await world('never')
+    w.relay.prepareChild(w.child)
+    vi.spyOn(w.ctx.agents, 'get').mockReturnValue(undefined)
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    expect(w.waiting).toHaveLength(1)
+    w.answer('computer', 'rejected')
+    await expect(result).resolves.toBe('reject')
+  })
+
+  it('asks as usual when the root has no policy of its own and the home\'s default is to ask', async () => {
+    const w = await world('never')
+    w.relay.prepareChild(w.child)
+    const own = w.ctx.approval.overrideOf.bind(w.ctx.approval)
+    vi.spyOn(w.ctx.approval, 'overrideOf').mockImplementation(session => session === w.root.session ? undefined : own(session))
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    expect(w.waiting).toHaveLength(1)
+    w.answer('computer', 'rejected')
+    await expect(result).resolves.toBe('reject')
+  })
+})
+
+describe('Full access with no consent service', () => {
+  it('rejects, failing closed, when the consent service is gone', async () => {
+    const w = await world('never')
+    w.relay.prepareChild(w.child)
+    w.ctx.set('delegationConsent', undefined as never)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(w.waiting).toHaveLength(0)
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
+  })
+})
+
+describe('a plugin that stops while a question waits', () => {
+  it('cancels the question', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    let relay: SeatRelay | undefined
+    const fiber = w.ctx.plugin(class {
+      constructor(scope: Context) {
+        relay = new SeatRelay(scope, {
+          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => `claude_code.${name}`, agentName: () => 'Claude Code', pinned: () => true,
+          recorded: (agent, callId) => {
+            agent.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId(callId), name: 'claude_code.Bash', arguments: '{}' })
+            return Promise.resolve()
+          },
+        }, new UnmountedRunScope())
+      }
+    })
+    await fiber.await()
+    const answer = relay?.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    expect(w.waiting).toHaveLength(1)
+    await fiber.dispose()
+    await expect(answer).resolves.toBe('cancel')
+  })
+})
+
+describe('several questions at once', () => {
+  it('tells that the seat waits from the first question until the last one is decided', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const changes: boolean[] = []
+    w.relay.onPendingChange((_child, waiting) => { changes.push(waiting) })
+    const first = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    const second = w.relay.onApproval(w.child, new AbortController().signal)(question({ callId: 'call-2' }))
+    await settle()
+    expect(w.waiting).toHaveLength(2)
+    expect(changes).toEqual([true])
+    w.answer('computer', 'rejected', 0)
+    await expect(first).resolves.toBe('reject')
+    expect([w.relay.pendingOf(w.child.id), changes]).toEqual([true, [true]])
+    w.answer('computer', 'rejected', 1)
+    await expect(second).resolves.toBe('reject')
+    expect([w.relay.pendingOf(w.child.id), changes]).toEqual([false, [true, false]])
+  })
+})
+
+describe('the log of Allow for this run when the consent service fails', () => {
+  it.each([
+    ['an Error', new Error('the rule list is gone'), 'the rule list is gone'],
+    ['something that is no Error', 'plain text', 'plain text'],
+  ])('says in the log that the allowance could not be logged when the service throws %s', async (_label, failure, logged) => {
+    const w = await world()
+    const warnings = captureWarnings(w.ctx)
+    w.relay.prepareChild(w.child)
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question({ runRule: RULE }))
+    await settle()
+    w.consent['runRules'] = () => { throw failure }
+    w.answer('computer', RUN_ANSWER)
+    await expect(result).resolves.toBe('allow-run')
+    await settle()
+    expect(warnings.join('\n')).toContain('the run allowance could not be logged')
+    expect(warnings.join('\n')).toContain(logged)
+    expect(w.child.session.snapshotEvents().filter(event => event.type === 'external-agent/run-allowed')).toEqual([])
+  })
+})
+
+describe('an answer that is no answer', () => {
+  it.each([['a word the home does not know', 'invented'], ['a value that is no word', 42]])('is unavailable, so the program is refused, for %s', async (_label, value) => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question({ runRule: RULE }))
+    await settle()
+    w.answer('computer', value)
+    await expect(result).resolves.toBe('reject')
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'unavailable' }])
   })
 })

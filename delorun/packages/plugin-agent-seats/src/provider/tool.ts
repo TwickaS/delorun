@@ -87,9 +87,9 @@ export function handOffTool(ctx: Context, seat: SeatConfig, provider: ExternalAg
     async execute(args, exec) {
       const parent = exec.agent
       if (!parent) throw new Error(`${seat.toolName} requires a calling agent (exec.agent was undefined)`)
-      const maxDepth = ctx.subagents.resolveMaxDepth(seat.maxDepth)
+      const { maxDepth } = seat
       const depth = delegationDepthOf(parent)
-      if (maxDepth !== undefined && depth >= maxDepth) throw new Error(depthRefusal(provider, depth, maxDepth))
+      if (depth >= maxDepth) throw new Error(depthRefusal(provider, depth, maxDepth))
       const limit = await ctx.externalAgents.limitRefusal(provider)
       if (limit !== undefined) throw new Error(limit)
       const llm = ctx.get('llm')
@@ -109,7 +109,7 @@ export function handOffTool(ctx: Context, seat: SeatConfig, provider: ExternalAg
           parent,
           agentPreset: seat.preset,
           agentOptions,
-          ...maxDepth === undefined ? {} : { maxDepth },
+          maxDepth,
           signal: exec.signal,
           delivery: 'parent',
         })

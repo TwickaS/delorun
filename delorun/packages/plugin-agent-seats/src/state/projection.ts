@@ -82,7 +82,8 @@ export function agentSeatProjection() {
       viewSchema,
       // The view depends only on what is shown, so a change of the program's session keeps the published reference.
       view: (state) => {
-        if (views.has(state.shown)) return views.get(state.shown) ?? null
+        const cached = views.get(state.shown)
+        if (cached !== undefined) return cached
         const value = viewOf(state.shown)
         views.set(state.shown, value)
         return value

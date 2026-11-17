@@ -5,7 +5,7 @@
 import { GateRefusedError, ProgramOpenError, type ProgramEvent } from '@delorun/external-agents/contract'
 import { describe, expect, it } from 'vitest'
 import { RESULT_DELIVERY_GUIDANCE } from '../../src/adapter/input.ts'
-import { agentMessage, CHILD, collect, finishOf, request, system, user, userBlocks, world, type World } from './support.ts'
+import { agentMessage, CHILD, collect, finishOf, request, system, toolResult, user, userBlocks, world, type World } from './support.ts'
 
 const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -179,6 +179,22 @@ describe('what the step streams', () => {
     expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([{ type: 'usage', usage: { inputTokens: 15, outputTokens: 5, cacheReadTokens: 3 } }])
   })
 
+  it('sums a figure that only one message reports, and omits one that none reports', async () => {
+    const w = world()
+    const chunks = await turn(w, [user('task')], [
+      { kind: 'message-end', usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 2 } },
+      { kind: 'turn-end', outcome: 'completed', usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 3 } },
+    ])
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([{ type: 'usage', usage: { inputTokens: 2, outputTokens: 2, cacheReadTokens: 2, cacheWriteTokens: 3 } }])
+  })
+
+  it('keeps streaming one text block while the program goes on with text', async () => {
+    const w = world()
+    const chunks = await turn(w, [user('task')], [{ kind: 'text', text: 'Hel' }, { kind: 'text', text: 'lo' }, { kind: 'turn-end', outcome: 'completed' }])
+    expect(chunks.map(chunk => chunk.type)).toEqual(['block-start', 'text-delta', 'text-delta', 'block-end', 'finish'])
+    expect(chunks.find(chunk => chunk.type === 'block-end')).toMatchObject({ block: { text: 'Hello' } })
+  })
+
   it('ends a step at the first message with tool calls and continues in the next request', async () => {
     const w = world()
     const task = user('task')
@@ -205,6 +221,16 @@ describe('Stop', () => {
     await expect(running).rejects.toThrow('stopped')
     expect(w.gate.latest.interrupts).toBe(1)
     expect(w.gate.latest.closed).toBe(false)
+  })
+
+  it('does not interrupt the program when reading its events fails for another reason', async () => {
+    const w = world()
+    const running = collect(w.adapter.stream(request([user('task')])))
+    await tick()
+    w.gate.latest.next = () => Promise.reject(new Error('the pipe broke'))
+    w.gate.latest.emit({ kind: 'text', text: 'x' })
+    await expect(running).rejects.toThrow('the pipe broke')
+    expect(w.gate.latest.interrupts).toBe(0)
   })
 
   it('drops what the program did before its turn ended, then sends the next message as a new turn', async () => {
@@ -319,6 +345,44 @@ describe('turns that cannot run or end in failure', () => {
     const w = world({ host: { cwd: () => undefined } })
     expect(finishOf(await collect(w.adapter.stream(request([user('task')]))))).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_FOLDER_UNKNOWN' } })
     expect(w.gate.starts).toEqual([])
+  })
+
+  it('lets a Stop that arrives while the input is sent end the request as a Stop', async () => {
+    const w = world()
+    const first = user('task')
+    await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
+    const controller = new AbortController()
+    w.gate.latest.send = () => { controller.abort(new Error('stopped')); return Promise.reject(new Error('closed')) }
+    await expect(collect(w.adapter.stream(request([first, user('more')], { signal: controller.signal })))).rejects.toThrow('closed')
+    expect(w.adapter.runOf(CHILD)).toBeDefined()
+    expect(w.gate.latest.closed).toBe(false)
+  })
+
+  it('hands the result of a harness tool the program called back to the host', async () => {
+    const delivered: Array<{ readonly callId: string, readonly output: string, readonly isError: boolean }> = []
+    const w = world({ host: { isHarnessCall: (_child, callId) => callId === 'harness-1', deliverHarnessResult: (_child, result) => { delivered.push(result) } } })
+    const first = user('task')
+    await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
+    const next = collect(w.adapter.stream(request([first, toolResult('harness-1', 'the answer'), toolResult('recorded-1', 'ls output'), user('go on')])))
+    await tick()
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    await next
+    expect(delivered).toEqual([{ callId: 'harness-1', output: 'the answer', isError: false }])
+    expect(w.gate.latest.sent.at(-1)?.text).toBe('go on')
+  })
+
+  it('starts the program without a model pick when the chat belongs to no workspace', async () => {
+    const w = world({ host: { workspaceOf: () => undefined } })
+    w.models.set('workspace-1', 'never-used')
+    await turn(w, [user('task')], [{ kind: 'turn-end', outcome: 'completed' }])
+    expect(w.gate.starts[0]?.model).toBeUndefined()
+  })
+
+  it('says the turn failed, without a reason, when the program reports a failed turn with none', async () => {
+    const w = world()
+    const chunks = await turn(w, [user('task')], [{ kind: 'turn-end', outcome: 'failed' }])
+    expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_FAILED' } })
+    expect(w.reports.failures).toEqual([{ child: CHILD, category: 'program' }])
   })
 
   it('ends the turn and drops the program when it no longer accepts input', async () => {

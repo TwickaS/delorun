@@ -79,8 +79,8 @@ export interface Stack {
   readonly gate: FakeGate
   /** Make a parked agent that is not a child: `depth` is its delegation depth. */
   agent(id: string, depth?: number): Promise<Agent>
-  /** Call a tool as an agent through the tool pipeline. */
-  call(agent: Agent, name: string, args: object): ReturnType<typeof executeToolFixture>
+  /** Call a tool as an agent, or with no calling agent, through the tool pipeline. */
+  call(agent: Agent | undefined, name: string, args: object): ReturnType<typeof executeToolFixture>
 }
 
 let counter = 0
@@ -139,7 +139,7 @@ export async function mountStack(options: { readonly flag?: boolean, readonly on
       callId: ToolCallId(`call-${++counter}`),
       name,
       arguments: args,
-      agent,
+      ...agent === undefined ? {} : { agent },
     }),
   }
 }

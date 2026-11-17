@@ -140,6 +140,15 @@ describe('the plugin with the preview flag on', () => {
   })
 })
 
+describe('a profile with no folder', () => {
+  it('refuses to mount, naming the missing folder, before registering anything', async () => {
+    FakeFlags.on = true
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    await expect(mountSeats(ctx, Config(null))).rejects.toThrow('this profile has none')
+  })
+})
+
 describe('the relay seam', () => {
   it('rejects a program\'s question while no relay is supplied', async () => {
     const { ctx } = await world(true)

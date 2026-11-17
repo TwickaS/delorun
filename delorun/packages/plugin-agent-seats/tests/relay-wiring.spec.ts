@@ -15,7 +15,7 @@ import { bindScopeParent, createScope } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime, { appendDelegatedPolicyOverrides } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import type { ProgramApprovalAnswer, SeatRecord, SeatSession, SeatStartRequest } from '@delorun/external-agents/contract'
+import type { ProgramApprovalAnswer, SeatLease, SeatLeaseEnd, SeatRecord, SeatSession, SeatStartRequest } from '@delorun/external-agents/contract'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as Plugin from '../src/index.ts'
 import { Config, mountSeats } from '../src/index.ts'
@@ -80,8 +80,14 @@ async function world(on: boolean, relay = true) {
   await ctx.plugin(FakeConnection)
   const waiting: Waiting[] = []
   ctx.on('approval/request', request => new Promise((resolve) => { waiting.push({ request, resolve }) }))
-  if (relay) await ctx.plugin(Plugin, Config(null))
-  else await mountSeats(ctx, Config(null))
+  let fiber: ReturnType<Context['plugin']> | undefined
+  let mounted: Awaited<ReturnType<typeof mountSeats>> | undefined
+  if (relay) {
+    fiber = ctx.plugin(Plugin, Config(null))
+    await fiber.await()
+  } else {
+    mounted = await mountSeats(ctx, Config(null))
+  }
   const options = { provider: 'claude-code-seat', model: 'program' }
   const root = (await ctx.agents.create({ sessionId: SessionId('root'), meta: { cwd: '/work' }, agentOptions: options })).agent
   setApprovalPolicy(root.session, 'ask')
@@ -105,7 +111,7 @@ async function world(on: boolean, relay = true) {
       if (event.agent === agent && event.status === 'idle') { dispose(); resolve() }
     })
   })
-  return { ctx, gate, root, child, waiting, idle }
+  return { ctx, gate, root, child, waiting, idle, fiber, mounted }
 }
 
 /** Hand the seat a task and let its program call `Bash` and raise a question about the call. */
@@ -233,6 +239,54 @@ describe('a program question on a seat child', () => {
     expect(w.child.session.snapshotEvents().flatMap(event => event.type === 'tool/call' ? [event.data.name] : [])).toEqual(['claude_code.Bash'])
     w.waiting[0]?.resolve('rejected' as never)
     await answer
+  })
+})
+
+describe('the program a seat opens', () => {
+  /** Hand the seat a task so its program opens, and make closing that program fail. */
+  async function openStuckProgram(w: Awaited<ReturnType<typeof world>>): Promise<void> {
+    w.child.followup(say('run the tests'))
+    await until(() => w.gate.programs.length === 1, 'the program')
+    w.gate.latest.close = () => Promise.reject(new Error('the program is stuck'))
+  }
+
+  it('starts with the model picked for the workspace that lists the chat', async () => {
+    const w = await world(true, false)
+    w.ctx.provide('workspaceRegistry', { list: () => [{ id: 'ws-1', sessionIds: [w.child.id] }] } as never)
+    w.mounted?.choices.set('ws-1', 'the-picked-model')
+    await w.mounted?.settled()
+    w.child.followup(say('run the tests'))
+    await until(() => w.gate.programs.length === 1, 'the program')
+    expect(w.gate.starts[0]).toMatchObject({ model: 'the-picked-model' })
+  })
+
+  it('starts with the model picked for the run folder when no workspace lists the chat', async () => {
+    const w = await world(true, false)
+    w.ctx.provide('workspaceRegistry', { list: () => [{ id: 'ws-other', sessionIds: [] }] } as never)
+    w.mounted?.choices.set('/work', 'the-folder-model')
+    await w.mounted?.settled()
+    w.child.followup(say('run the tests'))
+    await until(() => w.gate.programs.length === 1, 'the program')
+    expect(w.gate.starts[0]).toMatchObject({ model: 'the-folder-model' })
+  })
+
+  it('closes every open program when the plugin stops, and says when one will not close', async () => {
+    const w = await world(true)
+    const warnings = captureWarnings(w.ctx)
+    await openStuckProgram(w)
+    await w.fiber?.dispose()
+    await until(() => warnings.some(text => text.includes('a program did not close at shutdown: Error: the program is stuck')), 'the warning')
+  })
+
+  it('closes the program of a chat whose lease ended, and says when it will not close', async () => {
+    const w = await world(true)
+    const warnings = captureWarnings(w.ctx)
+    const listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
+    w.ctx.provide('delegationConsent', { onLeaseEnded: (listener: (lease: SeatLease, reason: SeatLeaseEnd) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } } } as never)
+    await openStuckProgram(w)
+    const lease: SeatLease = { child: w.child.id, root: w.root.id, workspace: 'w', cwd: '/work', provider: 'claude-code', workspaceListed: false, grantedAt: 0, why: 'asked' }
+    for (const listener of listeners) listener(lease, 'revoked')
+    await until(() => warnings.some(text => text.includes('did not close: Error: the program is stuck')), 'the warning')
   })
 })
 

@@ -260,3 +260,98 @@ describe('the seat fold', () => {
     expect(foldSeat(state, { type: 'step/start', seq: 5, time: 0, data: { turn: 1, step: 1 } } as SessionEvent)).toBe(state)
   })
 })
+
+describe('the logged program state', () => {
+  it('reads a program session without a cursor, and a cursor without a program session', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    expect(store.read(child)).toBeUndefined()
+    store.write(child, { programSessionId: 'program-1' })
+    expect(store.read(child)).toEqual({ programSessionId: 'program-1' })
+    store.write(child, { cursor: 'm1' })
+    expect(store.read(child)).toEqual({ cursor: 'm1' })
+  })
+
+  it('keeps the program\'s last message only for the program session it was read from', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    store.recordProgramMessage(child, 'last-1')
+    expect(store.stateOf(child).logged).toMatchObject({ programSessionId: null, cursor: null, programMessageId: 'last-1' })
+    store.write(child, { programSessionId: 'program-1', cursor: 'm1' })
+    store.recordProgramMessage(child, 'last-2')
+    store.write(child, { programSessionId: 'program-1', cursor: 'm2' })
+    expect(store.stateOf(child).logged).toMatchObject({ programSessionId: 'program-1', cursor: 'm2', programMessageId: 'last-2' })
+    store.write(child, { programSessionId: 'program-2' })
+    expect(store.stateOf(child).logged.programMessageId).toBeNull()
+  })
+
+  it('has no cursor to keep when it drops the program of a chat with no message yet', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    store.write(child, { programSessionId: 'program-1' })
+    store.clearProgram(child)
+    expect(store.read(child)).toBeUndefined()
+  })
+})
+
+describe('a question that waits while the seat shows a state with details', () => {
+  it.each([
+    ['a reached limit', 'limit', { resetAt: 1_790_000_000_000 }],
+    ['an ended seat', 'ended', { endedReason: 'The chat was archived.' }],
+    ['a model to pick', 'model-needed', { modelPicker: { offered: [{ id: 'a', label: 'A' }], planDefault: 'a' } }],
+  ] as const)('keeps the details of %s', async (_label, state, change) => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    store.setStatus(child, state, change)
+    store.setPending(child, 5)
+    expect(h.view()).toMatchObject({ state, pending: { since: 5 }, ...change })
+  })
+
+  it('refuses a chat that is not a seat child', async () => {
+    const h = await host()
+    expect(() => { new SeatRecords(h.ctx.sessions, h.handle).setPending(h.session.header.id, 5) }).toThrow('is not a seat child')
+  })
+})
+
+describe('records the log may hold in a shape the fold did not write', () => {
+  it('ignores a status record without a state', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working' })
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, {} as never)
+    expect(h.view()?.state).toBe('working')
+  })
+
+  it('skips an offered model that is not an object, and one with no name', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const modelPicker = { offered: [null, { id: 'a' }, { id: 'b', label: 'B' }], planDefault: 'b' }
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker } as never)
+    expect(h.view()?.modelPicker).toEqual({ offered: [{ id: 'b', label: 'B' }], planDefault: 'b' })
+  })
+
+  it('reads the last answer from the text of a message that also holds reasoning', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    h.session.append('turn/start', { turn: 1 })
+    h.assistant(1, [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text: 'Done.' }])
+    h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    expect(h.view()?.lastAnswer).toBe('Done.')
+  })
+
+  it('reads the same descriptor again without changing the seat', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const before = h.view()
+    describeSeat(h.session)
+    expect(h.view()).toEqual(before)
+  })
+})
