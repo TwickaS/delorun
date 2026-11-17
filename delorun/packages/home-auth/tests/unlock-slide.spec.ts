@@ -96,8 +96,8 @@ describe('which actions renew an unlock', () => {
   })
 
   it('keep the keepalives off the renewing list and the everyday state-changing steps on it', () => {
-    for (const action of ['terminal/retain', 'terminal/watch', 'terminal/list', 'mcpManager/watch', 'dynamicCordisRunner/reportRenderFailure']) expect(RENEWING_ACTIONS.has(action), action).toBe(false)
-    for (const action of ['terminal/create', 'terminal/attach', 'settings/update', 'pluginManager/setBundleEnabled', 'commands/execute', 'mcpManager/restart', 'workspace/create', 'session/create']) expect(RENEWING_ACTIONS.has(action), action).toBe(true)
+    for (const action of ['terminal/retain', 'terminal/attach', 'terminal/watch', 'terminal/list', 'mcpManager/watch', 'dynamicCordisRunner/reportRenderFailure']) expect(RENEWING_ACTIONS.has(action), action).toBe(false)
+    for (const action of ['terminal/create', 'settings/update', 'pluginManager/setBundleEnabled', 'commands/execute', 'mcpManager/restart', 'workspace/create', 'session/create']) expect(RENEWING_ACTIONS.has(action), action).toBe(true)
   })
 
   it('end the unlock at its original end when only reads and keepalives are polled past the slide minutes', async () => {
@@ -111,7 +111,7 @@ describe('which actions renew an unlock', () => {
       defaultPermission: () => undefined, dangerousMode: () => false,
     }
     const condition = createCondition(real, reachDevicePrincipal(deviceId, LISTENER))
-    const polled = ['terminal/list', 'terminal/watch', 'terminal/retain', 'mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
+    const polled = ['terminal/list', 'terminal/watch', 'terminal/retain', 'terminal/attach', 'mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
     for (let minute = 1; minute < 15; minute += 1) {
       served.clock.advance(MINUTE)
       for (const action of polled) expect(condition({ action: action as never, resource: { kind: 'global' }, args: {} }).kind, `${action} at ${String(minute)}`).toBe('allow')

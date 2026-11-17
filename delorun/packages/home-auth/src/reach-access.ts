@@ -446,7 +446,7 @@ export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
   'settings/mutate', 'settings/replace', 'settings/update', 'commands/execute',
   'pluginManager/cancelInstall', 'pluginManager/installBundle', 'pluginManager/removeBundle', 'pluginManager/setBundleEnabled',
   'pluginManager/setPluginEnabled', 'pluginManager/setVersionExemption', 'pluginManager/updateBundle', 'pluginManager/undo', 'pluginManager/restore',
-  'terminal/create', 'terminal/close', 'terminal/rename', 'terminal/attach',
+  'terminal/create', 'terminal/close', 'terminal/rename',
   'mcpManager/probe', 'mcpManager/restart',
   'directoryPicker/createDirectory', 'directoryPicker/pick',
   'workspace/create', 'session/create',
@@ -460,7 +460,7 @@ export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
  * covers every elevated action, which `tests/unlock-slide.spec.ts` checks, so a new action is classified on purpose.
  */
 export const ELEVATED_READS: ReadonlySet<string> = new Set([
-  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/retain',
+  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/retain', 'terminal/attach',
   'mcpManager/watch',
   'directoryPicker/list',
   'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
