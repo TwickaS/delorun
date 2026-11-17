@@ -1,5 +1,7 @@
 /** The update screens' copy: the sidebar's "Update now" opener, Settings → Updates, the report dialog, the progress card and the outcome card. */
 
+import { rollbackEn, rollbackZh } from './rollback-locales.ts'
+
 /** English dictionary. Plural pairs are chosen by count: `.one` for 1, `.other` otherwise. */
 export const en = {
   'nav': 'Updates',
@@ -141,6 +143,7 @@ export const en = {
   'reason.none': 'The attempt ended early.',
   'reload.notice': 'Delorun {version} is ready. Reloading this page.',
   'rollback.heading': 'Go back',
+  ...rollbackEn,
 } as const
 
 /** Every key of the update screens' dictionary. */
@@ -287,4 +290,5 @@ export const zh: typeof en = {
   'reason.none': '本次尝试提前结束。',
   'reload.notice': 'Delorun {version} 已就绪。正在重新加载本页。',
   'rollback.heading': '退回',
+  ...rollbackZh,
 }
