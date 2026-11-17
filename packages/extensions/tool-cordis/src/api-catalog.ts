@@ -5368,6 +5368,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'key', description: 'the credential record the finished attempt was authorizing.' }, { name: 'settlement', description: 'how it ended, including the `failed` case its caller sees as a thrown error.' }],
   },
   {
+    name: 'browser-use/admission-changed',
+    mode: 'parallel',
+    signature: '\'browser-use/admission-changed\'(session: Agent[\'session\']): Promise<void>',
+    summary: 'A Session\'s answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.',
+    description: 'A Session\'s answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.',
+    parameters: [{ name: 'session', description: 'the Session.' }],
+  },
+  {
     name: 'commands/change',
     mode: 'emit',
     signature: '\'commands/change\'(): void',

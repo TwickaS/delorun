@@ -240,6 +240,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   settingsShell: 'client-side Settings shell accessor — packages/client/ui-settings/README.md owns the API',
   sidebarLayout: 'client-side Sidebar layout registry — packages/client/ui-sidebar/README.md owns the API',
   permissionSwitchConsent: 'client-side optional consent before a permission switch — packages/client/ui-permission-presets/README.md owns the API',
+  browserUseAdmission: 'optional Session admission rule that only a Delorun plugin provides, outside this projection — packages/experimental/browser-use-playwright-mcp/src/index.ts documents the API',
 }
 
 /**
@@ -263,6 +264,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'commands': 'commands.md',
   'connection': 'web-server.md',
   'authenticator': 'web-server.md',
+  'browser-use': 'browser-use.md',
   'compaction': 'compaction.md',
   'cordis': 'extensions.md',
   'authorization': 'credentials.md',

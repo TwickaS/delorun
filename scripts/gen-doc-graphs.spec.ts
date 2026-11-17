@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import ts from 'typescript'
 import { afterAll, describe, expect, it } from 'vitest'
-import { collectPackageSources, EventRelationCollector, withMemoizedFileSystemProbes } from './gen-doc-graphs.ts'
+import { collectPackageSources, dispatchProblems, EventRelationCollector, withMemoizedFileSystemProbes } from './gen-doc-graphs.ts'
 import { TypeScriptProject } from './ts-project.ts'
 
 const FIXTURE: Record<string, string> = {
@@ -161,5 +161,31 @@ describe('memoized filesystem probes', () => {
     const memoized = withMemoizedFileSystemProbes(() => new TypeScriptProject(root))
     expect(memoized.sourceFiles().map(sourceFile => sourceFile.fileName))
       .toEqual(project.sourceFiles().map(sourceFile => sourceFile.fileName))
+  })
+})
+
+describe('event dispatch problems', () => {
+  const relation = (dispatcher?: string) => ({ dispatchers: new Map(dispatcher === undefined ? [] : [[dispatcher, new Set(['emit'])]]), listeners: new Set<string>() })
+
+  it('names a declared host event that nothing dispatches', () => {
+    expect(dispatchProblems([{ name: 'a/one', source: 'packages/a/a/src/index.ts' }], new Map(), {})).toEqual([
+      'no dispatcher found for declared event "a/one" — dead vocabulary, or a dispatch form the semantic scan misses (teach scripts/gen-doc-graphs.ts that form)',
+    ])
+  })
+
+  it('accepts a dispatched event, a client-declared one and one dispatched outside the Program', () => {
+    const events = [
+      { name: 'a/one', source: 'packages/a/a/src/index.ts' },
+      { name: 'b/two', source: 'packages/client/b/src/index.ts' },
+      { name: 'c/three', source: 'packages/c/c/src/index.ts' },
+    ]
+    expect(dispatchProblems(events, new Map([['a/one', relation('a')]]), { 'c/three': 'a Delorun plugin' })).toEqual([])
+  })
+
+  it('names an outside entry whose event is not declared or has a dispatcher in the Program as stale', () => {
+    const events = [{ name: 'a/one', source: 'packages/a/a/src/index.ts' }]
+    expect(dispatchProblems(events, new Map([['a/one', relation('a')]]), { 'a/one': 'x', 'z/gone': 'y' })).toEqual([
+      'DISPATCHED_OUTSIDE_PROGRAM names "a/one", "z/gone", which is not declared or now has a dispatcher in the Program; remove the stale entry',
+    ])
   })
 })
