@@ -12,6 +12,7 @@ import { arch, homedir, hostname, platform, release, type, userInfo } from 'node
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { parseRecord, Redactor, resolveSurface, surfaceFiles } from '@delorun/logs'
+import { gateByUnlock } from '@delorun/home-auth'
 import { harnessVersions } from './index.ts'
 import { REPORT_DEFAULTS, REPORT_ROUTE, type ReportDetails } from './client/report-api.ts'
 
@@ -156,7 +157,7 @@ export function detailsResponse(config: Config, where: { readonly home: string, 
 }
 
 /**
- * Mount the route once the Connection is up. It has no `admitPeer`, so an approved device is refused and only the computer reads the excerpt.
+ * Mount the route once the Connection is up. The excerpt can hold home paths, so a device reads it only while unlocked.
  * @param ctx - the row's scope.
  * @param config - the row's configuration.
  * @throws {TypeError} when `issueUrl` is not an https://github.com URL.
@@ -166,10 +167,10 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['connection'], (scope) => {
     scope.connection.fetch.register({
       path: REPORT_ROUTE, methods: ['GET'], requestBody: 'buffered',
-      fetch: () => {
+      ...gateByUnlock(() => scope.get('homeAuth'), () => {
         const profile = scope.get('profileContext')
         return Promise.resolve(detailsResponse(config, profile === undefined ? undefined : { home: profile.home, name: profile.name }))
-      },
+      }, { renews: false }),
     })
   })
 }

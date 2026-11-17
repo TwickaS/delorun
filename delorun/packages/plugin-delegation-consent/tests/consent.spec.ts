@@ -477,6 +477,8 @@ interface FakeConnection {
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>
   /** The route's `admitPeer` answer for a Peer principal. */
   readonly admits: (path: string, principal: object) => boolean
+  /** Run a route as a Peer: `admitPeer` first, then `fetch` with the same request, as the Connection does. */
+  readonly callAs: (path: string, principal: object, body: object) => Promise<Response>
 }
 
 /**
@@ -490,7 +492,7 @@ function routesOver(service: DelorunDelegationConsent, listener: string | undefi
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }>()
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }) => { routes.set(route.path, route) } } },
   }
   registerDelegationRoutes(ctx as never, service)
@@ -498,47 +500,67 @@ function routesOver(service: DelorunDelegationConsent, listener: string | undefi
     hook: (request, response, next) => hook!(request, response, next),
     fetch: async (path, init) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, init)),
     admits: (path, principal) => routes.get(path)?.admitPeer?.(new Request(`http://localhost${path}`), { principal }) === true,
+    callAs: async (path, principal, body) => {
+      const request = new Request(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body) })
+      const route = routes.get(path)!
+      if (route.admitPeer?.(request, { principal }) !== true) return new Response('forbidden', { status: 403 })
+      return route.fetch(request)
+    },
   }
 }
 
 describe('the routes', () => {
-  it('refuse a reach device with LOOPBACK_REQUIRED before any route runs, and let the computer through', async () => {
+  it('refuse a request the home cannot place, or a foreign Host on the loopback listener, and let the computer and a reach device through to the route', async () => {
     const { consent } = await mounted()
-    for (const listener of ['reach-tailscale-private', 'loopback'] as const) {
+    for (const [listener, host, expected] of [
+      ['loopback', '127.0.0.1:4500', true],
+      ['loopback', 'home.example.ts.net', false],
+      [undefined, '127.0.0.1:4500', false],
+      ['reach-tailscale-private', 'home.example.ts.net', true],
+    ] as const) {
       const routes = routesOver(consent, listener)
       for (const path of Object.values(DELEGATION_CONSENT_ROUTES)) {
         const answered: { status?: number, body?: string } = {}
         const response = { writeHead: (status: number) => { answered.status = status }, end: (body: string) => { answered.body = body } }
         let reached = false
-        await routes.hook({ url: path, headers: { host: listener === 'loopback' ? '127.0.0.1:4500' : 'home.example.ts.net' } }, response as never, async () => { reached = true })
-        expect({ listener, reached }).toEqual({ listener, reached: listener === 'loopback' })
-        if (listener !== 'loopback') expect(JSON.parse(answered.body ?? '{}')).toMatchObject({ error: 'LOOPBACK_REQUIRED' })
+        await routes.hook({ url: path, headers: { host } }, response as never, async () => { reached = true })
+        expect({ listener, host, reached }).toEqual({ listener, host, reached: expected })
+        if (!expected) expect(JSON.parse(answered.body ?? '{}')).toMatchObject({ error: 'LOOPBACK_REQUIRED' })
       }
-      let other = false
-      await routes.hook({ url: '/api/other', headers: { host: 'home.example.ts.net' } }, {} as never, async () => { other = true })
-      expect(other).toBe(true)
+    }
+    let other = false
+    await routesOver(consent, 'loopback').hook({ url: '/api/other', headers: { host: 'home.example.ts.net' } }, {} as never, async () => { other = true })
+    expect(other).toBe(true)
+  })
+
+  it('let any approved device read the grants and revoke one, and answer a locked device ELEVATION_REQUIRED on allow in either dangerous mode', async () => {
+    const { consent } = await mounted()
+    const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+    for (const mode of [false, true]) {
+      const routes = routesOver(consent, 'reach-tailscale-private', mode)
+      for (const path of [DELEGATION_CONSENT_ROUTES.grants, DELEGATION_CONSENT_ROUTES.revoke]) {
+        expect(routes.admits(path, device('locked-phone')), path).toBe(true)
+        expect(routes.admits(path, { kind: 'sdk' }), path).toBe(false)
+      }
+      const body = { sessionId: 'chat-1', provider: 'codex', confirmed: false }
+      // Pins the unlock check on the one route that grants an agent into a workspace.
+      const locked = await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('locked-phone'), body)
+      expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('unlocked-phone'), body)).status).not.toBe(403)
+      expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, { kind: 'sdk' }, body)).status).toBe(403)
     }
   })
 
-  it('let an unlocked device through only while dangerous mode holds, and refuse a locked device and another Peer at the peer check', async () => {
+  it('answers a device holding only the approval grace ELEVATION_REQUIRED on allow, and runs it after a code', async () => {
     const { consent } = await mounted()
+    const routes = routesOver(consent, 'reach-tailscale-private')
     const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
-    for (const path of Object.values(DELEGATION_CONSENT_ROUTES)) {
-      // Pins the mode check: the hook refuses the device before any route with the mode off.
-      const off = routesOver(consent, 'reach-tailscale-private', false)
-      const answered: { status?: number } = {}
-      let reachedOff = false
-      await off.hook({ url: path, headers: { host: 'home.example.ts.net' } }, { writeHead: (status: number) => { answered.status = status }, end: () => {} } as never, async () => { reachedOff = true })
-      expect({ path, reachedOff, status: answered.status }).toEqual({ path, reachedOff: false, status: 403 })
-      expect(off.admits(path, device('unlocked-phone'))).toBe(false)
-      const on = routesOver(consent, 'reach-tailscale-private', true)
-      let reached = false
-      await on.hook({ url: path, headers: { host: 'home.example.ts.net' } }, {} as never, async () => { reached = true })
-      expect({ path, reached }).toEqual({ path, reached: true })
-      expect(on.admits(path, device('unlocked-phone'))).toBe(true)
-      expect(on.admits(path, device('locked-phone'))).toBe(false)
-      expect(on.admits(path, { kind: 'sdk' })).toBe(false)
-    }
+    const body = { sessionId: 'chat-1', provider: 'codex', confirmed: false }
+    // Pins the grace exclusion: allowing an agent loosens a consent row.
+    const grace = await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('grace-phone'), body)
+    expect([grace.status, await grace.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('unlocked-phone'), body)).status).not.toBe(403)
+    expect(routes.admits(DELEGATION_CONSENT_ROUTES.revoke, device('grace-phone'))).toBe(true)
   })
 
   it('answer the service\'s calls and refusals', async () => {

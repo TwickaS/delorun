@@ -24,7 +24,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
-import { admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
 import { resolveDelorunHome } from '@delorun/home'
 import { AbstractSocketConsent } from './abstract-socket-consent.ts'
@@ -46,7 +46,7 @@ export const NETWORK_LIST_PATH = '/api/delorunNetwork.list'
 /** The route that changes one workspace's network. */
 export const NETWORK_SET_PATH = '/api/delorunNetwork.set'
 
-/** The action {@link requireComputerUnlessDangerous}'s refusal names for both routes. */
+/** The action {@link requireComputerOrDevice}'s refusal names for both routes. */
 const NETWORK_ACTION = 'Reading or changing a workspace\'s network'
 
 /** The largest request body {@link NETWORK_SET_PATH} reads. */
@@ -310,20 +310,19 @@ export class CommandNetwork extends Service {
 
   /**
    * Register the two routes. A request that did not arrive on the loopback listener under a loopback `Host` is
-   * refused before its body is read, so a device over reach neither reads nor changes a workspace's network, unless it
-   * holds an unlock while dangerous mode holds.
+   * placed at the computer or on a reach listener before its body is read; a device reads a workspace's network, and changes
+   * it only while it holds an unlock.
    * @param ctx - the context with the Connection.
    */
   private mountRoutes(ctx: Context): void {
     ctx.on('connection/request', async (request, response, next) => {
       const path = routedPathname(request.url)
-      if ((path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !requireComputerUnlessDangerous(request, response, ctx.get('homeAuth'), NETWORK_ACTION)) return
+      if ((path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), NETWORK_ACTION)) return
       await next()
     })
-    // The computer, or an unlocked device while dangerous mode holds.
-    const admitPeer = admitUnlockedDevice(() => ctx.get('homeAuth'))
-    ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', admitPeer, fetch: () => Promise.resolve(json(200, this.list())) })
-    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', admitPeer, fetch: request => this.handleSet(request) })
+    // Any approved device reads the network settings; changing one needs an unlock.
+    ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', admitPeer: admitApprovedDevice(), fetch: () => Promise.resolve(json(200, this.list())) })
+    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', ...gateByUnlock(() => ctx.get('homeAuth'), request => this.handleSet(request), { grace: false }) })
   }
 
   /**

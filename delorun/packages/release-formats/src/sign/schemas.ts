@@ -7,6 +7,8 @@
 import {
   DESKTOP_PLATFORMS,
   RELEASE_CHANNELS,
+  NPM_PACKAGE_NAME_PATTERN,
+  PACK_DOWNLOAD_MAX_BYTES,
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_SCHEMAS,
   RELEASE_SUMMARY_MAX_LENGTH,
@@ -172,6 +174,36 @@ export const FileListSchema = z.strictObject({
   files: z.array(z.strictObject({ path: z.string().min(1), length: z.number().int().min(0), sha256, mode: z.enum(['0644', '0755']) })),
 })
 
+const sha512 = z.string().regex(/^[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<Sha512Base64>(value))
+const npmName = z.string().max(214).regex(new RegExp(NPM_PACKAGE_NAME_PATTERN, 'u'))
+const packArchiveRef = fileRef.extend({ length: z.number().int().min(0).max(PACK_DOWNLOAD_MAX_BYTES), sha512 })
+const packFile = z.strictObject({ path: z.string().min(1), length: z.number().int().min(0), sha256, mode: z.enum(['0644', '0755']) })
+const packVariant = z.strictObject({
+  archive: packArchiveRef,
+  files: z.array(packFile),
+  peers: z.array(npmName),
+  external: z.array(z.strictObject({
+    name: npmName,
+    version,
+    url: z.string().regex(/^https:\/\/registry\.npmjs\.org\/[^?#\s]+\.tgz$/u),
+    sha512,
+    length: z.number().int().min(1).max(PACK_DOWNLOAD_MAX_BYTES),
+  })),
+})
+
+/** The signed content of the packs document: every pack of a release, bound to its manifest by digest. */
+export const PacksSchema = z.strictObject({
+  schema: z.literal(RELEASE_SCHEMAS.packs),
+  version,
+  manifest: sha256,
+  packs: z.array(z.strictObject({
+    name: npmName,
+    version,
+    experimental: z.boolean(),
+    variants: z.strictObject({ any: packVariant.exactOptional(), ...Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, packVariant.exactOptional()])) }),
+  })),
+})
+
 /** The content of a rebuild record, a plain JSON file that the manifest covers by its `rebuild.record` digest. */
 export const RebuildSchema = z.strictObject({
   schema: z.literal(RELEASE_SCHEMAS.rebuild),
@@ -193,6 +225,7 @@ const KINDS = {
   timestamp: { schema: TimestampSchema, limit: RELEASE_FILE_SIZE_LIMITS.timestamp },
   manifest: { schema: ManifestSchema, limit: RELEASE_FILE_SIZE_LIMITS.manifest },
   files: { schema: FileListSchema, limit: RELEASE_FILE_SIZE_LIMITS.files },
+  packs: { schema: PacksSchema, limit: RELEASE_FILE_SIZE_LIMITS.packs },
 } as const
 
 /** The content type of each envelope kind. */
@@ -201,6 +234,7 @@ export interface EnvelopeKinds {
   timestamp: TimestampMetadata
   manifest: ReleaseManifest
   files: RuntimeFileList
+  packs: z.output<typeof PacksSchema>
 }
 
 function problem(error: z.ZodError): string {

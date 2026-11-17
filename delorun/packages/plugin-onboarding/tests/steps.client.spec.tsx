@@ -5,7 +5,7 @@ import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
-import { ReadyStep } from '../src/client/steps/Ready.tsx'
+import { middleEllipsis, ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
@@ -704,7 +704,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', 'DeepSeek', undefined],
-      ['Look', 'Soft · Peach · System', undefined],
+      ['Look', 'Soft · System', undefined],
       ['Agents', 'Claude Code', undefined],
       ['Plugins', '1 added', undefined],
       ['Phone access', 'On', undefined],
@@ -739,7 +739,7 @@ describe('the ready step', () => {
   it('names the default look while the theme settings are still loading', async () => {
     ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
     await settle()
-    expect(rows()[1]).toEqual(['Look', 'Soft · Peach · System', undefined])
+    expect(rows()[1]).toEqual(['Look', 'Soft · System', undefined])
   })
 
   it('shows the default workspace once the dialog chose it', async () => {
@@ -822,5 +822,38 @@ describe('a set of chips', () => {
     await key(light, 'a')
     await key(group('Mode'), 'ArrowRight')
     expect(set).not.toHaveBeenCalled()
+  })
+})
+
+describe('what the guide shows after the audit', () => {
+  it('offers only the languages the guide has copy for, plus the active one', () => {
+    const locales = { active: 'en', revision: 1, locales: [{ id: 'en', label: 'English' }, { id: 'zh', label: '中文' }, { id: 'ja', label: '日本語' }] }
+    const store = createSnapshotStore(locales)
+    const face = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, setLocale: vi.fn() }
+    render(<WelcomeStep services={stepServices({ language: face })} guide={guideOf()} notice={undefined} />)
+    expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual(['English', '中文'])
+  })
+
+  it('shortens a long path in the middle and keeps its start and end', () => {
+    expect(middleEllipsis('/home/person/app')).toBe('/home/person/app')
+    const long = `/home/person/${'deeply/'.repeat(10)}project`
+    const shown = middleEllipsis(long)
+    expect(shown.length).toBeLessThan(long.length)
+    expect(shown.startsWith('/home/')).toBe(true)
+    expect(shown.endsWith('project')).toBe(true)
+    expect(shown).toContain('…')
+  })
+
+  it('reads one key state on Ready and Models: a found key the test could not reach is named, not called missing', async () => {
+    render(<ReadyStep services={stepServices()} guide={guideOf(hostFake({ keys: { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'unreachable' }] } }).host)} reach="absent" target={{ kind: 'none' }} keepCurrent={false} />)
+    await settle()
+    expect(screen.getByText('DeepSeek (key found, not checked)')).toBeTruthy()
+  })
+
+  it('says phone access is ready, and leaves out the command, when every Tailscale check passes', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(hostFake({ readiness: { ...READY, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } } }).host)} />)
+    await settle()
+    expect(screen.getByText(en['reach.ready'])).toBeTruthy()
+    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
   })
 })

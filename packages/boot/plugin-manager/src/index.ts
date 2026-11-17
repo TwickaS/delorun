@@ -50,7 +50,7 @@ import type {
   PackageResult, PluginChange, PluginEntryId, PluginInfo, PluginInstallCancellation, PluginInstallProgress, PluginInstallRequestId,
   PluginRegistries, PluginSpecInspection, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, Registry,
   RegistryAttempt, UpdateBundleOptions, PluginAudit, PluginAuditResult, ProfileChangedBy, ProfileHistoryInfo, ProfileVersion,
-  ProfileVersionId, ProfileVersionPreview,
+  ProfileVersionChanges, ProfileVersionId, ProfileVersionPreview,
   PluginOperation, PluginOperationId,
 } from './types.ts'
 export type * from './types.ts'
@@ -298,6 +298,12 @@ export function specPackageName(spec: string, dependencies: Readonly<Record<stri
   const specs = alternative === undefined ? [spec] : [spec, alternative]
   return Object.entries(dependencies).find(([dependency, saved]) => specs.includes(dependencySpec(dependency, saved, profileDir)))?.[0]
 }
+
+/** The diagnostic for a package the release publishes as a signed plugin pack and a registry or another source offers. */
+/** Why a version that holds a pack from another source is not restored. */
+const PACK_RESTORE = 'this version holds the plugin pack from a registry or another folder, not from its pack folder; remove the pack first, then add it again from Plugins.'
+
+const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it from Plugins or the setup guide, which downloads it from the release.'
 
 /** The package name a local directory declares, or `undefined` without a readable manifest. */
 function packageName(dir: string): string | undefined {
@@ -679,7 +685,26 @@ export class PluginManager extends TypertRemoteService {
       // Every failure of the history is a HistoryUnavailableError.
       return { ok: false, error: { code: 'history-unavailable', diagnostic: messageOf(error) } }
     }
-    return { ok: true, version: { version: held.id, summary: held.summary }, changes: profileVersionChanges(current, files) }
+    const changes = profileVersionChanges(current, files)
+    const pack = await this.packOutsideItsFolder(changes)
+    if (pack !== undefined) return { ok: false, error: { code: 'operation-error', diagnostic: `${pack}: ${PACK_RESTORE}` } }
+    return { ok: true, version: { version: held.id, summary: held.summary }, changes }
+  }
+
+  /**
+   * The first package a version would bring back or change whose spec is not its signed pack's folder, for a package
+   * the release publishes as a pack.
+   * @param changes - what the version changes.
+   * @returns the package name, or `undefined` when every pack the version holds is linked through its pack folder.
+   */
+  private async packOutsideItsFolder(changes: ProfileVersionChanges): Promise<string | undefined> {
+    const packs = this.ownerContext.get('packInstallTargets')
+    if (packs === undefined) return undefined
+    for (const plugin of changes.plugins) {
+      if (plugin.change === 'removed' || !await packs.isPack(plugin.name)) continue
+      if (dependencySpec(plugin.name, plugin.to, this.profile.dir) !== packs.linkSpec(plugin.name)) return plugin.name
+    }
+    return undefined
   }
 
   /** The managed files as they are now; an absent file reads as undefined. */
@@ -740,6 +765,8 @@ export class PluginManager extends TypertRemoteService {
     const { value: files } = await this.readHistory(() => this.versions.filesAt(version))
     const changes = profileVersionChanges(current, files)
     result.changes = changes
+    const pack = await this.packOutsideItsFolder(changes)
+    if (pack !== undefined) throw new ManagementFailure('operation-error', undefined, `${pack}: ${PACK_RESTORE}`)
     const provided = changes.plugins.flatMap(plugin => this.providedProtected(plugin.name))
     if (provided.length > 0) throw this.protectionFailure(provided)
     const rows = this.currentRows()
@@ -864,7 +891,13 @@ export class PluginManager extends TypertRemoteService {
       let target: Pick<BundleInfo, 'installTarget'> = {}
       let targetError: ManagementError | undefined
       if (offered !== undefined) {
-        try { target = { installTarget: officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) } }
+        try {
+          // A package the release publishes as a signed pack never has a registry target, installed or not.
+          const packs = this.ownerContext.get('packInstallTargets')
+          const pack = packs?.resolve(name, runtimeVersion)
+          if (pack === undefined && packs?.listed(name) === true) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
+          target = { installTarget: pack ?? officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) }
+        }
         catch (error) { targetError = managementError(error) }
       }
       const catalogMeta = offered === undefined ? {} : { meta: offered.meta }
@@ -1323,6 +1356,9 @@ export class PluginManager extends TypertRemoteService {
       const before = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
       // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       const known = specPackageName(spec, before, this.profile.dir)
+      // A package the release publishes as a signed pack installs only from its pack folder, never from a registry or another source.
+      const packs = this.ownerContext.get('packInstallTargets')
+      if (known !== undefined && packs !== undefined && await packs.isPack(known) && packs.linkSpec(known) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
       const provided = known === undefined ? [] : this.providedProtected(known)
       if (provided.length > 0) throw this.protectionFailure(provided)
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {
@@ -1336,6 +1372,9 @@ export class PluginManager extends TypertRemoteService {
       const files = await this.readRestoredFiles()
       // Read once, so the resolution and the installation below take the same path for the whole installation.
       const audited = this.ownerContext.get('pluginAudit') !== undefined
+      // With plugin packs composed, the package's name is read from a resolution that runs no script, as an audit's is.
+      const guarded = packs !== undefined
+      const twoPhase = audited || guarded
       let name: string
       let version: string | undefined
       try {
@@ -1386,10 +1425,10 @@ export class PluginManager extends TypertRemoteService {
           // With an audit, resolution only: no file is fetched into the profile and no script runs until it answered;
           // pnpm runs an approved git dependency's `prepare` even while it only resolves, unless scripts are ignored.
           // The expected package is checked on the run that installs it, so a resolution-only run carries no `expected`.
-          const resolveOnly = audited ? ['--lockfile-only', '--ignore-scripts'] : []
+          const resolveOnly = twoPhase ? ['--lockfile-only', '--ignore-scripts'] : []
           run = await this.runPnpm(
             ['add', installSpec, ...resolveOnly, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)],
-            control.abort.signal, requestId, audited || options?.expected === undefined ? {} : { expected: options.expected },
+            control.abort.signal, requestId, twoPhase || options?.expected === undefined ? {} : { expected: options.expected },
           )
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()
@@ -1434,9 +1473,12 @@ export class PluginManager extends TypertRemoteService {
         name = target
         const providedByTarget = this.providedProtected(name)
         if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
-        if (audited) {
+        // Whatever source the spec named, a package the release publishes as a pack installs only from its pack folder.
+        // The resolution ran no script and fetched nothing, so a refusal here leaves the files as they were.
+        if (packs !== undefined && await packs.isPack(name) && packs.linkSpec(name) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
+        if (twoPhase) {
           // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
-          await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install', result.registries)
+          if (audited) await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install', result.registries)
           const fetched = await this.runPnpm(['install', '--frozen-lockfile', ...registryArguments(used)], control.abort.signal, requestId, {
             baseline: { manifest: files.get(join(this.profile.dir, 'package.json')), lockfile: files.get(join(this.profile.dir, 'pnpm-lock.yaml')) },
             ...options?.expected === undefined ? {} : { expected: options.expected },

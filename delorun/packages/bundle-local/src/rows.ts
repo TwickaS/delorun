@@ -178,6 +178,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no listener or guard holds plugin_manager back, so it installs and removes as upstream does, behind its own approval.' },
   },
   {
+    id: 'delorun-packs',
+    kind: 'added',
+    reason: 'Plugin packs: plugins outside the default install download from the release channel, verify against the release\'s signed packs file and load through the plugin manager, from one Host install queue that survives a reload; the `packs` remote lists and changes that queue.',
+    parity: { kind: 'disabled', reason: 'Nothing in upstream calls the plugin; without the row no `packs` remote exists and every plugin install runs through the plugin manager as upstream does.' },
+  },
+  {
     id: 'delorun-workspace-rename',
     kind: 'added',
     reason: 'The C16 switch `rename_workspace_tool` on: the agent has a `rename_workspace` tool that renames a workspace through the workspace registry, the way the studio\'s rename does, after the person allows it; the plugin\'s own default, off, is the parity value.',
@@ -206,6 +212,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'Setup versions in Settings: the profile history\'s versions are listed and compared for any signed-in studio, and saving the setup or switching to a version is answered only on the loopback listener, at the home\'s computer; upstream has no such page.',
     parity: { kind: 'disabled', reason: 'Stock offers no version page, and a disabled row mounts nothing: no route.' },
+  },
+  {
+    id: 'delorun-requirements',
+    kind: 'added',
+    reason: 'Needs setup in Plugins: one read-only route tells the studio which rows of an optional bundle need a program, a setting or a platform they lack, from the bundle\'s own declaration; it changes nothing and upstream has no such state.',
+    parity: { kind: 'disabled', reason: 'Stock Plugins has no needs-setup state, and a disabled row mounts nothing: no route.' },
   },
   {
     id: 'delorun-report',

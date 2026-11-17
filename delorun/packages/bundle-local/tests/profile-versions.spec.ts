@@ -30,6 +30,7 @@ interface FakeConnection {
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>
   /** Whether the Connection's peer gate admits a reach device to the route; owners always pass. */
   readonly admitsReachDevice: (path: string) => boolean
+  readonly asDevice: (path: string, deviceId: string) => Promise<Response>
 }
 
 /** Register the routes on a fake Connection whose `homeAuth` places every request on one listener. */
@@ -38,14 +39,20 @@ function routesOver(service: ProfileVersions, listener: string | undefined): Fak
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: never) => boolean }>()
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: never) => boolean }) => { routes.set(route.path, route) } } },
   }
   registerVersionRoutes(ctx as never, service)
   return {
     hook: (request, response, next) => hook!(request, response, next),
     fetch: async (path, init) => routes.get(path.split('?')[0]!)!.fetch(new Request(`http://localhost${path}`, init)),
-    admitsReachDevice: path => routes.get(path)?.admitPeer?.(new Request(`http://localhost${path}`), { principal: { kind: 'reach-device' } } as never) === true,
+    admitsReachDevice: path => routes.get(path)?.admitPeer?.(new Request(`http://localhost${path}`), { principal: { kind: 'reach-device', deviceId: 'locked-phone', listener: 'reach-tailscale-private' } } as never) === true,
+    asDevice: async (path, deviceId) => {
+      const request = new Request(`http://localhost${path}`, { method: 'POST', body: '{}' })
+      const route = routes.get(path)!
+      if (route.admitPeer?.(request, { principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } } as never) !== true) return new Response('forbidden', { status: 403 })
+      return route.fetch(request)
+    },
   }
 }
 
@@ -63,18 +70,25 @@ const READS = [PROFILE_VERSION_ROUTES.list, PROFILE_VERSION_ROUTES.changes]
 const STUDIO = { host: '127.0.0.1:4500', origin: 'http://127.0.0.1:4500', 'sec-fetch-site': 'same-origin' }
 
 describe('the Setup versions routes', () => {
-  it('refuse a reach session saving or switching with LOOPBACK_REQUIRED before any route runs', async () => {
+  it('let a reach session through the hook to the unlock check, and refuse a foreign origin from it', async () => {
     const routes = routesOver(stubService().service, 'reach-tailscale-private')
     for (const path of WRITES) {
-      const outcome = await through(routes, { url: path, headers: { host: 'home.example.ts.net', origin: 'https://home.example.ts.net' } })
-      expect(outcome).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect(await through(routes, { url: path, headers: { host: 'home.example.ts.net', origin: 'https://home.example.ts.net' } })).toEqual({ reached: true })
+      for (const headers of [{ host: 'home.example.ts.net', origin: 'https://evil.example' }, { host: 'home.example.ts.net', 'sec-fetch-site': 'cross-site' }]) {
+        expect(await through(routes, { url: path, headers })).toMatchObject({ reached: false, status: 403, body: { error: 'FOREIGN_ORIGIN' } })
+      }
     }
   })
 
-  it('admit a signed-in reach device to the list and the differences, and to neither save nor switch', () => {
+  it('admit a signed-in reach device to every route, and answer a locked one ELEVATION_REQUIRED on save and switch', async () => {
     const routes = routesOver(stubService().service, 'reach-tailscale-private')
-    for (const path of READS) expect(routes.admitsReachDevice(path), path).toBe(true)
-    for (const path of WRITES) expect(routes.admitsReachDevice(path), path).toBe(false)
+    for (const path of [...READS, ...WRITES]) expect(routes.admitsReachDevice(path), path).toBe(true)
+    for (const path of WRITES) {
+      // Pins the unlock check: a locked device is admitted to the route and refused by it.
+      const locked = await routes.asDevice(path, 'locked-phone')
+      expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      expect((await routes.asDevice(path, 'unlocked-phone')).status).not.toBe(403)
+    }
   })
 
   it('refuse a request the home cannot place on a listener', async () => {
@@ -105,9 +119,9 @@ describe('the Setup versions routes', () => {
   })
 
   it('refuse a spelling of the target that reaches the route as the exact path does', async () => {
-    const routes = routesOver(stubService().service, 'reach-tailscale-private')
+    const routes = routesOver(stubService().service, 'loopback')
     for (const url of ['/api/x/../delorunVersions.switch', '/api/%2e%2e/api/delorunVersions.save', '/api\\delorunVersions.switch?x=1']) {
-      expect(await through(routes, { url, headers: { host: 'home.example.ts.net' } })).toMatchObject({ reached: false, status: 403 })
+      expect(await through(routes, { url, headers: { host: 'home.example.ts.net' } })).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     }
   })
 

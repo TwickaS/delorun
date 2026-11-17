@@ -17,7 +17,7 @@ import { BRAND_NAME, DelorunBrandMark } from './brand.tsx'
 import css from './PinLock.module.css'
 
 /** Props of the `shell.overlay` entry: the store's view, its unlock action and the lock screen's copy. */
-export type PinLockProps = PropsLocale<'delorunPin'> & InjectFace<Pick<PinSource, 'hooks' | 'unlock'>>
+export type PinLockProps = PropsLocale<'delorunPin'> & InjectFace<Pick<PinSource, 'hooks' | 'unlock' | 'dismiss'>>
 
 type Translate = PinLockProps['t']
 
@@ -63,15 +63,15 @@ function reducedMotion(): boolean {
 }
 
 /**
- * Render the lock screen while the page is locked.
+ * Render the lock screen while the page is locked and an action asked for the unlock.
  * @param props - the store's view, its unlock action and the copy.
  * @returns the lock screen, or nothing while the page is unlocked or PIN mode does not apply.
  */
-export function PinLock({ usePin, unlock, t }: PinLockProps): ReactNode {
+export function PinLock({ usePin, unlock, dismiss, t }: PinLockProps): ReactNode {
   const view = usePin(current => current)
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const locked = view.phase === 'locked'
+  const locked = view.phase === 'locked' && view.asked
   const removed = view.outcome?.kind === 'removed'
   const isPin = view.secret === 'pin'
   // A phone keeps its keypad on screen; a pointer device types straight away.
@@ -120,6 +120,7 @@ export function PinLock({ usePin, unlock, t }: PinLockProps): ReactNode {
           {isPin ? <Keypad onKey={press} deleteLabel={t('key.delete')} disabled={view.busy} /> : null}
           <Button variant="primary" type="submit" className={css.submit} disabled={!ready}>{t(view.busy ? 'unlocking' : 'unlock')}</Button>
         </>}
+      <Button variant="outline" type="button" className={css.submit} disabled={view.busy} onClick={dismiss}>{t(removed ? 'close' : 'notNow')}</Button>
     </form>
   </div>
 }

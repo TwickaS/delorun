@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
 import { CommandRow } from '../ui/CommandRow.tsx'
+import { StateLine } from '../ui/StateLine.tsx'
 import { useStore, type StepProps } from './shared.ts'
 import more from './reach.module.css'
 import css from './steps.module.css'
@@ -67,8 +68,9 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
   const tailscale = readiness.status === 'ready' ? readiness.value.tailscale : undefined
   return (
     <div className={css.stack}>
-      <p className={css.lead}>{t('reach.lead')}</p>
-      <CommandRow command={REACH_COMMAND} t={t} />
+      {tailscale?.state === 'ready'
+        ? <StateLine tone="success">{t('reach.ready')}</StateLine>
+        : <><p className={css.lead}>{t('reach.lead')}</p><CommandRow command={REACH_COMMAND} t={t} /></>}
       <details className={more.details}>
         <summary className={more.summary}>{t('reach.more')}</summary>
         <div className={more.more}>

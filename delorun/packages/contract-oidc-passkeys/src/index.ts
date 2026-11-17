@@ -171,6 +171,7 @@ export const ELEVATION_LIMITS = {
  * - `device-removed`: the device was removed.
  * - `listener-stopped`: remote access stopped serving the listener.
  * - `home-stopped`: the Host stopped.
+ * - `grace-ended`: the device finished its first-run setup, which ends the unlock a new device starts with.
  */
 export const ELEVATION_END_REASONS = [
   'expired',
@@ -184,6 +185,7 @@ export const ELEVATION_END_REASONS = [
   'pin-changed',
   'pin-mode-off',
   'token-refused',
+  'grace-ended',
 ] as const
 
 /** One reason of {@link ELEVATION_END_REASONS}. */
@@ -193,12 +195,13 @@ export type ElevationEndReason = (typeof ELEVATION_END_REASONS)[number]
  * What a device's own studio shows about elevation: nothing, a request waiting with the code to read out at the
  * computer, or an elevation and its end, in milliseconds since the epoch. `unlockMinutes` is how long an unlock on
  * the device's listener lasts once the computer approves one: a setting, not a secret, so it shows before any unlock.
+ * An `elevated` state with `reason: 'approval-grace'` is the unlock a newly approved device starts with on its first sign-in.
  * A home that predates the field omits it.
  */
 export type ElevationState =
   | { readonly kind: 'none'; readonly unlockMinutes?: number }
   | { readonly kind: 'pending'; readonly requestId: string; readonly code: string; readonly expiresAt: number; readonly unlockMinutes?: number }
-  | { readonly kind: 'elevated'; readonly elevationId: string; readonly endsAt: number }
+  | { readonly kind: 'elevated'; readonly elevationId: string; readonly endsAt: number; readonly reason?: 'approval-grace' }
 
 /** Limits of this contract. */
 export const IDENTITY_LIMITS = {

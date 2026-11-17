@@ -39,6 +39,7 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', ELEVATION_PATHS.state],
   ['exact', ELEVATION_PATHS.request],
   ['exact', ELEVATION_PATHS.lock],
+  ['exact', ELEVATION_PATHS.endGrace],
   ['exact', ELEVATION_PATHS.pending],
   ['exact', ELEVATION_PATHS.approve],
   ['exact', ELEVATION_PATHS.revoke],

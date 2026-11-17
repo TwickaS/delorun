@@ -11,6 +11,7 @@
     "src/config.ts",
     "src/wire.ts",
     "src/answers.ts",
+    "src/deferred.ts",
     "src/workspace-route.ts",
     "src/agent-models.ts",
     "src/clone.ts",

@@ -125,6 +125,7 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delorun.release-files': null,
   'delorun.release-log-bundle': null,
   'delorun.release-manifest': null,
+  'delorun.release-packs': null,
   'delorun.release-rebuild': null,
   'delorun.release-root': null,
   'delorun.release-timestamp': null,

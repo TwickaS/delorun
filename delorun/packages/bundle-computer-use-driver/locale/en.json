@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Computer use (Cua Driver)",
+    "description": "Lets the agent see and operate desktop windows on Linux and Windows through the Cua Driver SDK. macOS has Computer use"
+  }
+}

@@ -57,10 +57,13 @@ export function AddableCard({ services, state, reason, title, icon, description,
       line = <StateLine tone="loading">{t('bundle.checking')}</StateLine>
       break
     case 'available':
-      action = <Button variant="outline" size="sm" aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
+      action = <Button variant="outline" size="sm" className={css.inline} aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
       break
     case 'installing':
       line = <StateLine tone="loading">{t('bundle.adding')}</StateLine>
+      break
+    case 'offline':
+      line = <StateLine tone="info">{t('bundle.offline')}</StateLine>
       break
     case 'slow':
       line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>

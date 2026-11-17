@@ -86,7 +86,7 @@ function ModelChoice({ agent, form, live, added, services, title }: {
         ))}
       </div>
       {note !== undefined && <span className={css.hint} role="status">{note}</span>}
-      {retry && <Button variant="outline" size="sm" onClick={() => { setAttempt(each => each + 1) }}>{t('agents.model.retry')}</Button>}
+      {retry && <Button variant="outline" size="sm" className={css.inline} onClick={() => { setAttempt(each => each + 1) }}>{t('agents.model.retry')}</Button>}
     </div>
   )
 }

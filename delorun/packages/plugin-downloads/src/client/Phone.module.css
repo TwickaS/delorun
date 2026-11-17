@@ -1,0 +1,168 @@
+/* The quiet row: muted text, a thin grey line, no accent. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-2);
+  width: 100%;
+  padding-bottom: var(--delorun-space-3);
+}
+
+.list {
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: var(--delorun-space-3) 0;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-3);
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  text-align: left;
+  cursor: pointer;
+}
+
+.line:focus-visible,
+.icon:focus-visible,
+.close:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+  outline-offset: 2px;
+}
+
+.text {
+  flex: 1;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neutral {
+  display: inline-flex;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.thin {
+  display: block;
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.thin > span {
+  display: block;
+  height: 100%;
+  background: var(--dsw-alias-label-tertiary);
+  transition: width 0.3s ease-out;
+}
+
+/* The header icon and the bottom sheet. */
+.icon {
+  position: fixed;
+  top: max(var(--delorun-space-4), env(safe-area-inset-top));
+  right: var(--delorun-space-4);
+  z-index: 1050;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-bg-layer-1);
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1060;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 30%);
+  pointer-events: auto;
+}
+
+.sheet {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--delorun-space-6);
+  padding-bottom: max(var(--delorun-space-6), env(safe-area-inset-bottom));
+  border-radius: var(--dsw-radius-lg) var(--dsw-radius-lg) 0 0;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  animation: sheet-in 0.22s ease-out;
+}
+
+.sheetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--delorun-space-5);
+}
+
+.sheetTitle {
+  font-size: var(--dsw-font-s-14-font-size);
+  font-weight: 500;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+
+  .thin > span {
+    transition: none;
+  }
+}

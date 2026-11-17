@@ -24,6 +24,12 @@ describe('the paths a signed-in device reaches', () => {
     expect(reachesDevicePath('/index.html')).toBe(false)
     expect(reachesDevicePath('/delorun/reach/status')).toBe(true)
     expect(reachesDevicePath('/delorun/reach/status/more')).toBe(false)
+    expect(reachesDevicePath('/delorun/changes/state')).toBe(true)
+    expect(reachesDevicePath('/delorun/changes/setup-export')).toBe(true)
+    expect(reachesDevicePath('/delorun/changesx/state')).toBe(false)
+    expect(reachesDevicePath('/delorun/branding/icon')).toBe(true)
+    expect(reachesDevicePath('/delorun/branding/icon/x')).toBe(false)
+    expect(reachesDevicePath('/delorun/branding')).toBe(false)
     expect(reachesDevicePath('/favicon.svg.map')).toBe(false)
     // Pins the ICO as an install file: browsers ask for it on their own, and a refused request leaves a stale icon cached.
     expect(reachesDevicePath('/favicon.ico')).toBe(true)

@@ -39,6 +39,8 @@ export interface UpdateSupportOptions {
    * ([release check](./release-check.ts)); none when absent.
    */
   readonly preLaunch?: HomeRuntimeStoreOptions['preLaunch']
+  /** Installs the target's plugin packs before an update switches; none when absent. */
+  readonly carryPacks?: HomeRuntimeStoreOptions['carryPacks']
   /** Opens the release channel of one prepare. */
   readonly openChannel: OpenUpdateChannel
   /** The report's sources. */
@@ -273,6 +275,7 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     root: options.root,
     fullCheckDays: options.fullCheckDays,
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
+    ...options.carryPacks === undefined ? {} : { carryPacks: options.carryPacks },
     report: { build: async (version, purpose) => buildFromSources('cli-home', options.sources, version, purpose) },
   }, options.home)
   return {

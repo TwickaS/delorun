@@ -29,7 +29,7 @@ export type StoreLayoutCode = Extract<HomeLayoutErrorCode, 'STORE_BUSY' | 'NO_AC
 export type RuntimeStoreErrorCode = StoreLayoutCode | 'NO_PREVIOUS' | 'RUNTIME_CHANGED' | 'POINTER_CHANGED' | 'NOT_INSTALLED' | 'ROOT_NOT_ANCHORED' | 'TARGET_LOWER'
 
 /** What the launcher offers after a refused start. */
-export type RuntimeRemedy = 'reinstall' | 'rollback' | 'update' | 'launcher-update'
+export type RuntimeRemedy = 'reinstall' | 'rollback' | 'update' | 'launcher-update' | 'recover-packs'
 
 /** A refusal or failure of the runtime store. */
 export class RuntimeStoreError extends Error {

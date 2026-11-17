@@ -9,7 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import type { Context } from '@deepseek-ai/cordis'
-import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   boot, composeEntries, initProfile, loadProfileDirectory, readProfilePatches, readProfileManifest,
   reconcileProfilePatches, PluginPackages, readPluginMeta, getDshRuntimeVersion,
@@ -3074,4 +3074,118 @@ it('refuses an update whose target does not match where the copy was installed f
   expect(pnpm).not.toHaveBeenCalled()
   expect(view).not.toHaveBeenCalled()
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+describe('a package the release publishes as a signed pack', () => {
+  const targets = (listed: boolean, installed?: string) => (ctx: Context) => {
+    ctx.provide('packInstallTargets', {
+      resolve: (_name: string, version: string) => installed === undefined ? undefined : { spec: installed, version },
+      linkSpec: () => 'link:/home/packs/current/pack/package',
+      listed: () => listed,
+      isPack: () => Promise.resolve(listed),
+    })
+  }
+
+  it('has no registry install target while it is not installed, and says it is a pack', async () => {
+    const { manager } = await fixture('live', false, targets(true), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    const listed = (await manager.listBundles()).find(item => item.name === name)
+    expect(listed?.installTarget).toBeUndefined()
+    expect(listed?.error).toMatchObject({ code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) })
+  })
+
+  it('offers the link to the installed pack and nothing else', async () => {
+    const { manager } = await fixture('live', false, targets(true, 'link:/home/packs/current/pack/package'), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    expect((await manager.listBundles()).find(item => item.name === name)?.installTarget).toEqual({ spec: 'link:/home/packs/current/pack/package', version: getDshRuntimeVersion() })
+  })
+
+  it('keeps the usual target for a package the release does not publish as a pack', async () => {
+    const { manager } = await fixture('live', false, targets(false), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    expect((await manager.listBundles()).find(item => item.name === name)?.error?.diagnostic ?? '').not.toMatch(/signed plugin pack/u)
+  })
+
+  it('refuses a registry install of a pack, whoever asks, before pnpm runs', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = readFileSync(join(dir, 'package.json'), 'utf8')
+    const result = await manager.installBundle('@delorun/bundle-browser@0.1.0')
+    expect(result).toMatchObject({ application: 'failed', changed: false })
+    expect(result.error).toMatchObject({ code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) })
+    expect(pnpm).not.toHaveBeenCalled()
+    expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+  })
+  it.each([
+    ['a tarball', 'https://example.test/listed-pack-1.0.0.tgz'],
+    ['a Git repository', 'github:acme/listed-pack'],
+    ['an npm alias', 'npm:listed-pack@1.0.0'],
+    ['another folder', 'link:../elsewhere/listed-pack'],
+  ])('refuses %s that turns out to be a pack, after a resolution that runs no script', async (_kind, spec) => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const calls: string[][] = []
+    const marker = join(dir, 'install-script-ran')
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      calls.push([...args])
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, 'listed-pack': spec }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else writeFileSync(marker, 'ran')
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    const result = await manager.installBundle(spec)
+    expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) } })
+    // Only a resolution may have run: the install, which runs scripts, never does.
+    expect(calls.every(call => call[0] === 'add' && call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
+    expect(existsSync(marker)).toBe(false)
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('lets the pack\'s own folder through the same resolution', async () => {
+    const { manager, dir, bundle } = await fixture('live', false, targets(true))
+    const spec = 'link:/home/packs/current/pack/package'
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, 'listed-pack': spec }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else bundle('listed-pack', [])
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    expect(await manager.installBundle(spec, { enabled: false })).toMatchObject({ application: 'applied' })
+    expect(pnpm.mock.calls.map(call => call[1].slice(0, 1))).toEqual([['add'], ['install']])
+  })
+
+  it.each([
+    ['a registry spec', '1.0.0'],
+    ['a pack folder of an older release', 'link:/home/packs/0.0.9/pack/package'],
+  ])('refuses to restore a version that holds a pack as %s, changing no file', async (_kind, recorded) => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': recorded } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    const version = held.versions[0]!.id
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    expect(await manager.previewRestore(version)).toMatchObject({ ok: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack.*remove the pack first/u) } })
+    expect(await manager.restore(version)).toMatchObject({ application: 'failed', error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack/u) } })
+    expect(pnpm).not.toHaveBeenCalled()
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('restores a version whose pack is linked through its pack folder', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    expect(await manager.previewRestore(held.versions[0]!.id)).toMatchObject({ ok: true })
+  })
 })
