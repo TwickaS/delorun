@@ -13,7 +13,7 @@ import type { ThemeCopy } from './shell-copy.ts'
 const ThemeMenu = lazy(() => import('./theme-menu.tsx'))
 
 /** The button that opens the menu. */
-const TRIGGER = 'flex size-9 items-center justify-center rounded-(--dl-radius-sm) border border-(--dl-border) bg-(--dl-surface) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--dl-accent-text) active:scale-[0.97]' // us-spelling: quoted output (Tailwind class names)
+const TRIGGER = 'flex size-11 items-center justify-center rounded-(--dl-radius-sm) border border-(--dl-border) bg-(--dl-surface) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--dl-accent-text) active:scale-[0.97]' // us-spelling: quoted output (Tailwind class names)
 
 /** The gap between the button and its menu, and the margin kept to the window's edge, in pixels. */
 const GAP = 8

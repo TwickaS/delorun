@@ -20,6 +20,8 @@ const BAR = 'mx-auto flex w-full items-center justify-between gap-4 py-5' // us-
 /** The default inner width and margins of the header and the footer; a site passes its own grid's as `inner`. */
 export const DEFAULT_INNER = 'max-w-5xl px-5 sm:px-8'
 const BRAND = 'flex items-center gap-2.5 font-semibold tracking-tight text-(--dl-text)' // us-spelling: quoted output (Tailwind class names)
+/** A link with a 44 px tall hit area, the size a finger needs. */
+export const HIT = 'inline-flex min-h-11 items-center' // us-spelling: quoted output (Tailwind class names)
 const ROW = 'flex items-center gap-4 sm:gap-5' // us-spelling: quoted output (Tailwind class names)
 
 /**
@@ -62,7 +64,7 @@ export function SiteHeader({ copy, home, links, leading, inner = DEFAULT_INNER }
       </a>
       <div className={ROW}>
         <nav aria-label={copy.navLabel} className={`${ROW} text-sm`}>
-          {links.map(link => <SiteLink key={link.href} link={link} className={`text-(--dl-text-muted) hover:text-(--dl-text) ${FOCUS}`} />)}
+          {links.map(link => <SiteLink key={link.href} link={link} className={`${HIT} text-(--dl-text-muted) hover:text-(--dl-text) ${FOCUS}`} />)}
         </nav>
         {leading}
         <ThemeControl copy={copy.theme} />
