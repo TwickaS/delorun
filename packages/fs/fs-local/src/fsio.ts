@@ -168,6 +168,29 @@ export function localDisplayPath(cwd: string, path: string): string {
  * @returns the absolute display path plus the realpath-derived stable target key.
  */
 export async function resolveLocalTarget(cwd: string, path: string): Promise<LocalTarget> {
+  const target = await resolveUncheckedTarget(cwd, path)
+  refuseProcessSecret(target)
+  return target
+}
+
+/** The `/proc` entries that hold another process's environment or memory, by realpath: `/proc/<pid>[/task/<tid>]/environ|mem`. */
+const PROCESS_SECRET = /^\/proc\/\d+(?:\/task\/\d+)?\/(?:environ|mem)$/u
+
+/**
+ * Refuse a target that is a process's environment or memory file. The Host's environment holds its secrets (keys,
+ * webhook secrets), and `/proc/self/environ` and `/proc/<pid>/mem` read them without the tool naming a secret. A symlink to
+ * one resolves to its `/proc/<pid>/...` realpath, which this matches, as do the `self` and `thread-self` spellings. It holds
+ * in every sandbox mode: full access does not reach it. It is a fixed security invariant, not a setting.
+ * @param target - a resolved target.
+ * @throws {FsError} `FS_SANDBOX_DENIED` for such a target.
+ */
+export function refuseProcessSecret(target: LocalTarget): void {
+  if (PROCESS_SECRET.test(String(target.targetKey))) {
+    throw new FsError(`cannot read "${target.displayPath}": Delorun never reads another process's environment or memory`, 'FS_SANDBOX_DENIED')
+  }
+}
+
+async function resolveUncheckedTarget(cwd: string, path: string): Promise<LocalTarget> {
   if (path.trim().length === 0) throw new FsError('file_path must be a non-empty string', 'FS_NOT_FOUND')
   const displayPath = localDisplayPath(cwd, path)
   try {
@@ -469,6 +492,7 @@ const READ_FLAGS = process.platform === 'win32' ? fsConstants.O_RDONLY : fsConst
  * @returns the open descriptor, which the caller closes.
  */
 async function openRegularFile(target: LocalTarget, verb: 'read', signal?: AbortSignal): Promise<{ handle: FileHandle; info: Stats }> {
+  refuseProcessSecret(target)
   await statRegularFile(target, verb, signal)
   let handle: FileHandle
   try {
@@ -1217,6 +1241,7 @@ export async function readForEdit(
   signal?: AbortSignal,
 ): Promise<{ content: string; lineEndings: LineEndings }> {
   throwIfAborted(signal, 'edit')
+  refuseProcessSecret({ displayPath, targetKey: FsTargetKey(absolutePath) })
   let handle: FileHandle
   try {
     handle = await open(absolutePath, READ_FLAGS)
@@ -1258,6 +1283,7 @@ export async function readTextForDiff(
   signal?: AbortSignal,
 ): Promise<string | null> {
   throwIfAborted(signal, 'read')
+  refuseProcessSecret({ displayPath: absolutePath, targetKey: FsTargetKey(absolutePath) })
   try {
     const handle = await open(absolutePath, READ_FLAGS)
     let buffer: Buffer
