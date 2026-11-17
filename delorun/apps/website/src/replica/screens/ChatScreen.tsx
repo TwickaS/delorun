@@ -4,7 +4,7 @@
  * @module @delorun/website/replica/screens/ChatScreen
  */
 import type { ReactNode } from 'react'
-import { Composer, MessageBubble, ToolCard, Transcript } from '../../../../../packages/brand/src/replica/index.ts'
+import { Composer, MessageBubble, ToolCard, Transcript } from '@brand/replica/index.ts'
 import { REPLICA_COPY } from '../copy.ts'
 import type { ReplicaEvent } from '../model.ts'
 import type { ReplicaStrings } from '../strings.ts'
