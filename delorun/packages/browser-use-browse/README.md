@@ -32,6 +32,7 @@ English | [中文](README.zh.md)
 
 | Field | Default | Meaning |
 | --- | --- | --- |
+| `enabled` | `false` | C16 switch `use_my_browser`: off, the row checks its fields and mounts nothing. Every row Delorun ships turns it on. |
 | `variant` | `auto` | Which platform binary runs; `auto` picks this computer's. `windows-x64` on Linux runs the Windows binary through WSL. |
 | `command` | unset | An absolute program that replaces the binary, such as a test's stand-in server. |
 | `args` | `["mcp"]` | The program's arguments. |

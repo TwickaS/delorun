@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { childEnv, Config, installedPackageDirectory, NEVER_INHERITED, resolveCommand, validateConfig, variantOf } from '../src/config.ts'
 
 describe('the browse row configuration', () => {
-  it('defaults to the pinned binary for this computer, run as `browse mcp`, with nothing inherited', () => {
-    expect(Config({})).toEqual({ variant: 'auto', args: ['mcp'], inheritEnv: [], awayDays: 7 })
+  it('defaults to the switch off and the pinned binary for this computer, run as `browse mcp`, with nothing inherited', () => {
+    expect(Config({})).toEqual({ enabled: false, variant: 'auto', args: ['mcp'], inheritEnv: [], awayDays: 7 })
     expect(() => Config({ awayDays: 0 })).toThrow()
     expect(() => Config({ awayDays: 31 })).toThrow()
   })

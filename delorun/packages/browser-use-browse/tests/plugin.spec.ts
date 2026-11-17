@@ -58,8 +58,9 @@ function events(root: string): { event: string, pid: number, name?: string }[] {
  * @param answer - the person's answer.
  * @param server - the stand-in server's script.
  * @param consent - whether a consent that records each start is mounted.
+ * @param enabled - the row's C16 switch `use_my_browser`.
  */
-async function harness(adapter: MockAdapter, answer: () => ApprovalOutcome, server = fixture, consent = false) {
+async function harness(adapter: MockAdapter, answer: () => ApprovalOutcome, server = fixture, consent = false, enabled = true) {
   const root = mkdtempSync(join(tmpdir(), 'realb-plugin-'))
   roots.push(root)
   const ctx = new Context()
@@ -71,7 +72,7 @@ async function harness(adapter: MockAdapter, answer: () => ApprovalOutcome, serv
   ctx.llm.registerAdapter(['mock'], adapter)
   ctx.on('approval/request', () => Promise.resolve(answer()))
   if (consent) await ctx.plugin(RecordingConsent)
-  await ctx.plugin(BrowseDriver, Config({ command: process.execPath, args: [server, root] }))
+  await ctx.plugin(BrowseDriver, Config({ enabled, command: process.execPath, args: [server, root] }))
   return { ctx, root }
 }
 
@@ -149,5 +150,26 @@ describe('the browse row', () => {
     await run(ctx, chat, 'check my order')
     expect(chat.session.snapshotEvents().some(event => event.type === 'real-browser/granted')).toBe(false)
     expect(events(root)).toEqual([])
+  })
+
+  it('mounts nothing with the switch use_my_browser off: no tool, no service, no guard and no server', async () => {
+    const { ctx, root } = await harness(new MockAdapter([ASK, EXECUTE, textResponse('done')]), () => 'allowed-once', fixture, false, false)
+    const chat = await ctx.agentLoop.create(SessionId('chat'), { provider: 'mock', model: 'mock' }, { cwd: root })
+    expect(ctx.tools.schemas(chat).map(tool => tool.name)).not.toContain('use_my_browser')
+    expect(ctx.get('realBrowser')).toBeUndefined()
+    await run(ctx, chat, 'check my order')
+    const log = chat.session.snapshotEvents()
+    expect(log.some(event => event.type === 'approval/asked' || event.type === 'real-browser/granted')).toBe(false)
+    expect(events(root)).toEqual([])
+  })
+
+  it('still refuses a row Delorun would never start with the switch off', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await ctx.plugin(BrowserUse)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    const loaded = ctx.plugin(BrowseDriver, Config({ command: 'browse' }))
+    await expect(loaded).rejects.toThrow(/absolute path/u)
   })
 })

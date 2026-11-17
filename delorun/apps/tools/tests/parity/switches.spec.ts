@@ -496,7 +496,7 @@ describe('the parity overlay', () => {
     expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
       'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
       'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
-      'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal',
+      'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal', 'use_my_browser',
     ])
   })
 

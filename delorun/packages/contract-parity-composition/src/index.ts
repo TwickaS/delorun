@@ -423,6 +423,28 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'use_my_browser',
+    state: 'built',
+    registeredBy: '@delorun/browser-use-browse, whose row @delorun/bundle-real-browser inserts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-use-my-browser',
+    scenarioState: 'recorded',
+    field: {
+      module: '@delorun/browser-use-browse',
+      source: 'delorun/packages/browser-use-browse/src/config.ts',
+      key: 'enabled',
+    },
+    // Off, the row mounts nothing: no use_my_browser tool, no guard on browse
+    // calls and no browse server, so no browse tool or its system-prompt
+    // section reaches a model request.
+    sources: [
+      'delorun/packages/browser-use-browse/src/index.ts',
+      'delorun/packages/browser-use-browse/src/tool.ts',
+    ],
+  },
+  {
     id: 'external_agent_consent',
     state: 'built',
     registeredBy: '@delorun/plugin-delegation-consent',
