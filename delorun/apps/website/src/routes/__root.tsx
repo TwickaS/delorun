@@ -1,13 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
+import { LOOK_SCRIPT, LOOK_SCRIPT_ID } from '@design/head-script.ts'
 import { OG_IMAGE_PATH, SITE_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import appCss from '@/styles/app.css?url'
-
-/** Colours the page by the device's light or dark setting, before the first paint and when the setting changes. */
-const THEME_SCRIPT = "(function(){var m=matchMedia('(prefers-color-scheme: dark)');function a(){document.documentElement.classList.toggle('dark',m.matches)}a();m.addEventListener('change',a)})()"
-
-/** The id the build keeps when it strips the router's scripts from 404.html. */
-export const THEME_SCRIPT_ID = 'theme-init'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -27,7 +22,7 @@ export const Route = createRootRoute({
       { rel: 'stylesheet', href: appCss },
       { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
     ],
-    scripts: [{ id: THEME_SCRIPT_ID, children: THEME_SCRIPT }],
+    scripts: [{ id: LOOK_SCRIPT_ID, children: LOOK_SCRIPT }],
   }),
   component: RootDocument,
 })

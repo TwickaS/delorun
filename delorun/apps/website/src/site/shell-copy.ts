@@ -1,0 +1,56 @@
+/**
+ * The text and links the shared header and footer show on this site, in English. The documentation site passes its own,
+ * in each of its languages.
+ *
+ * @module @delorun/website/shell-copy
+ */
+import { LOOK_NAMES } from '@design/looks.ts'
+import type { FooterCopy, HeaderCopy, ShellLink, ThemeCopy } from '@design/shell-copy.ts'
+import { ARTICLES } from '@/site/articles.ts'
+import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL, UPSTREAM_URL } from '@/site/config.ts'
+import { COPY } from '@/site/copy.ts'
+
+/** The theme control's text. */
+export const THEME_COPY: ThemeCopy = {
+  open: 'Change the look of this page',
+  title: 'Look',
+  themes: 'Theme',
+  scheme: 'Light or dark',
+  light: 'Light',
+  dark: 'Dark',
+  back: 'Back to how it started',
+  names: LOOK_NAMES,
+}
+
+/** The header's text. */
+export const HEADER_COPY: HeaderCopy = { title: COPY.siteTitle, navLabel: COPY.footer.primaryNav, theme: THEME_COPY }
+
+/** The header's links: Docs, Blog once an article exists, and GitHub. */
+export const HEADER_LINKS: readonly ShellLink[] = [
+  { label: COPY.nav.docs, href: DOCS_URL, site: 'other' },
+  ...ARTICLES.length === 0 ? [] : [{ label: COPY.nav.blog, href: '/blog' }],
+  { label: COPY.nav.github, href: GITHUB_URL },
+]
+
+/** The footer's text. */
+export const FOOTER_COPY: FooterCopy = {
+  navLabel: COPY.footer.footerNav,
+  owner: COPY.footer.owner,
+  licence: { label: COPY.footer.licence, href: `${GITHUB_URL}/blob/main/LICENSE` },
+  upstream: { label: COPY.footer.upstream, href: UPSTREAM_URL },
+  back: THEME_COPY.back,
+}
+
+/** The footer's links, in order. */
+export const FOOTER_LINKS: readonly ShellLink[] = [
+  { label: COPY.footer.docs, href: DOCS_URL, site: 'other' },
+  { label: COPY.footer.changelog, href: `${DOCS_URL}/changelog`, site: 'other' },
+  { label: COPY.footer.roadmap, href: `${DOCS_URL}/guide/roadmap`, site: 'other' },
+  { label: COPY.footer.questions, href: `${DOCS_URL}/guide/questions`, site: 'other' },
+  { label: COPY.footer.knownIssues, href: `${DOCS_URL}/guide/known-issues`, site: 'other' },
+  ...ARTICLES.length === 0 ? [] : [{ label: COPY.footer.blog, href: '/blog' }],
+  { label: COPY.footer.github, href: GITHUB_URL },
+  { label: COPY.footer.privacy, href: '/privacy' },
+  { label: 'Notices', href: '/notices' },
+  { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
+]

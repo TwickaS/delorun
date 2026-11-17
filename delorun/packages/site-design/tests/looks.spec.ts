@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { PALETTES, PRESET_PALETTES } from '../../plugin-theme/src/config.ts'
 import { en } from '../../plugin-theme/src/client/locales.ts'
 import { ACCENT_IDS } from '../../plugin-theme/src/palette/soft.ts'
-import { buildLooks, CONTRAST_STOPS, LOOKS, ratio, resolveLook, ROLES, selector, type RoleName } from '../scripts/looks.ts'
+import { buildLooks, buildSwatches, CONTRAST_STOPS, LOOKS, ratio, resolveLook, ROLES, selector, type RoleName } from '../scripts/looks.ts'
 import { KNOWN_LOOKS, LOOK_NAMES, lookName } from '../src/looks.ts'
 
 const STYLESHEET = fileURLToPath(new URL('../src/looks.css', import.meta.url))
@@ -12,6 +12,10 @@ const STYLESHEET = fileURLToPath(new URL('../src/looks.css', import.meta.url))
 describe('the looks stylesheet', () => {
   it('is the one the Theme plugin generates now', () => {
     expect(readFileSync(STYLESHEET, 'utf8')).toBe(buildLooks())
+  })
+
+  it('has swatches equal to the ones the Theme plugin generates now', () => {
+    expect(readFileSync(fileURLToPath(new URL('../src/look-swatches.ts', import.meta.url)), 'utf8')).toBe(buildSwatches())
   })
 
   it('keeps the T3 Code copyright comment', () => {
