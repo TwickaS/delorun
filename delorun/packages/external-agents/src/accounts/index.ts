@@ -6,6 +6,7 @@
  */
 export { reachedLimit, windowStanding, type ReachedLimit } from './limit.ts'
 export { registerAccountRoutes } from './routes.ts'
+export { wireAccounts, type WireAccountsOptions } from './wiring.ts'
 export { createAgentAccounts, type AgentAccountsDependencies, type AgentAccountsService, type CheckResult, type RefreshReason } from './service.ts'
 export { checkThrough } from './check.ts'
 export { accountsFilePath, parseAccountsAnswer, parseRefreshAnswer, readAccountsFile, requestCheck, type AccountsRead } from './store.ts'

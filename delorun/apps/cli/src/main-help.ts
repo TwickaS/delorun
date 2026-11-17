@@ -21,7 +21,7 @@ export const HELP_GROUPS: readonly (readonly [title: string, entries: readonly E
   ['Everyday', [['start', 'start Delorun, in the background or in this terminal'], ['open', 'open the studio in your browser'], ['stop', 'stop Delorun'], ['status', 'show whether Delorun is running'], ['logs', 'see where the logs are and what they say']]],
   ['Setup', [['setup', 'set Delorun up, or answer one question again; export and import a setup'], ['doctor', 'check that everything Delorun needs is in place'], ['update', 'install a newer release'], ['recover', 'go back after an update that went wrong']]],
   ['Phone', [['reach', 'use the studio from your phone, over your own Tailscale network'], ['devices', 'choose which devices may sign in']]],
-  ['Safety', [['workspace', 'let a folder\'s chats run outside the sandbox, or start agents there'], ['agents', 'sign an added agent in'], ['mcp', 'answer the MCP servers that wait for you'], ['changes', 'review what plugins and edits want to change']]],
+  ['Safety', [['workspace', 'let a folder\'s chats run outside the sandbox, or start agents there'], ['agents', 'sign an added agent in, or see its plan limits'], ['mcp', 'answer the MCP servers that wait for you'], ['changes', 'review what plugins and edits want to change']]],
   ['Data', [['trash', 'bring back or delete chats and workspaces'], ['export', 'write a chat or workspace as a signed archive'], ['import', 'read a signed archive into this home'], ['import-home', 'copy a DeepSeek Harness home into this one']]],
   ['Advanced', [['verify', 'check this release against its signed manifest'], ['plugin', 'add, check and write plugins'], ['preview', 'turn a preview feature of the studio on or off'], ['headless', 'answer one task and exit']]],
 ]

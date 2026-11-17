@@ -16,13 +16,13 @@
  *
  * @module @delorun/external-agents/accounts/service
  */
-import type { AccountObservation, ExternalAgentName } from '../contract.ts'
-import { reachedLimit, type ReachedLimit } from './limit.ts'
+import type { AccountObservation, AccountRefreshReason, AgentAccounts, ExternalAgentName } from '../contract.ts'
+import { reachedLimit } from './limit.ts'
 import { EMPTY_ACCOUNTS, mergeObservation, problemOf, readAccountsFile, sanitiseObservation, UNKNOWN_ACCOUNT, writeAccountsFile } from './store.ts'
-import { ACCOUNT_PROVIDERS, type AccountsAnswer, type AccountsFile, type AccountState, type AccountView, type RefreshAnswer, type RefreshOutcome } from './wire.ts'
+import { ACCOUNT_PROVIDERS, type AccountsFile, type AccountState, type AccountView, type RefreshAnswer, type RefreshOutcome } from './wire.ts'
 
 /** The explicit act about an agent that asks for a check. `signed-in` is not held to the floor between checks. */
-export type RefreshReason = 'pack-added' | 'signed-in' | 'check-now'
+export type RefreshReason = AccountRefreshReason
 
 /** What the start gate answered a limits check. */
 export type CheckResult =
@@ -73,18 +73,7 @@ export interface AgentAccountsDependencies {
 }
 
 /** The service `ctx.agentAccounts` provides. */
-export interface AgentAccountsService {
-  /**
-   * One provider's figures. Never starts a check.
-   * @param provider - the provider.
-   * @returns its stored figures, unknown when none are stored or the file cannot be read.
-   */
-  read(provider: ExternalAgentName): Promise<AccountView>
-  /**
-   * Every provider's figures. Never starts a check.
-   * @returns the figures in provider order, with the time they were read at.
-   */
-  readAll(): Promise<AccountsAnswer>
+export interface AgentAccountsService extends AgentAccounts {
   /**
    * Fold in what a run or a check saw. Only the fields the store may hold are kept.
    * @param observation - the observation.
@@ -92,26 +81,12 @@ export interface AgentAccountsService {
    */
   observe(observation: AccountObservation): Promise<void>
   /**
-   * Check a provider's figures now, unless its pack is missing or the last check was too recent.
-   * @param provider - the provider.
-   * @param reason - why the check is asked for.
-   * @returns what the refresh did and the figures after it.
-   */
-  refresh(provider: ExternalAgentName, reason: RefreshReason): Promise<RefreshAnswer>
-  /**
    * Hear that a provider's driver registered. It checks in the background only when the store holds nothing for the
    * provider (its pack was just added) or holds the mark a sign-in left while Delorun was not running; a failure is
    * reported. A registration at an ordinary Host start checks nothing.
    * @param provider - the provider whose driver registered.
    */
   driverAdded(provider: ExternalAgentName): void
-  /**
-   * The reached limit that refuses a start now, from an agent's figures. Pure: stale figures never refuse.
-   * @param record - the agent's figures, as {@link AgentAccountsService.read} answers them.
-   * @param now - the time asked about, in milliseconds since the epoch.
-   * @returns the limit, or undefined when nothing refuses.
-   */
-  reachedLimit(record: AccountView, now: number): ReachedLimit | undefined
 }
 
 /**
