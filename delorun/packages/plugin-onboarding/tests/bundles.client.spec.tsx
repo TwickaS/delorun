@@ -395,6 +395,25 @@ describe('a pack the Host downloads', () => {
     })
   }
 
+  it('still ends a pack the card was re-read in the middle of, and one it finds already working', async () => {
+    vi.useFakeTimers()
+    try {
+      host([{ queue: [item('downloading')] }, { queue: [item('downloading')] }, { queue: [item('downloading')] }, { queue: [item('failed', 'could not be unpacked')] }])
+      const { installer, state } = bench([])
+      // The card opens while the Host is already installing the pack: another surface started it.
+      installer.refresh(['p'])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state('p')?.state).toBe('installing')
+      // The step re-reads its cards mid-install, which shows "checking" for a moment.
+      installer.refresh(['p'])
+      expect(state('p')).toEqual({ state: 'checking' })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(state('p')).toEqual({ state: 'failed', reason: 'could not be unpacked' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('leaves "installing" with the Host\'s reason when the download fails, and stops asking', async () => {
     vi.useFakeTimers()
     try {

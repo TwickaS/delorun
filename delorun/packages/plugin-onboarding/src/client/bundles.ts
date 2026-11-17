@@ -263,6 +263,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const state = needsPack ? 'unavailable' : stateOf(bundle, pack)
       const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
       const platformLimit = bundle?.error?.code === 'unsupported-platform' || pack?.kind === 'unavailable'
+      if (state === 'installing') void followPack(name)
       set(name, {
         state,
         ...reason === undefined ? {} : { reason },
@@ -277,25 +278,42 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     for (const name of names) show(name, true)
   }
   // The install list says how a queued pack ends; the card follows it, so it never stays on "Adding…" after a failure.
-  const followPack = async (name: string, before: BundleView, packs: PacksRemote): Promise<void> => {
-    for (;;) {
-      await new Promise<void>((resolve) => { setTimeout(resolve, options.pollMs) })
-      const now = views.getSnapshot()[name]
-      if (now?.state !== 'installing' && now?.state !== 'slow') return
-      let snapshot: PacksSnapshot
-      try {
-        snapshot = await packs.list()
-      } catch (error) {
-        console.warn('delorun onboarding: the plugin pack install was not followed', error)
-        continue
+  // One loop per pack runs while the card shows an install, whoever started it and across the card being re-read.
+  const following = new Set<string>()
+  const followPack = async (name: string): Promise<void> => {
+    if (following.has(name)) return
+    following.add(name)
+    const packs: PacksRemote = packsClient
+    try {
+      for (;;) {
+        await new Promise<void>((resolve) => { setTimeout(resolve, options.pollMs) })
+        const now = views.getSnapshot()[name]
+        // A card being re-read shows "checking" for a moment; the loop waits it out and reads the outcome after.
+        if (now?.state === 'checking') continue
+        if (now?.state !== 'installing' && now?.state !== 'slow') return
+        let snapshot: PacksSnapshot
+        try {
+          snapshot = await packs.list()
+        } catch (error) {
+          console.warn('delorun onboarding: the plugin pack install was not followed', error)
+          continue
+        }
+        const pack = snapshot.packs.find(each => each.name === name)
+        const view = pack === undefined ? undefined : packView(pack, snapshot.queue.find(item => item.key === name))
+        if (view?.kind === 'working') continue
+        const latest = views.getSnapshot()[name]
+        if (latest?.state !== 'installing' && latest?.state !== 'slow') return
+        const { reason: _reason, packsReason: _packsReason, state: _state, ...base } = latest
+        if (view === undefined) {
+          set(name, { ...base, state: 'failed' })
+          return
+        }
+        packViews.set(name, view)
+        set(name, { ...base, state: stateOf(known.get(name), view), ...view.kind === 'failed' ? { reason: view.failure.message } : {} })
+        return
       }
-      const pack = snapshot.packs.find(each => each.name === name)
-      if (pack === undefined) return
-      const view = packView(pack, snapshot.queue.find(item => item.key === name))
-      if (view.kind === 'working') continue
-      packViews.set(name, view)
-      set(name, { ...before, state: stateOf(known.get(name), view), ...view.kind === 'failed' ? { reason: view.failure.message } : {} })
-      return
+    } finally {
+      following.delete(name)
     }
   }
   return {
@@ -320,7 +338,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
         try {
           const queued = await packs.enqueue({ names: [name] })
           set(name, { ...fresh, state: queued.ok ? 'installing' : 'failed' })
-          if (queued.ok) void followPack(name, fresh, packs)
+          if (queued.ok) void followPack(name)
         } catch (error) {
           console.warn('delorun onboarding: the plugin pack was not queued', error)
           set(name, { ...fresh, state: 'failed' })
