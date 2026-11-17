@@ -93,6 +93,7 @@
     "@deepseek-ai/dsh-subprocess": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
+    "@delorun/external-agents": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/install": "workspace:*",
     "@delorun/logs": "workspace:*",
