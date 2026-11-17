@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Delegation consent",
+    "description": "Asks you before Claude Code, Codex or another outside agent starts work for you, remembers your answer for each workspace and limits how long a run can last"
+  }
+}
