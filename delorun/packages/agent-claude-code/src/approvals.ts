@@ -16,31 +16,36 @@ export const REJECTED_MESSAGE = 'The person rejected this tool call.'
 export const CANCELLED_MESSAGE = 'The person stopped this turn.'
 
 /**
- * Whether a rule allows exactly one command and nothing more: content present and without Claude Code's wildcard `*`,
- * which also excludes the `:*` prefix form.
+ * Whether a rule allows exactly one command and nothing more: content present, without Claude Code's wildcard `*`
+ * (which also excludes the `:*` prefix form), and on one line.
  * @param rule - a rule.
  * @returns whether it is exact.
  */
 function exactRule(rule: PermissionRuleValue): boolean {
-  return rule.ruleContent !== undefined && rule.ruleContent.length > 0 && !rule.ruleContent.includes('*')
+  return rule.ruleContent !== undefined && rule.ruleContent.length > 0 && !/[*\n\r]/.test(rule.ruleContent)
 }
 
 /**
- * The rule "Allow for this run" may add for one question: Claude Code's single suggested `addRules` allow entry, only
- * when it is for the tool that asked and its content equals the exact command asked about. A prefix or wildcard rule,
- * a rule without content, a path rule, more than one rule, or no command gives none. Mode changes (`setMode`) and
- * folder grants (`addDirectories`) are never taken.
+ * The rule "Allow for this run" may add for one question, which covers the exact command asked about and nothing else.
+ * Claude Code's single suggested `addRules` allow entry is taken when it is for the tool that asked and its content
+ * equals that command. Otherwise, for `Bash` only, the rule is built from the call itself: `Bash(<exact command>)`. A
+ * command holding `*` or a line break gets no rule, and neither does any other tool whose suggestion is not exact.
+ * Mode changes (`setMode`) and folder grants (`addDirectories`) are never taken.
  * @param toolName - the tool that asked.
  * @param input - the call's input.
  * @param suggestions - Claude Code's suggested permission updates.
  * @returns the one exact rule, or none.
  */
 export function exactRunRules(toolName: string, input: Record<string, unknown>, suggestions: readonly PermissionUpdate[] | undefined): PermissionRuleValue[] {
+  const command = input.command
+  if (typeof command !== 'string') return []
+  const exact = { toolName, ruleContent: command }
+  if (!exactRule(exact)) return []
   const rules = (suggestions ?? []).flatMap(suggestion =>
     suggestion.type === 'addRules' && suggestion.behavior === 'allow' ? suggestion.rules : [])
   const [rule] = rules
-  if (rules.length !== 1 || rule === undefined || rule.toolName !== toolName || !exactRule(rule)) return []
-  return typeof input.command === 'string' && rule.ruleContent === input.command ? [{ toolName: rule.toolName, ruleContent: rule.ruleContent }] : []
+  const suggestedExact = rules.length === 1 && rule !== undefined && rule.toolName === toolName && rule.ruleContent === command
+  return suggestedExact || toolName === 'Bash' ? [exact] : []
 }
 
 /**

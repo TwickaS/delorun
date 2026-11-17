@@ -324,6 +324,40 @@ describe(`the real Claude Agent SDK ${TESTED_SDK_VERSION} and its pinned Claude 
   })
 })
 
+describe('a run rule built from the call', { timeout: 90_000 }, () => {
+  const bash = (command: string): MessagesStep => ({ tool: 'Bash', input: { command, description: 'Run it' } })
+
+  it('covers the identical command only, within the turn and, re-applied, after a resume', async () => {
+    const h = await harness([
+      bash('mkdir -p dir-a'), bash('mkdir -p dir-a'), bash('mkdir -p dir-a && touch w.txt'), bash('mkdir -p dir-b'),
+      bash('touch x.txt && touch y.txt'), bash('touch x.txt'), { text: 'first done' },
+      bash('mkdir -p dir-a'), bash('touch x.txt && touch y.txt'), bash('mkdir -p dir-b'), bash('mkdir -p dir-a; touch v.txt'), { text: 'second done' },
+    ])
+    const forRun = new Set(['mkdir -p dir-a', 'touch x.txt && touch y.txt'])
+    const asked: ProgramApprovalRequest[] = []
+    const onApproval = (request: ProgramApprovalRequest): Promise<ProgramApprovalAnswer> => {
+      asked.push(request)
+      return Promise.resolve(forRun.has(request.reason.replace(/^Bash: /, '')) && request.runRule !== undefined ? 'allow-run' : 'allow-once')
+    }
+    const commands = (): string[] => asked.map(request => request.reason.replace(/^Bash: /, ''))
+    const first = await h.driver.open(openRequest(h, { onApproval }))
+    await first.send('Run the commands.', 'start')
+    expect((await turn(first)).at(-1)).toMatchObject({ outcome: 'completed' })
+    await first.close()
+    expect(commands()).toEqual(['mkdir -p dir-a', 'mkdir -p dir-a && touch w.txt', 'mkdir -p dir-b', 'touch x.txt && touch y.txt', 'touch x.txt'])
+    const rules = asked.filter(request => forRun.has(request.reason.replace(/^Bash: /, ''))).flatMap(request => request.runRule === undefined ? [] : [request.runRule])
+    expect(rules.map(rule => rule.summary)).toEqual(['Bash(mkdir -p dir-a)', 'Bash(touch x.txt && touch y.txt)'])
+
+    asked.splice(0)
+    const resumed = await h.driver.open(openRequest(h, { resume: first.programSessionId, runRules: rules, onApproval }))
+    await resumed.send('Run them again.', 'start')
+    expect((await turn(resumed)).at(-1)).toMatchObject({ outcome: 'completed' })
+    await resumed.close()
+    expect(commands()).toEqual(['mkdir -p dir-b', 'mkdir -p dir-a; touch v.txt'])
+    await quiescent(h)
+  })
+})
+
 describe('the person\'s own Claude Code settings in a seat', { timeout: 60_000 }, () => {
   interface Case { readonly user?: string[]; readonly local?: string[]; readonly project?: Record<string, unknown>; readonly asked: number; readonly made: boolean }
   // Claude Code takes only the restricting parts of a run folder's own `.claude/settings.json`: its deny and ask

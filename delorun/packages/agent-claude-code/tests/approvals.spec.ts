@@ -66,16 +66,19 @@ describe('Claude Code questions', () => {
     await session.close()
   })
 
-  it('offers no run rule when the program suggests no allow rule, and then allows only once', async () => {
+  it('builds the run rule from a Bash call when the program suggests no allow rule, and never takes a mode or folder', async () => {
     const asked: ProgramApprovalRequest[] = []
     const { ask, session } = await opened((request) => { asked.push(request); return Promise.resolve('allow-run') })
     const answer = await ask('Bash', { command: 'mkdir c' }, {
       signal, toolUseID: 'call-2', requestId: 'r2',
       suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }, { type: 'addDirectories', directories: ['/'], destination: 'session' }],
     })
-    expect(asked[0]?.runRule).toBeUndefined()
+    expect(asked[0]?.runRule?.summary).toBe('Bash(mkdir c)')
     expect(asked[0]?.reason).toBe('Bash: mkdir c')
-    expect(answer).toEqual({ behavior: 'allow', updatedInput: { command: 'mkdir c' } })
+    expect(answer).toEqual({
+      behavior: 'allow', updatedInput: { command: 'mkdir c' },
+      updatedPermissions: [{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'mkdir c' }], behavior: 'allow', destination: 'session' }],
+    })
     await session.close()
   })
 
@@ -152,29 +155,41 @@ describe('Claude Code questions', () => {
 describe('run rules', () => {
   it('takes the one suggested allow rule whose content is the exact command asked about', () => {
     expect(exactRunRules('Bash', { command: 'touch a.txt' }, TOUCH_SUGGESTIONS)).toEqual([{ toolName: 'Bash', ruleContent: 'touch a.txt' }])
-    expect(exactRunRules('Bash', { command: 'touch a.txt' }, undefined)).toEqual([])
+    expect(exactRunRules('PowerShell', { command: 'make' }, [allow({ toolName: 'PowerShell', ruleContent: 'make' })])).toEqual([{ toolName: 'PowerShell', ruleContent: 'make' }])
+  })
+
+  it.each<[string, Record<string, unknown>, PermissionUpdate[] | undefined]>([
+    ['no suggestion', { command: 'touch a.txt' }, undefined],
+    ['a prefix suggestion', { command: 'rm -rf build' }, [allow({ toolName: 'Bash', ruleContent: 'rm:*' })]],
+    ['a wildcard suggestion', { command: 'echo run > run.txt' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
+    ['a bare tool suggestion', { command: 'make' }, [allow({ toolName: 'Bash' })]],
+    ['a suggestion for another command', { command: 'make test' }, [allow({ toolName: 'Bash', ruleContent: 'make' })]],
+    ['two suggested rules', { command: 'make' }, [allow({ toolName: 'Bash', ruleContent: 'make' }, { toolName: 'Bash', ruleContent: 'ls' })]],
+    ['a mode change', { command: 'make' }, [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }]],
+    ['a folder grant', { command: 'make' }, [{ type: 'addDirectories', directories: ['/'], destination: 'session' }]],
+    ['parentheses, escaped in the rule text', { command: 'echo (a)' }, undefined],
+  ])('builds the exact Bash rule from the call for %s', (_case, input, suggestions) => {
+    expect(exactRunRules('Bash', input, suggestions)).toEqual([{ toolName: 'Bash', ruleContent: input.command }])
   })
 
   it.each<[string, string, Record<string, unknown>, PermissionUpdate[]]>([
-    ['a prefix rule', 'Bash', { command: 'rm -rf build' }, [allow({ toolName: 'Bash', ruleContent: 'rm:*' })]],
-    ['a wildcard rule', 'Bash', { command: 'echo run > run.txt' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
-    ['a wildcard in the command itself', 'Bash', { command: 'rm *.txt' }, [allow({ toolName: 'Bash', ruleContent: 'rm *.txt' })]],
-    ['a bare tool rule', 'Bash', { command: 'make' }, [allow({ toolName: 'Bash' })]],
+    ['a wildcard in the command', 'Bash', { command: 'rm *.txt' }, [allow({ toolName: 'Bash', ruleContent: 'rm *.txt' })]],
+    ['a multi-line command', 'Bash', { command: 'make\nmake install' }, []],
+    ['a command with a carriage return', 'Bash', { command: 'make\rrm -rf /' }, []],
+    ['a Bash call without a command', 'Bash', { description: 'nothing' }, []],
     ['a path glob', 'Edit', { file_path: '/w/src/a.ts' }, [allow({ toolName: 'Edit', ruleContent: '/w/src/**' })]],
     ['an exact path', 'Edit', { file_path: '/w/src/a.ts' }, [allow({ toolName: 'Edit', ruleContent: '/w/src/a.ts' })]],
-    ['another command', 'Bash', { command: 'make test' }, [allow({ toolName: 'Bash', ruleContent: 'make' })]],
-    ['another tool', 'Bash', { command: 'make' }, [allow({ toolName: 'PowerShell', ruleContent: 'make' })]],
-    ['two rules', 'Bash', { command: 'make' }, [allow({ toolName: 'Bash', ruleContent: 'make' }, { toolName: 'Bash', ruleContent: 'ls' })]],
-    ['a mode change', 'Bash', { command: 'make' }, [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }]],
-    ['a folder grant', 'Bash', { command: 'make' }, [{ type: 'addDirectories', directories: ['/'], destination: 'session' }]],
+    ['another tool with a prefix suggestion', 'PowerShell', { command: 'make' }, [allow({ toolName: 'PowerShell', ruleContent: 'make:*' })]],
+    ['another tool with no suggestion', 'PowerShell', { command: 'make' }, []],
+    ['a suggestion for another tool', 'PowerShell', { command: 'make' }, [allow({ toolName: 'Bash', ruleContent: 'make' })]],
   ])('offers no run rule for %s', (_case, toolName, input, suggestions) => {
     expect(exactRunRules(toolName, input, suggestions)).toEqual([])
   })
 
-  it('asks a prefix-rule question with no run rule, so the card offers only Reject and Allow once', async () => {
+  it('asks a multi-line question with no run rule, so the card offers only Reject and Allow once', async () => {
     const asked: ProgramApprovalRequest[] = []
     const { ask, session } = await opened((request) => { asked.push(request); return Promise.resolve('allow-once') })
-    await ask('Bash', { command: 'rm -rf build' }, { signal, toolUseID: 'call-4', requestId: 'r4', suggestions: [allow({ toolName: 'Bash', ruleContent: 'rm:*' })] })
+    await ask('Bash', { command: 'make\nrm -rf build' }, { signal, toolUseID: 'call-4', requestId: 'r4', suggestions: [allow({ toolName: 'Bash', ruleContent: 'make:*' })] })
     expect(asked[0]?.runRule).toBeUndefined()
     await session.close()
   })
@@ -190,6 +205,7 @@ describe('run rules', () => {
     expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: 'Bash' } })).toEqual([])
     expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: [7, { toolName: 3 }, { toolName: 'Edit', ruleContent: 5 }, { toolName: 'Bash' }, { toolName: 'Bash', ruleContent: 'rm:*' }, { toolName: 'Bash', ruleContent: 'ls' }] } }))
       .toEqual([{ toolName: 'Bash', ruleContent: 'ls' }])
+    expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: [{ toolName: 'Bash', ruleContent: 'ls\nrm -rf /' }] } })).toEqual([])
     expect(allowedToolsFor([])).toEqual([])
   })
 })
