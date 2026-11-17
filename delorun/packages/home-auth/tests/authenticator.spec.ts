@@ -493,6 +493,10 @@ describe('the authenticator provider', () => {
       entries.push({ id: 'include:delorun-reach', options: { name: '@delorun/reach' } } as never)
       expect(computerOnlyEntryIdsOf(ctx)).toEqual(new Set(['include:delorun-reach']))
       entries.pop()
+      // Pins the namespace form: a row's settings namespace is its `id` option, not its Loader entry id.
+      entries.push({ id: 'include:sandbox', options: { id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local' } } as never)
+      expect(computerOnlyEntryIdsOf(ctx)).toEqual(new Set(['include:sandbox', 'sandbox']))
+      entries.pop()
       expect(enable('include:delorun-mcp-consent')).toEqual({ kind: 'deny', reason: 'loopback-required: changing a protected plugin row' })
       expect(enable('include:delorun-trash')).toEqual({ kind: 'deny', reason: 'elevation-required: pluginManager/setPluginEnabled' })
       // A list that is not one of names protects every row.

@@ -117,3 +117,23 @@ describe('the bundles that carry a computer-only row', () => {
     expect(missing).toEqual([])
   })
 })
+
+describe('the settings namespace of a composed row', () => {
+  it('is refused when the row\'s `id` option, not its entry id, names the namespace, as the real profile composes it', async () => {
+    const { Context } = await import('@deepseek-ai/cordis')
+    const { computerOnlyEntryIdsOf } = await import('../src/authenticator.ts')
+    const ctx = new Context()
+    ctx.provide('loader', { entries: () => [
+      { id: 'include:sandbox', options: { id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local' } },
+      { id: 'include:sandbox-policy', options: { id: 'sandbox-policy', name: '@deepseek-ai/dsh-sandbox-policy' } },
+      { id: 'include:home-auth', options: { id: 'delorun-home-auth', name: '@delorun/home-auth' } },
+      { id: 'include:reach', options: { id: 'delorun-reach', name: '@delorun/reach' } },
+    ] } as never)
+    for (const kind of KINDS) {
+      const real = { ...facts(kind), computerOnlyEntryIds: () => computerOnlyEntryIdsOf(ctx) }
+      for (const ns of ['sandbox', 'sandbox-policy', 'delorun-home-auth', 'delorun-reach']) {
+        expect(createCondition(real, principal(kind))({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: {} } }), `${kind} ${ns}`).toEqual({ kind: 'deny', reason: PROTECTED_ROW_REFUSAL })
+      }
+    }
+  })
+})

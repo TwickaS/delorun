@@ -923,15 +923,16 @@ export const COMPUTER_ONLY_ROW_MODULES = {
 
 /**
  * Whether a settings write names the namespace of a row of {@link COMPUTER_ONLY_ROW_MODULES} (a namespace is the row's
- * Loader entry id, with or without its `include:` prefix), or names its namespace in a form the condition cannot read, or
- * while those rows cannot be read.
+ * Loader entry id, with or without its `include:` prefix), or while those rows cannot be read. A call whose
+ * namespace is not text names no row; the wire validates it.
  * @param facts - the computer-only rows.
  * @param args - the call's arguments.
  * @returns whether the write is refused to a device in every mode.
  */
 function settingsOfComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
   const ids = facts.computerOnlyEntryIds()
-  if (ids === undefined || typeof args.ns !== 'string') return ids === undefined
+  if (ids === undefined) return true
+  if (typeof args.ns !== 'string') return false
   return ids.has(args.ns) || ids.has(`include:${args.ns}`)
 }
 

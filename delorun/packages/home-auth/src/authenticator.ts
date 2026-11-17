@@ -175,12 +175,14 @@ export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefin
 }
 
 /**
- * The Loader entry ids of the rows whose module is in {@link COMPUTER_ONLY_ROW_MODULES}.
+ * The Loader entry ids of the rows whose module is in {@link COMPUTER_ONLY_ROW_MODULES}, and each such row's own `id`
+ * option, which names its settings namespace (a row `id: sandbox` has the entry id `include:sandbox`).
  * @param ctx - a context of the running profile.
- * @returns the ids, none without a Loader.
+ * @returns the ids and namespaces, none without a Loader.
  */
 export function computerOnlyEntryIdsOf(ctx: Context): ReadonlySet<string> {
-  return new Set([...ctx.get('loader')?.entries() ?? []].filter(row => Object.hasOwn(COMPUTER_ONLY_ROW_MODULES, row.options.name)).map(row => row.id))
+  const rows = [...ctx.get('loader')?.entries() ?? []].filter(row => Object.hasOwn(COMPUTER_ONLY_ROW_MODULES, row.options.name))
+  return new Set(rows.flatMap(row => typeof row.options.id === 'string' ? [row.id, row.options.id] : [row.id]))
 }
 
 /** What {@link keyRefsOf} reads of the model provider directory. */
