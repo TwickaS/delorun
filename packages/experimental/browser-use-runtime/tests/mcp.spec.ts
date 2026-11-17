@@ -625,6 +625,11 @@ describe('Session MCP Loader composition', () => {
     ctx.provide('sandboxPolicy')
     ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
     await expect(start('overlap-extra-root', quiet)).rejects.toThrow('overlaps')
+    // A chat in a subfolder, with the output folder elsewhere in the sandbox's workspace root.
+    const sub = join(root, 'workspace-sub')
+    await mkdir(sub)
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: tmpdir() }) } as never)
+    await expect(start('overlap-workspace-root', sub)).rejects.toThrow('overlaps')
     expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
