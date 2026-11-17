@@ -136,7 +136,8 @@ function useStudioNear(element: RefObject<Element | null>): ComponentType<Studio
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some(entry => entry.isIntersecting)) return
       observer.disconnect()
-      void import('./ReplicaStudio.tsx').then((module) => { setStudio(() => module.default) })
+      // Without the drawn studio the frame keeps its still.
+      import('./ReplicaStudio.tsx').then((module) => { setStudio(() => module.default) }, (error: unknown) => { console.error('The studio replay did not load.', error) })
     }, { rootMargin: '100% 0px' })
     observer.observe(target)
     return () => { observer.disconnect() }

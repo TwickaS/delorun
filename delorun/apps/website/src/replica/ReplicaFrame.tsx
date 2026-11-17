@@ -4,10 +4,14 @@
  * markup without the code that drew it, and when the frame nears the screen it loads `ReplicaLive.tsx` as a chunk of its
  * own, which takes the same place and plays, keeping the stills the server drew. So the page's start script carries
  * only this shell; the server's markup carries its own styles, so it is styled before any script runs.
+ * The frame owns its failure: if the chunk fails to load, the server's markup stays; if the live replica throws while
+ * rendering, the server's markup comes back in its place. Either way the still and its caption stay and the rest of the
+ * page is untouched, so a page that places a frame needs no guard of its own for it.
  * @module @delorun/website/replica/ReplicaFrame
  */
 import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { island } from 'virtual:replica-island'
+import { ChunkBoundary } from '../components/chunk-boundary.tsx'
 import type { SessionId } from './model.ts'
 import type { ReplicaLiveProps } from './ReplicaLive.tsx'
 import type { ReplicaWidth } from './screens/StudioLayout.tsx'
@@ -43,14 +47,23 @@ function serverStills(root: Element): Partial<Record<ReplicaWidth, string>> {
  */
 export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   const box = useRef<HTMLDivElement>(null)
-  const [live, setLive] = useState<{ readonly Live: ComponentType<ReplicaLiveProps>, readonly stills: Partial<Record<ReplicaWidth, string>> } | undefined>()
+  const [live, setLive] = useState<{
+    readonly Live: ComponentType<ReplicaLiveProps>
+    readonly stills: Partial<Record<ReplicaWidth, string>>
+    /** The server's markup, which comes back if the live replica throws. */
+    readonly markup: string
+  } | undefined>()
   useEffect(() => {
     const target = box.current
     if (target === null) return
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some(entry => entry.isIntersecting)) return
       observer.disconnect()
-      void import('./ReplicaLive.tsx').then((module) => { setLive({ Live: module.ReplicaLive, stills: serverStills(target) }) })
+      import('./ReplicaLive.tsx').then(
+        (module) => { setLive({ Live: module.ReplicaLive, stills: serverStills(target), markup: target.innerHTML }) },
+        // The server's markup stays: the still, its caption and the rail, which no longer play.
+        (error: unknown) => { console.error('The studio replay did not load.', error) },
+      )
     }, { rootMargin: '100% 0px' })
     observer.observe(target)
     return () => { observer.disconnect() }
@@ -59,7 +72,11 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   // replica replaces it in one commit.
   return live === undefined
     ? <div ref={box} className={className} dangerouslySetInnerHTML={{ __html: island({ session, width }) }} suppressHydrationWarning />
-    : <div ref={box} className={className}><live.Live session={session} width={width} stills={live.stills} /></div>
+    : <div ref={box} className={className}>
+        <ChunkBoundary fallback={<div dangerouslySetInnerHTML={{ __html: live.markup }} />}>
+          <live.Live session={session} width={width} stills={live.stills} />
+        </ChunkBoundary>
+      </div>
 }
 
 /**

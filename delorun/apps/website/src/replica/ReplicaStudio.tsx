@@ -90,7 +90,11 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
   const [fixture, setFixture] = useState<ReplicaFixture | undefined>()
   useEffect(() => {
     let current = true
-    void loadFixture(file.session).then((loaded) => { if (current) setFixture(shiftClock(loaded, Date.now() - Date.parse(loaded.clock))) })
+    // Without its fixture the studio is never ready, so the frame keeps its still.
+    loadFixture(file.session).then(
+      (loaded) => { if (current) setFixture(shiftClock(loaded, Date.now() - Date.parse(loaded.clock))) },
+      (error: unknown) => { console.error('The studio replay did not load.', error) },
+    )
     return () => { current = false }
   }, [file.session])
   useEffect(() => { if (fixture !== undefined) onReady() }, [fixture, onReady])
