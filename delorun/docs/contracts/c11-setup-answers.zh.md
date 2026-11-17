@@ -161,7 +161,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 | `reach.option` | `none`、`tailscale-private`、`tailscale-funnel` 或 `self-hosted-relay`。 | `none` | `none` 以外的任何值只在交互形式中被接受。 |
 | `reach.identityFactor` | `passkey`、`oidc`、`tailnet`、`tailnet-membership` 或 `null`。 | `null` | 方式为 `none` 时为 `null`。已构建的 `reach` 节为 `tailscale-private` 记录 `tailnet-membership`。`tailscale-funnel` 和 `self-hosted-relay` 为 `passkey` 或 `oidc`。`tailscale-private` 为 `passkey`、`oidc` 或 `tailnet`。`tailnet` 只在 C7 的套接字变体下可用（[C7](c07-reach-providers.zh.md#tailscale-serve-target)）；否则 setup 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝它。`ts.net` 地址上的 `passkey` 只在 C14 使通行密钥在那里可用时才可用（[C14](c14-oidc-passkeys.zh.md#relying-party-ids)）；否则 setup 以 `PASSKEY_UNAVAILABLE` 拒绝它。 |
 | `importStockHome` | 布尔值。 | `false` | 由 import 节设置。`--config` 拒绝 `true`，因为导入先显示其预览再询问。 |
-| `phonePowers` | `careful`、`full` 或 `null`。 | `null` | 由 `reach` 节设置，它只在打开远程访问时询问，并预选 Careful。`--yes` 从 `--phone-powers` 取得它，文档也可以指明它。`null` 保持 home 的级别不变；缺少该字段时读作 `null`。 |
+| `phonePowers` | `careful`、`full` 或 `null`。 | `null` | 由 `reach` 节设置，它只在打开远程访问时询问，预选之前的回答，否则预选 home 记录的级别，否则预选 Careful。`--yes` 从 `--phone-powers` 取得它，文档也可以指明它。`null` 保持 home 的级别不变；缺少该字段时读作 `null`。 |
 | `protectChanges` | 布尔值。 | `false` | 由 `changes-protection` 节设置；缺失的字段读作 `false`。`--config` 拒绝 `true`，因为只有终端证明才能更改保护设置（[C21](c21-changes.zh.md)）。 |
 | `updateCheck` | 布尔值；可选。 | `true` | Delorun 是否向发布通道检查更新的发布。`--no-update-check` 在每种形式中为整次 setup 运行将其设为 `false`；`delorun setup <section>` 拒绝它，而 `delorun setup privacy` 改为询问该问题。 |
 | `sections` | `{ "id", "status" }` 的列表，按流程顺序。 | `[]` | 由 setup 写入，从不由文档写入。`seen` 是已显示的说明，`answered` 是已回答的问题，`skipped` 是未被询问而采用其默认值的节。studio 的新手引导略过终端已涵盖的内容。 |

@@ -250,7 +250,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 - **Careful** 是默认级别。已解锁的手机不能打开终端、关闭保护、应用对你插件的变更、更改 Delorun 自己的文件，也不能做[上面](#what-an-approved-phone-can-and-cannot-do)列为留在你电脑上的其他事。它仍然可以撤销或丢弃一项变更，以及打开保护。Careful 不涵盖已解锁的手机所给出的批准：接受 MCP 服务器、允许外部 agent 和给工作区完全访问在两个级别下都可以，而且每一项都仍可能在沙箱之外启动程序。
 - **Full** 让已解锁的手机能做你的电脑能做的一切，每次都需要你在手机上输入的解锁：来自你电脑的代码，或你的 PIN。批准手机之后的 15 分钟永远不算数。
 
-`delorun setup` 会在你打开远程访问时请你选择，并预选 Careful。运行 `delorun devices powers` 查看级别。运行 `delorun devices powers careful` 或 `delorun devices powers full` 来选择；Full 需要终端。你电脑上的 studio 也会显示并设置它。选择会立即生效，无需重启。
+`delorun setup` 会在你打开远程访问时请你选择，并预选你的 home 当前的级别；如果还没有级别，则预选 Careful。运行 `delorun devices powers` 查看级别。运行 `delorun devices powers careful` 或 `delorun devices powers full` 来选择；Full 需要终端。你电脑上的 studio 也会显示并设置它。选择会立即生效，无需重启。
 
 在手机权限出现之前就已存在的 home，会从它的 `phonePowersOnUpgrade` 设置所指定的级别开始（除非你改过，否则是 Careful），studio 会一直提醒你，直到你作出选择。如果 Delorun 无法读取已保存的选择，就应用 Careful。
 
