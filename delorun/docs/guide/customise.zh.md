@@ -87,14 +87,14 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 | 插件 | 作用 | 需要你提供 | 状态 |
 | --- | --- | --- | --- |
-| 浏览器 | 智能体通过 Playwright，在你电脑上的 Chromium 浏览器中浏览。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 一个它能启动的 Chromium 浏览器。Stagehand 还需要它自己的模型。 | 实验性 |
+| 浏览器 | 智能体通过 Playwright，在你电脑上的 Chromium 浏览器中浏览。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 它的 Playwright 所需的 Chromium 版本；下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上下载它的命令。Stagehand 还需要它自己的模型。 | 实验性 |
 | 代码智能 | 一个只读的 `lsp` 工具：跳转到定义、查找引用、查找实现、悬停信息。 | 你的 PATH 上有 `typescript-language-server`；在此之前“插件”会显示“需要设置”。其他服务器放进你的 profile 补丁。 | 稳定 |
 | Claude Code 与 Codex 钩子 | 在一轮对话的相同时间点运行 `~/.claude/settings.json` 和 `~/.codex/hooks.json` 中的钩子，并加载 Claude Code mod。 | 你自己的钩子文件；文件缺失时不注册任何钩子。 | 实验性 |
 | Webhook | 已签名的 GitHub webhook 可以开始一次对话，监听 `127.0.0.1:3081`，前面需要你自己提供的代理或隧道。 | 环境中的 `DELORUN_GITHUB_WEBHOOK_SECRET`，以及你自己的规则；端点行起初是关闭的，在设置好密钥之前“插件”会显示“需要设置”。 | 实验性 |
 | 外部智能体 | 智能体把任务交给你已安装的 Codex 或 Claude Code 程序，并在工具程序中运行 Python。 | 已安装并已登录的程序，以及运行 Python 所需的 `python3`；缺少的一项会被略去。Python 在 Windows 上不可用。 | 实验性 |
 | 计算机使用（Cua Driver） | 智能体通过 Cua Driver SDK 查看并操作桌面窗口。 | 启动 Delorun 的程序拥有桌面权限。只支持 Linux 和 Windows；在 macOS 上它显示为不可用，那里的插件是“Computer use”。 | 实验性 |
 
-当可选插件需要你电脑上的某样东西时，“插件”会在它的那一行说明，例如“需要设置 · 需要安装 Chrome 或 Chromium”，旁边附有解决办法（带复制按钮的命令、指向该设置的链接，或一份指南）。这一行绝不会阻止其他插件。每次你打开“插件”以及每次回到它的窗口时，Delorun 都会重新检查，所以一旦你安装了程序或设置了值，这条提示会自行消失。代码智能的语言服务器行和 Webhook 的 GitHub 端点在你开启之前是关闭的；“插件”会告诉你它们还需要什么。
+当可选插件需要你电脑上的某样东西时，“插件”会在它的那一行说明，例如“需要设置 · 需要安装 typescript-language-server”，旁边附有解决办法（带复制按钮的命令、指向该设置的链接，或一份指南）。这一行绝不会阻止其他插件。每次你打开“插件”以及每次回到它的窗口时，Delorun 都会重新检查，所以一旦你安装了程序或设置了值，这条提示会自行消失。代码智能的语言服务器行和 Webhook 的 GitHub 端点在你开启之前是关闭的；“插件”会告诉你它们还需要什么。
 
 实验性插件在不同发行版之间可能会改变或出问题。Webhook 和浏览器会打开网络监听端口或真实的浏览器，所以开启之前请先阅读每个插件的作用。作为智能体的 Claude Code 和 Codex 是同一个列表中的独立插件。
 

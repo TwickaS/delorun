@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { assertBundlePlatform, composeEntries, initProfile, loadProfileDirectory, UnsupportedBundlePlatformError } from '@deepseek-ai/dsh-app-boot'
 import { checkRequirements } from '../src/requirements.ts'
 import { DELORUN_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '../src/profile.ts'
@@ -152,6 +152,21 @@ describe('what needs setup', () => {
     expect(ids('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual(['webhook-runtime'])
     expect(states('bundle-webhooks', binDir())).toEqual({ 'github-webhook-ingress': 'needs-setup' })
     expect(states('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual({ 'github-webhook-ingress': 'ready' })
+  })
+
+  it('says Browser needs its Chromium download until the exact build its Playwright expects is in Playwright\'s cache', () => {
+    const cache = mkdtempSync(join(scratch, 'ms-playwright-'))
+    vi.stubEnv('PLAYWRIGHT_BROWSERS_PATH', cache)
+    try {
+      const rowIds = flat(patchRows('bundle-browser')).map(row => String(row.id))
+      const answer = checkRequirements([{ name: '@delorun/bundle-browser', dir: join(PACKAGES, 'bundle-browser'), rowIds }], 'en')
+      expect(answer).toMatchObject({ problems: [], rows: [{ rowId: 'browser-use-playwright-mcp', state: 'needs-setup', reason: 'Chromium download' }] })
+      const row = answer.rows[0]
+      const command = row?.state === 'needs-setup' && row.fix.kind === 'command' ? row.fix.command : ''
+      expect(command).toMatch(/^npx -y @playwright\/mcp@\d+\.\d+\.\d+ install-browser chromium$/u)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it.each([['bundle-code-intelligence', ['lsp-stdio', 'tool-lsp']], ['bundle-webhooks', ['github-webhook-ingress']]] as const)(
