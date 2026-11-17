@@ -4,6 +4,8 @@ description: "Lets the agent open pages, click and read in a Chromium browser on
 
 # @delorun/bundle-browser
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Switch on **Browser** in Plugins to let the agent browse in a real Chromium browser on this computer. It uses the Playwright provider with a headless browser it launches itself.

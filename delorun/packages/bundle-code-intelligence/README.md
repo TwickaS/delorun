@@ -4,11 +4,13 @@ description: "Lets the agent ask a language server for definitions, references a
 
 # @delorun/bundle-code-intelligence
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Switch on **Code intelligence** in Plugins to give the agent a read-only `lsp` tool: go to definition, find references, find implementations and hover.
 
-The bundle brings your own language server, not one of its own. It starts the server `typescript-language-server --stdio` for JavaScript and TypeScript files, and only when that command is on your PATH; otherwise the provider and tool stay off and nothing fails. To add another language or server, replace the `lsp-stdio` row's `config` in your profile's `cordis.patch.yml`, restating the servers you keep.
+The bundle brings your own language server, not one of its own. It starts the server `typescript-language-server --stdio` for JavaScript and TypeScript files, The rows start off; Plugins shows "Needs setup" until `typescript-language-server` is on your PATH. To add another language or server, replace the `lsp-stdio` row's `config` in your profile's `cordis.patch.yml`, restating the servers you keep.
 
 ## Needs setup
 
