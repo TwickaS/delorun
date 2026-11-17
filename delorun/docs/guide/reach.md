@@ -22,6 +22,7 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 - [Approve a device](#approve-a-device)
 - [Keep approval yours](#keep-approval-yours)
 - [What an approved phone can and cannot do](#what-an-approved-phone-can-and-cannot-do)
+- [Choose how much an unlocked phone may do](#choose-how-much-an-unlocked-phone-may-do)
 - [Unlock sensitive actions for a while](#unlock-sensitive-actions-for-a-while)
 - [Unlock with a PIN](#unlock-with-a-pin)
 - [Remove a device](#remove-a-device)
@@ -172,7 +173,7 @@ With an unlock, the phone can also:
 - change settings;
 - run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
 - install, enable, update or remove plugins, and undo or restore a profile change. Delorun's own guard plugins and remote access cannot be turned off or changed this way, and an undo or restore that would change one is refused;
-- open or attach to a terminal in any folder, full-access workspaces included;
+- undo or discard a change in Changes, and turn protection on;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the model wrote;
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. Without the unlock the phone says how many minutes the unlock lasts and offers **Unlock**, and the prompt keeps waiting;
@@ -181,16 +182,18 @@ With an unlock, the phone can also:
 - loosen a workspace's network, run a trust check, and send a problem report, which can hold paths from your computer;
 - keep what you changed: nothing is set back when the unlock ends, and undo and the saved setup versions are how you roll a change back.
 
-A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never covers protected settings or the four actions that loosen what Delorun allows (accepting an MCP server, allowing an external agent, granting full access and loosening a workspace's network). Those still ask for a code from your computer. In PIN mode there is no such start at all: every action that needs an unlock asks for the PIN.
+A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never opens a terminal, whatever the level of [Phone powers](#choose-how-much-an-unlocked-phone-may-do), and never covers protected settings or the four actions that loosen what Delorun allows (accepting an MCP server, allowing an external agent, granting full access and loosening a workspace's network). Those still ask for a code from your computer. In PIN mode there is no such start at all: every action that needs an unlock asks for the PIN.
 
 Only your computer, even when the phone is unlocked:
 
 - turn remote access on or off, set or change the PIN, and approve or remove devices;
-- apply, discard or undo a change, create a plugin, and move a setup file in or out, because each is recorded as done by you in person;
+- choose [Phone powers](#choose-how-much-an-unlocked-phone-may-do), and dismiss the notice that tells you a phone changed protection;
 - turn update checks off (turning them on works from the phone);
 - open a file or folder in an application on your computer.
 
 The phone shows these as "Do this on your computer" with the reason.
+
+What else stays at your computer depends on Phone powers. With the default, Careful, an unlocked phone also cannot open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. With Full it can.
 
 Never, even unlocked:
 
@@ -208,7 +211,7 @@ A workspace that you already put on full access at your computer can still be dr
 <details>
 <summary>Edge cases</summary>
 
-- If a workspace is on full access, then the phone still needs an unlock to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so an unlocked phone is treated as your computer.
+- If a workspace is on full access, then the phone still needs Phone powers set to Full and an unlock to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so an unlocked phone with Full is treated as your computer.
 - If a phone's session is idle for 12 hours, or 14 days have passed since it signed in, then the session ends and its open connections close — the phone signs in again from the sign-in page with its own key.
 - If you approve or remove any device, then every phone's open connections close — each phone signs in again by itself.
 - If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone — images attached to messages do show.
@@ -223,6 +226,19 @@ A workspace that you already put on full access at your computer can still be dr
 - **Set up from your phone.** The setup guide on a phone marks a step only your computer can do, such as the PIN, says why, and offers **Do it on my computer**. That keeps the step in your home, not in the phone's browser, and the studio on your computer then shows a quiet **Finish setup · N left** in its sidebar. It opens just those steps, drops a step you already did, and goes away when none are left.
 
 </details>
+
+## Choose how much an unlocked phone may do
+
+Phone powers has two levels. You choose it at your computer, and a phone cannot change it, unlocked or not.
+
+- **Careful** is the default. An unlocked phone cannot open a terminal, turn protection off, apply changes to your plugins, change Delorun's own files, or do the other things [listed above](#what-an-approved-phone-can-and-cannot-do) as staying at your computer. It can still undo or discard a change and turn protection on. Careful does not cover the approvals an unlocked phone gives: accepting an MCP server, allowing an external agent and giving a workspace full access work at either level, and each can still start programs outside the sandbox.
+- **Full** lets an unlocked phone do everything your computer can, each time with an unlock you entered on the phone: a code from your computer, or your PIN. The 15 minutes after you approve a phone never count.
+
+Run `delorun devices powers` to see the level. Run `delorun devices powers careful` or `delorun devices powers full` to choose it; Full needs a terminal. The studio on your computer shows and sets it too. The choice applies at once, without a restart.
+
+A home that existed before Phone powers starts at the level its `phonePowersOnUpgrade` setting names, Careful unless you changed it, and the studio tells you until you choose. If Delorun cannot read the saved choice, it applies Careful.
+
+When a phone turns protection on or off, your computer shows a notice, and `delorun changes list` prints it under "Changed from a phone:" and clears it when it reaches a terminal. Turning protection off from a phone asks twice, as it does at the computer; the second question stops a slip and does not stop someone who holds your unlocked phone and has chosen Full.
 
 ## Unlock sensitive actions for a while
 
