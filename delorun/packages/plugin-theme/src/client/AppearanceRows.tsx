@@ -10,6 +10,7 @@ import { useId } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { DEFAULT_SETTINGS, DENSITIES, EFFORT_DISPLAYS, TYPEFACES, type ThemeSettings, type Typeface } from '../config.ts'
+import { writesFor } from '../settings.ts'
 import { FONT_FAMILIES } from '../palette/soft.ts'
 import { STOCK_FONT_STACKS } from '../palette/stock.ts'
 import css from './AppearanceRows.module.css'
@@ -95,11 +96,11 @@ export function TypefaceRow({ t, settings }: AppearanceRowProps) {
  */
 export function DensityRow({ t, settings }: AppearanceRowProps) {
   const id = useId()
-  const { current, disabled, failure, save } = useTheme(settings, t)
+  const { current, disabled, failure, track } = useTheme(settings, t)
   return (
     <SettingRow stacked titleId={id} title={t('density')} description={t('density.lead')} failure={failure}>
       <TileGroup labelledBy={id} className={css.densityTiles} value={current.density} disabled={disabled}
-        onChange={(value) => { save('density', value) }}
+        onChange={(density) => { track(settings.mutate(writesFor({ kind: 'density', density }, current))) }}
         tiles={DENSITIES.map(value => ({
           value,
           label: t(`density.${value}`),
