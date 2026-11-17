@@ -294,7 +294,8 @@ describe('the real pinned Codex app-server', () => {
   }, 150_000)
 
   it('offers harness tools on a loopback server named in the thread config only, and revokes it at exit (task 5, D14)', async () => {
-    const r = await real([{ kind: 'call-matching', pattern: /^mcp__delorun_[0-9a-f]{12}\/harness_echo$/, args: { text: 'from codex' } }, { kind: 'text', text: 'done' }])
+    const harnessCall: ResponsesStep = { kind: 'call-matching', pattern: /^mcp__delorun_[0-9a-f]{12}\/harness_echo$/, args: { text: 'from codex' } }
+    const r = await real([harnessCall, { kind: 'text', text: 'done' }, harnessCall, { kind: 'text', text: 'done again' }])
     const config = join(r.codexHome, 'config.toml')
     const before = readFileSync(config)
     const listing = readdirSync(r.codexHome).sort()
@@ -320,15 +321,22 @@ describe('the real pinned Codex app-server', () => {
     // The program's own approval of the call was answered by the driver, never asked.
     expect(r.questions).toEqual([])
     await session.close()
+    // A resumed thread gets a new server, name and token, again only in its thread config.
+    const resumed = await r.driver.open(r.request({ harnessTools: [echo], resume: session.programSessionId }))
+    await resumed.send('Call harness_echo again.', 'start')
+    const again = await untilTurnEnd(resumed)
+    expect(again.find(event => event.kind === 'tool-result')).toMatchObject({ isError: false })
+    expect(received).toHaveLength(2)
+    await resumed.close()
     await expectNothingLeft(r)
     expect(readFileSync(config).equals(before)).toBe(true)
     expect(readdirSync(r.codexHome).filter(name => !listing.includes(name) && !CODEX_STATE.test(name))).toEqual([])
     // The token reaches the program only in the thread config, and Codex keeps it in no file of its home: not the
     // rollout, not its databases or logs.
-    const token = /Bearer ([A-Za-z0-9_-]{43})/.exec(r.sent.find(frame => frame.includes('"thread/start"')) ?? '')?.[1]
-    expect(token).toBeDefined()
+    const tokens = r.sent.filter(frame => /"thread\/(start|resume)"/.test(frame)).flatMap(frame => [...frame.matchAll(/Bearer ([A-Za-z0-9_-]{43})/g)].map(match => match[1] ?? ''))
+    expect(new Set(tokens).size).toBe(2)
     expect(filesUnder(join(r.codexHome, 'sessions')).length).toBeGreaterThan(0)
-    expect(filesUnder(r.codexHome).filter(file => readFileSync(file).includes(token ?? 'missing'))).toEqual([])
+    expect(filesUnder(r.codexHome).filter(file => tokens.some(token => readFileSync(file).includes(token)))).toEqual([])
   }, 150_000)
 
   it('runs a limits check without a thread or a model request', async () => {

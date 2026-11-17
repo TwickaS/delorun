@@ -79,6 +79,7 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
     await session.close()
     await sleep(1_000)
     run.log.report('programs 1 s after Stop', processesIn(run.task))
+    run.log.report('sandbox folders left in the task folder', ['.agents', '.codex'].filter(name => existsSync(join(run.task, name))))
     await sleep(32_000)
     run.log.report('late.txt exists 33 s after Stop', existsSync(join(run.task, 'late.txt')))
   }),
@@ -98,22 +99,26 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
     await resumed.close()
   }),
 
-  /** One question with each answer; "Allow for this run" also lets the same command through unasked. */
+  /**
+   * One question with each answer. "Allow for this run" lets the identical command through unasked and still asks
+   * about a different one (D4).
+   */
   questions: () => scenario('questions', async (run) => {
     const session = await run.driver.open(run.request())
-    const turns: readonly { readonly answer: 'allow-once' | 'allow-run' | 'reject' | 'cancel'; readonly prompt: string; readonly file: string }[] = [
+    const turns: readonly { readonly answer: 'allow-once' | 'allow-run' | 'reject' | 'cancel'; readonly prompt: string; readonly file: string; readonly then?: 'reject' }[] = [
       { answer: 'allow-once', prompt: 'Run this shell command exactly: touch once.txt. Then say done.', file: 'once.txt' },
-      { answer: 'allow-run', prompt: 'Run this shell command exactly: touch run.txt. Then run exactly the same command once more: touch run.txt. Then say done.', file: 'run.txt' },
+      { answer: 'allow-run', then: 'reject', prompt: 'Run these three shell commands one at a time, each exactly as written: touch run.txt, then touch run.txt again, then touch other.txt. Then say done.', file: 'other.txt' },
       { answer: 'reject', prompt: 'Run this shell command exactly: touch rejected.txt. Then say done.', file: 'rejected.txt' },
       { answer: 'cancel', prompt: 'Run this shell command exactly: touch cancelled.txt. Then say done.', file: 'cancelled.txt' },
     ]
     for (const turn of turns) {
       const asked = run.questions.length
-      run.answers = [turn.answer]
+      run.answers = turn.then === undefined ? [turn.answer] : [turn.answer, turn.then]
       await session.send(turn.prompt, 'start')
       const events = await untilTurnEnd(session, run.log)
       run.log.report(`${turn.answer}`, {
         questions: run.questions.length - asked,
+        asked: run.questions.slice(asked).map(question => question.reason),
         calls: events.filter(event => event.kind === 'tool-call').length,
         made: existsSync(join(run.task, turn.file)),
         outcome: events.at(-1),
