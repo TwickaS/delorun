@@ -1,0 +1,121 @@
+/* The drawn studio: brand tokens only. Inside the live replica the brand's roles read the scoped studio tokens. */
+
+.layout {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+  background: var(--dl-surface);
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  /* A dialog's fixed overlay is placed against the drawn studio, not the page. */
+  contain: layout paint;
+  transform: translateZ(0);
+}
+
+.layout[data-width='phone'] { grid-template-columns: minmax(0, 1fr); }
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+  min-height: 0;
+  padding: var(--dl-space-3);
+  border-inline-end: 1px solid var(--dl-border);
+  background: var(--dl-surface-sunken);
+  font-size: 13px;
+}
+
+.workspace { display: flex; align-items: center; gap: var(--dl-space-2); font-weight: 600; }
+
+.badge {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--dl-radius-xs);
+  background: var(--dl-accent);
+  color: var(--dl-on-accent);
+  font-size: 12px;
+}
+
+.newChat {
+  padding: var(--dl-space-1) var(--dl-space-2);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-sm);
+  color: var(--dl-text-muted);
+}
+
+.chats { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+
+.chat, .settingsItem {
+  overflow: hidden;
+  padding: var(--dl-space-1) var(--dl-space-2);
+  border-radius: var(--dl-radius-sm);
+  color: var(--dl-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsItem { margin-top: auto; }
+
+.chat[data-current], .settingsItem[data-current] { background: var(--dl-surface-raised); color: var(--dl-text); }
+
+.main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+
+.header {
+  overflow: hidden;
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border-bottom: 1px solid var(--dl-border);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screens { position: relative; min-height: 0; }
+
+.screen {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease), visibility 0s var(--dl-ease) var(--dl-duration-quick);
+}
+
+.screen[data-active] { visibility: visible; opacity: 1; transition-delay: 0s; }
+
+.screen[data-screen='changes'], .screen[data-screen='versions'] { overflow: auto; padding: var(--dl-space-4); }
+
+.chatScreen { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+
+.transcript { padding: var(--dl-space-4); }
+
+.composerSlot { padding: 0 var(--dl-space-4) var(--dl-space-4); }
+
+.terminal {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: var(--dl-space-4);
+  overflow: auto;
+  background: var(--dl-surface-sunken);
+  color: var(--dl-text);
+  font-family: var(--dl-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.line[data-kind='output'] { color: var(--dl-text-muted); }
+
+/* A press the chapter script plays: the control shrinks as a pressed button does and carries the focus ring's colour. */
+.layout :global([data-replica-press]) {
+  outline: 2px solid var(--dl-accent);
+  outline-offset: 2px;
+  transform: scale(var(--dl-scale-pressed));
+  transition: transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+.root { height: 100%; }
