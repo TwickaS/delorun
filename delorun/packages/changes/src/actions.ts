@@ -64,6 +64,7 @@ import {
 } from './types.ts'
 import { isPluginRequest } from './install-actions.ts'
 import { leftOutOf } from './left-out.ts'
+import { addProtectionNotice } from './notices.ts'
 import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
 import { referenceRelease } from './tree.ts'
 
@@ -768,18 +769,20 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
 }
 
 /**
- * Change the protection setting. Only a terminal proof changes it. Turning it off is logged in the profile's change log
- * as an applied `guard-weakening` change. A start, the running Host's watcher of the plugins' folders and the Host's
- * plugins read the setting at each decision, so it takes effect without a restart.
+ * Change the protection setting from a terminal or the studio. Turning it off is logged in the profile's change log as
+ * an applied `guard-weakening` change decided where the proof says. A change a paired device made, either way, is also
+ * kept as a notice for the person at the computer ([notices](./notices.ts)). A start, the running Host's watcher of the
+ * plugins' folders and the Host's plugins read the setting at each decision, so it takes effect without a restart.
  * @param ctx - the profile whose log records a weakening.
  * @param level - the new level.
- * @param presence - proof from `attestTerminal`.
+ * @param presence - proof from `attestTerminal`, `attestStudio` or `attestDevice`.
  * @returns the level before and after, and the logged entry when the level is weaker.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue.
  */
 export async function changeProtection(ctx: ChangesContext, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionChange> {
   const before = await readProtection(ctx.home)
   const record = await setProtection(ctx.home, level, presence)
+  if (presence.device !== undefined) await addProtectionNotice(ctx.home, level, presence.device, record.setAt)
   if (PROTECTION_LEVELS.indexOf(level) <= PROTECTION_LEVELS.indexOf(before)) return { before, level }
   const entry: ChangeEntry = {
     id: changeId('guard-weakening', { setting: 'protection' }, undefined, undefined),
@@ -789,7 +792,7 @@ export async function changeProtection(ctx: ChangesContext, level: ProtectionLev
     summary: 'Protection turned off: changes load without review',
     createdAt: record.setAt,
     decidedAt: record.setAt,
-    decidedFrom: 'terminal',
+    decidedFrom: presence.kind,
   }
   await locked(ctx, async () => {
     await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), entry))

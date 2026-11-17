@@ -7,6 +7,7 @@ import { isChangesError, type ChangesCode } from '../src/errors.ts'
 import { changesDirectory, profileChangesDirectory, protectionPath } from '../src/paths.ts'
 import {
   approvedOf,
+  attestDevice,
   attestStudio,
   attestTerminal,
   closeWorkSession,
@@ -119,9 +120,17 @@ describe('attestStudio', () => {
     }
   })
 
-  it('refuses a studio proof for the protection setting', async () => {
+  it('the studio sets protection, and a paired device only with an unlock the person entered', async () => {
     await setProtection(home, 'on', terminal())
-    expect(await refusal(setProtection(home, 'off', attestStudio(atComputer)))).toBe('NOT_AT_COMPUTER')
+    // Without the fresh-unlock check a device in its approval grace, or a locked one, holds a proof.
+    expect(await refusal(() => attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: false }))).toBe('NOT_AT_COMPUTER')
+    const device = attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: true })
+    expect(device).toMatchObject({ kind: 'studio', device: { id: 'device-1', label: 'Phone' } })
+    expect((await setProtection(home, 'off', device)).level).toBe('off')
+    expect((await setProtection(home, 'on', attestStudio(atComputer))).level).toBe('on')
+    expect(await readProtection(home)).toBe('on')
+    // A forged proof is still refused.
+    expect(await refusal(setProtection(home, 'off', { kind: 'studio' } as never))).toBe('NOT_AT_COMPUTER')
     expect(await readProtection(home)).toBe('on')
   })
 })

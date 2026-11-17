@@ -51,6 +51,9 @@ import {
   elevationStateHandler,
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
+import { PhonePowersReader, writePhonePowers, type PhonePowers } from './phone-powers.ts'
+import { phonePowersHandler } from './phone-powers-routes.ts'
+import { PHONE_POWERS_PATH, type PhonePowersLevel } from './wire.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -195,6 +198,9 @@ export class HomeAuthService extends Service {
   /** Retries the PIN set-back while a lift waits; absent otherwise. */
   private pinRetry: NodeJS.Timeout | undefined
 
+  /** The Phone powers record's reader, made at the first read. */
+  private powers: PhonePowersReader | undefined
+
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
 
@@ -312,6 +318,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PHONE_POWERS_PATH, handler: phonePowersHandler(core, credential, { current: () => this.phonePowers(), set: level => this.setPhonePowers(level) }) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -423,6 +430,28 @@ export class HomeAuthService extends Service {
    */
   touchDeviceUnlock(deviceId: string, listener: ReachListenerId): void {
     this.core?.touchDeviceUnlock(deviceId, listener)
+  }
+
+  /**
+   * The Phone powers level in force, read from its record on every call; the reach policy and the Changes routes ask it
+   * before an action Careful keeps at the computer.
+   * @returns the level, whether the person chose it, and why the record cannot be read when it cannot (the level is then Careful).
+   */
+  phonePowers(): PhonePowers {
+    this.powers ??= new PhonePowersReader(this.secretsDirectory)
+    return this.powers.current()
+  }
+
+  /**
+   * Record the person's Phone powers choice. Only the computer's route calls it; a device never does.
+   * @param level - the level chosen.
+   * @returns the level now in force.
+   * @throws the failure of the protected write.
+   */
+  async setPhonePowers(level: PhonePowersLevel): Promise<PhonePowers> {
+    const powers = await writePhonePowers(this.secretsDirectory, level)
+    this.ctx.logger.info(`home-auth: Phone powers set to ${level} at the computer`)
+    return powers
   }
 
   /**

@@ -4,21 +4,24 @@
  *
  * The stand-in admits a request whose cookie is `studio=valid` and refuses any other with 401, or with 403 when the
  * request carries `x-test-fence: refuse`, as Connection's Host/Origin fence does. `x-test-remote: 1` admits it as a
- * remote session, as a reach dispatcher's admission does, and `x-test-listener: <id>` stamps it with that listener.
+ * remote session, as a reach dispatcher's admission does, and `x-test-listener: <id>` stamps it with that listener. A
+ * remote session with `x-test-unlock: fresh | grace | none` is the paired device {@link TEST_DEVICE} holding that
+ * unlock; without the header it is no paired device's.
  *
  * @module @delorun/plugin-changes/tests/routes-fixture
  */
 import { once } from 'node:events'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type PluginOperationResult, type ReloadOutcome } from '@delorun/changes'
+import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, type HarnessContext, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type PluginOperationResult, type ReloadOutcome } from '@delorun/changes'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { onTestFinished } from 'vitest'
-import { changesRoutes, type RouteDependencies } from '../src/routes.ts'
+import { changesRoutes, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
 
 /** The fixture's profile. */
 export const PROFILE = 'default'
@@ -26,8 +29,14 @@ export const PROFILE = 'default'
 /** The cookie the stand-in admits. */
 export const CREDENTIAL = 'Cookie: studio=valid'
 
-/** The session a reach dispatcher admitted. */
-const REMOTE = Object.freeze({ session: 'remote' })
+/** A remote session's stand-in Peer, with the unlock its paired device holds, if it is one. */
+interface RemotePeer {
+  readonly session: 'remote'
+  readonly unlock?: RouteDevice['unlock']
+}
+
+/** The paired device a remote session with `x-test-unlock` speaks for. */
+export const TEST_DEVICE = { id: 'device-test-1', label: 'Test phone' } as const
 
 /** The studio's own session on the loopback listener. */
 const LOCAL = Object.freeze({ session: 'local' })
@@ -131,6 +140,8 @@ export interface RouteServer {
   readonly warnings: string[]
   /** The arguments of each plugin operation the routes ran, which succeeds unless `operationResult` says otherwise. */
   readonly operations: (readonly string[])[]
+  /** How often a device's unlock was renewed after an action. */
+  readonly renewals: () => number
 }
 
 /**
@@ -140,8 +151,9 @@ export interface RouteServer {
  *   operation answers.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full' } = {}): Promise<RouteServer> {
   let profileReads = 0
+  let renewals = 0
   let reloads = 0
   const warnings: string[] = []
   const operations: (readonly string[])[] = []
@@ -151,9 +163,11 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
       admit: (request: IncomingMessage) => {
         if (request.headers['x-test-fence'] === 'refuse') return { rejection: 403 }
         if (request.headers.cookie !== 'studio=valid') return { rejection: 401 }
-        return { peer: request.headers['x-test-remote'] === '1' ? REMOTE : LOCAL, ...request.headers['x-test-roll'] === '1' ? { setCookie: 'studio=rolled; HttpOnly' } : {} }
+        const unlock = request.headers['x-test-unlock']
+        const remote: RemotePeer = { session: 'remote', ...unlock === 'fresh' || unlock === 'grace' || unlock === 'none' ? { unlock } : {} }
+        return { peer: request.headers['x-test-remote'] === '1' ? remote : LOCAL, ...request.headers['x-test-roll'] === '1' ? { setCookie: 'studio=rolled; HttpOnly' } : {} }
       },
-      isReachPeer: peer => peer === REMOTE,
+      isReachPeer: peer => (peer as Partial<RemotePeer>).session === 'remote',
     },
     profile: () => {
       profileReads += 1
@@ -174,6 +188,15 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     workspaces: () => [],
     reveal: () => {},
     delorunVersion: () => '0.0.0',
+    devices: {
+      deviceOf: (peer) => {
+        const { unlock } = peer as Partial<RemotePeer>
+        return Promise.resolve(unlock === undefined ? undefined : { ...TEST_DEVICE, unlock, renew: () => { renewals += 1 } })
+      },
+      phonePowers: () => ({ level: options.powers ?? 'careful', chosen: options.powers !== undefined }),
+    },
+    harness: () => undefined,
+    harnessEffect: () => Promise.resolve({ kind: 'restart' }),
     ...options,
   })
   const server = createServer((request, response) => {
@@ -191,7 +214,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
   await once(server, 'listening')
   port = (server.address() as AddressInfo).port
   onTestFinished(() => new Promise<void>((resolve) => { server.close(() => { resolve() }) }))
-  return { port, profileReads: () => profileReads, reloads: () => reloads, warnings, operations }
+  return { port, profileReads: () => profileReads, reloads: () => reloads, warnings, operations, renewals: () => renewals }
 }
 
 /**
@@ -313,4 +336,41 @@ export function get(port: number, path: string): Promise<Reply> {
  */
 export function json(reply: Reply): Record<string, unknown> {
   return JSON.parse(reply.body) as Record<string, unknown>
+}
+
+/** A file of the fixture runtime's `app/` directory the harness specs change. */
+export const RUNTIME_FILE = 'app/node_modules/delorun/lib/start.js'
+
+/**
+ * Install runtime {@link RUNTIME} in a home's store with two files and give its harness, as the home process gives the
+ * Host the running runtime's verified file list.
+ * @param home - the Delorun home.
+ * @returns the harness.
+ */
+export function routeHarness(home: string): HarnessContext {
+  const directory = join(home, 'runtimes', RUNTIME)
+  const files = { 'app/package.json': '{"name":"closure"}\n', [RUNTIME_FILE]: 'export const start = 1\n' }
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true })
+    writeFileSync(join(directory, path), text)
+  }
+  const signed = {
+    directory,
+    files: Object.entries(files).map(([path, text]) => ({ path, length: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex'), executable: false })),
+  }
+  return { home, runtime: RUNTIME, signed: () => Promise.resolve(signed) }
+}
+
+/** The address a paired device reaches the studio at. */
+export const DEVICE_HOST = 'studio.example.ts.net'
+
+/**
+ * A request from the paired device {@link TEST_DEVICE}'s own studio page.
+ * @param unlock - the unlock the device holds.
+ * @param body - the JSON body.
+ * @param withholdBody - whether only the head is sent, for a request that must be refused before its body.
+ * @returns what {@link send} takes.
+ */
+export function fromDevice(unlock: RouteDevice['unlock'], body: unknown = {}, withholdBody = false): Send {
+  return { method: 'POST', host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', `x-test-unlock: ${unlock}`, `Origin: https://${DEVICE_HOST}`], body, withholdBody }
 }

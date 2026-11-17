@@ -2612,6 +2612,9 @@ importers:
       '@delorun/home':
         specifier: workspace:*
         version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../plugin-scaffold

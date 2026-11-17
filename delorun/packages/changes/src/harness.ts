@@ -747,15 +747,22 @@ async function currentVersion(ctx: HarnessContext, record: HarnessRecord, path: 
  * @param ctx - the runtime.
  * @param id - the change id the person reviewed.
  * @param presence - proof that the person is at their computer.
+ * @param options - `reviewedTo`, the full content version the review showed as the change's new content; the studio
+ *   sends it, because the id binds that content through a truncated digest only.
  * @returns the change's log entry.
  * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `CHANGED_SINCE_REVIEW` when
- *   the copy no longer holds what the id names; `UNKNOWN_CHANGE`; `NOT_ALLOWED` for a change decided already.
+ *   the copy no longer holds what the id names, or the change's new content is not `reviewedTo`; `UNKNOWN_CHANGE`;
+ *   `NOT_ALLOWED` for a change decided already.
  */
-export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer): Promise<ChangeEntry> {
+export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer, options: { readonly reviewedTo?: ContentVersion } = {}): Promise<ChangeEntry> {
   requirePresence(presence, id)
   return withHarnessLock(ctx.home, async () => {
     const log = await readHarnessLog(ctx.home)
     const found = await requireFound(ctx, log, id)
+    const to = found.kind === 'pending' ? found.change.to : found.entry.to
+    if (options.reviewedTo !== undefined && to !== options.reviewedTo) {
+      throw new ChangesError('CHANGED_SINCE_REVIEW', id, `Change ${id} does not hold the content you were shown; look at it again.`)
+    }
     const at = timeOf(ctx)
     if (found.kind === 'logged') {
       const { entry } = found
@@ -1090,4 +1097,16 @@ export function loggedHarnessChange(entry: ChangeEntry): HarnessChange | undefin
   if (entry.kind !== 'harness-edit' || file === undefined || runtime === undefined || entry.from === undefined || entry.to === undefined) return undefined
   const empty = versionOf([])
   return { id: entry.id, kind: 'harness-edit', runtime, file, status: entry.from === empty ? 'added' : entry.to === empty ? 'removed' : 'modified', from: entry.from, to: entry.to }
+}
+
+/**
+ * The running runtime's harness as the home process gives it to the Host (the `changesHarness` service), so the studio's
+ * Changes routes decide changes to Delorun itself against the signed file list the home process verified.
+ */
+export interface ChangesHarnessHost {
+  /**
+   * The running runtime's harness.
+   * @returns it, or undefined when Delorun does not run an installed release from the runtime store.
+   */
+  context(): HarnessContext | undefined
 }

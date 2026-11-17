@@ -36,6 +36,7 @@
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/contract-plugin-versions": "workspace:*",
     "@delorun/home": "workspace:*",
+    "@delorun/home-auth": "workspace:*",
     "@delorun/plugin-scaffold": "workspace:*",
     "@delorun/profile-safety": "workspace:*"
   },

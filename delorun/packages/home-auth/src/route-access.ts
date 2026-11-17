@@ -160,17 +160,27 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   AUTH('/auth/pin/options', 'a phone must not choose the rules of its own unlock secret'),
   AUTH('/auth/pin/off', 'a phone must not turn its own unlock gate off'),
   AUTH('/auth/pin/resume', 'a phone must not lift a brute-force pause on its own unlock'),
-  { kind: 'changes-route', id: '/delorun/changes actions and setup', reason: 'apply, discard, undo and setup attest the person at the computer in the change log; the reveal action opens the computer\'s file manager' },
+  AUTH('/auth/phone-powers (POST)', 'a phone must not widen what a phone may do; any device reads the level'),
+  { kind: 'mode', id: 'terminal/* under Phone powers Careful', reason: 'a terminal is a shell outside the sandbox that runs the same delorun changes commands Careful keeps at the computer' },
+  { kind: 'changes-route', id: '/delorun/changes/notice-seen', reason: 'the notice of a change a phone made is for the person at the computer; a phone must not dismiss it' },
+  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
 ]
 
 /**
- * The web-server routes of Changes: `/delorun/changes/state`, `show` and `workspaces` are read by any admitted session
- * (R); the action and setup routes are `POST`s that attest the person at the computer before the body is read, so a
- * device is answered `403 LOOPBACK_REQUIRED` (C): their attestation is the record's proof of presence, which a device
- * unlock does not stand for.
+ * How a Changes route answers a paired device. `R`, `U` and `C` as {@link RouteLevel}; `Full`: an unlocked device while
+ * Phone powers is Full, and only the computer while it is Careful. Every `U` and `Full` route refuses the approval grace.
  */
-export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'actions' | 'setup', RouteAccess>> = {
-  reads: READ('what failed and the recent changes, without file contents beyond a shown change'),
-  actions: { level: 'C', reason: 'apply, discard and undo attest the person at the computer in the change log' },
-  setup: { level: 'C', reason: 'a setup file leaves the computer and changes what the profile runs' },
+export type ChangesRouteLevel = 'R' | 'U' | 'Full' | 'C'
+
+/**
+ * The web-server routes of Changes (`plugin-changes`' `access.ts` holds the decision for each control): `state`, `show`
+ * and `workspaces` are read by any admitted session; every `POST` is decided before its body is read, and a device's
+ * proof names the device in the log as decided in the studio.
+ */
+export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'tightening' | 'decisions' | 'setup' | 'notice', { readonly level: ChangesRouteLevel, readonly reason: string }>> = {
+  reads: { level: 'R', reason: 'what failed, the recent changes and the waiting ones, without file contents beyond a shown change' },
+  tightening: { level: 'U', reason: 'undo of a plugin\'s change, discard of a plugin\'s or a harness change and protection on only take back or tighten' },
+  decisions: { level: 'Full', reason: 'apply, turning plugins off or on, work sessions, safe mode, create, request, reveal, harness apply, undo and Make my copy, protection off and restart change what runs' },
+  setup: { level: 'Full', reason: 'a setup file leaves the computer and changes what the profile runs' },
+  notice: { level: 'C', reason: 'the notice of a change a phone made is for the person at the computer' },
 }

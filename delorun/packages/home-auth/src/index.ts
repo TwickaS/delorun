@@ -63,6 +63,8 @@ export {
   type PermissionLevel,
   CREATE_OUTSIDE_WORKSPACES,
   GRACE_REFUSED_ACTIONS,
+  FULL_POWERS_ACTIONS,
+  phonePowersRefusal,
   assertDisjoint,
   createReachAccessPolicy,
   createCondition,
@@ -80,6 +82,18 @@ export { ELEVATION_PATHS } from './elevation-routes.ts'
 export type { ReachFullAccessGrants } from './full-access-grants.ts'
 export { isElevationMinutes } from './elevation.ts'
 export { PIN_PATHS } from './pin-routes.ts'
+export {
+  PHONE_POWERS_FILE,
+  PHONE_POWERS_VERSION,
+  PhonePowersReader,
+  UNCHOSEN_PHONE_POWERS,
+  isPhonePowersLevel,
+  phonePowersPath,
+  readPhonePowers,
+  writePhonePowers,
+  type PhonePowers,
+} from './phone-powers.ts'
+export { PHONE_POWERS_LEVELS, PHONE_POWERS_PATH, type PhonePowersLevel, type PhonePowersView } from './wire.ts'
 export { UNLOCK_HEADER, UNLOCK_SUBPROTOCOL_PREFIX } from './unlock-token.ts'
 export { readPinSetBacks } from './pin-set-backs.ts'
 export type { LiftField } from './dangerous-settings.ts'

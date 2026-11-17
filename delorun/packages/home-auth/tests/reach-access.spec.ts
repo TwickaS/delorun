@@ -85,7 +85,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
-    dangerousMode: () => false,
+    phonePowers: () => 'full' as const, dangerousMode: () => false,
     ...overrides,
   }
 }
