@@ -13,6 +13,13 @@ import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionActivity, SessionActivityItem } from '@deepseek-ai/dsh-workspace'
 import type { SubagentIdentityProjection } from './projection-types.ts'
 
+/** A live external run beneath a Session and the way to end it. */
+export interface ExternalRunHandle {
+  readonly id: SessionId
+  /** End the run and release it; teardown failures are reported by the manager. */
+  stop(): void
+}
+
 /**
  * Answer `workspace/session-activity` with the running subagent descendants of
  * the asked Session, and `workspace/session-stop` by cancelling each of them
@@ -21,20 +28,26 @@ import type { SubagentIdentityProjection } from './projection-types.ts'
  * @param ctx - context carrying the Agent registry.
  * @param residentAncestors - verified creation ancestors for an exact managed Agent, absent before publication or for unmanaged Agents.
  * @param identityOf - ready service-owned descriptor identity reader; absent or invalid descriptors yield no identity.
+ * @param externalRunsOf - live external runs beneath a Session; they are listed as activity and stopped with it.
  */
 export function installSubagentArchiveAdmission(
   ctx: Context,
   residentAncestors: (agent: Agent) => readonly SessionId[] | undefined,
   identityOf: (session: Session) => SubagentIdentityProjection | undefined,
+  externalRunsOf: (sessionId: SessionId) => readonly ExternalRunHandle[],
 ): void {
   const ancestorsOf = (agent: Agent): readonly SessionId[] => residentAncestors(agent) ?? headerAncestors(ctx, agent)
   const runningDescendants = (sessionId: SessionId): Agent[] => ctx.agents.list()
     .filter(agent => agent.status === 'running' && ancestorsOf(agent).includes(sessionId))
   ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
     const running = runningDescendants(sessionId)
+    const external = externalRunsOf(sessionId)
     const rest = await next()
-    if (running.length === 0) return rest
-    const own: SessionActivity = { kind: 'subagent', items: running.map(child => describe(child, identityOf(child.session))) }
+    if (running.length === 0 && external.length === 0) return rest
+    const own: SessionActivity = {
+      kind: 'subagent',
+      items: [...running.map(child => describe(child, identityOf(child.session))), ...external.map(run => ({ id: run.id }))],
+    }
     return [own, ...rest]
   })
   ctx.on('workspace/session-stop', ({ sessionId }) => {
@@ -46,6 +59,7 @@ export function installSubagentArchiveAdmission(
         ctx.logger.warn(`subagent: cancelling "${child.id}" for an archived Session failed: ${String(error)}`)
       }
     }
+    for (const run of externalRunsOf(sessionId)) run.stop()
   })
   ctx.on('agent/pre-step', ({ agent }, next) => {
     const archived = ctx.get('workspaceRegistry')?.archivedSessionIds

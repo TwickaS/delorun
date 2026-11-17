@@ -441,10 +441,11 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
   })
 })
 
-/** The packs 0.1.0-preview.1.3 publishes, by package name: Delorun's optional bundles and upstream's two agent bundles. */
+/** The packs the release publishes, by package name: Delorun's optional bundles and upstream's two agent bundles. */
 const RELEASE_PACKS = [
   '@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex', '@delorun/bundle-agent-hooks', '@delorun/bundle-browser',
-  '@delorun/bundle-code-intelligence', '@delorun/bundle-computer-use-driver', '@delorun/bundle-external-agents', '@delorun/bundle-webhooks',
+  '@delorun/bundle-code-intelligence', '@delorun/bundle-computer-use-driver', '@delorun/bundle-external-agents', '@delorun/bundle-real-browser',
+  '@delorun/bundle-webhooks',
 ] as const
 
 /** Every workspace package's folder by name, under `packages/<group>/` and `delorun/packages/`. */

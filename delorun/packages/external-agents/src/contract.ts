@@ -132,7 +132,7 @@ export interface ProgramSpawnRequest {
    * driver adds no entry that names a credential. The gate then removes `NODE_OPTIONS` and every `DELORUN_*` name
    * whatever the overlay says.
    */
-  readonly env?: NodeJS.ProcessEnv
+  readonly env?: Readonly<Record<string, string | undefined>>
   /** Per-stream dispositions; drivers use pipes. */
   readonly stdio: SubprocessStdio
 }

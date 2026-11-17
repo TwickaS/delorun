@@ -89,7 +89,7 @@ describe('checkChangesInvariants', () => {
       expect((await storeFolder(fx.home, join(fx.home, 'packs', 'current', 'plug', 'package'))).version).toBe(approved)
       await startWork(host, 'plug', terminal(), { reload: () => Promise.resolve({ ok: true }), minutes: 60 })
       expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')))
-      await expect(prepareReload({ ...host, harnessLink: undefined })).resolves.toBeDefined()
+      await expect(prepareReload(host)).resolves.toBeDefined()
       expect(await atLoad(fx, '0.1.0')).toEqual([])
     })
 

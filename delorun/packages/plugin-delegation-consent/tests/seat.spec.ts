@@ -102,11 +102,11 @@ async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<Worl
     list: () => state.listed.map(path => ({ path })),
   } as never)
   if (mount === undefined) {
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7, levelOf: () => 'standard', missingSandboxTools: () => [] })
   } else {
     vi.stubEnv('DELORUN_HOME', paths.home)
     const saved = mount.fullAccessStartsAgents
-    apply(ctx, { enabled: { get: () => true }, runTimeoutMinutes: { get: () => 30 }, ...(saved === undefined ? {} : { fullAccessStartsAgents: { get: () => saved } }) } as never)
+    apply(ctx, { enabled: { get: () => true }, runTimeoutMinutes: { get: () => 30 }, fullAccessStartsAgents: { get: () => saved ?? true }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } } as never)
     await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
   }
   const consent = ctx.get('delegationConsent') as DelorunDelegationConsent
@@ -233,9 +233,9 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
   })
 
-  it('refuses a Full access seat with no grant when the consent row has no fullAccessStartsAgents switch, and allows it once the switch is on', async () => {
-    for (const [saved, verdict] of [[undefined, 'refuse'], [false, 'refuse'], [true, 'allow']] as const) {
-      const w = await world(saved === undefined ? {} : { fullAccessStartsAgents: saved })
+  it('refuses a Full access seat with no grant while the fullAccessStartsAgents switch is off, and allows it once on', async () => {
+    for (const [saved, verdict] of [[false, 'refuse'], [true, 'allow']] as const) {
+      const w = await world({ fullAccessStartsAgents: saved })
       w.policies.set('root', 'never')
       w.fullAccess.add('root')
       await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: verdict })
@@ -305,7 +305,7 @@ describe('a seat review at hand-off', () => {
     const w = await world()
     const bare = new Context()
     bare.provide('approval', w.ctx.get('approval') as never)
-    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: w.home }, now: () => 1 })
+    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: w.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
     const consent = bare.get('delegationConsent') as DelorunDelegationConsent
     await expect(consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('no sandbox policy') })
   })

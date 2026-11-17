@@ -68,6 +68,38 @@ describe('finding an added agent\'s sign-in program', () => {
     expect(found?.program).toMatch(/claude-agent-sdk-linux-x64\/claude$/)
   })
 
+  it('finds claude when the SDK and platform package export no ./package.json', () => {
+    const sdk = '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk'
+    const platform = `${sdk}/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64`
+    const closed = { main: 'index.js', exports: { '.': './index.js', './sdk-tools': './sdk-tools.js' } }
+    const dir = profileWith({
+      ...CLAUDE_ADDED,
+      [`${sdk}/package.json`]: manifest('@anthropic-ai/claude-agent-sdk', closed),
+      [`${sdk}/index.js`]: '',
+      [`${platform}/package.json`]: manifest('@anthropic-ai/claude-agent-sdk-linux-x64', { exports: { '.': './index.js' } }),
+      [`${platform}/index.js`]: '',
+    })
+    const found = loginProgramFor('claude-code', dir, LINUX)
+    expect(found?.args).toEqual(['auth', 'login'])
+    expect(found?.program).toMatch(/claude-agent-sdk-linux-x64\/claude$/)
+  })
+
+  it('finds claude when the SDK and platform package export no ./package.json', () => {
+    const sdk = '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk'
+    const platform = `${sdk}/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64`
+    const closed = { main: 'index.js', exports: { '.': './index.js', './sdk-tools': './sdk-tools.js' } }
+    const dir = profileWith({
+      ...CLAUDE_ADDED,
+      [`${sdk}/package.json`]: manifest('@anthropic-ai/claude-agent-sdk', closed),
+      [`${sdk}/index.js`]: '',
+      [`${platform}/package.json`]: manifest('@anthropic-ai/claude-agent-sdk-linux-x64', { exports: { '.': './index.js' } }),
+      [`${platform}/index.js`]: '',
+    })
+    const found = loginProgramFor('claude-code', dir, LINUX)
+    expect(found?.args).toEqual(['auth', 'login'])
+    expect(found?.program).toMatch(/claude-agent-sdk-linux-x64\/claude$/)
+  })
+
   it('runs the bundled codex wrapper with login', () => {
     const dir = profileWith(CODEX_ADDED)
     const found = loginProgramFor('codex', dir, LINUX)

@@ -257,3 +257,20 @@
   margin: 0;
   text-align: right;
 }
+
+/* One agent's level choices: a fieldset without the browser's frame, each option on its own wrapped line. */
+.levelGroup {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.levelOption {
+  display: block;
+  margin: 6px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}

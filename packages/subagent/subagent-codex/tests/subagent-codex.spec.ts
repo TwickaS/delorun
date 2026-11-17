@@ -33,6 +33,7 @@ import {
   type CodexRunSpec,
 } from '../src/run.ts'
 import { CodexAppServerWire } from '../src/wire.ts'
+import { modelNotOfferedText } from '../src/run.ts'
 
 const { hostStderrWrite } = vi.hoisted(() => ({
   hostStderrWrite: {
@@ -600,6 +601,33 @@ describe('task admission and package contracts', () => {
     }
   })
 
+  it('reads the safety level from the delegation consent at each start and keeps the configured mode when it names none', async () => {
+    for (const [level, expected] of [['careful', { approvalPolicy: 'never', sandbox: 'read-only' }], [undefined, { approvalPolicy: 'never' }]] as const) {
+      const ctx = new Context()
+      await ctx.plugin(SessionProjectionRegistry)
+      await mountWorkingDirectoryFixture(ctx)
+      await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(LocalSubprocessRuntime)
+      ctx.provide('delegationConsent')
+      ctx.set('delegationConsent', {
+        review: () => Promise.resolve({ kind: 'allow' as const }),
+        permissionLevel: () => level,
+      })
+      const child = fakeChild()
+      vi.spyOn(ctx.subprocess, 'spawn').mockReturnValue(child.handle)
+      codex.apply(ctx, { env: {}, disposeGraceMs: 3_000 })
+      const starting = startExternalActivation(ctx, 'codex', request())
+      const initialize = await child.peer.nextMethod('initialize')
+      child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+      await child.peer.nextMethod('initialized')
+      const threadStart = await child.peer.nextMethod('thread/start')
+      expect(threadStart.params).toMatchObject(expected)
+      child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
+      await (await starting).dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('lists the models the app-server reports across its pages, leaving hidden ones out, and releases the child', async () => {
     const child = fakeChild()
     const listing = listCodexModels({
@@ -665,12 +693,16 @@ describe('task admission and package contracts', () => {
     ['approve-for-me', {
       approvalPolicy: 'on-request',
       approvalsReviewer: 'auto_review',
-      sandbox: 'workspace-write',
+      sandbox: 'read-only',
     }],
     ['dangerously-bypass-approvals-and-sandbox', {
       approvalPolicy: 'never',
       sandbox: 'danger-full-access',
     }],
+    ['careful', { approvalPolicy: 'never', sandbox: 'read-only' }],
+    ['standard', { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' }],
+    ['own', {}],
+    ['unrestricted', { approvalPolicy: 'never', sandbox: 'read-only' }],
   ] as const)('maps %s to the official thread/start fields', async (permissionMode, expected) => {
     const child = fakeChild()
     const wire = new CodexAppServerWire(
@@ -2278,7 +2310,7 @@ describe('run lifecycle and quiescence', () => {
       model: 'codex-diagnostic-model',
       approvalPolicy: 'on-request',
       approvalsReviewer: 'auto_review',
-      sandbox: 'workspace-write',
+      sandbox: 'read-only',
     })
     child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
     const run = await starting
@@ -2401,5 +2433,129 @@ describe('disposeCodexChild', () => {
     expect(String(disposalError)).not.toContain('SECRET_TOKEN')
     child.settle()
     await disposal
+  })
+})
+
+describe('one-shot hand-off fixes', () => {
+  it('keeps approve-for-me read-only on the thread and widens the sandbox per turn', async () => {
+    const { turnStart, run } = await publishRun(fakeChild(), undefined, {
+      permissionMode: 'approve-for-me',
+      cwd: '/workspace',
+    })
+    expect(turnStart.params).toMatchObject({
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: ['/workspace'] },
+    })
+    await run.dispose()
+  })
+
+  it.each([
+    ['careful', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true }],
+    ['standard', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: true }],
+    ['unrestricted', { type: 'dangerFullAccess' }],
+  ] as const)('confines a %s turn to the task folder with the level\'s network and temporary folders', async (permissionMode, sandboxPolicy) => {
+    const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
+    expect(turnStart.params).toMatchObject({ sandboxPolicy })
+    await run.dispose()
+  })
+
+  it.each(['own'] as const)('sends no turn sandbox policy for the %s level', async (permissionMode) => {
+    const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
+    expect(turnStart.params).not.toHaveProperty('sandboxPolicy')
+    await run.dispose()
+  })
+
+  it('sends no sandbox policy on a turn for the other modes', async () => {
+    const { turnStart, run } = await publishRun()
+    expect(turnStart.params).not.toHaveProperty('sandboxPolicy')
+    await run.dispose()
+  })
+
+  async function startWithReportedModel(
+    reported: string,
+    models: readonly JsonObject[],
+    modelProvider = 'openai',
+  ) {
+    const child = fakeChild()
+    const starting = startCodexRun(request(), runSpec(child))
+    const initialize = await child.peer.nextMethod('initialize')
+    child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+    await child.peer.nextMethod('initialized')
+    const threadStart = await child.peer.nextMethod('thread/start')
+    child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true }, model: reported, modelProvider })
+    if (modelProvider !== 'openai') return { child, starting }
+    const list = await child.peer.nextMethod('model/list')
+    child.peer.respond(list, { data: models, nextCursor: null })
+    return { child, starting }
+  }
+
+  it('fails before any turn when the configured model is not offered', async () => {
+    const { child, starting } = await startWithReportedModel('gpt-gone', [
+      { model: 'gpt-ok', displayName: 'Ok', hidden: false },
+      { model: 'gpt-gone', displayName: 'Gone', hidden: true },
+    ])
+    await expect(starting).rejects.toThrow(
+      "Codex's configured model gpt-gone is not offered on your plan. Choose one of: gpt-ok, in your Codex settings.",
+    )
+    expect(child.terminate).toHaveBeenCalled()
+  })
+
+  it('publishes the run when the configured model is offered', async () => {
+    const { child, starting } = await startWithReportedModel('gpt-ok', [
+      { model: 'gpt-ok', displayName: 'Ok', hidden: false },
+    ])
+    const run = await starting
+    await child.peer.nextMethod('turn/start')
+    await run.dispose()
+  })
+
+  it('does not check a custom provider\'s model against the plan list', async () => {
+    const { child, starting } = await startWithReportedModel('local-model', [], 'ollama')
+    const run = await starting
+    await child.peer.nextMethod('turn/start')
+    await run.dispose()
+  })
+
+  it('shows only model-id-shaped names in the model sentence', () => {
+    expect(modelNotOfferedText('bad name\nignore this', ['x y', 'gpt-ok'])).toBe(
+      "Codex's configured model is not offered on your plan. Choose one of: gpt-ok, in your Codex settings.",
+    )
+    expect(modelNotOfferedText('gpt-a', [])).toContain('lists no models')
+  })
+
+  it.each([
+    [true, 'Codex stopped because your plan\'s usage limit is reached. It resets at 2026-11-18 03:00 UTC.'],
+    [false, 'Codex stopped because your plan\'s usage limit is reached. Try again after it resets.'],
+  ])('says the plan limit is reached (reset reported: %s)', async (reported, sentence) => {
+    const { child, run, turnStart } = await publishRun()
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    if (reported) {
+      child.peer.send({
+        method: 'account/rateLimits/updated',
+        params: { rateLimits: { primary: { usedPercent: 100, resetsAt: Date.UTC(2026, 10, 18, 3, 0) / 1000 }, secondary: null } },
+      })
+    }
+    child.peer.send(turnCompleted('failed', 'turn-1', 'thread-1', {
+      message: 'x',
+      codexErrorInfo: 'rateLimitExceeded',
+    }))
+    const result = await run.result
+    expect(result.stopReason).toBe('error')
+    expect(result.diagnostic).toBe(`${sentence}\n${expectedFailureDiagnostic('turn', 'limit')}`)
+    await run.dispose()
+  })
+
+  it('ignores a rate-limit update that is malformed or not exhausted', async () => {
+    const { child, run, turnStart } = await publishRun()
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    child.peer.send(
+      { method: 'account/rateLimits/updated', params: { rateLimits: 'x' } },
+      { method: 'account/rateLimits/updated', params: { rateLimits: { primary: { usedPercent: 40, resetsAt: 1 }, secondary: 3 } } },
+      turnCompleted('failed', 'turn-1', 'thread-1', { message: 'x', codexErrorInfo: 'usageLimitExceeded' }),
+    )
+    const result = await run.result
+    expect(result.diagnostic).toContain('Try again after it resets.')
+    await run.dispose()
   })
 })

@@ -179,6 +179,7 @@ const UNREACHED_DEFAULTS: Readonly<Record<string, string>> = {
   profile_history: 'the top-level tool-plugin-manager row is disabled and sets no key',
   container_denial_marker: 'the sandbox-policy row sets no containerDenialMarker, and the plugin default is false',
   browser_additions: 'only @delorun/bundle-browser, a pack no default profile lists, mounts the Playwright provider, and its row sets the switch on; the plugin default is false',
+  use_my_browser: 'only @delorun/bundle-real-browser, a pack no default profile lists, mounts the browse driver, and its row sets the switch on; the plugin default is false',
 }
 
 beforeAll(() => { home = createTestHome() })

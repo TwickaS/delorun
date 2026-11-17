@@ -159,7 +159,7 @@ export function claudeCodeStartupFailure(cause: unknown): Error {
 }
 
 function unattendedDiagnostic(
-  mode: ClaudeCodePermissionMode,
+  mode: ClaudeCodePermissionMode | 'default',
   request: 'tool permission' | 'MCP elicitation' | 'user dialog',
   decision: 'denied' | 'declined' | 'cancelled',
   reason: string,
@@ -175,8 +175,13 @@ export interface ClaudeCodeRunSpec {
   readonly cwd: string
   /** Profile-selected native model; omitted to preserve Claude settings. */
   readonly model?: string
-  /** Profile-selected native non-interactive permission mode. */
-  readonly permissionMode: ClaudeCodePermissionMode
+  /** Native non-interactive permission mode: the profile's, or the safety level's; `default` sends none. */
+  readonly permissionMode: ClaudeCodePermissionMode | 'default'
+  /** The command sandbox and extra disallowed tools a safety level selected for this run. */
+  readonly level?: {
+    readonly sandbox?: NonNullable<Options['sandbox']>
+    readonly disallowedTools: readonly string[]
+  }
   /** Explicit deployment/test environment layered after shared scrubbing. */
   readonly env: Record<string, string>
   /** Subprocess termination grace passed to the shared managed-range owner. */
@@ -350,10 +355,12 @@ export function claudeQueryOptions(
     ...spec.model === undefined ? {} : { model: spec.model },
     env: { ...scrubbedParentEnv(), ...spec.env },
     persistSession: false,
-    disallowedTools: spec.permissionMode === 'plan'
-      ? ['AskUserQuestion', 'ExitPlanMode']
-      : ['AskUserQuestion'],
-    permissionMode: spec.permissionMode,
+    disallowedTools: [
+      ...spec.permissionMode === 'plan' ? ['AskUserQuestion', 'ExitPlanMode'] : ['AskUserQuestion'],
+      ...spec.level?.disallowedTools ?? [],
+    ],
+    ...spec.permissionMode === 'default' ? {} : { permissionMode: spec.permissionMode },
+    ...spec.level?.sandbox === undefined ? {} : { sandbox: spec.level.sandbox },
     ...spec.permissionMode === 'bypassPermissions'
       ? { allowDangerouslySkipPermissions: true }
       : {

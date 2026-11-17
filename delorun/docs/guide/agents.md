@@ -73,6 +73,7 @@ The first time a chat hands an agent a task in a workspace, Delorun asks at the 
 - If the chat is on Read Only, then no agent starts — change the chat's permission first.
 - If the chat is on Full access, then every approval is refused without asking, so an agent starts only in a workspace where you allowed it.
 - If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it.
+- If you stop a chat, then the tasks it handed off during that turn stop too. A task from an earlier turn keeps running until it finishes, reaches its time limit, or you archive the chat, which stops every task the chat started.
 - If a task needs longer than the time limit, then it stops. The limit is 30 minutes unless you change it under [Advanced options](#advanced-options).
 
 </details>
@@ -84,6 +85,14 @@ An agent works in the chat's workspace. It can read and, where its own settings 
 ## Where the result shows
 
 The result comes back into the chat that handed over the task, as the agent's answer. A task that fails shows why in the same place.
+
+Three Codex failures have their own wording:
+
+- **Your configured model is not offered on your plan.** Codex stops before the task starts and names the model and the models your plan offers, for example "Codex's configured model gpt-5.5 is not offered on your plan. Choose one of: gpt-5.6-luna, gpt-5.5, in your Codex settings." Choose a model under **Advanced options**, or in your Codex settings. Delorun never picks one for you.
+- **Your plan's limit is reached.** The result says so and, when Codex reports it, when the limit resets.
+- **Codex is not signed in.** The result gives the `delorun agents login codex` command.
+
+Delorun's Codex runs never change your own Codex settings file, so a folder you hand to Codex does not become a trusted folder in your terminal Codex.
 
 ## Advanced options
 

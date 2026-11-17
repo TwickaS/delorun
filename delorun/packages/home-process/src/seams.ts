@@ -19,6 +19,7 @@ import type { LocalDeviceApproval } from './devices-approve.ts'
 import type { LocalConsents } from './consents.ts'
 import type { LocalReach } from './reach.ts'
 import type { LocalAgentAccounts } from './agents.ts'
+import type { RestartControl } from './restart.ts'
 
 /** C1's two pointers. */
 export interface RuntimePointers {
@@ -341,16 +342,23 @@ export interface UpdateChannelAccess {
   send(request: UnsignedRequest, options?: ExchangeOptions): Promise<ResponseLine[]>
 }
 
+/** What the home process lets the Host it boots drive in this process, without the update channel. */
+export interface HomeControls {
+  /** The restart ([restart](./restart.ts)), which the studio's Restart route begins. */
+  readonly restart: RestartControl
+}
+
 /** The profile's Host, booted in the home process. */
 export interface HostRunner {
   /**
    * Boot the Host.
    * @param access - the Host's way to the update channel.
+   * @param controls - what the Host may drive in this process.
    * @returns the running Host.
    * @throws when the profile does not boot; a `HostNotStoppedError` when a check refused the booted Host and its
    *   teardown did not finish, so it may still run in this process.
    */
-  boot(access: UpdateChannelAccess): Promise<RunningHost>
+  boot(access: UpdateChannelAccess, controls: HomeControls): Promise<RunningHost>
 }
 
 /** A studio link, or the reason the Host cannot make one that reaches the studio from this computer. */

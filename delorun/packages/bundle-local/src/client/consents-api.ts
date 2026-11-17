@@ -14,11 +14,11 @@ import {
   PERMISSION_ROUTES, type EverywhereAnswer, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from '@delorun/plugin-permission-defaults/wire'
 import {
-  DELEGATION_CONSENT_ROUTES, type AllowWorkspaceAnswer, type GrantsAnswer, type GrantView, type RevokeAnswer,
+  AGENT_LEVELS, DELEGATION_CONSENT_ROUTES, type AllowWorkspaceAnswer, type GrantsAnswer, type GrantView, type LevelsAnswer, type RevokeAnswer,
 } from '@delorun/plugin-delegation-consent/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { EverywhereAnswer, AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { LevelsAnswer, EverywhereAnswer, AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -58,6 +58,12 @@ const isRevoked: Check = fields({ stopped: isTime })
 const isDeclined: Check = fields({ declined: value => value === true })
 const isGrant: Check = fields({ workspace: isString, provider: isString, agent: isString, grantedAt: isTime })
 const isGrants: Check = fields({ grants: listOf(isGrant), storeProblem: optional(isString) })
+const isLevels: Check = fields({
+  levels: listOf(fields({
+    provider: isString, agent: isString, level: value => AGENT_LEVELS.some(level => level === value),
+    sandboxMissing: optional(fields({ tools: listOf(isString), installCommand: isString })),
+  })),
+})
 const isAllowed: Check = fields({ grant: isGrant })
 const isAgentRevoked: Check = fields({ revoked: value => typeof value === 'boolean' })
 
@@ -214,6 +220,17 @@ export async function declineServer(fetch: HostFetch, server: PendingServer): Pr
  */
 export function readAgentGrants(fetch: HostFetch): Promise<GrantsAnswer | undefined> {
   return mounted(call<GrantsAnswer>(fetch, DELEGATION_CONSENT_ROUTES.grants, isGrants))
+}
+
+/**
+ * Read each external agent's level and what its sandbox lacks here. Any approved device may read it; the live agent
+ * chat and the agent lists show the level as a chip from this answer.
+ * @param fetch - the request function.
+ * @returns the levels, or undefined when the consent is off and mounts no route.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export function readAgentLevels(fetch: HostFetch): Promise<LevelsAnswer | undefined> {
+  return mounted(call<LevelsAnswer>(fetch, DELEGATION_CONSENT_ROUTES.levels, isLevels))
 }
 
 /**

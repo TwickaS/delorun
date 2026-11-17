@@ -98,6 +98,45 @@ async function treeFiles(home: string, signed: SignedRuntime, files: Readonly<Re
 }
 
 /**
+ * How many files of a composed tree are linked or checked at once. A tree holds every file of the installation, tens of
+ * thousands, and one at a time each start spent seconds waiting on single filesystem calls.
+ */
+const TREE_FILE_CONCURRENCY = 64
+
+/**
+ * Run work over items, at most `limit` at a time.
+ * @param items - the items.
+ * @param limit - how many run at once.
+ * @param work - the work for one item.
+ * @returns each item's result, in the items' order.
+ * @throws the first failure of any item's work, once every started item has settled.
+ */
+async function eachLimited<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array<R>(items.length)
+  let next = 0
+  const lane = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next
+      next += 1
+      results[index] = await work(items[index]!)
+    }
+  }
+  const lanes = await Promise.allSettled(Array.from({ length: Math.min(limit, items.length) }, lane))
+  const failed = lanes.find(outcome => outcome.status === 'rejected')
+  if (failed !== undefined) throw failed.reason
+  return results
+}
+
+/**
+ * @param path - a `/`-separated relative path.
+ * @returns the relative paths of the directories above it, nearest last.
+ */
+function ancestorsOf(path: string): string[] {
+  const parts = path.split('/')
+  return parts.slice(0, -1).map((_part, index) => parts.slice(0, index + 1).join('/'))
+}
+
+/**
  * Every entry below a directory that is not a directory, by `/`-separated relative path, with whether it is a regular
  * file.
  * @param root - the directory.
@@ -168,13 +207,23 @@ export async function composedProblem(home: string, signed: SignedRuntime, files
   const expected = await treeFiles(home, signed, files)
   const found = await listEntries(root)
   const paths = [...new Set([...expected.keys(), ...found.keys()])].sort(compareCodeUnits)
-  for (const path of paths) {
+  // Every path is checked, many at once; the first in path order that differs, or fails to be read, decides.
+  const outcomes = await eachLimited(paths, TREE_FILE_CONCURRENCY, async (path): Promise<ComposedProblem['kind'] | { readonly failed: unknown } | undefined> => {
     const file = expected.get(path)
     const regular = found.get(path)
-    if (file === undefined) return { path, kind: 'extra' }
-    if (regular === undefined) return { path, kind: 'missing' }
-    if (!regular) return { path, kind: 'not-regular' }
-    if (!await pathHolds(signed, root, path, file)) return { path, kind: 'changed' }
+    if (file === undefined) return 'extra'
+    if (regular === undefined) return 'missing'
+    if (!regular) return 'not-regular'
+    try {
+      return await pathHolds(signed, root, path, file) ? undefined : 'changed'
+    } catch (failed) {
+      return { failed }
+    }
+  })
+  for (const [index, outcome] of outcomes.entries()) {
+    if (outcome === undefined) continue
+    if (typeof outcome === 'object') throw outcome.failed
+    return { path: paths[index]!, kind: outcome }
   }
   return undefined
 }
@@ -207,13 +256,12 @@ async function writeTreeFile(path: string, bytes: Buffer, executable: boolean): 
 async function buildTree(home: string, signed: SignedRuntime, files: Readonly<Record<string, ContentVersion>>, root: string): Promise<void> {
   const directories = new Set<string>([root])
   await mkdir(root, { mode: PRIVATE_DIR_MODE })
-  for (const [path, file] of [...await treeFiles(home, signed, files)].sort(([a], [b]) => compareCodeUnits(a, b))) {
+  const entries = [...await treeFiles(home, signed, files)].sort(([a], [b]) => compareCodeUnits(a, b))
+  const place = async ([path, file]: readonly [string, TreeFile]): Promise<void> => {
     const target = join(root, ...path.split('/'))
-    for (let directory = dirname(target); !directories.has(directory); directory = dirname(directory)) directories.add(directory)
-    await mkdir(dirname(target), { recursive: true, mode: PRIVATE_DIR_MODE })
     if (file.kind === 'approved') {
       await writeTreeFile(target, await readObject(home, file.digest), file.executable)
-      continue
+      return
     }
     try {
       await link(join(signed.directory, ...path.split('/')), target)
@@ -222,6 +270,27 @@ async function buildTree(home: string, signed: SignedRuntime, files: Readonly<Re
       await writeTreeFile(target, await readSignedFile(signed, file.file), file.file.executable)
     }
   }
+  const paths = new Set(entries.map(([path]) => path))
+  if (entries.some(([path]) => ancestorsOf(path).some(ancestor => paths.has(ancestor)))) {
+    // A list that names a path below one of its own files: placed one at a time in path order, so the build fails at
+    // that path as a path in the way.
+    for (const entry of entries) {
+      await mkdir(dirname(join(root, ...entry[0].split('/'))), { recursive: true, mode: PRIVATE_DIR_MODE })
+      await place(entry)
+    }
+    return
+  }
+  // Every directory first, parents before children, so the files can then be placed in any order.
+  for (const [path] of entries) {
+    const missing: string[] = []
+    // Each directory joins the set as it is found, so the walk ends at the root's own filesystem root at the latest.
+    for (let directory = dirname(join(root, ...path.split('/'))); !directories.has(directory); directory = dirname(directory)) {
+      directories.add(directory)
+      missing.push(directory)
+    }
+    for (const directory of missing.reverse()) await mkdir(directory, { mode: PRIVATE_DIR_MODE })
+  }
+  await eachLimited(entries, TREE_FILE_CONCURRENCY, place)
   for (const directory of [...directories].sort((a, b) => b.length - a.length)) await chmod(directory, TREE_EXECUTABLE_MODE)
 }
 

@@ -122,7 +122,7 @@ describe('the consent and the start gate together', () => {
       entries: () => [{ id: DELEGATION_CONSENT_ROW_ID, options: { id: DELEGATION_CONSENT_ROW_ID, config: { enabled: true } }, disabled: false }],
       unwrapExports: (exports: unknown) => exports,
     } as never)
-    apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => 30 } })
+    apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => 30 }, fullAccessStartsAgents: { get: () => true }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } })
     await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
     await ctx.plugin(ExternalAgentsService, {
       maxLivePrograms: 4, graceMs: 100, limitRefusal: false, env: {}, now: Date.now,

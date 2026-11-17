@@ -32,7 +32,7 @@ it('checks a profile with no links before a reload, with or without a published 
     ctx.provide('tools', { guard: () => () => {} } as never)
     if (packages !== undefined) ctx.provide('pluginPackages', packages as never)
     const info = vi.spyOn(ctx.logger, 'info')
-    plugin.apply(ctx, { enabled: false, installationBundles: [] })
+    plugin.apply(ctx, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
     await ctx.get('profileReconcileCheck')!.check({ name: 'default', dir, home } as never)
     expect(info).not.toHaveBeenCalled()
   }
