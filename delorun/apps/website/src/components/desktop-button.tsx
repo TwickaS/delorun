@@ -8,6 +8,7 @@
  */
 import { useEffect, useId, useState } from 'react'
 import { Button, Link } from '@brand'
+import { ButtonLink } from '@brand/button-link.web.tsx'
 import { DESKTOP_DOWNLOAD_PLACES, DESKTOP_DOWNLOADS, DESKTOP_PLATFORMS, type DesktopPlatform } from '../site/config.ts'
 import { COPY } from '../site/copy.ts'
 
@@ -80,8 +81,7 @@ export function DesktopButton({ downloads = DESKTOP_DOWNLOADS, className }: { do
     <div className={`flex flex-col items-start gap-2 ${className ?? ''}`.trim()}>
       {offer.available
         ? (
-            // TODO: draw it as the brand's button once the library has a link that looks like one.
-            <Link href={offer.href} className="inline-flex items-center gap-2">{ICON}{copy.labelFor[offer.platform]}</Link>
+            <ButtonLink href={offer.href} variant="secondary" icon={ICON}>{copy.labelFor[offer.platform]}</ButtonLink>
           )
         : <Button type="button" variant="secondary" unavailable aria-describedby={noteId} icon={ICON}>{copy.label}</Button>}
       <p id={noteId} className="min-h-5 text-sm text-(--dl-text-muted)">

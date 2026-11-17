@@ -36,8 +36,6 @@ export const EN = {
       href: `${DOCS_URL}/guide/trust#how-releases-are-signed-in-the-preview`,
       after: '.',
     },
-    replicaLabel: 'The Delorun studio at work on an ordinary chat',
-    stillAlt: 'The Delorun studio in a browser: a list of chats and workspaces on the left, and on the right a chat about laying out four raised beds, with a table of the beds and a JSON file the assistant wrote.',
   },
   desktop: {
     /** The label while no platform has a download. */

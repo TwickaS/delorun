@@ -7,13 +7,13 @@
  * @module @delorun/website/home
  */
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Frame as Picture, Link, SectionHeading } from '@brand'
+import { Link, SectionHeading } from '@brand'
 import { COPY, INSTALL_COMMANDS } from '../site/copy.ts'
 import { usePackageManager } from './package-manager.tsx'
 import { DesktopButton } from './desktop-button.tsx'
 import { CommandBlock, Install, ScriptsOff } from './install.tsx'
 import { Frame } from './layout.tsx'
-import { StudioStill } from './studio-still.tsx'
+import { ReplicaFrame } from '../replica/ReplicaFrame.tsx'
 import { GRID } from './grid.ts'
 import { ChunkBoundary } from './chunk-boundary.tsx'
 
@@ -44,7 +44,7 @@ function Hero({ install }: { install: ReactNode }) {
         </p>
       </div>
       <div className="col-span-full lg:col-start-6 lg:col-end-13">
-        <Picture width={800} height={500} label={copy.replicaLabel} still={<StudioStill alt={copy.stillAlt} eager />} />
+        <ReplicaFrame session="ordinary-work" width="responsive" />
       </div>
     </section>
   )
