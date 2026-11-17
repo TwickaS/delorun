@@ -92,6 +92,7 @@ export type {
 } from './config.ts'
 export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
+export { PROVIDER_DATA } from './provider-data.generated.ts'
 
 export const name = 'llm-pi-ai'
 export const inject = ['llm']
