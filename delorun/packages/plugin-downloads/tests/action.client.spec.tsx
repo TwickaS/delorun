@@ -78,18 +78,20 @@ describe('an installed pack whose last install failed', () => {
     release()
   })
 
-  it('says it is installed but not loading, with the reason, and offers Try again and Remove', () => {
+  it('says it is installed but not loading, with the reason, and offers Try again and Dismiss', () => {
     const source = createFakeDownloadsSource([failed])
     const release = provideDownloadsSource(source)
     render(<PackNotLoadingAction matched={BROWSER} t={t} />)
     expect(screen.getByRole('status').textContent).toContain('Installed, but not loading: The plugin manager could not load')
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Browser from the list' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the failure of Browser' }))
     expect(source.calls).toEqual([`remove:${BROWSER}`])
     cleanup()
     source.set([failed])
     render(<PackNotLoadingAction matched={BROWSER} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: 'Try Browser again' }))
     expect(source.calls).toEqual([`remove:${BROWSER}`, `retry:${BROWSER}`])
+    // Until the page draws again the action shows where the retry stands, never a blank.
+    expect(screen.getByRole('status').textContent).toBe('Waiting')
     release()
   })
 })

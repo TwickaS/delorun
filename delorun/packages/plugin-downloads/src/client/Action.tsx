@@ -61,23 +61,27 @@ export function packNotLoading(subject: PluginsSubject): string | null {
 }
 
 /**
- * Say that the pack is installed but not loading, with the reason, and offer Try again and Remove.
+ * Say that the pack is installed but not loading, with the reason, and offer Try again and Dismiss. Dismiss clears the
+ * failed record only; the pack stays installed, and the plugin page's own Remove uninstalls it.
  * @param props - the package this entry acts for and the copy.
- * @returns the state and its two controls, or nothing when the failure was cleared.
+ * @returns the failure and its two controls, the install's progress after Try again, or nothing when the failure was cleared.
  */
 export function PackNotLoadingAction({ matched, t }: { readonly matched: string, readonly t: Translate }): ReactNode {
   const source = useHubSource()
   const items = useSyncExternalStore(source.subscribe, source.snapshot, source.snapshot)
   const item = items.find(each => each.key === matched)
-  if (item === undefined || item.state !== 'failed') return null
+  if (item === undefined) return null
   const name = nameOf({ key: matched }, t)
+  // After Try again the item is queued or working until the page draws again: say where it stands, never a blank.
+  if (isActive(item)) return <span role="status">{statusText(item, t)}</span>
+  if (item.state !== 'failed') return null
   return (
     <span role="status">
       <span>{t('notLoading', { reason: statusText(item, t) })}</span>
       {' '}
       <Button variant="outline" size="sm" aria-label={t('retryItem', { name })} onClick={() => { source.retry(matched) }}>{t('retry')}</Button>
       {' '}
-      <Button variant="outline" size="sm" aria-label={t('removeItem', { name })} onClick={() => { source.remove(matched) }}>{t('remove')}</Button>
+      <Button variant="outline" size="sm" aria-label={t('dismissItem', { name })} onClick={() => { source.remove(matched) }}>{t('dismissFailure')}</Button>
     </span>
   )
 }

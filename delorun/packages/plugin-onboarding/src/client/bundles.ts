@@ -284,12 +284,18 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     if (following.has(name)) return
     following.add(name)
     const packs: PacksRemote = packsClient
+    const checkingSince = { at: 0 }
     try {
       for (;;) {
         await new Promise<void>((resolve) => { setTimeout(resolve, options.pollMs) })
         const now = views.getSnapshot()[name]
-        // A card being re-read shows "checking" for a moment; the loop waits it out and reads the outcome after.
-        if (now?.state === 'checking') continue
+        // A card being re-read shows "checking" for a moment; the loop waits it out, for as long as an add may run, and reads the outcome after.
+        if (now?.state === 'checking') {
+          if (checkingSince.at === 0) checkingSince.at = Date.now()
+          if (Date.now() - checkingSince.at > options.addWaitMs()) return
+          continue
+        }
+        checkingSince.at = 0
         if (now?.state !== 'installing' && now?.state !== 'slow') return
         let snapshot: PacksSnapshot
         try {
