@@ -13,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the conversation.approval slots and the pending approval.
 import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
+// Type-only: the ctx.uiWorkspace merge.
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 // Type-only: the tool.call.toolview slot.
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import './actions.ts'
@@ -24,6 +26,7 @@ import { createSeatClient } from './host-routes.ts'
 import { SeatToolRow } from './ToolRow.tsx'
 import { RECORD_TOOL_NAMES } from './tool-model.ts'
 import './view.ts'
+import { registerLists } from './lists/index.ts'
 
 export { en, NS, zh, type AgentSeatsLocaleKey } from './locales.ts'
 export { Banner, chipsOf, ComposerNote, monogram, type BannerInjected, type BannerProps, type SeatTranslate } from './Banner.tsx'
@@ -51,6 +54,7 @@ const copy = (text: string): Promise<void> => navigator.clipboard.writeText(text
  * @param ctx - the plugin context.
  */
 export function apply(ctx: Context): void {
+  registerLists(ctx)
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-agent-seats: dictionaries')
   const seatClient = createSeatClient((input, init) => globalThis.fetch(input, init))
   const bannerInjected = (): BannerInjected => ({ client: seatClient, copy, clock })
