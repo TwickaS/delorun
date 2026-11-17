@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { prepareReload } from '../src/enforce.ts'
 import { checkChangesInvariants, checkLoadedContent } from '../src/invariants.ts'
 import { changesStatus } from '../src/status.ts'
 import { activeDirectory, objectsDirectory, profileChangesDirectory, protectionPath, versionsDirectory } from '../src/paths.ts'
@@ -78,6 +79,13 @@ describe('checkChangesInvariants', () => {
       expect(await atDoctor(fx)).toEqual([])
     })
 
+    it('is refused by a recomposition of the new release, and passes one of the old release, which rewrites no copy', async () => {
+      const { fx } = await updated()
+      const reload = (runningRelease: string) => prepareReload({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => new Date('2026-01-01T00:00:00Z'), runningRelease })
+      await expect(reload('0.2.0')).rejects.toMatchObject({ code: 'LOAD_REFUSED' })
+      await expect(reload('0.1.0')).resolves.toBeDefined()
+    })
+
     it('is refused at load by the new release when its re-point did not happen', async () => {
       const { fx } = await updated()
       expect(await atLoad(fx, '0.2.0')).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
@@ -90,6 +98,14 @@ describe('checkChangesInvariants', () => {
       expect(await atDoctor(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
       rmSync(peer)
       symlinkSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'other'), peer)
+      expect(await atDoctor(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+    })
+
+    it('is reported by doctor when its link names a runtime store folder that is no release', async () => {
+      const { fx, peer } = await updated()
+      writeFiles(fx.home, { 'runtimes/not-a-version/app/node_modules/@s/peer/package.json': '{}' })
+      rmSync(peer)
+      symlinkSync(join(fx.home, 'runtimes', 'not-a-version', 'app', 'node_modules', '@s', 'peer'), peer)
       expect(await atDoctor(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
     })
   })

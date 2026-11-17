@@ -10,11 +10,12 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
 import { lstat, mkdir, open, realpath, rename, rm, rmdir, stat, symlink, type FileHandle } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delorun/contract-home-layout'
 import { HomeLayoutError, readProtectedFile, writeProtectedFile } from '@delorun/home'
+import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { ChangesError } from './errors.ts'
 import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
 import { activeRuntimeModules, compareCodeUnits, DEPENDENCY_DIRECTORY, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
@@ -458,7 +459,10 @@ export async function materialize(home: string, version: ContentVersion, target:
   return manifest
 }
 
-/** Which releases a link into the runtime store may name for {@link holdsVersionUnder}. */
+/**
+ * Which releases a link into the runtime store may name for {@link holdsVersionUnder}. Either way the release's folder
+ * name is a runtime version, the folder is a directory and not a link, and the linked package is there.
+ */
 export type RuntimeLinkRule =
   /** Only this release's installed packages; none when `release` is undefined. */
   | { readonly kind: 'release', readonly release: string | undefined }
@@ -491,8 +495,8 @@ export async function holdsVersionUnder(home: string, target: string, version: C
       continue
     }
     const [release, app, modules, ...rest] = relative(runtimes, entry.target).split(sep)
-    const named = release !== undefined && release !== '..' && !isAbsolute(release) && app === 'app' && modules === DEPENDENCY_DIRECTORY && rest.length > 0
-    const allowed = named && (rule.kind === 'release' ? release === rule.release : await exists(entry.target))
+    const named = release !== undefined && parseRuntimeVersion(release) !== undefined && app === 'app' && modules === DEPENDENCY_DIRECTORY && rest.length > 0
+    const allowed = named && (rule.kind === 'installed' || release === rule.release) && await isInstalledDirectory(join(runtimes, release)) && await exists(entry.target)
     entries.push(allowed ? { ...entry, target: rest.join('/'), runtime: true } : entry)
   }
   return versionOf(entries) === version
@@ -504,6 +508,14 @@ export async function holdsVersionUnder(home: string, target: string, version: C
  */
 async function exists(path: string): Promise<boolean> {
   return stat(path).then(() => true, () => false)
+}
+
+/**
+ * @param path - a release's folder in the runtime store.
+ * @returns whether it is a directory, not a symbolic link, as an installed release's is.
+ */
+async function isInstalledDirectory(path: string): Promise<boolean> {
+  return lstat(path).then(stats => stats.isDirectory(), () => false)
 }
 
 /**
