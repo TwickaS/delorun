@@ -21,7 +21,8 @@
  */
 import { execFile } from 'node:child_process'
 import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { PackEntry, PackExternal, RuntimePlatform } from '@delorun/contract-release-manifest'
 import { materialize, scanFolder, storeFolder } from '@delorun/changes'
@@ -75,6 +76,9 @@ export interface ReviewCopyRequest {
  * `runtimeNodeModules`, with the runtime store's own installer, and check its review copy ({@link reviewCopyProblems});
  * for this computer's own platform, also import the bundle patch's plugin modules from the materialized copy.
  * @param request - the variant and the runtime.
+ * The temporary home is removed afterwards; a failure to remove it is logged and changes neither the result nor the
+ * error the check ends with.
+ * @param request - the variant and the runtime.
  * @returns the review copy's problems; empty when every package of the copy loads.
  * @throws Error when `release` is not a runtime version; PackRefusal when the installer refuses the variant.
  */
@@ -83,20 +87,28 @@ export async function installedReviewCopyProblems(request: ReviewCopyRequest): P
   if (release === undefined) throw new Error(`${request.release} is not a runtime version`)
   const home = await mkdtemp(join(request.scratch, 'review-copy-home-'))
   try {
-    const paths = new StorePaths(home, request.platform)
-    await mkdir(join(paths.version(release), 'app'), { recursive: true, mode: 0o700 })
-    await symlink(resolve(request.runtimeNodeModules), paths.runtimeNodeModules(release), 'dir')
-    await writeFile(paths.pointer('current'), `${release}\n`, { mode: 0o600 })
-    const installed = await installPack({ paths, release, entry: request.entry, platform: request.platform, archive: request.archive, fetchExternal: request.fetchExternal })
-    const problems = await reviewCopyProblems(installed, home)
-    if (problems.length > 0 || request.platform !== `${process.platform}-${process.arch}`) return problems
-    const { version } = await storeFolder(home, installed)
-    const copy = join(home, 'review-copy')
-    await materialize(home, version, copy)
-    return await importProblems(copy, await pluginModules(copy))
+    return await checkInHome(request, release, home)
   } finally {
-    await removeSealed(home)
+    await removeSealed(home).catch((error: unknown) => {
+      // The check's own result or error is what the caller acts on; a leftover scratch home is only reported.
+      console.warn(`review copy check: could not remove ${home}: ${error instanceof Error ? error.message : String(error)}`)
+    })
   }
+}
+
+/** {@link installedReviewCopyProblems} in its temporary Delorun home. */
+async function checkInHome(request: ReviewCopyRequest, release: NonNullable<ReturnType<typeof parseRuntimeVersion>>, home: string): Promise<string[]> {
+  const paths = new StorePaths(home, request.platform)
+  await mkdir(join(paths.version(release), 'app'), { recursive: true, mode: 0o700 })
+  await symlink(resolve(request.runtimeNodeModules), paths.runtimeNodeModules(release), 'dir')
+  await writeFile(paths.pointer('current'), `${release}\n`, { mode: 0o600 })
+  const installed = await installPack({ paths, release, entry: request.entry, platform: request.platform, archive: request.archive, fetchExternal: request.fetchExternal })
+  const problems = await reviewCopyProblems(installed, home)
+  if (problems.length > 0 || request.platform !== `${process.platform}-${process.arch}`) return problems
+  const { version } = await storeFolder(home, installed)
+  const copy = join(home, 'review-copy')
+  await materialize(home, version, copy)
+  return await importProblems(copy, await pluginModules(copy), home)
 }
 
 /** Plugin modules a patch row cannot name: Cordis' own, such as `cordis:group`. */
@@ -153,17 +165,47 @@ const IMPORT_SCRIPT = [
 ].join('\n')
 
 /**
+ * The environment of the import's child process: `PATH` and fixed locale settings, with every directory a plugin module
+ * may write or read the person's data from (`HOME`, `DELORUN_HOME`, the XDG directories, `TMPDIR`) inside the temporary
+ * home. Nothing else is inherited: no credential, no `NODE_PATH`, no `NODE_OPTIONS` loader hook of the building
+ * process, and no home of the person running the cut.
+ * @param home - the temporary Delorun home.
+ * @returns the environment.
+ */
+async function importEnvironment(home: string): Promise<NodeJS.ProcessEnv> {
+  const person = join(home, 'person')
+  const directories = { HOME: person, XDG_CONFIG_HOME: join(person, '.config'), XDG_CACHE_HOME: join(person, '.cache'), XDG_DATA_HOME: join(person, '.local', 'share'), XDG_STATE_HOME: join(person, '.local', 'state'), TMPDIR: join(home, 'tmp') }
+  for (const directory of Object.values(directories)) await mkdir(directory, { recursive: true, mode: 0o700 })
+  return { ...process.env['PATH'] === undefined ? {} : { PATH: process.env['PATH'] }, ...directories, DELORUN_HOME: home, TZ: 'UTC', LC_ALL: 'C' }
+}
+
+/**
+ * The first directory above `directory` that holds a `node_modules` folder, which Node would resolve a bare specifier
+ * from when the copy does not hold it.
+ * @param directory - the copy's package directory.
+ * @returns that `node_modules` folder, or undefined when no directory above holds one.
+ */
+function nodeModulesAbove(directory: string): string | undefined {
+  for (let current = dirname(directory); ; current = dirname(current)) {
+    if (existsSync(join(current, 'node_modules'))) return join(current, 'node_modules')
+    if (dirname(current) === current) return undefined
+  }
+}
+
+/**
  * Import modules from a directory in a separate Node process, as the loader resolves a bundle's rows from the bundle's
  * package: a bare specifier resolves from the directory, the package's own name through its `exports`.
  * @param directory - the materialized copy's package directory.
  * @param names - the module specifiers.
- * @returns one line per module that fails to import, or one line when the process fails; empty when all import.
+ * @param home - the temporary Delorun home the process's environment points into ({@link importEnvironment}).
+ * @returns one line per module that fails to import, or one line when the process fails or a directory above the copy
+ * holds a `node_modules` folder, which could meet an import the copy does not; empty when all import.
  */
-async function importProblems(directory: string, names: readonly string[]): Promise<string[]> {
+async function importProblems(directory: string, names: readonly string[], home: string): Promise<string[]> {
   if (names.length === 0) return []
-  const env = { ...process.env }
-  // A loader hook of the building process, such as tsx, must not change how the copy resolves.
-  delete env['NODE_OPTIONS']
+  const above = nodeModulesAbove(directory)
+  if (above !== undefined) return [`the plugin modules cannot be imported from the review copy at ${directory}, because ${above} above it could meet an import the copy does not; check from a scratch directory with no node_modules above it`]
+  const env = await importEnvironment(home)
   return await new Promise((resolveProblems) => {
     execFile(process.execPath, ['--input-type=module', '-e', IMPORT_SCRIPT, JSON.stringify(names)], { cwd: directory, env, timeout: IMPORT_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error !== null) {

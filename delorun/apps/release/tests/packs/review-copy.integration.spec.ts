@@ -157,6 +157,59 @@ describe('a built pack\'s review copy', () => {
       .rejects.toThrow(/would not load from the review copy Changes makes of it: @deepseek-ai\/dsh-subagent-demo\/client: .*, imported from the review copy/u)
   })
 
+  /**
+   * The demo pack with one plugin module, `./env`, that fails to import unless its environment holds no variable of the
+   * building process and points every home directory into the check's temporary home.
+   */
+  function envProbe(): Record<string, string> {
+    return {
+      ...DEPLOYED,
+      'package.json': DEPLOYED['package.json']!.replace('"./client":"./lib/client.js"', '"./client":"./lib/client.js","./env":"./lib/env.js"'),
+      'cordis.patch.yml': '- insert:\n    - id: env\n      name: \'@deepseek-ai/dsh-subagent-demo/env\'\n',
+      'lib/env.js': [
+        'const env = process.env',
+        'if (env.PK4_BUILD_SECRET !== undefined || env.NODE_PATH !== undefined || env.NODE_OPTIONS !== undefined) throw new Error("the building process\'s environment reached the import")',
+        'for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "TMPDIR"]) {',
+        '  if (env[name] === undefined || !env[name].startsWith(env.DELORUN_HOME + "/")) throw new Error(`${name} is outside the temporary home`)',
+        '}',
+        'if (!process.cwd().startsWith(env.DELORUN_HOME + "/")) throw new Error("the import runs outside the temporary home")',
+        '',
+      ].join('\n'),
+    }
+  }
+
+  function demoSources(deployed: Record<string, string>, runtime: string): PackSources {
+    return {
+      deploy: (_name, _platform, directory) => Promise.resolve(put(directory, deployed)),
+      closureNodeModules: () => runtime,
+      locked: () => undefined,
+      download: () => Promise.reject(new Error('no download in this test')),
+      declaredPeers: () => Promise.resolve({}),
+    }
+  }
+
+  it('imports the plugin modules with none of the building process\'s environment and every home directory in the temporary home', async () => {
+    const { paths } = runtimeHome()
+    process.env['PK4_BUILD_SECRET'] = 'a credential of the person running the cut'
+    process.env['NODE_PATH'] = paths.runtimeNodeModules(RELEASE)
+    try {
+      await expect(buildPack('@deepseek-ai/dsh-subagent-demo', '0.2.2', false, RELEASE, [PLATFORM], 1_800_000_000, [], demoSources(envProbe(), paths.runtimeNodeModules(RELEASE)), temp('delorun-pack-review-build-'))).resolves.toBeDefined()
+    } finally {
+      delete process.env['PK4_BUILD_SECRET']
+      delete process.env['NODE_PATH']
+    }
+  })
+
+  it('refuses to import from a review copy with a node_modules folder above it, which could meet an import the copy does not', async () => {
+    const { paths } = runtimeHome()
+    const outer = temp('delorun-pack-review-outer-')
+    mkdirSync(join(outer, 'node_modules'))
+    const scratch = join(outer, 'scratch')
+    mkdirSync(scratch)
+    await expect(buildPack('@deepseek-ai/dsh-subagent-demo', '0.2.2', false, RELEASE, [PLATFORM], 1_800_000_000, [], demoSources(envProbe(), paths.runtimeNodeModules(RELEASE)), scratch))
+      .rejects.toThrow(new RegExp(`would not load from the review copy Changes makes of it: the plugin modules cannot be imported from the review copy at .*, because ${join(outer, 'node_modules').replaceAll('/', '\\/')} above it could meet an import the copy does not`, 'u'))
+  })
+
   it('leaves out a peer link no package.json declares, so the copy fails to load where the installed pack loads, as the review copy check reports', async () => {
     const { home, paths } = runtimeHome()
     // An installed pack as 0.1.0-preview.1.5 shipped it: a bundled package beside the link, and the import of
