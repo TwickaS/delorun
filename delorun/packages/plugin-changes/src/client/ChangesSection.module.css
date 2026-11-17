@@ -383,3 +383,8 @@
 .noticeRow {
   border-color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
 }
+
+/* The version line and Apply's note above a review of a change to Delorun itself. */
+.reviewLead {
+  margin-bottom: 12px;
+}

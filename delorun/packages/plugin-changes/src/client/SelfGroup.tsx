@@ -163,8 +163,10 @@ export function SelfReviewDialog({ change, state, t, show, busy, onClose, onAppl
     <LoadLine loaded={loaded} t={t} />
     {loaded.status === 'ready' && shown === undefined ? <p className={css.meta}>{t('review.gone')}</p> : null}
     {shown === undefined ? null : <>
-      <p className={css.text} data-self-to={shown.change.to}>{t('self.reviewVersion', { version: shown.change.to.slice(0, SHORT_VERSION) })}</p>
-      <p className={css.meta}>{t('self.applyNote')}</p>
+      <div className={css.reviewLead}>
+        <p className={css.text} data-self-to={shown.change.to}>{t('self.reviewVersion', { version: shown.change.to.slice(0, SHORT_VERSION) })}</p>
+        <p className={css.meta}>{t('self.applyNote')}</p>
+      </div>
       <ChangeDetail change={shown.review} t={t} />
     </>}
   </Modal>

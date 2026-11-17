@@ -1,8 +1,9 @@
 /**
  * The studio half of `@delorun/plugin-changes`: the Changes section in Settings, which reviews, applies, discards and
- * undoes changes, applies the agent's plugin requests, states the protection setting, and opens and ends a work session
- * through the Host's Changes routes; the work-session badge at the
- * sidebar's foot; and the outcome toast. A page that is not at the computer reads everything and acts on nothing.
+ * undoes changes to plugins and to Delorun itself, applies the agent's plugin requests, turns protection on and off, and
+ * opens and ends a work session through the Host's Changes routes; the work-session badge at the sidebar's foot; and the
+ * outcome toast. On a paired device each control follows the state's `access`: one the Phone powers level keeps at the
+ * computer is disabled, and one that needs an unlock opens the studio's unlock dialog when the route asks for it.
  * @module @delorun/plugin-changes/client
  */
 import type { Context } from '@deepseek-ai/cordis'

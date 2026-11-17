@@ -110,10 +110,10 @@ export function ProtectionOffDialog({ willLoad, t, busy, onClose, onConfirm }: {
       ? <p className={css.confirmText}>{t('protection.off.nothing')}</p>
       : <>
         <p className={css.confirmText}>{t('protection.off.willLoad')}</p>
-        <ul className={css.plainList} data-will-load>
+        {willLoad.plugins.length === 0 ? null : <ul className={css.plainList} data-will-load>
           {willLoad.plugins.map(plugin => <li key={plugin}>{plugin}</li>)}
-          {willLoad.harnessFiles === 0 ? null : <li>{t(pluralKey('protection.off.files', willLoad.harnessFiles), { n: willLoad.harnessFiles })}</li>}
-        </ul>
+        </ul>}
+        {willLoad.harnessFiles === 0 ? null : <p className={css.confirmText} data-will-load-files>{t(pluralKey('protection.off.files', willLoad.harnessFiles), { n: willLoad.harnessFiles })}</p>}
       </>}
   </Modal>
 }
