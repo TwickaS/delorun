@@ -581,7 +581,7 @@
     {
       "path": "packages/client/ui-chat/src/client/locale.ts",
       "class": "security",
-      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
+      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-17): approved; it only adds plural message keys (stats turns/steps .one/.other); no logic or model-visible change.",
       "sha256": "2e95b3b7fba6bb4d82b315c43a39e0d1119e118fff200bffef23aafc9b0213d3"
     },
     {
