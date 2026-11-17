@@ -264,6 +264,12 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(readFileSync(join(home, 'profiles', PROFILE, 'cordis.patch.yml'), 'utf8')).toContain('port: 3082')
   })
 
+  it('refuses, naming the range, when no studio port near the default is free', async () => {
+    const error = await setup({ kind: 'yes' }, undefined, undefined, home, { portIsFree: () => Promise.resolve(false) }).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as CliError).message).toContain('ports 3080 to 3180 are all in use on this computer')
+  })
+
   it('keeps the default port without a word when it is free', async () => {
     const lines: string[] = []
     expect(await setup({ kind: 'yes' }, undefined, undefined, home, { output: { stdout: text => void lines.push(text), stderr: () => undefined } })).toBe(EXIT.ok)
