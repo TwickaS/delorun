@@ -9,7 +9,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Button, Link, TextField } from '@brand'
 import { SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
-import { CONSENT_TEXT, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
+import { GRID } from '@/components/grid.ts'
+import { CONSENT_TEXT, FIELDS, HOME_SIGNUP_PAGE, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
 
 /** The part of Turnstile's script API the form calls. */
 interface TurnstileApi {
@@ -129,34 +130,35 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
         <TextField label={copy.emailLabel} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} />
       </div>
       <div className="flex items-start gap-3">
-        <input id={`${id}-consent`} name={FIELDS.consent} type="checkbox" value="yes" required className="mt-1 size-5 shrink-0 accent-fd-foreground" />
+        <input id={`${id}-consent`} name={FIELDS.consent} type="checkbox" value="yes" required className="mt-1 size-5 shrink-0 accent-(--dl-text)" />
         <label htmlFor={`${id}-consent`} className="text-sm leading-6">{CONSENT_TEXT}</label>
       </div>
       <div ref={widgetRef} />
       <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" variant="primary" disabled={status.kind === 'working'}>{copy.submit}</Button>
-        <p className="text-sm text-fd-muted-foreground">{copy.privacyNote.before}<Link href="/privacy#updates">{copy.privacyNote.link}</Link>{copy.privacyNote.after}</p>
+        <Button type="submit" variant="secondary" disabled={status.kind === 'working'}>{copy.submit}</Button>
+        <p className="text-sm text-(--dl-text-muted)">{copy.privacyNote.before}<Link href="/privacy#updates">{copy.privacyNote.link}</Link>{copy.privacyNote.after}</p>
       </div>
-      <p role="status" aria-live="polite" className={`text-sm font-medium ${status.kind === 'error' ? 'text-red-700 dark:text-red-400' : ''}`}>{status.kind === 'idle' ? '' : status.text}</p>
-      <noscript><p className="text-sm text-fd-muted-foreground">{copy.noScript(SUPPORT_EMAIL)}</p></noscript>
+      <p role="status" aria-live="polite" className={`text-sm font-medium ${status.kind === 'error' ? 'text-(--dl-error)' : ''}`}>{status.kind === 'idle' ? '' : status.text}</p>
+      <noscript><p className="text-sm text-(--dl-text-muted)">{copy.noScript(SUPPORT_EMAIL)}</p></noscript>
     </form>
   )
 }
 
 /**
- * The home page's sign-up section.
+ * The home page's sign-up section, on the page grid: the heading and its sentence from column 1, the form from column 5.
+ * The form records `/` as the place of consent, which the Worker's list of sign-up pages names.
  * @returns the section.
  */
 export function SignupSection() {
   const copy = COPY.signup
   return (
-    <section aria-labelledby="updates" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-      <div className="grid gap-8 rounded-2xl border border-fd-border bg-fd-card p-6 sm:p-8 lg:grid-cols-[1fr_1.3fr] lg:gap-12">
-        <div>
-          <h2 id="updates" className="text-2xl font-semibold tracking-tight">{copy.heading}</h2>
-          <p className="mt-3 leading-7 text-fd-muted-foreground">{copy.text}</p>
-        </div>
-        <SignupForm page="/" />
+    <section aria-labelledby="updates" className={`${GRID} pt-32 lg:pt-48`}>
+      <div className="col-span-full border-t border-(--dl-border) pt-8 lg:col-span-4">
+        <h2 id="updates" className="text-2xl font-semibold tracking-tight">{copy.heading}</h2>
+        <p className="mt-3 max-w-sm leading-7 text-(--dl-text-muted)">{copy.text}</p>
+      </div>
+      <div className="col-span-full mt-8 lg:col-start-5 lg:col-end-12 lg:mt-0 lg:border-t lg:border-(--dl-border) lg:pt-8">
+        <SignupForm page={HOME_SIGNUP_PAGE} />
       </div>
     </section>
   )

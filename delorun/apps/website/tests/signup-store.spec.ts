@@ -3,6 +3,7 @@ import { confirm, listUnsent, purgeUnconfirmed, recordSignup, rotateTokens, unsu
 import { hashToken, isTokenShape, newToken } from '../src/worker/tokens.ts'
 import { normaliseEmail, normaliseName, parseSignup } from '../src/worker/validate.ts'
 import { createDb } from './d1-sqlite.ts'
+import { CONSENT_TEXT_VERSION } from '../src/site/signup.ts'
 
 const INPUT = { email: 'ada@example.com', firstName: 'Ada', page: '/' }
 const T0 = '2026-11-13T10:00:00.000Z'
@@ -65,7 +66,7 @@ describe('the subscriber table', () => {
     const db = createDb()
     expect(await recordSignup(db, INPUT, await hashes(), T0)).toEqual({ kind: 'created' })
     const [row] = db.rows('SELECT * FROM subscribers')
-    expect(row).toMatchObject({ email: 'ada@example.com', first_name: 'Ada', status: 'pending', consent_at: T0, consent_page: '/', consent_text_version: '1', confirmation_sent_at: null })
+    expect(row).toMatchObject({ email: 'ada@example.com', first_name: 'Ada', status: 'pending', consent_at: T0, consent_page: '/', consent_text_version: CONSENT_TEXT_VERSION, confirmation_sent_at: null })
     expect(Object.keys(row ?? {})).not.toContain('ip')
   })
 

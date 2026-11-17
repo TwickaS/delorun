@@ -1,46 +1,255 @@
 /**
- * The home page and the not-found page.
+ * The home page: one long page in ten parts, the header, the hero, five claims, the four living sections, What's new,
+ * what comes next, the sign-up and the closing footer. Every part sits on one grid, twelve columns on a wide screen and
+ * four on a phone, with text hanging from columns 1, 5 and 9. Each living section shows a still until its own script
+ * loads, and keeps it with scripts off.
  *
  * @module @delorun/website/home
  */
+import type { ReactNode } from 'react'
 import view from 'virtual:delorun-changelog'
+import { Frame as Picture, Link, SectionHeading } from '@brand'
 import { DOCS_URL, HERO_IMAGE_PATH } from '@/site/config.ts'
 import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
-import { CopyButton } from '@/components/copy-button.tsx'
-import { PackageManagerPicker, usePackageManager } from '@/components/package-manager.tsx'
-import { Link } from '@brand'
+import { usePackageManager } from '@/components/package-manager.tsx'
+import { DesktopButton } from '@/components/desktop-button.tsx'
+import { CommandBlock, Install, ScriptsOff } from '@/components/install.tsx'
 import { Frame } from '@/components/layout.tsx'
 import { SignupSection } from '@/components/signup.tsx'
+import { GRID, SPACE } from '@/components/grid.ts'
+import css from './home.module.css'
+
+/** The studio picture's own size, which fixes the hero frame's shape. */
+const STUDIO_STILL = { width: 1440, height: 900 } as const
 
 /**
- * The install command and the first setup question, as a terminal would print them.
- * @param props.command - the install command on the first line.
- * @returns the block, which a screen reader reads as plain text.
+ * The studio picture as a still.
+ * @param props.alt - its text alternative; empty where a caption names the frame.
+ * @param props.eager - true in the hero, which is on the first screen.
+ * @returns the picture.
  */
-function Terminal({ command }: { command: string }) {
+function StudioStill({ alt, eager = false }: { alt: string, eager?: boolean }) {
+  return <img src={HERO_IMAGE_PATH} alt={alt} width={STUDIO_STILL.width} height={STUDIO_STILL.height} loading={eager ? 'eager' : 'lazy'} decoding="async" />
+}
+
+/**
+ * A still that holds a living section's place until its lane delivers the section: the box at the section's height,
+ * with the caption that names what will be there.
+ * @param props.caption - what the section shows.
+ * @param props.className - the box's heights at each width.
+ * @returns the box.
+ */
+function SectionStill({ caption, className }: { caption: string, className: string }) {
   return (
-    <figure className="min-w-0">
-      <figcaption className="mb-2 text-sm text-fd-muted-foreground">{COPY.terminalLabel}</figcaption>
-      <pre tabIndex={0} aria-label={COPY.terminalLabel} className="whitespace-pre-wrap break-words rounded-xl border border-fd-border bg-fd-card p-4 font-mono text-[13px] leading-6 text-fd-card-foreground focus-visible:outline-2 focus-visible:outline-fd-foreground sm:p-5 sm:text-sm"><code>{COPY.terminal(command)}</code></pre>
+    <figure className={`col-span-full m-0 grid place-items-center rounded-(--dl-radius-md) border border-(--dl-border) bg-(--dl-surface-raised) p-6 text-center text-(--dl-text-muted) ${className}`}>
+      <figcaption className="max-w-md text-sm">{caption}</figcaption>
     </figure>
   )
 }
 
 /**
- * The What's new strip: the latest assembled version's headlines. Absent until a version is assembled with headlines.
+ * The one link at the end of a living section to the guide page that teaches it.
+ * @param props.link - the text and address.
+ * @returns the line.
+ */
+function GuideLink({ link }: { link: { readonly text: string, readonly href: string } }) {
+  return <p className="col-span-full mt-6 lg:col-start-9 lg:col-end-13"><Link href={link.href}>{link.text}</Link></p>
+}
+
+/**
+ * A section of the page on the grid.
+ * @param props.id - the heading's id, which names the section.
+ * @param props.space - the space above it.
+ * @param props.children - its content, placed on the grid.
+ * @returns the section.
+ */
+function Section({ id, space, children }: { id: string, space: keyof typeof SPACE, children: ReactNode }) {
+  return <section aria-labelledby={id} className={`${GRID} ${SPACE[space]}`}>{children}</section>
+}
+
+/**
+ * The hero: the statement, the install command, the desktop button and the platform line on the left, the studio at
+ * work on the right. On a phone they stack in that order.
+ * @param props.install - the install command with its choice.
+ * @returns the hero.
+ */
+function Hero({ install }: { install: ReactNode }) {
+  const copy = COPY.hero
+  return (
+    <section aria-labelledby="hero" className={`${GRID} gap-y-12 pt-10 lg:items-start lg:pt-20`}>
+      <div className="col-span-full flex flex-col gap-8 lg:col-span-5">
+        <SectionHeading level={1} id="hero" title={copy.title} lead={copy.subline} />
+        <div className="grid max-w-xl gap-5">
+          {install}
+          <DesktopButton />
+        </div>
+        <p className="max-w-xl text-sm text-(--dl-text-muted)">
+          {copy.platform.before}<Link href={copy.platform.href}>{copy.platform.linkText}</Link>{copy.platform.after}
+          {copy.status.before}<Link href={copy.status.href}>{copy.status.linkText}</Link>{copy.status.after}
+        </p>
+      </div>
+      <div className="col-span-full lg:col-start-6 lg:col-end-13">
+        <Picture width={800} height={500} label={copy.replicaLabel} still={<StudioStill alt={copy.stillAlt} eager />} />
+      </div>
+    </section>
+  )
+}
+
+/**
+ * The five claims: numbered rows, one sentence each, each row a link to the guide page that states it.
+ * @returns the section.
+ */
+function Claims() {
+  const copy = COPY.claims
+  return (
+    <section aria-labelledby="claims" className={`${GRID} ${SPACE.normal}`}>
+      <h2 id="claims" className="sr-only">{copy.heading}</h2>
+      <ol className={`col-span-full m-0 list-none p-0 ${css.claims}`}>
+        {copy.items.map((claim, index) => (
+          <li key={claim.href}>
+            <a href={claim.href} className={css.claim}>
+              <span className={css.number} aria-hidden="true">{index + 1}</span>
+              <span className={css.sentence}>{claim.text}</span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+/**
+ * Make it yours: the setup strip, the page's signature, with its heading on the left and its lead from column 9.
+ * @returns the section.
+ */
+function MakeItYours() {
+  const copy = COPY.sections.makeItYours
+  return (
+    <Section id="make-it-yours" space="far">
+      <SectionHeading id="make-it-yours" title={copy.heading} className="col-span-full lg:col-span-6" />
+      <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
+      <div className="col-span-full mt-10 lg:mt-14">
+        <SectionStill caption={copy.still} className="h-[1040px] lg:h-[640px]" />
+      </div>
+      <GuideLink link={copy.link} />
+    </Section>
+  )
+}
+
+/**
+ * Made of parts you can change: the plugin browser, with the heading and lead hanging from column 5.
+ * @returns the section.
+ */
+function Parts() {
+  const copy = COPY.sections.parts
+  return (
+    <Section id="parts" space="normal">
+      <SectionHeading id="parts" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-start-5 lg:col-end-12" />
+      <div className="col-span-full mt-10 lg:mt-14">
+        <SectionStill caption={copy.still} className="h-[720px] lg:h-[640px]" />
+      </div>
+      <GuideLink link={copy.link} />
+    </Section>
+  )
+}
+
+/**
+ * Watch it change: the replayed sessions edge to edge, with the heading on the left and the lead from column 9.
+ * @returns the section.
+ */
+function Replays() {
+  const copy = COPY.sections.replays
+  return (
+    <Section id="replays" space="far">
+      <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-6" />
+      <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
+      <div className="col-span-full mt-10 lg:mt-14">
+        <Picture width={1392} height={870} label={copy.still} still={<StudioStill alt="" />} />
+      </div>
+      <GuideLink link={copy.link} />
+    </Section>
+  )
+}
+
+/**
+ * From your phone: the studio at desktop width on eight columns and at phone width on three, offset downwards. On a
+ * phone the phone-width studio comes first and the wide one scrolls sideways.
+ * @returns the section.
+ */
+function Phone() {
+  const copy = COPY.sections.phone
+  return (
+    <Section id="phone" space="normal">
+      <SectionHeading id="phone" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-span-7" />
+      <div className="col-span-full mt-10 grid grid-cols-subgrid gap-y-8 lg:mt-14">
+        <div className="col-span-full lg:order-2 lg:col-start-10 lg:col-end-13 lg:mt-32">
+          <Picture width={330} height={660} label={copy.narrowLabel} still={<StudioStill alt="" />} />
+        </div>
+        <div className={`col-span-full lg:order-1 lg:col-start-1 lg:col-end-9 ${css.sideways}`}>
+          <div className="w-[920px] max-w-none lg:w-auto">
+            <Picture width={920} height={575} label={copy.wideLabel} still={<StudioStill alt="" />} />
+          </div>
+        </div>
+      </div>
+      <GuideLink link={copy.link} />
+    </Section>
+  )
+}
+
+/**
+ * What's new: the latest assembled version's headlines, set large. Absent until a version is assembled with headlines.
  * @returns the section, or nothing.
  */
-function WhatsNew() {
+export function WhatsNew() {
   const latest = view?.versions[0]
   if (latest === undefined || latest.headlines.length === 0) return null
+  const copy = COPY.whatsNew
   return (
-    <section aria-labelledby="whats-new" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-      <h2 id="whats-new" className="text-2xl font-semibold tracking-tight">{COPY.whatsNew.heading}</h2>
-      <p className="mt-2 text-sm text-fd-muted-foreground">{COPY.whatsNew.latest(latest.version, latest.date)}</p>
-      <ul className="mt-4 list-disc space-y-1.5 pl-5">
-        {latest.headlines.map(headline => <li key={headline}>{headline}</li>)}
-      </ul>
-      <p className="mt-4"><Link href={`${DOCS_URL}/changelog`}>{COPY.whatsNew.full}</Link></p>
+    <Section id="whats-new" space="far">
+      <div className="col-span-full lg:col-span-4">
+        <h2 id="whats-new" className="text-2xl font-semibold tracking-tight">{copy.heading}</h2>
+        <p className="mt-2 text-sm tabular-nums text-(--dl-text-muted)">{copy.latest(latest.version, latest.date)}</p>
+      </div>
+      <div className="col-span-full mt-6 lg:col-start-5 lg:col-end-13 lg:mt-0">
+        <ul className="m-0 grid list-none gap-4 p-0">
+          {latest.headlines.map(headline => <li key={headline} className={css.headline}>{headline}</li>)}
+        </ul>
+        <p className="mt-8"><Link href={`${DOCS_URL}/changelog`}>{copy.full}</Link></p>
+      </div>
+    </Section>
+  )
+}
+
+/**
+ * What comes next, and teams: the heading and two short lines, each hanging from its own column.
+ * @returns the section.
+ */
+function Next() {
+  const copy = COPY.next
+  return (
+    <Section id="next" space="far">
+      <h2 id="next" className="col-span-full text-2xl font-semibold tracking-tight lg:col-span-4">{copy.heading}</h2>
+      <p className="col-span-full mt-4 max-w-sm leading-7 lg:col-start-5 lg:col-end-9 lg:mt-0">
+        {copy.roadmap.before}<Link href={copy.roadmapHref}>{copy.roadmap.linkText}</Link>{copy.roadmap.after}
+      </p>
+      <p className="col-span-full mt-4 max-w-sm leading-7 lg:col-start-9 lg:col-end-13 lg:mt-0">
+        {copy.teams.before}<Link href={copy.teamsHref}>{copy.teams.linkText}</Link>{copy.teams.after}
+      </p>
+    </Section>
+  )
+}
+
+/**
+ * The closing composition above the footer's links: the install command again at headline size and the desktop button.
+ * @param props.command - the command for the chosen package manager.
+ * @returns the composition.
+ */
+export function Closing({ command }: { command: string }) {
+  return (
+    <section aria-labelledby="closing" className="grid gap-6 text-(--dl-text)">
+      <h2 id="closing" className="sr-only">{COPY.closing.heading}</h2>
+      <CommandBlock command={command} size="lg" />
+      <DesktopButton />
     </section>
   )
 }
@@ -51,80 +260,22 @@ function WhatsNew() {
  */
 export function Home() {
   const [manager, setManager] = usePackageManager()
-  const command = INSTALL_COMMANDS[manager]
   return (
     <Frame signup={false}>
+      <ScriptsOff />
       <main>
-        <section className="mx-auto grid w-full max-w-5xl gap-10 px-5 pt-10 sm:px-8 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
-          <div>
-            <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
-            <p className="mt-3 text-xl font-medium tracking-tight">{COPY.heroSubline}</p>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
-            <p className="mt-3 max-w-xl text-sm text-fd-muted-foreground">{COPY.factLine}</p>
-            <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
-            <div className="mt-2 grid w-fit max-w-full gap-2">
-              <PackageManagerPicker value={manager} onChange={setManager} />
-              <CopyButton text={command} />
-            </div>
-            <div className="mt-5 max-w-xl"><Terminal command={command} /></div>
-            <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
-            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
-            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.status.before}<Link href={COPY.status.href}>{COPY.status.linkText}</Link>{COPY.status.after}</p>
-            <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
-          </div>
-          <figure className="min-w-0">
-            <img src={HERO_IMAGE_PATH} alt={COPY.heroImageAlt} width={1200} height={750} className="w-full rounded-xl border border-fd-border bg-fd-card" />
-          </figure>
-        </section>
-        <section aria-labelledby="features" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="features" className="text-2xl font-semibold tracking-tight">{COPY.featuresTitle}</h2>
-          <ul className="mt-8 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
-            {COPY.features.map(feature => (
-              <li key={feature.title}>
-                <h3 className="font-semibold">{feature.title}</h3>
-                <p className="mt-2 leading-7 text-fd-muted-foreground">{feature.text}</p>
-                <p className="mt-2 text-sm"><Link href={feature.href}>{feature.linkText}</Link></p>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Hero install={<Install manager={manager} onChange={setManager} />} />
+        <Claims />
+        <MakeItYours />
+        <Parts />
+        <Replays />
+        <Phone />
         <WhatsNew />
-        <section aria-labelledby="roadmap" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="roadmap" className="text-2xl font-semibold tracking-tight">{COPY.roadmap.heading}</h2>
-          <p className="mt-2 text-fd-muted-foreground">{COPY.roadmap.text}</p>
-          <ol className="mt-6 grid gap-x-10 gap-y-6 sm:grid-cols-3">
-            {COPY.roadmap.stages.map(stage => (
-              <li key={stage.title}>
-                <h3 className="font-semibold">{stage.title}</h3>
-                <p className="mt-2 leading-7 text-fd-muted-foreground">{stage.text}</p>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-6 leading-7">{COPY.roadmap.earns}</p>
-          <p className="mt-3 text-sm"><Link href={COPY.roadmap.href}>{COPY.roadmap.link}</Link></p>
-        </section>
-        <section aria-labelledby="teams" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="teams" className="text-2xl font-semibold tracking-tight">{COPY.teams.heading}</h2>
-          <p className="mt-2 leading-7 text-fd-muted-foreground">{COPY.teams.text}</p>
-        </section>
+        <Next />
         <SignupSection />
-      </main>
-    </Frame>
-  )
-}
-
-/**
- * The page for an address no page has. It has no layout controls beyond links: the build writes 404.html without the
- * router's scripts.
- * @returns the page.
- */
-export function NotFound() {
-  return (
-    <Frame signup={false}>
-      <main className="mx-auto w-full max-w-5xl px-5 pt-16 sm:px-8">
-        <h1 className="text-3xl font-semibold tracking-tight">{COPY.notFound.title}</h1>
-        <p className="mt-4 text-fd-muted-foreground">{COPY.notFound.text}</p>
-        <p className="mt-6"><Link href="/">{COPY.notFound.home}</Link></p>
+        <div className={`${GRID} ${SPACE.far}`}>
+          <div className="col-span-full lg:col-span-8"><Closing command={INSTALL_COMMANDS[manager]} /></div>
+        </div>
       </main>
     </Frame>
   )
