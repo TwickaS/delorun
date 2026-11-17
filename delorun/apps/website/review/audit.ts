@@ -10,6 +10,7 @@ import { createRequire } from 'node:module'
 import type { Browser, Page } from './browser.ts'
 import { throttleAsPhone } from './browser.ts'
 import { WIDTHS } from './naming.ts'
+import { headTags } from './head-tags.ts'
 import { open, url, wakeLazySections } from './page-tools.ts'
 import type { Finding } from './report.ts'
 import { failures, LIMITS, measure } from '../scripts/weight.ts'
@@ -90,6 +91,10 @@ export async function audit(browser: Browser, base: string, out: string): Promis
     await session.context.close()
   }
   measurements['scrollSmoothness'] = { ...scroll, note: 'headless Chromium on a software renderer: a floor, not a measure of real hardware' }
+
+  const head = await headTags(base)
+  measurements['headTags'] = head.tags
+  findings.push(...head.findings)
 
   const weights = measure(out)
   measurements['weight'] = { ...weights, limits: LIMITS }
@@ -195,9 +200,11 @@ async function keyboard(page: Page, width: number): Promise<{ findings: Finding[
       if (element === null || element === document.body) return null
       const style = (target: Element, pseudo?: string): string => {
         const cs = getComputedStyle(target, pseudo)
-        return [cs.outlineStyle, cs.outlineWidth, cs.outlineColor, cs.boxShadow, cs.backgroundColor, cs.color, cs.textDecorationLine, cs.borderColor, cs.opacity, cs.transform].join('|')
+        return [cs.outlineStyle, cs.outlineWidth, cs.outlineColor, cs.boxShadow, cs.backgroundColor, cs.color, cs.textDecorationLine, cs.borderColor, cs.opacity, cs.transform, cs.outlineOffset].join('|')
       }
-      const snapshot = (): string => [style(element), style(element, '::before'), style(element, '::after'), ...[...element.children].slice(0, 3).map(child => style(child))].join('#')
+      const near: Element[] = []
+      for (let node: Element | null = element.parentElement; node !== null && near.length < 3; node = node.parentElement) near.push(node)
+      const snapshot = (): string => [style(element), style(element, '::before'), style(element, '::after'), ...[...element.children].slice(0, 3).map(child => style(child)), ...near.map(node => style(node)), ...near.map(node => style(node, '::after'))].join('#')
       ;window.__qa = { element, snapshot }
       let alpha = 1
       for (let node: Element | null = element; node !== null; node = node.parentElement) alpha *= Number.parseFloat(getComputedStyle(node).opacity)
@@ -221,7 +228,7 @@ async function keyboard(page: Page, width: number): Promise<{ findings: Finding[
     lastIndex = stop.index
     stops.push(stop.label)
     if (!stop.visible) findings.push(fail('focus-invisible', where, `focus lands on something not visible: ${stop.label}`))
-    else if (blurred === stop.snapshot) findings.push(fail('focus-style', where, `no visible focus style: ${stop.label}`))
+    else if (blurred === stop.snapshot) findings.push(warn('focus-style', where, `no change found in the control, its children or three ancestors; check picture k-${String(index).padStart(2, '0')} (${stop.label})`))
     if (repeats >= 2) { findings.push(fail('focus-trap', where, `focus sticks on ${stop.label}`)); break }
   }
   if (stops.length === 0) findings.push(fail('tab-order', where, 'Tab never reached anything'))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { headFindings, readHeadTags } from '../review/head-tags.ts'
 import { parsePictureName, passFolder, pictureName } from '../review/naming.ts'
 import { auditMarkdown, indexMarkdown, reportJson, summarise, summaryLines, type Report } from '../review/report.ts'
 
@@ -74,5 +75,27 @@ describe('report', () => {
 
   it('lists the pictures grouped by page', () => {
     expect(indexMarkdown(['home__a__w1__soft-light__default.png', '404__page__w1__soft-light__default.png'])).toMatch(/## 404[\s\S]*## home/)
+  })
+})
+
+describe('head tags', () => {
+  const html = `<html><head><title>Delorun</title><meta name="description" content="A harness."><link rel="canonical" href="https://delorun.com/"><meta property="og:title" content="Delorun"><meta property="og:image" content=""><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@type":"SoftwareApplication"}</script></head><body></body></html>`
+
+  it('reads what is present and marks the rest missing', () => {
+    const tags = readHeadTags(html)
+    expect(tags.title).toBe('Delorun')
+    expect(tags.canonical).toBe('https://delorun.com/')
+    expect(tags['twitter:card']).toBe('summary_large_image')
+    expect(tags['structured-data']).toBe('SoftwareApplication')
+    expect(tags['og:image']).toBeNull()
+    expect(tags['og:url']).toBeNull()
+  })
+
+  it('warns for each missing tag and fails invalid structured data', () => {
+    const findings = headFindings('home', readHeadTags(html))
+    expect(findings.some(finding => finding.message === 'og:image is missing')).toBe(true)
+    expect(findings.every(finding => finding.severity === 'warn')).toBe(true)
+    const broken = headFindings('home', readHeadTags('<head><script type="application/ld+json">{</script></head>'))
+    expect(broken.some(finding => finding.severity === 'fail')).toBe(true)
   })
 })

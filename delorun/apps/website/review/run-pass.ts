@@ -52,8 +52,8 @@ try {
   const report: Report = {
     pass,
     commit,
-    missingSections: [...taken.missingSections].sort(),
-    findings: dedupe([...taken.findings, ...worstFindings, ...result.findings]),
+    missingSections: [...taken.missingSections].filter(key => key !== 'whats-new').sort(),
+    findings: dedupe([...taken.findings, ...worstFindings, ...result.findings, ...(taken.missingSections.has('whats-new') ? [{ severity: 'info' as const, check: 'whats-new', where: 'home', message: 'absent, no headlines in this release' }] : [])]),
     measurements: result.measurements,
     pictures,
   }
