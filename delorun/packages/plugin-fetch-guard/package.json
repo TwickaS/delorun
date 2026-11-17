@@ -7,7 +7,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./guard": "./src/guard.ts"
+    "./guard": "./src/guard.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin packs",
+    "description": "Downloads an optional plugin pack when you turn it on and checks it against the signed list of packs before it loads"
+  }
+}

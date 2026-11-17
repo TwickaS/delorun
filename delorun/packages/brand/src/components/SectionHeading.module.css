@@ -8,8 +8,8 @@
 
 .title {
   margin: 0;
-  /* The bundled faces cover weights 400 to 500; a heavier weight would be drawn by the browser as faux bold. Tabular figures are not set on titles: they widen the full stop. */
-  font-weight: 500;
+  /* Tabular figures are not set on titles: they widen the full stop. */
+  font-weight: 600;
   text-wrap: balance;
 }
 
