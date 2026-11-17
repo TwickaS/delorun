@@ -8,18 +8,19 @@
  */
 import { lazy, Suspense, type ReactNode } from 'react'
 import { Frame as Picture, Link, SectionHeading } from '@brand'
-import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
-import { usePackageManager } from '@/components/package-manager.tsx'
-import { DesktopButton } from '@/components/desktop-button.tsx'
-import { CommandBlock, Install, ScriptsOff } from '@/components/install.tsx'
-import { Frame } from '@/components/layout.tsx'
-import { StudioStill } from '@/components/studio-still.tsx'
-import { GRID } from '@/components/grid.ts'
+import { COPY, INSTALL_COMMANDS } from '../site/copy.ts'
+import { usePackageManager } from './package-manager.tsx'
+import { DesktopButton } from './desktop-button.tsx'
+import { CommandBlock, Install, ScriptsOff } from './install.tsx'
+import { Frame } from './layout.tsx'
+import { StudioStill } from './studio-still.tsx'
+import { GRID } from './grid.ts'
+import { ChunkBoundary } from './chunk-boundary.tsx'
 
 // The server imports the lower sections before it renders, so the prerendered page holds them in full and never a
 // fallback. The browser loads them as a lazy chunk; while it loads during hydration React keeps the server's markup.
-const below = import.meta.env.SSR ? await import('@/components/home-below.tsx') : undefined
-const HomeBelow = below?.HomeBelow ?? lazy(() => import('@/components/home-below.tsx').then(module => ({ default: module.HomeBelow })))
+const below = import.meta.env.SSR ? await import('./home-below.tsx') : undefined
+const HomeBelow = below?.HomeBelow ?? lazy(() => import('./home-below.tsx').then(module => ({ default: module.HomeBelow })))
 
 /**
  * The hero: the statement, the install command, the desktop button and the platform line on the left, the studio at
@@ -58,7 +59,7 @@ export function Closing({ command }: { command: string }) {
   return (
     <section aria-labelledby="closing" className="grid gap-6 text-(--dl-text)">
       <h2 id="closing" className="sr-only">{COPY.closing.heading}</h2>
-      <CommandBlock command={command} size="lg" />
+      <CommandBlock command={command} size="lg" main />
       <DesktopButton />
     </section>
   )
@@ -75,7 +76,9 @@ export function Home() {
       <ScriptsOff />
       <main>
         <Hero install={<Install manager={manager} onChange={setManager} />} />
-        <Suspense fallback={null}><HomeBelow /></Suspense>
+        <ChunkBoundary fallback={<p className={`${GRID} pt-24 text-(--dl-text-muted)`}>{COPY.partFailed}</p>}>
+          <Suspense fallback={null}><HomeBelow /></Suspense>
+        </ChunkBoundary>
       </main>
     </Frame>
   )

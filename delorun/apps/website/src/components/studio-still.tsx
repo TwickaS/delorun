@@ -3,7 +3,7 @@
  *
  * @module @delorun/website/studio-still
  */
-import { HERO_IMAGE_PATH } from '@/site/config.ts'
+import { HERO_IMAGE_PATH } from '../site/config.ts'
 
 /** The studio picture's own size, which fixes the hero frame's shape. */
 const STUDIO_STILL = { width: 1440, height: 900 } as const

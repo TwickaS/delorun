@@ -84,6 +84,8 @@ export const EN = {
   privacy: {
     title: 'Privacy',
   },
+  /** Shown in the place of the lower home page when its script fails to load. */
+  partFailed: 'The rest of this page did not load. Reload the page to see it.',
   notFound: {
     title: 'Page not found',
     text: 'Nothing is plugged in at this address.',

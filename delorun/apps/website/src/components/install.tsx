@@ -31,7 +31,7 @@ export function ScriptsOff() {
 interface CommandBlockProps {
   readonly command: string
   readonly size?: 'md' | 'lg'
-  /** True for the hero's command only: its copy button is the page's main button, the one place the accent fills. */
+  /** True for the hero's command and the closing one: the page's main action, whose copy button the accent fills. The two are never in view together. */
   readonly main?: boolean
   readonly className?: string
 }
@@ -40,7 +40,7 @@ interface CommandBlockProps {
  * One command in the brand's code block, with the site's copy wording.
  * @param props.command - the command.
  * @param props.size - `lg` at headline size, as the closing footer sets it.
- * @param props.main - true for the hero's command, whose copy button carries the accent.
+ * @param props.main - true for the page's main action, whose copy button carries the accent.
  * @param props.className - extra classes.
  * @returns the block.
  */

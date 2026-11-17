@@ -7,9 +7,10 @@ import { EN } from '../src/site/words/en.ts'
 import { PRIVACY_EN } from '../src/site/words/privacy-en.ts'
 import { SECTIONS_EN } from '../src/site/words/sections-en.ts'
 import { SIGNUP_EN } from '../src/site/words/signup-en.ts'
+import { SIGNUP_FAILED } from '../src/site/words/signup-failed-en.ts'
 
 /** Every dictionary the site has. */
-const ALL = [EN, PRIVACY_EN, SECTIONS_EN, SIGNUP_EN, CONSENT_TEXT, CONSENT_OUT_OF_DATE]
+const ALL = [EN, PRIVACY_EN, SECTIONS_EN, SIGNUP_EN, CONSENT_TEXT, CONSENT_OUT_OF_DATE, SIGNUP_FAILED]
 
 /** The guide pages the documentation site builds from. */
 const GUIDE = new URL('../../../docs/guide/', import.meta.url)
