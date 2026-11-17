@@ -8,6 +8,7 @@
     - id: browser-use-browse
       name: '../../../delorun/packages/browser-use-browse/src/index.ts'
       config:
+        enabled: true
         command: !!js process.execPath
         args:
           - !!js "process.cwd() + '/browse-fixture.mjs'"

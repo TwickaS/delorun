@@ -54,14 +54,16 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
  * Mount the provider: the grants, the tool, the call guard, the routes and, for each chat whose grant runs, browse.
+ * With the C16 switch `use_my_browser` off it mounts nothing.
  * @param ctx - the provider context.
  * @param config - the validated row configuration.
- * @returns when the projection is registered and everything is mounted.
+ * @returns when the projection is registered and everything is mounted, or at once with the switch off.
  * @throws Error before anything is mounted, for a row that would start something other than the pinned browse, or
  *   when this computer has no browse build or its package is missing.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   validateConfig(config)
+  if (!config.enabled) return
   const command = resolveCommand(config)
   const now = (): number => Date.now()
   const grants = await registerGrants(ctx, now)

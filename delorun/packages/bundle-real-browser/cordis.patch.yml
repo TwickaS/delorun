@@ -7,6 +7,9 @@
     - id: browser-use-browse
       name: '@delorun/browser-use-browse'
       disabled: true
+      # C16 switch use_my_browser, on in Delorun; the parity composition leaves the row out.
+      config:
+        enabled: true
     # The skill teaches the agent to work in the person's browser; it loads only while the driver row is on.
     - id: skill-real-browser
       name: '@delorun/skill-real-browser'

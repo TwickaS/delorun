@@ -54,6 +54,12 @@ export const FIXED_ENV: Readonly<Record<string, string>> = Object.freeze({
 /** The validated row configuration. */
 export interface Config {
   /**
+   * C16 switch `use_my_browser`: whether the row mounts anything. Off, it validates its fields and mounts nothing: no
+   * `use_my_browser` tool, no browse call guard, no `realBrowser` service, no routes and no browse server. Every row
+   * Delorun ships turns it on.
+   */
+  readonly enabled: boolean
+  /**
    * Which platform package's binary runs; `auto` picks the one for this computer. `windows-x64` on Linux runs the
    * Windows binary through WSL interop, so the relay runs beside a Chrome on the Windows side.
    */
@@ -83,6 +89,7 @@ const NEVER: ReadonlySet<string> = new Set(NEVER_INHERITED)
 
 /** The schema of {@link Config}. */
 export const Config: z<Partial<Config>, Config> = z.object({
+  enabled: z.boolean().default(false),
   variant: z.union(['auto', ...BROWSE_VARIANTS] as const).default('auto'),
   command: z.string().pattern(/\S/u),
   args: z.array(z.string()).default(['mcp']),

@@ -12,7 +12,7 @@
 
 每行给出一项证据。检查名（如 `parity-switches`）运行 `node_modules/.bin/tsx delorun/apps/tools/src/parity/composition/check-parity-switches.ts`，该检查读取开关注册表、开关字段与对等覆盖层。规格路径指向断言该行的测试文件。以「Manual check:」开头的条目指出审阅者用来确认该行的源码行。
 
-有十二个已构建的开关，其开关开启场景仍待录制：`browser_additions`、`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history`、`container_denial_marker` 和 `tool_failure_guard` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
+有十二个已构建的开关，其开关开启场景仍待录制：`browser_additions`、`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history`、`container_denial_marker`、`tool_failure_guard` 和 `use_my_browser` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
 
 ## Liveshare
 
@@ -109,6 +109,7 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | 项目 | 基线与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
 | 浏览器附加功能 | `dsh-v0.2.2-rc.3`：Playwright 浏览器提供方以 Playwright 自己的措辞报告未安装的浏览器版本，并且不给 `.playwright-mcp` 放 `.gitignore`。本树：提供方的 `browserAdditions` 开关由 [`@delorun/bundle-browser`](../../packages/bundle-browser/README.zh.md) 开启，它把该报告替换为一条消息，告诉模型停止尝试，并请本人在“插件”中完成 Browser 设置，同时给 `.playwright-mcp` 放入内容为 `*` 的 `.gitignore` | 已构建：`browser_additions`（开关开启场景待录制） | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
+| 你自己的浏览器 | `dsh-v0.2.2-rc.3`：没有任何浏览器工具能用到本人自己的浏览器及其登录状态。本树：[`@delorun/browser-use-browse`](../../packages/browser-use-browse/README.zh.md) 为智能体提供 `use_my_browser` 工具，每个 chat 询问本人一次，并且只为本人已允许的 chat 启动 browse 及其工具；它的 `enabled` 开关由 [`@delorun/bundle-real-browser`](../../packages/bundle-real-browser/README.zh.md) 开启，关闭时该行不挂载任何内容 | 已构建：`use_my_browser` | `delorun/packages/browser-use-browse/tests/plugin.spec.ts`、`snapshots/session/delorun-use-my-browser` 和 `parity-switches` |
 | 浏览器工具拒绝与文件夹防护 | `dsh-v0.2.2-rc.3`：Playwright 提供方提供 `browser_run_code_unsafe`，它在服务器进程中运行模型编写的代码，而服务器按文本把文件参数同它的文件夹比较。本树：MCP 客户端从不注册被拒绝的工具，`browser_run_code_unsafe` 始终被拒绝；提供方拒绝对被拒绝工具的调用，也拒绝 `filename` 或 `paths` 的真实位置在 chat 文件夹之外的调用；服务器被告知该文件夹为它唯一的 MCP root。这些是安全不变量：在所有开关关闭时依然成立，包括 `browser_additions` | 已构建：无开关；`security` 台账条目 | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
 
 ### 限制与容器
