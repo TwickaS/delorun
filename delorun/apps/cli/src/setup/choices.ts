@@ -57,6 +57,16 @@ export const USE_CASE_TEXT: Readonly<Record<SetupUseCase, ChoiceText>> = {
   },
 }
 
+/** The short phrase beside each use case while it is selected; the longer text is behind {@link USE_CASE_EXPLAIN}. */
+export const USE_CASE_HINT: Readonly<Record<SetupUseCase, string>> = {
+  local: 'Delorun runs here, in your browser',
+  remote: 'and from your phone, over Tailscale',
+  automation: 'no studio; run it from scripts',
+}
+
+/** The choice that shows what each use case means and asks again. */
+export const USE_CASE_EXPLAIN = 'What does each one mean?'
+
 /** The use cases in the order the question lists them. */
 export const USE_CASE_ORDER: readonly SetupUseCase[] = ['local', 'remote', 'automation']
 

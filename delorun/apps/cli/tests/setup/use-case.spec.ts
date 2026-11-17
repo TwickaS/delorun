@@ -71,20 +71,28 @@ afterEach(() => {
 })
 
 describe('the opening question', { timeout: TIMEOUT_MS }, () => {
-  it('asks how the person will use Delorun, with three options of plain lines and the recommended one marked', async () => {
+  it('asks how the person will use Delorun, with three short options and the recommended one marked', async () => {
     await interactive(['local', DS, 'environment', 'safer', 'save'])
     expect(questions()[0]).toBe('How will you use Delorun?')
     expect(screen()).toContain([
       '? How will you use Delorun?',
-      '> Just me, on this computer (recommended)',
-      '  Also from my phone or another device',
-      '  For scripts and automation',
+      '> Just me, on this computer (recommended) (Delorun runs here, in your browser)',
+      '  Also from my phone or another device (and from your phone, over Tailscale)',
+      '  For scripts and automation (no studio; run it from scripts)',
+      '  What does each one mean?',
     ].join('\n'))
+    expect(screen()).not.toContain('Suits most people.')
+    expect(screen().split('? How will you use')[0] ?? '').not.toContain('(recommended)')
+    expect(screen()).toMatch(/^delorun .* · new home in /mu)
+  })
+
+  it('shows what each option means only when asked, then asks again', async () => {
+    await interactive(['explain', 'local', DS, 'environment', 'safer', 'save'])
+    expect(questions().slice(0, 2)).toEqual(['How will you use Delorun?', 'How will you use Delorun?'])
     expect(screen()).toContain('Just me, on this computer (recommended)\n    Delorun runs in the background and opens in your browser on this computer. Nothing outside this computer can reach it.\n    Suits most people.\n    Change later: delorun setup reach.')
     expect(screen()).toContain('Change later: delorun reach off.')
     expect(screen()).toContain('Change later: delorun setup key, delorun setup background.')
     expect(screen()).toContain('Needs Tailscale installed and signed in on this computer.')
-    expect((screen().split('? How will you use')[0] ?? '').match(/\(recommended\)/gu)).toHaveLength(1)
   })
 })
 

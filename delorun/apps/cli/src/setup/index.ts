@@ -30,6 +30,8 @@ import { channelOriginOf } from './channel-origin.ts'
 import { checkSandboxHere } from '../doctor/sandbox.ts'
 import type { CheckResult } from '../doctor/checks.ts'
 import { nextSteps } from './ending.ts'
+import { styleOf } from '../style.ts'
+import { delorunVersion } from '../version.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
 import { keyTarget } from './provider-section.ts'
@@ -233,6 +235,20 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry, 
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, current !== undefined), { ...current ?? SETUP_DEFAULTS, ...flags }, current)
 }
 
+/**
+ * The line above the first question: the product, its version and where the new home will be.
+ * @param home - the Delorun home.
+ * @param env - the environment, which decides the colour and names the user's home folder.
+ * @returns the line with its line ending.
+ */
+function setupHeader(home: string, env: Readonly<Record<string, string | undefined>>): string {
+  const style = styleOf(env)
+  const version = String(delorunVersion())
+  const user = env.HOME
+  const shown = user !== undefined && user !== '' && home.startsWith(`${user}/`) ? `~${home.slice(user.length)}` : home
+  return `${style.badge()} ${version === '0.0.0' ? 'source build' : version} ${style.dim(`· new home in ${shown}`)}\n`
+}
+
 /** How many ports after the default {@link settlePort} tries before it gives up. */
 const PORT_SEARCH = 100
 
@@ -363,6 +379,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
       // The run records the sections it asks itself.
       before = { ...currentAnswers(profileDirectory(request.home, request.profile)), sections: [] }
     }
+    if (request.form.kind === 'interactive' && !finished) request.output.stdout(setupHeader(request.home, request.env))
     const collected = await collectAnswers(request, registry, before)
     // A re-run changes the existing profile, whatever name the answers carry.
     const named = finished ? { ...collected.answers, profile: { ...collected.answers.profile, name: null } } : collected.answers
