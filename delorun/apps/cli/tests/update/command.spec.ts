@@ -301,7 +301,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.ok)
 
-    expect(output.stdout).toBe('… fetching\nDelorun 1.0.0 is the newest release on the stable channel.\n')
+    expect(output.stdout).toBe('… fetching\n✓ Up to date · 1.0.0 (newest on the stable channel)\n')
     expect(sent('update.apply')).toHaveLength(0)
   })
 

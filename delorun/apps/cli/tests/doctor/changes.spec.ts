@@ -314,15 +314,15 @@ describe('delorun doctor with the changes lines', () => {
     linkPlugin('plug')
     await start()
     const sound = await doctor({ DELORUN_HOME: home })
-    expect(sound.stdout).toContain('pass changes: protection is on')
+    expect(sound.stdout).toContain('✓ changes: protection is on')
     writeFileSync(join(home, 'changes', 'protection.json'), '{}\n', { mode: 0o600 })
     const broken = await doctor({ DELORUN_HOME: home })
     expect(broken.exit).toBe(EXIT.failed)
-    expect(broken.stderr).toMatch(/^fail changes: The protection setting cannot be read: /mu)
+    expect(broken.stderr).toMatch(/^✗ changes: The protection setting cannot be read: /mu)
   })
 
   it('turns a changes check that throws into one failure line', async () => {
     const run = await doctor({ DELORUN_HOME: 'relative/home' })
-    expect(run.stderr).toMatch(/^fail changes: the check could not complete: /mu)
+    expect(run.stderr).toMatch(/^✗ changes: the check could not complete: /mu)
   })
 })

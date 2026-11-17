@@ -331,7 +331,7 @@ describe('what start, status and doctor show', { timeout: TIMEOUT_MS }, () => {
     const out: string[] = []
     const context = { env: { DELORUN_HOME: home }, stdout: (text: string) => void out.push(text), stderr: () => undefined }
     await statusCommand.run([], context)
-    expect(out.join('')).toContain(`${DANGEROUS_ON_LINE}\nDelorun isn't running`)
+    expect(out.join('')).toContain(`${DANGEROUS_ON_LINE}\n● Delorun isn't running`)
     expect(await dangerousModeCheck(context, PROFILE)).toEqual({ name: 'dangerous-mode', status: 'warn', message: DANGEROUS_ON_LINE })
   })
 

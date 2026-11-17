@@ -26,6 +26,7 @@ import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
 import { notRunningText } from './messages.ts'
 import { readableTime } from './output.ts'
+import { commandRows, styleOf, type Style } from './style.ts'
 import { printable } from './terminal-text.ts'
 import { changesNotice } from './verify/changes.ts'
 
@@ -45,8 +46,8 @@ async function workSessionLine(home: string, profile: string): Promise<string> {
   }
 }
 
-/** The line that follows the studio's address. */
-export const OPEN_HINT = 'Run delorun open to open the studio in your browser.'
+/** What `delorun open` does, beside its command in the status output. */
+export const OPEN_EXPLANATION = 'open the studio in your browser'
 
 /**
  * The studio's address from a `status` answer, read at the update channel's wire boundary: an `http:` or `https:` URL
@@ -73,17 +74,20 @@ export function studioAddress(studio: string | undefined): URL | undefined {
  * @param fromStore - whether this program runs from the runtime store; a source build has no release version to show.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined, fromStore: boolean): string {
+function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined, fromStore: boolean, style: Style): string {
   const studio = studioAddress(status.studio)
-  return [
-    `Delorun is ${status.state}.`,
+  const details = [
     ...studio === undefined ? [] : [`Studio: ${studio.href}`],
     `Version: ${fromStore ? status.runtime.running : 'source build'}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
     `Running chats: ${String(status.chats)}`,
     ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
     ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
-    ...studio === undefined ? [] : [OPEN_HINT],
     ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${readableTime(inspector.openedAt)}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delorun restarts without --inspect`],
+  ]
+  return [
+    style.mark(status.state === 'running' ? 'ok' : 'warn', `Delorun is ${status.state}.`),
+    ...details.map(line => `  ${line}`),
+    ...studio === undefined ? [] : commandRows(style, [['delorun open', OPEN_EXPLANATION], ['delorun stop', 'stop it']]),
     '',
   ].join('\n')
 }
@@ -97,6 +101,7 @@ export const statusCommand: CliCommand = {
     const profile = selectProfile(values.profile, context.env)
     const home = await resolveDelorunHome(context.env)
     const json = values.json === true
+    const style = styleOf(context.env)
     const verbose = values.verbose === true
     if (!json) {
       if (verbose) context.stdout(`Home: ${home.path}\nProfile: ${profile}\n`)
@@ -112,7 +117,7 @@ export const statusCommand: CliCommand = {
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
       if (json) context.stdout(`${JSON.stringify({ ok: false, state: 'not-running' })}\n`)
-      else context.stdout(notRunningText(profile)+'\n')
+      else context.stdout(`${style.mark('note', notRunningText(profile))}\n`)
       return EXIT.notRunning
     }
     let answer
@@ -127,7 +132,7 @@ export const statusCommand: CliCommand = {
       return EXIT.failed
     }
     const inspector = readInspectorRecord(home.path, profile, record.pid)
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector, runtimeOfFile(home.path, fileURLToPath(import.meta.url)).store))
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector, runtimeOfFile(home.path, fileURLToPath(import.meta.url)).store, style))
     return EXIT.ok
   },
 }

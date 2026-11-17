@@ -117,3 +117,6 @@ export function plantInstallation(directory: string): string {
   writeJson(join(directory, 'node_modules', '@deepseek-ai', 'dsh-base', 'package.json'), { name: '@deepseek-ai/dsh-base', version: '0.2.2', dsh: { bundle: { patch: 'cordis.patch.yml' } } })
   return join(directory, 'package.json')
 }
+
+/** The count line `delorun doctor` ends with, which is not a check. */
+export const SUMMARY = /^\d+ passed · \d+ warnings? · \d+ failed$/u

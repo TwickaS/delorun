@@ -32,6 +32,7 @@ import { UPDATE_CHECK_DEFAULTS } from '@delorun/bundle-local/update-check'
 import semver from 'semver'
 import { CliError, EXIT } from '../exit.ts'
 import { notRunningText } from '../messages.ts'
+import { commandRows, styleOf, type Style } from '../style.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { hostRefusal } from '@delorun/npm-launcher'
 import { runtimePlatformOf } from './channel.ts'
@@ -130,6 +131,17 @@ export const CHECK_DEPENDENCIES: UpdateCheckDependencies = {
 export const SOURCE_BUILD_TEXT = "This is a source build, so it doesn't update itself. Install Delorun with: npx delorun"
 
 /**
+ * The line that says no newer release exists.
+ * @param style - the styles.
+ * @param version - the running Delorun version.
+ * @param channel - the release channel.
+ * @returns the line without its newline.
+ */
+function upToDateLine(style: Style, version: string, channel: string): string {
+  return style.mark('ok', `Up to date · ${version} ${style.dim(`(newest on the ${channel} channel)`)}`)
+}
+
+/**
  * `delorun update --check`: run the update check now and print what it found.
  * @param home - the resolved Delorun home.
  * @param profile - the CLI profile, whose record the check writes and whose plugins it counts.
@@ -138,6 +150,7 @@ export const SOURCE_BUILD_TEXT = "This is a source build, so it doesn't update i
  * @returns 0 when the check verified the channel's newest release, 1 when it failed.
  */
 async function runCheck(home: string, profile: string, context: CommandContext, dependencies: UpdateCheckDependencies): Promise<CommandResult> {
+  const style = styleOf(context.env)
   const runtime = dependencies.runtime(home)
   if (!runtime.store) {
     context.stderr(`${SOURCE_BUILD_TEXT}\n`)
@@ -153,10 +166,11 @@ async function runCheck(home: string, profile: string, context: CommandContext, 
   const running = await runningRelease(home, platform, runtime.version, await anchor.root())
   const notice = await noticeOf(record, running, profileReader(home, profile))
   if (notice === undefined) {
-    context.stdout(`Delorun ${running.delorun} is the newest release on the ${running.channel} channel.\n`)
+    context.stdout(`${upToDateLine(style, running.delorun, running.channel)}\n`)
     return EXIT.ok
   }
-  for (const line of noticeLines(notice)) context.stdout(`${line}\n`)
+  const [headline = '', ...rest] = noticeLines(notice)
+  for (const line of [style.mark('note', headline), ...rest, ...commandRows(style, [['delorun update --report', 'see what changes'], ['delorun update', 'install it']])]) context.stdout(`${line}\n`)
   return EXIT.ok
 }
 
@@ -370,7 +384,7 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   const report = prepared.report as UpdateReport
   const reportId = String(prepared.reportId)
   if (report.to.delorun === report.from.delorun) {
-    context.stdout(`Delorun ${report.from.delorun} is the newest release on the ${report.from.channel} channel.\n`)
+    context.stdout(`${upToDateLine(styleOf(context.env), report.from.delorun, report.from.channel)}\n`)
     return EXIT.ok
   }
   if (semver.valid(report.to.delorun) === null || semver.valid(report.from.delorun) === null || semver.lt(report.to.delorun, report.from.delorun)) {

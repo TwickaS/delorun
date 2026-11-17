@@ -94,7 +94,7 @@ describe('delorun doctor when a check throws something other than an Error', () 
     } finally {
       vi.unstubAllEnvs()
     }
-    expect(printed).toContain('fail home: the check could not complete: the home is a text\n')
+    expect(printed).toContain('✗ home: the check could not complete: the home is a text\n')
     expect(printed).toMatch(/ port: /u)
   })
 })

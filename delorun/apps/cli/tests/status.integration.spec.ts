@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { newStartId, runDirectory } from '@delorun/home'
 import { queryHomeStatus } from '@delorun/home-process'
 import { EXIT } from '../src/exit.ts'
-import { OPEN_HINT, statusCommand, studioAddress } from '../src/status.ts'
+import { OPEN_EXPLANATION, statusCommand, studioAddress } from '../src/status.ts'
 import { startRunningHome, type RunningHome } from './fixtures/running-home.ts'
 
 vi.mock('@delorun/home-process', async (importOriginal) => {
@@ -77,11 +77,10 @@ describe('delorun status', { timeout: 30_000 }, () => {
     running = await startRunningHome(home, PROFILE, 'http://127.0.0.1:4123/?token=fixture-token-value')
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('Delorun is running.\n')
-    expect(result.stdout).toContain(`Studio: http://127.0.0.1:4123/\n`)
-    expect(result.stdout).toContain(`\n${OPEN_HINT}\n`)
+    expect(result.stdout).toContain('✓ Delorun is running.\n')
+    expect(result.stdout).toContain(`  Studio: http://127.0.0.1:4123/\n`)
+    expect(result.stdout).toContain(`\n  delorun open  ${OPEN_EXPLANATION}\n  delorun stop  stop it\n`)
     expect(result.stdout).not.toMatch(/Process id|Start id|Home:/)
-    expect(OPEN_HINT).toBe('Run delorun open to open the studio in your browser.')
     expect(result.stdout).not.toContain('fixture-token-value')
     expect(result.stdout).not.toContain('token')
   })
@@ -90,9 +89,9 @@ describe('delorun status', { timeout: 30_000 }, () => {
     running = await startRunningHome(home, PROFILE, undefined)
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('Running chats: 0\n')
+    expect(result.stdout).toContain('  Running chats: 0\n')
     expect(result.stdout).not.toContain('studio:')
-    expect(result.stdout).not.toContain(OPEN_HINT)
+    expect(result.stdout).not.toContain(OPEN_EXPLANATION)
   })
 
   it('prints the status answer alone with --json, as before', async () => {
@@ -100,11 +99,11 @@ describe('delorun status', { timeout: 30_000 }, () => {
     const result = await status(['--json'])
     expect(result.code).toBe(EXIT.ok)
     expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, status: { state: 'running', studio: 'http://127.0.0.1:4123/' } })
-    expect(result.stdout).not.toContain(OPEN_HINT)
+    expect(result.stdout).not.toContain(OPEN_EXPLANATION)
   })
 
   it('reports no home process, with and without --json, and a lock its exited holder left', async () => {
-    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining("Delorun isn't running. Start it with: delorun start\n") as string })
+    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining("● Delorun isn't running. Start it with: delorun start\n") as string })
     expect(await status(['--json'])).toMatchObject({ code: EXIT.notRunning, stdout: '{"ok":false,"state":"not-running"}\n' })
     const exited = spawnSync(process.execPath, ['-e', ''], { timeout: 30_000 })
     writeLock(exited.pid as number)
@@ -141,7 +140,7 @@ describe('delorun status', { timeout: 30_000 }, () => {
     } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('Version: source build\nRunning chats: 2\nUpdate: waiting to 1.1.0\n')
+    expect(result.stdout).toContain('  Version: source build\n  Running chats: 2\n  Update: waiting to 1.1.0\n')
     vi.mocked(queryHomeStatus).mockResolvedValueOnce({
       state: 'running', pid: process.pid, startId: newStartId(),
       runtime: { current: '1.1.0', previous: '1.0.0', running: '1.0.0' }, chats: 2,
@@ -149,7 +148,7 @@ describe('delorun status', { timeout: 30_000 }, () => {
     } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const verbose = await status(['--verbose'])
     expect(verbose.stdout).toContain('Version: source build (previous 1.0.0)')
-    expect(verbose.stdout).toMatch(/Process id: \d+\nStart id: /)
+    expect(verbose.stdout).toMatch(/Process id: \d+\n  Start id: /)
   })
 
   it('names an inherited DSH_HOME that it ignores', async () => {

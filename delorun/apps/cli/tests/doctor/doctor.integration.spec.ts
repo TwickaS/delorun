@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { SETUP_DEFAULTS } from '@delorun/contract-setup-answers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { recorded, serializeCheckState } from '@delorun/release-verify'
-import { CHECK_NAMES, closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER, usableBwrap } from './fixtures.ts'
+import { CHECK_NAMES, SUMMARY, closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER, usableBwrap } from './fixtures.ts'
 
 const BIN = join(import.meta.dirname, '../../src/bin.ts')
 const TSX_LOADER = import.meta.resolve('tsx/esm')
@@ -88,14 +88,14 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(0)
     expect(result.stderr).toBe([
-      'warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.',
-      `warn release-log: no release-log check of release ${RUNNING} is recorded in ${join(delorunHome, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.`,
-      `warn plugins: the CLI profile default is not set up in ${delorunHome}, so it has no plugin; delorun setup creates it.`,
+      '! docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.',
+      `! release-log: no release-log check of release ${RUNNING} is recorded in ${join(delorunHome, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.`,
+      `! plugins: the CLI profile default is not set up in ${delorunHome}, so it has no plugin; delorun setup creates it.`,
       '',
     ].join('\n'))
-    expect(result.stdout).toContain('pass home: ')
-    expect(result.stdout).toContain('pass key: the DeepSeek API key is set and has the expected format (format only; the key was not sent to DeepSeek).\n')
-    expect(result.stdout).toContain(`pass port: port ${String(port)} on 127.0.0.1 is free.\n`)
+    expect(result.stdout).toContain('✓ home: ')
+    expect(result.stdout).toContain('✓ key: the DeepSeek API key is set and has the expected format (format only; the key was not sent to DeepSeek).\n')
+    expect(result.stdout).toContain(`✓ port: port ${String(port)} on 127.0.0.1 is free.\n`)
   })
 
   it('warns for a running release that has stayed unchecked, with the time since and the recorded reason', async () => {
@@ -105,7 +105,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(0)
-    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delorun checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
+    expect(result.stderr).toMatch(new RegExp(`^! release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delorun checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
   })
 
   it.runIf(POSIX)('passes an answering Docker engine and prints its version', async () => {
@@ -113,7 +113,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('pass docker: the Docker engine answers; its server version is 27.3.1.\n')
+    expect(result.stdout).toContain('✓ docker: the Docker engine answers; its server version is 27.3.1.\n')
     expect(result.stderr).not.toContain(' docker: ')
   })
 
@@ -122,7 +122,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
     expect(result.status).toBe(0)
-    expect(result.stderr).toContain('warn docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
+    expect(result.stderr).toContain('! docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
   })
 
   it('checks the key of the provider the profile\'s default-model row selects, from the variable its route names', async () => {
@@ -136,17 +136,17 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     // A setup answers record naming no provider does not hide the provider the profile selects.
     writeFileSync(join(directory, 'setup-answers.json'), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, modelProvider: null }), { mode: 0o600 })
     const port = await freePort()
-    expect(doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY }).stderr).toContain('warn key: no Anthropic API key is set; the model cannot answer. Set WORK_ANTHROPIC_KEY, or run delorun setup key to store one')
-    expect(doctor(['--port', String(port)], { WORK_ANTHROPIC_KEY: 'anthropic-fixture-0123456789' }).stdout).toContain('pass key: the Anthropic API key is set and has the expected format (format only; the key was not sent to Anthropic).\n')
+    expect(doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY }).stderr).toContain('! key: no Anthropic API key is set; the model cannot answer. Set WORK_ANTHROPIC_KEY, or run delorun setup key to store one')
+    expect(doctor(['--port', String(port)], { WORK_ANTHROPIC_KEY: 'anthropic-fixture-0123456789' }).stdout).toContain('✓ key: the Anthropic API key is set and has the expected format (format only; the key was not sent to Anthropic).\n')
     writeFileSync(join(directory, 'cordis.patch.yml'), readFileSync(join(directory, 'cordis.patch.yml'), 'utf8').replace('provider: anthropic', 'provider: cerebras'))
-    expect(doctor(['--port', String(port)], {}).stderr).toContain('warn key: new chats start on cerebras, whose row names no key variable')
+    expect(doctor(['--port', String(port)], {}).stderr).toContain('! key: new chats start on cerebras, whose row names no key variable')
   })
 
   it('warns when no DeepSeek key is set, and exits 0', async () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)])
     expect(result.status).toBe(0)
-    expect(result.stderr).toContain('warn key: no DeepSeek API key is set; the model cannot answer.')
+    expect(result.stderr).toContain('! key: no DeepSeek API key is set; the model cannot answer.')
   })
 
   it.each([
@@ -156,7 +156,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: key })
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('fail key: the DeepSeek API key is malformed; check it at the key page (format only; the key was not sent to DeepSeek).\n')
+    expect(result.stderr).toContain('✗ key: the DeepSeek API key is malformed; check it at the key page (format only; the key was not sent to DeepSeek).\n')
     expect(leaksPartOf(result.stdout + result.stderr, key)).toBe(false)
   })
 
@@ -170,7 +170,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
     expect(result.status).toBe(0)
-    expect(result.stderr).toContain('warn docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
+    expect(result.stderr).toContain('! docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
     const output = result.stdout + result.stderr
     expect(output).not.toMatch(/[\u0000-\u0009\u000b-\u001f]/)
     for (const hostile of ['hostile-marker', 'CONTAINERS', 'title', '27.3.1', 'aaaa']) expect(output).not.toContain(hostile)
@@ -188,22 +188,22 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     writeFileSync(join(delorunHome, '.env'), `DEEPSEEK_API_KEY=${key}\n`, { mode: 0o600 })
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: key })
     expect(result.status).toBe(1)
-    expect(result.stderr).toMatch(/^fail key: the check could not complete: .*\.credentials\.yaml is not a readable credentials document \([A-Z_]+\)$/m)
+    expect(result.stderr).toMatch(/^✗ key: the check could not complete: .*\.credentials\.yaml is not a readable credentials document \([A-Z_]+\)$/m)
     expect(leaksPartOf(result.stdout + result.stderr, key)).toBe(false)
   })
 
   it('runs against an empty environment: one line per check, no crash and no key', () => {
     // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
     const result = doctorWithEnvironment(['--port', '1'], {})
-    const all = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
+    const all = (result.stdout + result.stderr).split('\n').filter(line => line !== '' && !SUMMARY.test(line))
     // The `changes` lines report the home's Changes; their own specs are in changes.spec.ts.
-    const lines = all.filter(line => !/^(?:pass|warn|fail) changes: /.test(line))
+    const lines = all.filter(line => !/^[✓!✗] changes: /.test(line))
     expect(all.length - lines.length).toBeGreaterThan(0)
-    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
-    expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
-    expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
-    expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this copy of Delorun was not installed by the launcher/)
-    expect(result.status).toBe(all.some(line => line.startsWith('fail ')) ? 1 : 0)
+    expect(lines.map(line => /^[✓!✗] ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
+    expect(lines.find(line => line.includes(' docker: '))).toMatch(/^[✓!] docker: /)
+    expect(lines.find(line => line.includes(' port: '))).toMatch(/^[✓✗] port: /)
+    expect(lines.find(line => / update: /.test(line))).toMatch(/^✓ update: this copy of Delorun was not installed by the launcher/)
+    expect(result.status).toBe(all.some(line => line.startsWith('✗ ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')
   })
@@ -214,8 +214,8 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'acme-gone'] } } }))
     const result = doctor(['--port', String(await freePort())], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(1)
-    expect(result.stdout).toContain('pass plugins: no plugin is installed in the profile default; it enables 2 bundles, loaded in this order: @deepseek-ai/dsh-base, acme-gone.\n')
-    expect(result.stderr).toContain('fail plugin acme-gone: the profile enables acme-gone in dsh.profile.bundles, but it is neither installed in the profile nor shipped with this Delorun')
+    expect(result.stdout).toContain('✓ plugins: no plugin is installed in the profile default; it enables 2 bundles, loaded in this order: @deepseek-ai/dsh-base, acme-gone.\n')
+    expect(result.stderr).toContain('✗ plugin acme-gone: the profile enables acme-gone in dsh.profile.bundles, but it is neither installed in the profile nor shipped with this Delorun')
     expect(result.stdout + result.stderr).not.toMatch(/ plugin @deepseek-ai\/dsh-base: /)
   })
 
@@ -224,7 +224,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     try {
       const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
       expect(result.status).toBe(1)
-      expect(result.stderr).toContain(`fail port: port ${String(port)} is in use; stop the other process or pass --port\n`)
+      expect(result.stderr).toContain(`✗ port: port ${String(port)} is in use; stop the other process or pass --port\n`)
     } finally {
       await closeServer(server)
     }
@@ -232,9 +232,9 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
 
   it('checks the studio default port 3080 when no --port is given and the profile sets none', () => {
     const result = doctor([], { DEEPSEEK_API_KEY: GOOD_KEY })
-    const line = /^(pass|fail) port: port 3080 /m.exec(result.stdout + result.stderr)
+    const line = /^(✓|✗) port: port 3080 /m.exec(result.stdout + result.stderr)
     expect(line).not.toBeNull()
-    expect(result.status).toBe(line?.[1] === 'pass' ? 0 : 1)
+    expect(result.status).toBe(line?.[1] === '✓' ? 0 : 1)
   })
 
   it('refuses a bad --port with the usage code before any check runs', () => {
@@ -260,7 +260,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     // The environment's key is malformed; the stored one, which the model uses, is well formed.
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: 'sk-fixture0123456789 abcdefghij' })
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('pass key: ')
+    expect(result.stdout).toContain('✓ key: ')
   })
 
   it('reads the key from the home .env file, the layer that delorun start reads', async () => {
@@ -269,7 +269,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)])
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('pass key: ')
+    expect(result.stdout).toContain('✓ key: ')
   })
 
   it.runIf(POSIX)('refuses a credentials document another user can read, with the chmod 600 fix and no key', async () => {
@@ -279,7 +279,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)])
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('fail key: the check could not complete: SECRET_FILE_MODE: ')
+    expect(result.stderr).toContain('✗ key: the check could not complete: SECRET_FILE_MODE: ')
     expect(result.stderr).toContain(`chmod 600 ${path}`)
     expect(leaksPartOf(result.stdout + result.stderr, GOOD_KEY)).toBe(false)
   })
@@ -289,7 +289,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain(`fail home: HOME_MODE: ${delorunHome} has mode 0755`)
+    expect(result.stderr).toContain(`✗ home: HOME_MODE: ${delorunHome} has mode 0755`)
     expect(result.stderr).toContain(`chmod 700 ${delorunHome}`)
   })
 })
