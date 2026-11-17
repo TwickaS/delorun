@@ -43,6 +43,7 @@ import { ADMISSION_REFUSAL_STATUS } from '@delorun/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
 import { COMPUTER_ONLY_ROW_MODULES, createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
+import { unlockOf } from './computer-only.ts'
 import { HOME_AUTH_HTTP_STATUS, HomeAuthError } from './errors.ts'
 import { takeUnlockToken } from './unlock-token.ts'
 
@@ -62,14 +63,25 @@ export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: ma
 /** The sentence the remote studio shows for a refused external-agent start. */
 export const EXTERNAL_AGENT_REFUSAL = 'This needs you at your computer: starting an external agent such as Claude Code or Codex, which runs outside Delorun\'s sandbox. Answer this prompt in the studio on the home\'s own computer'
 
+/** The sentence the remote studio shows for a refused real-browser grant, answered from a locked device. */
+export const REAL_BROWSER_REFUSAL = 'This needs an unlocked device: letting the agent use your own browser, with your sign-ins, in this chat. Unlock this device with its code or PIN and answer again, or answer at the home\'s own computer'
+
+/**
+ * Who besides the home's own computer may give a reserved grant: `computer` keeps it to the computer (and to a device
+ * that holds an unlock while dangerous mode holds); `unlocked-device` also lets any device unlocked with a code or PIN
+ * give it, but not one that holds only the approval grace.
+ */
+type GrantReach = 'computer' | 'unlocked-device'
+
 /**
  * The `LOOPBACK_REQUIRED` refusal of each grant a reach Peer may not give, by the approval request's `grants` marker
- * (`ApprovalGrant` of `@deepseek-ai/dsh-user-approval`).
+ * (`ApprovalGrant` of `@deepseek-ai/dsh-user-approval`), and who else may give it.
  */
-const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAction; readonly message: string }> = new Map([
-  ['full-access', { action: 'full-access-escalation', message: FULL_ACCESS_REFUSAL }],
-  ['workspace-management', { action: 'workspace-management', message: WORKSPACE_MANAGEMENT_REFUSAL }],
-  ['external-agent', { action: 'external-agent', message: EXTERNAL_AGENT_REFUSAL }],
+const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAction; readonly message: string; readonly reach: GrantReach }> = new Map([
+  ['full-access', { action: 'full-access-escalation', message: FULL_ACCESS_REFUSAL, reach: 'computer' }],
+  ['workspace-management', { action: 'workspace-management', message: WORKSPACE_MANAGEMENT_REFUSAL, reach: 'computer' }],
+  ['external-agent', { action: 'external-agent', message: EXTERNAL_AGENT_REFUSAL, reach: 'computer' }],
+  ['real-browser', { action: 'real-browser', message: REAL_BROWSER_REFUSAL, reach: 'unlocked-device' }],
 ])
 
 /** The approval outcomes that grant nothing, which a reach Peer may answer to any prompt. */
@@ -326,8 +338,11 @@ export class HomeAuthAuthenticator extends Authenticator {
    * `full-access` (an escalation to `danger-full-access`, `plugin_manager`'s included, and a workspace's full-access
    * consent) and `workspace-management` (creating, cloning, trashing or restoring a workspace, changing an
    * instruction-layer file, and the main chat's commands and writes) and `external-agent` (starting an external
-   * agent program, such as Claude Code or Codex, outside the sandbox). Any answer but `rejected`, `cancelled` and
-   * `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
+   * agent program, such as Claude Code or Codex, outside the sandbox). A `real-browser` grant (the person's own
+   * browser for one chat) is refused only to a device that holds no running unlock ({@link unlockOf}) or holds only the
+   * approval grace: a device that is merely signed in or in its grace stays refused, and one unlocked with a code or
+   * PIN gives it as the computer does. Any answer but `rejected`,
+   * `cancelled` and `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
    * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.
    */
@@ -339,6 +354,13 @@ export class HomeAuthAuthenticator extends Authenticator {
     // `tailnet-membership`.
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
+    if (refusal.reach === 'unlocked-device') {
+      const unlock = unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId))
+      // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant, in
+      // dangerous mode too: the unlock read here is the page's or the device's, the ones the lines below accept.
+      if (unlock !== undefined && unlock.grace !== true) return
+      throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
+    }
     // An unlocked PIN page gives what the computer gives. This Peer is the answering page's, so a locked tab stays
     // refused while a sibling tab is unlocked.
     if (reach.unlockId !== undefined && this.ctx.homeAuth.pageUnlockOf(reach.unlockId) !== undefined) return

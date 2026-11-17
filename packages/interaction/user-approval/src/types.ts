@@ -65,9 +65,10 @@ declare module '@deepseek-ai/dsh-session/types' {
  * - `workspace-management`: a change to which workspaces exist (create, clone, trash, restore), to an instruction-layer
  *   file (an `AGENTS.md`, a skill or a preset), or a command or write that runs where every workspace is reachable;
  * - `external-agent`: the start of an external agent program (a subagent provider without a local child session),
- *   which runs outside the sandbox and the approval prompts.
+ *   which runs outside the sandbox and the approval prompts;
+ * - `real-browser`: the person's own browser, with their sign-ins, for the rest of one chat.
  */
-export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
+export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent' | 'real-browser'
 
 /** The sandbox modes a call can ask to escalate to; `read-only` is the floor and nothing escalates to it. */
 export type ApprovalEscalation = 'workspace-write' | 'danger-full-access'

@@ -6,6 +6,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// The real-browser grant's Session events; re-exported so the root entry carries the SessionEventMap merge.
+export type * from './real-browser.ts'
 
 /** One provider-owned browser or connection and its quiescent cleanup. */
 export interface OwnedSessionResource<T> {
@@ -129,6 +131,17 @@ export class SessionResources<T> {
     // The queue tracks settlement independently of a caller observing its error.
     entry.tail = task.then(() => {}, () => {})
     return task
+  }
+
+  /**
+   * Close one owner's resource, after its running operations, and keep the owner live: a later {@link get} acquires a
+   * new one. Does nothing while the owner holds none.
+   * @param agent - exact live resource owner.
+   * @returns when the resource is closed.
+   */
+  async release(agent: Agent): Promise<void> {
+    const entry = this.entries.get(agent)
+    if (entry !== undefined) await this.closeEntry(agent, entry)
   }
 
   /**
