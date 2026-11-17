@@ -23,8 +23,10 @@
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delorun bundle is refused before it boots, and one in which a row of a Delorun bundle did not activate is shut down and
- * refused after it boots ([delorun-bundles](./delorun-bundles.ts)). A fresh start that fails right after a change starts once
- * more, in a new process, without that change ([retry](./changes/retry.ts)).
+ * refused after it boots ([delorun-bundles](./delorun-bundles.ts)). An optional plugin pack of the running release is not a
+ * Delorun bundle there: a skipped pack prints a notice, and a pack whose row did not activate is logged as not running while
+ * the studio starts. A fresh start that fails right after a change starts once more, in a new process, without that change
+ * ([retry](./changes/retry.ts)).
  *
  * Run from `runtimes/<version>/` of C1's store, the home process gets the update support of [update](./update/support.ts);
  * its Host counts running chats and runs C3's health check ([host](./update/host.ts)). A process whose descriptor 3
@@ -59,7 +61,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type Co
 import { holderAlive, HomeLayoutError, isFailClosedStub, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delorun/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delorun/bundle-local/profile'
-import { delorunRowIds, inactiveDelorunRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
+import { delorunRowIds, inactiveDelorunRows, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
 import { announceStudio } from './open/announce.ts'
@@ -72,6 +74,7 @@ import { dangerousModeLine } from './setup/dangerous.ts'
 import { openSetupLog, upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { runningReleasePacks, type ReleasePacks } from './release-packs.ts'
 import { fetchPacksFromRelease } from './profile-packs.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
@@ -185,6 +188,8 @@ export interface StartDependencies {
   readonly opener: StudioOpener
   /** The composition's approved plugin content step ([compose](./compose.ts)); {@link changesApprovedContent} in a real start. */
   readonly approvedPluginContent: ApprovedPluginContent
+  /** The running release's optional plugin packs, which the composition holds to no Delorun row rule ([release packs](./release-packs.ts)); {@link runningReleasePacks} in a real start. */
+  readonly releasePacks: ReleasePacks
   /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); {@link realPreStartSteps} in a real start. */
   readonly preStartSteps: readonly PreStartStep[]
   /** The second start after a start left a change out ([retry](./changes/retry.ts)); {@link relaunchForeground} in a real start. */
@@ -500,6 +505,7 @@ export async function upstreamAddHeadlessBundle(home: string, output: CommandOut
 export function upstreamDependencies(): StartDependencies {
   return {
     approvedPluginContent: changesApprovedContent,
+    releasePacks: runningReleasePacks,
     preStartSteps: realPreStartSteps(upstreamAddStudioBundle, upstreamAddHeadlessBundle),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delorun home.
@@ -733,6 +739,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   const composed = await composeDelorunProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
+    releasePacks: dependencies.releasePacks,
   }).catch(async (error: unknown) => {
     await removeSandboxOverlay(request.home, request.profile)
     throw error
@@ -764,8 +771,9 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
   try {
-    const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile))
+    const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile, composed.packBundles), composed.packBundles)
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
+    for (const pack of inactivePackRows(composed.resolvedProfile.profile, booted.rows(), composed.packBundles)) logger.warn(inactivePackWarning(request.profile, pack))
     assertDelorunInvariants(composed, booted)
     await retry.checkRows(booted.rows())
   } catch (error) {

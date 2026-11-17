@@ -10,10 +10,13 @@ import {
   carriedPackageDirectory,
   delorunRowIds,
   inactiveDelorunRows,
+  inactivePackRows,
+  inactivePackWarning,
   inactiveRowsRefusal,
   LINKING_PROGRESS,
   linkDelorunBundles,
   refuseSkippedDelorunBundles,
+  skippedPackNotices,
   type BootedRow,
   type BundleLinking,
   type LinkReport,
@@ -147,12 +150,53 @@ describe('the packages this installation carries', () => {
 
 describe('a profile that skipped a Delorun bundle', () => {
   it('starts when no Delorun bundle was skipped, and is refused with each skipped bundle\'s reason and fix otherwise', () => {
-    expect(() => { refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: '@deepseek-ai/dsh-extra', reason: 'not installed' }] }) }).not.toThrow()
-    expect(() => { refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'not installed' }] }) })
+    expect(() => { refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: '@deepseek-ai/dsh-extra', reason: 'not installed' }] }, new Set()) }).not.toThrow()
+    expect(() => { refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'not installed' }] }, new Set()) })
       .toThrow(`Delorun's bundle, so Delorun did not start:\n  ${LOCAL_BUNDLE}: not installed\n  To fix it, run: delorun plugin --profile default add link:${String(carriedPackageDirectory(LOCAL_BUNDLE))}`)
     expect(() => {
-      refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'a' }, { packageName: '@delorun/not-carried', reason: 'b' }] })
+      refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'a' }, { packageName: '@delorun/not-carried', reason: 'b' }] }, new Set())
     }).toThrow('  @delorun/not-carried: b\n  To fix it, reinstall Delorun, or run: delorun plugin --profile default install')
+  })
+})
+
+describe('a profile that skipped a pack bundle of the running release', () => {
+  const PACKS = new Set(['@delorun/bundle-webhooks'])
+
+  it('starts without the pack and says so, and still refuses a skipped runtime bundle beside it', () => {
+    const profile = { name: PROFILE, skippedBundles: [{ packageName: '@delorun/bundle-webhooks', reason: 'not installed' }] }
+    expect(() => { refuseSkippedDelorunBundles(profile, PACKS) }).not.toThrow()
+    expect(skippedPackNotices(profile, PACKS)).toEqual(['delorun: the plugin pack @delorun/bundle-webhooks did not load in the profile default (not installed), so Delorun starts without it. To fix it, run: delorun recover packs, or retry it in Plugins.\n'])
+    expect(() => { refuseSkippedDelorunBundles(profile, new Set()) }).toThrow('@delorun/bundle-webhooks: not installed')
+    expect(() => { refuseSkippedDelorunBundles({ name: PROFILE, skippedBundles: [...profile.skippedBundles, { packageName: LOCAL_BUNDLE, reason: 'gone' }] }, PACKS) }).toThrow(`${LOCAL_BUNDLE}: gone`)
+    expect(skippedPackNotices({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'gone' }] }, PACKS)).toEqual([])
+  })
+})
+
+describe('a pack bundle\'s rows that did not activate', () => {
+  const PACKS = new Set(['@delorun/bundle-webhooks'])
+  const layers = [
+    { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delorun-privacy', name: LOCAL_BUNDLE }] }] },
+    { packageName: '@delorun/bundle-webhooks', patches: [{ insert: [{ id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook' }, { id: 'github-webhook-ingress', name: 'cordis:group', config: [{ id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server' }] }] }] },
+  ]
+  const rows: BootedRow[] = [
+    { id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook', disabled: false, state: 'failed' },
+    { id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server', disabled: false, state: 'not-imported' },
+    { id: 'elsewhere', name: '@delorun/bundle-webhooks/other', disabled: false, state: 'pending' },
+    { id: 'off', name: '@delorun/bundle-webhooks/off', disabled: true, state: 'failed' },
+    { id: 'delorun-privacy', name: LOCAL_BUNDLE, disabled: false, state: 'failed' },
+  ]
+
+  it('do not stop the start; a runtime bundle\'s row still does', () => {
+    const ids = delorunRowIds({ layers } as never, PACKS)
+    expect(inactiveDelorunRows(rows, ids, PACKS).map(row => row.id)).toEqual(['delorun-privacy'])
+    expect(inactiveDelorunRows(rows, delorunRowIds({ layers } as never, new Set()), new Set()).map(row => row.id)).toEqual(['webhook-runtime', 'github-webhook-server', 'elsewhere', 'delorun-privacy'])
+  })
+
+  it('are reported per pack with a warning that names each row, its state and the remedy', () => {
+    const inactive = inactivePackRows({ layers } as never, rows, PACKS)
+    expect(inactive.map(each => ({ pack: each.pack, rows: each.rows.map(row => row.id) }))).toEqual([{ pack: '@delorun/bundle-webhooks', rows: ['webhook-runtime', 'github-webhook-server', 'elsewhere'] }])
+    expect(inactivePackWarning(PROFILE, inactive[0]!)).toBe('The plugin pack @delorun/bundle-webhooks did not start in the CLI profile default (webhook-runtime (@deepseek-ai/dsh-webhook) failed to start, github-webhook-server (@delorun/bundle-webhooks/server) failed to import, elsewhere (@delorun/bundle-webhooks/other) waits for a service that never came), so Delorun runs without it; Plugins shows it as not loaded. The warning above names the cause. To fix it, run: delorun recover packs, or turn the pack off in Plugins.')
+    expect(inactivePackRows({ layers } as never, rows.filter(row => row.id === 'delorun-privacy'), PACKS)).toEqual([])
   })
 })
 
@@ -163,8 +207,19 @@ describe('the rows of Delorun\'s bundles', () => {
         { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delorun-privacy', name: LOCAL_BUNDLE, config: { nested: [{ id: 'inner', name: '@delorun/inner' }] } }, 'text', null] }, {}] },
         { packageName: '@deepseek-ai/dsh-base', patches: [{ insert: [{ id: 'upstream-row', name: '@deepseek-ai/dsh-x' }] }] },
       ],
-    } as never)
+    } as never, new Set())
     expect([...ids].sort()).toEqual(['delorun-privacy', 'inner'])
+  })
+
+  it('leaves out every row a pack bundle of the running release inserts, nested ones included, and keeps another @delorun/ bundle\'s', () => {
+    const ids = delorunRowIds({
+      layers: [
+        { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delorun-privacy', name: LOCAL_BUNDLE }] }] },
+        { packageName: '@delorun/bundle-webhooks', patches: [{ insert: [{ id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook' }, { id: 'github-webhook-ingress', name: 'cordis:group', config: [{ id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server' }] }] }] },
+        { packageName: '@delorun/bundle-unlisted', patches: [{ insert: [{ id: 'unlisted-row', name: '@delorun/bundle-unlisted' }] }] },
+      ],
+    } as never, new Set(['@delorun/bundle-webhooks']))
+    expect([...ids].sort()).toEqual(['delorun-privacy', 'unlisted-row'])
   })
 
   it('reports the enabled Delorun rows that did not activate, with a fix for each', () => {
@@ -176,7 +231,7 @@ describe('the rows of Delorun\'s bundles', () => {
       { id: 'upstream', name: '@deepseek-ai/dsh-y', disabled: false, state: 'failed' },
       { id: 'delorun-ok', name: LOCAL_BUNDLE, disabled: false, state: 'active' },
     ]
-    const inactive = inactiveDelorunRows(rows, new Set(['inserted']))
+    const inactive = inactiveDelorunRows(rows, new Set(['inserted']), new Set())
     expect(inactive.map(row => row.id)).toEqual(['delorun-privacy', 'delorun-other', 'inserted'])
     const message = inactiveRowsRefusal(PROFILE, inactive).message
     expect(message).toContain('plugins of Delorun\'s bundles did not start in the CLI profile default, so Delorun stopped:')

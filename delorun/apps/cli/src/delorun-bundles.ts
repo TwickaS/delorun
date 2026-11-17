@@ -152,18 +152,31 @@ export async function linkDelorunBundles(
 }
 
 /**
- * Refuse a loaded profile when it skipped a Delorun bundle.
+ * Refuse a loaded profile when it skipped a Delorun bundle. A skipped pack bundle of the running release does not stop
+ * the start ({@link skippedPackNotices}).
  * @param profile - the profile as upstream's loader returned it.
+ * @param packBundles - the running release's pack bundles.
  * @throws {CliError} with the failure code, naming each skipped Delorun bundle, its reason and the command that fixes it.
  */
-export function refuseSkippedDelorunBundles(profile: Pick<Profile, 'name' | 'skippedBundles'>): void {
-  const skipped = profile.skippedBundles.filter(bundle => isDelorunPackage(bundle.packageName))
+export function refuseSkippedDelorunBundles(profile: Pick<Profile, 'name' | 'skippedBundles'>, packBundles: ReadonlySet<string>): void {
+  const skipped = profile.skippedBundles.filter(bundle => isDelorunPackage(bundle.packageName) && !packBundles.has(bundle.packageName))
   if (skipped.length === 0) return
   throw new CliError(EXIT.failed, [
     `delorun: the profile ${profile.name} could not load Delorun's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delorun did not start:`,
     ...skipped.map(({ packageName, reason }) => `  ${packageName}: ${reason}\n  To fix it, ${packageFix(profile.name, packageName)}`),
     'Without them the profile would start with DeepSeek Harness\'s own defaults: no Delorun guard, and session logs uploaded to DeepSeek.',
   ].join('\n'))
+}
+
+/**
+ * The notices for the pack bundles of the running release that a loaded profile skipped: the start goes on without them.
+ * @param profile - the profile as upstream's loader returned it.
+ * @param packBundles - the running release's pack bundles.
+ * @returns one line per skipped pack, each ending in a line break.
+ */
+export function skippedPackNotices(profile: Pick<Profile, 'name' | 'skippedBundles'>, packBundles: ReadonlySet<string>): string[] {
+  return profile.skippedBundles.filter(bundle => packBundles.has(bundle.packageName))
+    .map(({ packageName, reason }) => `delorun: the plugin pack ${packageName} did not load in the profile ${profile.name} (${reason}), so Delorun starts without it. To fix it, run: delorun recover packs, or retry it in Plugins.\n`)
 }
 
 /** How a booted plugin row ended its startup. */
@@ -191,11 +204,20 @@ export interface BootedRow {
 export const OPT_IN_ROWS: ReadonlySet<string> = new Set(['delorun-cost-meter', 'delorun-thinking-rsvp', 'browser-use-chrome-devtools-mcp', 'browser-use-stagehand-native'])
 
 /**
- * The ids of the rows that Delorun bundles insert into a profile.
- * @param profile - the loaded profile.
- * @returns the ids, from every `insert` list of each Delorun layer's patches, nested lists included.
+ * The package a module name belongs to.
+ * @param moduleName - a row's module, such as `@delorun/bundle-local/update-gate`.
+ * @returns the package, such as `@delorun/bundle-local`.
  */
-export function delorunRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
+export function packageOfModule(moduleName: string): string {
+  return moduleName.split('/').slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
+}
+
+/**
+ * The ids of the rows a bundle layer's patches insert.
+ * @param layer - the layer.
+ * @returns the ids, from every `insert` list of its patches, nested lists included.
+ */
+function insertedRowIds(layer: Pick<Profile['layers'][number], 'patches'>): Set<string> {
   const ids = new Set<string>()
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) {
@@ -207,22 +229,68 @@ export function delorunRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
     if (typeof record.id === 'string' && typeof record.name === 'string') ids.add(record.id)
     for (const child of Object.values(record)) if (typeof child === 'object') visit(child)
   }
-  for (const layer of profile.layers) {
-    if (!isDelorunPackage(layer.packageName)) continue
-    for (const patch of layer.patches) visit((patch as { insert?: unknown }).insert)
-  }
+  for (const patch of layer.patches) visit((patch as { insert?: unknown }).insert)
   return ids
 }
 
 /**
- * The enabled Delorun rows that did not activate: the rows Delorun bundles insert,
- * and any row whose module is in Delorun's scope.
+ * The ids of the rows that Delorun bundles insert into a profile. The running release's optional plugin packs are not
+ * Delorun bundles here: they load from their Changes review copy, and their rows are optional.
+ * @param profile - the loaded profile.
+ * @param packBundles - the running release's pack bundles ([release packs](./release-packs.ts)), whose layers are left out.
+ * @returns the ids, from every `insert` list of each Delorun layer's patches, nested lists included.
+ */
+export function delorunRowIds(profile: Pick<Profile, 'layers'>, packBundles: ReadonlySet<string>): Set<string> {
+  return new Set(profile.layers.filter(layer => isDelorunPackage(layer.packageName) && !packBundles.has(layer.packageName)).flatMap(layer => [...insertedRowIds(layer)]))
+}
+
+/**
+ * The enabled Delorun rows that did not activate: the rows Delorun bundles insert, and any row whose module is in
+ * Delorun's scope and not in a pack bundle of the running release.
  * @param rows - the booted profile's rows.
  * @param delorunIds - the ids Delorun bundles insert ({@link delorunRowIds}).
+ * @param packBundles - the running release's pack bundles, whose rows {@link inactivePackRows} reports instead.
  * @returns the inactive Delorun rows.
  */
-export function inactiveDelorunRows(rows: readonly BootedRow[], delorunIds: ReadonlySet<string>): BootedRow[] {
-  return rows.filter(row => (delorunIds.has(row.id) || isDelorunPackage(row.name)) && !row.disabled && row.state !== 'active')
+export function inactiveDelorunRows(rows: readonly BootedRow[], delorunIds: ReadonlySet<string>, packBundles: ReadonlySet<string>): BootedRow[] {
+  return rows.filter(row => (delorunIds.has(row.id) || (isDelorunPackage(row.name) && !packBundles.has(packageOfModule(row.name)))) && !row.disabled && row.state !== 'active')
+}
+
+/** A pack bundle whose enabled rows did not activate. */
+export interface InactivePack {
+  /** The pack bundle. */
+  readonly pack: string
+  /** Its enabled rows that did not activate, in the Loader's order. */
+  readonly rows: readonly BootedRow[]
+}
+
+/**
+ * The pack bundles of the running release with an enabled row that did not activate: a row the pack's layer inserts, or
+ * one whose module is in the pack's package. Such a pack does not stop the start.
+ * @param profile - the loaded profile.
+ * @param rows - the booted profile's rows.
+ * @param packBundles - the running release's pack bundles.
+ * @returns one entry per pack with such rows, in layer order.
+ */
+export function inactivePackRows(profile: Pick<Profile, 'layers'>, rows: readonly BootedRow[], packBundles: ReadonlySet<string>): InactivePack[] {
+  return profile.layers.filter(layer => packBundles.has(layer.packageName)).flatMap((layer) => {
+    const ids = insertedRowIds(layer)
+    const inactive = rows.filter(row => (ids.has(row.id) || packageOfModule(row.name) === layer.packageName) && !row.disabled && row.state !== 'active')
+    return inactive.length === 0 ? [] : [{ pack: layer.packageName, rows: inactive }]
+  })
+}
+
+/** How a booted row that did not activate ended, as a refusal or a warning words it. */
+const ROW_STATE_WORDS: Readonly<Record<RowState, string>> = { 'active': 'active', 'failed': 'failed to start', 'pending': 'waits for a service that never came', 'not-imported': 'failed to import' }
+
+/**
+ * The home log's warning for a pack whose rows did not activate: the studio runs without them.
+ * @param profile - the CLI profile.
+ * @param inactive - the pack and its rows ({@link inactivePackRows}).
+ * @returns the warning.
+ */
+export function inactivePackWarning(profile: string, inactive: InactivePack): string {
+  return `The plugin pack ${inactive.pack} did not start in the CLI profile ${profile} (${inactive.rows.map(row => `${row.id} (${row.name}) ${ROW_STATE_WORDS[row.state]}`).join(', ')}), so Delorun runs without it; Plugins shows it as not loaded. The warning above names the cause. To fix it, run: delorun recover packs, or turn the pack off in Plugins.`
 }
 
 /**
@@ -232,7 +300,6 @@ export function inactiveDelorunRows(rows: readonly BootedRow[], delorunIds: Read
  * @returns the error to stop the start with.
  */
 export function inactiveRowsRefusal(profile: string, rows: readonly BootedRow[]): CliError {
-  const describe: Record<RowState, string> = { 'active': 'active', 'failed': 'failed to start', 'pending': 'waits for a service that never came', 'not-imported': 'failed to import' }
   return new CliError(EXIT.failed, [
     `delorun: ${rows.length === 1 ? 'a plugin' : 'plugins'} of Delorun's bundles did not start in the CLI profile ${profile}, so Delorun stopped:`,
     ...rows.map((row) => {
@@ -240,7 +307,7 @@ export function inactiveRowsRefusal(profile: string, rows: readonly BootedRow[])
       const fix = directory === undefined
         ? packageFix(profile, row.name)
         : `build it in this source checkout with: pnpm --filter ${row.name} run build, then start again; if the profile does not list it, run: delorun plugin --profile ${profile} add link:${directory}`
-      return `  ${row.id} (${row.name}) ${describe[row.state]}\n  To fix it, ${fix}`
+      return `  ${row.id} (${row.name}) ${ROW_STATE_WORDS[row.state]}\n  To fix it, ${fix}`
     }),
     'The warning above names the cause. Without these plugins Delorun would run without its privacy settings and statements.',
   ].join('\n'))

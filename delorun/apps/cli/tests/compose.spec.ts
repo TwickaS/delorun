@@ -19,6 +19,7 @@ import { prepareHome, type CommandContext } from '../src/command.ts'
 import { assertComposedInvariants, assertDelorunInvariants, composeDelorunProfile, composedRows, NO_APPROVED_CONTENT, ROW_SERVICES, TURN_GATE_SERVICE, type BootedHost, type ComposedStart, type ComposeKind, type ServiceProvider } from '../src/compose.ts'
 import { OPT_IN_ROWS, type BootedRow } from '../src/delorun-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
+import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import { main } from '../src/main.ts'
 import { composedRow, isRecord } from '../src/patch-layers.ts'
 import { promptRows } from '../src/setup/prompt-switches.ts'
@@ -43,6 +44,8 @@ const HEADLESS_SERVICES = [
 let osHome: string
 let delorunHome: string
 let context: CommandContext
+/** The installed packs' review copies and the patches appended to them, by bundle name. */
+const packExtras = new Map<string, { readonly active: string, readonly patch: readonly object[] }>()
 
 beforeEach(async () => {
   osHome = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-compose-')))
@@ -58,6 +61,7 @@ beforeEach(async () => {
 }, 60_000)
 
 afterEach(() => {
+  packExtras.clear()
   vi.unstubAllEnvs()
   rmSync(osHome, { recursive: true, force: true })
 })
@@ -69,7 +73,7 @@ afterEach(() => {
  * @returns the composed start.
  */
 async function compose(kind: ComposeKind = 'cli', profile = 'default'): Promise<ComposedStart> {
-  return composeDelorunProfile({ home: delorunHome, profile, kind, output: context, env: {}, osHome }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT })
+  return composeDelorunProfile({ home: delorunHome, profile, kind, output: context, env: {}, osHome }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS })
 }
 
 /**
@@ -189,7 +193,7 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
     const ghost: ComposedStart = { ...composed, required: [...composed.required, { id: 'ghost', name: undefined }] }
     expect(composedRows(ghost).map(row => row.id)).not.toContain('ghost')
     expect(await refused(() => { assertComposedInvariants(ghost) })).toContain('ghost is not in the profile')
-    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, { prepareProfile: () => Promise.reject('no manifest'), approvedPluginContent: NO_APPROVED_CONTENT }))).toContain('could not be loaded: no manifest')
+    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, { prepareProfile: () => Promise.reject('no manifest'), approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS }))).toContain('could not be loaded: no manifest')
   })
 
   it('refuses a fetch guard turned off whatever the answer', async () => {
@@ -216,6 +220,7 @@ describe('a required row another layer replaces', { timeout: 60_000 }, () => {
     expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
       prepareProfile: upstreamDependencies().prepareProfile,
       approvedPluginContent: () => Promise.resolve([extra]),
+      releasePacks: NO_RELEASE_PACKS,
     }))).toContain(`sandbox is inserted again, which would replace the plugin @deepseek-ai/dsh-sandbox-local, with "@x/no-sandbox" (set in ${extra})`)
   })
 
@@ -390,7 +395,7 @@ describe('safe mode', { timeout: 60_000 }, () => {
   it('composes the safe-mode overlay before the sandbox overlay', async () => {
     expect(await main(['recover', 'safe-mode'], context)).toBe(EXIT.ok)
     const printed: string[] = []
-    const composed = await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: { ...context, stdout: (text) => { printed.push(text) } }, env: {}, osHome }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT })
+    const composed = await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: { ...context, stdout: (text) => { printed.push(text) } }, env: {}, osHome }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS })
     expect(composed.safe).toBeDefined()
     expect(composed.patchFiles.at(-1)).toBe(join(delorunHome, 'run', 'default', 'sandbox.patch.yml'))
     expect(printed.join('')).toContain('Delorun starts in safe mode')
@@ -405,6 +410,7 @@ describe('the approved plugin content slot', { timeout: 60_000 }, () => {
     const composed = await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
       prepareProfile: upstreamDependencies().prepareProfile,
       approvedPluginContent: (draft) => { drafts.push(draft.patchFiles); return Promise.resolve([extra]) },
+      releasePacks: NO_RELEASE_PACKS,
     })
     expect(drafts).toEqual([[]])
     expect(composed.patchFiles).toEqual([extra, join(delorunHome, 'run', 'default', 'sandbox.patch.yml')])
@@ -416,12 +422,14 @@ describe('the approved plugin content slot', { timeout: 60_000 }, () => {
     await expect(composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
       prepareProfile: upstreamDependencies().prepareProfile,
       approvedPluginContent: () => Promise.reject(refusal),
+      releasePacks: NO_RELEASE_PACKS,
     })).rejects.toBe(refusal)
     const extra = join(osHome, 'runner.patch.yml')
     writePatch(extra, [{ id: 'sandbox', config: { runnerCommand: ['/bin/true'] } }])
     expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
       prepareProfile: upstreamDependencies().prepareProfile,
       approvedPluginContent: () => Promise.resolve([extra]),
+      releasePacks: NO_RELEASE_PACKS,
     }))).toContain(`runnerCommand in ${extra}`)
   })
 })
@@ -436,6 +444,7 @@ describe('the person\'s --patch overlays', { timeout: 60_000 }, () => {
     const composed = await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, {
       prepareProfile: upstreamDependencies().prepareProfile,
       approvedPluginContent: (draft) => { drafts.push(draft.patchFiles); return Promise.resolve([extra]) },
+      releasePacks: NO_RELEASE_PACKS,
     })
     expect(drafts).toEqual([[overlay]])
     expect(composed.patchFiles).toEqual([overlay, extra, join(delorunHome, 'run', 'default', 'sandbox.patch.yml')])
@@ -444,14 +453,14 @@ describe('the person\'s --patch overlays', { timeout: 60_000 }, () => {
   it('are held to the invariants, naming the overlay that breaks one', async () => {
     const overlay = join(osHome, 'off.patch.yml')
     writePatch(overlay, [{ id: 'delorun-fetch-guard', disabled: true }])
-    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))).toContain(overlay)
+    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS }))).toContain(overlay)
   })
 
   it('are refused in safe mode, which says how to leave it', async () => {
     expect(await main(['recover', 'safe-mode'], context)).toBe(EXIT.ok)
     const overlay = join(osHome, 'mine.patch.yml')
     writePatch(overlay, [])
-    const message = await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))
+    const message = await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS }))
     expect(message).toContain('safe mode')
     expect(message).toContain('delorun recover exit-safe-mode')
   })
@@ -576,6 +585,196 @@ describe('the plugin manager\'s row', { timeout: 60_000 }, () => {
   })
 })
 
+/** The optional pack bundles a release publishes, as their source packages are named. */
+const RELEASE_PACK_DIRS = ['bundle-browser', 'bundle-code-intelligence', 'bundle-agent-hooks', 'bundle-webhooks', 'bundle-external-agents', 'bundle-computer-use-driver'] as const
+
+/** The source packages the pack bundles are built from. */
+const SOURCE_PACKAGES = fileURLToPath(new URL('../../../packages/', import.meta.url))
+
+/**
+ * Copy a package folder without its `node_modules`.
+ * @param from - the folder.
+ * @param to - the copy.
+ */
+function copyPackage(from: string, to: string): void {
+  cpSync(from, to, { recursive: true, filter: source => !source.slice(from.length).includes(`${sep}node_modules`) })
+}
+
+/**
+ * Install a pack the way a release installs it and Changes activates it: the unpacked pack under
+ * `packs/<release>/@delorun__<name>/package`, its Changes review copy under `changes/profiles/default/active/@delorun+<name>`
+ * with real copies of the packages it declares in its own `node_modules`, and the profile linking that copy and listing
+ * the bundle. Nothing of it lies inside this Delorun's own packages.
+ * @param dir - the pack's source package folder, such as `bundle-webhooks`.
+ * @param patch - patches appended to the review copy's bundle patch.
+ * @returns the review copy's folder.
+ */
+function installReleasePack(dir: string, patch: readonly object[] = [], approvedSource?: string): string {
+  const name = `@delorun/${dir}`
+  const source = realpathSync(join(SOURCE_PACKAGES, dir))
+  const unpacked = join(delorunHome, 'packs', '0.1.0', `@delorun__${dir}`, 'package')
+  copyPackage(source, unpacked)
+  rmSync(join(delorunHome, 'packs', 'current'), { force: true })
+  symlinkSync('0.1.0', join(delorunHome, 'packs', 'current'))
+  const active = join(delorunHome, 'changes', 'profiles', 'default', 'active', `@delorun+${dir}`)
+  copyPackage(unpacked, active)
+  const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+  for (const dependency of Object.keys(manifest.dependencies ?? {})) copyPackage(realpathSync(join(source, 'node_modules', dependency)), join(active, 'node_modules', dependency))
+  if (patch.length > 0) writeFileSync(join(active, 'cordis.patch.yml'), `${readFileSync(join(active, 'cordis.patch.yml'), 'utf8')}\n${stringify(patch)}`)
+  packExtras.set(name, { active, patch })
+  const profileDir = join(delorunHome, 'profiles', 'default')
+  const file = join(profileDir, 'package.json')
+  const profile = JSON.parse(readFileSync(file, 'utf8')) as { dependencies?: Record<string, string>, dsh: { profile: { bundles: string[] } }, delorun?: { changes?: { schema: string, plugins: Record<string, object> } } }
+  profile.dependencies = { ...profile.dependencies, [name]: `link:${active}` }
+  const plugins = { ...profile.delorun?.changes?.plugins, [name]: { source: approvedSource ?? join(delorunHome, 'packs', 'current', `@delorun__${dir}`, 'package'), version: 'a'.repeat(64), approvedAt: '2026-11-17T09:30:00.000Z' } }
+  profile.delorun = { ...profile.delorun, changes: { schema: 'delorun.changes-approved/1', plugins } }
+  profile.dsh.profile.bundles.push(name)
+  writeFileSync(file, JSON.stringify(profile))
+  mkdirSync(join(profileDir, 'node_modules', '@delorun'), { recursive: true })
+  symlinkSync(active, join(profileDir, 'node_modules', '@delorun', dir))
+  return active
+}
+
+/**
+ * The folder the release `0.1.0` installs a pack in.
+ * @param name - the pack's package name.
+ * @returns `packs/0.1.0/<name>/package` under the home.
+ */
+function packFolder(name: string): string {
+  return join(delorunHome, 'packs', '0.1.0', name.replace('/', '__'), 'package')
+}
+
+/**
+ * The running release's packs as `runningReleasePacks` reads them: each name with its folder.
+ * @param names - the names the release's verified packs file lists.
+ * @returns the packs.
+ */
+function releasePacksOf(names: readonly string[]): () => Promise<ReadonlyMap<string, string>> {
+  return () => Promise.resolve(new Map(names.map(name => [name, packFolder(name)])))
+}
+
+/**
+ * Compose the default profile with a list of the running release's packs. A release's runtime does not carry the packs, so
+ * its resolution loads each pack bundle from the review copy the profile links; a source checkout resolves the workspace's
+ * copy first, so each installed pack's layer is pointed at its review copy, with the patches appended to it.
+ * @param packs - the names the release's verified packs file lists.
+ * @returns the composed start.
+ */
+function composeWithPacks(packs: readonly string[]): Promise<ComposedStart> {
+  const prepare = upstreamDependencies().prepareProfile
+  return composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
+    prepareProfile: async (profile) => {
+      const prepared = await prepare(profile)
+      const layers = prepared.profile.layers.map((layer) => {
+        const extra = packExtras.get(layer.packageName)
+        return extra === undefined ? layer : { ...layer, packageDir: extra.active, patchPaths: [join(extra.active, 'cordis.patch.yml')], patches: [...layer.patches, ...extra.patch] }
+      })
+      return { ...prepared, profile: { ...prepared.profile, layers } }
+    },
+    approvedPluginContent: NO_APPROVED_CONTENT,
+    releasePacks: releasePacksOf(packs),
+  })
+}
+
+describe('a profile with the release\'s optional packs installed through Changes', { timeout: 120_000 }, () => {
+  const ALL = RELEASE_PACK_DIRS.map(dir => `@delorun/${dir}`)
+
+  it('was refused as a same-named stand-in when nothing told the packs from Delorun\'s own bundles', async () => {
+    const active = installReleasePack('bundle-webhooks')
+    const message = await refused(() => composeWithPacks([]))
+    expect(message).toContain(`webhook-runtime loads @delorun/bundle-webhooks from ${active}, which is not this Delorun's own copy in `)
+    expect(message).toContain(`github-webhook-server loads @delorun/bundle-webhooks from ${active}`)
+  })
+
+  it('starts with every pack installed: no pack row is required, and every required row still loads from this Delorun\'s packages', async () => {
+    const actives = RELEASE_PACK_DIRS.map(dir => installReleasePack(dir))
+    const composed = await composeWithPacks(ALL)
+    expect(composed.packBundles).toEqual(new Set(ALL))
+    const packRows = composed.layers.filter(layer => layer.packageName !== undefined && composed.packBundles.has(layer.packageName)).flatMap(layer => layer.patches.flatMap(patch => Array.isArray(patch.insert) ? patch.insert : []))
+    expect(packRows.length).toBeGreaterThan(5)
+    const required = new Set(composed.required.map(row => row.id))
+    for (const id of ['webhook-runtime', 'github-webhook-ingress', 'github-webhook-server', 'browser-use', 'lsp', 'computer-use-registry']) expect(required.has(id), id).toBe(false)
+    expect(required.has('delorun-fetch-guard')).toBe(true)
+    expect(composed.rowPackages.length).toBeGreaterThan(0)
+    expect(composed.rowPackages.every(row => row.dir.startsWith(composed.packagesRoot))).toBe(true)
+    expect(composed.rowPackages.some(row => actives.some(active => row.dir.startsWith(active)))).toBe(false)
+    expect(() => { assertDelorunInvariants(composed, booted(composed)) }).not.toThrow()
+    // The next start reads the same profile and packs again.
+    expect((await composeWithPacks(ALL)).required).toEqual(composed.required)
+  })
+
+  it('refuses a layer that only carries a pack\'s name: a profile link to another folder, or a review copy approved from one', async () => {
+    const other = join(osHome, 'any-folder', 'bundle-webhooks')
+    copyPackage(realpathSync(join(SOURCE_PACKAGES, 'bundle-webhooks')), other)
+    const active = installReleasePack('bundle-webhooks', [], other)
+    const fromOther = await refused(() => composeWithPacks(ALL))
+    expect(fromOther).toContain(`webhook-runtime loads @delorun/bundle-webhooks from ${active}, which is not this Delorun's own copy in `)
+    packExtras.set('@delorun/bundle-webhooks', { active: other, patch: [] })
+    expect(await refused(() => composeWithPacks(ALL))).toContain(`webhook-runtime loads @delorun/bundle-webhooks from ${realpathSync(other)}, which is not this Delorun's own copy in `)
+  })
+
+  it('accepts a pack layer that loads from the release\'s pack folder itself, and not one from another release\'s', async () => {
+    installReleasePack('bundle-webhooks')
+    packExtras.set('@delorun/bundle-webhooks', { active: join(delorunHome, 'packs', 'current', '@delorun__bundle-webhooks', 'package'), patch: [] })
+    expect((await composeWithPacks(ALL)).packBundles).toEqual(new Set(['@delorun/bundle-webhooks']))
+    const older = join(delorunHome, 'packs', '0.0.9', '@delorun__bundle-webhooks', 'package')
+    copyPackage(packFolder('@delorun/bundle-webhooks'), older)
+    packExtras.set('@delorun/bundle-webhooks', { active: older, patch: [] })
+    expect(await refused(() => composeWithPacks(ALL))).toContain(`webhook-runtime loads @delorun/bundle-webhooks from ${older}`)
+  })
+
+  it('starts without a pack bundle the profile skipped, with a notice, and refuses it when no packs list names it', async () => {
+    const prepare = upstreamDependencies().prepareProfile
+    const skipping = async (profile: string): ReturnType<typeof prepare> => {
+      const prepared = await prepare(profile)
+      return { ...prepared, profile: { ...prepared.profile, skippedBundles: [...prepared.profile.skippedBundles, { packageName: '@delorun/bundle-webhooks', reason: 'its folder is missing' }] } }
+    }
+    const printed: string[] = []
+    const output = { ...context, stderr: (text: string) => { printed.push(text) } }
+    await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output, env: {}, osHome }, { prepareProfile: skipping, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: releasePacksOf(ALL) })
+    expect(printed.join('')).toContain('delorun: the plugin pack @delorun/bundle-webhooks did not load in the profile default (its folder is missing), so Delorun starts without it.')
+    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, { prepareProfile: skipping, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS }))).toContain('@delorun/bundle-webhooks: its folder is missing')
+  })
+
+  it('still refuses a same-named stand-in of a runtime bundle beside the packs, even when a packs list names it', async () => {
+    installReleasePack('bundle-webhooks')
+    const standIn = join(delorunHome, 'profiles', 'default', 'node_modules', '@delorun', 'bundle-local-stand-in')
+    const prepared = await upstreamDependencies().prepareProfile('default')
+    copyPackage(realpathSync(prepared.profile.layers.find(layer => layer.packageName === '@delorun/bundle-local')!.packageDir), standIn)
+    const layers = prepared.profile.layers.map(layer => layer.packageName === '@delorun/bundle-local' ? { ...layer, packageDir: standIn } : layer)
+    const message = await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
+      prepareProfile: () => Promise.resolve({ ...prepared, profile: { ...prepared.profile, layers } }),
+      approvedPluginContent: NO_APPROVED_CONTENT,
+      releasePacks: releasePacksOf(['@delorun/bundle-webhooks', '@delorun/bundle-local', '@delorun/bundle-studio']),
+    }))
+    expect(message).toContain(`delorun-fetch-guard loads @delorun/bundle-local from ${standIn}, which is not this Delorun's own copy in `)
+  })
+
+  it('refuses a pack that inserts a protected runtime row again, naming the pack\'s copy', async () => {
+    const active = installReleasePack('bundle-webhooks', [{ insert: [{ id: 'delorun-permission-defaults', name: '@delorun/bundle-webhooks/server' }, { id: 'sandbox', name: '@delorun/bundle-webhooks/server' }] }])
+    const message = await refused(() => composeWithPacks(ALL))
+    expect(message).toContain('delorun-permission-defaults is inserted again, which would replace the plugin @delorun/plugin-permission-defaults, with "@delorun/bundle-webhooks/server"')
+    expect(message).toContain('sandbox is inserted again')
+    expect(message).toContain(join(active, 'cordis.patch.yml'))
+  })
+
+  it('refuses a pack that turns off, loosens or unprotects a protected runtime row, and a booted pack row in its place', async () => {
+    const active = installReleasePack('bundle-webhooks', [
+      { id: 'delorun-fetch-guard', disabled: true },
+      { id: 'plugin-manager', config: { protectedPlugins: [] } },
+    ])
+    const message = await refused(() => composeWithPacks(ALL))
+    expect(message).toContain(`delorun-fetch-guard is disabled (set in the bundle @delorun/bundle-webhooks (${join(active, 'cordis.patch.yml')}))`)
+    expect(message).toContain('plugin-manager no longer protects')
+    packExtras.set('@delorun/bundle-webhooks', { active, patch: [{ id: 'sandbox', config: { runnerCommand: ['sh'] } }] })
+    expect(await refused(() => composeWithPacks(ALL))).toContain(`the sandbox row sets the runner itself (runnerCommand in the bundle @delorun/bundle-webhooks (${join(active, 'cordis.patch.yml')}))`)
+    packExtras.clear()
+    const composed = await composeWithPacks(ALL)
+    const gate: BootedRow = { id: 'delorun-update-gate', name: '@delorun/bundle-webhooks/server', disabled: false, state: 'active' }
+    expect(await refused(() => { assertDelorunInvariants(composed, booted(composed, [gate])) })).toContain('delorun-update-gate runs the plugin "@delorun/bundle-webhooks/server", not @delorun/bundle-local/update-gate')
+  })
+})
+
 describe('a Delorun row from another copy of its package', { timeout: 60_000 }, () => {
   it('refuses a same-named stand-in of a Delorun bundle that the profile resolved, naming the row, the package and both places', async () => {
     // Resolution order puts the installation's copy first today; the invariant holds without relying on that order.
@@ -586,7 +785,7 @@ describe('a Delorun row from another copy of its package', { timeout: 60_000 }, 
     const layers = prepared.profile.layers.map(layer => layer.packageName === '@delorun/bundle-local' ? { ...layer, packageDir: standIn } : layer)
     const message = await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
       prepareProfile: () => Promise.resolve({ ...prepared, profile: { ...prepared.profile, layers } }),
-      approvedPluginContent: NO_APPROVED_CONTENT,
+      approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS,
     }))
     expect(message).toContain(`delorun-fetch-guard loads @delorun/bundle-local from ${standIn}, which is not this Delorun's own copy in `)
     expect(message).toContain(`delorun-update-gate loads @delorun/bundle-local from ${standIn}`)

@@ -21,6 +21,7 @@ import { workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
 import { stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
+import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import type { BootedRow } from '../src/delorun-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { cliRefusal } from '../src/refusals.ts'
@@ -70,6 +71,7 @@ function recording(seen: RunProfileOptions[], stops: string[], overrides: readon
     missingModelKey: () => Promise.resolve(undefined),
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
+    releasePacks: NO_RELEASE_PACKS,
     preStartSteps: upstreamDependencies().preStartSteps,
     cwd: () => workspace,
     loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
@@ -219,7 +221,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
   it('is the command delorun runs, over upstream\'s runner', () => {
     expect(headlessCommand.name).toBe('headless')
     expect(headlessDependencies().cwd()).toBe(process.cwd())
-    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'missingModelKey', 'preStartSteps', 'prepareProfile', 'runProfile'])
+    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'missingModelKey', 'preStartSteps', 'prepareProfile', 'releasePacks', 'runProfile'])
   })
 })
 
