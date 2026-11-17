@@ -1,5 +1,5 @@
 ---
-area: Settings
+area: Studio
 section: Changed
 ---
 

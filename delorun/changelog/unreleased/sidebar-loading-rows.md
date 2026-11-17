@@ -1,5 +1,5 @@
 ---
-area: Sidebar
+area: Studio
 section: Fixed
 ---
 

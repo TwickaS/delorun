@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { ACCENT_PRESETS, ACCENT_PREVIEWS, customStart, lookView, PALETTE_CHOICES, PALETTE_PREVIEWS, type LookValues, type PaletteChoice } from '../previews.ts'
 import type { SchemePreference, StepServices } from '../types.ts'
 import { LookChooser, type LookSampleCopy } from '@delorun/brand'
+import { BRAND_COLOURS } from '@delorun/brand/tokens'
 import { useStore, type StepProps } from './shared.ts'
 import { StockLookLink, StockLookScreen } from './StockLook.tsx'
 import css from './steps.module.css'
@@ -35,7 +36,7 @@ export function LookStep({ services, guide, next }: StepProps & { readonly next:
   const [failed, setFailed] = useState(false)
   const stored: LookValues = {
     palette: settings.value?.palette ?? 'soft', accent: settings.value?.accent ?? 'peach',
-    customAccent: settings.value?.customAccent ?? '#E5734A', contrast: settings.value?.contrast ?? 100,
+    customAccent: settings.value?.customAccent ?? BRAND_COLOURS.peach, contrast: settings.value?.contrast ?? 100,
   }
   const view = lookView(stored)
   const save = (write: Promise<boolean>): void => {
@@ -52,7 +53,7 @@ export function LookStep({ services, guide, next }: StepProps & { readonly next:
       { op: 'set', path: ['palette'], value: 'custom' },
     ]))
   }
-  const customColour = HEX.test(view.customAccent) ? view.customAccent : '#E5734A'
+  const customColour = HEX.test(view.customAccent) ? view.customAccent : BRAND_COLOURS.peach
   const accentFill = view.accent === 'custom' ? customColour : ACCENT_PREVIEWS[view.accent].light
   if (screen) return <StockLookScreen services={services} guide={guide} next={next} />
   const customTile = {

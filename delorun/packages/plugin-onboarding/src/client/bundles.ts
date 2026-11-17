@@ -113,6 +113,7 @@ export function reasonOf(bundle: BundleInfo | undefined): string | undefined {
  * such as an unbuilt checkout or an unsupported platform) is `unavailable`, a normal state; `failed` is only a bundle
  * the profile holds but cannot change or read.
  * @param bundle - the plugin manager's row, or undefined when it lists none by that name.
+ * @param pack - how the release's plugin pack of that name stands, when the release publishes one.
  * @returns the state before any action.
  */
 export function stateOf(bundle: BundleInfo | undefined, pack?: PackView): BundleState {

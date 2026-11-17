@@ -1,5 +1,5 @@
 ---
-area: Chat
+area: Chats and workspaces
 section: Fixed
 ---
 

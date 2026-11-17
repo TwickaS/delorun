@@ -128,7 +128,8 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(status.status).toBe(EXIT.notRunning)
     expect(status.stdout).toContain(`Home: ${delorunHome}\n`)
     expect(status.stdout).toContain(`DSH_HOME is set to ${dshHome}; Delorun ignores it and uses DSH_HOME=${delorunHome}`)
-    expect(status.stdout).toContain('Delorun is not running')
+    // The plain not-running sentence is printed to the error stream, after the verbose lines.
+    expect(`${status.stdout}${status.stderr}`).toContain('Delorun isn\'t running')
     expect(snapshot(dshHome)).toEqual(before)
   })
 
@@ -214,7 +215,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(start.stderr).toContain('run: delorun setup')
     const stop = delorun(['stop'])
     expect(stop.status).toBe(EXIT.ok)
-    expect(stop.stdout).toContain('Delorun is not running for the profile default.')
+    expect(`${stop.stdout}${stop.stderr}`).toContain('Delorun isn\'t running')
   })
 
   it('reports wrong command lines with the usage code', () => {
@@ -706,6 +707,7 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(refused.report.rows.find(row => row.id === 'delorun-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
     expect(refused.stderr).toContain('forced import failure')
     expect(refused.report.sessionLogEnabled).toBe(false)
-    expect(readdirSync(join(delorunHome, 'run', 'default'))).toEqual(['changes-boot.json'])
+    // The install queue's record is written at boot too, before the refusal.
+    expect(readdirSync(join(delorunHome, 'run', 'default')).sort()).toEqual(['changes-boot.json', 'installs.json'])
   })
 })

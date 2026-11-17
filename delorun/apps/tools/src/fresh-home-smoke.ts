@@ -35,6 +35,7 @@ const LISTEN_TIMEOUT_MS = 180_000
 export const FAILURE_PATTERNS: readonly RegExp[] = [/failed to start/i, /failed to import/i, /\bstopped\b/i, /ValidationError/, /Cannot find (module|package)/, /ERR_MODULE_NOT_FOUND/]
 
 /**
+ * Find the first line of a studio's output that reports a start-up failure.
  * @param log - the studio's output.
  * @returns the first line that reports a start-up failure, or undefined when none does.
  */
@@ -55,6 +56,7 @@ async function isFree(port: number): Promise<boolean> {
 }
 
 /**
+ * Choose the port the smoke studio listens on.
  * @param wanted - the port asked for, if any.
  * @returns a free port in the range; the wanted one when given.
  * @throws when the wanted port is outside the range or taken, or none is free.

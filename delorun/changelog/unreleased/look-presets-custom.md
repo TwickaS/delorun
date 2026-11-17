@@ -1,5 +1,5 @@
 ---
-area: Look and themes
+area: Studio
 section: Changed
 ---
 

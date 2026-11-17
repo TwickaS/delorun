@@ -20,6 +20,7 @@ import { LogVerificationError } from '@delorun/release-formats/log/bundle'
 import { TileError } from '@delorun/release-formats/log/tiles'
 import { VerificationError } from '@delorun/release-formats/sign/verify'
 import { RELEASE_VERIFY_DESCRIBERS } from '@delorun/release-verify/refusal'
+import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { runtimeStoreDescriber } from '@delorun/runtime-store'
 import { engineDescriber, supervisorDescriber } from '@delorun/supervisor'
 import { TrashError } from '@delorun/trash'
@@ -115,6 +116,8 @@ function updateReportRefusal(error: UpdateReportError): Refusal {
 export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
   refusalDescriber(CliError, error => ({ lead: error.message, remedies: [] })),
   refusalDescriber(SetupCancelled, error => ({ lead: error.message, remedies: [] })),
+  // `delorun recover packs` and an update's carry of the installed packs refuse through this class.
+  refusalDescriber(PackRefusal, error => ({ lead: 'Delorun could not verify or fetch a plugin pack.', reason: codedReason(error.code, error.message), remedies: ['Check your connection, then run: delorun recover packs', 'After an update, restart Delorun to finish it.'] })),
   refusalDescriber(DelorunVersionError, error => ({ lead: 'Delorun could not read its own version.', reason: error.message, remedies: [] })),
   refusalDescriber(DataInUseError, error => ({ lead: 'Delorun did not go ahead: another process uses the chat data.', reason: error.detail, remedies: ['Wait for it to end, then run the same command again.'] })),
   refusalDescriber(BundleReadError, error => ({ lead: `Delorun could not read the metadata of the bundle ${error.bundle}.`, reason: codedReason(error.code, error.detail), remedies: [] })),

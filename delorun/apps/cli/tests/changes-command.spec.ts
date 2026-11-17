@@ -204,13 +204,13 @@ describe('delorun changes list and show', () => {
     expect(out()).toMatch(/Working on plug since .*: edits in its folder load live\./)
   })
 
-  it('shows the plugin, folder, files with dependency files grouped, risk lines and with --diff the diff', async () => {
+  it('shows the plugin, folder, files, the left-out dependency folder, risk lines and with --diff the diff', async () => {
     edit('export default 2\nfetch("https://example.invalid/")\n')
     mkdirSync(join(source, 'node_modules', 'dep'), { recursive: true })
     writeFileSync(join(source, 'node_modules', 'dep', 'index.js'), 'module.exports = 1\n')
     const id = await pendingId()
     expect(await runChanges(['show', id], context, driven([]))).toBe(EXIT.ok)
-    expect(out()).toContain(`Change ${id}: changes to a plugin, waiting for your review\nPlugin: plug\nFolder: ${source}\nFiles:\n  modified  index.js\nDependency files (1):\n  added     node_modules/dep/index.js\n`)
+    expect(out()).toContain(`Change ${id}: changes to a plugin, waiting for your review\nPlugin: plug\nFolder: ${source}\nFiles:\n  modified  index.js\nNot included: node_modules/dep\n`)
     expect(out()).toContain('Opens network connections (index.js:2)')
     expect(out()).not.toContain('@@')
     context.printed.length = 0
@@ -597,8 +597,9 @@ describe('delorun changes work and done', () => {
     writeFileSync(join(source, 'a\u001b[31m.js'), 'export {}\n')
     context.printed.length = 0
     expect(await runChanges(['done', 'plug'], context, driven(['n']))).toBe(EXIT.ok)
-    expect(out()).toContain('Dependency files (1):\n')
-    expect(out()).toContain('Not included: dangling')
+    // Dependency folders are no longer part of a change: they are left out and named with the other left-out paths.
+    expect(out()).not.toContain('Dependency files')
+    expect(out()).toContain('Not included: dangling, node_modules/dep')
     expect(out()).toContain('The diff was cut short at its size limit; left out: ')
     expect(out()).toContain('a\\u001b[31m.js')
     expect(out()).not.toContain('\u001b')
