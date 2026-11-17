@@ -268,9 +268,21 @@
 }
 
 .levelOption {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 6px 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
+}
+
+/* The name and description wrap together beside the radio button, not under it. */
+.levelText {
+  min-width: 0;
+}
+
+.levelOption input {
+  flex: none;
+  margin: 3px 0 0;
 }

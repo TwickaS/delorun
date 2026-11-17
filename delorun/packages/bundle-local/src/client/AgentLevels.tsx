@@ -2,7 +2,8 @@
  * The "What agents may do on their own" card of Settings → Safety → External agents: one level for Claude Code and one
  * for Codex, chosen from four radio options with a one-line plain description each. A remote studio may only tighten:
  * a level looser than the saved one is disabled there and says it needs the home's own computer, as the home enforces.
- * When Claude Code's command sandbox cannot run on this computer, the card says what is missing and the install line.
+ * When Claude Code's command sandbox cannot run on this computer, the card names the missing tools, the install line and
+ * the level it affects, as a plain note.
  */
 import type { ReactNode } from 'react'
 import { AGENT_LEVELS, type AgentLevel, type AgentLevelView } from '@delorun/plugin-delegation-consent/wire'
@@ -18,6 +19,16 @@ const TITLES = { careful: 'levels.careful.title', standard: 'levels.standard.tit
 const DESCRIPTIONS = {
   careful: 'levels.careful.description', standard: 'levels.standard.description', own: 'levels.own.description', unrestricted: 'levels.unrestricted.description',
 } as const
+
+/**
+ * The missing tools as one phrase: `socat`, or `bubblewrap and socat`.
+ * @param t - the copy.
+ * @param tools - the missing tools' names.
+ * @returns the phrase.
+ */
+function toolList(t: Translate, tools: readonly string[]): string {
+  return tools.length < 2 ? tools.join('') : `${tools.slice(0, -1).join(', ')}${t('levels.noSandbox.and')}${tools.at(-1)!}`
+}
 
 /**
  * The words a chip shows for a level: its name, with ` · no sandbox` while the level promises a command sandbox this
@@ -58,16 +69,17 @@ export function AgentLevels({ t, saved, views, remote, disabled, set }: {
             <legend className={css.title}>{name}</legend>
             {AGENT_LEVELS.map((level) => {
               const locked = remote && AGENT_LEVELS.indexOf(level) > AGENT_LEVELS.indexOf(current)
+              const title = level === 'own' ? t('levels.own.agentTitle', { agent: name }) : t(TITLES[level])
               return <label key={level} className={css.levelOption} title={locked ? t('levels.computerOnly') : undefined}>
                 <input type="radio" name={`level-${provider}`} value={level} checked={current === level} disabled={locked}
                   onChange={() => { void set(field, level) }} />
-                {' '}<strong>{t(TITLES[level])}</strong>{' — '}{t(DESCRIPTIONS[level])}
+                <span className={css.levelText}><strong>{title}</strong>{' — '}{t(DESCRIPTIONS[level], { agent: name })}</span>
               </label>
             })}
             {remote ? <p className={css.description}>{t('levels.computerOnly')}</p> : null}
             {missing !== undefined
-              ? <p className={css.boxFailed} role="status" data-sandbox-missing="">
-                {t(current === 'careful' ? 'levels.noSandbox.careful' : 'levels.noSandbox.standard', { tools: missing.tools.join(', ') })} <code>{missing.installCommand}</code>
+              ? <p className={css.boxLine} role="status" data-sandbox-missing="">
+                {t('levels.noSandbox.needs', { tools: toolList(t, missing.tools) })} <code>{missing.installCommand}</code>. {t(current === 'careful' ? 'levels.noSandbox.careful' : 'levels.noSandbox.standard')}
               </p>
               : null}
           </fieldset>
