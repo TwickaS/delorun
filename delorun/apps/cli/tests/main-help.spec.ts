@@ -33,6 +33,10 @@ describe('the main help', () => {
     expect(coloured.split('\n')[0]).toContain('\u001b[38;5;208m')
   })
 
+  it('calls a source checkout a source build instead of showing its placeholder version', () => {
+    expect(mainHelp({ commands: NAMES, version: '0.0.0', columns: 80, style: PLAIN }).split('\n')[0]).toBe('delorun source build · the studio on your computer')
+  })
+
   it('wraps one paragraph on a hanging indent', () => {
     expect(wrapWithHangingIndent('  word  ', 'one two three four five', 18)).toEqual(['  word  one two', '        three four', '        five'])
     expect(wrapWithHangingIndent('', '', 10)).toEqual([''])

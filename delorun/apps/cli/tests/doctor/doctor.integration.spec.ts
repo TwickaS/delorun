@@ -202,7 +202,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(lines.map(line => /^[✓!✗] ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
     expect(lines.find(line => line.includes(' docker: '))).toMatch(/^[✓!] docker: /)
     expect(lines.find(line => line.includes(' port: '))).toMatch(/^[✓✗] port: /)
-    expect(lines.find(line => / update: /.test(line))).toMatch(/^✓ update: this copy of Delorun was not installed by the launcher/)
+    expect(lines.find(line => / update: /.test(line))).toMatch(/^✓ update: this is a source build/)
     expect(result.status).toBe(all.some(line => line.startsWith('✗ ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')

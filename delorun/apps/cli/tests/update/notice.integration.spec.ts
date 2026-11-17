@@ -616,7 +616,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
 
   it('reports the last check in delorun doctor', async () => {
     const store = { version: RUNNING, store: true }
-    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('was not installed by the launcher') })
+    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('is a source build') })
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('no update check is recorded') })
     await check()
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('Delorun 0.2.0 is available') })

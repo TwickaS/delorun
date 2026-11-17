@@ -7,6 +7,9 @@
  */
 import type { Style } from './style.ts'
 
+/** The version a source checkout's manifest carries, which is no release. */
+const SOURCE_VERSION = '0.0.0'
+
 /** The widest line the main help writes, however wide the terminal is. */
 export const HELP_WIDTH_LIMIT = 88
 
@@ -85,10 +88,11 @@ export function mainHelp(request: MainHelpRequest): string {
   const width = Math.min(request.columns, HELP_WIDTH_LIMIT)
   const nameWidth = Math.max(...grouped.map(name => name.length))
   const lines = [
-    `${style.badge()} ${request.version} ${style.dim('· the studio on your computer')}`,
+    `${style.badge()} ${request.version === SOURCE_VERSION ? 'source build' : request.version} ${style.dim('· the studio on your computer')}`,
     '',
     ...wrapWithHangingIndent('Usage: ', 'delorun [--profile <name>] [--foreground | --background]', width),
     ...wrapWithHangingIndent('       ', 'delorun <command> [options]', width),
+    '',
     ...wrapWithHangingIndent('', 'With no command, delorun sets up a new home, or starts Delorun and opens the studio: --background keeps it running after you close the terminal and --foreground keeps it in this terminal; without either, setup\'s answer chooses (delorun setup background).', width),
   ]
   for (const [title, entries] of HELP_GROUPS) {

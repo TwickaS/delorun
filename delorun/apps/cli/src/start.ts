@@ -890,7 +890,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   const handing = await handsOff(home, profile, runtimeOfFile(home, fileURLToPath(import.meta.url)))
   return retryDetached({ home, profile, output }, async (variables) => {
     const outcome = await launchDetached(home, profile, output, { ...entry, handsOff: handing }, variables, forwarded)
-    if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener)
+    if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener, false)
     return outcome
   })
 }
@@ -925,7 +925,7 @@ async function launchDetached(home: string, profile: string, output: CommandOutp
       output.stdout([
         spinner.stop('ok', `Delorun is running${profile === 'default' ? '' : ` for the profile ${profile}`}${address === undefined ? '' : ` · ${address.href}`}`),
         `  ${style.dim('It keeps running after you close this terminal.')}`,
-        ...commandRows(style, [['delorun open', 'open the studio'], ['delorun logs --follow', 'watch what it does'], ['delorun stop', 'stop it']]),
+        ...commandRows(style, [[`delorun open${profileFlag(profile)}`, 'open the studio'], [`delorun logs --follow${profileFlag(profile)}`, 'watch what it does'], [`delorun stop${profileFlag(profile)}`, 'stop it']]),
         ...dangerous === undefined ? [] : [dangerous],
         ...notice === undefined ? [] : [notice],
         '',

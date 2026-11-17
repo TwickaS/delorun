@@ -15,9 +15,10 @@ import { describeOpening, openHint, openStudio, type StudioOpener } from './stud
  * @param open - whether to open the studio in the browser now.
  * @param output - where the start writes.
  * @param opener - how the link is obtained and opened.
+ * @param hint - whether to print the line that names `delorun open`; false when the caller has printed it already.
  */
-export async function announceStudio(home: string, profile: string, open: boolean, output: CommandOutput, opener: StudioOpener): Promise<void> {
-  output.stdout(openHint(profile))
+export async function announceStudio(home: string, profile: string, open: boolean, output: CommandOutput, opener: StudioOpener, hint = true): Promise<void> {
+  if (hint) output.stdout(openHint(profile))
   if (!open) return
   const outcome = await openStudio(home, profile, opener)
   if (outcome.kind === 'opened') output.stdout(describeOpening(outcome, profile))
