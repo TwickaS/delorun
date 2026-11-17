@@ -532,7 +532,7 @@ describe('the limits check (review D8)', () => {
 describe('a reached limit (T12)', () => {
   const now = Date.UTC(2026, 10, 17, 12, 5)
   const reached = (resetsAt: number): AccountRecord => ({
-    provider: 'claude-code', signedIn: 'yes', windows: [{ kind: 'five_hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
+    provider: 'claude-code', signedIn: 'yes', installed: true, windows: [{ kind: 'five_hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
   })
 
   it('refuses a seat start with the window and reset time while the switch is on', async () => {
