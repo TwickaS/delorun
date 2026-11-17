@@ -618,13 +618,13 @@
       "path": "packages/client/ui-conversation/src/client/apply.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content."
+      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content; declares the conversation.session.banner slot on the conversation.session entry."
     },
     {
       "path": "packages/client/ui-conversation/src/client/contract/slots.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback."
+      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13)."
     },
     {
       "path": "packages/client/ui-conversation/src/client/locales.ts",
@@ -2875,6 +2875,12 @@
       "class": "delorun-feature",
       "feature": "live-agents",
       "reason": "Declares the `conversation.session.header.actions.subagent.row.lead|detail|trail` and `.trigger` list slots and their owner types (EA13)."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Renders the conversation.session.banner slot above the active View, so a plugin can show a full-width entry between the header and the transcript; with no registration it renders nothing."
     }
   ],
   "retired": []

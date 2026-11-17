@@ -4,7 +4,6 @@
  */
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SubagentRowOwner, SubagentTriggerOwner } from '@deepseek-ai/dsh-client-ui-subagent/client'
-import type { ListsKey } from './locales.ts'
 import { monogramOf, outsideCount, programOf, ringOf, wordsOf } from './format.ts'
 import { seatOf, waitingOf } from './read.ts'
 import css from './Lists.module.css'
@@ -49,12 +48,12 @@ export function RowMonogram(props: RowPartProps) {
  * The state words of an outside agent; nothing for an ordinary subagent. "Waiting for you" is in words and in the
  * warning colour.
  * @param props - the row and the dictionary.
- * @returns the words, or null.
+ * @returns the words, or an empty fragment.
  */
 export function RowWords(props: RowPartProps) {
   const { t, clock } = props
   const seat = seatOf(props.values)
-  if (seat === undefined) return null
+  if (seat === undefined) return <></>
   const words = wordsOf(seat, waitingOf(props), clock)
   const text = words.key === 'row.limit'
     ? (words.time === undefined ? t('row.limitNoTime') : t('row.limit', { time: words.time }))
@@ -70,12 +69,12 @@ export function RowWords(props: RowPartProps) {
  * The 5-hour ring (with its figure as text) and, while the agent waits for an answer, the Answer button that opens
  * its chat at the card.
  * @param props - the row and the dictionary.
- * @returns the indicator, or null.
+ * @returns the indicator, or an empty fragment.
  */
 export function RowTrail(props: RowPartProps) {
   const { t } = props
   const seat = seatOf(props.values)
-  if (seat === undefined) return null
+  if (seat === undefined) return <></>
   const ring = ringOf(seat)
   const agent = programOf(seat.agent)
   const waiting = waitingOf(props)
@@ -126,10 +125,10 @@ export type TriggerPartProps = SubagentTriggerOwner & { readonly t: ListsTransla
 /**
  * "· 2 outside" after the trigger's "3 agents".
  * @param props - the direct rows and the dictionary.
- * @returns the addition, or null while no row runs outside Delorun.
+ * @returns the addition, or an empty fragment while no row runs outside Delorun.
  */
 export function TriggerOutside({ rows, t }: TriggerPartProps) {
   const count = outsideCount(rows.map(row => seatOf(row.values)))
-  if (count === 0) return null
+  if (count === 0) return <></>
   return <span className={css.outside}>{' · '}{t('trigger.outside', { count: String(count) })}</span>
 }

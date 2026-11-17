@@ -9,7 +9,7 @@
     "declarationMap": false
   },
   "include": ["src", "tests"],
-  "exclude": ["src/client"],
+  "exclude": ["src/client", "tests/**/*.client.spec.ts", "tests/**/*.client.spec.tsx", "tests/**/*.client.ts"],
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
