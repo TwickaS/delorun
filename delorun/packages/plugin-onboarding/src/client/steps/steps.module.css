@@ -342,21 +342,43 @@
   overflow-wrap: anywhere;
 }
 
-.starterPreview {
+.ideas {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--delorun-space-3);
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.starterPreview > li {
-  padding: var(--delorun-space-2) var(--delorun-space-5);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
+}
+
+.idea {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-5);
+  padding: var(--delorun-space-3) var(--delorun-space-5);
+}
+
+.idea + .idea {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.ideaText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.ideaLabel {
+  color: var(--dsw-alias-label-primary);
+}
+
+.ideaPrompt {
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 767px) {

@@ -52,7 +52,7 @@ async function mountEntry(options: Options = {}) {
   const aside = createSnapshotStore(false)
   const complete = vi.fn()
   const completeStep = vi.fn((_id: string) => {})
-  const startChat = vi.fn((_workspaceId?: string, _folder?: string, _keepCurrent?: boolean) => Promise.resolve())
+  const startChat = vi.fn((_workspaceId?: string, _keepCurrent?: boolean) => Promise.resolve())
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
   const host = hostFake({ reach: options.reach ?? 'absent', ...options.tailscale === undefined ? {} : { readiness: { ...READY, tailscale: options.tailscale } } })
   const start = options.start ?? startFace()
@@ -206,7 +206,7 @@ describe('the first run', () => {
     expect(complete).toHaveBeenCalled()
     expect(completeStep).toHaveBeenCalledExactlyOnceWith(UPSTREAM_KEY_STEP)
     expect(UPSTREAM_KEY_STEP).toBe('deepseek-official')
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, false)
   })
 
   describe('the original look', () => {
@@ -393,14 +393,14 @@ describe('the workspace and the last button', () => {
     await forward(1)
     expect(screen.getByText('/home/person/app')).toBeTruthy()
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'code', false)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', false)
   })
 
   it('starts the chat through the workspace UI where other workspaces exist but no default', async () => {
     const { startChat } = await mountEntry({ start: startFace({ kind: 'other' }) })
     await forward(5)
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined, false)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, false)
   })
 
   it('sends the person back to Workspace from Ready while no folder is chosen and there is no default', async () => {
@@ -415,7 +415,7 @@ describe('the workspace and the last button', () => {
     await settle()
     await forward(1)
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', 'empty', false)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', false)
   })
 
   it.each<readonly [string, FolderChoice, string]>([
@@ -532,7 +532,7 @@ describe('finishing later and the last step', () => {
     await click(button(en.skip))
     expect(screen.getByText(en['ready.workspace.last'])).toBeTruthy()
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, undefined, true)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined, true)
   })
 
   it('uses the default workspace when the guide was opened again with no workspace and Workspace is skipped', async () => {
@@ -542,7 +542,7 @@ describe('finishing later and the last step', () => {
     await click(button(en.skip))
     expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
     await click(button(en.start))
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, false)
   })
 
   it('reopens at the saved step after Escape, and the chip\'s reopen shows the guide again', async () => {

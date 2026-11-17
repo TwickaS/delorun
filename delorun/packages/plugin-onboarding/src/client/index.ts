@@ -46,7 +46,7 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { setAddedAgentDefaults } from './agent-defaults.ts'
-import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
+import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, readWorkspaceNotice } from './host-api.ts'
@@ -59,7 +59,6 @@ import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
 import { FinishSetupChip, FloatingFinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
-import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
   AddOutcome, AgentRowSettings, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
@@ -75,7 +74,6 @@ export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
 export type { RenameModel, RenameRowProps } from './RenameRow.tsx'
 export { renameModel } from './RenameRow.tsx'
 export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
-export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
 export { hostApi, readReach, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
   AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DelorunOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
@@ -105,10 +103,10 @@ export const ONBOARDING_STEP = { id: ONBOARDING_ROW_ID, order: -200 } as const
 /** The General row that opens onboarding again, by the id Delorun's Settings layout places it under. */
 export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
 
-/** The no-key banner's place in the input dock: above the starter prompts. */
+/** The no-key banner's place in the input dock. */
 export const KEY_BANNER_ENTRY = { id: 'delorun-onboarding.key-banner', order: 5 } as const
 
-/** The set-aside notice's place in the input dock: beside the no-key banner, above the starter prompts. */
+/** The set-aside notice's place in the input dock: beside the no-key banner. */
 export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } as const
 
 /** The Finish setup chip's place in the input dock: just above the message box, below the notices. */
@@ -119,9 +117,6 @@ export const FINISH_SETUP_OVERLAY = { id: 'delorun-onboarding.finish-setup.float
 
 /** The wire name of the model tool whose row {@link RenameRow} draws; `@delorun/plugin-workspaces` defines the tool. */
 export const RENAME_TOOL = 'rename_workspace'
-
-/** The starter prompts' place in the input dock: just above the message box. */
-export const STARTER_ENTRY = { id: 'delorun-onboarding.starters', order: 10 } as const
 
 /** The id of the PIN mode section in Settings, which bundle-local registers. */
 const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
@@ -334,10 +329,10 @@ export function applyStudio(ctx: Context): void {
   const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice, hasWorkspace }
 
   /**
-   * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
-   * chose or a default one, the workspace UI's own New Session choice applies and no prompts follow.
+   * Open a new chat. Without a workspace the person chose or a default one, the workspace UI's own New Session
+   * choice applies.
    */
-  const startChat = async (chosen?: WorkspaceId, folder?: FolderKind, keepCurrent = false): Promise<void> => {
+  const startChat = async (chosen?: WorkspaceId, keepCurrent = false): Promise<void> => {
     const workspace = ctx.get('uiWorkspace')
     if (workspace === undefined) return
     let target = chosen
@@ -349,9 +344,8 @@ export function applyStudio(ctx: Context): void {
       workspace.startSession()
       return
     }
-    writeProgress('starterKind', folder ?? '')
     try {
-      await workspace.openWorkspace(target, (sessionId) => { writeProgress('starterSession', sessionId) })
+      await workspace.openWorkspace(target)
     } catch (error) {
       // The workspace UI already told the person why no chat opened.
       console.warn('delorun onboarding: the chat was not opened', error)
@@ -383,20 +377,6 @@ export function applyStudio(ctx: Context): void {
       if (layout !== undefined) closeSidebarDrawer(document, layout)
     },
   }
-  const starters: StarterInjected = {
-    starter: { getSnapshot: () => progress.getSnapshot().value?.starterSession ?? '', subscribe: listener => progress.subscribe(listener) },
-    folder: () => progress.getSnapshot().value?.starterKind ?? '',
-    prefill: (sessionId, text) => {
-      const scope = ctx.get('sessions')?.scope(sessionId)
-      const input = scope?.get('conversation')?.input.for(scope)
-      if (input === undefined) return
-      input.setDraft(text)
-      // Keyboard-less devices keep their keyboard down until the person taps the box.
-      if (window.matchMedia('(pointer: fine)').matches) input.focus()
-    },
-    bind: (sessionId) => { writeProgress('starterSession', sessionId) },
-    dismiss: () => { writeProgress('starterSession', '') },
-  }
   const keyBanner: KeyBannerInjected = {
     keyTest: () => keyStatus.refresh(),
     // Looked up on click: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
@@ -419,9 +399,6 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('settings.general.item', () => ctx.slots.register({
         name: 'settings.general.item', id: SHOW_AGAIN_ROW.id, order: SHOW_AGAIN_ROW.order, locale: NS, inject: () => showAgain,
       }, ShowAgainRow)),
-      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-        name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
-      }, StarterPrompts)),
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: FINISH_SETUP_ENTRY.id, order: FINISH_SETUP_ENTRY.order, locale: NS, inject: () => finishSetup,
       }, FinishSetupChip)),

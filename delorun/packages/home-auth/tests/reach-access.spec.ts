@@ -712,7 +712,7 @@ describe('the everyday settings and shipped plugin toggles of an approved device
     expect(mutate('delorun-onboarding', [])).toEqual(DENY('settings/mutate'))
     expect(approved()({ action: 'settings/replace', resource: GLOBAL, args: { ns: 'delorun-onboarding', section: { step: 'look' } } })).toEqual(DENY('settings/replace'))
     expect(write('delorun-onboarding', { step: 'look' })).toEqual(ALLOW)
-    expect(write('delorun-onboarding', { done: true, starterSession: 'x', starterKind: '' })).toEqual(ALLOW)
+    expect(write('delorun-onboarding', { done: true })).toEqual(ALLOW)
     expect(mutate('delorun-onboarding', ['step'])).toEqual(ALLOW)
     expect(write('delorun-chat-states', { maxRecords: 1 })).toEqual(DENY('settings/update'))
     expect(write('delorun-chat-states', { pruneMinutes: 1 })).toEqual(DENY('settings/update'))

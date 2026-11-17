@@ -8,7 +8,7 @@ import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
   KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
 } from '../src/index.ts'
-import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
+import { THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
 import { REACH_OPTIONS, SECTION_STATUSES } from '../../contract-setup-answers/src/index.ts'
 
@@ -28,13 +28,13 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], addWaitSeconds: config.addWaitSeconds.get() }
+  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], addWaitSeconds: config.addWaitSeconds.get() }
 }
 
 describe('the configuration', () => {
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delorun-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [], optionalRows: [], addWaitSeconds: 60 })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], addWaitSeconds: 60 })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -49,9 +49,6 @@ describe('the configuration', () => {
   it.each<readonly [string, object]>([
     ['a step id with a capital', { step: 'Look' }],
     ['a step id of a path', { step: '../look' }],
-    ['a session id with a space', { starterSession: 'a b' }],
-    ['a session id over 200 characters', { starterSession: 'a'.repeat(201) }],
-    ['a folder kind onboarding does not read', { starterKind: 'binary' }],
     ['a registry that is not https', { registry: 'http://registry.example' }],
     ['a timeout of zero', { keyTestTimeoutMs: 0 }],
     ['a package name with a capital', { plugins: ['Bad'] }],
@@ -64,10 +61,9 @@ describe('the configuration', () => {
     expect(() => Config(value)).toThrow()
   })
 
-  it('accepts scoped and plain package names and a session id', () => {
-    expect(plain({ starterSession: PENDING_STARTERS }).starterSession).toBe('pending')
-    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true, addWaitSeconds: 60 })
+  it('accepts scoped and plain package names', () => {
+    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], step: 'thinking.reader', done: true, addWaitSeconds: 60 })
   })
 })
 

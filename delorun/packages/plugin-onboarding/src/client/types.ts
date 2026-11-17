@@ -371,7 +371,7 @@ export interface OnboardingInjected {
    * @param folder - what that workspace's folder holds, which picks the starting prompts.
    * @param keepCurrent - when no workspace was chosen, leave the chat in the workspace it is in (the workspace UI's own New Session) instead of the default workspace.
    */
-  readonly startChat: (workspaceId?: WorkspaceId, folder?: FolderKind, keepCurrent?: boolean) => Promise<void>
+  readonly startChat: (workspaceId?: WorkspaceId, keepCurrent?: boolean) => Promise<void>
   /** Whether the person chose Finish later in this visit; the Finish setup chip reads it and the dialog sets it. */
   readonly aside: LaterStore
 }

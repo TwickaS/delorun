@@ -14,7 +14,7 @@ import type { OnboardingSettings } from '../config.ts'
 import type { SetupRecord } from '../wire.ts'
 import { buildSteps, STEPS, type FlowStep } from './flow.tsx'
 import { landFocus } from './focus.ts'
-import { createGuide, folderOf, type Guide } from './guide.ts'
+import { createGuide, type Guide } from './guide.ts'
 import type { OnboardingInjected, ReachState, StepServices } from './types.ts'
 import { DIALOG_CLASS, StepFrame } from './frame/StepFrame.tsx'
 import { StepFooter } from './frame/StepFooter.tsx'
@@ -173,7 +173,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     }
     const saved = finish()
     completeStep(UPSTREAM_KEY_STEP)
-    const started = startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
+    const started = startChat(workspace?.workspaceId, keepCurrent)
     // The original look unloads this dialog's plugin, so it is written last, after the progress and the first chat.
     if (guide.stock.getSnapshot()) {
       void Promise.allSettled([saved, started]).then(() => fixed.look.useStockLook()).then((ok) => { if (!ok) console.warn('delorun onboarding: the original look was not saved') }, (error: unknown) => { console.warn('delorun onboarding: the original look was not saved', error) })
