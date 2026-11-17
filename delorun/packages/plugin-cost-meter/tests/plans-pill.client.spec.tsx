@@ -67,7 +67,7 @@ describe('the Plans pill', () => {
   })
 
   it('opens a popover with every added agent\'s bars, reads again on opening and starts no check', async () => {
-    const h = home([account({}, 32, 12), account({ provider: 'codex', signedIn: 'no', plan: undefined, windows: [] })])
+    const h = home([account({}, 32, 12), account({ provider: 'codex', signedIn: 'no', windows: [] })])
     render(<PlansPill fetch={h.fetch} t={t} />)
     fireEvent.click(await screen.findByRole('button', { name: /^Plan limits/ }))
     const dialog = screen.getByRole('dialog')

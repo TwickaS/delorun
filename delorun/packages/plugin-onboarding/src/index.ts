@@ -86,7 +86,7 @@ function readStoredAccounts(ctx: Context): ReadinessEnvironment['accounts'] {
   const store = ctx.get('agentAccounts')
   if (store === undefined) return undefined
   return async () => (await store.readAll()).accounts.map(({ provider, installed, signedIn, plan, windows, checkedAt }) => ({
-    provider, installed, signedIn, windows,
+    provider, installed, signedIn, windows: [...windows],
     ...(plan === undefined ? {} : { plan }),
     ...(checkedAt === undefined ? {} : { checkedAt }),
   }))

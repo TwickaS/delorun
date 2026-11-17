@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TailscaleResult, TailscaleRunner } from '@delorun/reach'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReadinessAccount } from '../src/wire.ts'
 import { claudeSignIn, codexSignIn, processReadinessEnvironment, readReadiness, tailscaleReadiness, type ReadinessEnvironment } from '../src/readiness.ts'
 
 let home = ''
@@ -110,7 +111,7 @@ describe('the Tailscale probe', () => {
 })
 
 describe('the stored account figures', () => {
-  const account = { provider: 'claude-code', installed: true, signedIn: 'yes', plan: 'max', windows: [], checkedAt: 1 } as const
+  const account: ReadinessAccount = { provider: 'claude-code', installed: true, signedIn: 'yes', plan: 'max', windows: [], checkedAt: 1 }
 
   it('are read as stored with the time, and a readiness request never asks for a check', async () => {
     const read = vi.fn(() => Promise.resolve([account]))
