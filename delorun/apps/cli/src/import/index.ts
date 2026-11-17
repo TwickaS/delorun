@@ -190,6 +190,7 @@ export async function readArchiveFile(file: string, command = 'delorun import'):
   try {
     handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new CliError(EXIT.failed, `No file at ${quoted(file)}. Check the path and try again.`)
     throw new CliError(EXIT.failed, `${command}: the archive cannot be read: ${printable((error as Error).message)}`)
   }
   try {

@@ -425,7 +425,7 @@ describe('a hostile archive', () => {
     const home = fresh('home')
 
     expect((await refusal(importing(home, home, ['y']))).message).toContain('is not a regular file')
-    expect((await refusal(importing(home, join(home, 'missing.delorun'), ['y']))).message).toContain('cannot be read: ENOENT')
+    expect((await refusal(importing(home, join(home, 'missing.delorun'), ['y']))).message).toBe(`No file at ${JSON.stringify(join(home, 'missing.delorun'))}. Check the path and try again.`)
   })
 
   it('is never imported without a terminal to ask', async () => {
