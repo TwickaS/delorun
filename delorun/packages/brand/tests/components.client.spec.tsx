@@ -19,6 +19,19 @@ describe('Button', () => {
     rerender(<Button variant="destructive" disabled>Delete</Button>)
     expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('when unavailable stays focusable, is marked aria-disabled, keeps its description and ignores presses', () => {
+    const onClick = vi.fn()
+    render(<><Button unavailable aria-describedby="note" onClick={onClick}>Download for macOS</Button><p id="note">Not available yet</p></>)
+    const button = screen.getByRole('button', { name: 'Download for macOS' }) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    expect(button.getAttribute('aria-disabled')).toBe('true')
+    expect(button.getAttribute('aria-describedby')).toBe('note')
+    button.focus()
+    expect(document.activeElement).toBe(button)
+    fireEvent.click(button)
+    expect(onClick).not.toHaveBeenCalled()
+  })
 })
 
 describe('TextField', () => {

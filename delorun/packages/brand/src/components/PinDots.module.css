@@ -7,13 +7,13 @@
   border: 1.5px solid var(--dl-text-muted);
   border-radius: 50%;
   corner-shape: round;
-  transition: background-color var(--dl-motion), border-color var(--dl-motion), transform var(--dl-motion);
+  transition: background-color var(--dl-duration-quick) var(--dl-ease), border-color var(--dl-duration-quick) var(--dl-ease), transform var(--dl-motion-quick) var(--dl-ease-out);
 }
 
 .filled { border-color: var(--dl-text); background: var(--dl-text); transform: scale(1.08); }
 .dots[data-tone="error"] .dot { border-color: var(--dl-error); }
 .dots[data-tone="error"] .filled { background: var(--dl-error); }
-.dots[data-shake] { animation: shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+.dots[data-shake] { animation: shake var(--dl-motion-explain) var(--dl-ease-in-out); }
 
 @keyframes shake {
   10%, 90% { transform: translateX(-2px); }

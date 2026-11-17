@@ -41,9 +41,39 @@
   --dl-space-6: calc(32px * var(--dsh-density, 1));
 
   --dl-focus-ring: 2px solid var(--dl-accent-text);
-  --dl-motion: 150ms ease;
+  --dl-focus-ring-offset: 2px;
+
+  /* Motion. Arrivals use the strong ease-out, movement across the screen the ease-in-out, colour changes the plain ease;
+   * nothing uses an ease-in. `--dl-duration-*` time colour and opacity changes; `--dl-motion-*` time transform and
+   * clip-path changes and collapse to 0ms under reduced motion. Leaving takes `leave`, which is shorter than any arrival. */
+  --dl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dl-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dl-ease: ease;
+
+  --dl-duration-press: 120ms;
+  --dl-duration-quick: 180ms;
+  --dl-duration-move: 260ms;
+  --dl-duration-explain: 360ms;
+  --dl-duration-leave: 100ms;
+
+  --dl-motion-press: var(--dl-duration-press);
+  --dl-motion-quick: var(--dl-duration-quick);
+  --dl-motion-move: var(--dl-duration-move);
+  --dl-motion-explain: var(--dl-duration-explain);
+  --dl-motion-leave: var(--dl-duration-leave);
+
+  --dl-scale-pressed: 0.97;
+  --dl-scale-enter: 0.95;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(:root) { --dl-motion: 0ms linear; }
+  :where(:root) {
+    --dl-motion-press: 0ms;
+    --dl-motion-quick: 0ms;
+    --dl-motion-move: 0ms;
+    --dl-motion-explain: 0ms;
+    --dl-motion-leave: 0ms;
+    --dl-scale-pressed: 1;
+    --dl-scale-enter: 1;
+  }
 }

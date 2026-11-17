@@ -4,7 +4,7 @@
  * @module @delorun/brand/settings/AppearancePickers
  */
 import type { CSSProperties } from 'react'
-import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Switch } from '#upstream'
 import { ChipGroup } from './ChipGroup.tsx'
 import css from './ChipGroup.module.css'
 
