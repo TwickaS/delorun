@@ -14,12 +14,22 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { Config as ConfigSchema, resolveCommand, validateConfig, type Config as BrowseConfig } from './config.ts'
-import { registerGrants } from './grant.ts'
+import { registerGrants, type RealBrowserGrants } from './grant.ts'
 import { registerRealBrowserRoutes } from './routes.ts'
 import { guardBrowseCalls, useMyBrowserTool } from './tool.ts'
 
 export { RealBrowserGrants, type GrantState, type GrantView, type UseVerdict } from './grant.ts'
 export { REAL_BROWSER_ROUTES, type RealBrowserState } from './wire.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /**
+     * The chats' real-browser grants, provided while the driver row runs; a plugin that only makes sense beside the
+     * driver, such as its skill, injects it.
+     */
+    realBrowser: RealBrowserGrants
+  }
+}
 
 /** Cordis identity of the provider. */
 export const name = 'browser-use-browse'
@@ -52,6 +62,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   resolveCommand(config)
   const now = (): number => Date.now()
   const grants = await registerGrants(ctx, now)
+  ctx.provide('realBrowser', grants)
   ctx.tools.register(useMyBrowserTool(ctx, grants))
   guardBrowseCalls(ctx, grants)
   ctx.inject(['connection'], (scope) => { registerRealBrowserRoutes(scope, grants, { awayMs: () => config.awayDays * DAY_MS, now }) })

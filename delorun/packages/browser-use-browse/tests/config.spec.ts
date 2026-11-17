@@ -27,6 +27,7 @@ describe('the browse row configuration', () => {
       OPENCODE_BROWSER_ALLOW_FILE_URLS: '1',
       OPENCODE_BROWSER_ALLOW_FOREGROUND: '1',
       OPENCODE_BROWSER_FILE_ROOTS: '/',
+      OPENCODE_BROWSER_TOOLS: 'plain',
       OPENCODE_BROWSER_AUTO_UPDATE: 'on',
       opencode_browser_allow_all_cookies: '1',
       OPENCODE_BROWSER_DEBUG: '1',
@@ -34,7 +35,7 @@ describe('the browse row configuration', () => {
     }
     // Pins the denial: even a row that tried to list the hatches (the schema check is bypassed here) passes none of them on.
     const merged: Record<string, string | undefined> = { ...env, ...childEnv({ inheritEnv: ['ALLOW_ALL_COOKIES', 'FILE_ROOTS', 'DEBUG'] }, env) }
-    for (const name of ['ALLOW_ALL_COOKIES', 'ALLOW_ALL_STORAGE', 'ALLOW_FILE_URLS', 'ALLOW_FOREGROUND', 'FILE_ROOTS']) {
+    for (const name of ['ALLOW_ALL_COOKIES', 'ALLOW_ALL_STORAGE', 'ALLOW_FILE_URLS', 'ALLOW_FOREGROUND', 'FILE_ROOTS', 'TOOLS']) {
       expect(merged[`OPENCODE_BROWSER_${name}`], name).toBe('')
     }
     expect(merged['opencode_browser_allow_all_cookies']).toBe('')
@@ -67,9 +68,9 @@ describe('the browse row configuration', () => {
     expect(resolveCommand(Config({ command: '/opt/fixture', args: ['serve'] }), host, () => undefined)).toEqual({ command: '/opt/fixture', args: ['serve'] })
   })
 
-  it('finds the installed platform package beside the pinned launcher, and none that is not installed', () => {
-    const installed = installedPackageDirectory('linux-x64')
-    if (process.platform === 'linux' && process.arch === 'x64') expect(installed).toMatch(/browse-linux-x64$/u)
+  it('finds no platform package where the browse launcher is not installed', () => {
+    // The browse pack installs the launcher and its platform packages; this workspace installs neither.
+    expect(installedPackageDirectory('linux-x64')).toBeUndefined()
     expect(installedPackageDirectory('windows-x64')).toBeUndefined()
   })
 })

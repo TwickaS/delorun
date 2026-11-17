@@ -154,6 +154,22 @@ export class RealBrowserGrants {
   }
 
   /**
+   * {@link mayUse} for a browse call about to run. When the call is refused because the away permission ran out, the
+   * lapse is recorded once, as a `real-browser/away` with `cause: 'expired'`, which also stops later refusals from
+   * recording it again.
+   * @param session - the Session.
+   * @returns the verdict.
+   */
+  admitCall(session: Session): UseVerdict {
+    const verdict = this.mayUse(session)
+    const { awayUntil } = this.handle.stateOf(session)
+    if (verdict.kind === 'refuse' && verdict.reason === 'away' && awayUntil !== null) {
+      session.append('real-browser/away', { until: null, cause: 'expired' })
+    }
+    return verdict
+  }
+
+  /**
    * Whether the current turn of a Session holds a prompt the person sent.
    * @param session - the Session.
    * @returns the answer the log gives.
@@ -174,14 +190,15 @@ export class RealBrowserGrants {
   }
 
   /**
-   * Allow runs the person did not start to use the running grant until a time, or stop allowing them.
+   * Allow runs the person did not start to use the running grant until a time, or stop allowing them, as the person
+   * chose.
    * @param session - the chat.
    * @param until - Unix epoch milliseconds, or null to stop.
    * @returns whether a grant runs, so the change was recorded.
    */
   setAway(session: Session, until: number | null): boolean {
     if (!this.live(session)) return false
-    if (this.handle.stateOf(session).awayUntil !== until) session.append('real-browser/away', { until })
+    if (this.handle.stateOf(session).awayUntil !== until) session.append('real-browser/away', { until, cause: 'person' })
     return true
   }
 

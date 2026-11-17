@@ -1,7 +1,8 @@
 /**
  * The studio's routes to a chat's real-browser grant ({@link REAL_BROWSER_ROUTES}): its state and its end, which any
  * approved device reaches because they read or only narrow, and the away permission, which widens what the grant
- * covers and so needs the computer or a device that holds an unlock, as the grant's own approval does. A request the
+ * covers and so needs the computer or a device unlocked with a code or PIN, as the grant's own approval does; the
+ * approval grace opens neither. A request the
  * home cannot place is refused before its body is read.
  * @module @delorun/browser-use-browse/routes
  */
@@ -120,6 +121,6 @@ export function registerRealBrowserRoutes(ctx: Context, grants: RealBrowserGrant
       const recorded = grants.setAway(agent.session, body.on ? options.now() + options.awayMs() : null)
       if (!recorded) return refuse('NO_GRANT', 'nothing changed: the chat does not use the person\'s own browser')
       return json(200, stateOf(agent))
-    }, { renews: true }),
+    }, { grace: false, renews: true }),
   })
 }

@@ -1553,8 +1553,8 @@
     {
       "path": "pnpm-workspace.yaml",
       "class": "security",
-      "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code. Adds `minimumReleaseAgeExclude` entries for `@opencode/browse@0.1.1` and its seven platform packages, which `@delorun/browser-use-browse` pins (browse, MIT, npm provenance); 0.1.1 was published the day it was pinned. Awaiting the lead's review.",
-      "sha256": "9088227524e611f0b0422699afe0310c8345946c209b7420c539bcab80c8c27b"
+      "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code.",
+      "sha256": "bdddecdd5fc2341a20f47a3ffc89926dc6f672ce930d0f6b31ed6d746aada92a"
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
@@ -2833,6 +2833,18 @@
       "class": "delorun-feature",
       "feature": "real-browser",
       "reason": "Re-exports the types of the new `src/real-browser.ts`, which declares the `real-browser/*` Session events of a chat's grant to use the person's own browser, so the package's root entry carries the SessionEventMap merge. `@delorun/browser-use-browse` appends the events and folds them. No runtime change."
+    },
+    {
+      "path": "docs/persistence-changes/2026-11-17-real-browser-grant-events.schema.json",
+      "class": "delorun-feature",
+      "feature": "real-browser",
+      "reason": "The machine record of the persistence acknowledgement for the `real-browser/*` Session events, written by `persistence-changes --record` beside its bilingual prose."
+    },
+    {
+      "path": "packages/experimental/browser-use-runtime/src/real-browser.ts",
+      "class": "delorun-feature",
+      "feature": "real-browser",
+      "reason": "Declares, types only, the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events of a chat's grant to use the person's own browser (lead decision L45: upstream's catalog scans only `packages/`). `@delorun/browser-use-browse` appends and folds them; no runtime code."
     }
   ],
   "retired": []

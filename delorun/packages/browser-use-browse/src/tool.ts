@@ -112,7 +112,7 @@ export function guardBrowseCalls(ctx: Context, grants: RealBrowserGrants): void 
     if (!exec.name.startsWith(BROWSE_TOOL_PREFIX) && !(resourceTools.has(exec.name) && named)) return next()
     const agent = exec.agent
     if (agent === undefined) throw new Error(NO_GRANT_REFUSAL)
-    const verdict = grants.mayUse(agent.session)
+    const verdict = grants.admitCall(agent.session)
     if (verdict.kind === 'refuse') throw new Error(refusalOf(verdict))
     return next()
   }, { prepend: true })

@@ -9,7 +9,7 @@ kind: persistence-change
 
 ## 概述
 
-新增会话事件 `real-browser/granted`、`real-browser/away` 和 `real-browser/ended`，分别记录对话允许使用本人自己的浏览器、允许非本人发起的运行使用它，以及该许可的结束。
+新增会话事件 `real-browser/granted`、`real-browser/away` 和 `real-browser/ended`，分别记录对话允许使用本人自己的浏览器、允许非本人发起的运行使用它（并以 `cause` 记录是本人更改还是已到期），以及该许可的结束。
 
 ## 目录
 
@@ -28,7 +28,7 @@ baseline: false
 changes:
   - root: "event:real-browser/away"
     previous: null
-    after: "a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0"
+    after: "ba5aeeab52703d0cfd5ed0f3d92f914e1ecae896c2b13f48d29101e21876c59d"
     decision: same-version
   - root: "event:real-browser/ended"
     previous: null
@@ -43,12 +43,12 @@ changes:
 <a id="compatibility"></a>
 ## 兼容性
 
-新增三种事件类型，现有事件不变。没有这些类型的构建在读取含有其中任何一种事件的日志时会拒绝读取，就像它拒绝任何未知的事件类型一样，而不会在缺少该许可的情况下重放对话。有这些类型的构建可以原样读取所有旧日志，因为旧日志不含这些事件。这些事件保持会话格式版本不变：其类型名本身就是判别字段。
+新增三种事件类型，现有事件不变。没有这些类型的构建在读取含有其中任何一种事件的日志时会拒绝读取，就像它拒绝任何未知的事件类型一样，而不会在缺少该许可的情况下重放对话。有这些类型的构建可以原样读取所有旧日志，因为旧日志不含这些事件。`real-browser/away` 的必填字段 `cause` 在任何写入该事件的构建发布之前就已加入，因此没有日志含有缺少它的该事件。这些事件保持会话格式版本不变：其类型名本身就是判别字段。
 
 <a id="verification"></a>
 ## 验证
 
-`delorun/packages/browser-use-browse/tests/grant.spec.ts` 通过智能体循环和审批服务记录每种事件，并用 `realBrowserGrant` 投影折叠它们，包括一个不继承父会话许可的分叉会话。
+`delorun/packages/browser-use-browse/tests/grant.spec.ts` 通过智能体循环和审批服务记录每种事件，并用 `realBrowserGrant` 投影折叠它们：分叉会话不继承父会话的许可，从日志恢复的会话保留许可，已到期的“不在时”许可以 `cause: 'expired'` 记录一次。
 
 <a id="dev-note"></a>
 ## 开发备注
