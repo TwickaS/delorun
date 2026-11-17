@@ -18,6 +18,7 @@ import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import * as UpdateGate from '@delorun/bundle-local/update-gate'
 import { CountingChatGate, type HealthExpectations } from '@delorun/home-process'
 import type { BootedRow } from '../../src/delorun-bundles.ts'
+import { appliedReachConfig } from '../../src/reach/host.ts'
 import { sandboxProtection, type SandboxProtection } from '../../src/sandbox-protection.ts'
 import { arrivedOnLoopbackListener, bootProtectionOf, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, withAppliedConfig, type HostHealthFacts } from '../../src/update/host.ts'
 
@@ -667,34 +668,45 @@ describe('checkHealth', () => {
   describe('a reach row the predecessor applied while it ran', () => {
     const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delorun/reach'] } }
     const reach = (config: unknown): BootedRow => ({ id: 'delorun-reach', name: '@delorun/reach', disabled: false, state: 'active', config })
-    const option = { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
-    // The bundle's row, which the predecessor booted with before `delorun reach on` wrote the profile's own.
-    const off = { enabled: true, tailscalePrivate: option }
-    const on = { enabled: true, tailscalePrivate: { ...option, enabled: true, address: 'https://home.example-tailnet.ts.net', listenerPort: 31318 } }
+    // The owner's timeline: the predecessor booted with @delorun/bundle-local's row, then `delorun reach on` wrote the
+    // profile's own row, which restates the switch and the whole option, and the running Host applied the option.
+    const boot = { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
+    const option = { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
+    const written = { enabled: true, tailscalePrivate: option }
+    const handed = withAppliedConfig(bootRowsOf([manager, reach(boot)]), 'delorun-reach', appliedReachConfig(boot, option))
     // The successor's release adds rows elsewhere and changes nothing of the reach row.
     const added: BootedRow[] = [{ id: 'delorun-packs', name: '@delorun/plugin-packs', disabled: false, state: 'active', config: { concurrency: 2 } }, { id: 'delorun-requirements', name: '@delorun/bundle-local/requirements', disabled: false, state: 'active' }]
     const changed = { passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delorun-reach changed and the report did not name it' }
 
     it('fails H3 against the boot config alone, which the successor no longer boots with', async () => {
       const port = await studioAnswering(204)
-      expect(await checkHealth(facts(port, { rows: () => [manager, reach(on), ...added] }), { ...NOTHING_NAMED, previousRows: bootRowsOf([manager, reach(off)]) })).toEqual(changed)
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(written), ...added] }), { ...NOTHING_NAMED, previousRows: bootRowsOf([manager, reach(boot)]) })).toEqual(changed)
     })
 
-    it('passes H3 against the config the predecessor applied, whatever other rows the successor adds', async () => {
+    it('passes H3 for the option the predecessor applied, whatever other rows the successor adds', async () => {
       const port = await studioAnswering(204)
-      const handed = withAppliedConfig(bootRowsOf([manager, reach(off)]), 'delorun-reach', on)
-      expect(await checkHealth(facts(port, { rows: () => [manager, reach(on), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual({ passed: true })
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(written), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual({ passed: true })
     })
 
-    it('still fails H3 when the successor boots reach settings other than the ones applied, unless the report names the row', async () => {
+    it('still fails H3 when the file also changed a key the apply did not apply', async () => {
       const port = await studioAnswering(204)
-      const handed = withAppliedConfig(bootRowsOf([manager, reach(off)]), 'delorun-reach', on)
-      const longer = reach({ ...on, tailscalePrivate: { ...on.tailscalePrivate, elevationMinutes: 60 } })
+      const switchedOff = reach({ ...written, enabled: false })
+      const extra = reach({ ...written, tailscalePrivate: { ...option, funnel: true } })
+      const another = reach({ ...written, other: 1 })
+      for (const target of [switchedOff, extra, another]) {
+        expect(await checkHealth(facts(port, { rows: () => [manager, target, ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
+      }
+    })
+
+    it('still fails H3 when the successor boots another option than the one applied, unless the report names the row', async () => {
+      const port = await studioAnswering(204)
+      const longer = reach({ ...written, tailscalePrivate: { ...option, elevationMinutes: 60 } })
       expect(await checkHealth(facts(port, { rows: () => [manager, longer, ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
-      expect(await checkHealth(facts(port, { rows: () => [manager, reach(off), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
+      expect(await checkHealth(facts(port, { rows: () => [manager, reach(boot), ...added] }), { ...NOTHING_NAMED, previousRows: handed })).toEqual(changed)
       expect(await checkHealth(facts(port, { rows: () => [manager, longer, ...added] }), { ...NOTHING_NAMED, namedRows: ['delorun-reach'], previousRows: handed })).toEqual({ passed: true })
     })
   })
+
 
   describe('the sandbox row\'s protection', () => {
     const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@deepseek-ai/dsh-sandbox-local'] } }
