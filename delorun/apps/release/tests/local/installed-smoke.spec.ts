@@ -1,18 +1,22 @@
 /**
  * The installed-release smoke's own logic: the home-log check and its allowlist, the packs list read from a channel's
- * signed packs file, the load check over the plugin manager's answers, and the command line.
+ * signed packs file, the load check over the plugin manager's answers, the commands' environment, the clean-up of a
+ * leftover home process, and the command line.
  */
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RELEASE_SCHEMAS } from '@delorun/contract-release-manifest'
+import { currentHolder, holderIdentity, holderOf, newStartId, SYSTEM_PROCESS_TABLE, type ProcessHolder } from '@delorun/home'
 import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { BENIGN_LOG_LINES, FORBIDDEN_LOG_LINES, logProblems } from '../../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, packsForPlatform } from '../../src/installed-smoke/offered-packs.ts'
-import { installsState, loadProblems, parseSmokeArgs, redactTokens } from '../../scripts/installed-smoke.ts'
+import { installsState, loadProblems, parseSmokeArgs, redactTokens, smokeEnvironment, stopLeftover } from '../../scripts/installed-smoke.ts'
 import { PacksSnapshot, readAnswer } from '../../src/installed-smoke/wire.ts'
 import { manifestContent, rootFile, throwawayKeys } from '../sign/fixture.ts'
 
@@ -27,7 +31,7 @@ afterEach(() => {
 
 /** A pack entry with the given variants; the variant bodies are not read by the list. */
 function pack(name: string, platforms: readonly string[]) {
-  const variant = { archive: { name: `${name}.tar.gz`, length: 1, sha256: '0'.repeat(64), sha512: 'A'.repeat(86) }, files: [], external: [], peers: [] }
+  const variant = { archive: { name: `${name}.tar.gz`, length: 1, sha256: '0'.repeat(64), sha512: `${'A'.repeat(86)}==` }, files: [], external: [], peers: [] }
   return { name, version: '1.0.0', experimental: false, variants: Object.fromEntries(platforms.map(platform => [platform, variant])) }
 }
 
@@ -145,6 +149,93 @@ describe('the install wait', () => {
 describe('the run log', () => {
   it('leaves out the sign-in link\'s token and keeps the rest of the line', () => {
     expect(redactTokens('http://127.0.0.1:18982/?token=ULNh-x_1&a=b\nnext')).toBe('http://127.0.0.1:18982/?token=<redacted>&a=b\nnext')
+  })
+})
+
+describe('the commands\' environment', () => {
+  it('holds the scratch folders and no model key or other variable of the person running the cut, the launcher build included', () => {
+    vi.stubEnv('DEEPSEEK_API_KEY', 'sk-not-for-the-smoke')
+    vi.stubEnv('OPENAI_API_KEY', 'sk-not-for-the-smoke')
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-not-for-the-smoke')
+    vi.stubEnv('NPM_TOKEN', 'not-for-the-smoke')
+    try {
+      const env = smokeEnvironment({ home: '/s/home', delorun: '/s/home/.delorun', tmp: '/s/tmp', npm: '/s/npm' }, 'person')
+      expect(Object.keys(env).sort()).toEqual(['DELORUN_HOME', 'HOME', 'LANG', 'PATH', 'TERM', 'TMPDIR', 'USER', 'npm_config_cache', 'npm_config_update_notifier'])
+      expect(env).toMatchObject({ HOME: '/s/home', DELORUN_HOME: '/s/home/.delorun', TMPDIR: '/s/tmp', npm_config_cache: '/s/npm', USER: 'person' })
+      expect(JSON.stringify(env)).not.toContain('not-for-the-smoke')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
+
+describe('the leftover home process', () => {
+  /** A scratch Delorun home whose default profile's home lock records the holder. */
+  function homeWithLock(holder: ProcessHolder): string {
+    const home = mkdtempSync(join(tmpdir(), 'installed-smoke-home-'))
+    directories.push(home)
+    mkdirSync(join(home, 'run', 'default'), { recursive: true })
+    const record = { v: 1, startId: newStartId(), runtime: '0.1.0', startedAt: new Date().toISOString(), ...holder }
+    writeFileSync(join(home, 'run', 'default', 'home.lock'), `${JSON.stringify(record)}\n`, { mode: 0o600 })
+    return home
+  }
+
+  /** A child process that runs until it is stopped. */
+  async function sleeper() {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+    await once(child, 'spawn')
+    return child
+  }
+
+  const startReadable = process.platform === 'linux' || process.platform === 'darwin'
+
+  it.skipIf(!startReadable)('leaves alone a process that now has the recorded pid but is not the recorded holder', async () => {
+    const child = await sleeper()
+    try {
+      // The record names the child's pid with another process's start identity, this test's: the pid was reused.
+      const home = homeWithLock({ ...holderOf(child.pid!), ...holderIdentity({ processStart: currentHolder().processStart }) })
+      const said: string[] = []
+      stopLeftover(home, line => said.push(line))
+      expect(said).toEqual([])
+      expect(child.exitCode).toBeNull()
+      expect(child.signalCode).toBeNull()
+      expect(SYSTEM_PROCESS_TABLE.exists(child.pid!)).toBe(true)
+    } finally {
+      child.kill('SIGKILL')
+      await once(child, 'exit')
+    }
+  })
+
+  it('leaves alone a process it cannot confirm as the holder, and says so', async () => {
+    const child = await sleeper()
+    try {
+      const home = homeWithLock({ pid: child.pid! })
+      const said: string[] = []
+      stopLeftover(home, line => said.push(line))
+      expect(said).toEqual([`      left process ${String(child.pid)} running: the home lock names it, but it cannot be confirmed as the home process (${startReadable ? 'no-start-identity' : 'no-start-reader'})`])
+      expect(SYSTEM_PROCESS_TABLE.exists(child.pid!)).toBe(true)
+    } finally {
+      child.kill('SIGKILL')
+      await once(child, 'exit')
+    }
+  })
+
+  it.skipIf(!startReadable)('stops the recorded holder while it runs', async () => {
+    const child = await sleeper()
+    const exited = once(child, 'exit')
+    const home = homeWithLock(holderOf(child.pid!))
+    const said: string[] = []
+    stopLeftover(home, line => said.push(line))
+    expect(said).toEqual([`      stopped the home process ${String(child.pid)} that delorun stop left running`])
+    expect(await exited).toEqual([null, 'SIGKILL'])
+  })
+
+  it('does nothing without a home lock', () => {
+    const home = mkdtempSync(join(tmpdir(), 'installed-smoke-home-'))
+    directories.push(home)
+    const said: string[] = []
+    stopLeftover(home, line => said.push(line))
+    expect(said).toEqual([])
   })
 })
 

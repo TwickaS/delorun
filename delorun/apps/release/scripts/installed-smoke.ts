@@ -10,7 +10,8 @@
  * this checkout for that origin (`npm-launcher/src/build.ts`). An origin is used as it is, with a launcher built for it
  * unless `--launcher` names one: a launcher's channel origin is fixed when it is built. Every `delorun` command runs as
  * `npx --package=<launcher tgz> -- delorun` with an environment of its own, as the preview's wrapper runs it:
- * `HOME`, `DELORUN_HOME`, `TMPDIR` and the npm cache inside the scratch directory, no model key.
+ * `HOME`, `DELORUN_HOME`, `TMPDIR` and the npm cache inside the scratch directory, no model key. The launcher build
+ * runs with the same environment.
  *
  * Steps, each named on failure: 1 install and start, 2 add the offered packs, 3 wait for the installs and check each
  * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 clean up. The scratch
@@ -22,7 +23,7 @@
  * @module installed-smoke
  */
 import { spawn } from 'node:child_process'
-import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, statSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -31,6 +32,7 @@ import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import type { Server } from 'node:http'
 import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delorun/contract-release-manifest'
+import { checkHolder, readHomeLock, SYSTEM_PROCESS_TABLE, type ProcessTable } from '@delorun/home'
 import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { serveChannel } from './local-channel.ts'
 import { logProblems } from '../src/installed-smoke/home-log.ts'
@@ -226,17 +228,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     return remaining
   }
 
-  const environment: NodeJS.ProcessEnv = {
-    HOME: paths.home,
-    USER: process.env['USER'] ?? 'delorun',
-    LANG: 'C.UTF-8',
-    TERM: 'dumb',
-    TMPDIR: paths.tmp,
-    PATH: [dirname(process.execPath), '/usr/local/bin', '/usr/bin', '/bin'].join(':'),
-    npm_config_cache: paths.npm,
-    npm_config_update_notifier: 'false',
-    DELORUN_HOME: paths.delorun,
-  }
+  const environment = smokeEnvironment(paths)
   /** Run a command, with its output appended to the run's log. */
   const command = (executable: string, args: readonly string[], timeoutMs: number, env: NodeJS.ProcessEnv = environment, cwd = paths.home): Promise<Finished> => new Promise((settle) => {
     appendFileSync(request.log, `$ ${executable} ${args.join(' ')}\n`)
@@ -366,7 +358,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     if (launcher === undefined) {
       const out = join(scratch, 'launcher')
       const roots = await channelRoots(source, join(scratch, 'roots'))
-      const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', out, '--channel-origin', origin, '--package-version', request.version], 300_000, process.env, repository)
+      const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', out, '--channel-origin', origin, '--package-version', request.version], 300_000, environment, repository)
       if (built.status !== 0) throw new StepFailure(`the launcher build failed:\n${built.output.trim().split('\n').slice(-15).join('\n')}`)
       launcher = join(out, `delorun-${request.version}.tgz`)
     }
@@ -483,21 +475,62 @@ async function channelRoots(source: ChannelSource, directory: string): Promise<s
   }
 }
 
+/** The scratch folders a run's commands use. */
+export interface SmokePaths {
+  /** `HOME`. */
+  readonly home: string
+  /** `DELORUN_HOME`. */
+  readonly delorun: string
+  /** `TMPDIR`. */
+  readonly tmp: string
+  /** The npm cache. */
+  readonly npm: string
+}
+
 /**
- * Stop a home process `delorun stop` left running: the process the profile's home lock names, by its pid.
+ * The environment every command of a run gets, the launcher build included: the scratch folders, Node's own folder and
+ * the system folders on `PATH`, and nothing else of this process's environment but `USER`, so no model key, token or
+ * npm setting of the person running the cut reaches it.
+ * @param paths - the run's scratch folders.
+ * @param user - the user name; this process's by default.
+ * @returns the environment.
+ */
+export function smokeEnvironment(paths: SmokePaths, user: string = process.env['USER'] ?? 'delorun'): NodeJS.ProcessEnv {
+  return {
+    HOME: paths.home,
+    USER: user,
+    LANG: 'C.UTF-8',
+    TERM: 'dumb',
+    TMPDIR: paths.tmp,
+    PATH: [dirname(process.execPath), '/usr/local/bin', '/usr/bin', '/bin'].join(':'),
+    npm_config_cache: paths.npm,
+    npm_config_update_notifier: 'false',
+    DELORUN_HOME: paths.delorun,
+  }
+}
+
+/**
+ * Stop a home process `delorun stop` left running: the process the profile's home lock names, by its pid, and only
+ * while the lock's holder is confirmed to be that process ({@link checkHolder}), so a pid the system has since given
+ * to another process is left alone.
  * @param delorunHome - the scratch Delorun home.
  * @param say - prints one line.
+ * @param table - the processes to check the holder against; this operating system's by default.
+ * @throws Error when the lock file is not a home lock record.
  */
-function stopLeftover(delorunHome: string, say: (line: string) => void): void {
-  const lock = join(delorunHome, 'run', PROFILE, 'home.lock')
-  if (!existsSync(lock)) return
-  const pid = Number((/"pid"\s*:\s*(\d+)/u.exec(readFileSync(lock, 'utf8')) ?? [])[1])
-  if (!Number.isSafeInteger(pid) || pid <= 1) return
+export function stopLeftover(delorunHome: string, say: (line: string) => void, table: ProcessTable = SYSTEM_PROCESS_TABLE): void {
+  const record = readHomeLock(join(delorunHome, 'run', PROFILE))
+  if (record === undefined) return
+  const check = checkHolder(record, table)
+  if (check.kind !== 'confirmed') {
+    if (check.kind === 'unconfirmed') say(`      left process ${String(record.pid)} running: the home lock names it, but it cannot be confirmed as the home process (${check.reason})`)
+    return
+  }
   try {
-    process.kill(pid, 'SIGKILL')
-    say(`      stopped the home process ${String(pid)} that delorun stop left running`)
+    process.kill(record.pid, 'SIGKILL')
+    say(`      stopped the home process ${String(record.pid)} that delorun stop left running`)
   } catch (error) {
-    // ESRCH: the process already ended, which is the expected case.
+    // ESRCH: the process ended between the check and the signal.
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
   }
 }
