@@ -236,18 +236,41 @@ describe('the real pinned Codex app-server', () => {
     await session.close()
     await expectNothingLeft(r)
     expect(existsSync(join(r.workspace, 'late.txt'))).toBe(false)
+    // The sandbox's mount points in the workspace were removed with the process (decision 5).
+    expect(['.git', '.agents', '.codex'].filter(name => existsSync(join(r.workspace, name)))).toEqual([])
   }, 100_000)
 
-  it('leaves the Codex home\'s config.toml as it was', async () => {
-    const r = await real([shell('touch made.txt'), { kind: 'text', text: 'done' }])
-    r.answers = ['allow-once']
-    const before = readFileSync(join(r.codexHome, 'config.toml'), 'utf8')
+  it('answers the same command again after "Allow for this run" and asks about another (D4)', async () => {
+    const r = await real([shell('touch a.txt'), shell('touch a.txt'), shell('touch b.txt'), { kind: 'text', text: 'done' }])
+    r.answers = ['allow-run', 'reject']
+    const session = await r.driver.open(r.request())
+    await session.send('Touch a.txt twice, then b.txt.', 'start')
+    const events = await untilTurnEnd(session)
+    expect(events.filter(event => event.kind === 'tool-call')).toHaveLength(3)
+    expect(r.questions.map(question => question.reason)).toEqual([expect.stringContaining('a.txt'), expect.stringContaining('b.txt')])
+    expect([existsSync(join(r.workspace, 'a.txt')), existsSync(join(r.workspace, 'b.txt'))]).toEqual([true, false])
+    await session.close()
+    await expectNothingLeft(r)
+  }, 100_000)
+
+  it('leaves the Codex home\'s config.toml byte-identical through a turn, a question and a resume (decision 4)', async () => {
+    const r = await real([shell('touch made.txt'), { kind: 'text', text: 'done' }, shell('touch again.txt'), { kind: 'text', text: 'done' }])
+    r.answers = ['allow-once', 'allow-once']
+    const config = join(r.codexHome, 'config.toml')
+    const before = readFileSync(config)
     const session = await r.driver.open(r.request())
     await session.send('Make made.txt.', 'start')
     await untilTurnEnd(session)
     await session.close()
-    expect(readFileSync(join(r.codexHome, 'config.toml'), 'utf8')).toBe(before)
-  }, 100_000)
+    expect(readFileSync(config).equals(before)).toBe(true)
+    const resumed = await r.driver.open(r.request({ resume: session.programSessionId }))
+    await resumed.send('Make again.txt.', 'start')
+    await untilTurnEnd(resumed)
+    await resumed.close()
+    expect(readFileSync(config).equals(before)).toBe(true)
+    expect(existsSync(join(r.workspace, 'again.txt'))).toBe(true)
+    await expectNothingLeft(r)
+  }, 150_000)
 
   it('runs a limits check without a thread or a model request', async () => {
     const r = await real([])

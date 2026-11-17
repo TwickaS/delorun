@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { ProgramOpenError, type AccountObservation, type ProgramOpenRequest, type ProgramSpawnRequest } from '@delorun/external-agents/contract'
 import type { LocatedCodex } from '@delorun/external-agents/locate'
@@ -63,17 +63,41 @@ describe('open', () => {
   it('starts the pinned app-server through the gate\'s spawn, on the stable protocol', async () => {
     const s = setup()
     const session = await s.driver.open(s.request())
-    expect(s.spawned).toEqual([{ argv: [process.execPath, PINNED.script, 'app-server', '--stdio'], stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }])
+    expect(s.spawned).toEqual([{ argv: [process.execPath, PINNED.script, 'app-server', '--stdio'], env: expect.any(Object), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }])
     expect(s.codex.requests('initialize')).toEqual([{ clientInfo: { name: 'delorun', title: 'Delorun', version: '0.1.0' }, capabilities: { experimentalApi: false, requestAttestation: false } }])
     expect(s.codex.received.some(frame => frame.method === 'initialized')).toBe(true)
     expect(session.programSessionId).toBe(THREAD)
     await session.close()
   })
 
+  it('withholds NODE_OPTIONS and every DELORUN_ name from the app-server (D16)', async () => {
+    vi.stubEnv('DELORUN_EA1_SPEC', 'host-only')
+    vi.stubEnv('NODE_OPTIONS', '--require /host/hook.cjs')
+    try {
+      const s = setup()
+      await (await s.driver.open(s.request())).close()
+      const env = s.spawned[0]?.env ?? {}
+      expect(Object.keys(env)).toEqual(expect.arrayContaining(['NODE_OPTIONS', 'DELORUN_EA1_SPEC']))
+      expect(Object.values(env).every(value => value === undefined)).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('starts a lasting thread asking under untrusted on a read-only base, never ephemeral (L31)', async () => {
     const s = setup()
     await (await s.driver.open(s.request())).close()
     expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'read-only', ephemeral: false }])
+  })
+
+  it.each([
+    ['another approval policy', { approvalPolicy: 'never' }],
+    ['a writable thread sandbox', { sandbox: { type: 'workspaceWrite', writableRoots: [], networkAccess: false } }],
+  ])('refuses a thread Codex reports with %s, and ends the process', async (_name, change) => {
+    const s = setup()
+    s.codex.answer('thread/start', { result: { ...threadOpened('gpt-5.6-luna'), ...change } })
+    expect((await failureOf(s.driver.open(s.request()))).failure).toMatchObject({ category: 'program' })
+    expect(s.codex.exited).toBe(true)
   })
 
   it('passes a picked model on thread/start and thread/resume (L33)', async () => {

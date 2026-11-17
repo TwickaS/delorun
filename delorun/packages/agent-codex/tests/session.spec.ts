@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent } from '@delorun/external-agents/contract'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, onTestFinished } from 'vitest'
+import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramRunRule } from '@delorun/external-agents/contract'
+import { recordAbsentNames, type AbsentNames } from '../src/leftovers.ts'
 import { CodexRpc } from '../src/rpc.ts'
 import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
 import { FakeAppServer, settle, type Frame } from './fake-app-server.ts'
 import {
-  COMMAND, EXEC, NEXT_TURN, TASK, THREAD, TURN, agentDelta, commandApproval, commandItem, itemFrame, rateLimits, tokenUsage,
+  COMMAND, EXEC, NEXT_TURN, TASK, THREAD, TURN, commandApproval, commandItem, itemFrame, rateLimits, tokenUsage,
   turnCompleted, turnStarted,
 } from './recorded.ts'
 
@@ -17,7 +21,7 @@ interface Harness {
   answer: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
 }
 
-function harness(options: { readonly requestTimeoutMs?: number } = {}): Harness {
+function harness(options: { readonly requestTimeoutMs?: number; readonly runRules?: readonly ProgramRunRule[]; readonly leftovers?: readonly AbsentNames[] } = {}): Harness {
   const codex = new FakeAppServer()
   const questions: ProgramApprovalRequest[] = []
   const limits: AccountObservation[] = []
@@ -36,6 +40,8 @@ function harness(options: { readonly requestTimeoutMs?: number } = {}): Harness 
       onLimits: (observation) => { limits.push(observation) },
       requestTimeoutMs: options.requestTimeoutMs ?? 5_000,
       closeWaitMs: 50,
+      runRules: options.runRules ?? [],
+      leftovers: options.leftovers ?? [],
     }),
   }
   h.session.attach(THREAD, TASK)
@@ -72,13 +78,13 @@ describe('turns', () => {
     expect(h.codex.requests('turn/start')).toEqual([{
       threadId: THREAD,
       input: [{ type: 'text', text: 'Run this shell command exactly: touch made-by-codex.txt. Then say done.', text_elements: [] }],
-      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true },
     }])
     expect(h.session.turnRunning).toBe(true)
     h.codex.notify('item/started', itemFrame(commandItem('inProgress')))
     h.codex.notify('item/completed', itemFrame(commandItem('completed', 0)))
     h.codex.notify('thread/tokenUsage/updated', tokenUsage(1200, 1000, 40))
-    h.codex.notify('item/agentMessage/delta', agentDelta('done'))
+    h.codex.notify('item/completed', itemFrame({ type: 'reasoning', id: 'rs_1', summary: ['Writing the answer.'], content: [] }))
     h.codex.notify('item/completed', itemFrame({ type: 'agentMessage', id: 'msg_0c90', text: 'done', phase: 'final_answer' }))
     h.codex.notify('thread/tokenUsage/updated', tokenUsage(1300, 1200, 2))
     h.codex.notify('turn/completed', turnCompleted('completed'))
@@ -87,6 +93,7 @@ describe('turns', () => {
       { kind: 'tool-call', id: EXEC, name: 'shell', input: JSON.stringify({ command: COMMAND, cwd: TASK }) },
       { kind: 'message-end' },
       { kind: 'tool-result', id: EXEC, output: '', isError: false },
+      { kind: 'reasoning', text: 'Writing the answer.' },
       { kind: 'text', text: 'done' },
       // Codex reports a request's usage after its tool call's message has ended, so both requests land on the next message.
       { kind: 'message-end', usage: { inputTokens: 300, outputTokens: 42, totalTokens: 2542, cacheReadTokens: 2200, reasoningTokens: 6 } },
@@ -139,7 +146,7 @@ describe('turns', () => {
     await h.session.send('next', 'start')
     h.codex.notify('turn/started', turnStarted(NEXT_TURN))
     h.codex.notify('item/completed', itemFrame(commandItem('completed', 0), TURN))
-    h.codex.notify('item/agentMessage/delta', agentDelta('stale', TURN))
+    h.codex.notify('item/completed', itemFrame({ type: 'agentMessage', id: 'msg_stale', text: 'stale' }, TURN))
     h.codex.notify('turn/completed', turnCompleted('completed', NEXT_TURN))
     expect(kinds(await untilTurnEnd(h.session))).toEqual(['turn-end'])
   })
@@ -267,6 +274,18 @@ describe('interrupt (L32)', () => {
     expect(await h.session.interrupt()).toBe('closed')
   })
 
+  it('removes the sandbox folders the program left in its writable root once the process has ended (decision 5)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ea1-codex-leftovers-'))
+    onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
+    mkdirSync(join(root, '.git'))
+    const h = harness({ leftovers: recordAbsentNames([root]) })
+    // The stand-in program's sandbox mounts over the two names that were missing.
+    mkdirSync(join(root, '.agents'))
+    mkdirSync(join(root, '.codex'))
+    await h.session.close()
+    expect(['.git', '.agents', '.codex'].map(name => existsSync(join(root, name)))).toEqual([true, false, false])
+  })
+
   it('terminates a process that does not exit when its input ends', async () => {
     const h = harness()
     h.codex.exitOnStdinEnd = false
@@ -304,7 +323,7 @@ describe('questions', () => {
 
   it.each([
     ['allow-once', 'accept'],
-    ['allow-run', 'acceptForSession'],
+    ['allow-run', 'accept'],
     ['reject', 'decline'],
     ['cancel', 'cancel'],
   ] as const)('answers %s with %s', async (answer, decision) => {
@@ -316,7 +335,50 @@ describe('questions', () => {
   it('offers "Allow for this run" with the exact command as its run rule', async () => {
     const h = harness()
     await raise(h, 'allow-run')
-    expect(h.questions[0]?.runRule).toEqual({ provider: 'codex', summary: COMMAND, data: { kind: 'command', command: COMMAND, cwd: TASK } })
+    expect(h.questions[0]?.runRule).toEqual({
+      provider: 'codex',
+      summary: COMMAND,
+      data: { kind: 'command', threadId: THREAD, argv: ['/usr/bin/zsh', '-lc', 'touch made-by-codex.txt'], cwd: TASK, environmentId: 'local' },
+    })
+  })
+
+  it('answers the same command again itself after "Allow for this run", and asks about any other (D4)', async () => {
+    const h = harness()
+    await startTurn(h)
+    h.answer = () => Promise.resolve('allow-run')
+    expect((await h.codex.ask(0, 'item/commandExecution/requestApproval', commandApproval())).result).toEqual({ decision: 'accept' })
+    h.answer = () => Promise.resolve('reject')
+    expect((await h.codex.ask(1, 'item/commandExecution/requestApproval', commandApproval('exec-2'))).result).toEqual({ decision: 'accept' })
+    expect((await h.codex.ask(2, 'item/commandExecution/requestApproval', commandApproval('exec-3', "/usr/bin/zsh -lc 'touch other.txt'"))).result).toEqual({ decision: 'decline' })
+    expect(h.questions.map(question => question.callId)).toEqual([EXEC, 'exec-3'])
+  })
+
+  it.each([
+    ['another folder', { cwd: `${TASK}/sub` }],
+    ['another argv split', { command: '/usr/bin/zsh -lc touch made-by-codex.txt' }],
+    ['an escalation reason', { reason: 'Needs to write outside the workspace.' }],
+    ['a network host', { networkApprovalContext: { host: 'example.com', protocol: 'https' } }],
+    ['another thread', { threadId: 'other-thread' }],
+  ])('asks again about the same command with %s, despite a rule handed back on open (D4)', async (_name, change) => {
+    const rule = { provider: 'codex' as const, summary: COMMAND, data: { kind: 'command', threadId: THREAD, argv: ['/usr/bin/zsh', '-lc', 'touch made-by-codex.txt'], cwd: TASK, environmentId: 'local' } }
+    const covered = harness({ runRules: [rule] })
+    await startTurn(covered)
+    expect((await covered.codex.ask(0, 'item/commandExecution/requestApproval', commandApproval())).result).toEqual({ decision: 'accept' })
+    expect(covered.questions).toEqual([])
+    const h = harness({ runRules: [rule] })
+    await startTurn(h)
+    await h.codex.ask(0, 'item/commandExecution/requestApproval', { ...commandApproval(), ...change })
+    expect(h.questions).toHaveLength(1)
+  })
+
+  it('never re-answers a file change, even after "Allow for this run" on one', async () => {
+    const h = harness()
+    await startTurn(h)
+    h.answer = () => Promise.resolve('allow-run')
+    const change = (itemId: string) => ({ threadId: THREAD, turnId: TURN, itemId, startedAtMs: 1, reason: null, grantRoot: null })
+    await h.codex.ask(0, 'item/fileChange/requestApproval', change('patch-1'))
+    await h.codex.ask(1, 'item/fileChange/requestApproval', change('patch-2'))
+    expect(h.questions).toHaveLength(2)
   })
 
   it('offers no run rule for input to a running terminal or a network host, and allows such a call once', async () => {

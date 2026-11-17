@@ -20,7 +20,8 @@ import { locateCodex, type LocatedCodex } from '@delorun/external-agents/locate'
 import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
-import { CodexSession } from './session.ts'
+import { recordAbsentNames } from './leftovers.ts'
+import { CodexSession, sandboxWritableRoots, type CodexSessionOptions } from './session.ts'
 
 /** The driver's settings, from its row's validated configuration. */
 export interface CodexDriverOptions {
@@ -57,6 +58,16 @@ export function codexLocator(profileDirectory: string): () => LocatedCodex | und
 }
 
 /**
+ * The environment overlay every app-server gets (D16): `NODE_OPTIONS` and every `DELORUN_*` name removed, on top of the
+ * subprocess owner's scrub and the gate's own removal.
+ * @param env - the Host's environment.
+ * @returns the overlay, each entry `undefined`.
+ */
+export function withheldEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(['NODE_OPTIONS', ...Object.keys(env).filter(name => name.startsWith('DELORUN_'))].map(name => [name, undefined]))
+}
+
+/**
  * The argv for the pinned app-server.
  * @param program - the located program.
  * @returns Node, the package's bin script and the app-server arguments.
@@ -77,7 +88,12 @@ export class CodexDriver implements ExternalAgentDriver {
 
   async open(request: ProgramOpenRequest): Promise<CodexSession> {
     request.signal.throwIfAborted()
-    const session = this.connect(request.spawn, request.onApproval, request.onLimits)
+    const session = this.connect(request.spawn, {
+      onApproval: request.onApproval,
+      onLimits: request.onLimits,
+      runRules: request.runRules,
+      leftovers: recordAbsentNames(sandboxWritableRoots(request.cwd, process.env.TMPDIR)),
+    })
     const close = (): void => { void session.session.close() }
     request.signal.addEventListener('abort', close, { once: true })
     try {
@@ -101,6 +117,10 @@ export class CodexDriver implements ExternalAgentDriver {
           throw error
         }
       }
+      // A thread Codex reports under any other policy, from its own configuration or a resumed thread's, is not run.
+      if (opened.approvalPolicy !== THREAD_POLICY.approvalPolicy || opened.sandbox.type !== 'readOnly') {
+        throw new ProgramOpenError({ category: 'program', detail: 'Codex opened the thread without asking before commands in a read-only sandbox.' })
+      }
       const offered = await this.listModels(rpc, request.signal)
       if (request.model === undefined && !offered.some(model => model.id === opened.model)) {
         throw new ProgramOpenError({ category: 'model-not-offered', configured: opened.model, offered })
@@ -118,7 +138,8 @@ export class CodexDriver implements ExternalAgentDriver {
 
   async probe(request: Parameters<ExternalAgentDriver['probe']>[0]): Promise<AccountObservation> {
     request.signal.throwIfAborted()
-    const session = this.connect(request.spawn, () => Promise.resolve('reject'), () => {})
+    // A limits check opens no thread and runs no command, so it has no rules and leaves nothing to remove.
+    const session = this.connect(request.spawn, { onApproval: () => Promise.resolve('reject'), onLimits: () => {}, runRules: [], leftovers: [] })
     const close = (): void => { void session.session.close() }
     request.signal.addEventListener('abort', close, { once: true })
     try {
@@ -144,13 +165,13 @@ export class CodexDriver implements ExternalAgentDriver {
   }
 
   /** Locate the program, refuse an untested version, and start the app-server through the gate. */
-  private connect(spawn: ProgramSpawn, onApproval: ProgramOpenRequest['onApproval'], onLimits: ProgramOpenRequest['onLimits']): { readonly rpc: CodexRpc; readonly session: CodexSession } {
+  private connect(spawn: ProgramSpawn, seat: Pick<CodexSessionOptions, 'onApproval' | 'onLimits' | 'runRules' | 'leftovers'>): { readonly rpc: CodexRpc; readonly session: CodexSession } {
     const program = this.options.locate()
     if (program === undefined) throw new ProgramOpenError({ category: 'program', detail: 'The Codex program was not found in the Codex pack.' })
     if (program.version !== TESTED_CODEX_VERSION) {
       throw new ProgramOpenError({ category: 'program', detail: `Codex ${program.version} is not a version Delorun has tested; Delorun runs Codex ${TESTED_CODEX_VERSION}.` })
     }
-    const handle = spawn({ argv: appServerArgv(program), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } })
+    const handle = spawn({ argv: appServerArgv(program), env: withheldEnvironment(process.env), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } })
     if (handle.stdin === undefined || handle.stdout === undefined) {
       handle.terminate()
       throw new ProgramOpenError({ category: 'program', detail: 'The Codex app-server started without its input and output pipes.' })
@@ -162,7 +183,7 @@ export class CodexDriver implements ExternalAgentDriver {
       handle.stderr.on('data', (chunk: string) => { tap?.('!', chunk) })
     }
     const rpc = new CodexRpc(handle.stdout, handle.stdin, tap)
-    const session = new CodexSession({ handle, rpc, onApproval, onLimits, requestTimeoutMs: this.options.requestTimeoutMs, closeWaitMs: this.options.closeWaitMs })
+    const session = new CodexSession({ ...seat, handle, rpc, requestTimeoutMs: this.options.requestTimeoutMs, closeWaitMs: this.options.closeWaitMs })
     return { rpc, session }
   }
 

@@ -17,10 +17,12 @@ import type {
   AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramInterruptOutcome,
   ProgramRunRule, ProgramSession,
 } from '@delorun/external-agents/contract'
-import { addUsage, commandRunRule, observationOf, toolCall, toolResult, turnFailure, usageOf } from './mapping.ts'
+import { removeSandboxLeftovers, type AbsentNames } from './leftovers.ts'
+import { addUsage, observationOf, toolCall, toolResult, turnFailure, usageOf } from './mapping.ts'
 import { MappedItem, TOOL_ITEM_TYPES, type CodexNotification, type CodexServerRequest, type RateLimitSnapshot, type ToolItem, type TurnError, type WireJson } from './protocol.ts'
 import { EventQueue } from './queue.ts'
 import { CodexRpcError, type CodexRpc, type RequestId } from './rpc.ts'
+import { commandRunRule, ruleCovers } from './run-rules.ts'
 
 /**
  * Why a session's process is gone:
@@ -66,6 +68,44 @@ export interface CodexSessionOptions {
   readonly requestTimeoutMs: number
   /** How long the process may take to exit after its input ends before it is terminated, in milliseconds. */
   readonly closeWaitMs: number
+  /** Rules the person allowed for this run before the process started (D4). */
+  readonly runRules: readonly ProgramRunRule[]
+  /** The sandbox's protected names each writable root lacked before the process started; removed after it ends. */
+  readonly leftovers: readonly AbsentNames[]
+}
+
+/** Codex's `workspaceWrite` sandbox policy, as `turn/start` takes it. */
+export interface WorkspaceSandbox {
+  readonly type: 'workspaceWrite'
+  readonly writableRoots: readonly string[]
+  readonly networkAccess: boolean
+  readonly excludeTmpdirEnvVar: boolean
+  readonly excludeSlashTmp: boolean
+}
+
+/**
+ * The sandbox every turn runs in: the workspace is the only writable root, with no network and neither `/tmp` nor
+ * `$TMPDIR`.
+ * @param workspace - the run folder.
+ * @returns Codex's `workspaceWrite` sandbox policy.
+ */
+export function workspaceSandbox(workspace: string): WorkspaceSandbox {
+  return { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true }
+}
+
+/**
+ * The folders a turn's sandbox makes writable, where Codex mounts over its protected names.
+ * @param workspace - the run folder.
+ * @param tmpdir - the program's `$TMPDIR`, if set.
+ * @returns the writable roots.
+ */
+export function sandboxWritableRoots(workspace: string, tmpdir: string | undefined): string[] {
+  const policy = workspaceSandbox(workspace)
+  return [
+    ...policy.writableRoots,
+    ...policy.excludeSlashTmp ? [] : ['/tmp'],
+    ...policy.excludeTmpdirEnvVar || tmpdir === undefined ? [] : [tmpdir],
+  ]
 }
 
 /** The result recorded for a call still open when its turn ended. */
@@ -73,9 +113,10 @@ const UNFINISHED_CALL = 'The call did not finish before the turn ended.'
 /** The person's-view detail for a process that ended during a turn. */
 const PROCESS_ENDED = 'Codex stopped unexpectedly.'
 
-const DECISIONS: Readonly<Record<ProgramApprovalAnswer, 'accept' | 'acceptForSession' | 'decline' | 'cancel'>> = {
+/** Codex's decision for each answer; "Allow for this run" is a one-time accept, and the driver keeps the rule. */
+const DECISIONS: Readonly<Record<ProgramApprovalAnswer, 'accept' | 'decline' | 'cancel'>> = {
   'allow-once': 'accept',
-  'allow-run': 'acceptForSession',
+  'allow-run': 'accept',
   reject: 'decline',
   cancel: 'cancel',
 }
@@ -92,7 +133,6 @@ export class CodexSession implements ProgramSession {
   private currentTurn: string | undefined
   private starting = false
   private readonly openCalls = new Map<string, OpenCall>()
-  private readonly streamedMessages = new Set<string>()
   private messageOpen = false
   private pendingUsage: TokenUsage | undefined
   private lastError: TurnError | undefined
@@ -101,11 +141,13 @@ export class CodexSession implements ProgramSession {
   private closed: CodexClosedReason | undefined
   private closing: Promise<void> | undefined
   private readonly turnEndWaiters: (() => void)[] = []
+  private readonly runRules: ProgramRunRule[]
   private readonly options: CodexSessionOptions
 
   /** @param options - the process, its connection, the seat's callbacks and the timeouts. */
   constructor(options: CodexSessionOptions) {
     this.options = options
+    this.runRules = [...options.runRules]
     options.rpc.start({
       notification: (notification) => { this.notification(notification) },
       request: (request, id) => this.serverRequest(request, id),
@@ -203,9 +245,8 @@ export class CodexSession implements ProgramSession {
     return this.shutDown('closed')
   }
 
-  /** Codex's `workspace-write` sandbox for one turn: the workspace and temporary folders writable, no network. */
-  private sandboxPolicy(): Readonly<Record<string, unknown>> {
-    return { type: 'workspaceWrite', writableRoots: [this.workspace], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
+  private sandboxPolicy(): WorkspaceSandbox {
+    return workspaceSandbox(this.workspace)
   }
 
   private assertOpen(): void {
@@ -219,7 +260,6 @@ export class CodexSession implements ProgramSession {
   private beginTurn(): void {
     this.starting = true
     this.openCalls.clear()
-    this.streamedMessages.clear()
     this.messageOpen = false
     this.lastError = undefined
   }
@@ -263,23 +303,19 @@ export class CodexSession implements ProgramSession {
           if (!this.openCalls.has(mapped.id)) this.announce(mapped.id, mapped.type, toolCall(mapped), mapped)
           this.openCalls.delete(mapped.id)
           this.emit({ kind: 'tool-result', id: mapped.id, ...toolResult(mapped) })
-        } else if (item.type === 'agentMessage' && !this.streamedMessages.has(item.id)) {
+        } else if (item.type === 'agentMessage' || item.type === 'reasoning') {
           const parsed = MappedItem.safeParse(item)
-          if (parsed.success && parsed.data.type === 'agentMessage' && parsed.data.text !== '') this.emit({ kind: 'text', text: parsed.data.text })
+          if (!parsed.success) {
+            this.violation(new Error(`${item.type}: Codex's item has fields Delorun cannot read`))
+            break
+          }
+          if (parsed.data.type === 'agentMessage' && parsed.data.text !== '') this.emit({ kind: 'text', text: parsed.data.text })
+          if (parsed.data.type === 'reasoning') {
+            // The summary is the reasoning Codex shows; its raw content only when there is no summary.
+            const text = (parsed.data.summary.length > 0 ? parsed.data.summary : parsed.data.content).join('\n\n')
+            if (text !== '') this.emit({ kind: 'reasoning', text })
+          }
         }
-        break
-      }
-      case 'item/agentMessage/delta': {
-        const { threadId, turnId, itemId, delta } = notification.params
-        if (!this.isCurrent(turnId, threadId)) break
-        this.streamedMessages.add(itemId)
-        this.emit({ kind: 'text', text: delta })
-        break
-      }
-      case 'item/reasoning/summaryTextDelta':
-      case 'item/reasoning/textDelta': {
-        const { threadId, turnId, delta } = notification.params
-        if (this.isCurrent(turnId, threadId)) this.emit({ kind: 'reasoning', text: delta })
         break
       }
       case 'thread/tokenUsage/updated':
@@ -311,7 +347,7 @@ export class CodexSession implements ProgramSession {
   /** Parse a tool item; an item of a mapped type with unreadable fields breaks the session. */
   private toolItem(item: { readonly type: string; readonly id: string }): ToolItem | undefined {
     const parsed = MappedItem.safeParse(item)
-    if (!parsed.success || parsed.data.type === 'agentMessage') {
+    if (!parsed.success || parsed.data.type === 'agentMessage' || parsed.data.type === 'reasoning') {
       this.violation(new Error(`${item.type}: Codex's item has fields Delorun cannot read`))
       return undefined
     }
@@ -391,6 +427,7 @@ export class CodexSession implements ProgramSession {
       } catch (_unobservable) {
         // The subprocess owner can no longer see the range; it reports that itself, and the session is closed either way.
       }
+      removeSandboxLeftovers(this.options.leftovers)
       this.queue.close(new CodexSessionClosedError(reason))
     })()
     return this.closing
@@ -404,10 +441,14 @@ export class CodexSession implements ProgramSession {
         const command = params.command ?? (call?.type === 'commandExecution' ? call.command : undefined)
         const cwd = params.cwd ?? (call?.type === 'commandExecution' ? call.cwd : undefined)
         if (!this.openCalls.has(params.itemId)) this.announce(params.itemId, 'commandExecution', { name: 'shell', input: JSON.stringify({ command: command ?? null, cwd: cwd ?? null }) })
-        const runRule = commandRunRule({ kind: params.kind, command, cwd, networkApprovalContext: params.networkApprovalContext })
+        const question = { ...params, command, cwd }
+        // A question a rule from this run covers is answered once here; Codex never gets a session-wide answer (D4).
+        if (params.turnId === this.currentTurn && this.closed === undefined && this.runRules.some(rule => ruleCovers(rule, question))) return { decision: 'accept' }
+        const runRule = commandRunRule(question)
         const reason = [command ?? 'a command', params.reason].filter(part => typeof part === 'string' && part !== '').join('\n')
         const answer = await this.ask(id, params.turnId, { callId: params.itemId, toolName: 'shell', reason, ...runRule === undefined ? {} : { runRule } })
-        return { decision: answer === 'allow-run' && runRule === undefined ? 'accept' : DECISIONS[answer] }
+        if (answer === 'allow-run' && runRule !== undefined) this.runRules.push(runRule)
+        return { decision: DECISIONS[answer] }
       }
       case 'item/fileChange/requestApproval': {
         const { params } = request
@@ -417,7 +458,7 @@ export class CodexSession implements ProgramSession {
         const reason = [paths.join('\n'), params.reason, params.grantRoot].find(part => typeof part === 'string' && part !== '') ?? 'a file change'
         const answer = await this.ask(id, params.turnId, { callId: params.itemId, toolName: 'apply_patch', reason })
         // A file change has no run rule, so "Allow for this run" allows this change once.
-        return { decision: answer === 'allow-run' ? 'accept' : DECISIONS[answer] }
+        return { decision: DECISIONS[answer] }
       }
       case 'item/permissions/requestApproval':
         // Wider sandbox permissions are never granted to a seat: the answer grants nothing, for this turn only.

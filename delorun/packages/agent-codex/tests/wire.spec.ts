@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { commandRunRule, limitResetsAt, observationOf, toolCall, toolResult, turnFailure, usageOf } from '../src/mapping.ts'
+import { limitResetsAt, observationOf, toolCall, toolResult, turnFailure, usageOf } from '../src/mapping.ts'
 import { RateLimitSnapshot, TESTED_CODEX_VERSION, TurnError } from '../src/protocol.ts'
 import { CodexClosedError, CodexRpc, CodexRpcError, CodexWireError } from '../src/rpc.ts'
 import { FakeAppServer, settle } from './fake-app-server.ts'
@@ -112,10 +112,4 @@ describe('mappings', () => {
     expect(observation.windows[0]).toMatchObject({ status: 'reached' })
   })
 
-  it('builds a run rule only for one plain command', () => {
-    expect(commandRunRule({ command: 'touch a.txt', cwd: '/w' })).toEqual({ provider: 'codex', summary: 'touch a.txt', data: { kind: 'command', command: 'touch a.txt', cwd: '/w' } })
-    expect(commandRunRule({ kind: 'writeStdin', command: 'y' })).toBeUndefined()
-    expect(commandRunRule({ command: '  ' })).toBeUndefined()
-    expect(commandRunRule({ command: 'curl x', networkApprovalContext: { host: 'x' } })).toBeUndefined()
-  })
 })

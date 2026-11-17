@@ -1,12 +1,11 @@
 /**
  * Pure mappings from Codex's wire values to the driver contract: tool items to tool calls and results, token usage,
- * turn errors to the closed failure set, rate limits and models to an account observation, and a command question
- * to the run rule "Allow for this run" would grant.
+ * turn errors to the closed failure set, and rate limits and models to an account observation.
  * @module @delorun/agent-codex/mapping
  */
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
-import type { AccountObservation, LimitWindow, OfferedModel, ProgramFailure, ProgramRunRule } from '@delorun/external-agents/contract'
+import type { AccountObservation, LimitWindow, OfferedModel, ProgramFailure } from '@delorun/external-agents/contract'
 import type { ClientResult, RateLimitSnapshot, TokenUsageBreakdown, ToolItem, TurnError, WireJson } from './protocol.ts'
 
 /** A program tool call as the seat records it. */
@@ -197,28 +196,4 @@ export function observationOf(parts: ObservationParts): AccountObservation {
     ...parts.offered === undefined ? {} : { offeredModels: parts.offered },
     source: parts.source,
   }
-}
-
-/** A command question's fields that decide whether "Allow for this run" covers exactly one command. */
-export interface CommandQuestion {
-  readonly kind?: 'command' | 'writeStdin' | undefined
-  readonly command?: string | null | undefined
-  readonly cwd?: string | null | undefined
-  readonly networkApprovalContext?: unknown
-}
-
-/**
- * The run rule for a command question, when Codex's `acceptForSession` would allow exactly that command again.
- * Codex keeps a session approval per exact command, so a plain command qualifies; input to a running terminal and a
- * network-host question do not, because the session approval would cover more than this call.
- * @param question - the command question.
- * @returns the rule, or undefined when "Allow for this run" is not offered.
- */
-export function commandRunRule(question: CommandQuestion): ProgramRunRule | undefined {
-  if ((question.kind ?? 'command') !== 'command') return undefined
-  if (question.networkApprovalContext !== null && question.networkApprovalContext !== undefined) return undefined
-  const command = question.command
-  if (typeof command !== 'string' || command.trim() === '') return undefined
-  const cwd = question.cwd ?? null
-  return { provider: 'codex', summary: command, data: { kind: 'command', command, cwd } }
 }

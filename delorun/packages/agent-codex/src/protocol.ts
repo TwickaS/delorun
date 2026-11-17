@@ -28,7 +28,12 @@ export const InitializeResult = z.looseObject({ userAgent: z.string() })
 const Thread = z.looseObject({ id: z.string().min(1), model: z.string().nullable().optional() })
 
 /** `thread/start` and `thread/resume` results: the thread and the model it runs. */
-export const ThreadOpenResult = z.looseObject({ thread: Thread, model: z.string() })
+export const ThreadOpenResult = z.looseObject({
+  thread: Thread,
+  model: z.string(),
+  approvalPolicy: z.union([z.string(), z.record(z.string(), JsonSchema)]),
+  sandbox: z.looseObject({ type: z.string() }),
+})
 
 /** The error carried by a failed turn or an `error` notification. `codexErrorInfo` is a name or a one-key object. */
 export const TurnError = z.looseObject({
@@ -127,13 +132,14 @@ const McpToolCallItem = z.looseObject({
 })
 const WebSearchItem = z.looseObject({ type: z.literal('webSearch'), id: z.string(), query: z.string() })
 const AgentMessageItem = z.looseObject({ type: z.literal('agentMessage'), id: z.string(), text: z.string() })
+const ReasoningItem = z.looseObject({ type: z.literal('reasoning'), id: z.string(), summary: z.array(z.string()), content: z.array(z.string()) })
 
 /** A thread item the driver maps; any other item type is not shown. */
-export const MappedItem = z.discriminatedUnion('type', [CommandExecutionItem, FileChangeItem, McpToolCallItem, WebSearchItem, AgentMessageItem])
+export const MappedItem = z.discriminatedUnion('type', [CommandExecutionItem, FileChangeItem, McpToolCallItem, WebSearchItem, AgentMessageItem, ReasoningItem])
 /** A parsed mapped item. */
 export type MappedItem = z.infer<typeof MappedItem>
 /** A mapped item that is one of the program's own tool calls. */
-export type ToolItem = Exclude<MappedItem, { readonly type: 'agentMessage' }>
+export type ToolItem = Exclude<MappedItem, { readonly type: 'agentMessage' | 'reasoning' }>
 /** The item types that are tool calls. */
 export const TOOL_ITEM_TYPES: ReadonlySet<string> = new Set(['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch'])
 
@@ -141,7 +147,6 @@ export const TOOL_ITEM_TYPES: ReadonlySet<string> = new Set(['commandExecution',
 const AnyItem = z.looseObject({ type: z.string(), id: z.string() })
 
 const ItemNotification = z.looseObject({ threadId: z.string(), turnId: z.string(), item: AnyItem })
-const DeltaNotification = z.looseObject({ threadId: z.string(), turnId: z.string(), itemId: z.string(), delta: z.string() })
 const TokenUsageBreakdown = z.looseObject({
   totalTokens: z.number(),
   inputTokens: z.number(),
@@ -159,9 +164,6 @@ export const NOTIFICATIONS = {
   'turn/completed': z.looseObject({ threadId: z.string(), turn: Turn }),
   'item/started': ItemNotification,
   'item/completed': ItemNotification,
-  'item/agentMessage/delta': DeltaNotification,
-  'item/reasoning/summaryTextDelta': DeltaNotification,
-  'item/reasoning/textDelta': DeltaNotification,
   'thread/tokenUsage/updated': z.looseObject({ threadId: z.string(), turnId: z.string(), tokenUsage: z.looseObject({ last: TokenUsageBreakdown }) }),
   'account/rateLimits/updated': z.looseObject({ rateLimits: RateLimitSnapshot }),
   error: z.looseObject({ error: TurnError, willRetry: z.boolean(), threadId: z.string(), turnId: z.string() }),
@@ -184,7 +186,9 @@ export const SERVER_REQUESTS = {
     reason: nullableString,
     command: nullableString,
     cwd: nullableString,
+    environmentId: nullableString,
     networkApprovalContext: z.looseObject({ host: z.string() }).nullable().optional(),
+    proposedNetworkPolicyAmendments: z.array(JsonSchema).nullable().optional(),
   }),
   'item/fileChange/requestApproval': z.looseObject({
     threadId: z.string(),

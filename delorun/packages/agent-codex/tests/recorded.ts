@@ -32,6 +32,7 @@ export function threadOpened(model: string, id = THREAD): Frame {
     modelProvider: 'openai',
     cwd: TASK,
     approvalPolicy: 'untrusted',
+    sandbox: { type: 'readOnly', networkAccess: false },
     reasoningEffort: 'low',
   }
 }
@@ -73,8 +74,6 @@ export function commandApproval(itemId = EXEC, command = COMMAND): Frame {
     availableDecisions: ['accept', { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['touch', 'made-by-codex.txt'] } }, 'cancel'],
   }
 }
-
-export const agentDelta = (delta: string, turnId = TURN): Frame => ({ threadId: THREAD, turnId, itemId: 'msg_0c90', delta })
 
 /** `thread/tokenUsage/updated` after one model request. */
 export function tokenUsage(input: number, cached: number, output: number, turnId = TURN): Frame {
