@@ -24,6 +24,7 @@
  * | `delorun devices list \| approve \| remove <id> \| code` | the devices this home trusts, managed at this computer (contract C5; [devices](./devices/command.ts)) |
  * | `delorun workspace full-access [<folder> on \| off]` | a workspace's full access, turned on after a confirmation at this computer or off (contract C1; [workspace](./workspace/command.ts)) |
  * | `delorun agents login <claude-code \| codex>` | signs an added agent in with the provider's own program from the agent's package, at a terminal ([agents](./agents/command.ts)) |
+ * | `delorun agents status [claude-code \| codex] [--refresh] [--json]` | each added agent's sign-in, plan and plan-limit windows with their reset times and when they were seen, from the running Host (`agents.accounts`, contract C19) or the accounts file; `--refresh` asks the running Host to check now ([status](./agents/status.ts)) |
  * | `delorun workspace external-agents [<folder> <agent> on \| off]` | the external agents, such as Claude Code, that start in a workspace without asking, allowed after a confirmation at this computer or revoked (contract C14; [external agents](./workspace/external-agents.ts)) |
  * | `delorun mcp list \| accept <server> \| decline <server> \| revoke <command>` | the stdio MCP servers the running studio holds stopped, answered at this computer, and the server commands it allows (contract C19; [mcp](./mcp/command.ts)) |
  * | `delorun preview list \| on <flag> \| off <flag>` | the studio features a plugin declares as previews, and the profile row that turns one on ([preview](./preview/command.ts)) |
@@ -87,7 +88,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
   { name: 'devices', summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
   { name: 'workspace', summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]', load: async () => (await import('./workspace/command.ts')).workspaceCommand },
-  { name: 'agents', summary: 'Sign an added agent in without a separately installed command: login <claude-code|codex>', load: async () => (await import('./agents/command.ts')).agentsCommand },
+  { name: 'agents', summary: 'Sign an added agent in, or see its sign-in and plan limits: login <claude-code|codex>, status', load: async () => (await import('./agents/command.ts')).agentsCommand },
   { name: 'mcp', summary: 'The MCP servers waiting for your answer and the ones allowed: list, accept, decline, revoke', load: async () => (await import('./mcp/command.ts')).mcpCommand },
   { name: 'trash', summary: 'List deleted chats and workspaces; restore a chat, or delete one item or all forever', load: async () => (await import('./trash/command.ts')).trashCommand },
   { name: 'export', summary: 'Write a chat, or a workspace with its chats, as an archive signed by this home', load: async () => (await import('./export/command.ts')).exportCommand },

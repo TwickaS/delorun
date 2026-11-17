@@ -47,7 +47,7 @@ describe('agents.accounts and agents.refresh', () => {
     const accounts = new FakeAccounts(true)
     await expect(agentsAccounts(ACCOUNTS, accounts)).resolves.toEqual({ accounts: [], now: 1 })
     await expect(agentsRefresh(REFRESH, 'person', accounts)).resolves.toEqual({ outcome: { kind: 'checked' }, now: 1 })
-    expect(accounts.calls).toEqual(['accounts', 'refresh codex sign-in'])
+    expect(accounts.calls).toEqual(['accounts', 'refresh codex signed-in'])
   })
 
   it('name a missing Host or account service as unavailable', async () => {
