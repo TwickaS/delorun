@@ -546,7 +546,14 @@ class GateSession implements SeatSession {
 
   async send(text: string, mode: 'start' | 'steer'): Promise<void> {
     if (mode === 'start') {
-      const refusal = await this.options.reviewTurn?.()
+      let refusal: string | undefined
+      try {
+        refusal = await this.options.reviewTurn?.()
+      } catch (error) {
+        // A review that cannot finish is no approval: the program ends before the error reaches the seat.
+        await this.options.end()
+        throw error
+      }
       if (refusal !== undefined) {
         await this.options.end()
         throw new GateRefusedError({ category: 'consent', reason: refusal })

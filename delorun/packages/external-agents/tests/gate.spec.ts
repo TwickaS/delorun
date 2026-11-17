@@ -468,6 +468,19 @@ describe('each seat turn', () => {
     expect(w.driver.processes[0]?.terminated).toBe(true)
   })
 
+  it('ends the program when a turn\'s review fails, and passes the failure on', async () => {
+    const w = await world()
+    const session = await w.gate.start(start(w))
+    await session.send('first', 'start')
+    w.consent.verdict = (review) => {
+      if (review.phase === 'turn') throw new Error('the grants file cannot be read')
+      return { kind: 'allow', timeoutMs: 60_000, why: 'lease' }
+    }
+    await expect(session.send('second', 'start')).rejects.toThrow('the grants file cannot be read')
+    expect(w.driver.sessions[0]?.sent).toEqual([['first', 'start']])
+    expect(w.driver.processes[0]?.terminated).toBe(true)
+  })
+
   it('steers without a review', async () => {
     const w = await world()
     const session = await w.gate.start(start(w))
