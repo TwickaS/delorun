@@ -17,12 +17,22 @@ import { PinLock } from '../src/client/PinLock.tsx'
 import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
 import { applyPin, applyUnlock, PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { UnlockView } from '../src/client/unlock.ts'
+import { createUnlockSource, type UnlockView } from '../src/client/unlock.ts'
 import { UnlockOverlay } from '../src/client/UnlockOverlay.tsx'
 import { en as devicesEn } from '../src/client/devices-locales.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { fakeHost, type Answer } from './fake-host.ts'
+
+/**
+ * Show the lock screen as an action that needs the unlock does: ask for it, then render it.
+ * @param source - the lock's store.
+ * @returns the render result.
+ */
+function renderLock(source: PinSource) {
+  source.ask()
+  return render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={source.unlock} dismiss={source.dismiss} />)
+}
 
 const NOW = Date.UTC(2026, 10, 14, 9, 0, 0)
 const IDLE = 15 * 60_000
@@ -87,13 +97,37 @@ async function unlocked(extra: Parameters<typeof fakeHost>[0] = {}, state: objec
 }
 
 describe('the lock screen on a device', () => {
-  it('locks a fresh page when the mode is on and the page holds no token', async () => {
-    // Fails without: the phase `locked` for a page with no token (a reload starts here, as the token is page memory).
+  it('leaves a fresh page open and locked when the mode is on, and shows the lock screen only when an action asks', async () => {
+    // Fails without: the phase `locked` for a page with no token (a reload starts here, as the token is page memory), and a studio that opens without the PIN.
     const { source, host } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn() })
     expect(phase(source)).toBe('locked')
     expect(headerOf(host.received[0]?.init)).toBeUndefined()
-    render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={source.unlock} />)
+    const view = render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={source.unlock} dismiss={source.dismiss} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    view.unmount()
+    renderLock(source)
     expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('asks only while locked, closes with Not now, and closes on a successful unlock', async () => {
+    // Fails without: ask() answering false off a locked page, dismiss leaving the screen up, and an unlock leaving `asked` set.
+    const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn(), [key(PIN_ROUTES.unlock, 'POST')]: ok({ token: TOKEN, unlockId: 'u1', endsAt: NOW + 3_600_000, idleEndsAt: NOW + IDLE }) })
+    expect(source.ask()).toBe(true)
+    expect(source.hooks.pin.getSnapshot().asked).toBe(true)
+    renderLock(source)
+    fireEvent.click(screen.getByRole('button', { name: en.notNow }))
+    expect(source.hooks.pin.getSnapshot().asked).toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    source.ask()
+    await act(async () => { await source.unlock('483920') })
+    expect(source.hooks.pin.getSnapshot()).toMatchObject({ phase: 'unlocked', asked: false })
+    expect(source.ask()).toBe(false)
+  })
+
+  it('does not ask on the computer or while the mode is off', async () => {
+    const off = await open({ [key(PIN_ROUTES.state, 'GET')]: ok({ kind: 'off' }) })
+    expect(off.source.ask()).toBe(false)
+    expect(createPinSource(fakeHost({}).fetch, () => NOW, true).ask()).toBe(false)
   })
 
   it('stays out of the way when the mode is off, the home is older (404) or the page is on the computer', async () => {
@@ -109,7 +143,7 @@ describe('the lock screen on a device', () => {
     await onComputer.refresh()
     expect(phase(onComputer)).toBe('off')
     expect(host.received).toHaveLength(0)
-    const { container } = render(<PinLock t={t} usePin={bindSnapshotSelector(off.source.hooks.pin)} unlock={off.source.unlock} />)
+    const { container } = renderLock(off.source)
     expect(container.textContent).toBe('')
   })
 
@@ -148,7 +182,7 @@ describe('the lock screen on a device', () => {
   ] as const)('says %s in place', async (_name, answer, outcome, copy) => {
     // Fails without: the outcome of each refusal code and its copy on the lock screen.
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn(), [key(PIN_ROUTES.unlock)]: answer })
-    render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={source.unlock} />)
+    renderLock(source)
     const field = screen.getByLabelText('PIN') as HTMLInputElement
     fireEvent.change(field, { target: { value: '135792' } })
     fireEvent.click(screen.getByRole('button', { name: 'Unlock' }))
@@ -173,7 +207,8 @@ describe('the lock screen on a device', () => {
     // Fails without: the six-digit minimum, the input attributes, and clearing the field on submit.
     const unlock = vi.fn(async () => {})
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn() })
-    render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={unlock} />)
+    source.ask()
+    render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={unlock} dismiss={source.dismiss} />)
     const field = screen.getByLabelText('PIN') as HTMLInputElement
     expect(field.getAttribute('inputmode')).toBe('numeric')
     expect(field.getAttribute('autocomplete')).toBe('off')
@@ -196,7 +231,8 @@ describe('the lock screen on a device', () => {
   it('fills one dot per digit typed and never writes a digit into the dots', async () => {
     // Fails without: the dots, which count digits and must not carry their value in text or attributes.
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn() })
-    const { container } = render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={async () => {}} />)
+    source.ask()
+    const { container } = render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={async () => {}} dismiss={() => {}} />)
     const dots = container.querySelector('[data-dots]') as HTMLElement
     expect(dots.children).toHaveLength(6)
     expect(dots.getAttribute('data-dots')).toBe('0')
@@ -213,16 +249,16 @@ describe('the lock screen on a device', () => {
 
   it('shakes the dots on a wrong PIN and says the tries left, unless the person asked for less motion', () => {
     // Fails without: the shake on a wrong answer, or its removal under prefers-reduced-motion.
-    const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind: 'wrong', triesLeft: 3 }, paused: false } as const
+    const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind: 'wrong', triesLeft: 3 }, paused: false, asked: true } as const
     const usePin = ((select: (current: typeof view) => unknown) => select(view)) as never
     const matchMedia = (reduce: boolean) => vi.fn((query: string) => ({ matches: query.includes('reduce') ? reduce : false }))
     vi.stubGlobal('matchMedia', matchMedia(false))
-    const first = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} />)
+    const first = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} dismiss={() => {}} />)
     expect(first.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(true)
     expect(screen.getByRole('alert').textContent).toBe(en['wrong.other'].replace('{count}', '3'))
     first.unmount()
     vi.stubGlobal('matchMedia', matchMedia(true))
-    const second = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} />)
+    const second = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} dismiss={() => {}} />)
     expect(second.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(false)
     expect(screen.getByRole('alert').textContent).toContain('3 tries left')
     vi.unstubAllGlobals()
@@ -232,8 +268,8 @@ describe('the lock screen on a device', () => {
     // Fails without: a heading and an icon for paused, unreachable, address and failed outcomes.
     const headings = { paused: 'paused.title', unreachable: 'unreachable.title', address: 'address.title', failed: 'failed.title' } as const
     for (const [kind, title] of Object.entries(headings) as [keyof typeof headings, (typeof headings)[keyof typeof headings]][]) {
-      const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind }, paused: false } as const
-      const { container, unmount } = render(<PinLock t={t} usePin={((select: (current: typeof view) => unknown) => select(view)) as never} unlock={async () => {}} />)
+      const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind }, paused: false, asked: true } as const
+      const { container, unmount } = render(<PinLock t={t} usePin={((select: (current: typeof view) => unknown) => select(view)) as never} unlock={async () => {}} dismiss={() => {}} />)
       const notice = container.querySelector(`[data-outcome="${kind}"]`) as HTMLElement
       expect(notice.textContent).toContain(en[title])
       expect(notice.textContent).toContain(en[kind])
@@ -245,7 +281,7 @@ describe('the lock screen on a device', () => {
   it('asks for a passcode in a text field without a keypad when the home takes a passcode', async () => {
     // Fails without: the passcode kind, which takes any characters and no keypad.
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn({ secret: 'passcode' }) })
-    render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={source.unlock} />)
+    renderLock(source)
     const field = screen.getByLabelText('Passcode') as HTMLInputElement
     expect(field.getAttribute('inputmode')).toBe('text')
     fireEvent.change(field, { target: { value: 'correct horse' } })
@@ -433,5 +469,25 @@ describe('the plugin wiring', () => {
     } finally {
       await ctx.fiber.dispose()
     }
+  })
+})
+
+describe('an action that needs an unlock, under PIN mode', () => {
+  const READ: Answer = { status: 200, body: { kind: 'none', unlockMinutes: 15 } }
+
+  it('asks the PIN lock screen and opens no code dialog; without PIN mode the code dialog opens', async () => {
+    // Fails without: the hand-over to the PIN (the device would ask for a code at the computer under PIN mode), or the code dialog where the PIN does not apply.
+    const host = fakeHost({ [key(ELEVATION_ROUTES.state, 'GET')]: READ })
+    const asked = vi.fn(() => true)
+    const withPin = createUnlockSource(host.fetch, () => NOW, false, asked)
+    await withPin.refresh()
+    withPin.refused('elevation-required: terminal/create')
+    withPin.open()
+    expect(asked).toHaveBeenCalledTimes(2)
+    expect(withPin.hooks.unlock.getSnapshot().dialog).toBeNull()
+    const withoutPin = createUnlockSource(host.fetch, () => NOW, false, () => false)
+    await withoutPin.refresh()
+    withoutPin.refused('elevation-required: terminal/create')
+    expect(withoutPin.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: 'terminal/create' })
   })
 })

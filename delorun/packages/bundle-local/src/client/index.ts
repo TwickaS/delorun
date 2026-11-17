@@ -718,7 +718,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @returns the store, which the Devices section reads too.
  */
 export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
-  const unlock = createUnlockSource(fetch, Date.now, onComputer)
+  const unlock = createUnlockSource(fetch, Date.now, onComputer, () => pin?.ask() === true)
   // Lock now ends the page's PIN unlock when it holds one, and the device's elevation otherwise.
   const lock = async (): Promise<void> => {
     if (pin?.holdsUnlock() === true) await pin.lock()
@@ -755,7 +755,7 @@ export function applyPin(ctx: Context, fetch: HostFetch, onComputer = false): Pi
     name: 'shell.overlay',
     id: PIN_LOCK_OVERLAY_ID,
     locale: PIN_NS,
-    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock }),
+    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock, dismiss: pin.dismiss }),
   }, PinLock))
   return pin
 }

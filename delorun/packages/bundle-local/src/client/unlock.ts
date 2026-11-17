@@ -79,9 +79,10 @@ const NONE: ElevationState = { kind: 'none' }
  * @param now - the clock, in milliseconds since the epoch.
  * @param onComputer - whether the page is on the home's own computer, where no device unlocks: the store is `away` and
  *   reads nothing.
+ * @param askPin - asks the PIN lock screen for the unlock; true when it handled the request, so no code dialog opens.
  * @returns the store.
  */
-export function createUnlockSource(fetch: HostFetch, now: () => number = Date.now, onComputer = false): UnlockSource {
+export function createUnlockSource(fetch: HostFetch, now: () => number = Date.now, onComputer = false, askPin: () => boolean = () => false): UnlockSource {
   let view: UnlockView = { place: onComputer ? 'away' : 'unknown', state: NONE, dialog: null, ended: 0, lockFailed: false }
   let endings = 0
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -161,13 +162,15 @@ export function createUnlockSource(fetch: HostFetch, now: () => number = Date.no
     refresh,
     refused(reason) {
       if (reason?.startsWith(ELEVATION_REQUIRED) !== true || view.place === 'away') return
+      // Under PIN mode the unlock is the PIN, not a code typed at the computer.
+      if (askPin()) return
       const action = reason.slice(ELEVATION_REQUIRED.length).trim()
       publish({ dialog: { action: action === '' ? undefined : action, busy: false, outcome: undefined } })
       // A refusal while the banner shows means the unlock ended where this page did not see it.
       void refresh()
     },
     open() {
-      if (view.place !== 'device') return
+      if (view.place !== 'device' || askPin()) return
       publish({ dialog: { action: undefined, busy: false, outcome: undefined } })
     },
     async request() {
