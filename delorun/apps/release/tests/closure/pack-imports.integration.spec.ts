@@ -1,11 +1,12 @@
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PackEntry, RuntimePlatform, SemanticVersion, Sha256Hex, Sha512Base64 } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { describeUnresolved, importedSpecifiers, linkCarriedNeeds, nestedSingleCopies, packageNameOf, rangeProblem, unresolvedPackImports, type PackLayout } from '../../src/closure/pack-imports.ts'
-import { buildPack, keepsOneCopy, type PackSources } from '../../src/closure/packs.ts'
+import { describeUnresolved, importedSpecifiers, linkCarriedNeeds, nestedSingleCopies, packageNameOf, rangeProblem, undeclaredPeerNeeds, unresolvedPackImports, type PackLayout } from '../../src/closure/pack-imports.ts'
+import { buildPack, keepsOneCopy, type DeclaredPeers, type PackSources } from '../../src/closure/packs.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from '../../src/closure/plugin-set.ts'
 import { packProblemsAt } from '../../src/check-pack-imports.ts'
 
@@ -64,7 +65,7 @@ describe('checking that every package of a pack resolves its needs', () => {
       'node_modules/own-dep/package.json': json({ name: 'own-dep', dependencies: { 'left-out': '1.0.0' } }),
     })
     const unresolved = await unresolvedPackImports(missing)
-    expect(unresolved).toEqual([{ importer: 'own-dep', directory: 'node_modules/own-dep', name: 'left-out', via: 'dependencies', range: '1.0.0' }])
+    expect(unresolved).toEqual([{ importer: 'own-dep', directory: 'node_modules/own-dep', name: 'left-out', via: 'dependencies', range: '1.0.0', declared: true }])
     expect(describeUnresolved(unresolved[0]!)).toBe('own-dep (node_modules/own-dep) lists left-out in dependencies')
   })
 
@@ -83,7 +84,34 @@ describe('checking that every package of a pack resolves its needs', () => {
       'package.json': json({ name: '@deepseek-ai/dsh-subagent-demo' }),
       'lib/index.js': 'import { withTimeout } from "@deepseek-ai/dsh-timeout"\n',
     })
-    expect(await unresolvedPackImports(undeclared)).toEqual([{ importer: '@deepseek-ai/dsh-subagent-demo', directory: '', name: '@deepseek-ai/dsh-timeout', via: { file: 'lib/index.js' } }])
+    expect(await unresolvedPackImports(undeclared)).toEqual([{ importer: '@deepseek-ai/dsh-subagent-demo', directory: '', name: '@deepseek-ai/dsh-timeout', via: { file: 'lib/index.js' }, declared: false }])
+  })
+
+  it('refuses a linked peer the importing package does not declare, which Changes\' review copy leaves out, as 0.1.0-preview.1.5\'s Claude Code pack did', async () => {
+    const files = {
+      'package.json': json({ name: '@deepseek-ai/dsh-subagent-claude-code', peerDependencies: {}, dependencies: { '@deepseek-ai/dsh-brand': '0.2.2' } }),
+      'lib/index.js': 'import "@deepseek-ai/dsh-brand"\nimport { withTimeout } from "@deepseek-ai/dsh-timeout"\n',
+    }
+    const peers = ['@deepseek-ai/dsh-brand', '@deepseek-ai/dsh-timeout']
+    expect((await unresolvedPackImports(layout(files, peers))).map(describeUnresolved)).toEqual([
+      '@deepseek-ai/dsh-subagent-claude-code imports @deepseek-ai/dsh-timeout in lib/index.js without declaring it in its package.json, so the review copy leaves it out',
+    ])
+    const declared = { ...files, 'package.json': json({ name: '@deepseek-ai/dsh-subagent-claude-code', peerDependencies: { '@deepseek-ai/dsh-timeout': 'workspace:*' }, dependencies: { '@deepseek-ai/dsh-brand': '0.2.2' } }) }
+    expect(await unresolvedPackImports(layout(declared, peers))).toEqual([])
+  })
+
+  it('names, per package, the linked peers it imports without declaring, and not what it carries or declares', async () => {
+    const files = {
+      'package.json': json({ name: '@delorun/bundle-demo', dependencies: { '@deepseek-ai/dsh-ui': '1', hoisted: '1' } }),
+      'lib/index.js': 'import "@deepseek-ai/dsh-timeout"\nimport "hoisted"\n',
+      'node_modules/@deepseek-ai/dsh-ui/package.json': json({ name: '@deepseek-ai/dsh-ui', peerDependencies: { zod: '*' } }),
+      'node_modules/@deepseek-ai/dsh-ui/lib/client.js': 'import "zod"\nimport "react"\nimport "hoisted"\n',
+      'node_modules/hoisted/package.json': json({ name: 'hoisted' }),
+    }
+    expect([...await undeclaredPeerNeeds(layout(files, ['@deepseek-ai/dsh-timeout', 'react', 'zod']))]).toEqual([
+      ['', ['@deepseek-ai/dsh-timeout']],
+      ['node_modules/@deepseek-ai/dsh-ui', ['react']],
+    ])
   })
 
   it('reports the hooks plugin\'s dsh-hook-protocol, which 0.1.0-preview.1.4\'s Agent hooks pack neither carried nor linked', async () => {
@@ -98,7 +126,7 @@ describe('checking that every package of a pack resolves its needs', () => {
 
 describe('building a pack whose packages need what the deployment leaves out', () => {
   const PLATFORMS: RuntimePlatform[] = ['linux-x64']
-  function sources(deployed: Readonly<Record<string, string>>, closure: readonly string[]): PackSources {
+  function sources(deployed: Readonly<Record<string, string>>, closure: readonly string[], declared: DeclaredPeers = {}): PackSources {
     const modules = temp()
     for (const name of closure) put(modules, { [`${name}/package.json`]: json({ name, version: '1.0.0' }) })
     return {
@@ -106,8 +134,42 @@ describe('building a pack whose packages need what the deployment leaves out', (
       deploy: (_name, _platform, directory) => Promise.resolve(put(directory, deployed)),
       locked: () => undefined,
       download: () => Promise.reject(new Error('no download in this test')),
+      declaredPeers: () => Promise.resolve(declared),
     }
   }
+
+  /** The Claude Code pack as `pnpm deploy` leaves it: the source's peers emptied, and a bundled package importing a peer it does not declare. */
+  const DEPLOYED = {
+    'package.json': json({ name: '@deepseek-ai/dsh-subagent-claude-code', version: '0.2.2', peerDependencies: {}, dependencies: { '@deepseek-ai/dsh-brand': '0.2.2', '@deepseek-ai/dsh-ui': '0.2.2' } }),
+    'lib/index.js': 'import "@deepseek-ai/dsh-brand"\nimport "@deepseek-ai/dsh-timeout"\nimport "@deepseek-ai/cosmokit"\nimport "@deepseek-ai/dsh-llm"\n',
+    'node_modules/@deepseek-ai/dsh-brand/package.json': json({ name: '@deepseek-ai/dsh-brand', version: '1.0.0' }),
+    'node_modules/@deepseek-ai/dsh-ui/package.json': json({ name: '@deepseek-ai/dsh-ui', version: '0.2.2' }),
+    'node_modules/@deepseek-ai/dsh-ui/lib/client.js': 'import "react"\n',
+  }
+  const CLOSURE = ['@deepseek-ai/dsh-brand', '@deepseek-ai/dsh-timeout', '@deepseek-ai/cosmokit', '@deepseek-ai/dsh-llm', '@deepseek-ai/cordis', 'react']
+  const SOURCE_PEERS: DeclaredPeers = { peerDependencies: { '@deepseek-ai/cordis': 'workspace:~', '@deepseek-ai/dsh-llm': 'workspace:*', '@deepseek-ai/dsh-timeout': 'workspace:*', maybe: '*' }, peerDependenciesMeta: { maybe: { optional: true } } }
+
+  it('restores the peers deploy emptied with the source\'s ranges, and declares each linked import no package.json names at the closure\'s version', async () => {
+    const scratch = temp()
+    const built = await buildPack('@deepseek-ai/dsh-subagent-claude-code', '0.2.2', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources(DEPLOYED, CLOSURE, SOURCE_PEERS), scratch)
+    const variant = built.entry.variants.any!
+    expect(variant.peers).toEqual(['@deepseek-ai/cordis', '@deepseek-ai/cosmokit', '@deepseek-ai/dsh-brand', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-timeout', 'react'])
+    const deployed = join(scratch, '@deepseek-ai__dsh-subagent-claude-code-linux-x64')
+    const root = readFileSync(join(deployed, 'package.json'))
+    expect(JSON.parse(root.toString('utf8'))).toMatchObject({
+      peerDependencies: { '@deepseek-ai/cordis': 'workspace:~', '@deepseek-ai/dsh-llm': 'workspace:*', '@deepseek-ai/dsh-timeout': 'workspace:*', maybe: '*', '@deepseek-ai/cosmokit': '1.0.0' },
+      peerDependenciesMeta: { maybe: { optional: true } },
+    })
+    expect(JSON.parse(readFileSync(join(deployed, 'node_modules/@deepseek-ai/dsh-ui/package.json'), 'utf8'))).toMatchObject({ peerDependencies: { react: '1.0.0' } })
+    // The signed file list names the rewritten package.json, not the one deploy wrote.
+    expect(variant.files.find(file => file.path === 'package.json')!.sha256).toBe(createHash('sha256').update(root).digest('hex'))
+  })
+
+  it('refuses the cut when a package imports a package the pack carries but its package.json does not name', async () => {
+    const undeclared = { ...DEPLOYED, 'lib/index.js': 'import "hoisted"\n', 'node_modules/@deepseek-ai/dsh-ui/package.json': json({ name: '@deepseek-ai/dsh-ui', version: '0.2.2', dependencies: { hoisted: '1' } }), 'node_modules/hoisted/package.json': json({ name: 'hoisted', version: '1.0.0' }) }
+    await expect(buildPack('@deepseek-ai/dsh-subagent-claude-code', '0.2.2', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources(undeclared, CLOSURE, SOURCE_PEERS), temp()))
+      .rejects.toThrow(/dsh-subagent-claude-code for linux-x64 would not load from its review copy: @deepseek-ai\/dsh-subagent-claude-code imports hoisted in lib\/index\.js without declaring it/u)
+  })
 
   it('links a plugin\'s peer dependencies and imports the closure carries as peers', async () => {
     const built = await buildPack('@delorun/bundle-agent-hooks', '0.1.0', true, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ ...HOOKS_PLUGIN, 'node_modules/@deepseek-ai/dsh-hook-protocol/package.json': json({ name: '@deepseek-ai/dsh-hook-protocol', version: '0.1.0' }) }, ['@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm']), temp())
@@ -136,6 +198,7 @@ describe('linking needs to the closure only at a version they accept, and one co
       deploy: (_name, _platform, directory) => Promise.resolve(put(directory, UI)),
       locked: () => undefined,
       download: () => Promise.reject(new Error('no download in this test')),
+      declaredPeers: () => Promise.resolve({}),
     }
   }
 
@@ -157,7 +220,7 @@ describe('linking needs to the closure only at a version they accept, and one co
   })
 
   it('refuses a version specifier it cannot compare, and an alias of another package', () => {
-    const need = { importer: 'a', directory: 'node_modules/a', name: 'b', via: 'dependencies' as const }
+    const need = { importer: 'a', directory: 'node_modules/a', name: 'b', via: 'dependencies' as const, declared: true }
     expect(rangeProblem({ ...need, range: 'github:x/b' }, '1.0.0')).toMatch(/at github:x\/b, which is not a version range/u)
     expect(rangeProblem({ ...need, range: 'npm:other@^1.0.0' }, '1.2.0')).toMatch(/at npm:other@\^1\.0\.0, an alias of another package/u)
     expect(rangeProblem({ ...need, name: '@deepseek-ai/b', range: '@deepseek-ai/b@file:///source/packages/b' }, '0.2.2-rc.3')).toBeUndefined()

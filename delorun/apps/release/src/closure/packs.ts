@@ -8,6 +8,12 @@
  * (`./pack-imports.ts`) that the pack does not carry is linked as a peer when the closure carries it; a build whose pack
  * would still miss one is refused.
  *
+ * A pack's package.json files name every package it links: `pnpm deploy` empties the pack package's own
+ * `peerDependencies`, so the build restores the source's, and a package that imports a linked package without declaring
+ * it gets it in its `peerDependencies` at the closure's version. Changes follows only declared dependencies when it copies
+ * a pack for review, so an undeclared link would be missing from the copy; a build whose pack would still leave a need out
+ * of the copy is refused.
+ *
  * @module @delorun/release/closure/packs
  */
 import { createHash } from 'node:crypto'
@@ -24,7 +30,7 @@ import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
 import { closureName } from '../rebuild/compare.ts'
 import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
-import { linkCarriedNeeds, nestedSingleCopies } from './pack-imports.ts'
+import { describeUnresolved, linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, unresolvedPackImports, type PackLayout } from './pack-imports.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
 
@@ -38,6 +44,16 @@ export interface PackSources {
   locked(name: string, platform: RuntimePlatform): LockedPackage | undefined
   /** Download a registry tarball. */
   download(url: string): Promise<Buffer>
+  /** The `peerDependencies` and `peerDependenciesMeta` the workspace package's own `package.json` declares, before deploy. */
+  declaredPeers(name: string): Promise<DeclaredPeers>
+}
+
+/** A package's declared peers, as its source `package.json` lists them. */
+export interface DeclaredPeers {
+  /** Peer name to the range the source declares, such as `workspace:*`. */
+  readonly peerDependencies?: Readonly<Record<string, string>>
+  /** Peer name to its metadata; an `optional` peer is not a need. */
+  readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean }>>
 }
 
 /** What a pack build produces for one package. */
@@ -132,6 +148,35 @@ async function removeCommandLinks(directory: string): Promise<void> {
   }
 }
 
+/** The `package.json` fields the build reads or writes; any others are kept as they are. */
+interface PackageManifest {
+  dependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  peerDependenciesMeta?: Record<string, { readonly optional?: boolean }>
+}
+
+function manifestText(manifest: PackageManifest): string {
+  return `${JSON.stringify(manifest, null, 2)}\n`
+}
+
+/**
+ * Put back the peers `pnpm deploy` dropped from the pack package's `package.json`: each peer the source declares and the
+ * deployed manifest does not, with the source's range, and its `peerDependenciesMeta` entry.
+ * @param directory - the deployment.
+ * @param declared - the source's peers.
+ */
+async function restoreDeclaredPeers(directory: string, declared: DeclaredPeers): Promise<void> {
+  const path = join(directory, 'package.json')
+  const manifest = JSON.parse(await readFile(path, 'utf8')) as PackageManifest
+  const missing = Object.entries(declared.peerDependencies ?? {}).filter(([peer]) => manifest.peerDependencies?.[peer] === undefined)
+  if (missing.length === 0) return
+  manifest.peerDependencies = { ...manifest.peerDependencies, ...Object.fromEntries(missing) }
+  const meta = missing.flatMap(([peer]) => (declared.peerDependenciesMeta?.[peer] === undefined || manifest.peerDependenciesMeta?.[peer] !== undefined ? [] : [[peer, declared.peerDependenciesMeta[peer]] as const]))
+  if (meta.length > 0) manifest.peerDependenciesMeta = { ...manifest.peerDependenciesMeta, ...Object.fromEntries(meta) }
+  await writeFile(path, manifestText(manifest))
+}
+
 async function peerDependencyNames(directory: string): Promise<Set<string>> {
   const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { peerDependencies?: Record<string, string> }
   return new Set(Object.keys(manifest.peerDependencies ?? {}))
@@ -190,6 +235,7 @@ export async function buildPack(name: string, version: string, experimental: boo
   for (const platform of platforms) {
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
     await sources.deploy(name, platform, directory)
+    await restoreDeclaredPeers(directory, await sources.declaredPeers(name))
     // A Delorun package exports TypeScript sources, which Node does not run from a pack; the closure's are transpiled too.
     await transpilePackPackages(name, directory)
     const external: PackExternal[] = []
@@ -220,6 +266,7 @@ export async function buildPack(name: string, version: string, experimental: boo
     const untranspiled = entries.map(entry => entry.path).filter(path => isDelorunSource(name, path))
     if (untranspiled.length > 0) throw new Error(`${name} for ${platform} carries TypeScript sources of a Delorun package, which Node does not run from a pack: ${untranspiled.slice(0, 3).join(', ')}`)
     await linkClosureNeeds(name, platform, entries, peers, nestedName => keepsOneCopy(nestedName, packPeers, externals), external, sources)
+    await declareLinkedNeeds(name, platform, directory, entries, peers, external, sources)
     const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
     built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() })
   }
@@ -267,6 +314,42 @@ async function linkClosureNeeds(name: string, platform: RuntimePlatform, entries
   if (nested.length > 0) throw new Error(`${name} for ${platform} carries a second copy of a package that must exist once in a running Delorun, nested inside another package: ${nested.slice(0, 5).join(', ')}`)
   const problems = await linkCarriedNeeds({ paths, read: path => Promise.resolve(files.get(path)!.toString('utf8')), peers, external: new Set(external.map(pin => pin.name)) }, need => versionIn(join(sources.closureNodeModules(platform), need)))
   if (problems.length > 0) throw new Error(`${name} for ${platform} would not load: ${problems.slice(0, 5).join('; ')}${problems.length > 5 ? `; and ${String(problems.length - 5)} more` : ''}. List a package the closure does not carry in ${name}'s dependencies so the pack carries it, and keep a declared range within the closure's version`)
+}
+
+/**
+ * Declare in each package's `package.json` the linked peers it imports without declaring, so Changes' review copy keeps
+ * those links (see the module comment), then refuse a pack with any need the installed pack or the copy cannot meet.
+ * Each name goes into the importer's `peerDependencies` at the closure's exact version, in the deployment and in
+ * `entries`.
+ * @param name - the pack's package name.
+ * @param platform - the platform.
+ * @param directory - the deployment.
+ * @param entries - the pack's files; a rewritten `package.json` replaces its entry.
+ * @param peers - the linked peers.
+ * @param external - the pinned externals.
+ * @param sources - the closure.
+ * @throws Error naming each need that is still undeclared or unresolved.
+ */
+async function declareLinkedNeeds(name: string, platform: RuntimePlatform, directory: string, entries: ArchiveEntry[], peers: ReadonlySet<string>, external: readonly PackExternal[], sources: PackSources): Promise<void> {
+  const index = new Map(entries.map((entry, at) => [entry.path, at]))
+  const layout = (): PackLayout => ({ paths: new Set(index.keys()), read: path => Promise.resolve(entries[index.get(path)!]!.data.toString('utf8')), peers, external: new Set(external.map(pin => pin.name)) })
+  for (const [packageDirectory, needs] of await undeclaredPeerNeeds(layout())) {
+    const path = packageDirectory === '' ? 'package.json' : `${packageDirectory}/package.json`
+    const at = index.get(path)!
+    const manifest = JSON.parse(entries[at]!.data.toString('utf8')) as PackageManifest
+    const added: Record<string, string> = {}
+    for (const need of needs) {
+      const version = await versionIn(join(sources.closureNodeModules(platform), need))
+      if (version === undefined) throw new Error(`${name} for ${platform} links ${need}, which the closure does not carry`)
+      added[need] = version
+    }
+    manifest.peerDependencies = { ...manifest.peerDependencies, ...added }
+    const data = Buffer.from(manifestText(manifest))
+    await writeFile(join(directory, ...path.split('/')), data)
+    entries[at] = { ...entries[at]!, data }
+  }
+  const unmet = (await unresolvedPackImports(layout())).map(describeUnresolved)
+  if (unmet.length > 0) throw new Error(`${name} for ${platform} would not load from its review copy: ${unmet.slice(0, 5).join('; ')}${unmet.length > 5 ? `; and ${String(unmet.length - 5)} more` : ''}. Declare each package a pack's package imports in that package's package.json`)
 }
 
 async function entriesOf(scratch: string, name: string, platform: RuntimePlatform, paths: readonly string[]): Promise<ArchiveEntry[]> {
@@ -350,7 +433,14 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
     else carried.add(scope)
   }
   const lockfile = await readFile(join(request.source, 'pnpm-lock.yaml'), 'utf8')
+  const directories = new Map(packages.map(each => [each.name, each.dir]))
   const sources: PackSources = {
+    declaredPeers: async (name) => {
+      const directory = directories.get(name)
+      if (directory === undefined) throw new Error(`${name} is not a workspace package`)
+      const manifest = JSON.parse(await readFile(join(request.source, directory, 'package.json'), 'utf8')) as DeclaredPeers
+      return { ...manifest.peerDependencies === undefined ? {} : { peerDependencies: manifest.peerDependencies }, ...manifest.peerDependenciesMeta === undefined ? {} : { peerDependenciesMeta: manifest.peerDependenciesMeta } }
+    },
     closureNodeModules: platform => join(request.stage(platform), 'app', 'node_modules'),
     locked: name => lockedFrom(lockfile, name),
     download: async (url) => {
