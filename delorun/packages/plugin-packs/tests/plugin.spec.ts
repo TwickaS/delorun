@@ -3,15 +3,40 @@
  * methods and the install-state announcements, and the concurrency field's validation.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
 import { PacksService } from '../src/service.ts'
+import { PACK_ROUTES } from '../src/wire.ts'
 
 describe('the configuration', () => {
   it('defaults the concurrency to 2 and refuses less than 1 or a fraction', () => {
     expect(plugin.Config({} as plugin.Config).concurrency).toBe(2)
     expect(() => plugin.Config({ concurrency: 0 })).toThrow()
     expect(() => plugin.Config({ concurrency: 1.5 })).toThrow()
+  })
+})
+
+describe('the plugin with the services it needs', () => {
+  it('registers every route and provides the install targets once the plugin manager, the profile and the connection exist', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'delorun-packs-plugin-'))
+    try {
+      const ctx = new Context()
+      const registered: string[] = []
+      ctx.provide('pluginManager', { installBundle: () => Promise.resolve({ application: 'applied' }) } as never)
+      ctx.provide('profileContext', { home, name: 'default' } as never)
+      ctx.provide('connection', { fetch: { register: (route: { path: string }) => { registered.push(route.path); return () => Promise.resolve() } } } as never)
+      ctx.provide('packsEnvironment', { unsupported: 'a source checkout has no installed release' } as never)
+      await ctx.plugin(plugin, {} as plugin.Config)
+      await vi.waitFor(() => { expect(registered).toHaveLength(6) })
+      expect(registered.sort()).toEqual(Object.values(PACK_ROUTES).sort())
+      await vi.waitFor(() => { expect(ctx.get('packInstallTargets')).toBeDefined() })
+      expect(ctx.get('packInstallTargets')!.listed('anything')).toBeUndefined()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
 

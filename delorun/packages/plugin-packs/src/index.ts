@@ -151,7 +151,7 @@ class ChatGateService extends Service implements ChatGateSlot {
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.plugin(ChatGateService)
-  ctx.inject(['pluginManager', 'profileContext', 'connection'], (scope) => {
+  ctx.inject(['pluginManager', 'profileContext', 'connection', 'delorunChatGate'], (scope) => {
     const profile: ProfileContext = scope.profileContext
     const manager = scope.pluginManager
     const slot = scope.delorunChatGate
