@@ -146,6 +146,7 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   { kind: 'plugin-row', id: '@delorun/reach', reason: 'disabling it removes the control over which addresses reach the studio' },
   { kind: 'plugin-row', id: '@deepseek-ai/dsh-sandbox-local', reason: 'disabling it removes the confinement of commands a chat runs' },
   { kind: 'plugin-row', id: '@deepseek-ai/dsh-sandbox-policy', reason: 'disabling it removes what the sandbox allows' },
+  { kind: 'plugin-row', id: '@delorun/bundle-webhooks/server', reason: 'its settings decide the address the GitHub webhook endpoint listens on, which stays on loopback unless the computer moves it' },
   { kind: 'mode', id: 'dangerous mode on', reason: 'it is setup and config only, the same class as turning remote access on' },
   AUTH('/auth/owner/claim', 'it establishes who owns the home'),
   AUTH('/auth/devices/window', 'a phone that approves devices would let a stolen phone mint lasting access'),

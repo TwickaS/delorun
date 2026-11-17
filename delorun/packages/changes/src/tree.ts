@@ -9,6 +9,9 @@
  *   `link` entry with the target as written;
  * - any other target that does not resolve: skipped, since a copy holding the link would load whatever appears there;
  * - a target the walk already included, or below one: a relative `link` entry to its path in the version (see below);
+ * - a target in the Delorun home's runtime store (`runtimes/`), as a plugin pack links the packages the installed
+ *   release carries: a `link` entry marked `outside` with its real path, so the copy loads the signed release's package
+ *   as the pack does, while every other target in the home stays out;
  * - a target the scan may follow: dereferenced, so its files are part of the content under the link's path and nothing
  *   loads from outside the approved copy. The scan follows a link only to an installed package (a real path below a
  *   `node_modules` directory, such as one in pnpm's `.pnpm` store), to a sibling workspace package (a directory holding
@@ -51,7 +54,7 @@ import { constants, type Stats } from 'node:fs'
 import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
+import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { ChangesError } from './errors.ts'
 import { PACKAGE_NAME_PATTERN } from './paths.ts'
@@ -579,7 +582,7 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   }
   if ([...walk.included.keys()].some((directory) => contains(real, directory))) {
     walk.skipped.push(path)
-  } else if (!dereference) {
+  } else if (!dereference || inRuntimeStore(walk, real)) {
     admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: real, outside: true })
   } else if (!await mayFollow(walk, real, path, stats.isDirectory())) {
@@ -591,6 +594,15 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   } else {
     await addFile(walk, real, path)
   }
+}
+
+/**
+ * @param walk - the scan.
+ * @param real - a link's real target.
+ * @returns whether it lies in the Delorun home's runtime store, which holds only the installed releases' verified files.
+ */
+function inRuntimeStore(walk: Walk, real: string): boolean {
+  return walk.home !== undefined && contains(join(walk.home, DELORUN_HOME_ENTRIES.runtimes), real)
 }
 
 /** A version path a pnpm workspace links a package at: `node_modules/<name>`, below any directory. */

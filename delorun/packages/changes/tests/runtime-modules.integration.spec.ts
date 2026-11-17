@@ -1,7 +1,9 @@
-import { mkdirSync, symlinkSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, realpathSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { storeFolder } from '../src/store.ts'
+import { materialize, storeFolder } from '../src/store.ts'
 import { scanFolder } from '../src/tree.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -143,5 +145,46 @@ describe('a linked folder with pnpm-installed packages', () => {
     expect(paths).toContain('node_modules/dep')
     expect(paths).toContain('node_modules/devtool')
     expect(paths).toContain('node_modules/.pnpm/devtool@1.0.0/node_modules/devtool/index.js')
+  })
+})
+
+describe('a plugin pack whose peers link into the runtime store', () => {
+  /**
+   * A home with one installed release and a pack whose own package imports a peer the pack links from the release.
+   * @returns the home and the pack folder.
+   */
+  function packHome(): { readonly home: string, readonly pack: string, readonly peer: string } {
+    const home = realpathSync(temporaryDirectory('delorun-changes-home-'))
+    const peer = join(home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')
+    const pack = join(home, 'packs', '0.1.0', 'plug', 'package')
+    writeFiles(home, {
+      'runtimes/0.1.0/app/node_modules/@s/peer/package.json': JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
+      'runtimes/0.1.0/app/node_modules/@s/peer/index.js': 'export const answer = 42\n',
+      'secrets/home-auth/key': 'secret',
+      'packs/0.1.0/plug/package/package.json': JSON.stringify({ name: 'plug', dependencies: { inner: '1', '@s/peer': '1', secret: '1' } }),
+      'packs/0.1.0/plug/package/node_modules/inner/package.json': JSON.stringify({ name: 'inner', type: 'module', exports: './index.js', dependencies: { '@s/peer': '1' } }),
+      'packs/0.1.0/plug/package/node_modules/inner/index.js': 'export { answer } from \'@s/peer\'\n',
+    })
+    mkdirSync(join(pack, 'node_modules', '@s'), { recursive: true })
+    symlinkSync(peer, join(pack, 'node_modules', '@s', 'peer'))
+    symlinkSync(join(home, 'secrets', 'home-auth'), join(pack, 'node_modules', 'secret'))
+    return { home, pack, peer }
+  }
+
+  it('keeps a peer link into the runtime store as a link, and still leaves out a link to anywhere else in the home', async () => {
+    const { home, pack, peer } = packHome()
+    const scanned = await scanFolder(pack, { home })
+    expect(scanned.entries).toContainEqual({ type: 'link', path: 'node_modules/@s/peer', target: peer, outside: true })
+    expect(scanned.entries.some(entry => entry.path.startsWith('node_modules/secret'))).toBe(false)
+    expect(scanned.skipped).toContain('node_modules/secret')
+  })
+
+  it('stores a copy whose own package loads the peer from the runtime store, as the pack does', async () => {
+    const { home, pack } = packHome()
+    const { version } = await storeFolder(home, pack)
+    const copy = join(temporaryDirectory('delorun-changes-active-'), 'plug')
+    await materialize(home, version, copy)
+    const loaded = execFileSync(process.execPath, ['--input-type=module', '-e', `const { answer } = await import(${JSON.stringify(pathToFileURL(join(copy, 'node_modules', 'inner', 'index.js')).href)}); process.stdout.write(String(answer))`], { encoding: 'utf8' })
+    expect(loaded).toBe('42')
   })
 })

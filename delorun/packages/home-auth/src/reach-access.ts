@@ -945,13 +945,16 @@ function namesProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, a
 
 /**
  * The modules whose plugin rows only the computer changes, with the reason for each: disabling one removes the unlock
- * gate or the sandbox, so no unlock, PIN page or dangerous mode lets a device do it.
+ * gate or the sandbox, and a write to the webhook server's settings could move its loopback listener onto the network,
+ * so no unlock, PIN page or dangerous mode lets a device do it. The plugin manager's `protectedPlugins` is a separate
+ * list: a bundle may still add a row of one of these modules.
  */
 export const COMPUTER_ONLY_ROW_MODULES = {
   '@delorun/home-auth': 'it holds the pairing and unlock gate',
   '@delorun/reach': 'it decides which addresses reach the studio',
   '@deepseek-ai/dsh-sandbox-local': 'it confines the commands a chat runs',
   '@deepseek-ai/dsh-sandbox-policy': 'it decides what the sandbox allows',
+  '@delorun/bundle-webhooks/server': 'it decides the address and port the GitHub webhook endpoint listens on',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -987,10 +990,11 @@ const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabl
 
 /**
  * The bundles whose rows include a {@link COMPUTER_ONLY_ROW_MODULES} module, besides the packages that provide those
- * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it.
+ * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it, and
+ * replacing `@delorun/bundle-webhooks` could change the address its webhook server listens on.
  */
 export const COMPUTER_ONLY_BUNDLES: readonly string[] = [
-  '@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio',
+  '@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio', '@delorun/bundle-webhooks',
   '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-minimal', '@deepseek-ai/dsh-headless',
 ]
 

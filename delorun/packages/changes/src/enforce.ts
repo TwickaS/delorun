@@ -273,7 +273,7 @@ export async function storeFolderContent(home: string, source: string, scanCache
     const { manifest, version } = await storeFolder(home, source, { scanCache, dependencies: 'link' })
     const outside = manifest.entries.flatMap((entry) => entry.type === 'link' && entry.outside ? [entry.target] : [])
     const osHome = homedir()
-    return { kind: 'stored', version, linkedDependencies: { underHome: outside.some((target) => isInside(osHome, target)) } }
+    return { kind: 'stored', version, linkedDependencies: { underHome: outside.some((target) => isInside(osHome, target) && !isInRuntimeStore(home, target)) } }
   } catch (error) {
     return { kind: 'unreadable', detail: failureDetail(error) }
   }

@@ -134,8 +134,12 @@ describe('storeFolder', () => {
     // The home named through a link of its own is the same home.
     symlinkSync(home, join(workspace, 'alias'))
     const { manifest, skipped } = await storeFolder(join(workspace, 'alias'), folder)
-    expect(manifest.entries.map((entry) => entry.path)).toEqual(['index.js'])
-    expect(skipped).toEqual(['cfg', 'node_modules/dep', 'node_modules/home'])
+    // A package of the runtime store stays a link to the store, as a plugin pack links its peers; none of its bytes is copied.
+    expect(manifest.entries).toEqual([
+      expect.objectContaining({ type: 'file', path: 'index.js' }),
+      { type: 'link', path: 'node_modules/dep', target: join(realpathSync(home), 'runtimes', 'r', 'node_modules', 'dep'), outside: true },
+    ])
+    expect(skipped).toEqual(['cfg', 'node_modules/home'])
     expect(readdirSync(objectsDirectory(home))).toEqual([sha('p')])
   })
 
