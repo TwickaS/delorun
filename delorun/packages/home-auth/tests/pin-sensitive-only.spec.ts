@@ -25,7 +25,7 @@ function pinHome(pageUnlocked: boolean) {
     elevationOf: () => undefined, pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? unlock : undefined), pinEnabled: () => true,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set([ROW]), computerOnlyEntryIds: () => new Set([ROW]),
-    defaultPermission: () => undefined, dangerousMode: () => false,
+    defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
   }
   return { home, facts }
 }

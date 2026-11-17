@@ -38,7 +38,7 @@ Delorun runs upstream's plugin loading unchanged, so this is also what Delorun d
 
 ## The rules
 
-1. **One surface, Changes.** Built as `delorun changes` for plugins and the harness's own files ([C21, Commands](../contracts/c21-changes.md#commands)); the studio's section shows harness changes read-only, decided at a terminal.
+1. **One surface, Changes.** Built as `delorun changes` for plugins and the harness's own files ([C21, Commands](../contracts/c21-changes.md#commands)); the studio decides them too, at the computer or from a paired phone the person unlocked under Phone powers ([C21, Who may do what from where](../contracts/c21-changes.md#who-may-do-what-from-where)).
 2. **Approved content runs, not the folder.** Built ([C21, Loading approved content](../contracts/c21-changes.md#loading-approved-content)).
 3. **Work sessions give live reload.** Built at the terminal ([C21, Work sessions](../contracts/c21-changes.md#work-sessions)); Delorun's own watcher copies the folder into the plugin's active directory instead of upstream's source watching, because the folder's files are not the loaded ones. The studio's button and badge are not built yet.
 4. **The approval.** Built ([C21, The risk summary](../contracts/c21-changes.md#the-risk-summary)).
@@ -69,7 +69,8 @@ Delorun runs upstream's plugin loading unchanged, so this is also what Delorun d
 
 - `a changed harness file is refused in both protection settings`
 - `a changed plugin does not load with protection on`
-- `no route, tool or remote session can apply a change, start or end a work session, or change the protection setting`
+- `no tool can apply a change, start or end a work session, or change the protection setting`
+- `a phone uses a control only where Phone powers lets it, and only with an unlock it entered`
 - `the agent's first write to an approved plugin asks`
 - `a plugin outside a work session never loads from its folder`
 - `a work session's badge is shown while it lasts`

@@ -12,6 +12,7 @@
  *
  * @module @delorun/cli/setup/answers
  */
+import { PHONE_POWERS_LEVELS } from '@delorun/home-auth'
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import {
@@ -98,6 +99,7 @@ const answerFields = {
   reach,
   importStockHome: z.boolean(),
   protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
+  phonePowers: z.enum(PHONE_POWERS_LEVELS).nullable().default(SETUP_DEFAULTS.phonePowers),
 }
 
 const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(SECTION_STATUSES) })).default([])

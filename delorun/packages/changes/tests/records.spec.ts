@@ -7,9 +7,11 @@ import { isChangesError, type ChangesCode } from '../src/errors.ts'
 import { changesDirectory, profileChangesDirectory, protectionPath } from '../src/paths.ts'
 import {
   approvedOf,
+  attestDevice,
   attestStudio,
   attestTerminal,
   closeWorkSession,
+  decisionOf,
   findEntry,
   markShownAtUpgrade,
   migratesAtUpgrade,
@@ -25,6 +27,7 @@ import {
   setProtection,
   unshownAtUpgrade,
   withEntry,
+  withoutDecision,
   writeActiveRecord,
   writeApproved,
   writeChangeLog,
@@ -119,9 +122,17 @@ describe('attestStudio', () => {
     }
   })
 
-  it('refuses a studio proof for the protection setting', async () => {
+  it('the studio sets protection, and a paired device only with an unlock the person entered', async () => {
     await setProtection(home, 'on', terminal())
-    expect(await refusal(setProtection(home, 'off', attestStudio(atComputer)))).toBe('NOT_AT_COMPUTER')
+    // Without the fresh-unlock check a device in its approval grace, or a locked one, holds a proof.
+    expect(await refusal(() => attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: false }))).toBe('NOT_AT_COMPUTER')
+    const device = attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: true })
+    expect(device).toMatchObject({ kind: 'studio', device: { id: 'device-1', label: 'Phone' } })
+    expect((await setProtection(home, 'off', device)).level).toBe('off')
+    expect((await setProtection(home, 'on', attestStudio(atComputer))).level).toBe('on')
+    expect(await readProtection(home)).toBe('on')
+    // A forged proof is still refused.
+    expect(await refusal(setProtection(home, 'off', { kind: 'studio' } as never))).toBe('NOT_AT_COMPUTER')
     expect(await readProtection(home)).toBe('on')
   })
 })
@@ -254,6 +265,7 @@ describe('change log', () => {
     to: VERSION_B,
     decidedAt: '2026-11-10T11:00:00Z',
     decidedFrom: 'start',
+    decidedOn: { id: 'device-1', label: 'Phone' },
     historyVersion: 'h1',
     leftOut: { at: '2026-11-10T11:00:00Z', failure: 'did not start' },
     lastFailure: { at: '2026-11-10T11:05:00Z', failure: 'did not load' },
@@ -274,6 +286,7 @@ describe('change log', () => {
       { ...valid, entries: [{ ...entry(), id: 'c123' }] },
       { ...valid, entries: [{ ...entry(), kind: 'plugin-delete' }] },
       { ...valid, entries: [{ ...entry(), decidedFrom: 'phone' }] },
+      { ...valid, entries: [{ ...entry(), decidedOn: { id: 'device-1' } }] },
       { ...valid, entries: [{ ...entry(), subject: { plugin: 'p', owner: 'x' } }] },
       { ...valid, entries: [{ ...entry(), leftOut: { at: '2026-11-10T11:00:00Z' } }] },
       { ...valid, entries: [entry(), entry()] },
@@ -284,6 +297,19 @@ describe('change log', () => {
       await writeRecord(join(profileChangesDirectory(home, PROFILE), 'log.json'), value)
       expect(await refusal(readChangeLog(home, PROFILE)), JSON.stringify(value)).toBe('RECORD_UNREADABLE')
     }
+  })
+
+  it('names the paired device of a decision made in its studio, and no device for any other decision', () => {
+    const at = '2026-11-10T13:00:00Z'
+    const atComputer = { loopback: true, credential: true, remoteSession: false }
+    const phone = attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: true })
+    expect(decisionOf(at, phone)).toEqual({ decidedAt: at, decidedFrom: 'studio', decidedOn: { id: 'device-1', label: 'Phone' } })
+    expect(decisionOf(at, attestStudio(atComputer))).toEqual({ decidedAt: at, decidedFrom: 'studio' })
+    expect(decisionOf(at, 'start')).toEqual({ decidedAt: at, decidedFrom: 'start' })
+    // Pins the clearing: a later decision spread over the entry does not keep the earlier one's device.
+    const later = { ...withoutDecision(full), ...decisionOf(at, attestStudio(atComputer)) }
+    expect(later).toMatchObject({ decidedAt: at, decidedFrom: 'studio' })
+    expect(later).not.toHaveProperty('decidedOn')
   })
 
   it('replaces an entry with the same id or appends one, and finds entries', () => {

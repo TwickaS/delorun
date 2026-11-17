@@ -45,6 +45,8 @@ import {
   type ProtectionLevel,
   type ProtectionRecord,
   type WorkSessionRecord,
+  type DecidedFrom,
+  type StudioDevice,
 } from './types.ts'
 
 /** What a {@link ContentVersion} is: a SHA-256 in lowercase hexadecimal. */
@@ -57,7 +59,7 @@ export { PACKAGE_NAME_PATTERN }
 const AT_COMPUTER: unique symbol = Symbol('AtComputer')
 
 /**
- * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal} and
+ * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal}, {@link attestDevice} and
  * {@link attestStudio}, and checked at run time against the values they issued, so an object that merely looks like one
  * is refused.
  *
@@ -65,23 +67,54 @@ const AT_COMPUTER: unique symbol = Symbol('AtComputer')
  * gives its commands a real pseudo-terminal, so the proof does not tell a person from a model: a confined command cannot
  * use it, because the sandbox denies it every write under the Delorun home, `changes/` included (C1), while a command the
  * person runs with full access acts with the person's own authority. A studio proof says that a request reached the
- * loopback listener under a loopback `Host`, carried the studio's credential and was not admitted for a remote session.
+ * loopback listener under a loopback `Host`, carried the studio's credential and was not admitted for a remote session,
+ * or, from {@link attestDevice}, that a paired device's studio holds an unlock the person entered (a code or a PIN, never
+ * the approval grace). A device's proof is logged as `studio`, as the computer's is, with the device in the entry's
+ * `decidedOn` ({@link decisionOf}). Neither proof is a barrier to code running inside the Host.
  */
 export interface AtComputer {
-  /** Where the person is. */
+  /** Where the person is: a terminal, or the studio at the computer or on an unlocked paired device. */
   readonly kind: 'terminal' | 'studio'
+  /** The paired device a studio proof came from; absent at the computer and in a terminal. */
+  readonly device?: StudioDevice
   readonly [AT_COMPUTER]: true
 }
 
-/** Every {@link AtComputer} the two attest functions issued. */
+export type { StudioDevice }
+
+/** The fields of an entry that say when, where and on which paired device its last decision was made. */
+export type DecisionFields = Pick<ChangeEntry, 'decidedAt' | 'decidedFrom' | 'decidedOn'>
+
+/**
+ * The fields of a new decision. Spread them over {@link withoutDecision} of the entry, so a device named by an earlier
+ * decision is not left on this one.
+ * @param at - when, ISO 8601.
+ * @param from - the person's proof, or where Delorun decided.
+ * @returns the fields; `decidedOn` only for a proof from a paired device.
+ */
+export function decisionOf(at: string, from: AtComputer | Exclude<DecidedFrom, AtComputer['kind']>): DecisionFields {
+  if (typeof from === 'string') return { decidedAt: at, decidedFrom: from }
+  return { decidedAt: at, decidedFrom: from.kind, ...from.device === undefined ? {} : { decidedOn: { id: from.device.id, label: from.device.label } } }
+}
+
+/**
+ * @param entry - a log entry.
+ * @returns it without its last decision's fields.
+ */
+export function withoutDecision(entry: ChangeEntry): Omit<ChangeEntry, keyof DecisionFields> {
+  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, decidedOn: _decidedOn, ...rest } = entry
+  return rest
+}
+
+/** Every {@link AtComputer} the attest functions issued. */
 const issued = new WeakSet<AtComputer>()
 
 /**
  * @param kind - where the person is.
  * @returns a new, frozen proof, recorded as issued.
  */
-function issue(kind: AtComputer['kind']): AtComputer {
-  const presence: AtComputer = Object.freeze({ kind, [AT_COMPUTER]: true as const })
+function issue(kind: AtComputer['kind'], device?: StudioDevice): AtComputer {
+  const presence: AtComputer = Object.freeze({ kind, ...device === undefined ? {} : { device: Object.freeze({ id: device.id, label: device.label }) }, [AT_COMPUTER]: true as const })
   issued.add(presence)
   return presence
 }
@@ -110,6 +143,34 @@ export function attestStudio(facts: StudioArrival): AtComputer {
   return issue('studio')
 }
 
+/** What the studio's route knows about a paired device's request, decided before its body is read. */
+export interface DeviceArrival {
+  /** A reach listener admitted the request for this paired device's session. */
+  readonly remoteSession: true
+  /** The device. */
+  readonly device: StudioDevice
+  /**
+   * Whether the device holds an unlock the person entered for it: a code approved at the computer or a PIN page. False
+   * for a locked device and for one that holds only the approval grace.
+   */
+  readonly freshUnlock: boolean
+}
+
+/**
+ * Attest that a paired device's studio request comes from the person, with an unlock they entered. Only the studio's
+ * Changes routes (`@delorun/plugin-changes`) call it, and only for an action the person's Phone powers level lets a
+ * device take; the proof is recorded as `studio`.
+ * @param facts - the device and its unlock.
+ * @returns the proof, naming the device.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` unless the device holds a fresh unlock.
+ */
+export function attestDevice(facts: DeviceArrival): AtComputer {
+  if (facts.remoteSession !== true || facts.freshUnlock !== true || facts.device.id === '') {
+    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.')
+  }
+  return issue('studio', facts.device)
+}
+
 /**
  * Attest that a `delorun` command runs at a terminal the person types in.
  * @param streams - the command's standard input and output.
@@ -124,14 +185,14 @@ export function attestTerminal(streams: { readonly stdin: { readonly isTTY?: boo
 }
 
 /**
- * Refuse a claimed proof of presence that {@link attestTerminal} or {@link attestStudio} did not issue. Every writer
+ * Refuse a claimed proof of presence that {@link attestTerminal}, {@link attestStudio} or {@link attestDevice} did not issue. Every writer
  * that needs the person at their computer calls it before it reads or writes anything.
  * @param presence - a claimed proof.
  * @param subject - what it is for, for the refusal.
  * @throws {ChangesError} `NOT_AT_COMPUTER` when the attest functions did not issue it.
  */
 export function requirePresence(presence: AtComputer, subject: string): void {
-  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal or the studio on this computer.')
+  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal, the studio on this computer or an unlocked device.')
 }
 
 /**
@@ -344,6 +405,7 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   createdAt: required.iso,
   decidedAt: optional.iso,
   decidedFrom: { test: oneOf(DECIDED_FROM), expected: DECIDED_FROM.join(', '), optional: true },
+  decidedOn: { ...nested({ id: required.string, label: required.string }, 'a paired device'), optional: true },
   historyVersion: optional.string,
   leftOut: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
   shownAt: optional.iso,
@@ -470,17 +532,17 @@ export async function readProtection(home: string): Promise<ProtectionLevel> {
 }
 
 /**
- * Change the protection setting. Only the terminal command changes it: a studio proof is refused.
+ * Change the protection setting, from a terminal or the studio. The studio's route asks the person a second time before
+ * it turns protection off and decides whether a device may; this writer checks only the proof.
  * @param home - the Delorun home.
  * @param level - the new level.
- * @param presence - proof from {@link attestTerminal}.
+ * @param presence - proof from {@link attestTerminal}, {@link attestStudio} or {@link attestDevice}.
  * @returns the record written.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue, a studio proof included.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue.
  * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
  */
 export async function setProtection(home: string, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionRecord> {
   requirePresence(presence, 'protection')
-  if (presence.kind !== 'terminal') throw new ChangesError('NOT_AT_COMPUTER', 'protection', 'The protection setting changes only in a terminal: delorun changes protection.')
   const record: ProtectionRecord = { schema: PROTECTION_RECORD_SCHEMA, level, setAt: new Date().toISOString() }
   await makeChangesDirectory(home, changesDirectory(home))
   await writeProtectedFile(protectionPath(home), jsonText(record))

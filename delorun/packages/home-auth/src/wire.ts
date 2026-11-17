@@ -55,3 +55,22 @@ export const PAIRING_BOUNDS = {
   requestExpiryMinutes: { min: 1, max: 10 },
   pendingPerIdentity: { min: 1, max: 5 },
 } as const
+
+/**
+ * The Phone powers route: `GET` reads the level for the computer and for a signed-in device; `POST { level }` changes it,
+ * at the computer only (C14, "Phone powers").
+ */
+export const PHONE_POWERS_PATH = '/auth/phone-powers'
+
+/** The Phone powers levels, the careful one first: Careful keeps a terminal and loosening Changes at the computer. */
+export const PHONE_POWERS_LEVELS = ['careful', 'full'] as const
+
+/** One of {@link PHONE_POWERS_LEVELS}. */
+export type PhonePowersLevel = (typeof PHONE_POWERS_LEVELS)[number]
+
+/** What the Phone powers route answers. */
+export interface PhonePowersView {
+  readonly level: PhonePowersLevel
+  /** Whether the person chose it; false while the home applies the level for a home with no choice. */
+  readonly chosen: boolean
+}

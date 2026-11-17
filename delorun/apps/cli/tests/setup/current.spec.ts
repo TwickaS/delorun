@@ -1,8 +1,9 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SETUP_DEFAULTS, type ModelProviderAnswer } from '@delorun/contract-setup-answers'
+import { recordUpgradePhonePowers, writePhonePowers } from '@delorun/home-auth'
 import { currentAnswers } from '../../src/setup/current.ts'
 import { readPromptsRows, writePromptRows } from '../../src/setup/prompt-switches.ts'
 import { readProviderAnswer, writeProviderRows } from '../../src/setup/providers.ts'
@@ -66,8 +67,18 @@ describe('the readers that pair with the section writes', () => {
 describe('the answers a profile holds now', () => {
   it('falls back to the answers record where the configuration holds nothing', () => {
     writeFileSync(join(directory, ANSWERS_FILENAME), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, useCase: 'remote', background: false, modelProvider: null }))
-    const current = currentAnswers(directory)
-    expect(current).toMatchObject({ useCase: 'remote', background: false, modelProvider: null, prompts: 'safer', updateCheck: true, profile: { port: null }, reach: { option: 'none' }, sections: [] })
+    const current = currentAnswers(directory, directory)
+    expect(current).toMatchObject({ useCase: 'remote', background: false, modelProvider: null, prompts: 'safer', updateCheck: true, profile: { port: null }, reach: { option: 'none' }, phonePowers: null, sections: [] })
+  })
+
+  it('starts on the Phone powers level the person chose, and on none that Delorun recorded for them', async () => {
+    writeFileSync(join(directory, ANSWERS_FILENAME), JSON.stringify({ version: 1, ...SETUP_DEFAULTS }))
+    const secrets = join(directory, 'secrets', 'home-auth')
+    mkdirSync(secrets, { recursive: true, mode: 0o700 })
+    await recordUpgradePhonePowers(secrets, 'careful')
+    expect(currentAnswers(directory, directory).phonePowers).toBeNull()
+    await writePhonePowers(secrets, 'full')
+    expect(currentAnswers(directory, directory).phonePowers).toBe('full')
   })
 
   it('lets the live rows win over the record, including a studio port', () => {
@@ -75,6 +86,6 @@ describe('the answers a profile holds now', () => {
     writePromptRows(patch, 'stock')
     writeUpdateCheckRow(patch, false)
     setPatchRow(patch, { id: 'webserver', config: { host: '127.0.0.1', port: 4100 } })
-    expect(currentAnswers(directory)).toMatchObject({ prompts: 'stock', updateCheck: false, profile: { port: 4100 } })
+    expect(currentAnswers(directory, directory)).toMatchObject({ prompts: 'stock', updateCheck: false, profile: { port: 4100 } })
   })
 })

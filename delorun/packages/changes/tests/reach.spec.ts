@@ -1,6 +1,7 @@
 /**
  * Who can reach the actions of Changes: only `delorun changes`, this package and the studio's Changes routes
- * (`delorun/packages/plugin-changes/src/routes.ts`), which attest a studio request at the computer. A model tool, another
+ * (`delorun/packages/plugin-changes/src/routes.ts`), which attest a studio request at the computer or from a paired
+ * device the person unlocked. A model tool, another
  * Host route or a plugin that imported an action or an attest function could decide a change without the person at
  * their computer, so every other module of Delorun's workspaces, and every upstream module, is scanned for such an import.
  */
@@ -15,11 +16,14 @@ vi.setConfig({ testTimeout: 60_000 })
 /** The repository root. */
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
-/** The functions that decide a change to Delorun itself or write the person's copy of it, which only a terminal runs. */
+/**
+ * The functions that decide a change to Delorun itself or write the person's copy of it, which a terminal and the
+ * studio's harness routes run.
+ */
 const HARNESS_ACTIONS = ['applyHarnessChange', 'discardHarnessChange', 'undoHarnessChange', 'discardAllHarnessChanges', 'createHarnessCopy']
 
 /** The functions that decide a change or prove presence. */
-const GUARDED = ['applyChange', 'applyInstallChange', 'applySetupImport', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange', ...HARNESS_ACTIONS]
+const GUARDED = ['applyChange', 'applyInstallChange', 'applySetupImport', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'attestDevice', 'dismissNotice', 'leaveOutNewestChange', ...HARNESS_ACTIONS]
 
 /** The function that leaves a change out without a proof of presence, because a start failed. */
 const START_ONLY = 'leaveOutNewestChange'
@@ -141,12 +145,12 @@ describe('no model tool or route reaches a changes action', () => {
   it('the studio routes are the only module that attests a studio request, and they do', () => {
     const routes = readFileSync(join(ROOT, ROUTES), 'utf8')
     expect(IMPORTS_CHANGES.test(routes)).toBe(true)
-    expect(guardedNames(routes)).toContain('attestStudio')
-    // The routes never reach the protection setting, the terminal proof or an action on Delorun itself, which only a
-    // terminal that knows the runtime's signed file list decides. They apply an agent's plugin request with the studio's
-    // proof, as the terminal applies it with its own.
-    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', ...HARNESS_ACTIONS]) expect(guardedNames(routes), name).not.toContain(name)
-    expect(guardedNames(routes)).toContain('applyInstallChange')
+    // The routes attest the person at the computer and a paired device the person unlocked, and decide the protection
+    // setting and changes to Delorun itself with that proof, as the terminal decides them with its own. They change the
+    // protection setting only through `changeProtection`, which logs a weakening and keeps a device's notice, never write
+    // it directly, never mint the terminal's proof, and never discard every change to Delorun itself at once.
+    for (const name of ['attestStudio', 'attestDevice', 'changeProtection', 'dismissNotice', 'applyInstallChange', 'applyHarnessChange', 'undoHarnessChange', 'discardHarnessChange', 'createHarnessCopy']) expect(guardedNames(routes), name).toContain(name)
+    for (const name of ['setProtection', 'attestTerminal', 'discardAllHarnessChanges']) expect(guardedNames(routes), name).not.toContain(name)
     expect(guardedNames(routes)).not.toContain('*')
   })
 

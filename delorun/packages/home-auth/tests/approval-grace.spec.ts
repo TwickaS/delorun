@@ -217,7 +217,7 @@ describe('the approval grace and PIN mode', () => {
       elevationOf: () => elevation, pageUnlockOf: () => undefined, pinEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(['include:delorun-mcp-consent', 'delorun-mcp-consent']), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, dangerousMode: () => false,
+      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
     })
     const call = { action: 'settings/update' as const, resource: { kind: 'global' } as const, args: { ns: 'delorun-mcp-consent', patch: {} } }
     const principal = reachDevicePrincipal(phone.id, LISTENER)
@@ -240,7 +240,7 @@ describe('the approval grace and PIN mode', () => {
       elevationOf: () => elevation, pageUnlockOf: () => page, pinEnabled: () => page !== undefined,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, dangerousMode: () => false,
+      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
     })
     const principal = reachDevicePrincipal(phone.id, LISTENER)
     const resource = { kind: 'global' } as const
@@ -273,7 +273,7 @@ describe('the approval grace and the computer-only table', () => {
       elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, pinEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [HOME_AUTH_SWITCH, REACH_SWITCH], protectedEntryIds: () => new Set(['include:home-auth']), computerOnlyEntryIds: () => new Set(['include:home-auth']),
-      defaultPermission: () => undefined, dangerousMode: () => dangerous,
+      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => dangerous,
     })
     const principal = reachDevicePrincipal(phone.id, LISTENER)
     for (const dangerous of [false, true]) {

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { activeDirectory, attestTerminal, enforceApprovedContent, listChanges, readApproved, readChangeLog, readWorkSession, recordPluginRequest, readProtection, setProtection, writeChangeLog, type ChangeId, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delorun/changes'
+import { activeDirectory, addProtectionNotice, attestTerminal, readNotices, enforceApprovedContent, listChanges, readApproved, readChangeLog, readWorkSession, recordPluginRequest, readProtection, setProtection, writeChangeLog, type ChangeId, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { ensureHomeTree, newStartId, readHomeLock, runDirectory } from '@delorun/home'
 import { CountingChatGate, HomeProcess, sendHomeRequest, updateChannelProbe, type RunningHost } from '@delorun/home-process'
@@ -175,6 +175,16 @@ describe('delorun changes list and show', () => {
     context.printed.length = 0
     expect(await runChanges(['list', '--json'], context, driven([]))).toBe(EXIT.ok)
     expect(JSON.parse(out())).toMatchObject({ protection: 'on', pending: [{ id }] })
+  })
+
+  it('lists the protection changes a phone made, and a list at a terminal dismisses them', async () => {
+    await addProtectionNotice(home, 'off', { id: 'device-1', label: 'Pixel' }, '2026-11-17T10:00:00.000Z')
+    expect(await runChanges(['list'], context, driven([], [], false))).toBe(EXIT.ok)
+    expect(out()).toContain(`Changed from a phone:\n  ${readableTime('2026-11-17T10:00:00.000Z')}  Pixel turned protection off\n`)
+    // A list piped elsewhere keeps them; one at a terminal has shown them to the person.
+    expect(await readNotices(home)).toHaveLength(1)
+    expect(await runChanges(['list'], context, driven([]))).toBe(EXIT.ok)
+    expect(await readNotices(home)).toEqual([])
   })
 
   it('names a new plugin, two changed files, a failed apply, a gone folder and a work session in the list', async () => {
@@ -660,16 +670,24 @@ describe('delorun changes protection', () => {
     expect(out()).toBe(`Protection: off: ${OFF_MEANING}.\nChange it in a terminal: delorun changes protection on|off\n`)
   })
 
-  it('protection off states what off means and asks; only y writes it, and the log records the weakening', async () => {
+  it('protection off states what off means and asks twice; only y to both writes it, and the log records the weakening', async () => {
     const declined = driven(['n'])
     expect(await runChanges(['protection', 'off'], context, declined)).toBe(EXIT.ok)
     expect(out()).toBe(`Changes will load without your review. With protection off, ${OFF_MEANING}.\nNothing was changed.\n`)
     expect(declined.questions).toEqual(['Turn protection off? [y/N] '])
     expect(await readProtection(home)).toBe('on')
     context.printed.length = 0
-    const accepted = driven(['y'])
+    // Pins the second ask: a single y no longer turns protection off.
+    edit('export default 2\n')
+    const once = driven(['y', 'n'])
+    expect(await runChanges(['protection', 'off'], context, once)).toBe(EXIT.ok)
+    expect(once.questions).toEqual(['Turn protection off? [y/N] ', 'Turn protection off now? [y/N] '])
+    expect(out()).toContain('Once protection is off, the waiting changes of plug load at once.\nNothing was changed.\n')
+    expect(await readProtection(home)).toBe('on')
+    context.printed.length = 0
+    const accepted = driven(['y', 'y'])
     expect(await runChanges(['protection', 'off'], context, accepted)).toBe(EXIT.ok)
-    expect(accepted.questions).toEqual(['Turn protection off? [y/N] '])
+    expect(accepted.questions).toEqual(['Turn protection off? [y/N] ', 'Turn protection off now? [y/N] '])
     expect(await readProtection(home)).toBe('off')
     expect(out()).toContain('Protection is off (it was on). Delorun uses it from its next decision, without a restart.\n')
     expect((await readChangeLog(home, PROFILE)).entries.at(-1)).toMatchObject({ kind: 'guard-weakening', state: 'applied', summary: 'Protection turned off: changes load without review', decidedFrom: 'terminal' })

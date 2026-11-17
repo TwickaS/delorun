@@ -54,7 +54,9 @@ import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/ro
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
-import { checkRunningRuntime, handOffToComposedTree, handsOff, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
+import type { HarnessContext } from '@delorun/changes'
+import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
+import { provideChangesHarness } from './changes/harness-service.ts'
 import { relaunchForeground, retryDetached, retryForeground, retryHandOff, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -701,17 +703,22 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
 /**
  * Run the composed profile as the home process's Host, with the home log attached: the `.env` layers load, their
  * secret-named values are registered with the log's redactor, and the Host's root context receives `ctx.delorunSecrets`,
- * the credential registrations and the Cordis logger exporter before its first entry mounts.
+ * the credential registrations, the Cordis logger exporter and `ctx.changesHarness` before its first entry mounts.
  * @param dependencies - the environment loader and the profile runner.
  * @param homeLog - the home process's log.
  * @param options - the run options except the environment and the preparation hook, which this function supplies.
+ * @param harness - the running runtime's harness, which the studio's Changes routes decide changes to Delorun itself
+ *   against; undefined outside the runtime store.
  * @returns the booted profile.
  */
-export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>): Promise<BootedProfile> {
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext): Promise<BootedProfile> {
   const environment = dependencies.loadEnvironment()
   // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
   registerEnvironment(process.env, homeLog.redactor)
-  return dependencies.runProfile({ ...options, environment, prepare: (root) => { attachHomeLogs(root, homeLog) } })
+  return dependencies.runProfile({ ...options, environment, prepare: (root) => {
+    attachHomeLogs(root, homeLog)
+    provideChangesHarness(root, harness)
+  } })
 }
 
 /**
@@ -762,7 +769,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
-    })
+    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger))
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)

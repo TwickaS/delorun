@@ -51,6 +51,9 @@ import {
   elevationStateHandler,
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
+import { PHONE_POWERS_LEVELS, PhonePowersReader, recordUpgradePhonePowers, writePhonePowers, type PhonePowers } from './phone-powers.ts'
+import { phonePowersHandler } from './phone-powers-routes.ts'
+import { PHONE_POWERS_PATH, type PhonePowersLevel } from './wire.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -74,6 +77,8 @@ export interface ConfigInput {
   readonly approvalGraceMinutes?: number
   /** The most minutes one unlock lasts from its start; see {@link Config.unlockCapMinutes}. */
   readonly unlockCapMinutes?: number
+  /** The Phone powers level an existing home gets; see {@link Config.phonePowersOnUpgrade}. */
+  readonly phonePowersOnUpgrade?: PhonePowersLevel
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -110,6 +115,12 @@ export interface Config {
    * It must be at least the unlock minutes of every listener, or the listener is refused at start.
    */
   readonly unlockCapMinutes: number
+  /**
+   * The Phone powers level the Host's first start records, as not chosen, in a home that has no Phone powers record:
+   * a home that existed before Phone powers, or one whose setup did not ask. `careful` by default. A home that already
+   * has a record keeps it, so changing this setting changes only homes that have not started since.
+   */
+  readonly phonePowersOnUpgrade: PhonePowersLevel
 }
 
 /** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
@@ -159,6 +170,8 @@ export const Config: schema<ConfigInput, Config> = schema.object({
   }).default({}).description('The sign-in challenge limits. Out-of-bounds values fail the load.'),
   unlockCapMinutes: schema.number().step(1).min(1).max(1440).default(480)
     .description('The most minutes one unlock approved at the computer lasts from its start, from 1 to 1440; 480 (8 hours) by default. An unlock lasts its minutes after the last action that needed it, and this cap ends it however much it is used. It must be at least the unlock minutes.'),
+  phonePowersOnUpgrade: schema.union(PHONE_POWERS_LEVELS).default('careful')
+    .description('The Phone powers level the first start records in a home that has none, as not chosen: careful (the default) keeps the terminal, turning protection off and applying changes at the computer; full lets an unlocked phone do them. A home that has a record keeps it.'),
   approvalGraceMinutes: schema.number().step(1).min(0).max(60).default(15)
     .description('Minutes after a device is approved during which its first sign-in starts an unlock, from 0 to 60; 15 by default, and never more than the unlock minutes. 0 turns it off.'),
 })
@@ -194,6 +207,9 @@ export class HomeAuthService extends Service {
   private pinLifts: DangerousSettingsLedger | undefined
   /** Retries the PIN set-back while a lift waits; absent otherwise. */
   private pinRetry: NodeJS.Timeout | undefined
+
+  /** The Phone powers record's reader, made at the first read. */
+  private powers: PhonePowersReader | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -238,6 +254,8 @@ export class HomeAuthService extends Service {
     })
     await core.start()
     this.core = core
+    const upgraded = await recordUpgradePhonePowers(this.secretsDirectory, this.config.phonePowersOnUpgrade)
+    if (upgraded !== undefined) this.ctx.logger.info(`home-auth: this home had no Phone powers choice; ${upgraded.level === 'careful' ? 'Careful applies, so a phone cannot open a terminal' : 'Full applies'}. Choose at the computer: delorun devices powers careful|full, or the studio's Settings.`)
     this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
     await this.lifts.load()
     this.pinLifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachPinSettings), 'PIN mode settings')
@@ -312,6 +330,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PHONE_POWERS_PATH, handler: phonePowersHandler(core, credential, { current: () => this.phonePowers(), set: level => this.setPhonePowers(level) }) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -423,6 +442,28 @@ export class HomeAuthService extends Service {
    */
   touchDeviceUnlock(deviceId: string, listener: ReachListenerId): void {
     this.core?.touchDeviceUnlock(deviceId, listener)
+  }
+
+  /**
+   * The Phone powers level in force, read from its record on every call; the reach policy and the Changes routes ask it
+   * before an action Careful keeps at the computer.
+   * @returns the level, whether the person chose it, and why the record cannot be read when it cannot (the level is then Careful).
+   */
+  phonePowers(): PhonePowers {
+    this.powers ??= new PhonePowersReader(this.secretsDirectory)
+    return this.powers.current()
+  }
+
+  /**
+   * Record the person's Phone powers choice. Only the computer's route calls it; a device never does.
+   * @param level - the level chosen.
+   * @returns the level now in force.
+   * @throws the failure of the protected write.
+   */
+  async setPhonePowers(level: PhonePowersLevel): Promise<PhonePowers> {
+    const powers = await writePhonePowers(this.secretsDirectory, level)
+    this.ctx.logger.info(`home-auth: Phone powers set to ${level} at the computer`)
+    return powers
   }
 
   /**

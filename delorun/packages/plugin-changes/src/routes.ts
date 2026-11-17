@@ -1,27 +1,33 @@
 /**
  * The studio's Changes routes (contract C21, "Routes and the recovery screen"): what failed at the last start, the
- * recent changes and one change, read by any session the studio admits, and the actions a person takes at their
- * computer: apply, discard and undo a change, turn a plugin off or on, open and end a work session, and safe mode.
+ * recent changes and one change, read by any session the studio admits, and the actions: apply, discard and undo a
+ * plugin's change or a change to Delorun itself, turn a plugin off or on, open and end a work session, safe mode, make
+ * the person's copy of Delorun, and turn protection on or off.
  * Applying an agent's plugin request runs the plugin operation the Host names (`@delorun/changes`' shared operation) with
  * `applyInstallChange`, after a second confirmation that names its spec: what it installs is not shown before it runs.
  *
  * Every request is first admitted by Connection (`ctx.connection.admit`): the Host/Origin fence, then the studio's
  * signed cookie or the authenticator provider, so a caller without the studio's credential is answered 401 or 403 and
- * nothing else runs. A `POST` then needs the person at their computer, decided from where the request arrived before
- * its body is read: the loopback listener under a loopback `Host` (`@delorun/home`'s arrival helpers), admitted with
- * the credential, and not admitted for a remote session. No reach listener accepts a loopback `Host`, so such a request
- * did not come through a remote session; otherwise it is answered `403 LOOPBACK_REQUIRED`. A browser request from
- * another site (`Sec-Fetch-Site`, or an `Origin` that is not the request's own loopback origin) is answered
- * `403 CROSS_SITE`, also before the body is read. Only then is the body read, at most {@link MAX_BODY_BYTES}, and the
- * route attests the request with `attestStudio`, the only proof a studio request carries; no route changes the
- * protection setting, which only `delorun changes protection` changes.
+ * nothing else runs. A `POST` is then decided before its body is read, in this order: a browser request from another
+ * site is answered `403 CROSS_SITE` (at the computer: `Sec-Fetch-Site`, or an `Origin` that is not the request's own
+ * loopback origin; from a paired device: an `Origin` that is not the device's own studio address); then the control's
+ * level ([access](./access.ts)) decides who may act. The person at the computer is attested with `attestStudio`: the
+ * loopback listener under a loopback `Host`, admitted with the credential and not for a remote session. A paired device
+ * is attested with `attestDevice` only when the control's level and the Phone powers level let a device use it and the
+ * device holds an unlock the person entered (a code or a PIN; the approval grace never counts); otherwise it is answered
+ * `403 LOOPBACK_REQUIRED` or `403 ELEVATION_REQUIRED`. Only then is the body read, at most {@link MAX_BODY_BYTES}.
+ * A proof is no barrier to code running inside the Host; it records where the person decided.
  *
  * `state` reads only the records: it writes nothing and reads no plugin's folder, so the studio's repeated reads and a
- * remote session's cost nothing. Only `show` reads folders, computes diffs and stores their content.
+ * remote session's cost nothing. Only `show` reads folders and the person's copy of Delorun, computes diffs and stores
+ * their content.
  *
- * A change to Delorun itself is decided only at a terminal, which knows the signed file list of the runtime it runs: the
- * routes read its log entry and its diff from the store and refuse `apply`, `discard` and `undo` for it with
- * `409 DECIDE_AT_TERMINAL` and the command, before any action runs. No route calls an action on Delorun's own files.
+ * A change to Delorun itself is decided on the harness routes against the running runtime's signed file list, which the
+ * home process gives the Host (`changesHarness`); a Host without it, such as one run from a source checkout, answers
+ * `409 HARNESS_UNAVAILABLE`. `harness-apply` takes the full content version the review showed and refuses another.
+ * The plugin action routes refuse a change to Delorun itself with `409 HARNESS_ROUTE`. Turning protection off asks a
+ * second time (`409 CONFIRM_PROTECTION` with what would load without review); that second ask stops a misclick, not an
+ * attacker.
  *
  * Every answer is JSON with `cache-control: no-store`; file names, diffs, summaries and failures travel as JSON strings
  * that the screen renders as text. No answer names the Delorun home's path: a refusal or an unreadable part whose words
@@ -34,8 +40,22 @@ import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   applyChange,
+  applyHarnessChange,
   applyInstallChange,
+  attestDevice,
   attestStudio,
+  changeProtection,
+  countUnreviewedSinceOff,
+  createHarnessCopy,
+  discardHarnessChange,
+  dismissNotice,
+  harnessChanges,
+  harnessCopyDirectory,
+  pathExists,
+  readNotices,
+  showHarnessChange,
+  undoHarnessChange,
+  unreviewedSinceOff,
   CONTENT_VERSION_PATTERN,
   discardChange,
   finishWork,
@@ -68,6 +88,7 @@ import {
   type ChangesCode,
   type ChangesContext,
   type ContentVersion,
+  type HarnessContext,
   type HarnessReview,
   type InstallResult,
   type ListedChange,
@@ -81,29 +102,48 @@ import {
   type WorkStarted,
 } from '@delorun/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
+import { mayUse, accessView } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
   ACTION_PATHS,
   CHANGED_SINCE_REVIEW,
+  CONFIRM_PROTECTION,
   CONFIRM_RISK,
-  DECIDE_AT_TERMINAL,
+  ELEVATION_REQUIRED,
+  HARNESS_PATHS,
+  HARNESS_ROUTE,
+  HARNESS_UNAVAILABLE,
   LOOPBACK_REQUIRED,
+  NOTICE_SEEN_PATH,
+  PROTECTION_PATHS,
   SHOW_PATH,
   SETUP_PATHS,
   STATE_PATH,
   WORKSPACES_PATH,
   type ActionView,
+  type ActorView,
   type ChangesAction,
+  type ChangesControl,
   type ChangesStateView,
   type ChangeView,
   type CreatedView,
   type DiscardView,
   type DoneView,
   type EntryView,
+  type HarnessActionView,
+  type HarnessAction,
+  type HarnessAvailableView,
+  type HarnessCopyView,
+  type HarnessDiscardView,
+  type HarnessEffectView,
   type HarnessEntryView,
+  type HarnessPendingView,
+  type HarnessReviewView,
   type InstallView,
   type PendingListView,
   type PendingView,
+  type PhonePowersView,
+  type ProtectionChangedView,
   type RequestedView,
   type RevealedView,
   type RiskView,
@@ -116,7 +156,7 @@ import { createAction, CreateRefusal, requestAction, revealAction, type Scaffold
 import { applySetupImport } from '@delorun/changes/setup-transfer'
 import { applySetup, exportSetup, HeldSetups, inspectSetup, listSetupPlugins, MAX_SETUP_FILE_BYTES, SetupRefusal } from './setup-actions.ts'
 
-export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
+export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
 
 /** The largest body an action reads, in bytes; a body names one change or plugin. */
 export const MAX_BODY_BYTES = 16 * 1024
@@ -126,6 +166,9 @@ export const RECENT_CHANGES = 20
 
 /** The sentence a request that is not at the computer is answered with. */
 export const LOOPBACK_REQUIRED_SENTENCE = 'This needs you at your computer.'
+
+/** The sentence a paired device without an unlock the person entered is answered with. */
+export const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.'
 
 /** The sentence that stands for a failure's words when they name the Delorun home's path, which the Host log keeps. */
 export const HOME_WITHHELD_SENTENCE = 'Its details name files Delorun keeps; the Host log has them.'
@@ -194,7 +237,52 @@ export interface RouteDependencies {
    * @returns the version.
    */
   readonly delorunVersion: () => string
+  /** The paired devices and the Phone powers level, from the mounted `homeAuth` service. */
+  readonly devices: RouteDevices
+  /**
+   * The running runtime's harness, which the home process gives the Host.
+   * @returns it, or undefined when the Host does not run an installed release under `delorun start`.
+   */
+  readonly harness: () => HarnessContext | undefined
+  /**
+   * When a decided change to Delorun itself takes effect: live, or after a restart. Called after its log entry is written.
+   * @param entry - the applied or undone entry.
+   * @returns the effect.
+   */
+  readonly harnessEffect: (entry: ChangeEntry) => Promise<HarnessEffectView>
 }
+
+/** A paired device as the routes see it. */
+export interface RouteDevice {
+  readonly id: string
+  /** The name the person gave it. */
+  readonly label: string
+  /** `fresh`: an unlock the person entered (a code or a PIN page); `grace`: only the approval grace; `none`: locked. */
+  readonly unlock: 'fresh' | 'grace' | 'none'
+  /** Renew the device's sliding unlock after an action it was needed for. */
+  readonly renew: () => void
+}
+
+/** What the routes read of paired devices. */
+export interface RouteDevices {
+  /**
+   * The paired device a remote session speaks for.
+   * @param peer - the admitted session.
+   * @returns the device, or undefined for a session that is not a paired device's.
+   */
+  readonly deviceOf: (peer: object) => Promise<RouteDevice | undefined>
+  /**
+   * The Phone powers level in force.
+   * @returns it; Careful and not chosen while no `homeAuth` is mounted.
+   */
+  readonly phonePowers: () => PhonePowersView
+}
+
+/** Where an admitted request came from. */
+type Requester =
+  | { readonly kind: 'computer' }
+  | { readonly kind: 'device', readonly device: RouteDevice }
+  | { readonly kind: 'other' }
 
 /** A refusal a route answers with: its status, its code and the sentence the person reads. */
 class RouteRefusal extends Error {
@@ -312,6 +400,67 @@ export function isCrossSite(request: IncomingMessage): boolean {
   if (isForeignFetchSite(header(request, 'sec-fetch-site'))) return true
   const origin = request.headers.origin
   return origin !== undefined && !isSameLoopbackOrigin(origin, header(request, 'host'))
+}
+
+/**
+ * Whether a paired device's browser sent the request from another site: its `Sec-Fetch-Site` names another site, or its
+ * `Origin` is absent or is not the device's own studio address, `https://` and the `Host` the reach listener checked.
+ * @param request - the request.
+ * @returns true for a request the device's own studio page did not make.
+ */
+export function isCrossSiteDevice(request: IncomingMessage): boolean {
+  if (isForeignFetchSite(header(request, 'sec-fetch-site'))) return true
+  const origin = header(request, 'origin')
+  const host = header(request, 'host')
+  return origin === undefined || host === undefined || origin !== `https://${host}`
+}
+
+/**
+ * Where an admitted request came from: the person at the computer, a paired device, or neither.
+ * @param admission - the arrival and the admitted session.
+ * @param devices - the paired devices.
+ * @returns the requester.
+ */
+async function requesterOf(admission: { readonly arrival: StudioArrival, readonly peer: object }, devices: RouteDevices): Promise<Requester> {
+  if (atComputer(admission.arrival)) return { kind: 'computer' }
+  if (!admission.arrival.remoteSession) return { kind: 'other' }
+  const device = await devices.deviceOf(admission.peer)
+  return device === undefined ? { kind: 'other' } : { kind: 'device', device }
+}
+
+/**
+ * @param requester - where a request came from.
+ * @returns the actor `state` names.
+ */
+function actorOf(requester: Requester): ActorView {
+  if (requester.kind === 'computer') return 'computer'
+  if (requester.kind === 'other') return 'device-locked'
+  return requester.device.unlock === 'fresh' ? 'device-unlocked' : requester.device.unlock === 'grace' ? 'device-grace' : 'device-locked'
+}
+
+/**
+ * Decide a `POST` before its body is read: the site, then the control's level, then the proof.
+ * @param request - the request.
+ * @param admission - the arrival and the admitted session.
+ * @param control - the control the route is.
+ * @param devices - the paired devices and the Phone powers level.
+ * @returns the proof, and a renewal of the device's unlock to run once the action succeeded.
+ * @throws {RouteRefusal} `403 CROSS_SITE`; `403 LOOPBACK_REQUIRED` when the control stays at the computer for this
+ *   request; `403 ELEVATION_REQUIRED` for a device that holds no unlock the person entered.
+ */
+async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices): Promise<{ readonly presence: AtComputer, readonly renew: () => void }> {
+  const requester = await requesterOf(admission, devices)
+  if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
+  if (requester.kind === 'computer') return { presence: attestStudio(admission.arrival), renew: () => {} }
+  if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
+  const may = mayUse(actorOf(requester), devices.phonePowers().level, control)
+  if (!may.ok) {
+    throw may.needs === 'computer'
+      ? new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
+      : new RouteRefusal(403, ELEVATION_REQUIRED, ELEVATION_REQUIRED_SENTENCE)
+  }
+  const { device } = requester
+  return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh' }), renew: device.renew }
 }
 
 /**
@@ -464,6 +613,7 @@ function entryView(entry: ChangeEntry): EntryView {
     createdAt: entry.createdAt,
     ...entry.decidedAt === undefined ? {} : { decidedAt: entry.decidedAt },
     ...entry.decidedFrom === undefined ? {} : { decidedFrom: entry.decidedFrom },
+    ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
     undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
@@ -472,12 +622,16 @@ function entryView(entry: ChangeEntry): EntryView {
 
 /**
  * @param entry - an entry of the log of changes to Delorun itself.
+ * @param running - the runtime this Host runs, whose applied changes the harness routes undo; undefined without one.
  * @returns what the person reads of it, or undefined when it is not a decided change to a named file of a runtime.
  */
-function harnessEntryView(entry: ChangeEntry): HarnessEntryView | undefined {
+function harnessEntryView(entry: ChangeEntry, running: string | undefined): HarnessEntryView | undefined {
   const { file, runtime } = entry.subject
   if (entry.kind !== 'harness-edit' || file === undefined || runtime === undefined || entry.state === 'pending') return undefined
   return {
+    undoable: runtime === running && (entry.state === 'applied' || entry.state === 'left-out-at-start'),
+    ...entry.decidedFrom === undefined ? {} : { decidedFrom: entry.decidedFrom },
+    ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     id: entry.id,
     state: entry.state,
     file,
@@ -588,15 +742,17 @@ async function part<T>(problems: string[], home: HomeWords, what: string, read: 
  * `GET state`: what failed at the last start, the changes left out at it, the plugins under Changes and the agent's
  * plugin requests waiting for review, the recent changes newest first with whether each can be undone, the recent
  * changes to Delorun itself, the protection setting (the client says from it whether changes load without review), safe
- * mode, the work session, and whether the request is at the
- * computer, so the screen says so before an action is refused. It reads the records only: nothing is written and no
- * plugin's folder is read.
+ * mode, the work session, whether this Host can change Delorun's own files, how many changes loaded without review since
+ * protection was turned off, the notices of a device's protection changes (to the computer only), and what this request
+ * may use, so the screen says so before an action is refused. It reads the records only: nothing is written and no
+ * plugin's folder or copy of Delorun is read.
  * @param ctx - the profile.
- * @param atComputer - whether the request could act.
+ * @param requester - where the request came from.
  * @param home - the home's spellings and the log.
+ * @param dependencies - the running runtime's harness and the paired devices.
  * @returns the state.
  */
-async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords): Promise<ChangesStateView> {
+async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWords, dependencies: RouteDependencies): Promise<ChangesStateView> {
   const problems: string[] = []
   const boot = await part(problems, home, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
   const log = await part(problems, home, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
@@ -605,9 +761,12 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords
   const workSession = await part(problems, home, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
   const recorded = await part(problems, home, 'The changes waiting for review', () => recordedChanges(ctx))
   const harnessLog = await part(problems, home, 'The log of changes to Delorun itself', () => readHarnessLog(ctx.home))
+  const notices = requester.kind === 'computer' ? await part(problems, home, 'The notices', () => readNotices(ctx.home)) : []
+  const harness = dependencies.harness()
   const entries = log?.entries ?? []
   return {
-    atComputer,
+    atComputer: requester.kind === 'computer',
+    access: accessView(actorOf(requester), dependencies.devices.phonePowers()),
     profile: ctx.profile,
     ...protection === undefined ? {} : { protection },
     ...safeMode === undefined ? {} : { safeMode: { since: safeMode.since, reason: safeMode.reason, skipped: safeMode.skipped } },
@@ -622,7 +781,10 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords
     folders: (recorded?.folders ?? []).map(({ plugin, source, kind }) => ({ plugin, source, kind })),
     requests: (recorded?.requests ?? []).map(entryView),
     recent: newestDecided(entries, entryView),
-    harness: newestDecided(harnessLog?.entries ?? [], harnessEntryView),
+    harness: newestDecided(harnessLog?.entries ?? [], entry => harnessEntryView(entry, harness?.runtime)),
+    harnessAvailable: harness === undefined ? { kind: 'unavailable' } : { kind: 'available', runtime: harness.runtime, copy: await pathExists(harnessCopyDirectory(harness.home, harness.runtime)) } satisfies HarnessAvailableView,
+    unreviewedSinceOff: countUnreviewedSinceOff(entries, harnessLog?.entries ?? []),
+    notices: (notices ?? []).map(notice => ({ id: notice.id, level: notice.level, at: notice.at, device: notice.device })),
     ...workSession === undefined ? {} : { workSession },
     problems,
   }
@@ -631,18 +793,21 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords
 /**
  * `GET show`: one change by `?id=`, the open work session's folder against the content it started from by
  * `?work=<plugin>`, or every change of a plugin's folder waiting for review by `?pending`. Each reads the folders it
- * names and stores their content, as `delorun changes list` and `show` do.
+ * names and stores their content, as `delorun changes list` and `show` do. `?pending` also lists the changes waiting in
+ * the person's copy of Delorun, and `?id=` shows one of them.
  * @param ctx - the profile.
  * @param url - the request's URL.
+ * @param home - the home's spellings and the log.
+ * @param dependencies - the running runtime's harness.
  * @returns what the person reads.
  * @throws {RouteRefusal} `400 BAD_REQUEST` without exactly one well-formed query.
  */
-async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkReviewView | PendingListView> {
+async function shownOf(ctx: ChangesContext, url: URL, home: HomeWords, dependencies: RouteDependencies): Promise<ShownView | WorkReviewView | PendingListView> {
   const names = [...url.searchParams.keys()]
   if (names.length !== 1 || (names[0] !== 'id' && names[0] !== 'work' && !(names[0] === 'pending' && url.searchParams.get('pending') === ''))) {
     throw new RouteRefusal(400, 'BAD_REQUEST', 'Ask for one change with ?id=<id>, the work session with ?work=<plugin>, or the changes waiting for review with ?pending.')
   }
-  if (names[0] === 'pending') return { kind: 'pending-list', pending: (await listChanges(ctx)).pending.map(pendingView) }
+  if (names[0] === 'pending') return { kind: 'pending-list', pending: (await listChanges(ctx)).pending.map(pendingView), ...await harnessPendingOf(dependencies.harness(), home) }
   if (names[0] === 'work') return workView(await reviewWork(ctx, pluginOf(url.searchParams.get('work'))))
   const id = changeIdOf({ id: url.searchParams.get('id') })
   let shown: ShownChange
@@ -650,7 +815,7 @@ async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkR
     shown = await showChange(ctx, id)
   } catch (error) {
     // An id no plugin's change has may name a change to Delorun itself, which only the log of those changes holds.
-    const harness = isChangesError(error) && error.code === 'UNKNOWN_CHANGE' ? await harnessShown(ctx.home, id) : undefined
+    const harness = isChangesError(error) && error.code === 'UNKNOWN_CHANGE' ? await harnessShown(ctx.home, id, dependencies.harness()) : undefined
     if (harness === undefined) throw error
     return harness
   }
@@ -658,18 +823,24 @@ async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkR
 }
 
 /**
- * A logged change to Delorun itself with its files, risk summary and bounded diff, read from the store. Collection removes
- * the content of a change that was discarded or undone, and such a change is answered without its review.
+ * A logged change to Delorun itself with its files, risk summary and bounded diff, read from the store, or one waiting in
+ * the person's copy, whose two sides are stored first. Collection removes the content of a change that was discarded or
+ * undone, and such a change is answered without its review.
  * @param home - the Delorun home.
  * @param id - the change id.
- * @returns what the person reads, or undefined when the log of changes to Delorun itself has no such decided change.
+ * @param harness - the running runtime's harness, which reads the copy; undefined without one.
+ * @returns what the person reads, or undefined when no decided or waiting change to Delorun itself has the id.
  * @throws {ChangesError} `RECORD_UNREADABLE` for a log that cannot be read; `STORE_CORRUPT` when the store lacks the
  *   content of a change that is neither discarded nor undone.
  */
-async function harnessShown(home: string, id: ChangeId): Promise<ShownView | undefined> {
+async function harnessShown(home: string, id: ChangeId, harness: HarnessContext | undefined): Promise<ShownView | undefined> {
   const entry = (await readHarnessLog(home)).entries.find(candidate => candidate.id === id)
-  const view = entry === undefined ? undefined : harnessEntryView(entry)
-  if (entry === undefined || view === undefined) return undefined
+  const view = entry === undefined ? undefined : harnessEntryView(entry, harness?.runtime)
+  if (entry === undefined || view === undefined) {
+    const pending = harness === undefined ? undefined : await showHarnessChange(harness, id)
+    if (pending === undefined) return undefined
+    return { kind: 'harness-pending', change: harnessPendingView(pending), review: { kind: 'harness-edit', ...reviewView(pending) } }
+  }
   const change = loggedHarnessChange(entry)
   let review: HarnessReview | undefined
   try {
@@ -681,29 +852,57 @@ async function harnessShown(home: string, id: ChangeId): Promise<ShownView | und
   return {
     kind: 'harness',
     entry: view,
-    ...review === undefined ? {} : {
-      review: {
-        kind: 'harness-edit',
-        files: review.files.map(file => ({ path: file.path, status: file.status, binary: file.binary, dependency: file.dependency })),
-        risk: riskView(review.risk),
-        diff: { text: review.diff.text, truncated: review.diff.truncated, omitted: review.diff.omitted },
-      },
-    },
+    ...review === undefined ? {} : { review: { kind: 'harness-edit', ...reviewView(review) } },
   }
 }
 
 /**
- * Refuse an action on a change to Delorun itself: only a terminal, which knows the signed file list of the runtime it
- * runs, applies, discards or undoes one. The refusal comes before any action runs.
+ * @param review - a review of a change to Delorun itself.
+ * @returns its files, risk summary and bounded diff as the person reads them.
+ */
+function reviewView(review: HarnessReview): Omit<HarnessReviewView, 'kind'> {
+  return {
+    files: review.files.map(file => ({ path: file.path, status: file.status, binary: file.binary, dependency: file.dependency })),
+    risk: riskView(review.risk),
+    diff: { text: review.diff.text, truncated: review.diff.truncated, omitted: review.diff.omitted },
+  }
+}
+
+/**
+ * @param change - a change waiting in the person's copy of Delorun.
+ * @returns the line `show?pending` lists for it, with the full content version an apply sends back.
+ */
+function harnessPendingView(change: Pick<HarnessReview, 'id' | 'file' | 'runtime' | 'status' | 'to'>): HarnessPendingView {
+  return { id: change.id, file: change.file, runtime: change.runtime, status: change.status, to: change.to }
+}
+
+/**
+ * The changes waiting in the person's copy of Delorun, for `show?pending`.
+ * @param harness - the running runtime's harness; undefined without one, which lists none.
+ * @param home - the home's spellings and the log, for a problem's words.
+ * @returns the changes, or none and why the copy could not be read.
+ */
+async function harnessPendingOf(harness: HarnessContext | undefined, home: HomeWords): Promise<Pick<PendingListView, 'harness' | 'harnessProblem'>> {
+  if (harness === undefined) return { harness: [] }
+  try {
+    return { harness: (await harnessChanges(harness)).changes.map(harnessPendingView) }
+  } catch (error) {
+    if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
+    return { harness: [], harnessProblem: sayable(error.detail, error.code, home) }
+  }
+}
+
+/**
+ * Refuse a plugin action on a change to Delorun itself, which the harness routes decide with their own level. The
+ * refusal comes before any action runs.
  * @param home - the Delorun home.
  * @param id - the change id the body names.
- * @param action - the action asked for.
- * @throws {RouteRefusal} `409 DECIDE_AT_TERMINAL` with the command when the log of changes to Delorun itself has the id;
+ * @throws {RouteRefusal} `409 HARNESS_ROUTE` when the log of changes to Delorun itself has the id;
  *   {@link ChangesError} `RECORD_UNREADABLE` for a log that cannot be read.
  */
-async function refuseHarnessChange(home: string, id: ChangeId, action: 'apply' | 'discard' | 'undo'): Promise<void> {
+async function refuseHarnessChange(home: string, id: ChangeId): Promise<void> {
   if (!(await readHarnessLog(home)).entries.some(entry => entry.id === id)) return
-  throw new RouteRefusal(409, DECIDE_AT_TERMINAL, `Change ${id} changes Delorun itself, which you ${action} at a terminal: delorun changes ${action} ${id}`)
+  throw new RouteRefusal(409, HARNESS_ROUTE, `Change ${id} changes Delorun itself; decide it under Changes to Delorun itself.`)
 }
 
 /**
@@ -815,7 +1014,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       onlyFields(body, ['id', 'confirmedRisk'])
       const id = changeIdOf(body)
       const confirmed = confirmedRiskOf(body.confirmedRisk)
-      await refuseHarnessChange(ctx.home, id, action)
+      await refuseHarnessChange(ctx.home, id)
       const shown = await showChange(ctx, id)
       if (shown.kind === 'logged' && isPluginRequest(shown.entry)) {
         requireRequestConfirmation(shown.entry, confirmed)
@@ -829,7 +1028,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       onlyFields(body, ['id', 'confirmedRisk'])
       const id = changeIdOf(body)
       confirmedRiskOf(body.confirmedRisk)
-      await refuseHarnessChange(ctx.home, id, action)
+      await refuseHarnessChange(ctx.home, id)
       return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, options))
     }
     case 'off':
@@ -883,7 +1082,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
  * @param loopbackPort - the loopback listener's bound port.
  * @returns the arrival and a rolled credential, or undefined when the request was answered.
  */
-function admitted(request: IncomingMessage, response: ServerResponse, connection: RouteConnection, loopbackPort: LoopbackPort): { readonly arrival: StudioArrival, readonly setCookie?: string } | undefined {
+function admitted(request: IncomingMessage, response: ServerResponse, connection: RouteConnection, loopbackPort: LoopbackPort): { readonly arrival: StudioArrival, readonly peer: object, readonly setCookie?: string } | undefined {
   const admission = connection.admit(request)
   if ('rejection' in admission) {
     sendRefusal(response, admission.rejection === 401
@@ -892,7 +1091,7 @@ function admitted(request: IncomingMessage, response: ServerResponse, connection
     return undefined
   }
   const arrival = arrivalOf(request, loopbackPort, true, connection.isReachPeer(admission.peer))
-  return { arrival, ...admission.setCookie === undefined ? {} : { setCookie: admission.setCookie } }
+  return { arrival, peer: admission.peer, ...admission.setCookie === undefined ? {} : { setCookie: admission.setCookie } }
 }
 
 /**
@@ -937,12 +1136,12 @@ function workspacesOf(workspaces: readonly WorkspaceChoice[], atComputer: boolea
 }
 
 /**
- * Build a reading route: `state` or `show`. Any admitted session reads, a remote one included.
+ * Build a reading route: `state`, `show` or `workspaces`. Any admitted session reads, a remote one included.
  * @param read - what the route answers.
  * @param dependencies - what the routes reach.
  * @returns the handler.
  */
-function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean, home: HomeWords) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
+function readingRoute(read: (ctx: ChangesContext, url: URL, requester: Requester, home: HomeWords) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return
@@ -951,7 +1150,52 @@ function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean,
       if (request.method !== 'GET') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Read Changes with a GET.')
       const ctx = profileOf(dependencies)
       home = homeWords(ctx.home, dependencies.logger)
-      sendJson(response, 200, withoutHome(await read(ctx, new URL(String(request.url), 'http://studio.invalid'), atComputer(admission.arrival), home), home.homes), admission.setCookie)
+      const requester = await requesterOf(admission, dependencies.devices)
+      sendJson(response, 200, withoutHome(await read(ctx, new URL(String(request.url), 'http://studio.invalid'), requester, home), home.homes), admission.setCookie)
+    } catch (error) {
+      sendThrown(response, error, dependencies, home, admission.setCookie)
+    }
+  }
+}
+
+/** The control each plugin action route is. */
+const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
+  apply: 'plugin-apply',
+  discard: 'plugin-discard',
+  undo: 'plugin-undo',
+  off: 'plugin-other',
+  on: 'plugin-other',
+  work: 'plugin-other',
+  done: 'plugin-other',
+  'safe-mode': 'plugin-other',
+  create: 'plugin-other',
+  request: 'plugin-other',
+  reveal: 'plugin-other',
+}
+
+/**
+ * Build one `POST` route that the {@link gate} decides before its body is read: the site, then the control's level for
+ * the requester, then the proof. Only then is the body read and `run` called; a device's unlock is renewed after `run`
+ * succeeds. The Restart route builds its handler with it, so it has Apply's fence and level.
+ * @param control - the control the route is.
+ * @param dependencies - what the routes reach.
+ * @param run - the action, given the body, the profile and the proof.
+ * @returns the handler.
+ */
+export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler {
+  return async (request, response) => {
+    const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
+    if (admission === undefined) return
+    let home: HomeWords | undefined
+    try {
+      if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
+      const { presence, renew } = await gate(request, admission, control, dependencies.devices)
+      const ctx = profileOf(dependencies)
+      home = homeWords(ctx.home, dependencies.logger)
+      const body = await readBody(request)
+      const answer = await run(body, ctx, presence)
+      renew()
+      sendJson(response, 200, withoutHome(answer, home.homes), admission.setCookie)
     } catch (error) {
       sendThrown(response, error, dependencies, home, admission.setCookie)
     }
@@ -959,29 +1203,138 @@ function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean,
 }
 
 /**
- * Build one action route. The arrival and the site are decided before the body is read.
+ * Build one plugin action route.
  * @param action - the action.
  * @param dependencies - what the routes reach.
  * @returns the handler.
  */
 function actionRoute(action: ChangesAction, dependencies: RouteDependencies): RouteHandler {
-  return async (request, response) => {
-    const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
-    if (admission === undefined) return
-    let home: HomeWords | undefined
-    try {
-      if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
-      if (!atComputer(admission.arrival)) throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-      const presence = attestStudio(admission.arrival)
-      if (isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
-      const ctx = profileOf(dependencies)
-      home = homeWords(ctx.home, dependencies.logger)
-      const body = await readBody(request)
-      sendJson(response, 200, withoutHome(await act(action, body, ctx, presence, dependencies), home.homes), admission.setCookie)
-    } catch (error) {
-      sendThrown(response, error, dependencies, home, admission.setCookie)
+  return decidingRoute(ACTION_CONTROLS[action], dependencies, (body, ctx, presence) => act(action, body, ctx, presence, dependencies))
+}
+
+/**
+ * @param dependencies - what the routes reach.
+ * @returns the running runtime's harness.
+ * @throws {RouteRefusal} `409 HARNESS_UNAVAILABLE` when this Host has none.
+ */
+function harnessOf(dependencies: RouteDependencies): HarnessContext {
+  const harness = dependencies.harness()
+  if (harness === undefined) throw new RouteRefusal(409, HARNESS_UNAVAILABLE, 'Delorun\'s own files change only in an installed release started with delorun start.')
+  return harness
+}
+
+/** The control each harness route is. */
+const HARNESS_CONTROLS: Readonly<Record<HarnessAction, ChangesControl>> = {
+  apply: 'harness-apply',
+  undo: 'harness-undo',
+  discard: 'harness-discard',
+  copy: 'make-copy',
+}
+
+/**
+ * Run one harness action.
+ * @param action - the route.
+ * @param body - the request's body.
+ * @param harness - the running runtime's harness.
+ * @param presence - the proof.
+ * @param dependencies - the effect of a decided change, and the log.
+ * @returns what the person reads.
+ * @throws {RouteRefusal} for a body the action does not take or an unconfirmed risk; {@link ChangesError} for a
+ *   refusal of Changes.
+ */
+async function harnessAct(action: HarnessAction, body: Readonly<Record<string, unknown>>, harness: HarnessContext, presence: AtComputer, dependencies: RouteDependencies): Promise<HarnessActionView | HarnessDiscardView | HarnessCopyView> {
+  switch (action) {
+    case 'apply': {
+      onlyFields(body, ['id', 'to', 'confirmedRisk'])
+      const id = changeIdOf(body)
+      if (typeof body.to !== 'string' || !CONTENT_VERSION_PATTERN.test(body.to)) throw new RouteRefusal(400, 'BAD_REQUEST', 'Name the content you were shown: the change\'s to from show?pending.')
+      const confirmed = confirmedRiskOf(body.confirmedRisk)
+      const review = await showHarnessChange(harness, id)
+      if (review !== undefined) requireRiskConfirmation(review.risk, confirmed)
+      const entry = await applyHarnessChange(harness, id, presence, { reviewedTo: body.to as ContentVersion })
+      return { kind: 'harness', entry: harnessEntryView(entry, harness.runtime)!, effect: await dependencies.harnessEffect(entry) }
+    }
+    case 'undo': {
+      onlyFields(body, ['id'])
+      const entry = await undoHarnessChange(harness, changeIdOf(body), presence)
+      return { kind: 'harness', entry: harnessEntryView(entry, harness.runtime)!, effect: await dependencies.harnessEffect(entry) }
+    }
+    case 'discard': {
+      onlyFields(body, ['id'])
+      return { kind: 'harness', entry: harnessEntryView(await discardHarnessChange(harness, changeIdOf(body), presence), harness.runtime)! }
+    }
+    case 'copy': {
+      onlyFields(body, [])
+      const copy = await createHarnessCopy(harness, presence)
+      return { kind: 'copy', created: copy.created, runtime: harness.runtime, place: homeWords(harness.home, dependencies.logger).homes.reduce((text, path) => text.replaceAll(path, HOME_IN_ANSWERS), copy.directory) }
     }
   }
+}
+
+/**
+ * Build one harness route.
+ * @param action - the action.
+ * @param dependencies - what the routes reach.
+ * @returns the handler.
+ */
+function harnessRoute(action: HarnessAction, dependencies: RouteDependencies): RouteHandler {
+  return decidingRoute(HARNESS_CONTROLS[action], dependencies, (body, _ctx, presence) => harnessAct(action, body, harnessOf(dependencies), presence, dependencies))
+}
+
+/**
+ * What turning protection off lets load without review: the plugins whose folders hold changes waiting for review, and
+ * the files waiting in the person's copy of Delorun.
+ * @param ctx - the profile.
+ * @param harness - the running runtime's harness, if any.
+ * @returns the refusal that asks the second time.
+ */
+async function confirmProtectionOff(ctx: ChangesContext, harness: HarnessContext | undefined): Promise<RouteRefusal> {
+  const plugins = [...new Set((await listChanges(ctx)).pending.map(change => change.plugin))].sort()
+  let harnessFiles = 0
+  if (harness !== undefined) {
+    try {
+      harnessFiles = (await harnessChanges(harness)).changes.length
+    } catch (error) {
+      // A copy that cannot be read applies nothing at a start either; the second ask names the plugins alone.
+      if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
+    }
+  }
+  return new RouteRefusal(409, CONFIRM_PROTECTION, 'With protection off, saved changes to your linked plugins load at once, your copy of Delorun applies at the next start, and the agent installs plugins with the full-access approval alone. Confirm again to turn it off.', { willLoad: { plugins, harnessFiles } })
+}
+
+/**
+ * Build one protection route.
+ * @param level - the level the route sets.
+ * @param dependencies - what the routes reach.
+ * @returns the handler.
+ */
+function protectionRoute(level: 'on' | 'off', dependencies: RouteDependencies): RouteHandler {
+  return decidingRoute(level === 'off' ? 'protection-off' : 'protection-on', dependencies, async (body, ctx, presence): Promise<ProtectionChangedView> => {
+    if (level === 'on') {
+      onlyFields(body, [])
+      const loaded = await unreviewedSinceOff(ctx)
+      await changeProtection(ctx, 'on', presence)
+      return { protection: 'on', unreviewedSinceOff: loaded }
+    }
+    onlyFields(body, ['confirmed'])
+    if (body.confirmed !== undefined && typeof body.confirmed !== 'boolean') throw new RouteRefusal(400, 'BAD_REQUEST', 'confirmed is true or false.')
+    if (body.confirmed !== true) throw await confirmProtectionOff(ctx, dependencies.harness())
+    await changeProtection(ctx, 'off', presence)
+    return { protection: 'off', unreviewedSinceOff: 0 }
+  })
+}
+
+/**
+ * Build the route that dismisses a notice, at the computer only.
+ * @param dependencies - what the routes reach.
+ * @returns the handler.
+ */
+function noticeSeenRoute(dependencies: RouteDependencies): RouteHandler {
+  return decidingRoute('notice-seen', dependencies, async (body, ctx, presence) => {
+    onlyFields(body, ['id'])
+    if (typeof body.id !== 'string') throw new RouteRefusal(400, 'BAD_REQUEST', 'Name the notice by its id.')
+    return { dismissed: await dismissNotice(ctx.home, body.id, presence) }
+  })
 }
 
 /**
@@ -1017,9 +1370,7 @@ function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependenc
     let home: HomeWords | undefined
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'A setup is moved with a POST.')
-      if (!atComputer(admission.arrival)) throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-      const presence = attestStudio(admission.arrival)
-      if (isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
+      const { presence } = await gate(request, admission, 'plugin-other', dependencies.devices)
       const ctx = profileOf(dependencies)
       home = homeWords(ctx.home, dependencies.logger)
       const body = await readBody(request, kind === 'inspect' ? MAX_SETUP_BODY_BYTES : MAX_BODY_BYTES)
@@ -1075,10 +1426,14 @@ export interface ChangesRoute {
 export function changesRoutes(dependencies: RouteDependencies): readonly ChangesRoute[] {
   const held = new HeldSetups()
   return [
-    { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, atComputer, home) => stateOf(ctx, atComputer, home), dependencies) },
-    { kind: 'exact', path: SHOW_PATH, handler: readingRoute((ctx, url) => shownOf(ctx, url), dependencies) },
-    { kind: 'exact', path: WORKSPACES_PATH, handler: readingRoute((_ctx, _url, atComputer) => Promise.resolve(workspacesOf(dependencies.workspaces(), atComputer)), dependencies) },
+    { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, requester, home) => stateOf(ctx, requester, home, dependencies), dependencies) },
+    { kind: 'exact', path: SHOW_PATH, handler: readingRoute((ctx, url, _requester, home) => shownOf(ctx, url, home, dependencies), dependencies) },
+    { kind: 'exact', path: WORKSPACES_PATH, handler: readingRoute((_ctx, _url, requester) => Promise.resolve(workspacesOf(dependencies.workspaces(), requester.kind === 'computer')), dependencies) },
     ...(Object.keys(ACTION_PATHS) as ChangesAction[]).map((action): ChangesRoute => ({ kind: 'exact', path: ACTION_PATHS[action], handler: actionRoute(action, dependencies) })),
+    ...(Object.keys(HARNESS_PATHS) as HarnessAction[]).map((action): ChangesRoute => ({ kind: 'exact', path: HARNESS_PATHS[action], handler: harnessRoute(action, dependencies) })),
+    { kind: 'exact', path: PROTECTION_PATHS.on, handler: protectionRoute('on', dependencies) },
+    { kind: 'exact', path: PROTECTION_PATHS.off, handler: protectionRoute('off', dependencies) },
+    { kind: 'exact', path: NOTICE_SEEN_PATH, handler: noticeSeenRoute(dependencies) },
     ...(Object.keys(SETUP_PATHS) as (keyof typeof SETUP_PATHS)[]).map((kind): ChangesRoute => ({ kind: 'exact', path: SETUP_PATHS[kind], handler: setupRoute(kind, dependencies, held) })),
   ]
 }

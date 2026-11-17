@@ -18,6 +18,7 @@
     { "kind": "service", "name": "delorunNotice", "side": "browser", "source": "delorun/packages/bundle-local/src/client/index.ts" },
     { "kind": "service", "name": "updateReport", "side": "host", "source": "delorun/packages/update/src/service.ts" },
     { "kind": "service", "name": "homeAuth", "side": "host", "source": "delorun/packages/home-auth/src/service.ts" },
+    { "kind": "service", "name": "changesHarness", "side": "host", "source": "delorun/packages/plugin-changes/src/index.ts" },
     { "kind": "service", "name": "delorunSecrets", "side": "host", "source": "delorun/packages/logs/src/cordis.ts" },
     { "kind": "service", "name": "reachFullAccessGrants", "side": "host", "source": "delorun/packages/home-auth/src/full-access-grants.ts" },
     { "kind": "service", "name": "reach", "side": "host", "source": "delorun/packages/reach/src/service.ts" },

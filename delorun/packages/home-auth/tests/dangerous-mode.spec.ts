@@ -75,7 +75,7 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
     pinEnabled: () => false,
-    dangerousMode: () => mode,
+    phonePowers: () => 'full' as const, dangerousMode: () => mode,
   }
 }
 
@@ -233,7 +233,7 @@ function home(listener: string | undefined, mode: boolean, unlocked = true, pin 
     pinEnabled: () => pin,
     pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
-    dangerousMode: () => mode,
+    phonePowers: () => 'full' as const, dangerousMode: () => mode,
     elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined),
   } as never
 }
