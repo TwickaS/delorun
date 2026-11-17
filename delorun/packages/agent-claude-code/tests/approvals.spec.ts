@@ -105,6 +105,22 @@ describe('Claude Code questions', () => {
     await session.close()
   })
 
+  it.each([
+    ['Edit', { file_path: 'sum.js', old_string: 'SECRET OLD', new_string: 'SECRET NEW' }, 'Edit sum.js'],
+    ['Write', { file_path: 'test/sum.test.js', content: 'SECRET CONTENT' }, 'Write test/sum.test.js'],
+    ['NotebookEdit', { notebook_path: 'a.ipynb', new_source: 'SECRET' }, 'NotebookEdit a.ipynb'],
+    ['Bash', { command: 'x'.repeat(400) }, `Bash: ${'x'.repeat(300)}…`],
+    ['Glob', { path: 'p'.repeat(400) }, `Glob ${'p'.repeat(300)}…`],
+    ['Mystery', { payload: 'SECRET' }, 'Mystery'],
+  ])('words a question about %s as its tool with its command or path, never the call\'s other fields', async (tool, input, reason) => {
+    const asked: ProgramApprovalRequest[] = []
+    const { ask, session } = await opened((request) => { asked.push(request); return Promise.resolve('reject') })
+    await ask(tool, input, { signal, toolUseID: 'call-4', requestId: 'r4' })
+    expect(asked[0]?.reason).toBe(reason)
+    expect(asked[0]?.reason).not.toContain('SECRET')
+    await session.close()
+  })
+
   it('stops the turn when the seat cannot answer', async () => {
     const { ask, session } = await opened(() => Promise.reject(new Error('seat gone')))
     expect(await question(ask)).toEqual({ behavior: 'deny', message: CANCELLED_MESSAGE, interrupt: true })

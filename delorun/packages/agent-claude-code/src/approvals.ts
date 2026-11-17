@@ -141,7 +141,8 @@ export function permissionResult(answer: ProgramApprovalAnswer, input: Record<st
 
 /**
  * The plain description of a question for the person: Claude Code's own question sentence when it gives one,
- * otherwise the tool and the exact call. The call's own `description` field is the program model's words, not a
+ * otherwise the tool with its command or its file path, and never the rest of the call, which can hold file
+ * contents. The call's own `description` field is the program model's words, not a
  * statement of what runs, so it is never the reason.
  * @param toolName - the program's tool name.
  * @param input - the call's input.
@@ -152,8 +153,10 @@ export function permissionResult(answer: ProgramApprovalAnswer, input: Record<st
  */
 export function questionReason(toolName: string, input: Record<string, unknown>, options: { title?: string; displayName?: string }): string {
   if (options.title !== undefined && options.title.length > 0) return options.title
-  const detail = typeof input.command === 'string' ? input.command : JSON.stringify(input)
-  return `${options.displayName ?? toolName}: ${detail.length > 300 ? `${detail.slice(0, 300)}…` : detail}`
+  const name = options.displayName ?? toolName
+  if (typeof input.command === 'string') return `${name}: ${input.command.length > 300 ? `${input.command.slice(0, 300)}…` : input.command}`
+  const path = [input.file_path, input.path, input.notebook_path].find((value): value is string => typeof value === 'string' && value !== '')
+  return path === undefined ? name : `${name} ${path.length > 300 ? `${path.slice(0, 300)}…` : path}`
 }
 
 /** What the session does around a question. */
