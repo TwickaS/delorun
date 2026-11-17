@@ -17,8 +17,8 @@
   background: var(--dsw-alias-bg-layer-2);
   font-family: var(--dsw-font-mono, ui-monospace, monospace);
   font-size: var(--onb-small-size);
-  white-space: pre;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .copy {

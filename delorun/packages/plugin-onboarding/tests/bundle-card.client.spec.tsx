@@ -28,3 +28,14 @@ describe('an addable card on a phone', () => {
     expect(screen.getByText(en['bundle.added'])).toBeTruthy()
   })
 })
+
+describe('an unavailable card', () => {
+  it('blames the computer only for a platform limit, and gives the reason a Host without plugin packs reports', () => {
+    draw('unavailable', false)
+    expect(screen.getByText(en['bundle.unavailable'])).toBeTruthy()
+    cleanup()
+    render(<ul><AddableCard services={stepServices({ remote: false })} state="unavailable" packsReason="Delorun is not running from an installed release." title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+    expect(screen.getByText('Not available here. Delorun is not running from an installed release.')).toBeTruthy()
+    expect(screen.queryByText(en['bundle.unavailable'])).toBeNull()
+  })
+})

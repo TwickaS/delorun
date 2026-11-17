@@ -50,11 +50,11 @@ export function useRefresh(services: StepServices, names: readonly string[]): vo
 
 /**
  * A readable stand-in for a plugin's title while its registered title is unknown: the package name without its scope,
- * with dashes as spaces and a capital first letter, so a package id never shows.
+ * with dashes as spaces, without a leading `bundle` word, and a capital first letter, so a package id never shows.
  * @param name - the package name.
  * @returns the words, such as `Codex quota` for `@scope/codex-quota`.
  */
 export function readableName(name: string): string {
-  const words = name.slice(name.lastIndexOf('/') + 1).replaceAll('-', ' ').trim()
+  const words = name.slice(name.lastIndexOf('/') + 1).replace(/^bundle-/u, '').replaceAll('-', ' ').trim()
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
