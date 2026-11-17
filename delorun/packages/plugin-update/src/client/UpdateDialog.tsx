@@ -67,7 +67,7 @@ export function UpdateDialog({ state, t, actions, onClose, openChanges }: Update
     setStep({ kind: 'preparing' })
     setFailed(undefined)
     void actions.prepare().then((outcome) => {
-      setStep(outcome.ok ? { kind: 'ready', prepared: outcome.value } : { kind: 'refused', refusal: outcome.refusal })
+      setStep(outcome.ok ? { kind: 'ready', prepared: outcome.value.prepared } : { kind: 'refused', refusal: outcome.refusal })
     })
   }
   useEffect(() => {

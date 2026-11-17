@@ -55,6 +55,11 @@ export interface UpdateControllerDeps {
   readonly reload: () => void
 }
 
+/** The answer of the prepare route: the prepared update under `prepared`. */
+export interface PreparedUpdateAnswer {
+  readonly prepared: PreparedUpdateView
+}
+
 /** Thrown by {@link request} for a non-2xx answer. */
 class RouteRefused extends Error {
   readonly refusal: UpdateRefusal
@@ -186,8 +191,8 @@ export class UpdateController {
    * Fetch, verify and install the newest release, and read C3's report for it.
    * @returns the prepared update, whose handle `apply` takes.
    */
-  prepare(): Promise<Outcome<PreparedUpdateView>> {
-    return this.#act('update-begin', () => request<PreparedUpdateView>(UPDATE_PATHS.prepare, {}))
+  prepare(): Promise<Outcome<PreparedUpdateAnswer>> {
+    return this.#act('update-begin', () => request<PreparedUpdateAnswer>(UPDATE_PATHS.prepare, {}))
   }
 
   /**
