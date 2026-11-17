@@ -384,7 +384,7 @@
       "path": "packages/boot/plugin-manager/tests/tools.spec.ts",
       "class": "security",
       "reason": "Profile history and settings by chat: upstream's every-action-escalates assertions stand unchanged for the switch-off composition; the switch-on cases show that only the five read actions run without the escalation while every write action, `configure`, `undo` and `restore` included, still requires it, that `history` records no version, that `read_config` withholds the values of a non-native Config, and that the approval of `undo` and `restore` lists what they change. Lead verdict: kept with change; stock's assertions over every action hold with the C16 switch off, and the exemption and the withheld values are asserted only with it on. The configure cases list the plugins first and add the refusals of a protected and of an unaddressable entry, and the next-step assertions cover the protected-by-profile wording beside upstream's.",
-      "sha256": "cf7a686b9f9e7fa112583c1e5cd94a3c853d4b3cc6bbd95db5427e9f9a4458af"
+      "sha256": "2d8c1fac0343d71198815667a47ceaa488825413f37f8581567167c0aae621d0"
     },
     {
       "path": "packages/bundle/web-app/presets/cordis.patch.yml",
