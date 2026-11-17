@@ -258,6 +258,8 @@ export interface EntryView {
   /** ISO 8601. */
   readonly decidedAt?: string
   readonly decidedFrom?: DecidedFromView
+  /** The name of the paired device whose studio made the decision; absent for a decision at the computer or a terminal. */
+  readonly decidedOn?: string
   /** Why applying it failed to load. */
   readonly lastFailure?: FailureView
   /** What the start that left it out failed with. */
@@ -283,6 +285,8 @@ export interface HarnessEntryView {
   /** What the start that left it out failed with. */
   readonly leftOut?: FailureView
   readonly decidedFrom?: DecidedFromView
+  /** The name of the paired device whose studio made the decision; absent for a decision at the computer or a terminal. */
+  readonly decidedOn?: string
   /** Whether `harness-undo` takes it back: an applied change, or one a failed start left out, of the running runtime. */
   readonly undoable: boolean
 }

@@ -168,13 +168,18 @@ describe('changes to Delorun itself', () => {
     expect(server.renewals()).toBe(0)
   })
 
-  it('under Full an unlocked phone applies a harness change, recorded as decided in the studio', async () => {
+  it('under Full an unlocked phone applies a harness change, recorded as decided in the studio on that phone', async () => {
     const { ctx, server, change } = await waitingChange('full')
     const applied = await send(server.port, HARNESS_PATHS.apply, fromDevice('fresh', { id: change.id, to: change.to }))
-    expect(json(applied)).toMatchObject({ kind: 'harness', entry: { id: change.id, state: 'applied', decidedFrom: 'studio' } })
-    expect((await readHarnessLog(ctx.home)).entries).toMatchObject([{ id: change.id, decidedFrom: 'studio' }])
+    expect(json(applied)).toMatchObject({ kind: 'harness', entry: { id: change.id, state: 'applied', decidedFrom: 'studio', decidedOn: TEST_DEVICE.label } })
+    expect((await readHarnessLog(ctx.home)).entries).toMatchObject([{ id: change.id, decidedFrom: 'studio', decidedOn: TEST_DEVICE }])
     // Pins the renewal: the unlock the action needed slides on.
     expect(server.renewals()).toBe(1)
+    // A later decision at the computer does not keep the phone's name.
+    expect(json(await post(server.port, HARNESS_PATHS.undo, { id: change.id }))).toMatchObject({ kind: 'harness', entry: { state: 'undone', decidedFrom: 'studio' } })
+    const [undone] = (await readHarnessLog(ctx.home)).entries
+    expect(undone).toMatchObject({ state: 'undone', decidedFrom: 'studio' })
+    expect(undone).not.toHaveProperty('decidedOn')
   })
 
   it('a Host that runs no installed release decides no change to Delorun itself', async () => {

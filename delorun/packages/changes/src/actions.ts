@@ -32,6 +32,7 @@ import { isJsonObject, LINK_SECTIONS, readLinks, readProfileManifest, type JsonO
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory, versionsDirectory } from './paths.ts'
 import { pluginChange } from './pending.ts'
 import {
+  decisionOf,
   approvedOf,
   findEntry,
   readActiveRecord,
@@ -42,6 +43,7 @@ import {
   requirePresence,
   setProtection,
   withEntry,
+  withoutDecision,
   writeActiveRecord,
   writeApproved,
   writeChangeLog,
@@ -310,7 +312,7 @@ function summaryOf(change: PluginChange): string {
  * @returns it without the decision's fields and the failure, as a pending change records it.
  */
 function undecided(entry: ChangeEntry): ChangeEntry {
-  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, historyVersion: _historyVersion, lastFailure: _lastFailure, ...rest } = entry
+  const { historyVersion: _historyVersion, lastFailure: _lastFailure, ...rest } = withoutDecision(entry)
   return rest
 }
 
@@ -518,7 +520,7 @@ export async function applyChange(ctx: ChangesContext, id: ChangeId, presence: A
       summary: `Applied ${id}: ${summary}`,
       wentBack: `Went back: ${id} failed to load`,
       ...steps,
-      done: recorded => ({ ...pendingEntry, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }),
+      done: recorded => ({ ...pendingEntry, state: 'applied', ...decisionOf(at, presence), ...recorded }),
       failed: lastFailure => ({ ...pendingEntry, lastFailure }),
     })
   })
@@ -558,7 +560,7 @@ export async function discardChange(ctx: ChangesContext, id: ChangeId, presence:
         createdAt: findEntry(state.log, id)?.createdAt ?? at,
       }
     }
-    const entry: ChangeEntry = { ...base, state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+    const entry: ChangeEntry = { ...withoutDecision(base), state: 'discarded', ...decisionOf(at, presence) }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(state.log, entry))
     return entry
   })
@@ -630,7 +632,7 @@ async function applyLeftOut(ctx: ChangesContext, state: State, entry: ChangeEntr
     summary: `Applied ${entry.id} again: ${entry.summary}`,
     wentBack: `Went back: ${entry.id} failed to load again`,
     ...steps,
-    done: recorded => ({ ...applied, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }),
+    done: recorded => ({ ...withoutDecision(applied), state: 'applied', ...decisionOf(at, presence), ...recorded }),
     failed: lastFailure => ({ ...entry, lastFailure }),
   })
 }
@@ -660,7 +662,7 @@ async function undoContent(ctx: ChangesContext, state: State, entry: ChangeEntry
     summary: `Undid ${entry.id}: ${entry.summary}`,
     wentBack: `Went back: undoing ${entry.id} failed to load`,
     ...steps,
-    done: () => ({ ...withoutFailure(entry), state: 'undone', decidedAt: at, decidedFrom: presence.kind }),
+    done: () => ({ ...withoutDecision(withoutFailure(entry)), state: 'undone', ...decisionOf(at, presence) }),
     failed: lastFailure => ({ ...entry, lastFailure }),
   })
 }
@@ -762,8 +764,8 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
     write: () => writeBundles(ctx.profileDir, next),
     revert: () => writeBundles(ctx.profileDir, bundles),
     done: recorded => undoing === undefined
-      ? { ...pendingEntry, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }
-      : { ...withoutFailure(undoing), state: 'undone', decidedAt: at, decidedFrom: presence.kind },
+      ? { ...pendingEntry, state: 'applied', ...decisionOf(at, presence), ...recorded }
+      : { ...withoutDecision(withoutFailure(undoing)), state: 'undone', ...decisionOf(at, presence) },
     failed: lastFailure => undoing === undefined ? { ...pendingEntry, lastFailure } : { ...undoing, lastFailure },
   })
 }
@@ -791,8 +793,7 @@ export async function changeProtection(ctx: ChangesContext, level: ProtectionLev
     subject: { setting: 'protection' },
     summary: 'Protection turned off: changes load without review',
     createdAt: record.setAt,
-    decidedAt: record.setAt,
-    decidedFrom: presence.kind,
+    ...decisionOf(record.setAt, presence),
   }
   await locked(ctx, async () => {
     await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), entry))

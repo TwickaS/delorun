@@ -45,6 +45,8 @@ import {
   type ProtectionLevel,
   type ProtectionRecord,
   type WorkSessionRecord,
+  type DecidedFrom,
+  type StudioDevice,
 } from './types.ts'
 
 /** What a {@link ContentVersion} is: a SHA-256 in lowercase hexadecimal. */
@@ -67,23 +69,41 @@ const AT_COMPUTER: unique symbol = Symbol('AtComputer')
  * person runs with full access acts with the person's own authority. A studio proof says that a request reached the
  * loopback listener under a loopback `Host`, carried the studio's credential and was not admitted for a remote session,
  * or, from {@link attestDevice}, that a paired device's studio holds an unlock the person entered (a code or a PIN, never
- * the approval grace). A device's proof is logged as `studio`, as the computer's is: the change log does not tell them
- * apart, and the Host log names the device. Neither proof is a barrier to code running inside the Host.
+ * the approval grace). A device's proof is logged as `studio`, as the computer's is, with the device in the entry's
+ * `decidedOn` ({@link decisionOf}). Neither proof is a barrier to code running inside the Host.
  */
 export interface AtComputer {
   /** Where the person is: a terminal, or the studio at the computer or on an unlocked paired device. */
   readonly kind: 'terminal' | 'studio'
-  /** The paired device a studio proof came from; absent at the computer and in a terminal. Never in the change log. */
+  /** The paired device a studio proof came from; absent at the computer and in a terminal. */
   readonly device?: StudioDevice
   readonly [AT_COMPUTER]: true
 }
 
-/** A paired device, as a proof from {@link attestDevice} names it. */
-export interface StudioDevice {
-  /** The device's id. */
-  readonly id: string
-  /** The name the person gave it, for a notice at the computer. */
-  readonly label: string
+export type { StudioDevice }
+
+/** The fields of an entry that say when, where and on which paired device its last decision was made. */
+export type DecisionFields = Pick<ChangeEntry, 'decidedAt' | 'decidedFrom' | 'decidedOn'>
+
+/**
+ * The fields of a new decision. Spread them over {@link withoutDecision} of the entry, so a device named by an earlier
+ * decision is not left on this one.
+ * @param at - when, ISO 8601.
+ * @param from - the person's proof, or where Delorun decided.
+ * @returns the fields; `decidedOn` only for a proof from a paired device.
+ */
+export function decisionOf(at: string, from: AtComputer | Exclude<DecidedFrom, AtComputer['kind']>): DecisionFields {
+  if (typeof from === 'string') return { decidedAt: at, decidedFrom: from }
+  return { decidedAt: at, decidedFrom: from.kind, ...from.device === undefined ? {} : { decidedOn: { id: from.device.id, label: from.device.label } } }
+}
+
+/**
+ * @param entry - a log entry.
+ * @returns it without its last decision's fields.
+ */
+export function withoutDecision(entry: ChangeEntry): Omit<ChangeEntry, keyof DecisionFields> {
+  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, decidedOn: _decidedOn, ...rest } = entry
+  return rest
 }
 
 /** Every {@link AtComputer} the attest functions issued. */
@@ -385,6 +405,7 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   createdAt: required.iso,
   decidedAt: optional.iso,
   decidedFrom: { test: oneOf(DECIDED_FROM), expected: DECIDED_FROM.join(', '), optional: true },
+  decidedOn: { ...nested({ id: required.string, label: required.string }, 'a paired device'), optional: true },
   historyVersion: optional.string,
   leftOut: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
   shownAt: optional.iso,

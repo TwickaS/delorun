@@ -613,6 +613,7 @@ function entryView(entry: ChangeEntry): EntryView {
     createdAt: entry.createdAt,
     ...entry.decidedAt === undefined ? {} : { decidedAt: entry.decidedAt },
     ...entry.decidedFrom === undefined ? {} : { decidedFrom: entry.decidedFrom },
+    ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
     undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
@@ -630,6 +631,7 @@ function harnessEntryView(entry: ChangeEntry, running: string | undefined): Harn
   return {
     undoable: runtime === running && (entry.state === 'applied' || entry.state === 'left-out-at-start'),
     ...entry.decidedFrom === undefined ? {} : { decidedFrom: entry.decidedFrom },
+    ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     id: entry.id,
     state: entry.state,
     file,

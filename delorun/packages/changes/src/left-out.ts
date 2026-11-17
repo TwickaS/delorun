@@ -24,7 +24,7 @@ import { locked, timeOf } from './action-support.ts'
 import type { ChangesContext } from './actions.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory } from './paths.ts'
-import { approvedOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
+import { approvedOf, decisionOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withoutDecision, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
 import type { ActiveContent, ActiveRecord, ApprovedRecord, ChangeEntry, ChangeKind, ChangeLog, ChangeState } from './types.ts'
 
 /** The most a left-out change's failure keeps, in bytes of UTF-8. */
@@ -182,7 +182,7 @@ export async function leaveOutNewestChange(ctx: ChangesContext, failure: string,
  */
 function leftOutEntry(entry: ChangeEntry, at: string, failure: string): ChangeEntry {
   const { lastFailure: _lastFailure, ...applied } = entry
-  return { ...applied, state: 'left-out-at-start', decidedAt: at, decidedFrom: 'start', leftOut: { at, failure: boundedFailure(failure) } }
+  return { ...withoutDecision(applied), state: 'left-out-at-start', ...decisionOf(at, 'start'), leftOut: { at, failure: boundedFailure(failure) } }
 }
 
 /**
