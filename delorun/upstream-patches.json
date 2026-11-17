@@ -1554,7 +1554,7 @@
       "path": "pnpm-workspace.yaml",
       "class": "security",
       "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code. Adds `minimumReleaseAgeExclude` entries for exactly `@opencode/browse@0.1.1` and its seven platform packages at 0.1.1, which the Your own browser pack pins: owner ruling A443 (2026-11-17), to remove after 2026-11-18 00:15Z, when 0.1.1 passes the release-age rule by itself.",
-      "sha256": "8cbd3efec6653e94f2a230844d10e286732310a24db8076231259915711a83d9"
+      "sha256": "9ad8becd6e3704c3a24b6b8ba78ce7857aadecd3082aa5fbd790bc08953a32b0"
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
