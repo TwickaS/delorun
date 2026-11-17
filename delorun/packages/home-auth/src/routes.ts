@@ -20,6 +20,7 @@ import { DEVICE_APPROVAL_VERSION } from '@delorun/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError, refusalBody, STRUCTURED_REFUSALS } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delorun/home'
+import { deviceSession } from './elevation-routes.ts'
 import { isRecord } from './files.ts'
 import { devicePublicKeyOf } from './records.ts'
 
@@ -140,6 +141,21 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
  */
 export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
+    // A signed-in device reads the same listing, with its own id and the unlocks running now (the approval grace
+    // among them), so its studio shows who is paired and who is unlocked; the computer's checks below do not apply.
+    if (isReachArrival(auth, request)) {
+      const device = deviceSession(auth, request, response, 'GET')
+      if (device === undefined) return
+      try {
+        const unlocks = auth.elevationsAtComputer().running
+          .filter(record => record.page !== true)
+          .map(({ deviceId, endsAt, grace }) => ({ deviceId, endsAt, ...grace === true ? { reason: 'approval-grace' as const } : {} }))
+        sendJson(response, 200, { ...await auth.devices(), current: device.session.deviceId, unlocks })
+      } catch (error) {
+        sendThrown(response, error)
+      }
+      return
+    }
     // The listing names the owner and every device, so it answers on the loopback listener only, under a `Host` that
     // names it, to the studio's own credential: a rebinding name reaches this port while its `Host` still says whose
     // page asked, and any local process reaches the port at all.
@@ -164,6 +180,28 @@ export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): 
  */
 export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
+    // A signed-in device may remove itself, which is its own sign-out. Removing another device stays at the computer: a
+    // stolen unlocked phone must not lock the person out of their other devices.
+    if (isReachArrival(auth, request)) {
+      const device = deviceSession(auth, request, response, 'POST')
+      if (device === undefined) return
+      try {
+        const message = await readMessage(request, response)
+        if (message === undefined) return
+        if (message.v !== DEVICE_APPROVAL_VERSION || typeof message.deviceId !== 'string' || message.deviceId === '') {
+          sendError(response, new HomeAuthError('BAD_REQUEST', 'a removal carries the device id'))
+          return
+        }
+        if (message.deviceId !== device.session.deviceId) {
+          sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs you at your computer: open the studio on the home\'s own computer'))
+          return
+        }
+        sendJson(response, 200, await auth.revokeDevice(device.session.deviceId))
+      } catch (error) {
+        sendThrown(response, error)
+      }
+      return
+    }
     // Removing a device ends its sessions, so the arrival is decided before anything is read: a foreign `Host` is a
     // rebinding name, a request without the studio's credential is a local program, and a foreign or absent `Origin` or
     // a cross-site fetch is a page the person never asked to remove anything.
@@ -186,6 +224,17 @@ export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredenti
       sendThrown(response, error)
     }
   }
+}
+
+/**
+ * Whether a request arrived on a reach listener, where a signed-in device may use the device routes it is allowed.
+ * @param auth - the home-auth instance, which decides the arrival.
+ * @param request - the request.
+ * @returns whether the arrival is a reach listener.
+ */
+function isReachArrival(auth: HomeAuth, request: IncomingMessage): boolean {
+  const listener = auth.arrivalOf(request).listener
+  return listener !== undefined && listener !== 'loopback'
 }
 
 /**
