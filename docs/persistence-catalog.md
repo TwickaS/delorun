@@ -51,6 +51,9 @@ The [format references](persistence-changes/historical-formats/README.md) cover 
 | `event:model/selection` | event | `35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc` | [`{ type: "model/selection" }`](#persistence-type-sha256-35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc) |
 | `event:permission/preset` | event | `5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b` | [`{ type: "permission/preset" }`](#persistence-type-sha256-5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b) |
 | `event:plan/mode` | event | `a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f` | [`{ type: "plan/mode" }`](#persistence-type-sha256-a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f) |
+| `event:real-browser/away` | event | `a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0` | [`{ type: "real-browser/away" }`](#persistence-type-sha256-a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0) |
+| `event:real-browser/ended` | event | `8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5` | [`{ type: "real-browser/ended" }`](#persistence-type-sha256-8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5) |
+| `event:real-browser/granted` | event | `23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1` | [`{ type: "real-browser/granted" }`](#persistence-type-sha256-23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1) |
 | `event:request/context` | event | `37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf` | [`{ type: "request/context" }`](#persistence-type-sha256-37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf) |
 | `event:request/header` | event | `4208123b50df5006b181481ab45fcf1cde807b88d3fd4d340090bc2e202fac41` | [`{ type: "request/header" }`](#persistence-type-sha256-4208123b50df5006b181481ab45fcf1cde807b88d3fd4d340090bc2e202fac41) |
 | `event:sandbox/mode` | event | `516da4cdd6d2f1e5ce488e648578ca51f40e458f707b803e5b24de870e799415` | [`{ type: "sandbox/mode" }`](#persistence-type-sha256-516da4cdd6d2f1e5ce488e648578ca51f40e458f707b803e5b24de870e799415) |
@@ -737,6 +740,44 @@ Source: [`packages/interaction/permission-presets/src/index.ts:55`](../packages/
 ```
 
 Source: [`packages/plan/plan-mode/src/index.ts:53`](../packages/plan/plan-mode/src/index.ts)
+
+### `real-browser/*`
+
+<a id="real-browseraway--log-only"></a>
+
+#### `real-browser/away` — log-only
+
+```ts persistence-catalog
+/**
+ * Whether a run the person did not start, such as a scheduled one, may use the running grant: until the Unix
+ * epoch milliseconds `until`, or no longer for `null`. A later one replaces it; `real-browser/ended` ends it.
+ */
+'real-browser/away': { until: number | null }
+```
+
+Source: [`packages/experimental/browser-use-runtime/src/real-browser.ts:26`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+<a id="real-browserended--log-only"></a>
+
+#### `real-browser/ended` — log-only
+
+```ts persistence-catalog
+/** The Session's real-browser grant ended, its away permission with it; a later `real-browser/granted` starts a new one. */
+'real-browser/ended': { reason: RealBrowserEndReason }
+```
+
+Source: [`packages/experimental/browser-use-runtime/src/real-browser.ts:28`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+<a id="real-browsergranted--log-only"></a>
+
+#### `real-browser/granted` — log-only
+
+```ts persistence-catalog
+/** The person allowed their own browser for the rest of this Session; it lasts until a `real-browser/ended`. */
+'real-browser/granted': { source: RealBrowserGrantSource }
+```
+
+Source: [`packages/experimental/browser-use-runtime/src/real-browser.ts:21`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 ### `request/*`
 
@@ -1448,6 +1489,14 @@ SHA-256: `85d6d96ff884297410ec0026bdacba835f10e56cbcc5a3b9d670739f4aa0494b`
 SHA-256: `e438a9d4fb883b3e4a8d9fc8913aa1550ed50eb384bfbf943100a5605b537498`
 
 `"append"`
+
+<a id="persistence-type-sha256-c914163c995adf6f4ba3e6d488fa0a2869931475e951d068c2c62a45f231ba32"></a>
+
+### `"approval"`
+
+SHA-256: `c914163c995adf6f4ba3e6d488fa0a2869931475e951d068c2c62a45f231ba32`
+
+`"approval"`
 
 <a id="persistence-type-sha256-cd186c309e2bef305705e1d324139240f5e681f4f6a957d6a25b0225f65560df"></a>
 
@@ -2263,6 +2312,20 @@ SHA-256: `ae63d9d1080ed8945031594d93f8d96651d7101b848719cc3e1475875cd3d649`
 
 `"permission/preset"`
 
+<a id="persistence-type-sha256-8759a561541fffb56a5feef4bc9a1f7c0015f53b7cf8f97c134af52c320e41aa"></a>
+
+<a id="persistence-type-packagesexperimentalbrowser-use-runtimesrcreal-browsertsrealbrowserendreason"></a>
+
+<a id="persistence-type-realbrowserendreason"></a>
+
+### `"person"`
+
+SHA-256: `8759a561541fffb56a5feef4bc9a1f7c0015f53b7cf8f97c134af52c320e41aa`
+
+Sources: [`packages/experimental/browser-use-runtime/src/real-browser.ts:16`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+`"person"`
+
 <a id="persistence-type-sha256-0fe52387f65052702ed9d7cd59db826468936595d1b3eec207e7a823adc719db"></a>
 
 ### `"plan-mode"`
@@ -2334,6 +2397,30 @@ SHA-256: `4edec1b770e8ec4ce1220bf42edc5ac46713a1b48d4caa778dcfc98bad1f28a3`
 SHA-256: `12a0cfa619ac4a5fc6c3e8e359c8dae15769edc61497a575935c78d5842f8e42`
 
 `"read-only"`
+
+<a id="persistence-type-sha256-e3f8749a97ac2bad7fe9c9e5c5e9284c79e8c8a188e8ff3858e4fec21d713bbf"></a>
+
+### `"real-browser/away"`
+
+SHA-256: `e3f8749a97ac2bad7fe9c9e5c5e9284c79e8c8a188e8ff3858e4fec21d713bbf`
+
+`"real-browser/away"`
+
+<a id="persistence-type-sha256-0703d5d9f960171d43bc93cd30135354434521dd4dfcd70aa5781e5c75dee6fd"></a>
+
+### `"real-browser/ended"`
+
+SHA-256: `0703d5d9f960171d43bc93cd30135354434521dd4dfcd70aa5781e5c75dee6fd`
+
+`"real-browser/ended"`
+
+<a id="persistence-type-sha256-15fb9e28d624c1d6dae288b05d36d2bafe7197b95912b0b6d5873c232bdae12b"></a>
+
+### `"real-browser/granted"`
+
+SHA-256: `15fb9e28d624c1d6dae288b05d36d2bafe7197b95912b0b6d5873c232bdae12b`
+
+`"real-browser/granted"`
 
 <a id="persistence-type-sha256-3c2535ca0a2062f172f15344f8040755002b5ac506cf94fc4ebaa822b15feb8c"></a>
 
@@ -4537,6 +4624,23 @@ Sources: [`packages/core/tool-executor-ptc/src/types.ts:12`](../packages/core/to
 | `parentCallId` | required | `string` |
 | `rootCallId` | required | `string` |
 | `subCallId` | required | `string` |
+
+<a id="persistence-type-sha256-6db2226d1696010ee3f2b9c4907a614242c7036f342c45a786c0555d4a1b9b16"></a>
+
+<a id="persistence-type-packagesexperimentalbrowser-use-runtimesrcreal-browsertsrealbrowsergrantsource"></a>
+
+<a id="persistence-type-realbrowsergrantsource"></a>
+
+### `RealBrowserGrantSource`
+
+SHA-256: `6db2226d1696010ee3f2b9c4907a614242c7036f342c45a786c0555d4a1b9b16`
+
+Sources: [`packages/experimental/browser-use-runtime/src/real-browser.ts:13`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `askedSeq` | required | `number` |
+| `kind` | required | `"approval"` |
 
 <a id="persistence-type-sha256-814d9434e1ddf9078612b3b34322f26e9363b469213335007f7e9ba7fee9464e"></a>
 
@@ -8067,6 +8171,18 @@ Sources: [`packages/interaction/permission-presets/src/index.ts:55`](../packages
 |---|---|---|
 | `preset` | required | `string` |
 
+<a id="persistence-type-sha256-0b19dfa092f699cbb5654040869d27848038ad508eec0ed259c92be0d11d7c68"></a>
+
+### `{ reason }`
+
+SHA-256: `0b19dfa092f699cbb5654040869d27848038ad508eec0ed259c92be0d11d7c68`
+
+Sources: [`packages/experimental/browser-use-runtime/src/real-browser.ts:28`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `reason` | required | `"person"` |
+
 <a id="persistence-type-sha256-e481c46af3813e0010558e93f578b2986acd658404cec2d1679e3ac2a6c48654"></a>
 
 ### `{ reason, turn }`
@@ -8120,6 +8236,18 @@ Sources: [`packages/compaction/compaction/src/types.ts:82`](../packages/compacti
 | `shadowedRange` | required | [`{ end, start }`](#persistence-type-sha256-9e41386b3a0c9572b0d63078492ebb3997da7d3a830d44e0259418bd02f4bcb2) |
 | `shadowedSeqs` | required | [`number[]`](#persistence-type-sha256-5d03ba38734809bcbd2a55221bd938b3b3fc34b49bb686c6113e9e4931e3aa78) |
 | `shadowedTokenCount` | required | `number` |
+
+<a id="persistence-type-sha256-84733e6147348b2bb6044e3be238fc891b0750dc121fd09a5c45ac29c8b1e338"></a>
+
+### `{ source }`
+
+SHA-256: `84733e6147348b2bb6044e3be238fc891b0750dc121fd09a5c45ac29c8b1e338`
+
+Sources: [`packages/experimental/browser-use-runtime/src/real-browser.ts:21`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `source` | required | [`RealBrowserGrantSource`](#persistence-type-sha256-6db2226d1696010ee3f2b9c4907a614242c7036f342c45a786c0555d4a1b9b16) |
 
 <a id="persistence-type-sha256-54f9276a1617d7c12594722c89cfe864bcbe4517e9a6f9c98bab14f199a135e0"></a>
 
@@ -8732,6 +8860,54 @@ SHA-256: `a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f`
 | `seq` | required | `number` |
 | `time` | required | `number` |
 | `type` | required | `"plan/mode"` |
+
+<a id="persistence-type-sha256-a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0"></a>
+
+<a id="persistence-type-eventreal-browseraway"></a>
+
+### `{ type: "real-browser/away" }`
+
+SHA-256: `a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`{ until }`](#persistence-type-sha256-1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"real-browser/away"` |
+
+<a id="persistence-type-sha256-8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5"></a>
+
+<a id="persistence-type-eventreal-browserended"></a>
+
+### `{ type: "real-browser/ended" }`
+
+SHA-256: `8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`{ reason }`](#persistence-type-sha256-0b19dfa092f699cbb5654040869d27848038ad508eec0ed259c92be0d11d7c68) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"real-browser/ended"` |
+
+<a id="persistence-type-sha256-23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1"></a>
+
+<a id="persistence-type-eventreal-browsergranted"></a>
+
+### `{ type: "real-browser/granted" }`
+
+SHA-256: `23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`{ source }`](#persistence-type-sha256-84733e6147348b2bb6044e3be238fc891b0750dc121fd09a5c45ac29c8b1e338) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"real-browser/granted"` |
 
 <a id="persistence-type-sha256-71bb3254ec8f1e491ce63b762a7b5f18709de23aa4e8abcc8b886f4b6ce051dd"></a>
 
@@ -9403,6 +9579,18 @@ SHA-256: `e308ccf867a5398e316e0af8cb6ce238a8d33a63b9b384c8250a686786285f72`
 | `seq` | required | `number` |
 | `time` | required | `number` |
 | `type` | required | `"workspace/changes"` |
+
+<a id="persistence-type-sha256-1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5"></a>
+
+### `{ until }`
+
+SHA-256: `1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5`
+
+Sources: [`packages/experimental/browser-use-runtime/src/real-browser.ts:26`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `until` | required | [`OptionalSessionSeq`](#persistence-type-sha256-3bd652ebfa8726b3ce3937a4f1bd2759e02f86b3a08a20f9e41a8513656fbc5f) |
 
 <a id="persistence-type-sha256-0aa62ab51b36c0e64b134bd03ba8725d758744180a1a447da49beaad194f219f"></a>
 
