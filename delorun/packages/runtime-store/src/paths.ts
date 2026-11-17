@@ -107,6 +107,26 @@ export class StorePaths {
   }
 
   /**
+   * The `app/node_modules` of an installation: what provides a pack's peers.
+   * @param version - the installed version.
+   * @returns `runtimes/<version>/app/node_modules`.
+   */
+  runtimeNodeModules(version: RuntimeVersion): string {
+    return join(this.root, version, 'app', 'node_modules')
+  }
+
+  /**
+   * An installed pack's identity record, outside the pack so a confined command that can write the pack cannot
+   * rewrite what the pack is checked against.
+   * @param version - the release version.
+   * @param name - the pack's package name.
+   * @returns `trust/runtime-files/packs/<version>/<name>.json`, with `/` in a scoped name written `__`.
+   */
+  packRecord(version: RuntimeVersion, name: string): string {
+    return join(this.identityRecords, 'packs', version, `${name.replaceAll('/', '__')}.json`)
+  }
+
+  /**
    * A pointer file.
    * @param name - `current` or `previous`.
    * @returns its path.

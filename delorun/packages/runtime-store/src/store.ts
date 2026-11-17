@@ -21,6 +21,7 @@ import { createStagingDirectory, moveOutAndRemove, removeTree, sealInstallation,
 import { changeTimeOf, fullCheckDue, nowNs, RACY_WINDOW_NS, readIdentityRecord, recordBound, recordText, trustedFileSystem, type RecordBinding } from './identity.ts'
 import { launchCommand, readStoreLayout, requireLayout, requireProtocol, SUPPORTED, type LauncherSupport, type LaunchCommand } from './launch.ts'
 import { withStoreLock } from './lock.ts'
+import { installedPacksProblems } from './packs-check.ts'
 import { identityRecordVersion, parseRuntimeVersion, releaseFileVersion, StorePaths } from './paths.ts'
 import { isInstalled, readPointerFile, readPointers, syncDirectory, writePointers, type RuntimePointers } from './pointer.ts'
 import { readStoredRelease, verifyRelease, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
@@ -248,6 +249,7 @@ export class RuntimeStore {
   async checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<CheckedRuntime> {
     const release = await this.storedRelease(version, root)
     const check = await this.sharedCheck(version, release, true, () => this.fullCheck(version, release, 'changed'))
+    await this.requirePacksIntact(version, root)
     return { version, ...release, check }
   }
 
@@ -304,6 +306,7 @@ export class RuntimeStore {
       const release = await this.storedRelease(current, request.root)
       requireProtocol(this.paths, current, release.manifest, release.files, request.launcher)
       const check = await this.startCheck(current, release, request.fullCheckDays)
+      await this.requirePacksIntact(current, request.root)
       return { version: current, check, ...launchCommand(this.paths, current, request.profile, request.args) }
     } catch (error) {
       if (!isStoreError(error)) throw error
@@ -438,6 +441,16 @@ export class RuntimeStore {
         const owner = identityRecordVersion(name)
         if (owner !== undefined && (!kept.has(owner) || TEMPORARY.test(name))) await attempt(join(this.paths.identityRecords, name), () => removeTree(join(this.paths.identityRecords, name)))
       }
+      for (const [parent, remove] of [[this.paths.packs, (path: string) => moveOutAndRemove(path, this.paths.staging)], [join(this.paths.identityRecords, 'packs'), removeTree]] as const) {
+        const releases = await readdir(parent).catch((error: unknown) => {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+          throw error
+        })
+        for (const name of releases) {
+          const owner = parseRuntimeVersion(name)
+          if (owner !== undefined && !kept.has(owner)) await attempt(join(parent, name), () => remove(join(parent, name)))
+        }
+      }
       return { removed, failed }
     })
   }
@@ -455,6 +468,17 @@ export class RuntimeStore {
     } catch (error) {
       throw new RuntimeStoreError('RUNTIME_CHANGED', this.paths.version(version), `runtime ${version}'s stored manifest or file list does not verify: ${(error as Error).message}`, await this.remediesFor(version), { cause: error })
     }
+  }
+
+  /**
+   * Refuse a version whose installed packs differ from their signed file lists.
+   * @param version - the installed version.
+   * @param root - the trusted root.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` naming the files that differ.
+   */
+  private async requirePacksIntact(version: RuntimeVersion, root: RootMetadata): Promise<void> {
+    const problems = await installedPacksProblems(this.paths, root, version)
+    if (problems.length > 0) throw new RuntimeStoreError('RUNTIME_CHANGED', join(this.paths.packs, version), `the plugin packs of ${version} differ from their signed file lists: ${problems.slice(0, 5).join('; ')}`, await this.remediesFor(version))
   }
 
   /**
