@@ -104,6 +104,7 @@ export const forkClientWebsiteProject = {
       ...STUDIO_ALIASES,
       { find: '#upstream', replacement: fileURLToPath(new URL('./packages/brand/src/upstream.web.tsx', import.meta.url)) },
       { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
+      { find: /^@brand\//, replacement: fileURLToPath(new URL('./packages/brand/src/', import.meta.url)) },
       { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
       // The site's own React 19 for every import, as in the unit project: the replica's JSX and the components it renders share it.
       ...existsSync(WEBSITE_MODULES) ? [{ find: /^(react|react-dom)(\/.*)?$/, replacement: `${WEBSITE_MODULES}/$1$2` }] : [],
