@@ -100,10 +100,11 @@ export function linkAs(fx: Fixture, name: string, target: string): void {
 /**
  * Run the start's enforcement as a start at a terminal does: what it names as approved at upgrade is recorded as shown.
  * @param fx - the fixture.
+ * @param runningRelease - the installed release the start runs from; none, as from a source checkout, when omitted.
  * @returns what the start prints.
  */
-export async function start(fx: Fixture): Promise<StartChanges> {
-  const changes = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
+export async function start(fx: Fixture, runningRelease?: string): Promise<StartChanges> {
+  const changes = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW, ...runningRelease === undefined ? {} : { runningRelease } })
   await markShownAtUpgrade({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, lockWaitMs: 1000 }, changes.approvedAtUpgrade.map(({ plugin }) => plugin), NOW.toISOString())
   return changes
 }

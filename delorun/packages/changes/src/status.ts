@@ -197,7 +197,7 @@ function lastAppliedOf(entries: readonly ChangeEntry[], plugin: string): Applied
  */
 export async function changesStatus(request: ChangesStatusRequest): Promise<ChangesStatus> {
   const { home, profile, profileDir } = request
-  const invariants = [...await checkChangesInvariants(request)]
+  const invariants = [...await checkChangesInvariants({ ...request, runtimeLinks: 'installed' })]
   const protection = await orElse<ProtectionLevel | undefined>(() => readProtection(home), undefined)
   const approved = await orElse(() => readApproved(profileDir), { schema: APPROVED_RECORD_SCHEMA, plugins: {} })
   const active = await orElse(() => readActiveRecord(home, profile), { schema: ACTIVE_RECORD_SCHEMA, plugins: {} })

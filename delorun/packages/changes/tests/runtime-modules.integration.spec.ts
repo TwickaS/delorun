@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { holdContent } from '../src/enforce.ts'
-import { holdsVersion, holdsVersionInAnyRelease, materialize, storeFolder } from '../src/store.ts'
+import { holdsVersion, holdsVersionUnder, materialize, storeFolder } from '../src/store.ts'
 import { scanFolder } from '../src/tree.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -261,7 +261,10 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     writeFiles(home, { 'runtimes/current': '0.2.0\n' })
     expect((await storeFolder(home, updated)).version).toBe(version)
     expect(await holdsVersion(home, copy, version)).toBe(false)
-    expect(await holdsVersionInAnyRelease(home, copy, version)).toBe(true)
+    // A Host still running 0.1.0 holds the copy that names its packages; doctor holds it while they are there.
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'release', release: '0.1.0' })).toBe(true)
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'release', release: '0.2.0' })).toBe(false)
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'installed' })).toBe(true)
     await holdContent(home, copy, version)
     expect(await holdsVersion(home, copy, version)).toBe(true)
     rmSync(join(home, 'runtimes', '0.1.0'), { recursive: true })

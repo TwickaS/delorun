@@ -9,7 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { lstat, mkdir, open, realpath, rename, rm, rmdir, symlink, type FileHandle } from 'node:fs/promises'
+import { lstat, mkdir, open, realpath, rename, rm, rmdir, stat, symlink, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -17,7 +17,7 @@ import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@de
 import { HomeLayoutError, readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { ChangesError } from './errors.ts'
 import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
-import { activeRuntimeModules, compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
+import { activeRuntimeModules, compareCodeUnits, DEPENDENCY_DIRECTORY, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
 
 /** The mode of an active file whose owner execute bit is set. */
@@ -458,29 +458,52 @@ export async function materialize(home: string, version: ContentVersion, target:
   return manifest
 }
 
+/** Which releases a link into the runtime store may name for {@link holdsVersionUnder}. */
+export type RuntimeLinkRule =
+  /** Only this release's installed packages; none when `release` is undefined. */
+  | { readonly kind: 'release', readonly release: string | undefined }
+  /** Any release's installed package that is still there. */
+  | { readonly kind: 'installed' }
+
 /**
- * Whether a directory holds a content version once its links into any release's installed packages are read as links
- * into the active one's: true for a copy written under an earlier release, which the next start re-points
- * ({@link holdsVersion} is false for it).
+ * Whether a directory holds a content version, its links into a release's installed packages read as `runtime` links
+ * when the rule allows that release: a start of the new release holds a copy only once it names the new release's
+ * packages, and a Host an update switched away from holds the copy that names its own.
  * @param home - the Delorun home.
  * @param target - the directory.
  * @param version - the version id.
- * @returns whether it holds the version up to the release its runtime links name; false when it does not exist.
+ * @param rule - which releases a link may name.
+ * @returns whether it holds the version; false when it does not exist.
  */
-export async function holdsVersionInAnyRelease(home: string, target: string, version: ContentVersion): Promise<boolean> {
+export async function holdsVersionUnder(home: string, target: string, version: ContentVersion, rule: RuntimeLinkRule): Promise<boolean> {
   const runtimes = join(await realpath(home), DELORUN_HOME_ENTRIES.runtimes)
+  let scanned: readonly VersionEntry[]
   try {
-    const entries = (await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home })).entries.map((entry) => {
-      if (entry.type !== 'link' || !entry.outside || entry.runtime === true) return entry
-      const [release, app, modules, ...rest] = relative(runtimes, entry.target).split(sep)
-      if (release === undefined || release === '..' || isAbsolute(release) || app !== 'app' || modules !== 'node_modules' || rest.length === 0) return entry
-      return { ...entry, target: rest.join('/'), runtime: true as const }
-    })
-    return versionOf(entries) === version
+    scanned = (await scanFolder(target, ACTIVE_SCAN)).entries
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error
   }
+  const entries: VersionEntry[] = []
+  for (const entry of scanned) {
+    if (entry.type !== 'link' || !entry.outside) {
+      entries.push(entry)
+      continue
+    }
+    const [release, app, modules, ...rest] = relative(runtimes, entry.target).split(sep)
+    const named = release !== undefined && release !== '..' && !isAbsolute(release) && app === 'app' && modules === DEPENDENCY_DIRECTORY && rest.length > 0
+    const allowed = named && (rule.kind === 'release' ? release === rule.release : await exists(entry.target))
+    entries.push(allowed ? { ...entry, target: rest.join('/'), runtime: true } : entry)
+  }
+  return versionOf(entries) === version
+}
+
+/**
+ * @param path - a path.
+ * @returns whether something is there, following links.
+ */
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(() => true, () => false)
 }
 
 /**
