@@ -180,6 +180,28 @@ describe('the home lock', () => {
     expect(readdirSync(runDirectory)).toEqual(['home.lock'])
   })
 
+  it.skipIf(otherStart() === undefined || process.platform !== 'linux')('replaces a lock recorded in an earlier boot and another pid namespace, as after a restart', async () => {
+    plantLock(process.pid, 'b'.repeat(32), 'linux:6cfcd605-0000-4000-8000-000000000001:12022538', 'pid:[4026532223]')
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') })
+    expect(readHomeLock(runDirectory)).toEqual(lock.record)
+    lock.release()
+    expect(readdirSync(runDirectory)).toEqual([])
+  })
+
+  it.skipIf(process.platform !== 'linux')('replaces a lock whose process is gone from this boot and this pid namespace', async () => {
+    const own = readProcessStart(process.pid)!
+    plantLock(deadPid(), 'b'.repeat(32), own, readPidNamespace())
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') })
+    expect(readHomeLock(runDirectory)).toEqual(lock.record)
+    lock.release()
+  })
+
+  it.skipIf(otherStart() === undefined)('refuses a live holder of this boot that answers, or does not, in this pid namespace', async () => {
+    plantLock(process.pid, 'b'.repeat(32), readProcessStart(process.pid), readPidNamespace())
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') })).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+  })
+
   it.skipIf(readPidNamespace() === undefined)('replaces a dead holder\'s lock recorded in this process\'s pid namespace', async () => {
     plantLock(deadPid(), 'b'.repeat(32), undefined, readPidNamespace())
     const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })

@@ -1,8 +1,8 @@
 /**
  * The home lock `run/<profile>/home.lock` (contract C1, "The home lock"): one holder per CLI profile, a JSON record
  * created by exclusive creation at mode 0600, a lock whose holder is dead replaced, and a live holder never taken
- * over. A holder is dead when its process no longer exists or another process has taken its process id, and a holder
- * recorded in another pid namespace is never dead ([holder](./holder.ts)). Creation, takeover guards and removal are the shared lock file's ([lock file](./lock-file.ts)),
+ * over. A holder is dead when it was recorded in an earlier boot, its process no longer exists, or another process has
+ * taken its process id, and a holder recorded in another pid namespace of this boot is never dead ([holder](./holder.ts)). Creation, takeover guards and removal are the shared lock file's ([lock file](./lock-file.ts)),
  * with the record's random `startId` naming its takeover guard `home.lock.takeover-<startId>`.
  *
  * @module @delorun/home/lock
@@ -171,7 +171,7 @@ export async function acquireHomeLock(options: AcquireOptions): Promise<HomeLock
       const answer = await options.probe(found)
       const holder = `process ${String(found.pid)}, started ${found.startedAt}`
       if (answer === 'answered') throw new HomeLayoutError('HOME_RUNNING', file.path, `a home process for this profile is already running (${holder})`)
-      throw new HomeLayoutError('HOME_UNRESPONSIVE', file.path, `${holder} holds ${file.path} but did not answer within 2 seconds; stop that process, or remove the file if it is not a delorun process`)
+      throw new HomeLayoutError('HOME_UNRESPONSIVE', file.path, `${holder} holds ${file.path} but did not answer within 2 seconds. Delorun may be busy: wait a moment and open it again, or quit that process from your system's task list or activity monitor. If that process is not Delorun, delete the file ${file.path} and open Delorun again`)
     }
     if (await file.removeDead(found.startId) === 'done') continue
     if (Date.now() > deadline) throw new Error(`could not take ${file.path}: another process kept replacing the stale lock for ${String(TAKEOVER_WAIT_MS / 1000)} seconds`)
