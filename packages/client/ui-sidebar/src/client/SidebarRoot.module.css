@@ -965,9 +965,9 @@
   flex: none;
 }
 
-/* The inline actions are items of the row itself: the spacer pushes the icon buttons to its end, a labelled entry
- * (`data-sidebar-foot-line`) takes its own line above the icons, and a foot too narrow for one row (a phone drawer with
- * 44px buttons) wraps the icons onto another line. */
+/* The inline actions are items of the row itself: the spacer pushes the icon buttons to its end, and a labelled entry
+ * (`data-sidebar-foot-line`) takes its own line above the icons. With 44px buttons the foot is too narrow for one row, so
+ * the spacer fills a line and the action icons start the next one together. */
 .footRow:has(> .footerActionsInline) {
   flex-wrap: wrap;
 }
@@ -1012,6 +1012,10 @@
 
 /* The foot's icon buttons are 44px on phone widths and coarse pointers; the panel icons follow. */
 @media (max-width: 767px), (pointer: coarse) {
+  .footSpacer {
+    flex-basis: 100%;
+  }
+
   .footPanels .panelRow {
     width: 44px;
     min-height: 44px;

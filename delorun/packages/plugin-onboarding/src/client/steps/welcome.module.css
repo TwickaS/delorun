@@ -17,6 +17,12 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* The line in the tile's own language wraps instead of being cut short on a narrow screen. */
+.tiles [role='radio'] > :last-child {
+  overflow: visible;
+  white-space: normal;
+}
+
 .tiles [role='radio'][aria-checked='true'] {
   color: var(--dsw-alias-label-primary);
 }
