@@ -65,6 +65,7 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/elevation': HOME_AUTH,
   'exact /auth/elevation/request': HOME_AUTH,
   'exact /auth/elevation/lock': HOME_AUTH,
+  'exact /auth/elevation/end-grace': HOME_AUTH,
   'exact /auth/elevation/pending': HOME_AUTH,
   'exact /auth/elevation/approve': HOME_AUTH,
   'exact /auth/elevation/revoke': HOME_AUTH,
@@ -81,77 +82,75 @@ const REACHED: Readonly<Record<string, string>> = {
 
 /**
  * One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request,
- * `read` admits a device's `GET` and nothing else, and `admitted` answers every device through the route's own
- * `admitPeer`. A refused route answers upstream's `forbidden` unless its own check refuses the device first, with
+ * `read` admits a device's `GET` and nothing else, `admitted` answers every device through the route's own
+ * `admitPeer`, and `unlock` admits a device to the route, which answers `403 ELEVATION_REQUIRED` while the device is
+ * locked and runs for an unlocked one. A refused route answers upstream's `forbidden` unless its own check refuses the device first, with
  * `refusal`'s code.
  */
 interface FetchDecision {
-  readonly device: 'refused' | 'per-call' | 'read' | 'admitted'
+  readonly device: 'refused' | 'per-call' | 'read' | 'admitted' | 'unlock'
   readonly reason: string
   readonly refusal?: string
   /** The status a `read` or `admitted` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
   readonly answers?: number
 }
 
-const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
-const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate, unless dangerous mode holds and the device holds an unlock'
-const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
-const EXTERNAL_AGENT = 'allowing or revoking an external agent for a workspace decides whether a program outside the sandbox starts without asking, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
-const VERSIONS_WRITE = 'saving, trying and switching setup versions changes what runs, which only the home\'s computer does'
-const DANGEROUS_STATE = 'reading and turning off dangerous mode: the route admits only a device that holds a running unlock, and this device holds none; no route turns the mode on'
+const UNLOCKED = (reason: string): FetchDecision => ({ device: 'unlock', reason })
+const READ = (reason: string, answers?: number): FetchDecision => ({ device: 'read', reason, ...answers === undefined ? {} : { answers } })
+const OPEN = (reason: string, answers?: number): FetchDecision => ({ device: 'admitted', reason, ...answers === undefined ? {} : { answers } })
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
- * Every exact Fetch route of the composition with the device's decision. Delorun's routes default to refused; a device
- * keeps a read only to render a chat it can already read, to send the person to the computer, as the waiting MCP
- * servers' names do, or when the studio shows it on every page, as the trust badge's bill.
+ * Every exact Fetch route of the composition with the device's decision. A paired device does what the computer's studio
+ * does: a read or a step that only tightens is open to it, a step that widens access needs the unlock, and what
+ * upstream declares owner-only stays refused.
  */
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
-  '/api/delorunChatStates.list': { device: 'refused', reason: 'snooze and settle states order the chat list at the computer; a device renders every chat without them, and the client keeps its last states' },
-  '/api/delorunChatStates.set': { device: 'refused', reason: 'snoozing or settling a chat is not in the device rule' },
-  '/api/delorunOnboarding.workspaceNotice': { device: 'refused', reason: 'names the workspace record files the registry set aside at start-up, which is workspace housekeeping the home\'s computer shows' },
-  '/api/delorunOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
-  '/api/delorunOnboarding.addWorkspace': { device: 'refused', reason: 'adds a folder as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
-  '/api/delorunNetwork.list': { device: 'refused', reason: 'lists each workspace\'s network setting, which is read and changed only at the home\'s computer', refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunNetwork.set': { device: 'refused', reason: 'changes a workspace\'s network, which only the person at the home\'s computer chooses', refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunOnboarding.clone': { device: 'refused', reason: 'runs Git as the person and adds the clone as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
-  '/api/delorunOnboarding.cloneStatus': { device: 'refused', reason: 'reports a clone the computer started', refusal: 'LOOPBACK_ONLY' },
-  '/api/delorunOnboarding.localModels': { device: 'refused', reason: 'probes this computer\'s loopback model servers (Ollama, LM Studio), which only the computer can add as providers' },
-  '/api/delorunOnboarding.readiness': { device: 'refused', reason: 'whether the coding agents are signed in and how far Tailscale is set up serves onboarding at the computer' },
-  '/api/delorunOnboarding.keyTest': { device: 'admitted', reason: 'An approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted' },
-  '/api/delorunOnboarding.recommend': { device: 'admitted', answers: 400, reason: 'An approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only' },
-  '/api/delorunBranding.icon': { device: 'admitted', answers: 415, reason: 'an approved phone uploads the Branding icon as it writes any everyday setting; the host checks the bytes (PNG, JPEG or WebP, at most 256 KB, never SVG), and the probe sends none, so the route answers 415 past its admission' },
-  '/api/delorunMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
-  '/api/delorunMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
-  '/api/delorunTrust.bill': { device: 'read', reason: 'the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret' },
-  '/api/delorunTrust.check': { device: 'refused', reason: 'Check now hashes the runtime and runs the release-log check, which only the home\'s computer starts' },
-  '/api/delorunVersions.list': { device: 'read', reason: 'the setup versions screen lists the saved versions and which one runs, which a signed-in studio reads; it names no secret' },
-  '/api/delorunVersions.changes': { device: 'read', reason: 'the setup versions screen compares a saved version with the running one, which a signed-in studio reads; the history\'s admission keeps secret fields out; the probe names no version, so the route answers 400 BAD_REQUEST', answers: 400 },
-  '/api/delorunReport.details': { device: 'refused', reason: 'the report holds an excerpt of the home\'s log, which only the computer the home runs on may read; a device reports its versions without it' },
-  '/api/delorunVersions.save': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunVersions.switch': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunUpdateCheck.channel': { device: 'read', reason: 'the Settings copy on a signed-in device names the release host this installation contacts, which is the channel origin\'s host alone; it names no secret and changes nothing' },
-  '/api/delorunUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
-  '/api/delorunUpdateCheck.notes': { device: 'refused', reason: 'the release notes of the update that would run, which is read where the update notice is, at the computer that runs the update' },
-  '/api/delorunTrash.list': { device: 'refused', reason: TRASH },
-  '/api/delorunTrash.deleteChat': { device: 'refused', reason: TRASH },
-  '/api/delorunTrash.deleteWorkspace': { device: 'refused', reason: TRASH },
-  '/api/delorunTrash.restore': { device: 'refused', reason: TRASH },
-  '/api/delorunTrash.purge': { device: 'refused', reason: TRASH },
-  '/api/delorunTrash.empty': { device: 'refused', reason: TRASH },
-  '/api/delorunPermission.workspaces': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunPermission.review': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunPermission.setFullAccess': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunPermission.everywhere': { device: 'refused', reason: DANGEROUS_STATE },
-  '/api/delorunPermission.everywhereOff': { device: 'refused', reason: DANGEROUS_STATE },
-  '/api/delorunMcpConsent.pending': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunMcpConsent.revoke': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunDelegationConsent.grants': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunDelegationConsent.allow': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunDelegationConsent.revoke': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
-  '/api/delorunMcpConsent.waiting': { device: 'admitted', reason: 'the names of the servers waiting for the person\'s OK, without their commands, so a phone says to approve them at the computer' },
+  '/api/delorunChatStates.list': READ('snooze and settle states order the chat list, which a phone shows too'),
+  '/api/delorunChatStates.set': OPEN('snoozing or settling a chat is everyday organising', 400),
+  '/api/delorunOnboarding.workspaceNotice': READ('names the workspace record files the registry set aside at start-up'),
+  '/api/delorunOnboarding.setupRecord': READ('what setup recorded serves onboarding on a phone'),
+  '/api/delorunOnboarding.addWorkspace': UNLOCKED('adds a folder as a workspace, which is what the model may write'),
+  '/api/delorunNetwork.list': READ('lists each workspace\'s network setting'),
+  '/api/delorunNetwork.set': UNLOCKED('a looser network setting lets commands reach more of the network'),
+  '/api/delorunOnboarding.clone': UNLOCKED('runs Git as the person and adds the clone as a workspace'),
+  '/api/delorunOnboarding.cloneStatus': UNLOCKED('reports a clone an unlocked device started'),
+  '/api/delorunOnboarding.localModels': READ('probes this computer\'s loopback model servers'),
+  '/api/delorunOnboarding.readiness': READ('whether the coding agents are signed in and how far Tailscale is set up serves onboarding on a phone'),
+  '/api/delorunOnboarding.keyTest': OPEN('An approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted'),
+  '/api/delorunOnboarding.recommend': OPEN('An approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only', 400),
+  '/api/delorunBranding.icon': OPEN('an approved phone uploads the Branding icon as it writes any everyday setting; the host checks the bytes (PNG, JPEG or WebP, at most 256 KB, never SVG), and the probe sends none, so the route answers 415 past its admission', 415),
+  '/api/delorunMainChat.open': OPEN('opens the main chat, which exists to be opened'),
+  '/api/delorunMainChat.reports': READ('a count for the main chat\'s sidebar mark'),
+  '/api/delorunTrust.bill': READ('the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret'),
+  '/api/delorunTrust.check': UNLOCKED('Check now hashes the runtime and runs the release-log check on the computer'),
+  '/api/delorunVersions.list': READ('the setup versions screen lists the saved versions and which one runs; it names no secret'),
+  '/api/delorunVersions.changes': READ('the setup versions screen compares a saved version with the running one; the probe names no version, so the route answers 400 BAD_REQUEST', 400),
+  '/api/delorunReport.details': UNLOCKED('the report holds an excerpt of the home\'s log, which can name paths of the home'),
+  '/api/delorunVersions.save': UNLOCKED('saving a setup version writes to the computer'),
+  '/api/delorunVersions.switch': UNLOCKED('switching a setup version changes what runs'),
+  '/api/delorunUpdateCheck.channel': READ('the Settings copy on a signed-in device names the release host this installation contacts, which is the channel origin\'s host alone; it names no secret and changes nothing'),
+  '/api/delorunUpdateCheck.notice': READ('the update notice names the release that runs and how many installed plugins an update would turn off'),
+  '/api/delorunUpdateCheck.notes': READ('the release notes of the update that would run'),
+  '/api/delorunTrash.list': READ('the trash lists deleted chats and workspaces'),
+  '/api/delorunTrash.deleteChat': OPEN('moving a chat to the trash is reversible', 400),
+  '/api/delorunTrash.deleteWorkspace': OPEN('moving a workspace to the trash is reversible', 400),
+  '/api/delorunTrash.restore': OPEN('restoring from the trash is reversible', 400),
+  '/api/delorunTrash.purge': UNLOCKED('deleting from the trash is for good'),
+  '/api/delorunTrash.empty': UNLOCKED('emptying the trash is for good'),
+  '/api/delorunPermission.workspaces': READ('lists the workspaces and their full access'),
+  '/api/delorunPermission.review': OPEN('shows what full access would allow, before anything changes', 400),
+  '/api/delorunPermission.setFullAccess': UNLOCKED('a workspace\'s full access lets a chat write outside the workspace sandbox'),
+  '/api/delorunPermission.everywhere': READ('reading whether dangerous mode is on'),
+  '/api/delorunPermission.everywhereOff': OPEN('turning dangerous mode off only tightens; no route turns the mode on'),
+  '/api/delorunMcpConsent.pending': READ('lists the MCP servers waiting for the person\'s OK'),
+  '/api/delorunMcpConsent.accept': UNLOCKED('accepting a stdio MCP server lets its command run outside the sandbox'),
+  '/api/delorunMcpConsent.decline': OPEN('declining only withholds consent', 400),
+  '/api/delorunMcpConsent.revoke': OPEN('revoking only withdraws consent', 400),
+  '/api/delorunDelegationConsent.grants': READ('lists which external agents may work in which workspaces'),
+  '/api/delorunDelegationConsent.allow': UNLOCKED('allowing an external agent for a workspace starts a program outside the sandbox without asking'),
+  '/api/delorunDelegationConsent.revoke': OPEN('revoking only withdraws a grant', 400),
+  '/api/delorunMcpConsent.waiting': READ('the names of the servers waiting for the person\'s OK, without their commands'),
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
   '/api/session.markdown': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
@@ -167,6 +166,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
 let studio: Studio
 let listener: ReachListener
 let phone: Endpoint
+/** The approved device's id, whose unlock the unlock pass starts and ends. */
+let deviceId: string
 /** The device's session cookie. */
 let session: string
 /** The loopback studio's origin and its browser cookie, which admits the owner. */
@@ -227,6 +228,7 @@ beforeAll(async () => {
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
+  deviceId = record.id
   await new DeviceStore({ file: join(studio.home, 'secrets', 'home-auth', 'devices.json') }).add(record)
   const opened = await ctx.homeAuth.openSession({ deviceId: record.id, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
   session = `__Host-delorun-session=${opened.token}`
@@ -340,6 +342,13 @@ describe('the routes a signed-in device reaches', () => {
         expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: decision.answers ?? 200 })
         continue
       }
+      if (decision?.device === 'unlock') {
+        // Pins the unlock gate: a locked device is admitted to the route and refused by it with the typed code.
+        const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
+        const error = reply.status === 403 ? (JSON.parse(reply.body) as { readonly error?: unknown }).error : reply.body
+        expect.soft({ path: route.path, status: reply.status, error }).toEqual({ path: route.path, status: 403, error: 'ELEVATION_REQUIRED' })
+        continue
+      }
       if (decision?.device !== 'refused') continue
       const method = route.methods[0] ?? 'GET'
       const reply = await asPhone(route.path, { method })
@@ -351,6 +360,29 @@ describe('the routes a signed-in device reaches', () => {
       const answer = await asStudio(route.path, method, '{"clearLogs":"not a flag"}')
       expect.soft({ path: route.path, refused: answer.status === 401 || answer.status === 403 }).toEqual({ path: route.path, refused: false })
     }
+  })
+
+  it('runs the unlock routes for an unlocked device, with the approval grace or a code from the computer, and again refuses them once it is locked', async () => {
+    const { homeAuth } = studio.ctx
+    const admitted = homeAuth.admitToken(session.slice(session.indexOf('=') + 1), LISTENER)
+    if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+    const requested = homeAuth.requestElevation(admitted.sessionId, admitted.session)
+    if (requested.kind !== 'pending') throw new Error('no unlock request is waiting')
+    homeAuth.approveElevation(requested.requestId, requested.code)
+    try {
+      const unlockRoutes = fetchRoutes().filter(route => FETCH_ROUTES[route.path]?.device === 'unlock')
+      expect(unlockRoutes.length).toBeGreaterThan(8)
+      for (const route of unlockRoutes) {
+        const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
+        // Pins the gate's other half: an unlocked device reaches the route, which answers past the admission.
+        const error = reply.status === 403 ? (JSON.parse(reply.body || '{}') as { readonly error?: unknown }).error : undefined
+        expect.soft({ path: route.path, status: reply.status, error }).toEqual({ path: route.path, status: reply.status, error: undefined })
+      }
+    } finally {
+      homeAuth.lockElevation(deviceId, LISTENER)
+    }
+    const locked = await asPhone('/api/delorunVersions.save', { method: 'POST' })
+    expect(locked.status).toBe(403)
   })
 
   it('lets an approved phone test model keys but not an unauthenticated or locked one, and sends no key back', async () => {

@@ -216,6 +216,11 @@ export interface HomeAuthOptions {
   readonly pairing?: () => PairingSpec
   /** How many sign-in challenges one source and one device may be issued a minute; {@link CHALLENGE_LIMIT_DEFAULTS} when absent. */
   readonly challengeLimits?: ChallengeLimits
+  /**
+   * The minutes after its approval during which a device's first sign-in starts an unlock (the approval grace), read at
+   * each sign-in; the grace is also capped at the unlock minutes of the listener. 0 turns it off; absent is off.
+   */
+  readonly approvalGraceMinutes?: () => number
 }
 
 /**
@@ -234,6 +239,7 @@ export class HomeAuth {
   private readonly challengeSources: AttemptLimiter
   private readonly challengeDevices: AttemptLimiter
   private readonly now: () => number
+  private readonly approvalGraceMinutes: () => number
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
   private readonly random: RandomBytes
@@ -323,6 +329,7 @@ export class HomeAuth {
       windowMs: CLAIM_WINDOW_MS,
       ...(options.now === undefined ? {} : { now: options.now }),
     })
+    this.approvalGraceMinutes = options.approvalGraceMinutes ?? (() => 0)
     const challengeLimits = options.challengeLimits ?? CHALLENGE_LIMIT_DEFAULTS
     this.challengeSources = new AttemptLimiter({ limit: challengeLimits.perSourcePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
     this.challengeDevices = new AttemptLimiter({ limit: challengeLimits.perDevicePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
@@ -863,8 +870,39 @@ export class HomeAuth {
         ...(replaces === undefined ? {} : { replaces }),
       })
       await this.deviceStore.write((await this.deviceStore.list()).map(record => record.id === device.id ? { ...record, lastSignInAt: this.now() } : record))
+      this.startApprovalGrace(device, request, served, opened.sessionId)
       return opened
     })
+  }
+
+  /**
+   * Start the approval grace for a device that has just signed in for the first time: an unlock that runs from the
+   * approval for the grace minutes, at most the listener's unlock minutes, so a newly approved phone runs its first-run
+   * setup without unlock prompts. It starts only on the first sign-in of a device whose record shows no earlier one,
+   * never on a rotation, and not once the grace window since the approval has passed. It admits only what an unlock
+   * admits: the computer-only table is refused during it as at any other time.
+   * @param device - the device's record as read before this sign-in.
+   * @param request - the sign-in request.
+   * @param served - the listener it signed in on.
+   * @param sessionId - the session the sign-in opened, which the unlock belongs to and which ends it.
+   */
+  private startApprovalGrace(device: DeviceRecord, request: SignInRequest, served: ServedListener, sessionId: SessionId): void {
+    const minutes = this.approvalGraceMinutes()
+    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined) return
+    const graceMs = Math.min(minutes, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) * 60_000
+    const endsAt = device.approvedAt + graceMs
+    if (this.now() >= endsAt) return
+    this.elevations.startGrace({ deviceId: request.deviceId, listener: request.listener, sessionId }, endsAt)
+  }
+
+  /**
+   * End the approval grace of a device on one listener, which the device's own studio asks for once its first-run setup
+   * finishes. Any other unlock the device holds stays.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  endApprovalGrace(deviceId: string, listener: ReachListenerId): void {
+    this.elevations.endGraceFor(deviceId, listener)
   }
 
   /**

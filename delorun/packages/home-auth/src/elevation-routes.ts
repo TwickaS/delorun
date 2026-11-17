@@ -27,6 +27,8 @@ export const ELEVATION_PATHS = {
   request: '/auth/elevation/request',
   /** `POST`: the device ends its elevation and its waiting request. */
   lock: '/auth/elevation/lock',
+  /** `POST`: the device ends the unlock a new device starts with, once its first-run setup finishes. */
+  endGrace: '/auth/elevation/end-grace',
   /** `GET`: the computer's list of waiting requests and running elevations. */
   pending: '/auth/elevation/pending',
   /** `POST` `{ requestId, typedCode }`: the computer approves a request. */
@@ -203,5 +205,20 @@ export function elevationRevokeHandler(auth: HomeAuth, credential: LoopbackCrede
     } catch (error) {
       sendThrown(response, error)
     }
+  }
+}
+
+/**
+ * Build the route a device ends its approval grace with, once its first-run setup finishes. It ends only the grace: an
+ * unlock the person approved at the computer, or a PIN page's, stays.
+ * @param auth - the home-auth instance.
+ * @returns the handler.
+ */
+export function elevationEndGraceHandler(auth: HomeAuth): RouteHandler {
+  return async (request, response) => {
+    const device = deviceSession(auth, request, response, 'POST')
+    if (device === undefined) return
+    auth.endApprovalGrace(device.session.deviceId, device.listener)
+    sendJson(response, 200, auth.elevationState(device.session.deviceId, device.listener))
   }
 }

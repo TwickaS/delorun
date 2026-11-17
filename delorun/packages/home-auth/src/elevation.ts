@@ -46,6 +46,11 @@ export interface ElevationRecord extends ElevationAsker {
    * ({@link Elevations.of}) never returns it and a device's Lock or a computer-approved elevation never ends it.
    */
   readonly page?: true
+  /**
+   * Set on the unlock a newly approved device starts with on its first sign-in (the approval grace). It behaves as a
+   * computer-approved elevation, and the device's own call to end the grace ({@link Elevations.endGraceFor}) ends it.
+   */
+  readonly grace?: true
 }
 
 /** One request to elevate, waiting for the person at the computer. */
@@ -205,6 +210,27 @@ export class Elevations {
   }
 
   /**
+   * Start the approval grace of a newly approved device: an elevation that no request at the computer asked for.
+   * @param asker - the device, the listener and the session that signed in.
+   * @param endsAt - when it ends, in milliseconds since the epoch.
+   * @returns the elevation that started.
+   */
+  startGrace(asker: ElevationAsker, endsAt: number): ElevationRecord {
+    return this.begin(asker, this.options.now(), endsAt, false, true)
+  }
+
+  /**
+   * End the approval grace of one device on one listener, which its first-run setup finishing asks for. An unlock the
+   * person approved at the computer, or a PIN page's, stays.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns how many graces ended, zero or one.
+   */
+  endGraceFor(deviceId: string, listener: ReachListenerId): number {
+    return this.endWhere(record => record.deviceId === deviceId && record.listener === listener && record.grace === true, 'grace-ended')
+  }
+
+  /**
    * Move the end of a running elevation, which a page's activity does within its cap.
    * @param elevationId - the elevation.
    * @param endsAt - the new end, in milliseconds since the epoch.
@@ -239,9 +265,10 @@ export class Elevations {
    * @param at - the start.
    * @param endsAt - the end.
    * @param page - whether it is a page unlock.
+   * @param grace - whether it is an approval grace.
    * @returns the record.
    */
-  private begin(asker: ElevationAsker, at: number, endsAt: number, page = false): ElevationRecord {
+  private begin(asker: ElevationAsker, at: number, endsAt: number, page = false, grace = false): ElevationRecord {
     const record: ElevationRecord = {
       id: newSecret(ELEVATION_LIMITS.idBytes, this.options.random),
       deviceId: asker.deviceId,
@@ -250,6 +277,7 @@ export class Elevations {
       startedAt: at,
       endsAt,
       ...page ? { page: true } : {},
+      ...grace ? { grace: true } : {},
     }
     const running: Running = { record, timer: setTimeout(() => { this.end(running, 'expired') }, endsAt - at) }
     running.timer.unref()
@@ -295,7 +323,7 @@ export class Elevations {
    */
   stateOf(deviceId: string, listener: ReachListenerId): ElevationState {
     const elevation = this.of(deviceId, listener)
-    if (elevation !== undefined) return { kind: 'elevated', elevationId: elevation.id, endsAt: elevation.endsAt }
+    if (elevation !== undefined) return { kind: 'elevated', elevationId: elevation.id, endsAt: elevation.endsAt, ...elevation.grace === true ? { reason: 'approval-grace' as const } : {} }
     const request = this.requestOf(deviceId, listener)
     if (request !== undefined) return { kind: 'pending', requestId: request.requestId, code: request.code, expiresAt: request.expiresAt }
     return { kind: 'none' }
