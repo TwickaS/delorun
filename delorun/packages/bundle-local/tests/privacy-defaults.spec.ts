@@ -179,6 +179,7 @@ describe('a Delorun CLI profile', () => {
       `${LOCAL_BUNDLE}/update-check`,
       `${LOCAL_BUNDLE}/trust`,
       `${LOCAL_BUNDLE}/profile-versions`,
+      `${LOCAL_BUNDLE}/requirements`,
       `${LOCAL_BUNDLE}/report`,
       '@delorun/plugin-install-check',
       '@delorun/plugin-trash',
