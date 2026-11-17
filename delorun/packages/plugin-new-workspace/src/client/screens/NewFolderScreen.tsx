@@ -29,7 +29,7 @@ export interface NewFolderScreenProps {
   readonly onEdit: (change: { readonly name?: string, readonly git?: boolean }) => void
   /** Open the folder browser to pick where the folder goes. */
   readonly onChangePlace: () => void
-  /** Make the folder. */
+  /** Go on to the model screen; the folder is made when the flow finishes. */
   readonly onSubmit: () => void
   /** Go back to the first screen. */
   readonly onBack: () => void
@@ -73,7 +73,7 @@ export function NewFolderScreen({ t, home, choice, busy, problem, onEdit, onChan
       </div>
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <DialogFooter back={{ label: t('back'), onClick: onBack, disabled: busy }}
-        primary={{ label: t('create'), onClick: onSubmit, disabled: busy || !valid }} />
+        primary={{ label: t('continue'), onClick: onSubmit, disabled: busy || !valid }} />
     </form>
   )
 }

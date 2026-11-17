@@ -17,7 +17,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 // Type-only: the `remote/call-denied` event.
 import type {} from '@deepseek-ai/dsh-api-gateway/client'
+// Type-only: the ctx.remote merge, whose `session` namespace answers the model catalogue.
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+// Type-only: `ctx.delorunFullAccess`, the full-access consent for one workspace.
+import type {} from '@delorun/bundle-local/full-access'
 import { createApi } from './api.ts'
+import type { FullAccessAsk } from './create.ts'
+import { viewOfCatalog, type ModelCatalogView } from './models.ts'
 import { en, NS, zh, type NewWorkspaceLocaleKey } from './locales.ts'
 import { Overlay, type OpenFlow, type OverlayInjected } from './Overlay.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
@@ -125,14 +131,32 @@ function applyStudio(ctx: Context): void {
   // A refusal until the device is unlocked opens the studio's unlock dialog the way a refused Remote call does.
   const api = createApi({
     unlockNeeded: (route) => {
-      const endpoint = `delorunNewWorkspace/${route}`
+      const endpoint = route === 'setNetwork' ? 'delorunNetwork/set' : `delorunNewWorkspace/${route}`
       ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
     },
   })
+  const readModels = async (): Promise<ModelCatalogView | undefined> => {
+    const session = ctx.get('remote.session')
+    if (session === undefined) return undefined
+    try {
+      const response = await session.modelCatalog()
+      return response.ok ? viewOfCatalog(response.value) : undefined
+    } catch (error) {
+      // The screen says the catalogue could not be read and the flow goes on.
+      console.warn('delorun new workspace: the model catalogue could not be read', error)
+      return undefined
+    }
+  }
+  const fullAccess: FullAccessAsk = {
+    available: () => ctx.get('delorunFullAccess') !== undefined,
+    ask: async path => await ctx.get('delorunFullAccess')?.askForWorkspace(path) ?? false,
+  }
   const injected: OverlayInjected = {
     hooks: { open: store },
     api,
     browse,
+    readModels,
+    fullAccess,
     close: (id) => { settle({ kind: 'cancelled' }, id) },
     created: (id, created) => { settle({ kind: 'created', ...created }, id) },
   }

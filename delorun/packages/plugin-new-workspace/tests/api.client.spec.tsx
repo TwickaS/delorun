@@ -94,6 +94,31 @@ describe('a route that refuses the arrival', () => {
   })
 })
 
+describe('the network route', () => {
+  it('sends the workspace\'s path and setting to the home\'s route and reads the setting now in effect', async () => {
+    const answer = { network: { access: 'allowlist', hosts: ['pypi.org'] } }
+    const { api, fetch } = clientAnswering(Response.json(answer))
+    expect(await api.setNetwork('/home/person/src/site', { access: 'allowlist', hosts: ['pypi.org'] })).toEqual({ ok: true, value: answer })
+    expect(fetch.mock.calls[0]?.[0]).toBe('api/delorunNetwork.set')
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ path: '/home/person/src/site', network: { access: 'allowlist', hosts: ['pypi.org'] } })
+  })
+
+  it('treats a refusal to loosen without confirmation, or an unreadable answer, as a failure', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const unconfirmed = clientAnswering(Response.json({ error: 'NETWORK_UNCONFIRMED' }, { status: 409 }))
+    expect(await unconfirmed.api.setNetwork('/x', { access: 'off', hosts: [] })).toEqual({ ok: false, reason: 'failed' })
+    const odd = clientAnswering(Response.json({ network: { access: 'sometimes', hosts: [] } }))
+    expect(await odd.api.setNetwork('/x', { access: 'off', hosts: [] })).toEqual({ ok: false, reason: 'failed' })
+  })
+
+  it('asks the studio for the unlock when the home wants one, naming its own route', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { api, unlockNeeded } = clientAnswering(Response.json({ error: 'ELEVATION_REQUIRED' }, { status: 403 }))
+    expect(await api.setNetwork('/x', { access: 'off', hosts: [] })).toEqual({ ok: false, reason: 'locked' })
+    expect(unlockNeeded).toHaveBeenCalledExactlyOnceWith('setNetwork')
+  })
+})
+
 describe('the defaults routes', () => {
   it('read and record a workspace\'s defaults', async () => {
     const answer = { result: 'defaults', defaults: { browser: 'none' } }

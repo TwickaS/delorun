@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { CLONE_POLL_MS, createChosen } from '../src/client/create.ts'
-import { failure, fakeApi, ok } from './fixtures.client.ts'
+import { CLONE_POLL_MS, createChosen, setUpWorkspace, type SetupPlan } from '../src/client/create.ts'
+import { failure, fakeApi, fakeFullAccess, ok } from './fixtures.client.ts'
 
 /** A wait that returns at once and records the delays asked. */
 const instant = () => vi.fn(async (_ms: number) => {})
@@ -92,5 +92,54 @@ describe('following a clone', () => {
     const { api } = fakeApi()
     const { job: _none, ...unstarted } = started
     expect(await createChosen(api, unstarted, vi.fn())).toEqual({ ok: false, problem: { kind: 'failed' } })
+  })
+})
+
+describe('setting up a workspace that exists', () => {
+  const PLAN: SetupPlan = { model: { provider: 'deepseek', model: 'pro', reasoningEffort: 'high' }, permission: 'files', network: { access: 'open', hosts: [] } }
+  const PATH = '/home/person/Projects/site'
+
+  it('stores the model and asks for nothing else under the safe choices', async () => {
+    const { api, setDefaults, setNetwork } = fakeApi()
+    const { fullAccess, ask } = fakeFullAccess()
+    expect(await setUpWorkspace(api, PATH, PLAN, fullAccess)).toEqual([])
+    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(PATH, { model: PLAN.model })
+    expect(setNetwork).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('stores the browser choice with the model when there is one, and stores nothing when there is neither', async () => {
+    const { api, setDefaults } = fakeApi()
+    const { fullAccess } = fakeFullAccess()
+    await setUpWorkspace(api, PATH, { ...PLAN, browser: 'none' }, fullAccess)
+    expect(setDefaults).toHaveBeenLastCalledWith(PATH, { model: PLAN.model, browser: 'none' })
+    setDefaults.mockClear()
+    await setUpWorkspace(api, PATH, { ...PLAN, model: undefined }, fullAccess)
+    expect(setDefaults).not.toHaveBeenCalled()
+  })
+
+  it('goes on to the network and Full access after defaults fail, naming each step that failed', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { api, setNetwork } = fakeApi({ setDefaults: async () => failure('failed'), setNetwork: async () => ok({ network: { access: 'off', hosts: [] } }) })
+    const { fullAccess, ask } = fakeFullAccess(false)
+    const notes = await setUpWorkspace(api, PATH, { ...PLAN, permission: 'full', network: { access: 'off', hosts: [] } }, fullAccess)
+    expect(notes).toEqual(['defaults'])
+    expect(setNetwork).toHaveBeenCalledOnce()
+    expect(ask).toHaveBeenCalledExactlyOnceWith(PATH)
+  })
+
+  it('reports a Host answer that is not the defaults as a failure', async () => {
+    const { api } = fakeApi({ setDefaults: async () => ok({ result: 'refused', problem: 'home-directory' }) })
+    expect(await setUpWorkspace(api, PATH, PLAN, fakeFullAccess().fullAccess)).toEqual(['defaults'])
+  })
+
+  it('reports a network that was not saved, and an absent or failing consent service', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { api } = fakeApi({ setNetwork: async () => failure('locked') })
+    const plan: SetupPlan = { ...PLAN, permission: 'full', network: { access: 'allowlist', hosts: ['pypi.org'] } }
+    expect(await setUpWorkspace(api, PATH, plan, fakeFullAccess(true, false).fullAccess)).toEqual(['network', 'full-access-later'])
+    const refusing = fakeFullAccess()
+    refusing.ask.mockRejectedValue(new Error('no prompt'))
+    expect(await setUpWorkspace(api, PATH, plan, refusing.fullAccess)).toEqual(['network', 'full-access-later'])
   })
 })

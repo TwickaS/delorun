@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { INITIAL, isLastScreen, reduce, SCREENS, STEP_TOTAL, stepNumber, type FlowAction, type FlowState } from '../src/client/flow.ts'
+import { canCreateNow, INITIAL, isLastScreen, reduce, SCREENS, STEP_TOTAL, safetyProblem, stepNumber, type FlowAction, type FlowState } from '../src/client/flow.ts'
 
 const PARENT = '/home/person/Projects'
 
@@ -7,9 +7,12 @@ const PARENT = '/home/person/Projects'
 const run = (actions: readonly FlowAction[], from: FlowState = INITIAL): FlowState => actions.reduce(reduce, from)
 
 describe('the flow\'s first screen', () => {
-  it('opens on the how screen with nothing chosen, in step 1 of 5', () => {
-    expect(INITIAL).toEqual({ step: 'how', method: undefined, choice: undefined, picking: undefined, problem: undefined })
-    expect([stepNumber(INITIAL.step), STEP_TOTAL]).toEqual([1, 5])
+  it('opens on the how screen with nothing chosen and the safe choices made, in step 1 of 4', () => {
+    expect(INITIAL).toEqual({
+      step: 'how', method: undefined, choice: undefined, picking: undefined, model: undefined,
+      safety: { permission: 'files', access: 'open', hosts: '' }, problem: undefined,
+    })
+    expect([stepNumber(INITIAL.step), STEP_TOTAL]).toEqual([1, 4])
   })
 
   it('does not go on until a way to start is chosen', () => {
@@ -95,9 +98,83 @@ describe('a clone', () => {
 })
 
 describe('the screens list', () => {
-  it('counts the screens built so far from one array, and finishes on the last of them', () => {
-    expect(SCREENS).toEqual(['how', 'where'])
-    expect(isLastScreen('how')).toBe(false)
-    expect(['folder', 'new-folder', 'clone'].map(step => isLastScreen(step as 'folder'))).toEqual([true, true, true])
+  it('counts the screens from one array, and finishes on the last of them', () => {
+    expect(SCREENS).toEqual(['how', 'where', 'model', 'safety'])
+    expect(STEP_TOTAL).toBe(SCREENS.length)
+    expect(['how', 'folder', 'new-folder', 'clone', 'model', 'safety'].map(step => stepNumber(step as 'how'))).toEqual([1, 2, 2, 2, 3, 4])
+    expect(['how', 'folder', 'new-folder', 'clone', 'model', 'safety'].map(step => isLastScreen(step as 'how'))).toEqual([false, false, false, false, false, true])
+  })
+})
+
+describe('the model and safety screens', () => {
+  const onFolder = run([{ type: 'method', method: 'new-folder', parent: PARENT }, { type: 'continue' }, { type: 'edit-new', change: { name: 'site' } }])
+  const onModel = reduce(onFolder, { type: 'continue' })
+
+  it('goes from the second screen to the model screen, then the safety screen, which has nothing after it', () => {
+    expect([onModel.step, stepNumber(onModel.step)]).toEqual(['model', 3])
+    const onSafety = reduce(onModel, { type: 'continue' })
+    expect([onSafety.step, stepNumber(onSafety.step)]).toEqual(['safety', 4])
+    expect(reduce(onSafety, { type: 'continue' })).toBe(onSafety)
+  })
+
+  it('goes on from a folder on this computer once one is chosen, and from a clone once it started', () => {
+    const folder = run([{ type: 'method', method: 'folder', parent: PARENT }, { type: 'continue' }])
+    expect(reduce(folder, { type: 'continue' })).toBe(folder)
+    expect(run([{ type: 'existing', path: '/home/person/src' }, { type: 'continue' }], folder).step).toBe('model')
+    const clone = run([{ type: 'method', method: 'clone', parent: PARENT }, { type: 'continue' }])
+    expect(reduce(clone, { type: 'continue' })).toBe(clone)
+    expect(run([{ type: 'clone-started', job: 'job-1' }, { type: 'continue' }], clone).step).toBe('model')
+  })
+
+  it('does not go on while a place is being picked', () => {
+    const picking = reduce(onFolder, { type: 'pick-place' })
+    expect(reduce(picking, { type: 'continue' })).toBe(picking)
+  })
+
+  it('goes back one screen at a time, to the second screen of the card chosen', () => {
+    const onSafety = reduce(onModel, { type: 'continue' })
+    expect(reduce(onSafety, { type: 'back' }).step).toBe('model')
+    expect(reduce(onModel, { type: 'back' }).step).toBe('new-folder')
+    const clone = run([{ type: 'method', method: 'clone', parent: PARENT }, { type: 'continue' }, { type: 'clone-started', job: 'j' }, { type: 'continue' }, { type: 'back' }])
+    expect(clone.step).toBe('clone')
+    expect(clone.choice).toMatchObject({ job: 'j' })
+  })
+
+  it('forgets a started clone when the clone\'s fields or place change, since it is another clone', () => {
+    const started = run([{ type: 'method', method: 'clone', parent: PARENT }, { type: 'continue' }, { type: 'clone-started', job: 'j' }])
+    expect(reduce(started, { type: 'edit-clone', change: { url: 'https://example.com/b.git' } }).choice).not.toHaveProperty('job')
+    const picked = run([{ type: 'pick-place' }, { type: 'place-picked', path: '/home/person/src' }], started)
+    expect(picked.choice).toEqual({ kind: 'clone', url: '', branch: '', parent: '/home/person/src', name: '' })
+  })
+
+  it('keeps the model pick and the safety choices, changing only the fields given', () => {
+    const picked = run([
+      { type: 'model', pick: { provider: 'deepseek', model: 'flash', effort: 'on' } },
+      { type: 'safety', change: { access: 'allowlist' } }, { type: 'safety', change: { hosts: 'pypi.org' } }, { type: 'safety', change: { permission: 'full' } },
+    ], onModel)
+    expect(picked.model).toEqual({ provider: 'deepseek', model: 'flash', effort: 'on' })
+    expect(picked.safety).toEqual({ permission: 'full', access: 'allowlist', hosts: 'pypi.org' })
+  })
+
+  it('offers Create now from the model screen onward, once a place is chosen and the safety choices are usable', () => {
+    expect([INITIAL, onFolder, onModel, reduce(onModel, { type: 'continue' })].map(canCreateNow)).toEqual([false, false, true, true])
+    const noPlace = { ...onModel, choice: undefined }
+    expect(canCreateNow(noPlace)).toBe(false)
+    expect(canCreateNow(run([{ type: 'safety', change: { access: 'allowlist' } }], onModel))).toBe(false)
+    expect(canCreateNow(run([{ type: 'safety', change: { access: 'allowlist', hosts: 'pypi.org' } }], onModel))).toBe(true)
+  })
+
+  it('reads the hosts only for an allowlist', () => {
+    expect(safetyProblem({ permission: 'files', access: 'open', hosts: 'not a host' })).toBeUndefined()
+    expect(safetyProblem({ permission: 'files', access: 'allowlist', hosts: '' })).toEqual({ kind: 'empty' })
+    expect(safetyProblem({ permission: 'files', access: 'allowlist', hosts: 'a.example\nnope' })).toEqual({ kind: 'invalid', host: 'nope' })
+    expect(safetyProblem({ permission: 'files', access: 'allowlist', hosts: 'a.example' })).toBeUndefined()
+  })
+
+  it('shows a refusal of the place on the second screen, and a lock where the person pressed', () => {
+    expect(reduce(onModel, { type: 'finish-failed', problem: { kind: 'create', problem: 'exists' } })).toMatchObject({ step: 'new-folder', problem: { kind: 'create', problem: 'exists' } })
+    expect(reduce(onModel, { type: 'finish-failed', problem: { kind: 'locked' } })).toMatchObject({ step: 'model', problem: { kind: 'locked' } })
+    const recent = run([{ type: 'finish-failed', problem: { kind: 'place', problem: 'home-directory' } }])
+    expect(recent.step).toBe('how')
   })
 })

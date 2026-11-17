@@ -1,6 +1,8 @@
 /** The `shell.overlay` entry: draws the dialog while the service has the flow open. */
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { NewWorkspaceApi } from './api.ts'
+import type { FullAccessAsk } from './create.ts'
+import type { ModelCatalogView } from './models.ts'
 import type { CreatedWorkspace } from './NewWorkspaceDialog.tsx'
 import { NewWorkspaceDialog } from './NewWorkspaceDialog.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
@@ -22,6 +24,13 @@ export interface OverlayInjected {
   /** The studio's folder navigation. */
   readonly browse: FolderBrowse
   /**
+   * Read the model catalogue and the home's default model from the studio's session remote.
+   * @returns the catalogue, or undefined when it cannot be read.
+   */
+  readonly readModels: () => Promise<ModelCatalogView | undefined>
+  /** The Full access consent service, if the studio has one. */
+  readonly fullAccess: FullAccessAsk
+  /**
    * End a flow without a workspace.
    * @param id - the flow's {@link OpenFlow.id}.
    */
@@ -42,11 +51,11 @@ export type OverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'delorunN
  * @param props - the open flow hook, the services and the dictionary.
  * @returns the dialog, or nothing.
  */
-export function Overlay({ useOpen, api, browse, close, created, t }: OverlayProps) {
+export function Overlay({ useOpen, api, browse, readModels, fullAccess, close, created, t }: OverlayProps) {
   const flow = useOpen(current => current)
   if (flow === null) return null
   return (
-    <NewWorkspaceDialog key={flow.id} t={t} api={api} browse={browse} from={flow.from}
+    <NewWorkspaceDialog key={flow.id} t={t} api={api} browse={browse} readModels={readModels} fullAccess={fullAccess} from={flow.from}
       onClose={() => { close(flow.id) }} onCreated={(workspace) => { created(flow.id, workspace) }} />
   )
 }

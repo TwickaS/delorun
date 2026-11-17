@@ -31,25 +31,28 @@ export interface FooterAction {
 
 /** The props of the footer. */
 export interface DialogFooterProps {
-  /** Back, or Cancel on the first screen. */
-  readonly back: FooterAction
+  /** Back, or Cancel on the first screen; absent on a screen that only goes on. */
+  readonly back?: FooterAction
+  /** A secondary action between Back and the primary, such as Create now. */
+  readonly extra?: FooterAction
   /** The primary action, at the right. */
   readonly primary: FooterAction
 }
 
 /**
  * Draw a screen's buttons in the dialog's footer.
- * @param props - the secondary and primary actions.
+ * @param props - the back, secondary and primary actions.
  * @returns the buttons, portalled into the footer.
  */
-export function DialogFooter({ back, primary }: DialogFooterProps): ReactNode {
+export function DialogFooter({ back, extra, primary }: DialogFooterProps): ReactNode {
   const { element, note } = useContext(FooterContext)
   if (element === null) return null
   return createPortal((
     <div className={css.buttons}>
       {note !== undefined && <p className={css.note} role="status">{note}</p>}
       <span className={css.spacer} />
-      <Button variant="outline" className={css.button} disabled={back.disabled} onClick={back.onClick}>{back.label}</Button>
+      {back !== undefined && <Button variant="outline" className={css.button} disabled={back.disabled} onClick={back.onClick}>{back.label}</Button>}
+      {extra !== undefined && <Button variant="outline" className={css.button} disabled={extra.disabled} onClick={extra.onClick}>{extra.label}</Button>}
       <Button variant="primary" className={css.button} disabled={primary.disabled} onClick={primary.onClick}>{primary.label}</Button>
     </div>
   ), element)

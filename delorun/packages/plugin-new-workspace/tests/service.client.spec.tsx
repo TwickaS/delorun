@@ -102,6 +102,53 @@ describe('the stock look', () => {
   })
 })
 
+describe('the studio services the dialog reads', () => {
+  const injected = (entries: Map<string, Entry>) => (entries.get(`shell.overlay#${OVERLAY_ID}`)?.options.inject?.() ?? {}) as OverlayInjected
+
+  it('reads the model catalogue from the session remote and the home\'s default with it', async () => {
+    const { ctx, entries } = await harness()
+    const modelCatalog = vi.fn(async () => ({
+      ok: true as const,
+      value: { default: { provider: 'deepseek', model: 'pro', reasoningEffort: 'high' }, groups: [{ id: 'deepseek', name: 'DeepSeek', models: [{ id: 'pro', name: 'Pro' }] }] },
+    }))
+    ctx.provide('remote.session', { modelCatalog } as never)
+    expect(await injected(entries).readModels()).toEqual({
+      default: { provider: 'deepseek', model: 'pro', reasoningEffort: 'high' },
+      options: [{ provider: 'deepseek', providerName: 'DeepSeek', id: 'pro', name: 'Pro', efforts: [], defaultEffort: undefined }],
+    })
+  })
+
+  it('reads no catalogue when the session remote is absent, answers an error or fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { ctx, entries } = await harness()
+    expect(await injected(entries).readModels()).toBeUndefined()
+    const answers = [async () => ({ ok: false, error: { code: 'x', message: 'y' } }), async () => { throw new Error('offline') }]
+    ctx.provide('remote.session', { modelCatalog: () => answers.shift()?.() } as never)
+    expect(await injected(entries).readModels()).toBeUndefined()
+    expect(await injected(entries).readModels()).toBeUndefined()
+  })
+
+  it('asks the Full access consent service for one workspace, or says it is absent', async () => {
+    const { ctx, entries } = await harness()
+    const { fullAccess } = injected(entries)
+    expect(fullAccess.available()).toBe(false)
+    expect(await fullAccess.ask('/x')).toBe(false)
+    const askForWorkspace = vi.fn(async (_path: string) => true)
+    ctx.provide('delorunFullAccess', { askForWorkspace })
+    expect(fullAccess.available()).toBe(true)
+    expect(await fullAccess.ask(`${HOME}/src/site`)).toBe(true)
+    expect(askForWorkspace).toHaveBeenCalledExactlyOnceWith(`${HOME}/src/site`)
+  })
+
+  it('names the home\'s network route when a network change needs the unlock', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    stubHost({ '/api/delorunNetwork.set': () => Response.json({ error: 'ELEVATION_REQUIRED' }, { status: 403 }) })
+    const { entries, denied } = await harness()
+    await injected(entries).api.setNetwork('/x', { access: 'off', hosts: [] })
+    expect(denied).toEqual([{ endpoint: 'delorunNetwork/set', reason: 'elevation-required: delorunNetwork/set' }])
+  })
+})
+
 describe('the service', () => {
   const service = (ctx: Context): DelorunNewWorkspace => ctx.get('delorunNewWorkspace') as DelorunNewWorkspace
 

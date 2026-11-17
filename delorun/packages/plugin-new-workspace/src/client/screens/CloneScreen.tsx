@@ -32,7 +32,7 @@ export interface CloneScreenProps {
   readonly onEdit: (change: CloneEdit) => void
   /** Open the folder browser to pick where the clone goes. */
   readonly onChangePlace: () => void
-  /** Start the clone. */
+  /** Start the clone, which keeps running while the next screens show. */
   readonly onSubmit: () => void
   /** Go back to the first screen. */
   readonly onBack: () => void

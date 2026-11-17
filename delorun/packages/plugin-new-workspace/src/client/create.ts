@@ -3,8 +3,9 @@
  * Host has added it. A failure carries the wire's own reason so the dialog shows it in place on the right screen.
  * @module @delorun/plugin-new-workspace/client/create
  */
-import type { ApiFailure, NewWorkspaceApi } from './api.ts'
-import { assertNever, type Choice, type Problem } from './flow.ts'
+import type { BrowserChoice, WorkspaceModel } from '../wire.ts'
+import type { ApiFailure, NetworkSetting, NewWorkspaceApi } from './api.ts'
+import { assertNever, type Choice, type Permission, type Problem } from './flow.ts'
 
 /** How often a running clone is asked how far it is, in milliseconds. */
 export const CLONE_POLL_MS = 1000
@@ -111,4 +112,70 @@ async function followClone(api: NewWorkspaceApi, job: string | undefined, onProg
     }
     await wait(CLONE_POLL_MS)
   }
+}
+
+/** What setting a new workspace up stores and asks, once the workspace exists. */
+export interface SetupPlan {
+  /** The model and thinking level to keep, or undefined when the catalogue could not be read. */
+  readonly model: WorkspaceModel | undefined
+  /** The browser choice to keep; absent until the browser screen exists. */
+  readonly browser?: BrowserChoice
+  /** Change files in the folder, or Full access, which asks for consent. */
+  readonly permission: Permission
+  /** The network for commands. */
+  readonly network: NetworkSetting
+}
+
+/** The Full access consent, asked for one workspace. */
+export interface FullAccessAsk {
+  /**
+   * Whether the consent service exists on this page.
+   * @returns true when {@link FullAccessAsk.ask} can ask.
+   */
+  available(): boolean
+  /**
+   * Ask the person for Full access in one workspace.
+   * @param path - the workspace's canonical folder.
+   * @returns whether the person granted it.
+   */
+  ask(path: string): Promise<boolean>
+}
+
+/** A setup step that did not come out; the workspace exists and opens regardless. */
+export type SetupNote = 'defaults' | 'network' | 'full-access-later'
+
+/**
+ * Set up a workspace that now exists: keep its defaults, narrow its network, then ask for Full access when chosen, in
+ * that order. Each step that fails is reported and does not stop the next; a declined consent is not a failure and leaves the
+ * workspace on Change files.
+ * @param api - the Host client.
+ * @param path - the workspace's canonical folder as the Host returned it.
+ * @param plan - what to store and ask.
+ * @param fullAccess - the consent service.
+ * @returns the steps that did not come out, in order.
+ */
+export async function setUpWorkspace(api: NewWorkspaceApi, path: string, plan: SetupPlan, fullAccess: FullAccessAsk): Promise<readonly SetupNote[]> {
+  const notes: SetupNote[] = []
+  if (plan.model !== undefined || plan.browser !== undefined) {
+    const stored = await api.setDefaults(path, { ...plan.model === undefined ? {} : { model: plan.model }, ...plan.browser === undefined ? {} : { browser: plan.browser } })
+    if (!stored.ok || stored.value.result !== 'defaults') notes.push('defaults')
+  }
+  if (plan.network.access !== 'open') {
+    const set = await api.setNetwork(path, plan.network)
+    if (!set.ok) notes.push('network')
+  }
+  if (plan.permission === 'full') {
+    if (!fullAccess.available()) {
+      notes.push('full-access-later')
+    } else {
+      try {
+        await fullAccess.ask(path)
+      } catch (_refused) {
+        // The consent could not be asked; the workspace stays on Change files, as after a decline.
+        console.warn('delorun new workspace: the Full access consent could not be asked')
+        notes.push('full-access-later')
+      }
+    }
+  }
+  return notes
 }

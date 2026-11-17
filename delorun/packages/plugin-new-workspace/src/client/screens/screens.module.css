@@ -448,6 +448,102 @@
   cursor: pointer;
 }
 
+/* The model and safety screens: native selects, a radio list and the shared copy block about what a chat can still change. */
+.select,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: var(--dsw-font-s-14-font-size);
+}
+
+.select {
+  min-height: 32px;
+}
+
+.textarea {
+  min-height: 96px;
+  padding-top: var(--delorun-space-3);
+  padding-bottom: var(--delorun-space-3);
+  font-family: var(--dsw-font-mono);
+  resize: vertical;
+}
+
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.select:disabled,
+.textarea:disabled {
+  opacity: 0.5;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nw-gap-1);
+  padding: var(--nw-gap-1) var(--nw-gap-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.choice:has(input:disabled) {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-2);
+  min-width: 0;
+}
+
+.choiceTitle {
+  font-size: var(--dsw-font-s-14-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-s-14-line-height);
+}
+
+.chats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  padding-top: var(--nw-gap-1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.chatsList {
+  margin: 0;
+  padding-inline-start: var(--nw-gap-2);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
 /* On a phone the browser shows one column at a time: the folders, then the selected folder's preview with a way back. */
 @media (max-width: 640px) {
   .cards {

@@ -2,7 +2,9 @@
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { vi } from 'vitest'
 import type { ApiResult, NewWorkspaceApi } from '../src/client/api.ts'
+import type { FullAccessAsk } from '../src/client/create.ts'
 import { en, type Translate } from '../src/client/locales.ts'
+import type { ModelCatalogView } from '../src/client/models.ts'
 import type { FolderBrowse, FolderListing } from '../src/client/screens/FolderScreen.tsx'
 import type { PlacesAnswer, PreviewAnswer } from '../src/wire.ts'
 
@@ -82,7 +84,34 @@ export function fakeApi(overrides: Partial<NewWorkspaceApi> = {}) {
     cloneStatus: vi.fn<NewWorkspaceApi['cloneStatus']>(overrides.cloneStatus ?? (async () => ok({ state: 'done' as const, workspaceId: 'workspace-3', path: `${HOME}/Projects/site`, kind: 'code' as const }))),
     defaults: vi.fn<NewWorkspaceApi['defaults']>(overrides.defaults ?? (async () => ok({ result: 'defaults' as const, defaults: {} }))),
     setDefaults: vi.fn<NewWorkspaceApi['setDefaults']>(overrides.setDefaults ?? (async (_path, defaults) => ok({ result: 'defaults' as const, defaults }))),
+    setNetwork: vi.fn<NewWorkspaceApi['setNetwork']>(overrides.setNetwork ?? (async (_path, network) => ok({ network }))),
   }
   const api: NewWorkspaceApi = spies
   return { api, ...spies }
+}
+
+/**
+ * The home's catalogue: two DeepSeek models, the first with three thinking levels and high as the home's default, and one
+ * model of another provider without any thinking level.
+ */
+export const CATALOG: ModelCatalogView = {
+  default: { provider: 'deepseek', model: 'deepseek-pro', reasoningEffort: 'high' },
+  options: [
+    {
+      provider: 'deepseek', providerName: 'DeepSeek', id: 'deepseek-pro', name: 'DeepSeek Pro',
+      efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }, { id: 'max', name: 'Max' }], defaultEffort: 'low',
+    },
+    {
+      provider: 'deepseek', providerName: 'DeepSeek', id: 'deepseek-flash', name: 'DeepSeek Flash',
+      efforts: [{ id: 'off', name: 'Off' }, { id: 'on', name: 'On' }], defaultEffort: 'off',
+    },
+    { provider: 'other', providerName: 'Other', id: 'plain', name: 'Plain', efforts: [], defaultEffort: undefined },
+  ],
+}
+
+/** A Full access consent that exists and answers `granted`; each call is a spy. */
+export function fakeFullAccess(granted = true, available = true) {
+  const ask = vi.fn(async (_path: string) => granted)
+  const fullAccess: FullAccessAsk = { available: () => available, ask }
+  return { fullAccess, ask }
 }

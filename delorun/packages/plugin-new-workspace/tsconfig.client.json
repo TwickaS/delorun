@@ -38,6 +38,9 @@
     },
     {
       "path": "../../../packages/api/gateway/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/remotes/tsconfig.client.json"
     }
   ]
 }

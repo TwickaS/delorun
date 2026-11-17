@@ -3,7 +3,7 @@
  * and every failure comes back as a value, never a rejection, so a screen shows an honest state in place.
  * @module @delorun/plugin-new-workspace/client/api
  */
-import type { z } from 'zod'
+import { z } from 'zod'
 import {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, CREATE_PATH, CreateAnswer,
   DEFAULTS_PATH, DefaultsAnswer, PLACES_PATH, PlacesAnswer, PREVIEW_PATH, PreviewAnswer, SEARCH_PATH, SearchAnswer, SET_DEFAULTS_PATH,
@@ -16,8 +16,30 @@ export type ApiFailure = 'locked' | 'refused-arrival' | 'failed'
 /** A parsed answer, or why there was none. */
 export type ApiResult<T> = { readonly ok: true, readonly value: T } | { readonly ok: false, readonly reason: ApiFailure }
 
+/** The home's route that sets one workspace's network. `POST` takes `{ path, network: { access, hosts } }` and answers `{ network }`. */
+export const NETWORK_SET_PATH = '/api/delorunNetwork.set'
+
+/**
+ * The network a workspace's commands get, as `@delorun/plugin-permission-defaults` stores it: `open`, `allowlist` (the hosts
+ * only) or `off`. The home answers a change that loosens the network without `confirmed: true` with `NETWORK_UNCONFIRMED`;
+ * this flow only narrows the default `open`, so it never sends `confirmed`, and such an answer is a failure.
+ */
+export const NetworkSetting = z.strictObject({
+  access: z.enum(['open', 'allowlist', 'off']),
+  hosts: z.array(z.string()),
+})
+
+/** {@link NetworkSetting}'s parsed value. */
+export type NetworkSetting = z.output<typeof NetworkSetting>
+
+/** The home's answer to a network change: the setting now in effect. */
+export const NetworkAnswer = z.looseObject({ network: z.looseObject({ access: z.enum(['open', 'allowlist', 'off']), hosts: z.array(z.string()) }) })
+
+/** {@link NetworkAnswer}'s parsed value. */
+export type NetworkAnswer = z.output<typeof NetworkAnswer>
+
 /** The routes by the name the unlock report and the log use. */
-type RouteName = 'places' | 'search' | 'preview' | 'add' | 'create' | 'clone' | 'cloneStatus' | 'defaults' | 'setDefaults'
+type RouteName = 'places' | 'search' | 'preview' | 'add' | 'create' | 'clone' | 'cloneStatus' | 'defaults' | 'setDefaults' | 'setNetwork'
 
 /** The flow's requests. */
 export interface NewWorkspaceApi {
@@ -77,6 +99,13 @@ export interface NewWorkspaceApi {
    * @returns the defaults now kept.
    */
   setDefaults(path: string, defaults: WorkspaceDefaults): Promise<ApiResult<DefaultsAnswer>>
+  /**
+   * Set one workspace's network for commands, through the home's own route.
+   * @param path - the workspace's canonical folder, as the Host returned it.
+   * @param network - the access and, for an allowlist, the hosts.
+   * @returns the setting now in effect.
+   */
+  setNetwork(path: string, network: NetworkSetting): Promise<ApiResult<NetworkAnswer>>
 }
 
 /** What the client needs from the page. */
@@ -164,5 +193,6 @@ export function createApi(options: ApiOptions): NewWorkspaceApi {
     cloneStatus: job => call('cloneStatus', CLONE_STATUS_PATH, CloneStatus, { job }),
     defaults: path => call('defaults', DEFAULTS_PATH, DefaultsAnswer, { path }),
     setDefaults: (path, defaults) => call('setDefaults', SET_DEFAULTS_PATH, DefaultsAnswer, { path, defaults }),
+    setNetwork: (path, network) => call('setNetwork', NETWORK_SET_PATH, NetworkAnswer, { path, network }),
   }
 }
