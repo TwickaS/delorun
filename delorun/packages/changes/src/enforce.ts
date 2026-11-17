@@ -43,7 +43,7 @@ import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
 import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import { holdsVersion, materialize, storeEmptyVersion, storeFolder } from './store.ts'
-import { versionOf } from './tree.ts'
+import { referenceRelease, versionOf } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
 import { approvedWith, declinedByPerson, unreviewedEntry, unreviewedWords, type UnreviewedLoad } from './unreviewed.ts'
 import { endWorkWithoutPerson, workFinishedLine, workSessionExpired, type WorkFinished } from './work.ts'
@@ -73,10 +73,10 @@ export interface EnforceRequest {
    */
   readonly harnessLink?: (name: string, target: string) => boolean
   /**
-   * The installed release this process runs from (`DELORUN_VERSION`). A link in an active directory into the runtime
-   * store holds only when it names this release's installed packages, so a Host still running after an update switched
-   * `runtimes/current` loads its own release's packages and a start of the new release loads the new one's. When absent,
-   * as from a source checkout, no such link holds.
+   * The installed release this process runs from (`DELORUN_VERSION`). A start re-points an active directory's links into
+   * the runtime store to this release's installed packages, and the load check holds them to it, so a Host still running
+   * after an update switched `runtimes/current` loads its own release's packages and a start of the new release loads
+   * the new one's. When absent, as from a source checkout, both use the release `runtimes/current` names.
    */
   readonly runningRelease?: string
 }
@@ -418,19 +418,20 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   for (const { plugin } of moved) await pointLinkAt(profileDir, plugin, activeDirectory(home, profile, plugin))
 
   const activeBefore = await readActiveRecord(home, profile)
+  const release = await referenceRelease(home, request.runningRelease)
   // A reload decides only the plugins it moved; every other active directory keeps what the record says it holds.
   const activePlugins: Record<string, ActiveContent> = pass === 'start' ? {} : { ...activeBefore.plugins }
   for (const { plugin } of managed) {
     let active = decided.get(plugin)
     try {
-      await holdContent(home, activeDirectory(home, profile, plugin), active?.version)
+      await holdContent(home, activeDirectory(home, profile, plugin), active?.version, release)
     } catch (error) {
       if (!isChangesError(error) || (error.code !== 'STORE_CORRUPT' && error.code !== 'RUNTIME_CHANGED')) throw error
       // Content the store no longer holds, such as a version a restored history version names after collection
       // removed it, or a link to a package the release carries while the home runs no installed release: the plugin
       // loads nothing until the person applies a change again.
       failed.push({ plugin, detail: error.detail })
-      await holdContent(home, activeDirectory(home, profile, plugin), undefined)
+      await holdContent(home, activeDirectory(home, profile, plugin), undefined, release)
       active = undefined
     }
     if (active === undefined) delete activePlugins[plugin]
@@ -547,11 +548,12 @@ function withApproval(record: ApprovedRecord, plugin: string, approval: Approved
  * @param home - the Delorun home.
  * @param directory - the active directory.
  * @param version - the version; undefined for an empty directory.
+ * @param release - the release whose installed packages its `runtime` links name; `runtimes/current` when omitted.
  */
-export async function holdContent(home: string, directory: string, version: ContentVersion | undefined): Promise<void> {
-  if (await holdsVersion(home, directory, version ?? EMPTY_CONTENT_VERSION)) return
+export async function holdContent(home: string, directory: string, version: ContentVersion | undefined, release?: string): Promise<void> {
+  if (await holdsVersion(home, directory, version ?? EMPTY_CONTENT_VERSION, release)) return
   if (version !== undefined) {
-    await materialize(home, version, directory)
+    await materialize(home, version, directory, undefined, release)
     return
   }
   await rm(directory, { recursive: true, force: true })

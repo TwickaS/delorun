@@ -86,6 +86,22 @@ describe('checkChangesInvariants', () => {
       await expect(reload('0.1.0')).resolves.toBeDefined()
     })
 
+    it('is re-pointed to the current release and loads when a source checkout, which runs no release, starts', async () => {
+      const { fx, peer } = await updated()
+      await start(fx)
+      expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.2.0', 'app', 'node_modules', '@s', 'peer')))
+      expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([])
+    })
+
+    it('is re-pointed to and loads from the release a start runs, which need not be the current one', async () => {
+      const { fx, peer } = await updated()
+      await start(fx, '0.2.0')
+      await start(fx, '0.1.0')
+      expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')))
+      expect(await atLoad(fx, '0.1.0')).toEqual([])
+      expect(await atLoad(fx, '0.2.0')).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+    })
+
     it('is refused at load by the new release when its re-point did not happen', async () => {
       const { fx } = await updated()
       expect(await atLoad(fx, '0.2.0')).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
