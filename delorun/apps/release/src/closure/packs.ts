@@ -2,7 +2,7 @@
  * Building a release's packs (contract C2's packs file): one archive per plugin package that a person turns on and the
  * default install does not carry, for each platform whose files differ. A pack holds the package and its production
  * dependencies, except (1) packages the closure already carries at the same version, which the install links
- * into the pack as peers, and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
+ * into the pack as peers (a third-party package at another version stays in the pack; see `keepsOneCopy`), and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
  * which the packs file pins by npm tarball URL and SHA-512 and the client fetches from the registry.
  *
  * @module @delorun/release/closure/packs
@@ -29,7 +29,7 @@ export interface PackSources {
   /** The staged closure's `app/node_modules` for a platform. */
   closureNodeModules(platform: RuntimePlatform): string
   /** The lockfile's exact version and `sha512-` integrity of a package for a platform. */
-  locked(name: string, platform: RuntimePlatform): { readonly version: string, readonly integrity: string } | undefined
+  locked(name: string, platform: RuntimePlatform): LockedPackage | undefined
   /** Download a registry tarball. */
   download(url: string): Promise<Buffer>
 }
@@ -40,6 +40,13 @@ export interface BuiltPack {
   readonly entry: PackEntry
   /** Archive file name to bytes, to write beside the release. */
   readonly archives: ReadonlyMap<string, Buffer>
+}
+
+/** One package version the lockfile pins: `source` is the registry name when it differs from the dependency name. */
+export interface LockedPackage {
+  readonly version: string
+  readonly integrity: string
+  readonly source?: string
 }
 
 /**
@@ -82,11 +89,46 @@ export function packArchiveName(release: string, name: string, platform: Runtime
 async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources): Promise<PackExternal> {
   const locked = sources.locked(name, platform)
   if (locked === undefined) throw new Error(`the lockfile does not pin ${name} for ${platform}`)
-  const url = tarballUrl(name, locked.version)
+  const url = tarballUrl(locked.source ?? name, locked.version)
   const bytes = await sources.download(url)
   const sha512 = createHash('sha512').update(bytes).digest('base64')
   if (`sha512-${sha512}` !== locked.integrity) throw new Error(`${url} does not match the lockfile's integrity; the registry served other bytes than the lockfile pins`)
   return { name, version: brandString<SemanticVersion>(locked.version), url, sha512: brandString<Sha512Base64>(sha512), length: bytes.byteLength }
+}
+
+/** Third-party libraries that must exist once in a running Delorun: they hold module-level state or classes that plugins compare or pass across the plugin boundary. */
+export const SINGLETON_LIBRARIES: readonly string[] = ['react', 'react-dom', 'zod', '@modelcontextprotocol/sdk']
+
+/** Scopes of the workspace, Delorun and rescoped vendor packages (`vendor/*` are all `@deepseek-ai/*`). */
+const CORE_SCOPES: readonly string[] = ['@deepseek-ai/', '@delorun/']
+
+/**
+ * Whether a bundled package at another version than the closure's would be a second copy that breaks module identity.
+ * Workspace, Delorun and vendor packages, the singleton libraries, the recipe's externals and anything the pack lists in
+ * `peerDependencies` must exist once; any other third-party package may ship inside the pack at its own version, which
+ * Node resolves first from the pack's directory.
+ * @param name - the package name.
+ * @param packPeers - the pack package's `peerDependencies` names.
+ * @param externals - the recipe's `packExternals`.
+ * @returns true when a differing version is refused.
+ */
+export function keepsOneCopy(name: string, packPeers: ReadonlySet<string>, externals: readonly string[]): boolean {
+  return CORE_SCOPES.some(scope => name.startsWith(scope)) || SINGLETON_LIBRARIES.includes(name) || packPeers.has(name) || isExternal(name, externals)
+}
+
+/** Delete every `.bin` directory under a deployed package, including those nested in its dependencies. */
+async function removeCommandLinks(directory: string): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const path = join(directory, entry.name)
+    if (entry.name === '.bin') await rm(path, { recursive: true, force: true })
+    else await removeCommandLinks(path)
+  }
+}
+
+async function peerDependencyNames(directory: string): Promise<Set<string>> {
+  const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { peerDependencies?: Record<string, string> }
+  return new Set(Object.keys(manifest.peerDependencies ?? {}))
 }
 
 async function versionIn(directory: string): Promise<string | undefined> {
@@ -120,21 +162,23 @@ export async function buildPack(name: string, version: string, experimental: boo
     const external: PackExternal[] = []
     const dropped = new Set<string>()
     const peers = new Set<string>()
+    const kept = new Set<string>()
+    const packPeers = await peerDependencyNames(directory)
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
-      if (nested !== undefined && !dropped.has(nested)) {
+      if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {
           dropped.add(nested)
           external.push(await pinOf(nested, platform, sources))
         } else {
           const inClosure = await versionIn(join(sources.closureNodeModules(platform), nested))
           const bundled = await versionIn(join(directory, 'node_modules', nested))
-          if (inClosure !== undefined && inClosure !== bundled) throw new Error(`${name} bundles ${nested}@${bundled ?? 'unknown'} for ${platform}, but the closure carries ${nested}@${inClosure}; a pack never carries a second copy of a core package`)
-          if (inClosure !== undefined) {
+          if (inClosure !== undefined && inClosure !== bundled && keepsOneCopy(nested, packPeers, externals)) throw new Error(`${name} bundles ${nested}@${bundled ?? 'unknown'} for ${platform}, but the closure carries ${nested}@${inClosure}; ${nested} must exist once in a running Delorun, so a pack never carries a second copy of it`)
+          if (inClosure !== undefined && inClosure === bundled) {
             dropped.add(nested)
             peers.add(nested)
-          }
+          } else kept.add(nested)
         }
       }
       if (nested !== undefined && dropped.has(nested)) continue
@@ -181,14 +225,30 @@ export function packsDocument(version: string, packs: readonly PackEntry[]): Rel
 }
 
 /** The lockfile's resolution of one package: `packages` keys are `<name>@<version>`. */
-export function lockedFrom(lockfile: string, name: string): { readonly version: string, readonly integrity: string } | undefined {
-  const packages = (parseYaml(lockfile) as { packages?: Record<string, { resolution?: { integrity?: string } }> }).packages ?? {}
+export function lockedFrom(lockfile: string, name: string): LockedPackage | undefined {
+  const document = parseYaml(lockfile) as { packages?: Record<string, { resolution?: { integrity?: string } }>, snapshots?: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }> }
+  const packages = document.packages ?? {}
   const found = Object.entries(packages).filter(([key]) => key.startsWith(`${name}@`) && /^\d/u.test(key.slice(name.length + 1)))
-  if (found.length === 0) return undefined
+  if (found.length === 0) return aliasedLock(packages, document.snapshots ?? {}, name)
   if (found.length > 1) throw new Error(`the lockfile pins ${name} at ${found.length} versions; a pack external needs exactly one`)
   const [key, value] = found[0]!
   const integrity = value.resolution?.integrity
   return integrity === undefined ? undefined : { version: key.slice(name.length + 1), integrity }
+}
+
+/** A package the lockfile pins under another registry name (`name: 'real@version'`), as `@openai/codex-<platform>` is. */
+function aliasedLock(packages: Record<string, { resolution?: { integrity?: string } }>, snapshots: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }>, name: string): LockedPackage | undefined {
+  const targets = new Set<string>()
+  for (const snapshot of Object.values(snapshots)) {
+    const target = snapshot.optionalDependencies?.[name] ?? snapshot.dependencies?.[name]
+    if (target !== undefined && /^@?[^@]+@\d/u.test(target)) targets.add(target)
+  }
+  if (targets.size > 1) throw new Error(`the lockfile pins ${name} at ${targets.size} versions; a pack external needs exactly one`)
+  const target = [...targets][0]
+  const integrity = target === undefined ? undefined : packages[target]?.resolution?.integrity
+  if (target === undefined || integrity === undefined) return undefined
+  const at = target.lastIndexOf('@')
+  return { version: target.slice(at + 1), integrity, source: target.slice(0, at) }
 }
 
 /** What a release's pack step needs from the build. */
@@ -240,7 +300,7 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
     deploy: (name, platform, directory) => {
       execFileSync('pnpm', ['--filter', name, 'deploy', '--prod', '--ignore-scripts', ...request.targets[platform], '--config.allow-unused-patches=true', '--config.node-linker=hoisted', '--config.package-import-method=copy', '--config.link-workspace-packages=true', '--config.hoist-workspace-packages=false', directory], { cwd: request.source, env: request.env, stdio: 'inherit' })
       // A pack carries no command links: the archive refuses symbolic links and a pack is never run through .bin.
-      return rm(join(directory, 'node_modules', '.bin'), { recursive: true, force: true })
+      return removeCommandLinks(directory)
     },
   }
   const entries: PackEntry[] = []

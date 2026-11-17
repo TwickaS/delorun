@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimePlatform } from '@delorun/contract-release-manifest'
 import { closureName } from '../../src/rebuild/compare.ts'
-import { buildPack, isExternal, packArchiveName, lockedFrom, tarballUrl, type PackSources } from '../../src/closure/packs.ts'
+import { buildPack, isExternal, keepsOneCopy, packArchiveName, lockedFrom, SINGLETON_LIBRARIES, tarballUrl, type PackSources } from '../../src/closure/packs.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from '../../src/closure/plugin-set.ts'
 
 const roots: string[] = []
@@ -21,14 +21,16 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = Buffer.from('registry tarball bytes')
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean }): PackSources {
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string> }): PackSources {
   const closure = temp()
-  put(closure, { 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
+  const extra = options.extra
+  put(closure, { ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"2.0.0"}` }, 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
   return {
     closureNodeModules: () => join(closure, 'node_modules'),
     deploy: async (_name, platform, directory) => {
       put(directory, {
-        'package.json': '{"name":"@delorun/demo","version":"1.0.0"}',
+        'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', peerDependencies: options.peerDependencies }),
+        ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"1.0.0"}`, [`node_modules/${extra}/index.js`]: 'own\n' },
         'lib/index.js': 'export {}\n',
         'node_modules/shared-peer/package.json': `{"name":"shared-peer","version":"${options.bundledPeer ?? '2.0.0'}"}`,
         ...options.armOnlyPeer === true && platform === 'linux-arm64' ? { 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' } : {},
@@ -68,8 +70,25 @@ describe('building a pack', () => {
     expect(built.entry.variants['linux-arm64']!.peers).toEqual(['arm-peer', 'shared-peer'])
   })
 
-  it('refuses a pack that bundles a core package at another version than the closure carries', async () => {
-    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, bundledPeer: '1.0.0' }), temp())).rejects.toThrow(/shared-peer@1\.0\.0.*closure carries shared-peer@2\.0\.0/u)
+  it('lets a third-party package keep its own version inside the pack, without linking the closure\'s', async () => {
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, extra: 'old-http' }), temp())
+    expect(built.entry.variants.any!.peers).toEqual(['shared-peer'])
+    expect(built.entry.variants.any!.files.map(file => file.path)).toEqual(expect.arrayContaining(['node_modules/old-http/index.js', 'node_modules/old-http/package.json']))
+  })
+
+  it.each(['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@delorun/contract-release-manifest', ...SINGLETON_LIBRARIES])('refuses a differing copy of %s, which must exist once', async (extra) => {
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, extra }), temp())).rejects.toThrow(/second copy/u)
+  })
+
+  it('refuses a differing copy of a package the pack lists as a peer dependency', async () => {
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, extra: 'old-http', peerDependencies: { 'old-http': '*' } }), temp())).rejects.toThrow(/old-http@1\.0\.0.*second copy/u)
+  })
+
+  it('counts every vendored package as core, by its real name', () => {
+    const root = join(import.meta.dirname, '../../../../..')
+    const names = readdirSync(join(root, 'vendor')).filter(entry => existsSync(join(root, 'vendor', entry, 'package.json'))).map(entry => (JSON.parse(readFileSync(join(root, 'vendor', entry, 'package.json'), 'utf8')) as { name: string }).name)
+    expect(names.length).toBeGreaterThan(0)
+    for (const vendored of names) expect(keepsOneCopy(vendored, new Set(), [])).toBe(true)
   })
 
   it('names no pack archive like a runtime archive or file list, whatever the pack is called', () => {
@@ -98,6 +117,11 @@ describe('the lockfile and the pack candidates', () => {
     expect(lockedFrom(lock, '@openai/codex-linux-x64')).toEqual({ version: '0.153.4', integrity: 'sha512-AAAA' })
     expect(lockedFrom(lock, 'absent')).toBeUndefined()
     expect(() => lockedFrom(lock, 'twice')).toThrow(/2 versions/u)
+  })
+
+  it('finds a package the lockfile pins under another registry name, with the name to download from', () => {
+    const lock = "packages:\n  '@openai/codex@0.153.4-linux-x64':\n    resolution: {integrity: sha512-AAAA}\nsnapshots:\n  '@openai/codex@0.153.4':\n    optionalDependencies:\n      '@openai/codex-linux-x64': '@openai/codex@0.153.4-linux-x64'\n"
+    expect(lockedFrom(lock, '@openai/codex-linux-x64')).toEqual({ version: '0.153.4-linux-x64', integrity: 'sha512-AAAA', source: '@openai/codex' })
   })
 
   it('makes the bundles the default install lacks packs: Claude Code and Codex, not what the closure carries', () => {
