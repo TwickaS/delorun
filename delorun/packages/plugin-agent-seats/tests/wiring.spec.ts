@@ -19,7 +19,7 @@ import * as Plugin from '../src/index.ts'
 import { Config, LIVE_AGENTS, mountSeats, type SeatRelayHook } from '../src/index.ts'
 import { LEASE_END_TEXT } from '../src/lease.ts'
 import { CHOOSE_MODEL_PATH, MODEL_CHOICES_FILE, RESUME_PATH } from '../src/state/index.ts'
-import { captureWarnings, FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
+import { captureWarnings, fake, FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
 import { FakeGate, FixtureWorkingDirectory } from './provider/harness.ts'
 
 /** A consent service that tells when a lease ends. */
@@ -65,7 +65,7 @@ async function world(on: boolean): Promise<World> {
   await ctx.plugin(FakeConnection)
   // The question relay needs these services; the surface under test never asks a question.
   for (const service of ['approval', 'agents'] as const) if (ctx.get(service) === undefined) ctx.provide(service, {} as never)
-  return { ctx, flags: ctx.previewFlags as FakeFlags, connection: ctx.connection as unknown as FakeConnection, presets: ctx.agentPresets as unknown as FakePresets, dir }
+  return { ctx, flags: ctx.previewFlags as FakeFlags, connection: fake<FakeConnection>(ctx.connection), presets: fake<FakePresets>(ctx.agentPresets), dir }
 }
 
 /** What a chat's model and a person can meet: tool names, subagent providers and model providers. */
@@ -179,7 +179,7 @@ describe('the end of a lease', () => {
     session.append('subagent/descriptor', { version: 3, mode: 'continuable', provider: 'claude-code-seat', label: 'task' })
     const child = session.header.id
     mounted.events.onStarting?.(child, 'claude-code')
-    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const consent = fake<FakeConsent>(ctx.get('delegationConsent') ?? {})
     const lease: SeatLease = { child, root: child, workspace: 'w', cwd: '/work', provider: 'claude-code', workspaceListed: false, grantedAt: 0, why: 'asked' }
     for (const listener of consent.listeners) listener(lease, 'archived')
     expect(mounted.store.viewOf(child)).toMatchObject({ state: 'ended', endedReason: LEASE_END_TEXT.archived })
@@ -196,7 +196,7 @@ describe('the end of a lease', () => {
     const { ctx } = await world(true)
     await ctx.plugin(FakeConsent)
     const mounted = await mountSeats(ctx, Config(null))
-    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const consent = fake<FakeConsent>(ctx.get('delegationConsent') ?? {})
     const session = ctx.sessions.create()
     const lease: SeatLease = { child: session.header.id, root: session.header.id, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0, why: 'asked' }
     for (const listener of consent.listeners) listener(lease, 'revoked')
@@ -207,7 +207,7 @@ describe('the end of a lease', () => {
     const { ctx } = await world(true)
     await ctx.plugin(FakeConsent)
     await mountSeats(ctx, Config(null))
-    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const consent = fake<FakeConsent>(ctx.get('delegationConsent') ?? {})
     const gone = SessionId('archived-away')
     const lease: SeatLease = { child: gone, root: gone, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0, why: 'asked' }
     expect(() => { for (const listener of consent.listeners) listener(lease, 'archived') }).not.toThrow()

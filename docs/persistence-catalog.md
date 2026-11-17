@@ -528,7 +528,7 @@ Source: [`packages/core/session/src/types.ts:317`](../packages/core/session/src/
  * `@delorun/plugin-agent-seats` appends it.
  * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
  */
-'external-agent/run-allowed': { askedSeq: SessionSeq }
+'external-agent/run-allowed': { askedSeq: AskedSeq }
 ```
 
 Source: [`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)

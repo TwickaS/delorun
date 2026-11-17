@@ -85,3 +85,12 @@ export function captureWarnings(ctx: Context): string[] {
   })
   return texts
 }
+
+/**
+ * Read a partial fake as the interface a plugin under test expects.
+ * @param value - the fake; it implements the members the spec reaches.
+ * @returns the same value, typed as `T`.
+ */
+export function fake<T>(value: object): T {
+  return value as T
+}

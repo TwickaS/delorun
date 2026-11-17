@@ -12,7 +12,7 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import { Config } from '../src/config.ts'
 import { seatRelay } from '../src/relay/index.ts'
 import type { SeatStateMount } from '../src/state/index.ts'
-import { captureWarnings } from './mount-support.ts'
+import { captureWarnings, fake } from './mount-support.ts'
 import { describeSeat } from './state/support.ts'
 
 interface Calls {
@@ -37,7 +37,7 @@ async function hooked(state: Partial<{ recorded: (child: unknown, callId: string
   ctx.provide('agents', { get: () => child, turnBoundaryOf: () => ({ openTurnStartSeq: 1 }) } as never)
   ctx.on('approval/request', () => new Promise<never>(() => {}))
   const calls: Calls = { pending: [], notices: [] }
-  const mount = {
+  const mount = fake<SeatStateMount>({
     records: { recorded: state.recorded ?? (() => Promise.resolve()) },
     store: {
       viewOf: () => ({ pending: state.pendingShown === false ? undefined : { since: 1 } }),
@@ -46,7 +46,7 @@ async function hooked(state: Partial<{ recorded: (child: unknown, callId: string
       notice: state.notice ?? ((notified: SessionId, kind: string, text: string) => { calls.notices.push({ child: notified, kind, text }) }),
     },
     setPending: state.setPending ?? ((_child: SessionId, since: number | undefined) => { calls.pending.push(since) }),
-  } as unknown as SeatStateMount
+  })
   let approver: ReturnType<typeof seatRelay> | undefined
   await ctx.plugin(class {
     constructor(scope: Context) {

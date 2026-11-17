@@ -530,7 +530,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
  * `@delorun/plugin-agent-seats` appends it.
  * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
  */
-'external-agent/run-allowed': { askedSeq: SessionSeq }
+'external-agent/run-allowed': { askedSeq: AskedSeq }
 ```
 
 来源：[`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)
