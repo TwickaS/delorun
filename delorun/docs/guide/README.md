@@ -40,6 +40,7 @@ The user guide is for people who install and use Delorun, the agent harness you 
 - **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
 - **Bring my chats from the DeepSeek website:** [Import your DeepSeek website chats](import-deepseek-chats.md).
 - **See what a chat costs:** [See what a chat costs](cost-meter.md).
+- **Let the agent work in my own Chrome, signed in as me:** [Use your own browser](use-your-own-browser.md).
 - **Read the model's thinking word by word:** [Read the model's thinking word by word](thinking-tab.md).
 
 ## I want to choose or change the model
