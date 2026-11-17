@@ -616,7 +616,7 @@ describe('the recommended plugins step', () => {
   })
 
   it('names a plugin whose title is not known yet in words, never by its package id', () => {
-    expect(['@scope/codex-quota', '@deepseek-ai/dsh-session-search', 'plain'].map(readableName)).toEqual(['Codex quota', 'Dsh session search', 'Plain'])
+    expect(['@scope/codex-quota', '@deepseek-ai/dsh-session-search', 'plain', '@delorun/bundle-browser'].map(readableName)).toEqual(['Codex quota', 'Dsh session search', 'Plain', 'Browser'])
   })
 })
 
