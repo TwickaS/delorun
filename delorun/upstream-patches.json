@@ -840,13 +840,13 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall. The search field is 44px tall under a coarse pointer or on a phone width."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall. The search field is 44px tall under a coarse pointer or on a phone width. At 600px and below outside the desktop windows the navigation is a grouped list of 48px rows with chevrons and a page opens full screen under a back arrow, respecting the safe areas."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",
@@ -2707,6 +2707,12 @@
       "class": "delorun-feature",
       "feature": "agents-setup",
       "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Adds the shell's `back` label, the name of the arrow that returns from a Settings page to the list on a phone."
     }
   ],
   "retired": []

@@ -83,7 +83,7 @@ export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-setting
  */
 export const PHONE_NAV_STYLE = '@keyframes dlo-nav-edges{0%{--dsh-nav-fade-start:0px;--dsh-nav-fade-end:24px}4%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}'
   + '96%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}100%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:0px}}'
-  + '@media (max-width:767px){'
+  + '@media (min-width:601px) and (max-width:767px){'
   + 'html [data-shortcut-modal="settings"] [role="group"]>[aria-hidden="true"]:first-child{display:flex;align-items:center;flex:none;padding:0 4px 0 12px;' // us-spelling: quoted output (CSS)
   + 'font-size:12px;font-weight:600;line-height:16px;letter-spacing:.02em;white-space:nowrap;color:var(--dsw-alias-label-secondary)}' // us-spelling: quoted output (CSS)
   + 'html [data-shortcut-modal="settings"] [role="group"]+[role="group"]{margin-inline-start:8px;padding-inline-start:4px;border-inline-start:1px solid var(--dsw-alias-border-l2)}'
