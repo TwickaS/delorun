@@ -25,6 +25,11 @@ function text(result: { readonly content: readonly { readonly type: string, read
   return result.content.filter(block => block.type === 'text').map(block => block.text).join('')
 }
 
+/** A refusal as the tool pipeline reports a thrown error: the sentence after its `Error: ` prefix. */
+function refusalText(result: Parameters<typeof text>[0]): string {
+  return text(result).replace(/^Error: /, '')
+}
+
 /** The request the next hand-off passes to the runtime, with the real runtime still starting the child. */
 function watchStarts(ctx: Context) {
   return vi.spyOn(ctx.subagents, 'startActivation')
@@ -52,6 +57,7 @@ describe('the seat provider', () => {
   it('removes the provider and the tool when the registering plugin stops', async () => {
     const { ctx } = await stack({ register: false })
     const fiber = ctx.plugin({
+      inject: ['subagents', 'tools'],
       apply: (scope: Context) => { registerSeatProviders(scope, { seats: SEATS }, () => true) },
     })
     await fiber.await()
@@ -162,7 +168,7 @@ describe('the depth rule', () => {
     const child = await agent('seat-child', 1)
     const result = await call(child, 'claude_code', { description: 'Task', prompt: 'Do it.' })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('Claude Code was not started: this agent is at delegation depth 1 and a hand-off may reach depth 1 at most. Carry out the work directly.')
+    expect(refusalText(result)).toBe('Claude Code was not started: this agent is at delegation depth 1 and a hand-off may reach depth 1 at most. Carry out the work directly.')
     expect(starts).not.toHaveBeenCalled()
     expect(gate.asked).toEqual([])
   })
@@ -200,8 +206,8 @@ describe('the gate refusals', () => {
     const lead = await agent('lead')
     const result = await call(lead, 'claude_code', { description: 'Task', prompt: 'Do it.' })
     expect(result.isError).toBe(true)
-    if (typeof expected === 'string') expect(text(result)).toBe(expected)
-    else expect(text(result)).toMatch(expected)
+    if (typeof expected === 'string') expect(refusalText(result)).toBe(expected)
+    else expect(refusalText(result)).toMatch(expected)
   })
 
   it('names Codex in its own sentences', () => {

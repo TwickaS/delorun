@@ -2,13 +2,19 @@
  * A real subagent runtime, tool runtime and agent loop around the provider side of the seats plugin, with stand-ins
  * for the start gate, the preset registry's presets and the seat route's model.
  */
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+import Include from '@deepseek-ai/cordis-plugin-include'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
 import { LlmAdapter, ToolCallId, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -86,9 +92,15 @@ let counter = 0
  */
 export async function mountStack(options: { readonly flag?: boolean, readonly oneShots?: readonly string[], readonly seats?: typeof SEATS, readonly register?: boolean } = {}): Promise<Stack> {
   const ctx = new Context()
+  await ctx.plugin(Loader)
+  ctx.loader.builtins.include = Include
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(FixtureWorkingDirectory)
+  // Continuable children need a session persistence backend.
+  const root = await mkdtemp(join(tmpdir(), 'ea2-seat-provider-'))
+  ctx.effect(() => async () => { await rm(root, { recursive: true, force: true }) }, 'harness: scratch folder')
+  await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentPresets, { default: 'coding' })
   for (const id of ['coding', 'claude-code-seat', 'codex-seat']) await ctx.agentPresets.register({ id, plugins: [] })
   await ctx.plugin(SubagentRuntime)
