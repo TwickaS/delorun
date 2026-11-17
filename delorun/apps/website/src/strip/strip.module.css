@@ -6,18 +6,25 @@
  */
 
 /*
- * The box the page holds for the strip; the still and the live strip both fill it, so nothing moves when one replaces the
- * other. Each height holds the tallest strip, with the spacious density and the longest entry.
+ * The box the page holds for the strip: the live strip's first height at each width in the largest density, which a
+ * look carried in the link can start in, and which the shorter still fills too, so nothing moves when one replaces the other. A change that writes more keys or a larger density grows the strip from
+ * the visitor's own press.
  */
 .strip {
   position: relative;
-  min-height: 1280px;
+  min-height: 1265px;
   color: var(--dl-text);
+}
+
+@media (min-width: 640px) {
+  .strip {
+    min-height: 1150px;
+  }
 }
 
 @media (min-width: 1024px) {
   .strip {
-    min-height: 640px;
+    min-height: 620px;
   }
 }
 
@@ -35,26 +42,38 @@
   min-width: 0;
 }
 
-/* The entry and the versions side by side on a wide screen, the notes under both. */
+/* The entry and the versions side by side on a wide screen, the notes under the versions. */
 .record {
   align-content: start;
   row-gap: var(--dl-space-5);
   min-width: 0;
 }
 
+/* The heading and the way back share a row; on a narrow strip the way back moves under the heading whole. */
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--dl-space-3);
+  gap: var(--dl-space-2) var(--dl-space-3);
   min-height: 2rem;
+}
+
+.back {
+  white-space: nowrap;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
 }
 
 .notes {
   display: flex;
   flex-direction: column;
   gap: var(--dl-space-2);
-  grid-column: 1 / -1;
 }
 
 .group {
@@ -75,27 +94,25 @@
   color: var(--dl-text);
 }
 
-/* The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. */
+/*
+ * The theme tiles: all eight at once, four to a row at every width. Where a tile is too narrow for its name and the radio
+ * mark (below 1440 px wide, or in the spacious density), the mark goes and the name is centred; the chosen tile keeps its
+ * border, and under forced colours an outline in the system's highlight colour.
+ */
 .tiles {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1439px) {
   .tiles {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: 7.5rem;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x mandatory;
-    scroll-padding-inline: var(--dl-space-1);
-    padding: var(--dl-space-1);
-    margin: calc(-1 * var(--dl-space-1));
+    --delorun-tile-mark: none;
+    --delorun-tile-label-align: center;
   }
+}
 
-  .tiles > * {
-    scroll-snap-align: start;
-  }
+:global(html[data-density='spacious']) .tiles {
+  --delorun-tile-mark: none;
+  --delorun-tile-label-align: center;
 }
 
 .swatch {
@@ -143,21 +160,32 @@
   background: var(--look-accent);
 }
 
-/* The entry and the versions keep their room as they change, so nothing around them moves. */
+/* The entry grows downwards as keys are written; on a wide screen nothing sits under it. */
 .entry {
-  min-height: 15.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+}
+
+.entryLine {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
 }
 
 /* Every change of the Theme entry has the same title, so the studio's list collapses them into one row. */
 .list {
-  min-height: 5rem;
+  min-height: 4.5rem;
 }
 
-.empty {
+/* The studio's sentence for a profile with no versions, in the frame the list draws. */
+.noVersions {
   margin: 0;
-  padding: var(--dl-space-4);
-  border: 1px dashed var(--dl-border);
+  padding: var(--dl-space-3) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
   border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
   font-size: 14px;
   line-height: 1.5;
   color: var(--dl-text-muted);
@@ -333,4 +361,13 @@
 :global(html.strip-spread)::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
+}
+
+/* Forced colours draw every tile's border alike, so the chosen tile gets an outline the system colours keep. */
+@media (forced-colors: active) {
+  .tiles > [aria-checked='true'],
+  .stillTile[aria-current] {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
 }

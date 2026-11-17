@@ -20,6 +20,12 @@ describe('the plugin browser without scripts', () => {
     expect(html).not.toContain('role="tablist"')
   })
 
+  it('prints the list as terms and descriptions, with no box of its own to scroll', () => {
+    expect(html.match(/<dt /g)).toHaveLength(data.plugins.length)
+    expect(html.match(/<dl /g)?.length).toBeGreaterThan(0)
+    expect(html).not.toContain('tabindex')
+  })
+
   it('prints what each pack needs and the files each kind of plugin starts with', () => {
     expect(html).toContain('typescript-language-server installed')
     for (const paths of Object.values(data.scaffold)) for (const path of paths) expect(html).toContain(path)
@@ -55,8 +61,44 @@ describe('the plugin browser with scripts', () => {
     expect(detailTitle()).toBe(data.plugins.at(-1)!.title)
   })
 
+  const rows = () => [...host.querySelectorAll<HTMLButtonElement>('[id^="plugin-row-"]')]
+  const showAll = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === ENGLISH_WORDS.showAll(data.plugins.length))
+
+  it('shows the first rows and a control for the rest, which then takes the focus to the next row', async () => {
+    expect(rows()).toHaveLength(8)
+    const control = showAll()
+    expect(control).toBeDefined()
+    await act(async () => { control!.click() })
+    expect(rows()).toHaveLength(data.plugins.length)
+    expect(showAll()).toBeUndefined()
+    expect(document.activeElement?.id).toBe(`plugin-row-${data.plugins[8]!.name}`)
+    await press(document.activeElement!, 'ArrowDown')
+    expect(detailTitle()).toBe(data.plugins[9]!.title)
+    expect(document.activeElement?.id).toBe(`plugin-row-${data.plugins[9]!.name}`)
+  })
+
+  it('updates the detail for every row chosen, opens it under the row and keeps each full title', async () => {
+    expect(host.querySelector('li > [id^="plugin-row-"] + div')).toBeNull()
+    await act(async () => { showAll()!.click() })
+    for (const plugin of data.plugins) {
+      const row = host.querySelector<HTMLButtonElement>(`[id="plugin-row-${plugin.name}"]`)!
+      await act(async () => { row.click() })
+      expect(detailTitle()).toBe(plugin.title)
+      expect(row.nextElementSibling?.querySelector('h3')?.textContent).toBe(plugin.title)
+      expect(row.getAttribute('title')).toBe(plugin.title)
+      expect(row.getAttribute('aria-current')).toBe('true')
+    }
+  })
+
+  it('shows the whole list when a key moves past the first rows', async () => {
+    await press(rows()[0]!, 'End')
+    expect(rows()).toHaveLength(data.plugins.length)
+    expect(document.activeElement?.id).toBe(`plugin-row-${data.plugins.at(-1)!.name}`)
+  })
+
   it('shows what a pack needs and what a plugin that is on does not', async () => {
     const pack = data.plugins.find((plugin) => plugin.requires.length > 0)!
+    await act(async () => { showAll()!.click() })
     await act(async () => { host.querySelector<HTMLElement>(`[id="plugin-row-${pack.name}"]`)!.click() })
     expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain(pack.requires[0])
     expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain(ENGLISH_WORDS.requiresHeading)

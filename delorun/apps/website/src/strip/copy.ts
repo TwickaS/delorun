@@ -21,10 +21,17 @@ const EN = {
   copied: 'Copied',
   /** The answer when copying fails. */
   copyFailed: 'Copy failed. Select the entry and copy it.',
-  /** Shown in place of the entry before the first change. */
-  entryEmpty: 'Nothing yet. Change the page and the entry Delorun would write appears here.',
-  /** Shown in place of the versions before the first change. */
-  versionsEmpty: 'Each change is listed here as a version.',
+  /** The place of the studio bundle's row, shown in the monospace face while the profile holds no entry of its own. */
+  bundleFile: '@delorun/bundle-studio/cordis.patch.yml',
+  /** The line under the bundle's row. */
+  bundleNote: 'Your profile holds no entry of its own, so the studio bundle\'s entry applies.',
+  /**
+   * The line under an entry that stores a theme under an id other than its name.
+   * @param name - the theme's name, such as "Berry".
+   * @param id - the id the entry stores, such as `t3-chat`.
+   * @returns the line.
+   */
+  storedAs: (name: string, id: string): string => `${name} is stored as ${id}.`,
   /**
    * The way back, named for the earlier look.
    * @param name - the earlier look's name.

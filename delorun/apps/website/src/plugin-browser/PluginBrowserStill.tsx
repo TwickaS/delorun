@@ -43,33 +43,38 @@ export function KindFiles({ kind, words }: { readonly kind: Kind; readonly words
 }
 
 /**
- * Every plugin and every kind's files as text.
+ * Every plugin as a definition list, its title as the term and its sentence and needs as the descriptions, then every
+ * kind's files. With scripts off the list takes the room it needs; while scripts run it holds the live browser's first
+ * height until the live browser replaces it.
  * @param props - the page's words.
- * @returns the scrolling region.
+ * @returns the list.
  */
 export function PluginBrowserStill({ words }: { readonly words: PluginBrowserWords }) {
   return (
-    <div className={css.plain} tabIndex={0} role="region" aria-label={words.listLabel}>
+    <div className={css.plain} role="region" aria-label={words.listLabel} data-plugin-browser="still">
       {STANDINGS.map((standing) => {
         const group = PLUGINS.filter((plugin) => plugin.standing === standing)
         return group.length === 0 ? null : (
-          <section key={standing}>
-            <h3>{words.groups[standing]}</h3>
-            <ul>
+          <section key={standing} className={css.plainSection}>
+            <h3 className={css.plainHeading}>{words.groups[standing]}</h3>
+            <dl className={css.plainList}>
               {group.map((plugin) => (
-                <li key={plugin.name}>
-                  <strong>{plugin.title}</strong>
-                  <span>{plugin.sentence}</span>
-                  {plugin.requires.length === 0 ? null : <small>{words.requiresHeading}: {plugin.requires.join(', ')}</small>}
-                </li>
+                <div key={plugin.name} className={css.plainItem}>
+                  <dt className={css.plainTitle}>{plugin.title}</dt>
+                  <dd className={css.plainSentence}>{plugin.sentence}</dd>
+                  {plugin.requires.length === 0 ? null : <dd className={css.plainNeeds}>{words.requiresHeading}: {plugin.requires.join(', ')}</dd>}
+                </div>
               ))}
-            </ul>
+            </dl>
           </section>
         )
       })}
-      <p>{words.makeIntro}</p>
-      {KINDS.map((each) => <section key={each}><h3 className={css.fileHeading}>{words.kinds[each].name}</h3><KindFiles kind={each} words={words} /></section>)}
-      <p className={css.note}>{words.makeNote}</p>
+      <section className={css.plainSection}>
+        <h3 className={css.plainHeading}>{words.makeYourOwnTab}</h3>
+        <p className={css.plainIntro}>{words.makeIntro}</p>
+        {KINDS.map((each) => <section key={each}><h4 className={css.fileHeading}>{words.kinds[each].name}</h4><KindFiles kind={each} words={words} /></section>)}
+        <p className={css.note}>{words.makeNote}</p>
+      </section>
     </div>
   )
 }
