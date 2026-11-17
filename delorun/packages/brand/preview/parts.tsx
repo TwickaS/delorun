@@ -1,6 +1,7 @@
 /**
  * The parts the website and the docs draw with, in a light and a dark column: the section heading, the button states
- * with the unavailable one beside an ordinary one, the tabs, the code block, the frame, the switch and the toast. Run
+ * with the unavailable one beside an ordinary one, the tabs, the code block, the frame, the switch, the toast and the
+ * simplified chat. Run
  * with `BRAND_PREVIEW_SEAM=web vite --config delorun/packages/brand/preview/vite.config.ts` and open `/parts.html`; it is
  * not part of any build.
  */
@@ -8,6 +9,7 @@ import '../src/fonts.css'
 import { useState, type CSSProperties } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Button, CodeBlock, Frame, SectionHeading, TabList, TabPanel } from '../src/index.ts'
+import { Composer, MessageBubble, ToolCard, Transcript } from '../src/replica/index.ts'
 import { Switch } from '#upstream'
 import { showToast, ToastCard, Toaster } from '../src/toast.web.tsx'
 
@@ -45,6 +47,15 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
         <Frame width={480} height={300} label="The studio, live" still={still}><div style={{ padding: 16, fontSize: 14 }}>The live replica</div></Frame>
       </div>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><Switch checked={on} label="Delorun look" onChange={setOn} />Delorun look</label>
+      <div style={{ display: 'grid', gridTemplateRows: 'minmax(0, 360px) auto', gap: 12 }}>
+        <Transcript label="Conversation">
+          <MessageBubble from="person">Make the page header blue.</MessageBubble>
+          <MessageBubble from="agent"><p>I will change the header colour.</p><p>One moment.</p></MessageBubble>
+          <ToolCard title="Run a command" command="npm run build" status="running" statusLabel="Running" outputLabel="Output" />
+          <ToolCard title="Run a command" command="git diff --stat" status="done" statusLabel="Done" outputLabel="Output" output={' header.css | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)'} />
+        </Transcript>
+        <Composer label="Message" placeholder="Ask for a change" value="Now make the footer" sendLabel="Send" typing />
+      </div>
       <ToastCard message="Theme changed to Ocean" action={{ label: 'Back to Soft', onClick: () => {} }} onDone={() => {}} />
       <Button style={{ justifySelf: 'start' }} onClick={() => { showToast({ message: `Theme changed to ${scheme === 'dark' ? 'Ocean' : 'Forest'}`, action: { label: 'Back to Soft', onClick: () => {} } }) }}>Show a toast</Button>
     </section>
