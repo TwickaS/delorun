@@ -433,6 +433,7 @@ describe('the documentation website check', () => {
       needs: [],
     })
     expect(catalog(TREE, { ...HOST, staleRuntime: ['packages/client/ui-primitives'] }).find(check => check.id === 'website-site')?.needs).toEqual(['build:artifacts'])
+    for (const path of ['packages/client/ui-approval/src/client/ApprovalCard.tsx', 'delorun/packages/plugin-changes/src/client/ChangesSection.tsx']) expect(selected([path]), path).toContain('website-site')
     for (const path of ['delorun/apps/website/src/site/copy.ts', 'delorun/packages/site-design/src/mark.tsx', 'delorun/packages/brand/src/settings/AppearancePickers.tsx', 'delorun/changelog/changelog.json']) expect(selected([path])).toContain('website-site')
     expect(selected(['delorun/apps/docs/source.config.ts'])).not.toContain('website-site')
     expect(selected(['delorun/packages/site-design/src/mark.tsx'])).toContain('docs-site')

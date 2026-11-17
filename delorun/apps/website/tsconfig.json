@@ -55,6 +55,7 @@
   "exclude": [
     "tests",
     "scripts",
+    "review",
     "node_modules",
     "out",
     ".build",

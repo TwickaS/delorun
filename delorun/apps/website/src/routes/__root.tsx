@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       { property: 'og:title', content: `${COPY.siteTitle}: ${COPY.tagline}` },
       { property: 'og:description', content: COPY.description },
       { property: 'og:image', content: `${SITE_URL}${OG_IMAGE_PATH}` },
-      { property: 'og:image:alt', content: 'The Delorun mark and the words Delorun, an agent harness that runs on your own computer.' },
+      { property: 'og:image:alt', content: COPY.linkPreviewAlt },
       { name: 'twitter:card', content: 'summary_large_image' },
     ],
     links: [

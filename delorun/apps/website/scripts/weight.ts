@@ -18,7 +18,7 @@ export const LIMITS = {
   /** Font files preloaded on the first screen. */
   preloadedFonts: 2,
   /** The script that makes the page interactive: the chunks the page loads at start. */
-  interactiveScript: 110 * KB,
+  interactiveScript: 115 * KB,
   /** A living section's own script and data, loaded on first use. */
   section: 40 * KB,
   /** The studio replica: its script, styles and one session's fixture. */

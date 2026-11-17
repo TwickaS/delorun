@@ -17,6 +17,9 @@ const REPLICA_INPUTS = [
   ...['plugin-changes', 'bundle-local', 'plugin-theme', 'plugin-settings-layout'].map(name => `delorun/packages/${name}/src/**`),
 ] as const
 
+/** The path prefixes of {@link REPLICA_INPUTS}, so a change to a file the replica builds from selects the website check. */
+const REPLICA_PREFIXES = REPLICA_INPUTS.map(input => input.replace(/\*\*$/, ''))
+
 /**
  * The invocations that select a check: `pre-commit` runs the staged paths, `changed` selects by change (`--changed`
  * and the pre-push hook), and `full` is the full gate. A check with no tier runs only when `--only` names it.
@@ -938,7 +941,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path.startsWith('delorun/docs/') || path === 'delorun/apps/release/package.json')
       if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
     } else if (check.id === WEBSITE_ID) {
-      const site = paths.find(path => path.startsWith(`${WEBSITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path.startsWith('delorun/packages/brand/') || path === 'delorun/changelog/changelog.json')
+      const site = paths.find(path => path.startsWith(`${WEBSITE_DIR}/`) || path.startsWith('delorun/packages/site-design/') || path.startsWith('delorun/packages/brand/') || path === 'delorun/changelog/changelog.json' || REPLICA_PREFIXES.some(prefix => path.startsWith(prefix)))
       if (site !== undefined) pick(check, `the product website or the design it shares changed (${site})`)
     } else if (check.id === CLOSURE_CHECK_ID && selection.changed !== undefined) {
       const closure = paths.find(path => affectsParity(path) || path === 'pnpm-lock.yaml')
