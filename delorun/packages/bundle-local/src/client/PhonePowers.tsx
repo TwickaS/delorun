@@ -2,24 +2,25 @@
  * The Phone powers choice in the Devices section: Careful or Full, each with what it lets an unlocked phone do. The
  * person chooses at the computer; a device shows the level read-only with "change this at your computer", and the
  * route refuses a device's choice whatever its unlock. While the home applies a level nobody chose, the computer shows
- * a one-time notice that ends with the person's first choice.
+ * a one-time notice that ends with the person's first choice. The onboarding Phone access step shows the same block at
+ * the computer through `@delorun/bundle-local/phone-powers`, with the `delorunDevices` dictionary.
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { PHONE_POWERS_LEVELS, type PhonePowersLevel, type PhonePowersView } from '@delorun/home-auth/wire'
 import { readPhonePowers, setPhonePowers, type HostFetch } from './devices-api.ts'
-import type { DevicesSectionProps } from './DevicesSection.tsx'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
 /**
  * Render the choice.
- * @param props - the section's copy, the request function, whether the page is on a device, and the failure wording.
+ * @param props - the Devices dictionary, the request function, whether the page is on a device, and the failure wording.
  * @returns the block, or nothing when the profile does not serve the route.
  */
 export function PhonePowers({ t, fetch, onDevice, failure }: {
-  readonly t: DevicesSectionProps['t']
+  readonly t: TranslateNS<'delorunDevices'>
   readonly fetch: HostFetch
   /** True on a paired device, where the level is read-only; undefined until the page knows where it is. */
   readonly onDevice: boolean | undefined
