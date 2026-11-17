@@ -1157,6 +1157,41 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The setup guide's Welcome step shows the languages as two large tiles, each named in its own language, with a small picture of the studio below that switches language as you pick."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Every step of the setup guide uses the window's space: Phone access explains how it is set up and what a phone can do, Workspace explains what a workspace is for with an example folder of each kind, and Look shows its themes in two full rows."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The setup guide's buttons read \"Skip step\" and \"Complete setup later\"; Finish setup in the sidebar footer brings the guide back."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The sidebar footer is one aligned row of icons, with Finish setup on its own line above it instead of a second, right-aligned row."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The setup guide's Models step explains \"How does Delorun know?\" once for all the providers it found, instead of repeating it under each one."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "In the Recommended plugins step, each row has one right-aligned slot that goes from a secondary Add button with a plus, to Adding with the download's progress, to Added, all the same width so the row does not move. More and Less use the muted link style."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Adding plugins in the setup guide shows in the downloads panel straight away, and a plugin that is being added keeps its state when the list is read again, so a quick run of Add clicks queues every one of them."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
     },
@@ -1379,6 +1414,11 @@
       "area": "Safety and privacy",
       "section": "Fixed",
       "text": "A chat never turns a plugin on at any protection level: with protection off, `undo` and `restore` in the plugin manager, and a turn-on whose `enabled` is not the boolean `false`, wait for you at the computer, as an install does."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Fixed",
+      "text": "A newly approved phone can no longer open or type in a terminal during the 15 minutes after you approve it at the computer. A terminal is a shell on your computer outside the sandbox, so from a phone it now always needs an unlock: a code from the computer, your PIN or the unlock method you chose. Setting up from the phone in those 15 minutes still needs no unlock."
     },
     {
       "area": "Safety and privacy",
@@ -1687,6 +1727,21 @@
     },
     {
       "area": "Safety and privacy",
+      "section": "Security",
+      "text": "Browser refuses to save or upload a file whose path really lies outside the chat's folder. Playwright's own check compares paths as text, so a link inside a project could lead a screenshot, PDF or upload somewhere else on the computer. The agent is told to use a path inside the chat's folder. If a project's `.playwright-mcp` is itself a link to somewhere else, Browser's tools stop until you remove it, because downloads and default-named files would follow it."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Security",
+      "text": "Browser no longer gives the agent Playwright's `browser_run_code_unsafe` tool. It ran code the agent wrote on your computer, outside the page and outside the sandbox."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Security",
+      "text": "The folder in the Delorun home that Browser's server runs in is kept private to you, including when it already existed with wider access."
+    },
+    {
+      "area": "Safety and privacy",
       "section": "Removed",
       "text": "Feedback no longer goes to DeepSeek. Delorun's studio hides the feedback buttons and the `/feedback` command, and it sends no session-log prefix to DeepSeek's feedback collector."
     },
@@ -1902,6 +1957,21 @@
     },
     {
       "area": "Plugins",
+      "section": "Changed",
+      "text": "Browser uses Google Chrome when you have it installed, so it needs no download and no setup. Chrome runs in a fresh profile of its own, never your Chrome profile. Without Chrome, Browser uses Playwright's Chromium as before, and Plugins shows \"Needs setup · Chromium download\" until that build is there. A Delorun update can need a new Chromium download only in that case. To always use one of the two, set `browser: chrome` or `browser: chromium` on the `browser-use-playwright-mcp` row. Restart Delorun after you install or remove Chrome."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "Browser asks you to allow its playwright-mcp server once, not once for each project folder. The server now runs in one folder of the Delorun home for every chat, so the same exact command is what you allow, and switching between projects does not ask again."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "Screenshots, PDFs and other files Browser saves go into a hidden `.playwright-mcp` folder in the chat's project, and the agent gets a link to each one. Delorun gives that folder its own `.gitignore`, so Git leaves the files out of commits, including in a `.playwright-mcp` folder you already have that has none. A `.gitignore` already in that folder, and your project's `.gitignore`, are left as they are."
+    },
+    {
+      "area": "Plugins",
       "section": "Fixed",
       "text": "On a build run from source, which has no plugin packs, the Agents step shows Claude Code and Codex as not available here with the reason, instead of an Add button that stays on \"Adding…\"."
     },
@@ -1964,6 +2034,26 @@
       "area": "Plugins",
       "section": "Fixed",
       "text": "Delorun starts again after you add an optional pack such as Browser or Webhooks; in 0.1.0-preview.1.5 the next start refused the profile, saying its plugins were not Delorun's own copy. A pack counts as Delorun's only when it loads from the signed pack the running release installed. A pack that does not load is now turned off with a reason in Plugins and home.log instead of stopping the studio, and a pack that cannot be fetched no longer blocks the start."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Browser now says \"Needs setup · Chromium download\" in Plugins when the Chromium build its Playwright expects is missing, with the command that downloads that exact build. Before, it said Browser was ready whenever Chrome was installed. A browser step that still finds the build missing fails with one short message telling the agent to stop and ask you to finish Browser setup in Plugins. In 0.1.0-preview.1.6 the agent kept trying other tools instead, at length."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "New chats start again after you add the Browser pack and before you allow its playwright-mcp server; in 0.1.0-preview.1.6 every new chat failed with \"McpConsentRefusedError\" until the server was allowed. The chat now starts without the browser tools, home.log notes why, and the notice reads \"MCP tools are off until you allow playwright-mcp\" with the action that reviews and allows it. Once allowed, the server starts in your next new chat."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Plugins no longer shows \"Update available\" and an Update button on a plugin pack you installed (such as Claude Code or Codex) when it already runs the version this Delorun offers. The tag compared the reviewed copy in Changes with the pack folder; a pack whose approved source is the offered pack folder now counts as the same source, and a different version still shows the tag."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Adding several plugin packs no longer stalls for two minutes at a time or fails with \"timed out waiting for the writer lock\". Packs still download two at a time, but install one after another, and Delorun reads a plugin's folder before it locks the profile, so other changes to the profile no longer wait for that read."
     },
     {
       "area": "Plugins",
@@ -2297,6 +2387,105 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.7",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The setup guide's Welcome step shows the languages as two large tiles, each named in its own language, with a small picture of the studio below that switches language as you pick."
+            },
+            {
+              "section": "Changed",
+              "text": "Every step of the setup guide uses the window's space: Phone access explains how it is set up and what a phone can do, Workspace explains what a workspace is for with an example folder of each kind, and Look shows its themes in two full rows."
+            },
+            {
+              "section": "Changed",
+              "text": "The setup guide's buttons read \"Skip step\" and \"Complete setup later\"; Finish setup in the sidebar footer brings the guide back."
+            },
+            {
+              "section": "Changed",
+              "text": "The sidebar footer is one aligned row of icons, with Finish setup on its own line above it instead of a second, right-aligned row."
+            },
+            {
+              "section": "Changed",
+              "text": "The setup guide's Models step explains \"How does Delorun know?\" once for all the providers it found, instead of repeating it under each one."
+            },
+            {
+              "section": "Changed",
+              "text": "In the Recommended plugins step, each row has one right-aligned slot that goes from a secondary Add button with a plus, to Adding with the download's progress, to Added, all the same width so the row does not move. More and Less use the muted link style."
+            },
+            {
+              "section": "Changed",
+              "text": "Adding plugins in the setup guide shows in the downloads panel straight away, and a plugin that is being added keeps its state when the list is read again, so a quick run of Add clicks queues every one of them."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "A newly approved phone can no longer open or type in a terminal during the 15 minutes after you approve it at the computer. A terminal is a shell on your computer outside the sandbox, so from a phone it now always needs an unlock: a code from the computer, your PIN or the unlock method you chose. Setting up from the phone in those 15 minutes still needs no unlock."
+            },
+            {
+              "section": "Security",
+              "text": "Browser refuses to save or upload a file whose path really lies outside the chat's folder. Playwright's own check compares paths as text, so a link inside a project could lead a screenshot, PDF or upload somewhere else on the computer. The agent is told to use a path inside the chat's folder. If a project's `.playwright-mcp` is itself a link to somewhere else, Browser's tools stop until you remove it, because downloads and default-named files would follow it."
+            },
+            {
+              "section": "Security",
+              "text": "Browser no longer gives the agent Playwright's `browser_run_code_unsafe` tool. It ran code the agent wrote on your computer, outside the page and outside the sandbox."
+            },
+            {
+              "section": "Security",
+              "text": "The folder in the Delorun home that Browser's server runs in is kept private to you, including when it already existed with wider access."
+            }
+          ]
+        },
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "Browser uses Google Chrome when you have it installed, so it needs no download and no setup. Chrome runs in a fresh profile of its own, never your Chrome profile. Without Chrome, Browser uses Playwright's Chromium as before, and Plugins shows \"Needs setup · Chromium download\" until that build is there. A Delorun update can need a new Chromium download only in that case. To always use one of the two, set `browser: chrome` or `browser: chromium` on the `browser-use-playwright-mcp` row. Restart Delorun after you install or remove Chrome."
+            },
+            {
+              "section": "Changed",
+              "text": "Browser asks you to allow its playwright-mcp server once, not once for each project folder. The server now runs in one folder of the Delorun home for every chat, so the same exact command is what you allow, and switching between projects does not ask again."
+            },
+            {
+              "section": "Changed",
+              "text": "Screenshots, PDFs and other files Browser saves go into a hidden `.playwright-mcp` folder in the chat's project, and the agent gets a link to each one. Delorun gives that folder its own `.gitignore`, so Git leaves the files out of commits, including in a `.playwright-mcp` folder you already have that has none. A `.gitignore` already in that folder, and your project's `.gitignore`, are left as they are."
+            },
+            {
+              "section": "Fixed",
+              "text": "Browser now says \"Needs setup · Chromium download\" in Plugins when the Chromium build its Playwright expects is missing, with the command that downloads that exact build. Before, it said Browser was ready whenever Chrome was installed. A browser step that still finds the build missing fails with one short message telling the agent to stop and ask you to finish Browser setup in Plugins. In 0.1.0-preview.1.6 the agent kept trying other tools instead, at length."
+            },
+            {
+              "section": "Fixed",
+              "text": "New chats start again after you add the Browser pack and before you allow its playwright-mcp server; in 0.1.0-preview.1.6 every new chat failed with \"McpConsentRefusedError\" until the server was allowed. The chat now starts without the browser tools, home.log notes why, and the notice reads \"MCP tools are off until you allow playwright-mcp\" with the action that reviews and allows it. Once allowed, the server starts in your next new chat."
+            },
+            {
+              "section": "Fixed",
+              "text": "Plugins no longer shows \"Update available\" and an Update button on a plugin pack you installed (such as Claude Code or Codex) when it already runs the version this Delorun offers. The tag compared the reviewed copy in Changes with the pack folder; a pack whose approved source is the offered pack folder now counts as the same source, and a different version still shows the tag."
+            },
+            {
+              "section": "Fixed",
+              "text": "Adding several plugin packs no longer stalls for two minutes at a time or fails with \"timed out waiting for the writer lock\". Packs still download two at a time, but install one after another, and Delorun reads a plugin's folder before it locks the profile, so other changes to the profile no longer wait for that read."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.6",
       "date": "2026-11-17",
