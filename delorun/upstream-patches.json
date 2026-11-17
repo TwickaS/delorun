@@ -2815,6 +2815,12 @@
       "class": "delorun-feature",
       "feature": "mcp-add-consent",
       "reason": "Passes the runtime's `browserServerDirectory` as `directory`, so `serverDirectory: home` runs the server in one folder of the home for every Session, as the Playwright provider does (L38); without the setting the server runs in each Session's working directory, as upstream's does."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/approved-source.ts",
+      "class": "delorun-feature",
+      "feature": "plugin-packs",
+      "reason": "Plugins shows no false 'Update available' for a plugin approved from a signed pack: when the profile's approved-plugin record (delorun.changes.plugins[name].source, written by Changes) names the folder an offered link target points to, readBundles reports that target as the row's source instead of the Changes review copy's link. Display only: it reads profile data and changes no install, load or trust decision."
     }
   ],
   "retired": []
