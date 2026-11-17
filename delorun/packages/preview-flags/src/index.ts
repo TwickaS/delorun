@@ -4,26 +4,27 @@
  * the Host (`ctx.previewFlags.isOn`), the studio ({@link PREVIEW_FLAG_ROUTES}, `usePreviewFlag`) and `delorun preview`
  * read the same state. A preview flag changes studio UI only; the package README states the rule.
  *
- * The row checks its `flags` when it loads, against the flags the profile's bundles list in their manifests
- * ([manifest](./manifest.ts)): a flag no bundle lists stops the row with a message that names it and the known flags,
- * and a flag whose declaring row is off is logged as a warning.
+ * The row checks its `flags` when it loads, against the flags the packages of the profile's rows list in their
+ * manifests ([manifest](./manifest.ts)): a flag no package lists stops the row with a message that names it and the
+ * known flags, and a flag whose declaring plugin is off is logged as a warning.
  *
  * @module @delorun/preview-flags
  */
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readProfileManifest, resolveBundleDir, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
 import { admitApprovedDevice } from '@delorun/home-auth'
-import { readFlagIndex, type FlagBundle, type FlagIndex } from './manifest.ts'
+import { packageOf, readFlagIndex, rowPackages, type FlagIndex } from './manifest.ts'
 import { createPreviewFlags, type PreviewFlags } from './registry.ts'
 import { PREVIEW_FLAG_ROUTES, type PreviewFlagsAnswer } from './wire.ts'
 
 export { isPreviewFlagId, knownList, PREVIEW_FLAG_ID, previewFlagId } from './flags.ts'
 export type { BooleanPreviewFlag, PreviewFlagCopy, PreviewFlagDeclaration, PreviewFlagId, PreviewFlagKind } from './flags.ts'
-export { assertFlagsIndexed, listedFlags, readFlagIndex } from './manifest.ts'
-export type { FlagBundle, FlagIndex, FlagIndexProblem, FlagOwner } from './manifest.ts'
+export { assertFlagsIndexed, listedFlags, packageOf, readFlagIndex, resolvePackageDir, rowPackages } from './manifest.ts'
+export type { FlagIndex, FlagIndexProblem, FlagPackage } from './manifest.ts'
 export { createPreviewFlags } from './registry.ts'
 export type { CreatedPreviewFlags, PreviewFlags, PreviewFlagsSource } from './registry.ts'
 export { PREVIEW_FLAG_ROUTES, PreviewFlagsAnswer, PreviewFlagView } from './wire.ts'
@@ -57,52 +58,55 @@ export const Config = z.object({
     .default({}),
 })
 
-/** The part of the Loader the row reads: each row's id and whether it is disabled. */
+/** The part of the Loader the row reads: each row's module name and whether it is disabled. */
 interface RowStates {
-  entries(): Iterable<{ readonly options: { readonly id: string }, readonly disabled: boolean }>
+  entries(): Iterable<{ readonly options: { readonly name?: unknown }, readonly disabled: boolean }>
 }
 
 /**
- * The profile's bundles, as the index reads them: the ones it started with and the ones its manifest lists now, which
- * include a bundle the plugin manager added while Delorun runs.
+ * The files a row's package is resolved from, as the Loader resolves a bundle's rows: the installation, the profile,
+ * and each of the profile's bundles, the ones it started with and the ones its manifest lists now, which include a
+ * bundle the plugin manager added while Delorun runs.
  * @param profile - the profile.
  * @param warn - reports a bundle whose directory cannot be resolved; the plugin manager reports that bundle's own error.
- * @returns each resolvable bundle's name and directory.
+ * @returns the anchors, in resolution order.
  * @throws {Error} when the profile's manifest cannot be read.
  */
-function profileBundles(profile: ProfileContext, warn: (message: string) => void): FlagBundle[] {
+function resolutionAnchors(profile: ProfileContext, warn: (message: string) => void): string[] {
   const current = readProfileManifest('delorun', profile.dir).dsh?.profile?.bundles ?? []
-  return [...new Set([...profile.startedBundles, ...current])].flatMap((bundle) => {
+  const bundles = [...new Set([...profile.startedBundles, ...current])].flatMap((bundle) => {
     try {
-      return [{ name: bundle, dir: resolveBundleDir('delorun', bundle, profile.installAnchor, profile.dir) }]
+      return [join(resolveBundleDir('delorun', bundle, profile.installAnchor, profile.dir), 'package.json')]
     } catch (error) {
       warn(`${bundle} was not read for preview flags: ${(error as Error).message}`)
       return []
     }
   })
+  return [profile.installAnchor, join(profile.dir, 'package.json'), ...bundles]
 }
 
 /**
  * Check the row's flags, provide `ctx.previewFlags` and serve the read route.
  * @param ctx - the plugin context with the Connection.
  * @param config - the row's configuration.
- * @throws {Error} when a configured flag is in no bundle's list, flags are configured in a tree without a profile, or the profile's manifest cannot be read.
+ * @throws {Error} when a configured flag is in no package's list, flags are configured in a tree without a profile, or the profile's manifest cannot be read.
  */
 export function apply(ctx: Context, config: Config): void {
   const warn = (message: string): void => { ctx.logger.warn(`${name}: ${message}`) }
   const profile: ProfileContext | undefined = ctx.get('profileContext')
+  const loader: RowStates | undefined = ctx.get('loader')
+  const rows = (): { readonly name?: unknown, readonly disabled: boolean }[] => [...loader?.entries() ?? []].map(entry => ({ name: entry.options.name, disabled: entry.disabled }))
   const read = (from: ProfileContext): FlagIndex => {
-    const index = readFlagIndex(profileBundles(from, warn))
-    for (const problem of index.problems) ctx.logger.error(`${name}: the preview flags of ${problem.bundle} were not read: ${problem.message}`)
+    const index = readFlagIndex(rowPackages(rows().map(row => row.name), resolutionAnchors(from, warn)))
+    for (const problem of index.problems) ctx.logger.error(`${name}: the preview flags of ${problem.package} were not read: ${problem.message}`)
     return index
   }
   const index: FlagIndex | undefined = profile === undefined ? undefined : read(profile)
-  const loader: RowStates | undefined = ctx.get('loader')
   const { flags, notices } = createPreviewFlags({
     configured: config.flags,
     index,
     ...profile === undefined ? {} : { reindex: () => read(profile) },
-    rowOff: rowId => ![...loader?.entries() ?? []].some(entry => entry.options.id === rowId && !entry.disabled),
+    pluginOff: owner => !rows().some(row => packageOf(row.name) === owner && !row.disabled),
   })
   for (const notice of notices) ctx.logger.warn(notice)
   ctx.provide('previewFlags', flags)

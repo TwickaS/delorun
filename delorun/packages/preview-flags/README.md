@@ -23,9 +23,9 @@ A **preview flag** marks a studio feature that is built far enough to look at an
 
 A flag has an id, a kind, the package name of the plugin that owns it, and a title and description in English and Chinese. The id is dot-separated camel-case words: the feature area, then the flag's own name, such as `onboarding.previewSteps`. The only kind is `boolean`; `PreviewFlagDeclaration` is a union over `kind`, so another kind adds a member there and its value to the row's `flags` schema.
 
-A flag is declared in two places, which a spec holds equal.
+A flag is declared in two places, which a gate holds equal.
 
-1. The plugin's Host half declares it for as long as the plugin runs, as an effect:
+1. The plugin keeps its declarations in `src/preview-flags.ts`, exported as `PREVIEW_FLAGS`, and its Host half declares each for as long as the plugin runs, as an effect:
 
    ```ts
    export const PREVIEW_STEPS: PreviewFlagDeclaration = {
@@ -33,16 +33,17 @@ A flag is declared in two places, which a spec holds equal.
      title: { en: 'Planned setup steps', zh: '计划中的设置步骤' },
      description: { en: 'Shows setup steps that are planned and not built yet.', zh: '显示已计划但尚未实现的设置步骤。' },
    }
-   ctx.inject(['previewFlags'], (child) => { child.effect(() => child.previewFlags.declare(PREVIEW_STEPS)) })
+   export const PREVIEW_FLAGS: readonly PreviewFlagDeclaration[] = [PREVIEW_STEPS]
+   ctx.inject(['previewFlags'], (child) => { for (const flag of PREVIEW_FLAGS) child.effect(() => child.previewFlags.declare(flag)) })
    ```
 
-2. The bundle that inserts the plugin's row lists the id in its `package.json`, keyed by the row id its patch declares:
+2. The plugin's own `package.json` lists the ids:
 
    ```json
-   "delorun": { "previewFlags": { "delorun-onboarding": ["onboarding.previewSteps"] } }
+   "delorun": { "previewFlags": ["onboarding.previewSteps"] }
    ```
 
-The list exists because two readers cannot run plugins: `delorun preview`, which also works while Delorun is stopped, and the Host for a row that is off. The Host refuses a declaration whose id no bundle lists, after reading the lists again for a bundle added while Delorun runs, and `assertFlagsIndexed` (`./manifest`) lets the plugin's spec fail when the list and the declarations differ.
+The list exists because two readers cannot run plugins: `delorun preview`, which also works while Delorun is stopped, and the Host for a plugin whose row is off. Both find the packages from the profile's rows, enabled or not, and resolve each from the installation, the profile and the bundle that brings it. The Host refuses a declaration whose id its owner's package does not list, after reading the lists again for a plugin added while Delorun runs. The `gates:preview-flags` gate ([`@delorun/tools`](../../apps/tools/README.md)) fails when a package's list and its `PREVIEW_FLAGS` differ, and `assertFlagsIndexed` (`./manifest`) checks the same in the plugin's own spec.
 
 ## Turn a flag on
 
@@ -63,9 +64,9 @@ The row `delorun-preview-flags`, which `@delorun/bundle-studio` inserts, holds t
 
 A change applies the next time Delorun starts. The row checks its `flags` when it loads:
 
-- A flag that no bundle of the profile lists stops the row, with a message that names the flag and the known flags. `delorun preview on` refuses such a flag before it is written, and `delorun preview off` removes one that is already set.
-- A flag that is on while the row that declares it is off is logged as a warning and changes nothing; `delorun preview list` says so beside the flag.
-- A bundle whose list cannot be read is logged as an error, and its flags are unknown until it is fixed.
+- A flag that no plugin of the profile lists stops the row, with a message that names the flag and the known flags. `delorun preview on` refuses such a flag before it is written, and `delorun preview off` removes one that is already set.
+- A flag that is on while the plugin that declares it is off is logged as a warning and changes nothing; `delorun preview list` says so beside the flag.
+- A package whose list cannot be read is logged as an error, and its flags are unknown until it is fixed.
 
 ## Read a flag
 
@@ -83,7 +84,7 @@ A change applies the next time Delorun starts. The row checks its `flags` when i
 - **A preview flag changes studio UI only.** It never changes what reaches a model: no prompt, tool, tool result or request field may depend on a flag. A future flag that would change model-visible input adds a session event first, so the input stays reconstructable from the session log, and that event, not the flag, is what the request is built from.
 - **Off by default.** A flag is on only where a profile's row sets it to `true`; no plugin and no bundle patch turns one on.
 - **No Settings page.** The row is written by `delorun preview` or by hand.
-- **One owner per flag.** Two rows that list one id, or two plugins that declare it, are refused.
+- **One owner per flag.** Two packages that list one id, a plugin that declares another package's flag, and a second declaration of one flag are refused.
 
 `tests/ui-only.spec.ts` enforces the first rule as far as the package can: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs.
 

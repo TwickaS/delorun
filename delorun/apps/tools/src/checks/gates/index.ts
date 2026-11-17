@@ -155,6 +155,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
     },
     {
+      id: 'gates:preview-flags',
+      title: 'Every Delorun package lists exactly the preview flags its plugin declares',
+      command: [TSX, `${GATE_DIR}/preview-flags.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/packages/*/src/**/*.ts', 'delorun/packages/*/src/**/*.tsx', `${GATE_DIR}/preview-flags.ts`],
+    },
+    {
       id: 'gates:workspace-graph',
       title: 'Delorun packages have no dependency cycle and the runtime closure carries no release or developer tooling',
       command: [TSX, `${GATE_DIR}/workspace-graph.ts`],

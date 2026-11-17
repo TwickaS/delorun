@@ -35,7 +35,7 @@ describe('a preview flag changes studio UI only', () => {
 
   it('gives the Host no way to change a flag while Delorun runs', () => {
     // Pins the API: a setter would let a plugin, and so a tool call, turn a preview on mid-chat.
-    const { flags } = createPreviewFlags({ configured: {}, index: undefined, rowOff: () => false })
+    const { flags } = createPreviewFlags({ configured: {}, index: undefined, pluginOff: () => false })
     expect(Object.keys(flags).sort()).toEqual(['declare', 'isOn', 'list'])
   })
 })

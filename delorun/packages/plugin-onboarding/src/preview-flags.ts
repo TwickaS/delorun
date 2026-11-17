@@ -1,6 +1,7 @@
 /**
  * The preview flags onboarding declares. The Host half declares them to `@delorun/preview-flags` and the studio half
- * reads them by id; `@delorun/bundle-studio` lists the ids for this plugin's row, and a spec holds the two equal.
+ * reads them by id; this package's `package.json` lists the ids under `delorun.previewFlags`, and the
+ * `gates:preview-flags` gate and a spec hold the two equal.
  * @module @delorun/plugin-onboarding/preview-flags
  */
 import { previewFlagId, type PreviewFlagDeclaration } from '@delorun/preview-flags/flags'
@@ -20,5 +21,5 @@ export const PREVIEW_STEPS: PreviewFlagDeclaration = {
   },
 }
 
-/** Every flag this plugin declares. */
-export const ONBOARDING_PREVIEW_FLAGS: readonly PreviewFlagDeclaration[] = [PREVIEW_STEPS]
+/** Every flag this plugin declares, under the name the `gates:preview-flags` gate reads. */
+export const PREVIEW_FLAGS: readonly PreviewFlagDeclaration[] = [PREVIEW_STEPS]

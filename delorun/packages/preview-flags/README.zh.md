@@ -26,9 +26,9 @@ kind: "package-library"
 
 开关有 id、种类、拥有它的插件的包名，以及英文和中文的标题与描述。id 是以点分隔的驼峰单词：先是功能领域，再是开关自己的名称，例如 `onboarding.previewSteps`。目前唯一的种类是 `boolean`；`PreviewFlagDeclaration` 是按 `kind` 区分的联合类型，新增种类时在那里添加一个成员，并把它的值加入该行的 `flags` 模式。
 
-开关在两处声明，由一个测试保证二者一致。
+开关在两处声明，由一个门禁检查保证二者一致。
 
-1. 插件的 Host 部分在其运行期间以 effect 的方式声明它：
+1. 插件把声明放在 `src/preview-flags.ts` 中，以 `PREVIEW_FLAGS` 导出，其 Host 部分在插件运行期间以 effect 的方式逐个声明：
 
    ```ts
    export const PREVIEW_STEPS: PreviewFlagDeclaration = {
@@ -36,16 +36,17 @@ kind: "package-library"
      title: { en: 'Planned setup steps', zh: '计划中的设置步骤' },
      description: { en: 'Shows setup steps that are planned and not built yet.', zh: '显示已计划但尚未实现的设置步骤。' },
    }
-   ctx.inject(['previewFlags'], (child) => { child.effect(() => child.previewFlags.declare(PREVIEW_STEPS)) })
+   export const PREVIEW_FLAGS: readonly PreviewFlagDeclaration[] = [PREVIEW_STEPS]
+   ctx.inject(['previewFlags'], (child) => { for (const flag of PREVIEW_FLAGS) child.effect(() => child.previewFlags.declare(flag)) })
    ```
 
-2. 插入该插件所在行的 bundle 在其 `package.json` 中列出这个 id，以其补丁声明的行 id 为键：
+2. 插件自己的 `package.json` 列出这些 id：
 
    ```json
-   "delorun": { "previewFlags": { "delorun-onboarding": ["onboarding.previewSteps"] } }
+   "delorun": { "previewFlags": ["onboarding.previewSteps"] }
    ```
 
-需要这份列表，是因为有两个读取者无法运行插件：`delorun preview`（Delorun 停止时也能使用），以及面对已关闭的行的 Host。Host 会为 Delorun 运行期间新增的 bundle 重新读取这些列表，然后拒绝任何 bundle 都未列出其 id 的声明；`assertFlagsIndexed`（`./manifest`）让插件的测试在列表与声明不一致时失败。
+需要这份列表，是因为有两个读取者无法运行插件：`delorun preview`（Delorun 停止时也能使用），以及面对其所在行已关闭的插件的 Host。二者都从配置档的各行（无论是否启用）找到这些包，并依次从安装位置、配置档和带来该包的 bundle 解析它。Host 会为 Delorun 运行期间新增的插件重新读取这些列表，然后拒绝其所有者的包未列出其 id 的声明。当包的列表与其 `PREVIEW_FLAGS` 不一致时，`gates:preview-flags` 门禁检查（[`@delorun/tools`](../../apps/tools/README.zh.md)）会失败；`assertFlagsIndexed`（`./manifest`）在插件自己的测试中做同样的检查。
 
 <a id="turn-a-flag-on"></a>
 ## 打开开关
@@ -67,9 +68,9 @@ kind: "package-library"
 
 更改在 Delorun 下次启动时生效。该行在加载时检查自己的 `flags`：
 
-- 配置档中没有任何 bundle 列出的开关会使该行停止，消息会指出这个开关和已知的开关。`delorun preview on` 在写入前拒绝这样的开关，`delorun preview off` 可以移除已经设置的这类开关。
-- 开关已打开而声明它的行处于关闭时，会记录一条警告，且不产生任何变化；`delorun preview list` 会在该开关旁说明。
-- 无法读取其列表的 bundle 会被记录为错误，在修复之前它的开关是未知的。
+- 配置档中没有任何插件列出的开关会使该行停止，消息会指出这个开关和已知的开关。`delorun preview on` 在写入前拒绝这样的开关，`delorun preview off` 可以移除已经设置的这类开关。
+- 开关已打开而声明它的插件处于关闭时，会记录一条警告，且不产生任何变化；`delorun preview list` 会在该开关旁说明。
+- 无法读取其列表的包会被记录为错误，在修复之前它的开关是未知的。
 
 <a id="read-a-flag"></a>
 ## 读取开关
@@ -89,7 +90,7 @@ kind: "package-library"
 - **预览开关只改变工作室界面。** 它绝不改变到达模型的内容：任何提示词、工具、工具结果或请求字段都不得依赖开关。将来若有开关会改变模型可见的输入，必须先添加一个会话事件，使该输入仍可从会话日志重建；请求由该事件构建，而不是由开关构建。
 - **默认关闭。** 只有配置档的这一行把开关设为 `true` 时它才打开；任何插件和 bundle 补丁都不会打开它。
 - **没有设置页面。** 该行由 `delorun preview` 或手动写入。
-- **每个开关只有一个所有者。** 两行列出同一个 id，或两个插件声明同一个 id，都会被拒绝。
+- **每个开关只有一个所有者。** 两个包列出同一个 id、插件声明另一个包的开关，以及对同一开关的第二次声明，都会被拒绝。
 
 `tests/ui-only.spec.ts` 在本包力所能及的范围内强制执行第一条规则：本包不导入会话、模型或工具相关的包，Host API 也不提供在 Delorun 运行期间更改开关的途径。
 

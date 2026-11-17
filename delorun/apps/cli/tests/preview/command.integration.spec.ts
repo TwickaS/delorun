@@ -1,5 +1,5 @@
 /**
- * `delorun preview` over a real profile directory: the flags come from the bundles' manifests and the composed rows,
+ * `delorun preview` over a real profile directory: the flags come from the composed rows and their packages' manifests,
  * `on` and `off` write the profile's own patch and read back through `list`, and an unknown flag is refused with the
  * known ones. Each test's comment names the check whose removal makes it fail.
  */
@@ -16,21 +16,25 @@ let home: string
 let profileDir: string
 let patchPath: string
 
-/** Write the studio bundle the profile lists: its manifest's flag index and its patch. */
-function writeBundle(options: { readonly onboardingOff?: boolean, readonly flags?: object, readonly row?: boolean } = {}): void {
+/**
+ * Write the studio bundle the profile lists, with its patch, and the two plugins it brings in its own `node_modules`,
+ * each listing its flags in its own manifest.
+ */
+function writeBundle(options: { readonly onboardingOff?: boolean, readonly onboardingFlags?: readonly string[], readonly row?: boolean } = {}): void {
   const dir = join(profileDir, 'node_modules', '@test', 'bundle-studio')
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({
-    name: '@test/bundle-studio', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } },
-    delorun: { previewFlags: options.flags ?? { 'delorun-onboarding': ['onboarding.previewSteps'], 'delorun-browser': ['browser.ownChrome'] } },
-  }))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@test/bundle-studio', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  for (const [plugin, flags] of [['plugin-onboarding', options.onboardingFlags ?? ['onboarding.previewSteps']], ['plugin-browser', ['browser.ownChrome']]] as const) {
+    mkdirSync(join(dir, 'node_modules', '@test', plugin), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', '@test', plugin, 'package.json'), JSON.stringify({ name: `@test/${plugin}`, version: '1.0.0', delorun: { previewFlags: flags } }))
+  }
   writeFileSync(join(dir, 'cordis.patch.yml'), [
     '- insert:',
     '    - id: delorun-onboarding',
     '      name: \'@test/plugin-onboarding\'',
     ...options.onboardingOff === true ? ['      disabled: true'] : [],
     '    - id: delorun-browser',
-    '      name: \'@test/plugin-browser\'',
+    '      name: \'@test/plugin-browser/host\'',
     ...options.row === false ? [] : [`    - id: ${PREVIEW_FLAGS_ROW}`, '      name: \'@delorun/preview-flags\''],
     '',
   ].join('\n'))
@@ -151,12 +155,12 @@ describe('delorun preview', () => {
     expect(off.err.join('')).toContain('onboarding.previewSteps is still on for the profile default: a patch other than')
   })
 
-  it('warns about a bundle whose flag list is malformed and still lists the others', () => {
-    writeBundle({ flags: { 'delorun-onboarding': ['Not An Id'] } })
+  it('warns about a plugin whose flag list is malformed and still lists the others', () => {
+    writeBundle({ onboardingFlags: ['Not An Id'] })
     const listed = request()
     listPreviewFlags(listed.request)
-    expect(listed.err.join('')).toContain('delorun: warning: the preview flags of @test/bundle-studio were not read:')
-    expect(listed.out.join('')).toBe('No plugin of the profile default declares a preview flag.\n')
+    expect(listed.err.join('')).toContain('delorun: warning: the preview flags of @test/plugin-onboarding were not read:')
+    expect(listed.out.join('')).toBe('Preview flags of the profile default:\n  browser.ownChrome  off  @test/plugin-browser\n\nTurn one on with: delorun preview on <flag>\n')
   })
 
   it('fails for a directory without a profile, and for a profile without the row', async () => {

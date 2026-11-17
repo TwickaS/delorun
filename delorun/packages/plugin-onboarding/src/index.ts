@@ -41,7 +41,7 @@ import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key
 import { VARIABLE_NAME, type KeySource, type KeySourceKind } from './wire.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
-import { ONBOARDING_PREVIEW_FLAGS } from './preview-flags.ts'
+import { PREVIEW_FLAGS } from './preview-flags.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
@@ -63,7 +63,7 @@ export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './
 export { isCloneAddress, isFolderName, suggestedName } from './clone-address.ts'
 export { declaredConnections } from './recommend.ts'
 export { assertRowsExist, type RowSource } from './rows.ts'
-export { ONBOARDING_PREVIEW_FLAGS, PREVIEW_STEPS } from './preview-flags.ts'
+export { PREVIEW_FLAGS, PREVIEW_STEPS } from './preview-flags.ts'
 
 /** The plugin's name in logs. */
 export const name = 'delorun-onboarding'
@@ -95,7 +95,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   // The planned steps the studio shows under a preview flag; without the preview-flags row nothing is declared and every preview is off.
   ctx.inject(['previewFlags'], (child) => {
-    for (const flag of ONBOARDING_PREVIEW_FLAGS) child.effect(() => child.previewFlags.declare(flag), `delorun-onboarding: preview flag ${flag.id}`)
+    for (const flag of PREVIEW_FLAGS) child.effect(() => child.previewFlags.declare(flag), `delorun-onboarding: preview flag ${flag.id}`)
   })
   // Without the registry the routes are absent and the studio's requests fail, which its folder choice reports.
   ctx.inject(['workspaceRegistry'], (child) => {

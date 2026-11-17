@@ -1,24 +1,24 @@
 /**
- * Onboarding's preview flags: what the Host half declares, and that the studio bundle's manifest lists the same ids
- * for this plugin's row, which is what `delorun preview` and the preview-flags row read.
+ * Onboarding's preview flags: what the Host half declares, and that the package's own manifest lists the same ids,
+ * which is what `delorun preview` and the preview-flags row read.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { assertFlagsIndexed, createPreviewFlags } from '@delorun/preview-flags'
-import { apply, Config, inject, name, ONBOARDING_PREVIEW_FLAGS, ONBOARDING_ROW_ID, PREVIEW_STEPS } from '../src/index.ts'
+import { apply, Config, inject, name, PREVIEW_FLAGS, PREVIEW_STEPS } from '../src/index.ts'
 
 describe('onboarding\'s preview flags', () => {
-  it('are listed for its row in the studio bundle\'s manifest, id for id', () => {
+  it('are listed in the package\'s own manifest, id for id', () => {
     // Pins the index: a flag declared and not listed is refused by the Host, and one listed and not declared can be turned on and does nothing.
-    const manifest: unknown = JSON.parse(readFileSync(fileURLToPath(new URL('../../bundle-studio/package.json', import.meta.url)), 'utf8'))
-    expect(() => { assertFlagsIndexed(manifest, ONBOARDING_ROW_ID, ONBOARDING_PREVIEW_FLAGS.map(flag => flag.id)) }).not.toThrow()
+    const manifest: unknown = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
+    expect(() => { assertFlagsIndexed(manifest, PREVIEW_FLAGS.map(flag => flag.id)) }).not.toThrow()
   })
 
   it('name the plugin as their owner and have words in both languages', () => {
     expect(PREVIEW_STEPS.id).toBe('onboarding.previewSteps')
-    for (const flag of ONBOARDING_PREVIEW_FLAGS) {
+    for (const flag of PREVIEW_FLAGS) {
       expect(flag.owner).toBe('@delorun/plugin-onboarding')
       for (const text of [flag.title.en, flag.title.zh, flag.description.en, flag.description.zh]) expect(text.trim()).not.toBe('')
     }
@@ -29,7 +29,7 @@ describe('onboarding\'s preview flags', () => {
     onTestFinished(async () => { await ctx.fiber.dispose() })
     ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
     vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-    const { flags } = createPreviewFlags({ configured: {}, index: undefined, rowOff: () => false })
+    const { flags } = createPreviewFlags({ configured: {}, index: undefined, pluginOff: () => false })
     const fiber = ctx.plugin({ name, inject: [...inject], Config, apply })
     await fiber.await()
     // Without the row nothing is declared, and the plugin runs as before.

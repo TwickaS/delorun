@@ -106,6 +106,9 @@
     "tsdown": "^0.22.2"
   },
   "delorun": {
-    "state": "shipped"
+    "state": "shipped",
+    "previewFlags": [
+      "onboarding.previewSteps"
+    ]
   }
 }
