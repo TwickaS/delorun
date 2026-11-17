@@ -96,6 +96,9 @@ export type SidebarInjected = {
 export type SidebarProps = PropsRuntime<'sidebar.workspaces.list'> & PropsLocale<'delorunSidebar'> & InjectFace<SidebarInjected>
 
 /** How many settled chats show before Show more, and how many each press adds. */
+/** Placeholder rows shown until the first Workspace snapshot arrives, so an unloaded list does not read as "No chats yet". */
+const SKELETON_ROWS = 6
+
 const SETTLED_FIRST = 10
 const SETTLED_PAGE = 25
 /** How long the undo line stays. */
@@ -654,11 +657,17 @@ export function Sidebar(props: SidebarProps) {
                         {sections.active.map(chat => row(chat, 'active'))}
                       </>
                     )}
-                  {empty && !(folders && folderList.length > 0) && (
-                    <li className={css.empty}>
-                      {emptyText}
-                    </li>
-                  )}
+                  {empty && !(folders && folderList.length > 0) && (workspacesLoaded
+                    ? (
+                      <li className={css.empty}>
+                        {emptyText}
+                      </li>
+                    )
+                    : (
+                      <li className={css.skeleton} aria-hidden="true" data-testid="sidebar-skeleton">
+                        {Array.from({ length: SKELETON_ROWS }, (_, index) => <span key={index} className={css.skeletonRow} />)}
+                      </li>
+                    ))}
                   {shelfOrder.map((shelf, index) => {
                     const rows = sections[shelf]
                     const shown = shelfRows(shelf)
