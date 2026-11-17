@@ -2542,6 +2542,40 @@ importers:
 
   delorun/packages/contract-verification-checks: {}
 
+  delorun/packages/external-agents:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:*
+        version: link:../../../packages/subprocess/subprocess
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../../packages/util/values
+
   delorun/packages/home:
     dependencies:
       '@deepseek-ai/dsh-brand':
