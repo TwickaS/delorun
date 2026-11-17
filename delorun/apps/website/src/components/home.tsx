@@ -1,46 +1,66 @@
 /**
- * The home page and the not-found page.
+ * The home page: one long page in ten parts, the header, the hero, five claims, the four living sections, What's new,
+ * what comes next, the sign-up and the closing footer. Every part sits on one grid, twelve columns on a wide screen and
+ * four on a phone, with text hanging from columns 1, 5 and 9. The parts below the first screen are a separate chunk
+ * (`home-below.tsx`): the server renders them with the rest, and the browser loads their script after the first screen.
  *
  * @module @delorun/website/home
  */
-import view from 'virtual:delorun-changelog'
-import { DOCS_URL, HERO_IMAGE_PATH } from '@/site/config.ts'
-import { COPY, INSTALL_COMMANDS } from '@/site/copy.ts'
-import { CopyButton } from '@/components/copy-button.tsx'
-import { PackageManagerPicker, usePackageManager } from '@/components/package-manager.tsx'
-import { Link } from '@brand'
-import { Frame } from '@/components/layout.tsx'
-import { SignupSection } from '@/components/signup.tsx'
+import { lazy, Suspense, type ReactNode } from 'react'
+import { Frame as Picture, Link, SectionHeading } from '@brand'
+import { COPY, INSTALL_COMMANDS } from '../site/copy.ts'
+import { usePackageManager } from './package-manager.tsx'
+import { DesktopButton } from './desktop-button.tsx'
+import { CommandBlock, Install, ScriptsOff } from './install.tsx'
+import { Frame } from './layout.tsx'
+import { StudioStill } from './studio-still.tsx'
+import { GRID } from './grid.ts'
+import { ChunkBoundary } from './chunk-boundary.tsx'
+
+// The server imports the lower sections before it renders, so the prerendered page holds them in full and never a
+// fallback. The browser loads them as a lazy chunk; while it loads during hydration React keeps the server's markup.
+const below = import.meta.env.SSR ? await import('./home-below.tsx') : undefined
+const HomeBelow = below?.HomeBelow ?? lazy(() => import('./home-below.tsx').then(module => ({ default: module.HomeBelow })))
 
 /**
- * The install command and the first setup question, as a terminal would print them.
- * @param props.command - the install command on the first line.
- * @returns the block, which a screen reader reads as plain text.
+ * The hero: the statement, the install command, the desktop button and the platform line on the left, the studio at
+ * work on the right. On a phone they stack in that order.
+ * @param props.install - the install command with its choice.
+ * @returns the hero.
  */
-function Terminal({ command }: { command: string }) {
+function Hero({ install }: { install: ReactNode }) {
+  const copy = COPY.hero
   return (
-    <figure className="min-w-0">
-      <figcaption className="mb-2 text-sm text-fd-muted-foreground">{COPY.terminalLabel}</figcaption>
-      <pre tabIndex={0} aria-label={COPY.terminalLabel} className="whitespace-pre-wrap break-words rounded-xl border border-fd-border bg-fd-card p-4 font-mono text-[13px] leading-6 text-fd-card-foreground focus-visible:outline-2 focus-visible:outline-fd-foreground sm:p-5 sm:text-sm"><code>{COPY.terminal(command)}</code></pre>
-    </figure>
+    <section aria-labelledby="hero" className={`${GRID} gap-y-12 pt-10 lg:items-start lg:pt-20`}>
+      <div className="col-span-full flex flex-col gap-8 lg:col-span-5">
+        <SectionHeading level={1} id="hero" title={copy.title} lead={copy.subline} />
+        <div className="grid max-w-xl gap-5">
+          {install}
+          <DesktopButton />
+        </div>
+        <p className="max-w-xl text-sm text-(--dl-text-muted)">
+          {copy.platform.before}<Link href={copy.platform.href}>{copy.platform.linkText}</Link>{copy.platform.after}
+          {copy.status.before}<Link href={copy.status.href}>{copy.status.linkText}</Link>{copy.status.after}
+        </p>
+      </div>
+      <div className="col-span-full lg:col-start-6 lg:col-end-13">
+        <Picture width={800} height={500} label={copy.replicaLabel} still={<StudioStill alt={copy.stillAlt} eager />} />
+      </div>
+    </section>
   )
 }
 
 /**
- * The What's new strip: the latest assembled version's headlines. Absent until a version is assembled with headlines.
- * @returns the section, or nothing.
+ * The closing composition above the footer's links: the install command again at headline size and the desktop button.
+ * @param props.command - the command for the chosen package manager.
+ * @returns the composition.
  */
-function WhatsNew() {
-  const latest = view?.versions[0]
-  if (latest === undefined || latest.headlines.length === 0) return null
+export function Closing({ command }: { command: string }) {
   return (
-    <section aria-labelledby="whats-new" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-      <h2 id="whats-new" className="text-2xl font-semibold tracking-tight">{COPY.whatsNew.heading}</h2>
-      <p className="mt-2 text-sm text-fd-muted-foreground">{COPY.whatsNew.latest(latest.version, latest.date)}</p>
-      <ul className="mt-4 list-disc space-y-1.5 pl-5">
-        {latest.headlines.map(headline => <li key={headline}>{headline}</li>)}
-      </ul>
-      <p className="mt-4"><Link href={`${DOCS_URL}/changelog`}>{COPY.whatsNew.full}</Link></p>
+    <section aria-labelledby="closing" className="grid gap-6 text-(--dl-text)">
+      <h2 id="closing" className="sr-only">{COPY.closing.heading}</h2>
+      <CommandBlock command={command} size="lg" main />
+      <DesktopButton />
     </section>
   )
 }
@@ -51,80 +71,14 @@ function WhatsNew() {
  */
 export function Home() {
   const [manager, setManager] = usePackageManager()
-  const command = INSTALL_COMMANDS[manager]
   return (
-    <Frame signup={false}>
+    <Frame signup={false} closing={<Closing command={INSTALL_COMMANDS[manager]} />}>
+      <ScriptsOff />
       <main>
-        <section className="mx-auto grid w-full max-w-5xl gap-10 px-5 pt-10 sm:px-8 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
-          <div>
-            <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
-            <p className="mt-3 text-xl font-medium tracking-tight">{COPY.heroSubline}</p>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
-            <p className="mt-3 max-w-xl text-sm text-fd-muted-foreground">{COPY.factLine}</p>
-            <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
-            <div className="mt-2 grid w-fit max-w-full gap-2">
-              <PackageManagerPicker value={manager} onChange={setManager} />
-              <CopyButton text={command} />
-            </div>
-            <div className="mt-5 max-w-xl"><Terminal command={command} /></div>
-            <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
-            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<Link href={COPY.platformNote.href}>{COPY.platformNote.linkText}</Link>{COPY.platformNote.after}</p>
-            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.status.before}<Link href={COPY.status.href}>{COPY.status.linkText}</Link>{COPY.status.after}</p>
-            <p className="mt-5"><Link href={`${DOCS_URL}/guide/install`} className="font-medium">{COPY.guideLink}</Link></p>
-          </div>
-          <figure className="min-w-0">
-            <img src={HERO_IMAGE_PATH} alt={COPY.heroImageAlt} width={1200} height={750} className="w-full rounded-xl border border-fd-border bg-fd-card" />
-          </figure>
-        </section>
-        <section aria-labelledby="features" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="features" className="text-2xl font-semibold tracking-tight">{COPY.featuresTitle}</h2>
-          <ul className="mt-8 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
-            {COPY.features.map(feature => (
-              <li key={feature.title}>
-                <h3 className="font-semibold">{feature.title}</h3>
-                <p className="mt-2 leading-7 text-fd-muted-foreground">{feature.text}</p>
-                <p className="mt-2 text-sm"><Link href={feature.href}>{feature.linkText}</Link></p>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <WhatsNew />
-        <section aria-labelledby="roadmap" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="roadmap" className="text-2xl font-semibold tracking-tight">{COPY.roadmap.heading}</h2>
-          <p className="mt-2 text-fd-muted-foreground">{COPY.roadmap.text}</p>
-          <ol className="mt-6 grid gap-x-10 gap-y-6 sm:grid-cols-3">
-            {COPY.roadmap.stages.map(stage => (
-              <li key={stage.title}>
-                <h3 className="font-semibold">{stage.title}</h3>
-                <p className="mt-2 leading-7 text-fd-muted-foreground">{stage.text}</p>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-6 leading-7">{COPY.roadmap.earns}</p>
-          <p className="mt-3 text-sm"><Link href={COPY.roadmap.href}>{COPY.roadmap.link}</Link></p>
-        </section>
-        <section aria-labelledby="teams" className="mx-auto mt-20 w-full max-w-5xl px-5 sm:px-8">
-          <h2 id="teams" className="text-2xl font-semibold tracking-tight">{COPY.teams.heading}</h2>
-          <p className="mt-2 leading-7 text-fd-muted-foreground">{COPY.teams.text}</p>
-        </section>
-        <SignupSection />
-      </main>
-    </Frame>
-  )
-}
-
-/**
- * The page for an address no page has. It has no layout controls beyond links: the build writes 404.html without the
- * router's scripts.
- * @returns the page.
- */
-export function NotFound() {
-  return (
-    <Frame signup={false}>
-      <main className="mx-auto w-full max-w-5xl px-5 pt-16 sm:px-8">
-        <h1 className="text-3xl font-semibold tracking-tight">{COPY.notFound.title}</h1>
-        <p className="mt-4 text-fd-muted-foreground">{COPY.notFound.text}</p>
-        <p className="mt-6"><Link href="/">{COPY.notFound.home}</Link></p>
+        <Hero install={<Install manager={manager} onChange={setManager} />} />
+        <ChunkBoundary fallback={<p className={`${GRID} pt-24 text-(--dl-text-muted)`}>{COPY.partFailed}</p>}>
+          <Suspense fallback={null}><HomeBelow /></Suspense>
+        </ChunkBoundary>
       </main>
     </Frame>
   )

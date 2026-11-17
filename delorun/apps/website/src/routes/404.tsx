@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { NotFound } from '@/components/home.tsx'
+import { NotFound } from '@/components/not-found.tsx'
 import { COPY } from '@/site/copy.ts'
 
 /** The not-found page, prerendered to 404.html, which a static host serves for an address no file has; the build removes its router scripts. */
