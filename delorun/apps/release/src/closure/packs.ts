@@ -9,7 +9,7 @@
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PackEntry, PackExternal, PackVariant, ReleasePacks, RuntimePlatform, SemanticVersion, Sha512Base64 } from '@delorun/contract-release-manifest'
 import { RELEASE_SCHEMAS } from '@delorun/contract-release-manifest'
@@ -239,7 +239,8 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
     },
     deploy: (name, platform, directory) => {
       execFileSync('pnpm', ['--filter', name, 'deploy', '--prod', '--ignore-scripts', ...request.targets[platform], '--config.allow-unused-patches=true', '--config.node-linker=hoisted', '--config.package-import-method=copy', '--config.link-workspace-packages=true', '--config.hoist-workspace-packages=false', directory], { cwd: request.source, env: request.env, stdio: 'inherit' })
-      return Promise.resolve()
+      // A pack carries no command links: the archive refuses symbolic links and a pack is never run through .bin.
+      return rm(join(directory, 'node_modules', '.bin'), { recursive: true, force: true })
     },
   }
   const entries: PackEntry[] = []
