@@ -210,6 +210,7 @@ export class SeatRelay {
   private fullAccessStartsAgents(): boolean {
     const consent = this.ctx.get('delegationConsent')
     const read: unknown = consent === undefined ? undefined : Reflect.get(consent, 'fullAccessStartsAgents')
+    // TODO: fix/p2-fullaccess (EA33) adds the switch; once it is in this base, an absent switch must fail closed (false).
     return typeof read === 'function' ? read.call(consent) !== false : true
   }
 
