@@ -65,8 +65,12 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   },
   'plugin-delegation-consent/src/routes.ts': {
     'DELEGATION_CONSENT_ROUTES.grants': READ('lists which agents may work in which workspaces'),
+    'DELEGATION_CONSENT_ROUTES.levels': READ('reads the level saved for each agent and whether its sandbox tools are missing'),
     'DELEGATION_CONSENT_ROUTES.allow': UNLOCKED('allowing lets an external agent work in a workspace'),
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
+  },
+  'plugin-agent-seats/src/mount.ts': {
+    'route.path': UNLOCKED('resuming an agent after its plan limit and picking its model change what the person\'s own program runs next; both go through the unlock gate'),
   },
   'external-agents/src/accounts/routes.ts': {
     'ACCOUNT_ROUTES.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),
