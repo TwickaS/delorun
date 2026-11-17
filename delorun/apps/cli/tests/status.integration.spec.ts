@@ -104,11 +104,11 @@ describe('delorun status', { timeout: 30_000 }, () => {
   })
 
   it('reports no home process, with and without --json, and a lock its exited holder left', async () => {
-    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining('Delorun is not running. Start it with delorun start.\n') as string })
+    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining("Delorun isn't running. Start it with: delorun start\n") as string })
     expect(await status(['--json'])).toMatchObject({ code: EXIT.notRunning, stdout: '{"ok":false,"state":"not-running"}\n' })
     const exited = spawnSync(process.execPath, ['-e', ''], { timeout: 30_000 })
     writeLock(exited.pid as number)
-    expect((await status()).stdout).toContain('Delorun is not running.')
+    expect((await status()).stdout).toContain("Delorun isn't running.")
   })
 
   it('fails when the lock holder lives but its update channel does not answer', async () => {
@@ -141,14 +141,14 @@ describe('delorun status', { timeout: 30_000 }, () => {
     } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('Version: 1.0.0\nRunning chats: 2\nUpdate: waiting to 1.1.0\n')
+    expect(result.stdout).toContain('Version: source build\nRunning chats: 2\nUpdate: waiting to 1.1.0\n')
     vi.mocked(queryHomeStatus).mockResolvedValueOnce({
       state: 'running', pid: process.pid, startId: newStartId(),
       runtime: { current: '1.1.0', previous: '1.0.0', running: '1.0.0' }, chats: 2,
       studio: 'http://127.0.0.1:4123/', update: { phase: 'waiting', target: '1.1.0' },
     } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const verbose = await status(['--verbose'])
-    expect(verbose.stdout).toContain('Version: 1.0.0 (previous 1.0.0)')
+    expect(verbose.stdout).toContain('Version: source build (previous 1.0.0)')
     expect(verbose.stdout).toMatch(/Process id: \d+\nStart id: /)
   })
 

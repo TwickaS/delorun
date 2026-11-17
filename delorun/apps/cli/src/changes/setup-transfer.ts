@@ -65,6 +65,7 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
   if (word === 'export') {
     const out = parsed.values.out
+    if (out === undefined && parsed.positionals.length > 0) throw new CliError(EXIT.usage, '--out is missing: delorun setup export --out <file>')
     if (parsed.positionals.length > 0 || out === undefined || out.length === 0 || parsed.values['dry-run'] || parsed.values['remove-others']) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
     const chosen = parsed.values.plugin
     return runExport(ctx, out, {

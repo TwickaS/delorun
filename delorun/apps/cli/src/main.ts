@@ -46,6 +46,7 @@ import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { asksForHelp, commandHelp } from './help.ts'
+import { closestMatch } from './output.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { applyDelorunVersionEnvironment, versionCommand } from './version.ts'
 
@@ -188,7 +189,10 @@ export async function main(argv: readonly string[], context: CommandContext = {
     await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
     const entry = COMMANDS.find(candidate => candidate.name === first)
-    if (entry === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
+    if (entry === undefined) {
+      const near = closestMatch(first, COMMANDS.map(command => command.name))
+      throw new CliError(EXIT.usage, `✗ Unknown command ${JSON.stringify(first)}.${near === undefined ? '' : ` Did you mean ${JSON.stringify(near)}?`} delorun --help lists commands.`)
+    }
     if (asksForHelp(rest)) {
       context.stdout(commandHelp(entry.name) ?? usage())
       return EXIT.ok

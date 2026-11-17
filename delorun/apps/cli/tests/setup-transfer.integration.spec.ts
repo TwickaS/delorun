@@ -362,6 +362,7 @@ describe('delorun setup import', () => {
     const source = await world('source', true)
     expect((await refused(runSetupTransfer(['import'], source.context, driven([], source.profileDir)))).message).toContain('Usage: delorun setup export')
     expect((await refused(runSetupTransfer(['import', 'a', 'b'], source.context, driven([], source.profileDir)))).message).toContain('Usage: delorun setup export')
+    expect((await refused(runSetupTransfer(['export', 'file.dsh'], source.context, driven([], source.profileDir)))).message).toBe('--out is missing: delorun setup export --out <file>')
     expect((await refused(runSetupTransfer(['import', 'a', '--bogus'], source.context, driven([], source.profileDir)))).message).toContain('bogus')
   })
 })

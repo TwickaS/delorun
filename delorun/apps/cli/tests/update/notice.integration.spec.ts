@@ -605,7 +605,10 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
     expect(await update(['--check'])).toBe(EXIT.failed)
     expect(output.stderr).toBe('delorun update --check: the check failed, so nothing is known about a newer release: the release host did not answer, answered with an error, or sent a file larger than its limit\n')
     expect(await update(['--check'], false)).toBe(EXIT.failed)
-    expect(output.stderr).toContain('was not installed by the launcher')
+    expect(output.stderr).toContain("This is a source build, so it doesn't update itself. Install Delorun with: npx delorun")
+    output.stderr = ''
+    expect(await update(['--report'], false)).toBe(EXIT.failed)
+    expect(output.stderr).toBe("This is a source build, so it doesn't update itself. Install Delorun with: npx delorun\n")
     await expect(update(['--check', '--yes'])).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(update(['--check', '--no-data-copy'])).rejects.toMatchObject({ exit: EXIT.usage })
     expect(await updateCommand.run(['--check'], context())).toBe(EXIT.failed)

@@ -31,6 +31,7 @@ import { confirmsWithoutAsking, dataCopyNote, exemptionNote, reasonMessage, unch
 import { UPDATE_CHECK_DEFAULTS } from '@delorun/bundle-local/update-check'
 import semver from 'semver'
 import { CliError, EXIT } from '../exit.ts'
+import { notRunningText } from '../messages.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { hostRefusal } from '@delorun/npm-launcher'
 import { runtimePlatformOf } from './channel.ts'
@@ -125,6 +126,9 @@ export const CHECK_DEPENDENCIES: UpdateCheckDependencies = {
   runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
 }
 
+/** What `--check` and `--report` print for a copy that did not come from the launcher, so it has no release store to update. */
+export const SOURCE_BUILD_TEXT = "This is a source build, so it doesn't update itself. Install Delorun with: npx delorun"
+
 /**
  * `delorun update --check`: run the update check now and print what it found.
  * @param home - the resolved Delorun home.
@@ -136,7 +140,7 @@ export const CHECK_DEPENDENCIES: UpdateCheckDependencies = {
 async function runCheck(home: string, profile: string, context: CommandContext, dependencies: UpdateCheckDependencies): Promise<CommandResult> {
   const runtime = dependencies.runtime(home)
   if (!runtime.store) {
-    context.stderr('delorun update --check: this copy of Delorun was not installed by the launcher, so it cannot check for updates. Install it with npx delorun.\n')
+    context.stderr(`${SOURCE_BUILD_TEXT}\n`)
     return EXIT.failed
   }
   const platform = runtimePlatformOf(process.platform, process.arch)
@@ -346,11 +350,15 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   if (values.report === true && (values.yes === true || values['data-copy'] !== undefined || values['no-data-copy'] !== undefined)) {
     throw new CliError(EXIT.usage, 'delorun update: --report applies nothing, so it takes no --yes, --data-copy or --no-data-copy')
   }
+  if (values.from === undefined && !checks.runtime(home.path).store) {
+    context.stderr(`${SOURCE_BUILD_TEXT}\n`)
+    return EXIT.failed
+  }
   try {
     await queryHomeStatus(home.path, profile, HOME_STATUS_TIMEOUT_MS)
   } catch (_notRunning) {
     // No token, socket or answer: the update needs the home process.
-    context.stderr(`delorun update: Delorun is not running for the profile ${profile}; run delorun start, then delorun update.\n`)
+    context.stderr(`${notRunningText(profile)}\n`)
     return EXIT.notRunning
   }
   const gitProblem = await historyGitProblem({})

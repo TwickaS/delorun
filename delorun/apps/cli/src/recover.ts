@@ -27,7 +27,7 @@ import { HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delorun/home'
 import type { DelorunLogger } from '@delorun/logs'
 import { journalPath, queryHomeStatus, readJournal, removeJournal, removeStash, sendHomeRequest, stashPath, updateChannelProbe, writeJournal } from '@delorun/home-process'
-import { recover, type RecoverAction } from '@delorun/profile-safety'
+import { recover, type RecoverAction, type RecoverReport } from '@delorun/profile-safety'
 import { isStoreError, RuntimeStore, type TrustedRootSource } from '@delorun/runtime-store'
 import { discardKeptData, listKeptData, recoverDataCopies } from '@delorun/update'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
@@ -36,6 +36,7 @@ import { parseFailure, prepareHome, type CliCommand, type CommandContext, type C
 import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
 import { recoverWorkspaces, terminalRestoreConfirm } from './recover-workspaces.ts'
 import { helpPointer } from './help.ts'
+import { withReadableTimes } from './output.ts'
 import { cliRedactor } from './refusals.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
 import { runtimeOfFile } from './update/runtime.ts'
@@ -126,6 +127,26 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
     : [`The recorded update from Delorun ${record.from} to Delorun ${record.to} is ${record.phase}; the chat data ${record.dataDiffers ? 'changes format' : 'keeps its format'}${record.dataDiffers ? `, and ${record.copy ? 'a copy was taken' : 'no copy was taken'}` : ''}.`]
   for (const kept of await listKeptData(home)) lines.push(`${kept.kind === 'copy' ? 'Chat-data copy' : kept.kind === 'runtimes' ? 'Set-aside program store' : 'Set-aside chat data'}: ${kept.path} (${String(kept.bytes)} bytes); remove it with delorun recover discard ${kept.path}.`)
   return lines
+}
+
+/**
+ * The lines `recover status` prints: the report's, with readable times, then the update record, then only the actions
+ * that can run now.
+ * @param home - the Delorun home.
+ * @param profile - the CLI profile.
+ * @param report - the status report.
+ * @returns the lines.
+ */
+async function statusOutput(home: string, profile: string, report: RecoverReport): Promise<string[]> {
+  const facts = report.lines.filter(line => !line.startsWith('Run `delorun recover')).map(line => withReadableTimes(line))
+  const flag = profile === 'default' ? '' : ` --profile ${profile}`
+  const actions = [
+    ...report.lastUpdate === undefined ? [] : [['delorun recover rollback', 'go back to the version before the last update']],
+    ...report.versions.length === 0 ? [] : [['delorun recover restore <version>', 'go back to an earlier profile version']],
+    ...report.safeMode === undefined ? [['delorun recover safe-mode', 'start without third-party plugins']] : [['delorun recover exit-safe-mode', 'end safe mode']],
+  ].map(([command, what]) => [`${command}${flag}`, what] as const)
+  const width = Math.max(0, ...actions.map(([command]) => command.length))
+  return [...facts, ...await updateLines(home, profile).then(lines => lines.map(line => withReadableTimes(line))), ...actions.length === 0 ? [] : ['', ...actions.map(([command, what]) => `  ${command.padEnd(width)}  ${what}`)]]
 }
 
 /**
@@ -284,7 +305,7 @@ export const recoverCommand: CliCommand = {
     if (action.kind === 'restore') await discardImportReviews({ home: home.path, profile, profileDir: join(home.path, 'profiles', profile) }, action.version)
     // Ending safe mode takes the overlay a safe-mode start wrote with it.
     if (action.kind === 'exit-safe-mode') removeSafeModeOverlay(home.path, profile)
-    const lines = action.kind === 'status' ? [...report.lines, ...await updateLines(home.path, profile)] : report.lines
+    const lines = action.kind === 'status' ? await statusOutput(home.path, profile, report) : report.lines
     if (json) context.stdout(JSON.stringify({ ...report, lines }, undefined, 2) + '\n')
     else for (const line of lines) context.stdout(`${line}\n`)
     return EXIT.ok

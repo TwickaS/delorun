@@ -17,11 +17,14 @@ import { DSH_HOME_ENV, HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-lay
 import type { HomeStatus } from '@delorun/contract-home-process'
 import { holderAlive, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { queryHomeStatus } from '@delorun/home-process'
+import { fileURLToPath } from 'node:url'
 import { EXIT } from './exit.ts'
+import { runtimeOfFile } from './update/runtime.ts'
 import { parseOptions, type CliCommand } from './command.ts'
 import { profileDirectory, selectProfile } from './profile.ts'
 import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
+import { notRunningText } from './messages.ts'
 import { printable } from './terminal-text.ts'
 import { changesNotice } from './verify/changes.ts'
 
@@ -66,14 +69,15 @@ export function studioAddress(studio: string | undefined): URL | undefined {
  * @param status - the answer.
  * @param verbose - whether to add the process id, the start id and the previous version.
  * @param inspector - the debugger the home process keeps open, if any.
+ * @param fromStore - whether this program runs from the runtime store; a source build has no release version to show.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined): string {
+function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined, fromStore: boolean): string {
   const studio = studioAddress(status.studio)
   return [
     `Delorun is ${status.state}.`,
     ...studio === undefined ? [] : [`Studio: ${studio.href}`],
-    `Version: ${status.runtime.running}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
+    `Version: ${fromStore ? status.runtime.running : 'source build'}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
     `Running chats: ${String(status.chats)}`,
     ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
     ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
@@ -107,7 +111,7 @@ export const statusCommand: CliCommand = {
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
       if (json) context.stdout(`${JSON.stringify({ ok: false, state: 'not-running' })}\n`)
-      else context.stdout('Delorun is not running. Start it with delorun start.\n')
+      else context.stdout(notRunningText(profile)+'\n')
       return EXIT.notRunning
     }
     let answer
@@ -122,7 +126,7 @@ export const statusCommand: CliCommand = {
       return EXIT.failed
     }
     const inspector = readInspectorRecord(home.path, profile, record.pid)
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector))
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector, runtimeOfFile(home.path, fileURLToPath(import.meta.url)).store))
     return EXIT.ok
   },
 }

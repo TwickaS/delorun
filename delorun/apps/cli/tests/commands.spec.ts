@@ -46,11 +46,15 @@ describe('the lazily loaded command table', () => {
     }
   })
 
-  it('refuses an unknown command with the usage code and the help text', async () => {
+  it('refuses an unknown command in one line with the usage code', async () => {
     const { exit, stdout, stderr } = await run(['frobnicate'])
     expect(exit).toBe(EXIT.usage)
     expect(stdout).toBe('')
-    expect(stderr).toContain('delorun: unknown command "frobnicate"\n\nUsage: delorun')
-    expect(stderr).toContain('Commands:')
+    expect(stderr).toBe('✗ Unknown command "frobnicate". delorun --help lists commands.\n')
+  })
+
+  it('suggests the closest command for a typing slip', async () => {
+    expect((await run(['doctr'])).stderr).toBe('✗ Unknown command "doctr". Did you mean "doctor"? delorun --help lists commands.\n')
+    expect((await run(['stat'])).stderr).toContain('Did you mean "status"?')
   })
 })

@@ -66,7 +66,7 @@ async function again(script: readonly Answer[]): Promise<number> {
  */
 async function yes(promptsAnswer?: SetupRequest['promptsAnswer']): Promise<number> {
   return runSetup({
-    home, profile: PROFILE, output: { stdout: () => undefined, stderr: () => undefined }, env: {}, form: { kind: 'yes' },
+    home, profile: PROFILE, output: { stdout: () => undefined, stderr: () => undefined }, env: {}, form: { kind: 'yes' }, portIsFree: () => Promise.resolve(true),
     ...promptsAnswer === undefined ? {} : { promptsAnswer },
   })
 }
@@ -331,7 +331,7 @@ describe('what start, status and doctor show', { timeout: TIMEOUT_MS }, () => {
     const out: string[] = []
     const context = { env: { DELORUN_HOME: home }, stdout: (text: string) => void out.push(text), stderr: () => undefined }
     await statusCommand.run([], context)
-    expect(out.join('')).toContain(`${DANGEROUS_ON_LINE}\nDelorun is not running`)
+    expect(out.join('')).toContain(`${DANGEROUS_ON_LINE}\nDelorun isn't running`)
     expect(await dangerousModeCheck(context, PROFILE)).toEqual({ name: 'dangerous-mode', status: 'warn', message: DANGEROUS_ON_LINE })
   })
 

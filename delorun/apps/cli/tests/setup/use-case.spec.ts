@@ -132,7 +132,7 @@ describe('the three use cases', { timeout: TIMEOUT_MS }, () => {
   it('--yes keeps the local use case and every safe default, and --config accepts a use case and defaults to local without one', async () => {
     const yes = join(osHome, 'yes', '.delorun')
     await ensureHomeTree(yes, PROFILE)
-    expect(await runSetup({ home: yes, profile: PROFILE, env: {}, form: { kind: 'yes' }, output: { stdout: () => undefined, stderr: () => undefined } })).toBe(EXIT.ok)
+    expect(await runSetup({ home: yes, profile: PROFILE, env: {}, form: { kind: 'yes' }, portIsFree: () => Promise.resolve(true), output: { stdout: () => undefined, stderr: () => undefined } })).toBe(EXIT.ok)
     expect(JSON.parse(readFileSync(join(profileDirectory(yes, PROFILE), 'setup-answers.json'), 'utf8'))).toMatchObject({ useCase: 'local', background: true, prompts: 'safer' })
     const document = { ...SETUP_DEFAULTS, modelProvider: { id: DS, credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }, useCase: 'automation', background: false }
     const path = join(osHome, 'automation.json')

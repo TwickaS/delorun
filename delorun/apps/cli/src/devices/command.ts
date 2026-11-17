@@ -33,6 +33,7 @@ import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { requireTerminal } from '../needs-terminal.ts'
+import { notRunningText, REMOTE_ACCESS_OFF } from '../messages.ts'
 import { printable } from '../terminal-text.ts'
 import { runPin, type PinDependencies } from './pin.ts'
 
@@ -248,8 +249,13 @@ type Outcome = ExitCode | 'again'
  */
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running. Start it with delorun start, then run delorun devices approve again')
-  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
+  if (!dependencies.running(home, profile)) return notRunning(context, profile)
+  const row = readReachRow(home, profile)
+  if (!row.enabled || row.address === '') {
+    context.stderr(`${REMOTE_ACCESS_OFF}\n`)
+    return EXIT.failed
+  }
+  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(row)}\n`)
   for (;;) {
     const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
     if (opened.ok !== true) return failed(context, `Delorun refused: ${refusal(opened)}`)
@@ -270,9 +276,7 @@ async function approve(where: Where): Promise<ExitCode> {
  * @returns the sentence.
  */
 function openLine(row: TailscalePrivateRow): string {
-  return row.enabled && row.address !== ''
-    ? `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
-    : 'Remote access is off for this profile, so a phone cannot reach your studio: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
+  return `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
 }
 
 /**
@@ -434,7 +438,7 @@ interface Unlock {
  */
 async function elevate(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running, so no device holds an unlock. Start it with delorun start')
+  if (!dependencies.running(home, profile)) return notRunning(context, profile)
   for (;;) {
     const listed = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: {} }))
     if (listed.ok !== true) return failed(context, `Delorun refused: ${refusal(listed)}`)
@@ -607,6 +611,17 @@ async function code(where: Where): Promise<ExitCode> {
  */
 function final(lines: readonly ResponseLine[]): ResponseLine {
   return lines.at(-1) ?? { ok: false, error: 'NO_ANSWER' }
+}
+
+/**
+ * Report that no home process runs.
+ * @param context - the output.
+ * @param profile - the profile.
+ * @returns {@link EXIT.notRunning}.
+ */
+function notRunning(context: CommandContext, profile: string): ExitCode {
+  context.stderr(`${notRunningText(profile)}\n`)
+  return EXIT.notRunning
 }
 
 /**
