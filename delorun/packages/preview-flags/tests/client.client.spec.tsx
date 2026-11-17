@@ -71,6 +71,20 @@ describe('usePreviewFlag', () => {
     expect(urls).toHaveLength(2)
   })
 
+  it('reads through the page\'s own fetch by default, and stops telling a listener that unsubscribed', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ flags: [view(true)] }), { status: 200 })))
+    const store = createPreviewFlagsStore()
+    const listener = vi.fn()
+    const unsubscribe = store.subscribe(listener)
+    await store.load()
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(PREVIEW_FLAG_ROUTES.list.slice(1), { headers: { accept: 'application/json' } })
+    expect(listener).toHaveBeenCalledTimes(1)
+    unsubscribe()
+    await store.refresh()
+    expect(listener).toHaveBeenCalledTimes(1)
+    fetch.mockRestore()
+  })
+
   it('fails without a provider, naming the flag', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => render(<Reads id={STEPS} />)).toThrow('usePreviewFlag("onboarding.previewSteps") needs a PreviewFlagsProvider above it')

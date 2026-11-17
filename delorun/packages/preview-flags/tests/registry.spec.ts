@@ -126,6 +126,15 @@ describe('the Host\'s flags', () => {
     expect(flags.list()).toEqual([])
   })
 
+  it('keep a later declaration when an earlier one is withdrawn again', () => {
+    const { flags } = createPreviewFlags({ configured: {}, index: ONE, rowOff: rowsOn })
+    const first = flags.declare(flag())
+    first()
+    flags.declare(flag())
+    first()
+    expect(flags.list().map(each => each.id)).toEqual(['onboarding.previewSteps'])
+  })
+
   it('refuse to answer for an id that is neither declared nor listed, naming the known flags', () => {
     const { flags } = createPreviewFlags({ configured: {}, index: ONE, rowOff: rowsOn })
     expect(() => flags.isOn(BROWSER)).toThrow('delorun-preview-flags: "browser.ownChrome" is not a declared preview flag. Known flags: onboarding.previewSteps')

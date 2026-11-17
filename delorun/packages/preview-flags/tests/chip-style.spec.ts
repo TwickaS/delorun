@@ -7,11 +7,11 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 describe('the preview chip\'s stylesheet', () => {
-  it('draws the muted ink on a hairline at the smallest size, with no fill, bold weight or motion', () => {
+  it('draws the secondary ink on a hairline at the smallest size, with no fill, bold weight or motion', () => {
     const css = readFileSync(fileURLToPath(new URL('../src/client/PreviewChip.module.css', import.meta.url)), 'utf8')
     const rule = /\.chip \{([^}]*)\}/.exec(css)?.[1] ?? ''
-    expect(rule).toContain('color: var(--dl-text-muted)')
-    expect(rule).toContain('border: 1px solid var(--dl-border)')
+    expect(rule).toContain('color: var(--dsw-alias-label-secondary, var(--dl-text-muted))')
+    expect(rule).toContain('border: 0.5px solid var(--dsw-alias-border-l2, var(--dl-border))')
     expect(rule).toContain('font-weight: 400')
     expect(rule).toContain('font-size: var(--dsw-font-xxxs-11-font-size, 11px)')
     expect(css).not.toMatch(/background|animation|transition|box-shadow|text-transform/)

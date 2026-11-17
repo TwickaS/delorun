@@ -1,17 +1,16 @@
-/* A quiet label: the muted ink on a hairline, at the smallest size of the studio's scale. */
+/* A quiet label: the studio's secondary ink on a hairline, at the smallest size of its scale. Each value reads the
+   studio's token first and the brand's on a page without a studio. */
 .chip {
   display: inline-flex;
   align-items: center;
   flex: none;
   padding: 0 6px;
-  border: 1px solid var(--dl-border);
-  border-radius: var(--dl-radius-xs);
-  color: var(--dl-text-muted);
-  font-family: var(--dl-font-sans);
+  border: 0.5px solid var(--dsw-alias-border-l2, var(--dl-border));
+  border-radius: var(--dsw-radius-xs, var(--dl-radius-xs));
+  color: var(--dsw-alias-label-secondary, var(--dl-text-muted));
   font-size: var(--dsw-font-xxxs-11-font-size, 11px);
   font-weight: 400;
   line-height: 16px;
-  letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: default;
   user-select: none;
@@ -19,6 +18,6 @@
 }
 
 .chip:focus-visible {
-  outline: var(--dl-focus-ring);
+  outline: 2px solid var(--dsw-alias-brand-primary, var(--dl-accent));
   outline-offset: 2px;
 }

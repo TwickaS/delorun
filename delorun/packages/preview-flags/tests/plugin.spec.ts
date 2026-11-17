@@ -13,24 +13,28 @@ const STEPS = previewFlagId('onboarding.previewSteps')
 const FLAG: PreviewFlagDeclaration = { id: STEPS, owner: '@test/plugin-onboarding', kind: 'boolean', title: { en: 'Planned steps', zh: '计划中的步骤' }, description: { en: 'Shows the planned steps.', zh: '显示计划中的步骤。' } }
 
 /** A profile directory whose `node_modules` holds one bundle that lists the onboarding flag. */
-async function profile(): Promise<{ readonly dir: string; readonly installAnchor: string; readonly startedBundles: readonly string[] }> {
+async function profile(broken = false): Promise<{ readonly dir: string; readonly installAnchor: string; readonly startedBundles: readonly string[] }> {
   const dir = await mkdtemp(join(tmpdir(), 'delorun-preview-flags-profile-'))
   onTestFinished(async () => { await rm(dir, { recursive: true, force: true }) })
   const bundle = join(dir, 'node_modules', '@test', 'bundle-studio')
   await mkdir(bundle, { recursive: true })
   await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'profile', private: true }))
   await writeFile(join(bundle, 'package.json'), JSON.stringify({ name: '@test/bundle-studio', delorun: { previewFlags: { 'delorun-onboarding': ['onboarding.previewSteps'] } } }))
+  if (broken) {
+    await mkdir(join(dir, 'node_modules', '@test', 'broken'), { recursive: true })
+    await writeFile(join(dir, 'node_modules', '@test', 'broken', 'package.json'), JSON.stringify({ name: '@test/broken', delorun: { previewFlags: { row: ['Not An Id'] } } }))
+  }
   // A bundle that cannot be resolved is the plugin manager's to report; the row reads the others.
-  return { dir, installAnchor: join(dir, 'package.json'), startedBundles: ['@test/bundle-studio', '@test/missing'] }
+  return { dir, installAnchor: join(dir, 'package.json'), startedBundles: ['@test/bundle-studio', broken ? '@test/broken' : '@test/missing'] }
 }
 
 /** A tree with a Connection, the profile and a Loader holding the onboarding row. */
-async function tree(options: { readonly onboardingOff?: boolean } = {}) {
+async function tree(options: { readonly onboardingOff?: boolean; readonly brokenBundle?: boolean } = {}) {
   const ctx = new Context()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const routes = new Map<string, { readonly methods: readonly string[]; readonly admitPeer?: unknown; readonly fetch: (request: Request) => Promise<Response> }>()
   ctx.provide('connection', { fetch: { register: (route: { path: string; methods: readonly string[]; fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route); return () => { routes.delete(route.path) } } } } as never)
-  ctx.provide('profileContext', await profile() as never)
+  ctx.provide('profileContext', await profile(options.brokenBundle) as never)
   ctx.provide('loader', { entries: () => [{ options: { id: 'delorun-onboarding' }, disabled: options.onboardingOff === true }, { options: { id: PREVIEW_FLAGS_ROW_ID }, disabled: false }] } as never)
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
   const read = async (): Promise<PreviewFlagsAnswer> => PreviewFlagsAnswer.parse(await (await routes.get(PREVIEW_FLAG_ROUTES.list)!.fetch(new Request('http://harness.test/api'))).json())
@@ -73,6 +77,27 @@ describe('the row', () => {
     expect(await read()).toEqual({ flags: [] })
     // The unresolvable bundle is reported once; nothing else warns.
     expect(warn.mock.calls.map(call => String(call[0]))).toEqual([expect.stringContaining('@test/missing was not read for preview flags')])
+  })
+
+  it('logs a bundle whose flag list is malformed as an error and loads with the other bundles\' flags', async () => {
+    const { ctx } = await tree({ brokenBundle: true })
+    const error = vi.spyOn(ctx.logger, 'error').mockImplementation(() => {})
+    const fiber = ctx.plugin({ name, inject: [...inject], Config, apply }, { flags: { 'onboarding.previewSteps': true } })
+    await fiber.await()
+    expect(error.mock.calls.map(call => String(call[0]))).toEqual([expect.stringContaining('delorun-preview-flags: the preview flags of @test/broken were not read:')])
+    ctx.previewFlags.declare(FLAG)
+    expect(ctx.previewFlags.isOn(STEPS)).toBe(true)
+  })
+
+  it('reads a flag\'s row as off in a tree without a Loader', async () => {
+    const ctx = new Context()
+    onTestFinished(async () => { await ctx.fiber.dispose() })
+    ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
+    ctx.provide('profileContext', await profile() as never)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    const fiber = ctx.plugin({ name, inject: [...inject], Config, apply }, { flags: { 'onboarding.previewSteps': true } })
+    await fiber.await()
+    expect(warn.mock.calls.map(call => String(call[0]))).toContainEqual(expect.stringContaining('the row "delorun-onboarding" of @test/bundle-studio, whose plugin declares it, is off'))
   })
 
   it('warns that a flag is on while the row that declares it is off', async () => {
