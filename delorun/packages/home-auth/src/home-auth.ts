@@ -677,6 +677,17 @@ export class HomeAuth {
   }
 
   /**
+   * Renew the computer-approved unlock a device holds on a listener, if any, after the person typed in an attached
+   * terminal. A grace and a page unlock do not slide.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  touchDeviceUnlock(deviceId: string, listener: ReachListenerId): void {
+    const record = this.elevations.of(deviceId, listener)
+    if (record !== undefined) this.elevations.touch(record.id)
+  }
+
+  /**
    * The running PIN mode page unlock one Peer was admitted under, which the reach-device policy reads.
    * @param unlockId - the id in the Peer's principal.
    * @returns the unlock, or undefined once it ended.

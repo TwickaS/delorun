@@ -64,7 +64,7 @@ export function registerPackRoutes(ctx: Context, hub: Pick<PacksHub, 'snapshot' 
     }
     ctx.effect(() => ctx.connection.fetch.register({
       path, methods: ['POST'], requestBody: 'buffered',
-      ...gate === 'read' ? { ...anyDevice, fetch: run } : gateByUnlock(homeAuth, run),
+      ...gate === 'read' ? { ...anyDevice, fetch: run } : gateByUnlock(homeAuth, run, { renews: true }),
     }), `plugin-packs: ${path}`)
   }
   const named = (call: (name: string) => Promise<PacksResult>) => (body: Readonly<Record<string, unknown>>) => (nameOk(body.name) ? call(body.name) : undefined)

@@ -115,7 +115,7 @@ export function registerPermissionRoutes(ctx: Context): void {
     const body = await bodyOf(request, SetFullAccessBody)
     if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')
     return answered(() => ctx.permissionDefaults.setFullAccess(body, deviceRequests.has(request) ? 'device' : 'computer'))
-  }, { grace: false })
+  }, { grace: false, renews: true })
   const deviceRequests = new WeakSet<Request>()
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.everywhere,

@@ -581,8 +581,8 @@
     {
       "path": "packages/client/ui-chat/src/client/locale.ts",
       "class": "security",
-      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "e882d19d5cc5ee56ad5b26050cc1ab2fccef4508ae326ec0278ba32c2912ee74"
+      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-17): approved; it only adds plural message keys (stats turns/steps .one/.other); no logic or model-visible change.",
+      "sha256": "2e95b3b7fba6bb4d82b315c43a39e0d1119e118fff200bffef23aafc9b0213d3"
     },
     {
       "path": "packages/client/ui-chat/src/client/presentation-policy.ts",
@@ -840,13 +840,13 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall. The search field is 44px tall under a coarse pointer or on a phone width."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them. On phones the tab strip fades at the edge that has more tabs beyond it (a scroll-driven mask), which cues that it scrolls. Under a coarse primary pointer the tab cells, the close control and the Open configuration file button are 44px tall. The search field is 44px tall under a coarse pointer or on a phone width. At 600px and below outside the desktop windows the navigation is a grouped list of 48px rows with chevrons and a page opens full screen under a back arrow, respecting the safe areas."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",
@@ -1998,7 +1998,7 @@
       "path": "packages/fs/fs-local/src/fsio.ts",
       "class": "security",
       "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Mutations: an edit's read and an overwrite's diff basis go through the same confirmed descriptor; every write, create, move and delete holds the target's directory open and confirms it. On Linux missing directories are created through the held parent's descriptor and held without following a link, the staging directory is held without following a link and confirmed private (owner, 0700) and empty, and the temp file, publication and removal are reached through `/proc/self/fd`; elsewhere directories are created by name and confirmed, and the staging directory and the published file are confirmed by path (removing a misplaced publication). A changed path fails with `FS_IO_ERROR`. The staging directory is removed without walking it (unlink the temp file, then a non-recursive `rmdir` that leaves a non-empty directory or a link in its name in place), and a misplaced one outside Linux only when empty. A listing leaves out a child link that resolves through itself (`ELOOP`) instead of failing. Content, errors and limits are otherwise upstream's. Lead verdict (2026-11-11): kept; on Linux every write, create, move, edit and delete reaches the target directory, the directories it creates and the staging directory through held descriptors opened without following links, and the staging directory is removed without recursion, so a link swapped in after the checks fails the mutation with FS_IO_ERROR; outside Linux the path checks are best effort as documented.",
-      "sha256": "81f4a87aacbc17e8c83c4dbbcbd837414e13f069f2cb64f57cff867a0731b3f0"
+      "sha256": "8f622f6353146852a46b5884a91c5d18712ba3b88487a75851ae30bede1ceb81"
     },
     {
       "path": "packages/spill/spill/src/index.ts",
@@ -2756,6 +2756,42 @@
       "class": "delorun-feature",
       "feature": "phone-safe-areas",
       "reason": "Turns off the mobile tap highlight flash so taps feel native."
+    },
+    {
+      "path": "packages/api/terminal-controller/src/index.ts",
+      "class": "security",
+      "reason": "`TerminalController.onTyped` announces each typed write of a terminal attachment (the person's keystrokes, never output, retention, resizes or protocol replies), so a sliding unlock stays alive while the person types: an ended unlock closes the device's terminal stream, and keystrokes are stream traffic the reach policy does not decide. Lead verdict (2026-11-17): approved; it only announces typed writes of already-admitted attachments to a listener, renewing nothing on its own; S14.",
+      "sha256": "42e190512ccd6a55f91c49fdb3d88af3d4e61eb3ce9fa77551a951a808c03595"
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Adds the shell's `back` label, the name of the arrow that returns from a Settings page to the list on a phone."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css",
+      "class": "delorun-feature",
+      "feature": "hero-row-wrap",
+      "reason": "The empty-chat workspace row wraps with a 4px row gap, so the mode chip is not clipped on a phone."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/HeroShell.module.css",
+      "class": "delorun-feature",
+      "feature": "hero-row-wrap",
+      "reason": "The workspace chip takes at most 60% of its row and ends a long name in an ellipsis."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Button.module.css",
+      "class": "delorun-feature",
+      "feature": "settings-buttons",
+      "reason": "Settings cards get 32px inline buttons on a pointer screen, and primary and outline buttons sink to 97% while pressed."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/StatsPills.tsx",
+      "class": "delorun-feature",
+      "feature": "copy-plurals",
+      "reason": "Picks the singular or plural form of the turns and steps counts, so one turn and one step read correctly."
     }
   ],
   "retired": []

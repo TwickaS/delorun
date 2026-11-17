@@ -417,6 +417,15 @@ export class HomeAuthService extends Service {
   }
 
   /**
+   * Renew the computer-approved unlock a device holds on a listener, after it typed in an attached terminal.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  touchDeviceUnlock(deviceId: string, listener: ReachListenerId): void {
+    this.core?.touchDeviceUnlock(deviceId, listener)
+  }
+
+  /**
    * Whether PIN mode is on.
    * @returns whether it is; false before the service started.
    */

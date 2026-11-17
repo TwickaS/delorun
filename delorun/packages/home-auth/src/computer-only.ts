@@ -79,11 +79,11 @@ const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code f
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @param fetch - the route's own handler.
  * @param options - `grace: false` for a route that loosens a consent or guard row: the approval grace does not open it, only
- *   a code or a PIN unlock does. The grace opens the route by default. `renews: false` for a route the studio polls or that
- *   only reads: a call of it does not renew the unlock.
+ *   a code or a PIN unlock does. The grace opens the route by default. `renews` is explicit for every route: true for a deliberate,
+ *   state-changing call, which renews a sliding unlock; false for a route the studio polls or that only reads.
  * @returns the `admitPeer` and `fetch` for `ConnectionFetchRoute`.
  */
-export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>, options: { readonly grace?: boolean; readonly renews?: boolean } = {}): {
+export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>, options: { readonly grace?: boolean; readonly renews: boolean }): {
   readonly admitPeer: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean
   readonly fetch: (request: Request) => Promise<Response>
 } {
@@ -95,7 +95,7 @@ export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetc
       const unlock = unlockOf(home, peer.principal as ReachDevicePrincipal)
       if (unlock === undefined || (unlock.grace === true && options.grace === false)) locked.add(request)
       // The route needs an unlock, so the call renews the unlock it ran under.
-      else if (options.renews !== false) home.touchUnlock?.(unlock.id)
+      else if (options.renews) home.touchUnlock?.(unlock.id)
       return true
     },
     fetch: (request) => {

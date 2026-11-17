@@ -24,10 +24,12 @@
 }
 
 .subheading {
-  margin: 20px 0 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
+  margin: 24px 0 8px;
+  padding: 0 4px;
+  font-size: var(--dsh-settings-card-heading-size, 15px);
+  font-weight: var(--dsh-settings-card-heading-weight, 500);
+  line-height: var(--dsh-settings-card-heading-line-height, 22px);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-primary));
 }
 
 .intro,

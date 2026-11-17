@@ -13,12 +13,12 @@
  * is active. Visible dialog chrome belongs to the step, so a
  * mounted-but-deciding step paints nothing here.
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChevronLeftOutlineRegular, IconCloseOutlineRegular, IconDataOutlineMedium,
   IconPersonalizationOutlineMedium, IconSearchOutlineRegular, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -26,6 +26,23 @@ import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-con
 import { GENERAL_SECTION_ID, searchNav, UNPLACED_ITEMS_PAGE, type SettingsNav, type SettingsNavPage } from './layout.ts'
 import css from './SettingsRoot.module.css'
 import { DesktopUpdateIndicator } from './DesktopUpdateIndicator.tsx'
+
+/** Width at or below which the panel is a list of pages that each open full screen. */
+const PHONE_QUERY = '(max-width: 600px)'
+
+const subscribePhone = (listener: () => void): (() => void) => {
+  if (typeof window.matchMedia !== 'function') return () => {}
+  const query = window.matchMedia(PHONE_QUERY)
+  query.addEventListener('change', listener)
+  return () => { query.removeEventListener('change', listener) }
+}
+
+/** Whether the panel uses the phone list: a narrow viewport outside the desktop windows, which keep the rail. */
+const phoneSnapshot = (): boolean => {
+  if (typeof window.matchMedia !== 'function') return false
+  const root = document.documentElement
+  return window.matchMedia(PHONE_QUERY).matches && !root.hasAttribute('data-windows-titlebar') && root.dataset.platform !== 'darwin'
+}
 
 const RECOVERY_CONFIRMATION_MS = 2_000
 
@@ -50,6 +67,8 @@ type PanelProps = {
   activeId: string | undefined
   onSelect: (id: string) => void
   onClose: () => void
+  /** The shell's `back` label, for the phone page header. */
+  backLabel: string
 }
 
 /** A section drawn inside an onboarding step has no panel to close. */
@@ -60,7 +79,7 @@ const noSectionClose = (): void => {}
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: PanelProps) {
+function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose, backLabel }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
   // projection falls back to the first row when the id is gone. In a grouped
   // layout a requested section id selects the page that holds it.
@@ -77,6 +96,17 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: P
   const options = useRef<HTMLDivElement>(null)
   const results = useMemo(() => (nav === undefined ? [] : searchNav(nav, query)), [nav, query])
   const searching = query.trim() !== ''
+  const phone = useSyncExternalStore(subscribePhone, phoneSnapshot)
+  // On a phone the panel opens on the list unless a section was requested; a pick on any width shows its page.
+  const [showList, setShowList] = useState(activeId === undefined)
+  const phoneView = !phone || nav === undefined ? undefined : searching ? 'results' : showList ? 'list' : 'page'
+  const back = useRef<HTMLButtonElement>(null)
+  const opened = useRef<string | undefined>(undefined)
+  const select = useCallback((id: string) => {
+    opened.current = id
+    setShowList(false)
+    onSelect(id)
+  }, [onSelect])
 
   // A search result opens its page, then brings its card or row into view.
   useEffect(() => {
@@ -91,6 +121,20 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: P
   const panel = useRef<HTMLDivElement>(null)
   useModalLayer(panel, true, onClose)
 
+  // Focus follows the view: the back arrow when a page opens, the page's row when the list returns, and the panel when a
+  // width change removes the focused control.
+  const seenView = useRef(phoneView)
+  useEffect(() => {
+    const previous = seenView.current
+    seenView.current = phoneView
+    if (previous === phoneView) return
+    if (phoneView === 'page') back.current?.focus()
+    else if (phoneView === 'list' && opened.current !== undefined) {
+      const row = Array.from(panel.current?.querySelectorAll<HTMLElement>('[data-page-id]') ?? []).find(node => node.dataset.pageId === opened.current)
+      row?.focus()
+    } else if (!panel.current?.contains(document.activeElement)) panel.current?.focus()
+  }, [phoneView])
+
   // Portalled beside #root like the Modal primitive: a covering surface mounted
   // inside the root would precede the columns' chrome in document order, so a
   // chrome row that declares window drag after it would override its subtraction.
@@ -98,12 +142,21 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: P
   return createPortal((
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}
+        data-phone={phoneView}>
         {/* The four seats stay direct children of the panel and take their
             places from its grid: title and header share the first row, the
             navigation and the active section the second. */}
-        <div className={css.navTitle} id={titleId} tabIndex={-1}
-          data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</div>
+        <div className={css.navTitle} id={phoneView === 'page' ? undefined : titleId} tabIndex={-1} data-modal-autofocus={active === undefined ? '' : undefined}>
+          {phoneView === 'page' && (
+            <button ref={back} type="button" className={css.back} aria-label={backLabel} onClick={() => { setShowList(true) }}>
+              <IconChevronLeftOutlineRegular size={18} />
+            </button>
+          )}
+          {phoneView === 'page' && activePage !== undefined
+            ? <span id={titleId} className={css.navTitleText}>{activePage.label}</span>
+            : renderSlot('settings.header', {})}
+        </div>
         <nav className={css.nav}>
           {nav !== undefined && (
             <label className={css.search}>
@@ -124,11 +177,13 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: P
               {nav.groups.map(group => (
                 <div key={group.id} className={css.navGroup} role="group" aria-label={group.label}>
                   <div className={css.navGroupLabel} aria-hidden="true">{group.label}</div>
-                  {group.pages.map(page => (
-                    <NavCell key={page.id} id={page.id} label={page.label} icon={page.icon}
-                      active={!searching && page.id === active} renderSlot={renderSlot}
-                      onSelect={(id) => { setQuery(''); onSelect(id) }} />
-                  ))}
+                  <div className={css.navGroupCells}>
+                    {group.pages.map(page => (
+                      <NavCell key={page.id} id={page.id} label={page.label} icon={page.icon}
+                        active={!searching && page.id === active} renderSlot={renderSlot}
+                        onSelect={(id) => { setQuery(''); select(id) }} />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -169,7 +224,7 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: P
               {results.map(result => (
                 <li key={`${result.pageId}/${result.anchor ?? ''}`}>
                   <button type="button" className={css.result}
-                    onClick={() => { setQuery(''); setAnchor(result.anchor); onSelect(result.pageId) }}>
+                    onClick={() => { setQuery(''); setAnchor(result.anchor); select(result.pageId) }}>
                     {result.path.map((part, index) => (
                       <span key={index} className={index === result.path.length - 1 ? css.resultName : css.resultPath}>{part}</span>
                     ))}
@@ -203,6 +258,7 @@ function NavCell({ id, label, icon: Icon, active, renderSlot, onSelect }: {
       aria-current={active ? 'true' : undefined}
       data-modal-autofocus={active ? '' : undefined}
       onFocus={(event) => { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }}
+      data-page-id={id}
       onClick={() => { onSelect(id) }}
     >
       <span className={css.navIcon} aria-hidden="true">
@@ -396,6 +452,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           activeId={activeId}
           onSelect={actions.select}
           onClose={close}
+          backLabel={t('back')}
         />
       )}
       {/* Dialog chrome and `#root` inert ownership live inside each step's

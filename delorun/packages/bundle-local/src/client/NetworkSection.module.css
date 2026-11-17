@@ -17,7 +17,7 @@
 
 .intro,
 .line {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
@@ -35,11 +35,18 @@
 }
 
 .row {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-  padding: 16px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.risk {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .head {
@@ -60,7 +67,7 @@
 }
 
 .description {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;

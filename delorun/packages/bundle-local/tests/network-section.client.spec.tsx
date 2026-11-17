@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The Network section reads each workspace's network from the home, saves a tightening at once, asks before a change
+ * The Network section reads each workspace's network from the home, saves each change at once, asks before a change
  * that loosens the network and sends the confirmation only after the person gives it, and says in place when the home
  * serves the setting only to its own computer, refuses a change or cannot read its store.
  */
@@ -103,11 +103,12 @@ describe('the Network section', () => {
     renderSection(fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST }))
     const alpha = await rowOf('Alpha')
     expect(screen.getByText(en.intro)).toBeTruthy()
+    expect(screen.getAllByText(en.risk)).toHaveLength(1)
     expect(within(alpha).getByText('/home/me/alpha')).toBeTruthy()
     expect(within(alpha).getByText('Default: Open')).toBeTruthy()
     expect(within(alpha).getByRole('tab', { name: en['access.open'] }).getAttribute('aria-selected')).toBe('true')
     expect(within(alpha).queryByRole('button', { name: en.useDefault })).toBeNull()
-    expect((within(alpha).getByRole('button', { name: en.save }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
     const beta = await rowOf('Beta')
     expect(within(beta).getByText('Set for this workspace. Default: Open')).toBeTruthy()
     expect(within(beta).getByRole('tab', { name: en['access.allowlist'] }).getAttribute('aria-selected')).toBe('true')
@@ -131,7 +132,6 @@ describe('the Network section', () => {
     const alpha = await rowOf('Alpha')
     fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
     expect(within(alpha).getByText(en['access.off.description'])).toBeTruthy()
-    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
     await vi.waitFor(async () => { expect(within(await rowOf('Alpha')).getByText('Set for this workspace. Default: Open')).toBeTruthy() })
     expect(host.posts()).toEqual([{ path: ALPHA.path, network: off }])
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -153,7 +153,6 @@ describe('the Network section', () => {
     renderSection(host)
     const alpha = await rowOf('Alpha')
     fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
-    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
     expect(await screen.findByText(/locks after 15 minutes/)).toBeTruthy()
     await store.refresh()
     await vi.waitFor(() => { expect(host.posts()).toHaveLength(2) })
@@ -168,7 +167,6 @@ describe('the Network section', () => {
     renderSection(host)
     const beta = await rowOf('Beta')
     fireEvent.click(within(beta).getByRole('tab', { name: en['access.open'] }))
-    fireEvent.click(within(beta).getByRole('button', { name: en.save }))
     const dialog = await screen.findByRole('dialog', { name: 'Let Beta reach more of the network?' })
     expect(within(dialog).getByText('Commands in Beta will be able to reach any host on the internet.')).toBeTruthy()
     expect(host.posts()).toEqual([{ path: BETA.path, network: { access: 'open', hosts: ['registry.npmjs.org'] } }])
@@ -189,11 +187,8 @@ describe('the Network section', () => {
     const alpha = await rowOf('Alpha')
     const toggle = within(alpha).getByRole('switch', { name: en['abstract.title'] })
     expect(toggle.getAttribute('aria-checked')).toBe('false')
-    fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
-    expect(within(alpha).queryByRole('switch', { name: en['abstract.title'] })).toBeNull()
-    fireEvent.click(within(alpha).getByRole('tab', { name: en['access.open'] }))
+    expect(within(await rowOf('Beta')).queryByRole('switch', { name: en['abstract.title'] })).toBeNull()
     fireEvent.click(within(alpha).getByRole('switch', { name: en['abstract.title'] }))
-    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(en['confirm.abstract'].replace('{workspace}', 'Alpha'))).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
@@ -210,32 +205,39 @@ describe('the Network section', () => {
     renderSection(host)
     const alpha = await rowOf('Alpha')
     fireEvent.click(within(alpha).getByRole('tab', { name: en['access.allowlist'] }))
-    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: control }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(host.posts()).toHaveLength(1)
     expect(host.count(`GET ${NETWORK_ROUTES.list}`)).toBe(1)
-    // The draft stays for the person to change or save again.
-    expect(within(alpha).getByRole('tab', { name: en['access.allowlist'] }).getAttribute('aria-selected')).toBe('true')
+    // The row shows the setting in effect again.
+    expect(within(alpha).getByRole('tab', { name: en['access.open'] }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('offers common hosts for review, adds nothing on its own, and names the added hosts in the confirmation', async () => {
+  it('adds a common host group and saves it at once, naming the added hosts in the confirmation', async () => {
     const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: UNCONFIRMED })
     renderSection(host)
     const beta = await rowOf('Beta')
     fireEvent.click(within(beta).getByRole('button', { name: en['common.add'] }))
     expect(within(beta).getByText(en['common.hint'])).toBeTruthy()
     fireEvent.click(within(beta).getByRole('button', { name: en['common.pypi'] }))
-    fireEvent.click(within(beta).getByRole('button', { name: en['common.npm'] }))
-    fireEvent.click(within(beta).getByRole('button', { name: en['common.go'] }))
-    const hosts = within(beta).getByRole('textbox', { name: 'Allowed hosts of Beta, one per line' }) as HTMLTextAreaElement
-    expect(hosts.value).toBe('registry.npmjs.org\npypi.org\nfiles.pythonhosted.org\nproxy.golang.org\nsum.golang.org')
-    expect(host.posts()).toHaveLength(0)
-    fireEvent.click(within(beta).getByRole('button', { name: en.save }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Commands in Beta will be able to reach these added hosts: files.pythonhosted.org, proxy.golang.org, pypi.org, sum.golang.org.')).toBeTruthy()
-    expect(host.posts()).toEqual([{ path: BETA.path, network: { access: 'allowlist', hosts: ['registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org', 'proxy.golang.org', 'sum.golang.org'] } }])
+    expect(within(dialog).getByText('Commands in Beta will be able to reach these added hosts: files.pythonhosted.org, pypi.org.')).toBeTruthy()
+    expect(host.posts()).toEqual([{ path: BETA.path, network: { access: 'allowlist', hosts: ['registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org'] } }])
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    const hosts = within(beta).getByRole('textbox', { name: 'Allowed hosts of Beta, one per line' }) as HTMLTextAreaElement
+    expect(hosts.value).toBe('registry.npmjs.org')
+  })
+
+  it('saves an edited host list when the field loses focus, and not before', async () => {
+    const edited: WorkspaceNetwork = { access: 'allowlist', hosts: ['registry.npmjs.org', 'github.com'] }
+    const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: saved(edited) })
+    renderSection(host)
+    const hosts = within(await rowOf('Beta')).getByRole('textbox', { name: 'Allowed hosts of Beta, one per line' })
+    fireEvent.change(hosts, { target: { value: 'registry.npmjs.org\ngithub.com' } })
+    expect(host.posts()).toHaveLength(0)
+    fireEvent.blur(hosts)
+    await vi.waitFor(() => { expect(host.posts()).toEqual([{ path: BETA.path, network: edited }]) })
   })
 
   it('returns a workspace to the default with a request that names no network', async () => {
@@ -252,17 +254,17 @@ describe('the Network section', () => {
     expect(host.posts()).toEqual([{ path: BETA.path }, { path: BETA.path, confirmed: true }])
   })
 
-  it('shows the Host\'s sentence in the row for a host entry it refuses, and keeps the draft', async () => {
+  it('shows the Host\'s sentence in the row for a host entry it refuses, and puts the list back', async () => {
     const message = '"https://example.com" is not a host name: write a name such as registry.npmjs.org or *.npmjs.org, with no scheme or path, and a port only after a colon'
     const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: refusal(422, 'NETWORK_INVALID', message) })
     renderSection(host)
     const beta = await rowOf('Beta')
     const hosts = within(beta).getByRole('textbox', { name: 'Allowed hosts of Beta, one per line' })
     fireEvent.change(hosts, { target: { value: 'registry.npmjs.org\nhttps://example.com\n' } })
-    fireEvent.click(within(beta).getByRole('button', { name: en.save }))
+    fireEvent.blur(hosts)
     expect((await within(beta).findByRole('alert')).textContent).toBe(message)
     expect(host.posts()).toEqual([{ path: BETA.path, network: { access: 'allowlist', hosts: ['registry.npmjs.org', 'https://example.com'] } }])
-    expect((hosts as HTMLTextAreaElement).value).toBe('registry.npmjs.org\nhttps://example.com\n')
+    expect((hosts as HTMLTextAreaElement).value).toBe('registry.npmjs.org')
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -273,7 +275,6 @@ describe('the Network section', () => {
     expect(screen.getByRole('alert').textContent).toBe(en.problem.replace('{problem}', problem))
     expect((within(beta).getByRole('tab', { name: en['access.open'] }) as HTMLButtonElement).disabled).toBe(true)
     expect((within(beta).getByRole('button', { name: en.useDefault }) as HTMLButtonElement).disabled).toBe(true)
-    expect((within(beta).getByRole('button', { name: en.save }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('says that only the home\'s own computer reads and changes the setting', async () => {
@@ -298,7 +299,6 @@ describe('the Network section', () => {
     renderSection(host)
     const alpha = await rowOf('Alpha')
     fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
-    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
     expect((await within(alpha).findByRole('alert')).textContent).toBe(en.loopback)
   })
 

@@ -283,7 +283,7 @@ export function apply(ctx: Context, config: Config): void {
         } catch (error) {
           return failure(error, 'TRUST_CHECK_FAILED')
         }
-      }),
+      }, { renews: true }),
     }), `${name}: the check route`)
   })
 }

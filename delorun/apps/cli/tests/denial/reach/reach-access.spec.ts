@@ -33,7 +33,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -245,8 +245,12 @@ describe('a reach device through the Gateway', () => {
     // Pins the unlock check: an owner principal, or a binding without the condition, would dispatch each call.
     await expectElevationRequired('pluginManager/installBundle', { spec: '@example/bundle' })
     await expectElevationRequired('pluginManager/setPluginEnabled', { id: 'delorun-permission-defaults', enabled: false })
-    await expectElevationRequired('pluginManager/setBundleEnabled', { name: '@delorun/bundle-local', enabled: false })
-    await expectElevationRequired('pluginManager/removeBundle', { name: '@delorun/bundle-local' })
+    await expectElevationRequired('pluginManager/setBundleEnabled', { name: '@delorun/plugin-cost-meter-other', enabled: false })
+    await expectElevationRequired('pluginManager/removeBundle', { name: '@delorun/plugin-cost-meter-other' })
+    // A bundle that carries a computer-only row is refused before the unlock is asked, locked or not.
+    for (const spec of [['pluginManager/setBundleEnabled', { name: '@delorun/bundle-local', enabled: false }], ['pluginManager/removeBundle', { name: '@delorun/bundle-local' }]] as const) {
+      expect(await call(spec[0], spec[1]), spec[0]).toMatchObject({ ok: false, error: { details: { action: spec[0], reason: PROTECTED_ROW_REFUSAL } } })
+    }
     await expectElevationRequired('pluginManager/undo', {})
     await expectElevationRequired('pluginManager/restore', { version: 'v0' })
   })
