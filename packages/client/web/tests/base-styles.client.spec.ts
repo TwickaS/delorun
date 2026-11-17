@@ -34,6 +34,10 @@ const literalContentSelectors = [
 ]
 
 describe('web shell base.css', () => {
+  it('removes the mobile tap highlight flash', () => {
+    expect(normalizedCss).toContain('-webkit-tap-highlight-color: transparent')
+  })
+
   it('leaves theme styles to the dynamic ui-theme client entry', () => {
     expect(imports).toEqual([])
     expect(baseCss).not.toContain(THEME_PACKAGE)
