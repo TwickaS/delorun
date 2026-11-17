@@ -6,7 +6,7 @@ const applied: Look[] = []
 vi.mock('../src/look-store.ts', () => ({ setLook: (look: Look) => { applied.push(look) } }))
 
 const copy: ThemeCopy = {
-  open: 'Change the look', title: 'Look', themes: 'Theme', scheme: 'Light or dark', light: 'Light', dark: 'Dark', back: 'Back to how it started', names: LOOK_NAMES,
+  open: 'Change the look', title: 'Look', themes: 'Theme', scheme: 'Light or dark', device: 'Device', light: 'Light', dark: 'Dark', back: 'Back to how it started', names: LOOK_NAMES,
   toast: { region: 'Notifications', theme: name => `Now ${name}.`, scheme: name => `Now ${name}.`, undo: name => `Back to ${name}`, reset: 'Reset.' },
 }
 
@@ -25,6 +25,13 @@ describe('the toast after a change of look', () => {
     const toast = lookToast(copy, { ...DEFAULT_LOOK, scheme: 'light' }, { ...DEFAULT_LOOK, scheme: 'dark' })
     expect(toast?.message).toBe('Now Dark.')
     expect(toast?.action?.label).toBe('Back to Light')
+  })
+
+  it('names the device when the chosen scheme is removed', async () => {
+    const { lookToast } = await import('../src/look-toast.tsx')
+    const toast = lookToast(copy, { ...DEFAULT_LOOK, scheme: 'dark' }, { ...DEFAULT_LOOK, scheme: undefined })
+    expect(toast?.message).toBe('Now Device.')
+    expect(toast?.action?.label).toBe('Back to Dark')
   })
 
   it('says nothing when nothing changed', async () => {
