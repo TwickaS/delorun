@@ -207,4 +207,14 @@ describe.skipIf(process.env.DELORUN_REAL_NPM_TARBALLS === undefined)('the real t
       expect(count, name).toBeGreaterThan(0)
     }
   }, 300_000)
+
+  it('extracts every .tgz there through extractExternal, as the release installs it', async () => {
+    const directory = process.env.DELORUN_REAL_NPM_TARBALLS!
+    for (const name of readdirSync(directory).filter(each => each.endsWith('.tgz'))) {
+      const bytes = readFileSync(join(directory, name))
+      const out = temp()
+      await extractExternal(bytes, pin(bytes), out)
+      expect(existsSync(join(out, 'package.json')) || readdirSync(out).length > 0, name).toBe(true)
+    }
+  }, 300_000)
 })
