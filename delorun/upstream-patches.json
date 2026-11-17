@@ -2731,6 +2731,18 @@
       "class": "delorun-feature",
       "feature": "phone-safe-areas",
       "reason": "Turns off the mobile tap highlight flash so taps feel native."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css",
+      "class": "delorun-feature",
+      "feature": "hero-row-wrap",
+      "reason": "The empty-chat workspace row wraps with a 4px row gap, so the mode chip is not clipped on a phone."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/HeroShell.module.css",
+      "class": "delorun-feature",
+      "feature": "hero-row-wrap",
+      "reason": "The workspace chip takes at most 60% of its row and ends a long name in an ellipsis."
     }
   ],
   "retired": []
