@@ -78,7 +78,8 @@ export async function signIn(link: string): Promise<StudioClient> {
     const response = await fetch(`${origin}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', cookie, origin }, body: JSON.stringify(body), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
     const text = await response.text()
     if (response.status !== 200) throw new Error(`${path} answered HTTP ${String(response.status)}: ${text.slice(0, 500)}`)
-    return JSON.parse(text) as unknown
+    const answer: unknown = JSON.parse(text)
+    return answer
   }
   return {
     origin,
