@@ -6,7 +6,6 @@ import type { ReactNode } from 'react'
 import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
 import { CommandRow } from '../ui/CommandRow.tsx'
-import { StateLine } from '../ui/StateLine.tsx'
 import { useStore, type StepProps } from './shared.ts'
 import more from './reach.module.css'
 import chevron from '../ui/Chevron.module.css'
@@ -69,9 +68,9 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
   const tailscale = readiness.status === 'ready' ? readiness.value.tailscale : undefined
   return (
     <div className={css.stack}>
-      {tailscale?.state === 'ready'
-        ? <StateLine tone="success">{t('reach.ready')}</StateLine>
-        : <><p className={css.lead}>{t('reach.lead')}</p><CommandRow command={REACH_COMMAND} t={t} /></>}
+      {/* The step shows only while remote access is off, so Tailscale being ready is never the same as phone access being on. */}
+      <p className={css.lead}>{t(tailscale?.state === 'ready' ? 'reach.tailscaleReady' : 'reach.lead')}</p>
+      <CommandRow command={REACH_COMMAND} t={t} />
       <details className={more.details}>
         <summary className={`${chevron.summary} ${more.summary}`}>{t('reach.more')}</summary>
         <div className={more.more}>

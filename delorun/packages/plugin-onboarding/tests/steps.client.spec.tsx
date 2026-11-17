@@ -862,10 +862,11 @@ describe('what the guide shows after the audit', () => {
     expect(screen.getByText('DeepSeek (key found, not checked)')).toBeTruthy()
   })
 
-  it('says phone access is ready, and leaves out the command, when every Tailscale check passes', async () => {
+  it('says Tailscale is set up and remote access is off, and keeps the command that turns it on, when every Tailscale check passes', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf(hostFake({ readiness: { ...READY, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } } }).host)} />)
     await settle()
-    expect(screen.getByText(en['reach.ready'])).toBeTruthy()
-    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
+    expect(screen.getByText(en['reach.tailscaleReady'])).toBeTruthy()
+    expect(screen.queryByText(en['reach.lead'])).toBeNull()
+    expect(screen.getByText(REACH_COMMAND)).toBeTruthy()
   })
 })
