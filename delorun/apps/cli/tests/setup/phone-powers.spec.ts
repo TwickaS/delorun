@@ -3,11 +3,11 @@
  * takes it from `--phone-powers` and a `--config` document from `phonePowers`; every form records it as the person's
  * choice, and a form that names no level leaves the home's level as it is.
  */
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { phonePowersPath, readPhonePowers } from '@delorun/home-auth'
+import { phonePowersPath, readPhonePowers, recordUpgradePhonePowers, writePhonePowers } from '@delorun/home-auth'
 import { ensureHomeTree } from '@delorun/home'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { phonePowersFromFlag, runSetup, type SetupRequest } from '../../src/setup/index.ts'
@@ -82,6 +82,34 @@ describe('the Phone powers choice in setup', { timeout: TIMEOUT_MS }, () => {
     expect(readAnswersDocument(path).phonePowers).toBeNull()
     writeFileSync(path, JSON.stringify({ ...DOCUMENT, phonePowers: 'everything' }))
     expect(() => readAnswersDocument(path)).toThrow('phonePowers is not a value')
+  })
+
+  it('an unattended run for a new profile cannot choose Full on a home that already has a level', async () => {
+    // Pins the per-home level against a per-profile run: a script must not widen what paired phones may do.
+    const other = 'other'
+    await ensureHomeTree(home, other)
+    mkdirSync(secrets(), { recursive: true, mode: 0o700 })
+    const path = join(osHome, 'answers.json')
+    writeFileSync(path, JSON.stringify({ ...DOCUMENT, phonePowers: 'full' }))
+    const refused = { exit: EXIT.failed, message: expect.stringContaining('run delorun devices powers full in a terminal') }
+    for (const write of [() => writePhonePowers(secrets(), 'careful'), () => recordUpgradePhonePowers(secrets(), 'careful')]) {
+      rmSync(phonePowersPath(secrets()), { force: true })
+      const before = await write()
+      await expect(runSetup(request({ kind: 'yes' }, { profile: other, phonePowersAnswer: 'full' }))).rejects.toMatchObject(refused)
+      await expect(runSetup(request({ kind: 'config', path }, { profile: other }))).rejects.toMatchObject(refused)
+      expect(await readPhonePowers(secrets())).toEqual(before)
+    }
+    rmSync(phonePowersPath(secrets()))
+    writeFileSync(phonePowersPath(secrets()), 'not json', { mode: 0o600 })
+    await expect(runSetup(request({ kind: 'yes' }, { profile: other, phonePowersAnswer: 'full' }))).rejects.toMatchObject(refused)
+    // Careful never widens, and Full over Full changes nothing.
+    rmSync(phonePowersPath(secrets()))
+    await writePhonePowers(secrets(), 'full')
+    expect(await runSetup(request({ kind: 'yes' }, { profile: other, phonePowersAnswer: 'full' }))).toBe(EXIT.ok)
+    expect(await readPhonePowers(secrets())).toEqual({ level: 'full', chosen: true })
+    rmSync(join(home, 'profiles', other), { recursive: true })
+    expect(await runSetup(request({ kind: 'yes' }, { profile: other, phonePowersAnswer: 'careful' }))).toBe(EXIT.ok)
+    expect(await readPhonePowers(secrets())).toEqual({ level: 'careful', chosen: true })
   })
 
   it('takes --phone-powers only with --yes and only a level', () => {

@@ -12,6 +12,7 @@
  * @module @delorun/cli/setup
  */
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createRuntimeResolution, initProfile, loadProfile } from '@deepseek-ai/dsh-app-boot'
 import { DELORUN_PROFILE_BUNDLES } from '@delorun/bundle-local/profile'
@@ -23,7 +24,7 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delorun/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delorun/logs'
 import { PROMPTS_OPTIONS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ModelProviderAnswer, type PhonePowersAnswer, type PromptsAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { isPhonePowersLevel } from '@delorun/home-auth'
+import { HomeAuthError, isPhonePowersLevel, phonePowersPath, readPhonePowers } from '@delorun/home-auth'
 import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { currentAnswers } from './current.ts'
 import { promptsFromFlags } from './dangerous.ts'
@@ -187,6 +188,30 @@ const FLAGS_FORM = (source: string): UnattendedForm => ({ source, provider: 'wit
 const CONFIG_FORM: UnattendedForm = { source: 'delorun setup --config', provider: 'in the document\'s modelProvider', modelField: 'modelProvider.model' }
 
 /**
+ * Check the Phone powers answer of an unattended form. The level is per home and a profile is not, so a `--yes` or
+ * `--config` run for a new profile may meet a home whose phones are already paired. Such a run writes Careful at any
+ * time, as `delorun devices powers careful` does, and writes Full only in a home with no Phone powers record yet or one
+ * that already holds Full: widening what a phone may do on a home that has a level needs a terminal.
+ * @param home - the Delorun home.
+ * @param answer - the answer, or `null`, which leaves the level as it is.
+ * @param form - the form, which names the source in the message.
+ * @throws {CliError} `EXIT.failed` for Full in a home whose record holds Careful or cannot be read.
+ */
+async function checkUnattendedPhonePowers(home: string, answer: PhonePowersAnswer | null, form: UnattendedForm): Promise<void> {
+  if (answer !== 'full') return
+  const directory = join(home, 'secrets', 'home-auth')
+  if (!existsSync(phonePowersPath(directory))) return
+  let level: PhonePowersAnswer | undefined
+  try {
+    level = (await readPhonePowers(directory)).level
+  } catch (error) {
+    // An unreadable record is refused below like a Careful one: this run cannot tell what it would widen.
+    if (!(error instanceof HomeAuthError)) throw error
+  }
+  if (level !== 'full') throw new CliError(EXIT.failed, `${form.source}: this home already has a Phone powers level, so an unattended run cannot choose Full; run delorun devices powers full in a terminal`)
+}
+
+/**
  * Check a provider answer of an unattended form: its model against the installed catalog, its base URL, and, when
  * `--check-key` asks for it, the key it reads from the environment. A base URL that reaches another computer over plain
  * `http` is accepted with a warning on standard error.
@@ -227,12 +252,14 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry, 
   if (form.kind === 'yes') {
     const answers = { ...yesAnswers(env, request.providerChoice), ...request.promptsAnswer === undefined ? {} : { prompts: request.promptsAnswer }, ...request.phonePowersAnswer === undefined ? {} : { phonePowers: request.phonePowersAnswer }, ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedProvider(request, answers.modelProvider, FLAGS_FORM('delorun setup --yes'))
+    await checkUnattendedPhonePowers(request.home, answers.phonePowers, FLAGS_FORM('delorun setup --yes'))
     return { answers, secret: undefined, keepSavedKey: false }
   }
   if (form.kind === 'config') {
     const document = readAnswersDocument(form.path)
     const answers = { ...document, ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedProvider(request, answers.modelProvider, CONFIG_FORM)
+    await checkUnattendedPhonePowers(request.home, answers.phonePowers, CONFIG_FORM)
     return { answers, secret: undefined, keepSavedKey: false }
   }
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, current !== undefined), { ...current ?? SETUP_DEFAULTS, ...flags }, current)

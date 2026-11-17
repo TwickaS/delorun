@@ -196,7 +196,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 <a id="yes-and-config-forms"></a>
 ### --yes 与 --config 形式
 
-`--yes` 保持 `local` 使用场景，接受除提供方之外的每个默认值，并且除默认值、提供方标志、`--prompts`、`--phone-powers` 和 `--no-update-check` 之外不应用任何回答。`--phone-powers careful|full` 记录该手机权限级别，只适用于 `--yes`。没有 `--provider` 时，无论环境中有什么密钥，它都不设置任何提供方，并打印如何添加：在终端中或带提供方标志的 `delorun setup key`，或 studio 的 Settings → Agent → Models。`--provider <id>` 指名[模型提供方](#model-providers)中的一家提供方，`--model <id>` 指名其模型（除 DeepSeek 之外的每家提供方都需要），`--base-url <url>` 指名 `openai-compatible` 的端点且不用于任何其他提供方，`--key-env <NAME>` 指名每次启动时读取密钥的变量，默认为提供方的密钥变量。命令行从不接受密钥，不是变量名的 `--key-env` 值会被拒绝且不回显。变量未设置时，setup 以写明它的带类型错误停止。`delorun setup key` 在已设置好的 profile 上接受相同的标志，然后什么也不问。没有提供方的 `--check-key` 以用法代码被拒绝。
+`--yes` 保持 `local` 使用场景，接受除提供方之外的每个默认值，并且除默认值、提供方标志、`--prompts`、`--phone-powers` 和 `--no-update-check` 之外不应用任何回答。`--phone-powers careful|full` 记录该手机权限级别，只适用于 `--yes`。级别属于 home，因此无人值守的运行（`--yes` 或 `--config`）只在没有手机权限记录、或记录已经是 Full 的 home 中选择 Full，否则在写入任何内容之前停止，并指出在终端中运行 `delorun devices powers full`；Careful 则总会被记录。没有 `--provider` 时，无论环境中有什么密钥，它都不设置任何提供方，并打印如何添加：在终端中或带提供方标志的 `delorun setup key`，或 studio 的 Settings → Agent → Models。`--provider <id>` 指名[模型提供方](#model-providers)中的一家提供方，`--model <id>` 指名其模型（除 DeepSeek 之外的每家提供方都需要），`--base-url <url>` 指名 `openai-compatible` 的端点且不用于任何其他提供方，`--key-env <NAME>` 指名每次启动时读取密钥的变量，默认为提供方的密钥变量。命令行从不接受密钥，不是变量名的 `--key-env` 值会被拒绝且不回显。变量未设置时，setup 以写明它的带类型错误停止。`delorun setup key` 在已设置好的 profile 上接受相同的标志，然后什么也不问。没有提供方的 `--check-key` 以用法代码被拒绝。
 
 `--config <file>` 读取符合上述 schema 的回答文档，并按与 `--yes` 相同的规则应用其回答；其提供方是 `modelProvider` 所指名的那一个，提供方标志在它旁边被拒绝；无论文档怎么说，`--no-update-check` 都会关闭发布检查。`reach.option` 不是 `none` 的文档，以及 `importStockHome` 或 `protectChanges` 为 `true` 的文档，都会被拒绝，并返回写明该字段的带类型错误。两种形式都不更改保护设置。带有已移除键的文档会被拒绝，拒绝信息写明已移除的键。任何字段中带有凭据取值的文档会被拒绝，且不回显该取值。
 
@@ -257,6 +257,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 | `refuses a document that turns changes protection on, which only a terminal changes, and reads an absent answer as no` | `protectChanges` 为 `true` 的文档，会被拒绝，并返回写明该字段的带类型的错误。 |
 | `stops a yes before it writes, naming how to finish, and a run at a terminal resumes it` | 标准输出不是终端的 yes 不写入保护记录。 |
 | `takes --phone-powers only with --yes and only a level` | 没有 `--yes` 的 `--phone-powers`，或值不是级别的 `--phone-powers`，以用法错误码拒绝。 |
+| `an unattended run for a new profile cannot choose Full on a home that already has a level` | 在记录为 Careful（无论是否已选择）或无法读取的 home 中指明 Full 的 `--yes` 或 `--config` 会停止，并保持记录不变；Full 覆盖 Full 以及任何时候的 Careful 都会被记录。 |
 | `is not asked when remote access is off, and the home keeps no level` | 关闭远程访问的终端运行不会询问手机权限，也不写入记录。 |
 | `config file with a removed key is refused` | 带有已移除键的文档会被拒绝，并返回写明已移除的键且不含任何取值的带类型的错误。 |
 | `config file carrying a credential value is refused` | 任何字段中带有凭据取值的文档会被拒绝，且不回显该取值。 |
