@@ -22,7 +22,7 @@
  * @module @delorun/plugin-main-chat/account-tools
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { Session } from '@deepseek-ai/dsh-session'
+import { pluginRecordOf, type Session } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
@@ -32,6 +32,9 @@ import { CreateRequest, ImportRequest, WorkspaceRefusedError, type InstructionsR
 
 /** The Session event of another chat's or workspace's text read in the main chat's turn, by `chat_read`, `chat_search` or `workspace_instructions`. */
 export const READ_EVENT = 'delorun-main-chat/read'
+
+/** The plugin record 0.1.0-preview.1.x wrote for a read; preview.2 stopped writing it, and {@link readThisTurn} still honours it so approval gating does not loosen across an update. */
+export const LEGACY_READ_RECORD = 'plugin:delorun-main-chat/read'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -80,7 +83,7 @@ export function readThisTurn(session: Session): boolean {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]!
     if (event.type === 'turn/start') return false
-    if (event.type === READ_EVENT) return true
+    if (event.type === READ_EVENT || pluginRecordOf(event)?.type === LEGACY_READ_RECORD) return true
     if (event.type === 'user/message' && event.data.source.kind === 'delorun-main-chat') return true
   }
   return false

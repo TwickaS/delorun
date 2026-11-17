@@ -446,15 +446,24 @@ describe('the main chat\'s reports', () => {
     expect(adapter.requests.at(-1)).toContain('Chat new-in-ws-app in app asks the person a question: Which colour should the footer be?. It waits until the person answers in that chat.')
   })
 
-  it('ignore a handoff or read record an earlier preview wrote as a plugin record', async () => {
-    const { adapter, run, main, footer, restart } = await delegated()
-    appendPluginRecord(main.session, 'plugin:delorun-main-chat/handoff', { chat: 'old-chat' })
-    appendPluginRecord(main.session, 'plugin:delorun-main-chat/read', { chat: 'old-chat' })
+  it('count a read record an earlier preview wrote as a plugin record, so approval gating does not loosen across an update', async () => {
+    const { main } = await delegated()
     expect(MainChat.readThisTurn(main.session)).toBe(false)
+    appendPluginRecord(main.session, 'plugin:delorun-main-chat/read', { chat: 'old-chat' })
+    expect(MainChat.readThisTurn(main.session)).toBe(true)
+  })
+
+  it('keep reporting on a chat an earlier preview handed off as a plugin record', async () => {
+    const { adapter, run, main, chat, restart, routes } = await delegated()
+    appendPluginRecord(main.session, 'plugin:delorun-main-chat/handoff', { chat: 'other' })
     await restart()
-    adapter.script.push(text('Done after the restart.'))
-    await run(footer, 'Fix the footer.')
-    expect(main.session.ownEvents().some(event => event.type === 'delorun-main-chat/handoff' && event.data.chat === 'old-chat')).toBe(false)
+    const other = await chat('other', `${ROOT}/notes`)
+    adapter.script.push(text('Done after the update.'))
+    await run(other, 'Hello.')
+    await inboxHolds(routes, 1)
+    adapter.script.push(text('ok'))
+    await run(main, 'And?')
+    expect(adapter.requests.at(-1)).toContain('Agent: Done after the update.')
   })
 
   it('keep reporting on a chat the main chat delegated to after the plugin starts again, from the handoff in the main chat\'s log', async () => {

@@ -17,12 +17,15 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
-import { isAppendSurfaceEvent, SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
+import { isAppendSurfaceEvent, pluginRecordOf, SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { chatLines, newestWithin } from './chat-text.ts'
 import { folders } from './folders.ts'
 import { MAIN_CHAT_SESSION_ID } from './wire.ts'
+
+/** The plugin record 0.1.0-preview.1.x wrote for a handoff; preview.2 stopped writing it, and a start still reads it so a chat handed off before the update reports back. */
+export const LEGACY_HANDOFF_RECORD = 'plugin:delorun-main-chat/handoff'
 
 /** The Session event of a handoff: the main chat started or wrote to this chat, which then reports back. */
 export const HANDOFF_EVENT = 'delorun-main-chat/handoff'
@@ -100,6 +103,12 @@ function ending(reason: TurnEndReason): string {
   }
 }
 
+// The chat of a 1.x handoff plugin record, read-only; `undefined` for any other event.
+const legacyHandoffChat = (event: SessionEvent): unknown => {
+  const record = pluginRecordOf(event)
+  return record?.type === LEGACY_HANDOFF_RECORD ? (record.data as { chat?: unknown }).chat : undefined
+}
+
 /**
  * Watch the chats the main chat names and report on them to it.
  * @param ctx - the plugin context, with the session controller, the session query service and the workspace registry.
@@ -122,7 +131,9 @@ export function mainChatReports(ctx: Context, root: string, limits: ReportLimits
   // The handoffs a start finds in the main chat's log; a main chat not yet created has none.
   const loaded = ctx.sessionQuery.readSession(MAIN).then(({ events }) => {
     for (const event of events) {
-      if (event.type === HANDOFF_EVENT) watched.add(SessionId(event.data.chat))
+      const chat = event.type === HANDOFF_EVENT ? event.data.chat : legacyHandoffChat(event)
+      // The log is durable data: a chat that is not a string is skipped.
+      if (typeof chat === 'string') watched.add(SessionId(chat))
     }
   }, (error: unknown) => {
     // The session store answers a main chat it does not hold with an error; any other failure leaves the handoffs unread.
