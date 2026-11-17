@@ -1,6 +1,7 @@
 import { mkdirSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { storeFolder } from '../src/store.ts'
 import { scanFolder } from '../src/tree.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -56,8 +57,35 @@ describe('a linked folder with npm-installed packages', () => {
     expect(paths.some((path) => path.includes('devtool') || path.includes('devleaf') || path.includes('devonly') || path.includes('.bin'))).toBe(false)
   })
 
-  it('names an installed development package the plugin does not need among the skipped paths', async () => {
-    expect((await scan(npmFolder())).skipped).toEqual(['node_modules/devtool'])
+  it('names every top-level package the copy leaves out among the skipped paths, which the review lists', async () => {
+    const folder = npmFolder()
+    writeFiles(folder, installed('node_modules/@d/extraneous', { name: '@d/extraneous' }))
+    const expected = ['node_modules/@d/extraneous', 'node_modules/devleaf', 'node_modules/devtool']
+    expect((await scan(folder)).skipped).toEqual(expected)
+    expect((await storeFolder(temporaryDirectory('delorun-changes-home-'), folder)).skipped).toEqual(expected)
+  })
+
+  it('copies the dependencies of a package an npm workspace links from inside the folder', async () => {
+    const folder = temporaryDirectory('delorun-changes-npm-')
+    writeFiles(folder, {
+      'package.json': JSON.stringify({ name: 'plug', dependencies: { '@s/core': '1' } }),
+      ...installed('packages/core', { name: '@s/core', dependencies: { lodash: '1' } }),
+      ...installed('node_modules/lodash', { name: 'lodash' }),
+      ...installed('node_modules/other', { name: 'other' }),
+    })
+    mkdirSync(join(folder, 'node_modules/@s'))
+    symlinkSync('../../packages/core', join(folder, 'node_modules/@s/core'))
+    const scanned = await scan(folder)
+    const paths = scanned.entries.map((entry) => entry.path)
+    expect(paths).toContain('node_modules/@s/core')
+    expect(paths).toContain('node_modules/lodash/index.js')
+    expect(scanned.skipped).toEqual(['node_modules/other'])
+  })
+
+  it('keeps every package when the package.json cannot be read as JSON', async () => {
+    const folder = temporaryDirectory('delorun-changes-npm-')
+    writeFiles(folder, { 'package.json': '{not json', ...installed('node_modules/any', { name: 'any' }) })
+    expect((await scan(folder)).entries.map((entry) => entry.path)).toContain('node_modules/any/index.js')
   })
 
   it('copies a folder whose development packages put the whole install over the limit', async () => {
