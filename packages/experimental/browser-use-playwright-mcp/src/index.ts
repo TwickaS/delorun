@@ -356,14 +356,12 @@ export function unreadableMessage(name: string): string {
  * @param call - the call.
  * @param folder - the Session's real folder.
  * @param output - the Session's output folder.
- * @returns the path the server reads: the copy, or the file itself when it is already in the output folder, which a
+ * @returns the path the server reads: the copy, or the file's real path when it is already in the output folder, which a
  * confined command cannot write; or `undefined` when the file is not inside the Session's folder or changed during the
  * check.
  */
 async function readableCopy(name: string, call: BrowserToolCall, folder: string, output: string): Promise<string | undefined> {
   const path = resolve(call.directory, name)
-  const outputReal = await realpath(output)
-  if (inside(outputReal, await realLocation(path))) return path
   let handle
   try {
     handle = await open(path, 'r')
@@ -374,9 +372,13 @@ async function readableCopy(name: string, call: BrowserToolCall, folder: string,
   try {
     const opened = await handle.stat({ bigint: true })
     const real = await realpath(path).catch(() => undefined)
-    if (real === undefined || !inside(folder, real) || !opened.isFile()) return undefined
+    if (real === undefined || !opened.isFile()) return undefined
     const resolved = await stat(real, { bigint: true })
     if (resolved.dev !== opened.dev || resolved.ino !== opened.ino) return undefined
+    // A file in the output folder, which a confined command cannot write, goes to the server by its real path, never by
+    // the path the model wrote, which can pass through a link the chat controls.
+    if (inside(await realpath(output), real)) return real
+    if (!inside(folder, real)) return undefined
     const copy = join(output, `upload-${randomUUID()}-${basename(real)}`)
     await pipeline(handle.createReadStream({ autoClose: false }), createWriteStream(copy, { flags: 'wx', mode: 0o600 }))
     return copy
@@ -495,16 +497,16 @@ export async function refuseWrittenOutside(
     const names = await readdir(target).catch(() => [])
     landed.push(target, ...names.map(name => join(target, name)))
   }
-  let found = false
+  const found: string[] = []
   let kept = false
   for (const real of new Set(landed)) {
     const stats = await lstat(real).catch(() => undefined)
     if (stats === undefined || !stats.isFile() || stats.mtimeMs < startedAt - 1000) continue
-    found = true
+    found.push(real)
     if (!await removeWritten(real, startedAt)) kept = true
   }
-  if (!found) return undefined
-  log(`${name}: ${call.tool} saved a file outside the chat's folder through a link; the result was refused${kept ? '' : ' and the file removed'}`)
+  if (found.length === 0) return undefined
+  log(`${name}: ${call.tool} saved a file outside the chat's folder through a link (${found.join(', ')}); the result was refused${kept ? '' : ' and the file removed'}`)
   return writtenOutsideMessage(!kept)
 }
 

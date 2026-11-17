@@ -260,6 +260,7 @@ it('catches a file the server wrote through a nested link, removes it without fo
   expect(readFileSync(join(outside, 'older.txt'), 'utf8')).toBe('the person\'s own file')
   expect(lines).toHaveLength(1)
   expect(lines[0]).toContain('outside the chat')
+  expect(lines[0]).toContain(join(outside, 'download.pdf'))
   // The link itself stays: removal never follows or changes it.
   expect(await realpath(join(output, 'sub', 'out'))).toBe(outside)
 })
@@ -362,6 +363,23 @@ it('copies a file the server would read from the chat\'s folder into the output 
   expect(state).toBe(Provider.unreadableMessage('state.json'))
   expect(await prepare('browser_navigate', { url: 'https://example.com' })).toBeUndefined()
   expect(await prepare('browser_take_screenshot', { filename: 'x.png' })).toBeUndefined()
+})
+
+it('hands the server the real path of a file in the output folder, never a path through a link the chat controls', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  const home = join(outside, 'home')
+  await Promise.all([mkdir(outputDirectory), mkdir(home)])
+  await writeFile(join(outputDirectory, 'credentials.json'), 'in the output folder')
+  await writeFile(join(home, 'credentials.json'), 'home secret')
+  await symlink(outputDirectory, join(chat, 'x'))
+  const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: ['x/credentials.json'] }, directory: chat, outputDirectory })
+  const { paths } = (prepared as { arguments: { paths: string[] } }).arguments
+  expect(paths).toEqual([join(outputDirectory, 'credentials.json')])
+  // The chat swaps the link after the check; the path the server got no longer goes through it.
+  await rm(join(chat, 'x'))
+  await symlink(home, join(chat, 'x'))
+  expect(readFileSync(paths[0]!, 'utf8')).toBe('in the output folder')
 })
 
 it('refuses a read through a link that leads outside the chat\'s folder, a missing file, a folder, and reads nothing outside', async () => {

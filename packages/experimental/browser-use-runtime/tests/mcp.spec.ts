@@ -1,6 +1,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
+import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -607,6 +608,17 @@ describe('Session MCP Loader composition', () => {
     expect([...new Set((await events(root)).filter(event => event.event === 'start').map(event => String(event.outputDir)))].sort()).toEqual([...folders].sort())
     expect(await readdir(first)).toEqual([])
     expect(await readdir(second)).toEqual([])
+  })
+
+  it('does not start the server when the output folder overlaps the Session\'s working directory', async () => {
+    const outputRoot = join(tmpdir(), `dsh-overlap-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root } = await load({ outputRoot })
+    await expect((async () => {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId('overlap'), meta: { cwd: tmpdir() } })
+      await warm(ctx, agent)
+    })()).rejects.toThrow('overlaps the Session\'s working directory')
+    expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
   it('never writes through a link or over a person\'s own rules in the output folder', async () => {

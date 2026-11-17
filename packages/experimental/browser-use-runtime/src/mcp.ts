@@ -1,8 +1,8 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
 import { createHash } from 'node:crypto'
-import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { chmod, lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -233,6 +233,24 @@ async function sessionOutputDirectory(root: string, sessionId: string): Promise<
 }
 
 /**
+ * Refuse an output folder that overlaps the Session's working directory, which a confined command can write: inside it,
+ * the chat could replace the folder; around it, the working directory would be inside the output folder.
+ * @param output - the Session's output folder.
+ * @param sessionDirectory - the Session's working directory.
+ * @throws when either folder is inside the other.
+ */
+async function assertOutsideWorkingDirectory(output: string, sessionDirectory: string): Promise<void> {
+  const [folder, work] = await Promise.all([realpath(output), realpath(sessionDirectory)])
+  const within = (path: string, ancestor: string): boolean => {
+    const rest = relative(ancestor, path)
+    return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest))
+  }
+  if (within(folder, work) || within(work, folder)) {
+    throw new Error(`the output folder ${folder} overlaps the Session's working directory ${work}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the working directory`)
+  }
+}
+
+/**
  * A failed tool result carrying one message.
  * @param message - the model-visible failure.
  * @returns the failure.
@@ -404,6 +422,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
           scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
             serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
           const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
+          if (outputDirectory !== undefined) await assertOutsideWorkingDirectory(outputDirectory, sessionDirectory)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {
