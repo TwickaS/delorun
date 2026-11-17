@@ -19,7 +19,7 @@ export interface ProcessResult {
 }
 
 /** Runs one child process to its end. */
-export type ProcessRunner = (file: string, args: readonly string[], options: { readonly timeoutMs?: number }) => ProcessResult
+export type ProcessRunner = (file: string, args: readonly string[], options: { readonly timeoutMs?: number, readonly input?: string }) => ProcessResult
 
 /** Everything the adapter reads or writes outside its own memory. */
 export interface BrowseDeps {
@@ -117,9 +117,17 @@ export function createBrowseAdapter(deps: BrowseDeps): StudioBrowser {
       const result = deps.run(locateBrowse(deps), ['doctor'], { timeoutMs: QUICK_MS })
       const detail = result.stdout.split('\n').slice(0, 4).join('\n').trim()
       if (result.status === 0 && result.stdout.includes('Status: ok')) return { ok: true, detail }
-      return { ok: false, detail: detail === '' ? failure('browse doctor', result) : detail }
+      const report = detail === '' ? failure('browse doctor', result) : detail
+      const outdated = /Unknown command/i.test(`${result.stderr}${result.stdout}`)
+        ? '\nThis browse version lacks the `doctor`, `session` and `execute` commands the adapter drives; use `--adapter playwright`.'
+        : ''
+      return { ok: false, detail: report + outdated }
     },
     run(spec: RunSpec): RunResult {
+      if (spec.code === undefined || spec.viewport !== undefined || spec.scheme !== undefined || spec.steps !== undefined || spec.screenshotTo !== undefined) {
+        return { ok: false, output: 'the browse adapter runs only a --file or --code script; --viewport, --scheme, --steps and --screenshot need --adapter playwright' }
+      }
+      const code = spec.code
       const bin = locateBrowse(deps)
       const windows = bin.toLowerCase().endsWith('.exe')
       const name = `delorun-studio-${deps.randomHex()}`
@@ -149,7 +157,7 @@ export function createBrowseAdapter(deps: BrowseDeps): StudioBrowser {
           step('browse recording start', ['recording', 'start', '-s', name, '--frame-rate', '15', toBrowsePath(spec.recordTo)])
           recordingOpen = true
         }
-        tempFile = deps.writeTemp(spec.code)
+        tempFile = deps.writeTemp(code)
         const executed = step('browse execute', [
           'execute', '-s', name, '--timeout-ms', String(spec.timeoutMs), '--file', toBrowsePath(tempFile),
         ], spec.timeoutMs + EXECUTE_GRACE_MS)
