@@ -49,6 +49,10 @@ const stateField = z.strictObject({
   unreached: z.string().min(1).optional(),
   // The connections a plugin is recommended for; `@delorun/plugin-onboarding`'s `declaredConnections` owns their form.
   connections: z.array(z.string()).optional(),
+  // A bundle the release publishes as a signed plugin pack (`@delorun/plugin-packs`), and what each of its rows needs set up
+  // (`@delorun/bundle-local`'s `requirements.ts` owns the form of `requires`).
+  pack: z.boolean().optional(),
+  requires: z.record(z.string(), z.unknown()).optional(),
 })
 
 const manifestFields = z.looseObject({
@@ -69,6 +73,8 @@ export interface StatePackage {
   readonly state?: PackageState | undefined
   /** The lane that wires the package, when nothing reaches it yet. */
   readonly unreached?: string | undefined
+  /** Whether the release publishes the package as a signed plugin pack, which the installed release adds on request: a root of its own. */
+  readonly pack?: boolean | undefined
   /** Names of every package it depends on, in any of the three dependency sections. */
   readonly dependencies: readonly string[]
   /** Names of the packages in its `devDependencies`, which the state rules ignore and the build order does not. */
@@ -107,6 +113,7 @@ export function readWorkspace(root: string): StateWorkspace {
         dir,
         state: recorded.success ? recorded.data.state : undefined,
         unreached: recorded.success ? recorded.data.unreached : undefined,
+        pack: recorded.success ? recorded.data.pack : undefined,
         dependencies: [
           ...Object.keys(fields.dependencies ?? {}),
           ...Object.keys(fields.peerDependencies ?? {}),
@@ -120,14 +127,15 @@ export function readWorkspace(root: string): StateWorkspace {
 }
 
 /**
- * The packages reachable from the roots through workspace dependencies, the roots included.
+ * The packages reachable from the roots through workspace dependencies, the roots and the plugin packs included.
  * @param packages - the workspace packages.
  * @param rootDirs - the directories of the root packages.
  * @returns the reachable package names.
  */
 export function reachable(packages: readonly StatePackage[], rootDirs: readonly string[]): Set<string> {
   const byName = new Map(packages.map((entry) => [entry.name, entry]))
-  const queue = packages.filter((entry) => rootDirs.includes(entry.dir))
+  // A plugin pack is added to an installed release on request, so it is reached through the packs file, not a dependency.
+  const queue = packages.filter((entry) => rootDirs.includes(entry.dir) || entry.pack === true)
   const seen = new Set(queue.map((entry) => entry.name))
   for (let entry = queue.pop(); entry !== undefined; entry = queue.pop()) {
     for (const dependency of entry.dependencies) {

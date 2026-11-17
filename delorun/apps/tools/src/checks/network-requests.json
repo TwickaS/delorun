@@ -76,6 +76,11 @@
       "id": "key-check",
       "purpose": "Setup's live check of a typed model key, through upstream's model-listing client, to the provider's origin only.",
       "sources": ["delorun/apps/cli/src/setup/key-check.ts"]
+    },
+    {
+      "id": "plugin-pack-download",
+      "purpose": "Adding a plugin pack from the guide or the downloads panel: the release channel's signed packs file and the pack archive it names, fetched only when the person adds one, over the release's own channel with no redirect followed.",
+      "sources": ["delorun/packages/runtime-store/src/packs-fetch.ts", "delorun/packages/plugin-packs/src/environment.ts"]
     }
   ],
   "local": [
@@ -90,6 +95,10 @@
     {
       "source": "delorun/packages/supervisor/src/launch.ts",
       "reason": "Reads the launch pipe the CLI passes the Docker supervisor as an inherited file descriptor."
+    },
+    {
+      "source": "delorun/packages/plugin-packs/src/client.ts",
+      "reason": "The studio's client for the home's own pack routes: a same-origin fetch to the studio that served the page, no other host."
     }
   ]
 }

@@ -26,6 +26,72 @@
   },
   "delorun": {
     "state": "experimental",
-    "pack": true
+    "pack": true,
+    "requires": {
+      "experimental-subagent-oar-codex": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "codex"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "command",
+          "command": "npm install -g @openai/codex"
+        }
+      },
+      "experimental-subagent-oar-claude": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "claude"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "command",
+          "command": "npm install -g @anthropic-ai/claude-code"
+        }
+      },
+      "tool-subagent-oar": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "codex",
+              "claude"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "docs",
+          "url": "https://docs.delorun.com/guide/customise#optional-plugins"
+        }
+      },
+      "ptc-runtime-python": {
+        "needs": [
+          {
+            "kind": "platform",
+            "os": [
+              "linux",
+              "darwin"
+            ]
+          },
+          {
+            "kind": "program",
+            "names": [
+              "python3"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "docs",
+          "url": "https://docs.delorun.com/guide/customise#optional-plugins"
+        }
+      }
+    }
   }
 }

@@ -511,6 +511,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
       { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
+      { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
       { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
     ],
   }
@@ -523,6 +524,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
   const VERSIONS_INSERT = {
     insert: [
       { id: 'delorun-profile-versions', name: '@delorun/bundle-local/profile-versions', disabled: true },
+      { id: 'delorun-requirements', name: '@delorun/bundle-local/requirements', disabled: true },
       { id: 'delorun-report', name: '@delorun/bundle-local/report', config: { issueUrl: 'https://github.com/Delo-Run/delorun/issues/new', template: 'bug_report.yml' }, disabled: true },
     ],
   }
@@ -568,6 +570,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
           { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
           { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
           { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
+          { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
           { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
         ],
       },
