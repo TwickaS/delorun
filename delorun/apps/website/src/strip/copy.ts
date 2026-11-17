@@ -13,25 +13,29 @@ const EN = {
   controls: 'Change this page',
   /** The heading over the entry. */
   entry: 'What Delorun writes',
-  /** The entry's place, shown in the monospace face. */
-  entryFile: 'cordis.patch.yml',
+  /** The label over the entry once the profile holds its own: the one file the entry is written to. */
+  entryFile: 'In your cordis.patch.yml',
   /** The entry's copy button. */
   copyEntry: 'Copy the entry',
   /** The copy button's answer. */
   copied: 'Copied',
   /** The answer when copying fails. */
   copyFailed: 'Copy failed. Select the entry and copy it.',
-  /** The place of the studio bundle's row, shown in the monospace face while the profile holds no entry of its own. */
-  bundleFile: '@delorun/bundle-studio/cordis.patch.yml',
-  /** The line under the bundle's row. */
-  bundleNote: 'Your profile holds no entry of its own, so the studio bundle\'s entry applies.',
+  /** The label over the default entry, which the studio's own file holds until a change writes the profile's. */
+  bundleFile: 'In the studio\'s own cordis.patch.yml, the default',
+  /** The line under the default entry. */
+  bundleNote: 'You have not changed anything yet, so the default applies. Choose a look and Delorun writes your own entry in your cordis.patch.yml.',
+  /** The line under every entry, which says what its one switch does. */
+  additionsNote: 'studioAdditions: true switches on Delorun\'s own look and settings in the studio: its theme, typefaces, headline and wording.',
+  /** The line under the studio's sentence for no versions. */
+  saveNote: 'Saving a version is done in the studio, under Settings, Setup versions.',
   /**
-   * The line under an entry that stores a theme under an id other than its name.
+   * The line under an entry that writes a theme under an id other than its name.
    * @param name - the theme's name, such as "Berry".
    * @param id - the id the entry stores, such as `t3-chat`.
    * @returns the line.
    */
-  storedAs: (name: string, id: string): string => `${name} is stored as ${id}.`,
+  storedAs: (name: string, id: string): string => `${name} is written as ${id} in the file.`,
   /**
    * The way back, named for the earlier look.
    * @param name - the earlier look's name.

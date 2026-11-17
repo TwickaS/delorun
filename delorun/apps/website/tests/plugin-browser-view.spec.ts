@@ -21,7 +21,7 @@ describe('the plugin browser without scripts', () => {
   })
 
   it('prints the list as terms and descriptions, with no box of its own to scroll', () => {
-    expect(html.match(/<dt /g)).toHaveLength(data.plugins.length)
+    expect(html.match(/<dt [^>]*data-plugin-term/g)).toHaveLength(data.plugins.length)
     expect(html.match(/<dl /g)?.length).toBeGreaterThan(0)
     expect(html).not.toContain('tabindex')
   })
@@ -29,6 +29,13 @@ describe('the plugin browser without scripts', () => {
   it('prints what each pack needs and the files each kind of plugin starts with', () => {
     expect(html).toContain('typescript-language-server installed')
     for (const paths of Object.values(data.scaffold)) for (const path of paths) expect(html).toContain(path)
+  })
+
+  it('keeps each kind\'s files in a collapsed disclosure and each file apart from its note', () => {
+    expect(html.match(/<details/g)).toHaveLength(Object.keys(data.scaffold).length)
+    expect(html).not.toContain('<details open')
+    expect(html).toContain('<dt><code>package.json</code></dt><dd>')
+    expect(html).not.toContain('</code><span>')
   })
 })
 
