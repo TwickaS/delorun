@@ -6,14 +6,16 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   en, monogramOf, outsideCount, parseHandOffInput, parseHandOffResult, RowMonogram, RowTrail, RowWords, ringOf,
-  shortDuration, TriggerOutside, wordsOf, type AgentSeatView, type RowPartProps,
+  shortDuration, TriggerOutside, wordsOf, type RowPartProps,
 } from '../src/client/lists/index.ts'
+import type { AgentSeatView } from '../src/client/view.ts'
 
 afterEach(cleanup)
 
 const t = makeTranslate(en)
 const clock = (ms: number): string => `T${String(ms)}`
 const seat: AgentSeatView = { agent: 'claude-code', ownSettings: 'accept edits', sandbox: 'off', state: 'working', fiveHourPercent: 82 }
+const { fiveHourPercent: _figure, ...noFigure } = seat
 
 function row(values: RowPartProps['values'], open = vi.fn()): RowPartProps {
   return {
@@ -43,8 +45,8 @@ describe('ring and words', () => {
   it('rings the 5-hour figure, marks near and reached, and says nothing without a figure', () => {
     expect(ringOf(seat)).toEqual({ percent: 82, reached: false, near: true })
     expect(ringOf({ ...seat, fiveHourPercent: 40 })?.near).toBe(false)
-    expect(ringOf({ ...seat, state: 'limit', fiveHourPercent: undefined })).toEqual({ percent: 100, reached: true, near: true })
-    expect(ringOf({ ...seat, fiveHourPercent: undefined })).toBeUndefined()
+    expect(ringOf({ ...noFigure, state: 'limit' })).toEqual({ percent: 100, reached: true, near: true })
+    expect(ringOf(noFigure)).toBeUndefined()
   })
 
   it('gives the ring an accessible name and the figure as text', () => {
