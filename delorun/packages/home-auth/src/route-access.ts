@@ -29,6 +29,8 @@ export interface RouteAccess {
 }
 
 const READ = (reason: string): RouteAccess => ({ level: 'R', reason })
+/** Level `R` for a write that changes only an everyday setting or the person's own organising, so it needs no unlock. */
+const EVERYDAY = (reason: string): RouteAccess => ({ level: 'R', reason })
 const UNLOCKED = (reason: string): RouteAccess => ({ level: 'U', reason })
 
 /**
@@ -85,7 +87,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   },
   'plugin-chat-states/src/index.ts': {
     'CHAT_STATE_PATHS.list': READ('reads which chats are snoozed or settled'),
-    'CHAT_STATE_PATHS.set': READ('snoozing and settling are everyday organising'),
+    'CHAT_STATE_PATHS.set': EVERYDAY('snoozing or settling a chat writes its state, which is everyday organising'),
   },
   'plugin-main-chat/src/index.ts': {
     'MAIN_CHAT_PATHS.reports': READ('counts the main chat\'s waiting reports'),

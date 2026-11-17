@@ -5,7 +5,7 @@
  * @module @delorun/brand/icons
  */
 import { BRAND_COLOURS } from './tokens.ts'
-import { MARK } from './mark.tsx'
+import { MARK } from './mark-data.ts'
 
 const { ink, paper, peach } = BRAND_COLOURS
 

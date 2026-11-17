@@ -5,7 +5,7 @@
  * against this builder.
  * @module @delorun/brand/og
  */
-import { MARK } from './mark.tsx'
+import { MARK } from './mark-data.ts'
 
 /** The stylesheets the page loads, relative to `apps/website/scripts/`. */
 const BRAND_CSS = '../../../packages/brand/src'
