@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
-import { Config as OnboardingConfig } from '@delorun/plugin-onboarding'
 
 const CHAT_IMPORT = '@deepseek-ai/dsh-deepseek-chat-import'
 const patch = yaml.load(readFileSync(fileURLToPath(new URL('../../bundle-studio/cordis.patch.yml', import.meta.url)), 'utf8')) as Array<{ insert?: Array<{ id: string; name: string; config?: { plugins?: string[]; optionalRows?: string[]; hiddenProviders?: string[] } }> }>
@@ -38,9 +37,5 @@ describe('the studio bundle offers the optional bundles as packs (A405)', () => 
   })
 })
 
-describe('the studio bundle\'s onboarding row', () => {
-  it('passes the onboarding plugin\'s own config validation, so the plugin starts', () => {
-    const config = rows.find(row => row.id === 'delorun-onboarding')?.config
-    expect(() => OnboardingConfig(config as never)).not.toThrow()
-  })
-})
+// The row's config is validated against the plugin's own schema in plugin-onboarding's shipped-config spec; importing the
+// plugin here would make bundle-local's build depend on a package that depends on it.
