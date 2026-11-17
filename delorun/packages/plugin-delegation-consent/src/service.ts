@@ -8,9 +8,10 @@
  * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
  * 4. A grant for the provider in the chat's workspace allows the start.
- * 5. A chat in Full access, whose approval policy is `never` and whose sandbox mode is `danger-full-access` together,
- *    allows the start without anyone being asked while the `fullAccessStartsAgents` switch is on. Any other chat whose
- *    policy is `never` is refused without anyone being asked.
+ * 5. A start whose top-level chat is in Full access, with its own logged approval policy `never` and sandbox mode
+ *    `danger-full-access` together, is allowed without anyone being asked while the `fullAccessStartsAgents` switch is
+ *    on; the walk up through the delegation ancestry never takes a child's pinned or inherited values. Any other
+ *    chat whose policy is `never` is refused without anyone being asked.
  * 6. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
  *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
  *    start, and it records nothing.
@@ -22,10 +23,10 @@
  */
 import { sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-sandbox-policy'
-import type {} from '@deepseek-ai/dsh-user-approval'
+import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
+import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import type {
   DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict,
 } from '@deepseek-ai/dsh-subagent'
@@ -102,8 +103,7 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const session = parent.session
     const sandbox = this.ctx.get('sandboxPolicy')
     if (sandbox === undefined) return { kind: 'refuse', reason: noSandboxPolicyRefusal(provider) }
-    const mode = sandbox.resolve({ session }).mode
-    if (mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
+    if (sandbox.resolve({ session }).mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
     const workspace = workspaceKey(session.header.cwd ?? '')
     if (workspace === NO_WORKSPACE) return { kind: 'refuse', reason: noWorkspaceRefusal(provider) }
     const cwd = workspaceKey(review.cwd)
@@ -117,8 +117,7 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const facts = { provider, workspace, cwd, label: review.label }
     // The approval service answers `rejected` without asking anyone while the chat's policy is `never`.
     const policy = approval.overrideOf(session) ?? approval.config.policy
-    // Full access is both together: a `never` policy on a sandboxed preset, such as a custom one, is not the person's choice to run unprompted.
-    if (policy === 'never' && mode === 'danger-full-access' && this.options.fullAccessStartsAgents()) return allowed
+    if (this.options.fullAccessStartsAgents() && this.rootIsFullAccess(parent, approval, sandbox)) return allowed
     const outcome = await approval.request({
       agent: parent,
       toolName: provider,
@@ -129,6 +128,32 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     })
     if (outcome === 'allowed-once') return allowed
     return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome === 'rejected' && policy === 'never' ? 'never' : outcome, workspace) }
+  }
+
+  /**
+   * Whether the top-level chat that this start descends from is in Full access: its own logged approval policy is
+   * `never` and its own sandbox mode is `danger-full-access`, together. A local subagent is always pinned to `never`
+   * and inherits its parent's sandbox, so a child's values never count; an ancestor that cannot be found counts as not
+   * Full access.
+   * @param parent - the agent calling the delegation tool.
+   * @param approval - the composed approval service.
+   * @param sandbox - the composed sandbox policy.
+   * @returns true when the root chat is in Full access.
+   */
+  private rootIsFullAccess(parent: Agent, approval: ApprovalService, sandbox: SandboxPolicyService): boolean {
+    const agents = this.ctx.get('agents')
+    const visited = new Set<SessionId>([parent.id])
+    let root = parent
+    while (root.session.header.origin === 'subagent') {
+      const next = root.session.header.parentSession
+      if (next === undefined || visited.has(next)) return false
+      visited.add(next)
+      const ancestor = agents?.get(next)
+      if (ancestor === undefined) return false
+      root = ancestor
+    }
+    const policy = approval.overrideOf(root.session) ?? approval.config.policy
+    return policy === 'never' && sandbox.resolve({ session: root.session }).mode === 'danger-full-access'
   }
 
   /**
