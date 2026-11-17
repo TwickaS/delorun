@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@delorun/external-agents": "workspace:*",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.2.0",
     "zod": "4.6.6"
   },
   "peerDependencies": {

@@ -11,6 +11,8 @@ export type ResponsesStep =
   | { readonly kind: 'text'; readonly text: string }
   /** A call of the first named function Codex advertised, with the arguments given for that name. */
   | { readonly kind: 'call'; readonly choices: Readonly<Record<string, Readonly<Record<string, unknown>>>> }
+  /** A call of the first advertised function whose name matches, such as an MCP tool under a random server name. */
+  | { readonly kind: 'call-matching'; readonly pattern: RegExp; readonly args: Readonly<Record<string, unknown>> }
   /** Open the stream and never answer. */
   | { readonly kind: 'hold' }
 
@@ -54,19 +56,27 @@ function textEvents(text: string): Record<string, unknown>[] {
   ])
 }
 
-function callEvents(name: string, args: Readonly<Record<string, unknown>>, index: number): Record<string, unknown>[] {
+function callEvents(qualified: string, args: Readonly<Record<string, unknown>>, index: number): Record<string, unknown>[] {
   const argumentsText = JSON.stringify(args)
-  const item = { id: `fc_fixture_${index}`, type: 'function_call', status: 'completed', name, arguments: argumentsText, call_id: `call_fixture_${index}` }
+  const [namespace, name] = qualified.includes('/') ? qualified.split('/', 2) : [undefined, qualified]
+  const item = {
+    id: `fc_fixture_${index}`, type: 'function_call', status: 'completed', name, ...namespace === undefined ? {} : { namespace },
+    arguments: argumentsText, call_id: `call_fixture_${index}`,
+  }
   return itemEvents(item, [
     { type: 'response.function_call_arguments.delta', item_id: item.id, output_index: 0, delta: argumentsText },
     { type: 'response.function_call_arguments.done', item_id: item.id, output_index: 0, arguments: argumentsText },
   ])
 }
 
-/** The function names a request advertises. */
+/** The function names a request advertises; a function inside a namespace, such as an MCP server's, as `namespace/name`. */
 function advertised(body: Record<string, unknown>): string[] {
-  const tools = Array.isArray(body.tools) ? body.tools : []
-  return tools.flatMap((tool: unknown) => typeof tool === 'object' && tool !== null && 'name' in tool && typeof tool.name === 'string' ? [tool.name] : [])
+  const names = (tools: unknown, prefix: string): string[] => (Array.isArray(tools) ? tools : []).flatMap((tool: unknown) => {
+    if (typeof tool !== 'object' || tool === null || !('name' in tool) || typeof tool.name !== 'string') return []
+    if ('type' in tool && tool.type === 'namespace' && 'tools' in tool) return names(tool.tools, `${tool.name}/`)
+    return [`${prefix}${tool.name}`]
+  })
+  return names(body.tools, '')
 }
 
 function readBody(request: IncomingMessage): Promise<string> {
@@ -111,13 +121,15 @@ export async function startResponsesFixture(script: readonly ResponsesStep[]): P
       if (step.kind === 'text') {
         events = textEvents(step.text)
       } else {
-        const name = advertised(body).find(candidate => Object.hasOwn(step.choices, candidate))
+        const name = step.kind === 'call'
+          ? advertised(body).find(candidate => Object.hasOwn(step.choices, candidate))
+          : advertised(body).find(candidate => step.pattern.test(candidate))
         if (name === undefined) {
-          reply.end(`data: ${JSON.stringify({ type: 'error', message: 'none of the scripted functions was advertised' })}\n\n`)
+          reply.end(`data: ${JSON.stringify({ type: 'error', message: `none of the scripted functions was advertised: ${advertised(body).join(', ')}` })}\n\n`)
           return
         }
         calls += 1
-        events = callEvents(name, step.choices[name] ?? {}, calls)
+        events = callEvents(name, step.kind === 'call' ? step.choices[name] ?? {} : step.args, calls)
       }
       for (const event of events) reply.write(`data: ${JSON.stringify(event)}\n\n`)
       reply.end('data: [DONE]\n\n')

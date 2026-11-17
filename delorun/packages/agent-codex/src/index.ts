@@ -25,12 +25,15 @@ export interface Config {
   readonly requestTimeoutSeconds: number
   /** How long the app-server gets to exit after its input ends before it is terminated, in whole seconds; at least 1. */
   readonly closeWaitSeconds: number
+  /** How long Codex waits for one harness tool call before it fails the call (`tool_timeout_sec`), in whole seconds. */
+  readonly harnessToolTimeoutSeconds: number
 }
 
 /** The configuration schema, with the shipped defaults. */
 export const Config: z<Partial<Config>, Config> = z.object({
   requestTimeoutSeconds: z.natural().min(1).default(120),
   closeWaitSeconds: z.natural().min(1).default(5),
+  harnessToolTimeoutSeconds: z.natural().min(1).default(900),
 })
 
 /** Services wait in {@link apply}: the plugin loads in a profile with neither the gate nor the Codex pack. */
@@ -48,6 +51,8 @@ export function apply(ctx: Context, config: Config): void {
       locate: codexLocator(profile.dir),
       requestTimeoutMs: config.requestTimeoutSeconds * 1_000,
       closeWaitMs: config.closeWaitSeconds * 1_000,
+      harnessToolTimeoutSeconds: config.harnessToolTimeoutSeconds,
+      onLateHarnessResult: (tool) => { scope.logger.warn('agent-codex: a harness tool result for %s arrived after Codex had failed the call; it was dropped', tool) },
     })
     let registration: (() => void) | undefined
     const follow = (): void => {

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramRunRule } from '@delorun/external-agents/contract'
+import type { HarnessServer } from '../src/harness-server.ts'
 import { recordAbsentNames, type AbsentNames } from '../src/leftovers.ts'
 import { CodexRpc } from '../src/rpc.ts'
 import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
@@ -21,7 +22,7 @@ interface Harness {
   answer: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
 }
 
-function harness(options: { readonly requestTimeoutMs?: number; readonly runRules?: readonly ProgramRunRule[]; readonly leftovers?: readonly AbsentNames[] } = {}): Harness {
+function harness(options: { readonly requestTimeoutMs?: number; readonly runRules?: readonly ProgramRunRule[]; readonly leftovers?: readonly AbsentNames[]; readonly harness?: HarnessServer } = {}): Harness {
   const codex = new FakeAppServer()
   const questions: ProgramApprovalRequest[] = []
   const limits: AccountObservation[] = []
@@ -42,6 +43,7 @@ function harness(options: { readonly requestTimeoutMs?: number; readonly runRule
       closeWaitMs: 50,
       runRules: options.runRules ?? [],
       leftovers: options.leftovers ?? [],
+      ...options.harness === undefined ? {} : { harness: options.harness },
     }),
   }
   h.session.attach(THREAD, TASK)
@@ -478,6 +480,51 @@ describe('questions', () => {
     expect(h.questions[0]).toMatchObject({ callId: 'mcp-1', toolName: 'mcp__docs__search', reason: 'Allow docs/search?' })
     expect(tool.result).toEqual({ action: 'accept', content: {}, _meta: null })
     expect(form.result).toEqual({ action: 'decline', content: null, _meta: null })
+  })
+
+  describe('elicitations about Delorun\'s own harness server (D14)', () => {
+    const OWN = 'delorun_5f3a9c0e1b2d'
+    const own: HarnessServer = { name: OWN, toolNames: new Set(['harness_read']), mcpServers: {}, close: () => Promise.resolve() }
+    const toolCall = (server: string, tool = 'harness_read') => itemFrame({ type: 'mcpToolCall', id: 'mcp-1', server, tool, status: 'inProgress', arguments: {}, result: null, error: null })
+    const elicitation = (serverName: string, meta: Frame | null = { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'] }, threadId = THREAD) =>
+      ({ threadId, turnId: TURN, serverName, mode: 'form', message: `Allow the ${serverName} MCP server to run tool "harness_read"?`, requestedSchema: {}, _meta: meta })
+
+    async function answer(server: string, params: Frame, toolName?: string): Promise<{ readonly reply: Frame; readonly asked: number }> {
+      const h = harness({ harness: own })
+      await startTurn(h)
+      h.codex.notify('item/started', toolCall(server, toolName))
+      h.answer = () => Promise.resolve('reject')
+      const reply = await h.codex.ask(0, 'mcpServer/elicitation/request', params)
+      return { reply, asked: h.questions.length }
+    }
+
+    it('answers a call of an offered tool on the thread\'s own server itself, without persisting', async () => {
+      const { reply, asked } = await answer(OWN, elicitation(OWN))
+      expect(reply.result).toEqual({ action: 'accept', content: {}, _meta: null })
+      expect(asked).toBe(0)
+    })
+
+    it('asks the person about a server named delorun', async () => {
+      expect((await answer('delorun', elicitation('delorun'))).asked).toBe(1)
+    })
+
+    it('never accepts an elicitation without the tool-call kind', async () => {
+      const { reply, asked } = await answer(OWN, elicitation(OWN, null))
+      expect(reply.result).toEqual({ action: 'decline', content: null, _meta: null })
+      expect(asked).toBe(0)
+    })
+
+    it('asks the person about the right kind with another server\'s name', async () => {
+      expect((await answer('docs', elicitation('docs'))).asked).toBe(1)
+    })
+
+    it('asks the person about a tool on its own server that was not offered', async () => {
+      expect((await answer(OWN, elicitation(OWN), 'harness_write')).asked).toBe(1)
+    })
+
+    it('does not answer for another thread', async () => {
+      expect((await answer(OWN, elicitation(OWN, undefined, 'other-thread'))).reply.result).not.toMatchObject({ action: 'accept' })
+    })
   })
 
   it('refuses a server request it does not answer', async () => {

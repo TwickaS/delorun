@@ -17,6 +17,7 @@ import type {
   AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramInterruptOutcome,
   ProgramRunRule, ProgramSession,
 } from '@delorun/external-agents/contract'
+import type { HarnessServer } from './harness-server.ts'
 import { removeSandboxLeftovers, type AbsentNames } from './leftovers.ts'
 import { addUsage, observationOf, toolCall, toolResult, turnFailure, usageOf } from './mapping.ts'
 import { MappedItem, TOOL_ITEM_TYPES, type CodexNotification, type CodexServerRequest, type RateLimitSnapshot, type ToolItem, type TurnError, type WireJson } from './protocol.ts'
@@ -72,6 +73,8 @@ export interface CodexSessionOptions {
   readonly runRules: readonly ProgramRunRule[]
   /** The sandbox's protected names each writable root lacked before the process started; removed after it ends. */
   readonly leftovers: readonly AbsentNames[]
+  /** The thread's harness MCP server, closed when the process ends; absent when no harness tool is offered. */
+  readonly harness?: HarnessServer
 }
 
 /** Codex's `workspaceWrite` sandbox policy, as `turn/start` takes it. */
@@ -428,6 +431,7 @@ export class CodexSession implements ProgramSession {
         // The subprocess owner can no longer see the range; it reports that itself, and the session is closed either way.
       }
       removeSandboxLeftovers(this.options.leftovers)
+      await this.options.harness?.close()
       this.queue.close(new CodexSessionClosedError(reason))
     })()
     return this.closing
@@ -480,6 +484,11 @@ export class CodexSession implements ProgramSession {
     if (kind !== 'mcp_tool_call' || callId === undefined || params.turnId === null) return { action: 'decline', content: null, _meta: null }
     const call = this.openCalls.get(callId)?.item
     const toolName = call?.type === 'mcpToolCall' ? `mcp__${call.server}__${call.tool}` : `mcp__${params.serverName}`
+    // A call of a harness tool on this thread's own server is the seat's to decide, not Codex's (D14).
+    const harness = this.options.harness
+    if (harness !== undefined && params.serverName === harness.name && params.threadId === this.threadId && call?.type === 'mcpToolCall' && harness.toolNames.has(call.tool)) {
+      return { action: 'accept', content: {}, _meta: null }
+    }
     const answer = await this.ask(id, params.turnId, { callId, toolName, reason: params.message })
     switch (answer) {
       case 'allow-once':

@@ -20,6 +20,7 @@ import { locateCodex, type LocatedCodex } from '@delorun/external-agents/locate'
 import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
+import { startHarnessServer } from './harness-server.ts'
 import { recordAbsentNames } from './leftovers.ts'
 import { CodexSession, sandboxWritableRoots, type CodexSessionOptions } from './session.ts'
 
@@ -31,6 +32,13 @@ export interface CodexDriverOptions {
   readonly requestTimeoutMs: number
   /** How long the process may take to exit after its input ends before it is terminated, in milliseconds. */
   readonly closeWaitMs: number
+  /** Codex's limit for one harness tool call, in whole seconds (`tool_timeout_sec`). */
+  readonly harnessToolTimeoutSeconds: number
+  /**
+   * Hear a harness tool result that arrived after Codex had failed the call; the result is dropped (L38).
+   * @param tool - the tool's name.
+   */
+  readonly onLateHarnessResult: (tool: string) => void
   /** Sees every frame, for live diagnostics only. */
   readonly tap?: WireTap
 }
@@ -88,12 +96,22 @@ export class CodexDriver implements ExternalAgentDriver {
 
   async open(request: ProgramOpenRequest): Promise<CodexSession> {
     request.signal.throwIfAborted()
-    const session = this.connect(request.spawn, {
-      onApproval: request.onApproval,
-      onLimits: request.onLimits,
-      runRules: request.runRules,
-      leftovers: recordAbsentNames(sandboxWritableRoots(request.cwd, process.env.TMPDIR)),
-    })
+    const harness = request.harnessTools.length === 0
+      ? undefined
+      : await startHarnessServer({ tools: request.harnessTools, toolTimeoutSeconds: this.options.harnessToolTimeoutSeconds, onLateResult: this.options.onLateHarnessResult })
+    let session: ReturnType<CodexDriver['connect']>
+    try {
+      session = this.connect(request.spawn, {
+        onApproval: request.onApproval,
+        onLimits: request.onLimits,
+        runRules: request.runRules,
+        leftovers: recordAbsentNames(sandboxWritableRoots(request.cwd, process.env.TMPDIR)),
+        ...harness === undefined ? {} : { harness },
+      })
+    } catch (error: unknown) {
+      await harness?.close()
+      throw error
+    }
     const close = (): void => { void session.session.close() }
     request.signal.addEventListener('abort', close, { once: true })
     try {
@@ -104,6 +122,8 @@ export class CodexDriver implements ExternalAgentDriver {
       const thread = {
         cwd: request.cwd,
         ...THREAD_POLICY,
+        // Delorun's harness server is named in this thread's config only, never under the Codex home.
+        ...harness === undefined ? {} : { config: { mcp_servers: harness.mcpServers } },
         ...request.model === undefined ? {} : { model: request.model },
       }
       let opened: ClientResult<'thread/start'>
@@ -165,7 +185,7 @@ export class CodexDriver implements ExternalAgentDriver {
   }
 
   /** Locate the program, refuse an untested version, and start the app-server through the gate. */
-  private connect(spawn: ProgramSpawn, seat: Pick<CodexSessionOptions, 'onApproval' | 'onLimits' | 'runRules' | 'leftovers'>): { readonly rpc: CodexRpc; readonly session: CodexSession } {
+  private connect(spawn: ProgramSpawn, seat: Pick<CodexSessionOptions, 'onApproval' | 'onLimits' | 'runRules' | 'leftovers' | 'harness'>): { readonly rpc: CodexRpc; readonly session: CodexSession } {
     const program = this.options.locate()
     if (program === undefined) throw new ProgramOpenError({ category: 'program', detail: 'The Codex program was not found in the Codex pack.' })
     if (program.version !== TESTED_CODEX_VERSION) {

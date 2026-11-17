@@ -13,7 +13,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSpawn } from '@delorun/external-agents/contract'
+import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramHarnessTool, ProgramOpenRequest, ProgramSpawn } from '@delorun/external-agents/contract'
 import { ProgramOpenError } from '@delorun/external-agents/contract'
 import { locateCodex } from '@delorun/external-agents/locate'
 import { CodexDriver } from '../src/driver.ts'
@@ -33,6 +33,10 @@ interface Real {
   readonly handles: SubprocessHandle[]
   readonly driver: CodexDriver
   readonly questions: ProgramApprovalRequest[]
+  /** Harness tool results that arrived after Codex failed the call. */
+  readonly lateResults: string[]
+  /** Every frame the driver sent, as JSON. */
+  readonly sent: string[]
   answers: ProgramApprovalAnswer[]
   request(overrides?: Partial<ProgramOpenRequest>): ProgramOpenRequest
 }
@@ -89,6 +93,8 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
     return handle
   }
   const questions: ProgramApprovalRequest[] = []
+  const lateResults: string[] = []
+  const sent: string[] = []
   const r: Real = {
     codexHome,
     workspace,
@@ -97,7 +103,13 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
     handles,
     questions,
     answers: [],
-    driver: new CodexDriver({ locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000 }),
+    lateResults,
+    sent,
+    driver: new CodexDriver({
+      locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000, harnessToolTimeoutSeconds: 5,
+      onLateHarnessResult: (tool) => { lateResults.push(tool) },
+      tap: (direction, frame) => { if (direction === '>') sent.push(JSON.stringify(frame)) },
+    }),
     request: overrides => ({
       sessionId: SessionId('seat-child'),
       cwd: workspace,
@@ -132,6 +144,15 @@ const text = (events: readonly ProgramEvent[]): string => events.flatMap(event =
 
 /** A shell command as either of the shell tools Codex 0.153.4 may advertise. */
 const shell = (command: string): ResponsesStep => ({ kind: 'call', choices: { exec_command: { cmd: command }, shell_command: { command } } })
+
+/** Codex's own state that a first start creates in an empty home: databases, logs, caches and thread rollouts. */
+const CODEX_STATE = /^(?:[a-z_]+_\d+\.sqlite(?:-shm|-wal)?|logs_\d+\.sqlite.*|models_cache\.json|sessions|shell_snapshots|\.tmp|tmp|thread-writer-locks|version\.json|installation_id|memories|log|cache|archived_sessions|\.personality_migration|\.sandbox_migration|plugins|skills)$/
+
+/** Every file under a folder, recursively; none when it does not exist. */
+function filesUnder(folder: string): string[] {
+  if (!existsSync(folder)) return []
+  return readdirSync(folder, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile()).map(entry => join(entry.parentPath, entry.name))
+}
 
 /** Processes whose working directory is the folder; Linux only. */
 function processesIn(folder: string): number[] {
@@ -270,6 +291,44 @@ describe('the real pinned Codex app-server', () => {
     expect(readFileSync(config).equals(before)).toBe(true)
     expect(existsSync(join(r.workspace, 'again.txt'))).toBe(true)
     await expectNothingLeft(r)
+  }, 150_000)
+
+  it('offers harness tools on a loopback server named in the thread config only, and revokes it at exit (task 5, D14)', async () => {
+    const r = await real([{ kind: 'call-matching', pattern: /^mcp__delorun_[0-9a-f]{12}\/harness_echo$/, args: { text: 'from codex' } }, { kind: 'text', text: 'done' }])
+    const config = join(r.codexHome, 'config.toml')
+    const before = readFileSync(config)
+    const listing = readdirSync(r.codexHome).sort()
+    const received: JsonValue[] = []
+    const echo: ProgramHarnessTool = {
+      name: 'harness_echo',
+      description: 'Echo the text back. Use it when asked to.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      call: (input) => {
+        received.push(input)
+        return Promise.resolve({ output: 'echoed', isError: false })
+      },
+    }
+    const session = await r.driver.open(r.request({ harnessTools: [echo] }))
+    await session.send('Call harness_echo with the text "from codex".', 'start')
+    const events = await untilTurnEnd(session)
+    const advertised = JSON.stringify(r.fixture.requests[0]?.tools)
+    const server = /delorun_[0-9a-f]{12}/.exec(advertised)?.[0]
+    expect(server).toBeDefined()
+    expect(events.find(event => event.kind === 'tool-call')).toMatchObject({ name: `mcp__${server ?? ''}__harness_echo` })
+    expect(events.find(event => event.kind === 'tool-result')).toMatchObject({ isError: false })
+    expect(received).toEqual([{ text: 'from codex' }])
+    // The program's own approval of the call was answered by the driver, never asked.
+    expect(r.questions).toEqual([])
+    await session.close()
+    await expectNothingLeft(r)
+    expect(readFileSync(config).equals(before)).toBe(true)
+    expect(readdirSync(r.codexHome).filter(name => !listing.includes(name) && !CODEX_STATE.test(name))).toEqual([])
+    // The token reaches the program only in the thread config, and Codex keeps it in no file of its home: not the
+    // rollout, not its databases or logs.
+    const token = /Bearer ([A-Za-z0-9_-]{43})/.exec(r.sent.find(frame => frame.includes('"thread/start"')) ?? '')?.[1]
+    expect(token).toBeDefined()
+    expect(filesUnder(join(r.codexHome, 'sessions')).length).toBeGreaterThan(0)
+    expect(filesUnder(r.codexHome).filter(file => readFileSync(file).includes(token ?? 'missing'))).toEqual([])
   }, 150_000)
 
   it('runs a limits check without a thread or a model request', async () => {
