@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
@@ -242,7 +242,44 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
   }
 })
 
-it('passes the folder guard to the Session MCP mount', () => {
-  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
-  expect(vi.mocked(mountSessionMcp).mock.calls[0]![1].refuseCall).toBe(Provider.refuseOutsideFolder)
+it('turns off the tool that runs code in the server process: never registered, and refused when called', async () => {
+  const { chat } = await chatFolder()
+  for (const config of [{ mode: 'launch' }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222' }] as const) {
+    expect(Provider.Config(config).deniedTools).toEqual(['browser_run_code_unsafe'])
+    Provider.apply(new Context(), Provider.Config(config))
+    const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
+    expect(options.deniedTools).toEqual(['browser_run_code_unsafe'])
+    for (const args of [{ code: 'async page => require("node:fs").writeFileSync("/tmp/x", "x")' }, { filename: 'code.js' }, {}, undefined]) {
+      expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: args, directory: chat }))
+        .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+    }
+    expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: { function: '() => document.title' }, directory: chat })).toBeUndefined()
+  }
+  expect(Provider.deniedToolMessage('browser_run_code_unsafe')).toContain('is turned off here because it runs code outside the page')
+})
+
+it('denies the configured tools in place of the default, keeps the folder guard for the rest, and rejects a name that is not a tool name', async () => {
+  const { chat, outside } = await chatFolder()
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', deniedTools: ['browser_evaluate', 'browser_file_upload'] }))
+  const options = vi.mocked(mountSessionMcp).mock.calls[0]![1]
+  expect(options.deniedTools).toEqual(['browser_evaluate', 'browser_file_upload'])
+  expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: {}, directory: chat })).toBe(Provider.deniedToolMessage('browser_evaluate'))
+  expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: {}, directory: chat })).toBeUndefined()
+  expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
+    .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+  expect(() => Provider.Config({ mode: 'launch', deniedTools: ['mcp__playwright-mcp__browser evaluate'] })).toThrow()
+})
+
+it('offers no other tool that runs model-written code in the server process in the pinned Playwright', () => {
+  const require = createRequire(import.meta.url)
+  const mcp = createRequire(require.resolve('@playwright/mcp/package.json'))
+  const bundle = readFileSync(mcp.resolve('playwright-core/lib/coreBundle'), 'utf8')
+  // Every tool file that evaluates code in the server's own process uses Node's `vm`; the page-side tools do not.
+  const marker = '// packages/playwright-core/src/tools/backend/'
+  const files = bundle.slice(bundle.indexOf(marker), bundle.indexOf(`${marker}tools.ts`)).split(marker).slice(1)
+  const withVm = files.filter(file => /require\("(?:node:)?vm"\)/u.test(file))
+  expect(files.length).toBeGreaterThan(20)
+  expect(withVm.map(file => file.slice(0, file.indexOf('\n')))).toEqual(['runCode.ts'])
+  const tools = withVm.flatMap(file => [...file.matchAll(/name: "(browser_[a-z_]+)"/gu)].map(match => match[1]))
+  expect(tools).toEqual([...Provider.SERVER_CODE_TOOLS])
 })

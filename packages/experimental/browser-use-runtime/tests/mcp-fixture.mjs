@@ -51,6 +51,7 @@ lines.on('line', line => {
       reply(request.id, { tools: [
         { name: 'visit', description: 'Visit the fixture page.', inputSchema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false } },
         { name: 'disconnect', description: 'Disconnect the fixture.', inputSchema: { type: 'object', properties: {} } },
+        ...mode === 'unsafe-tool' ? [{ name: 'unsafe', description: 'Run code in the fixture process.', inputSchema: { type: 'object', properties: {} } }] : [],
       ] })
       break
     case 'tools/call':

@@ -18,8 +18,24 @@ export const name = 'experimental-browser-use-playwright-mcp'
 /** Services required for scoped MCP startup and prompt readiness checks. */
 export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt', 'workingDirectory']
 
+/**
+ * The tools of the pinned Playwright MCP server that run model-written code in the server process, outside the page
+ * and outside the agent's sandbox: the default of `deniedTools`. In @playwright/mcp 0.0.80 that is one tool; every
+ * other offered tool acts on the page or on files the folder guard checks.
+ */
+export const SERVER_CODE_TOOLS: readonly string[] = ['browser_run_code_unsafe']
+
+/** Settings every mode has. */
+export interface DeniedToolsConfig {
+  /**
+   * The server's own tool names that are turned off: never offered to the model and refused when called. Defaults to
+   * {@link SERVER_CODE_TOOLS}; a list set here replaces the default.
+   */
+  deniedTools: string[]
+}
+
 /** Launch settings: the shared ones and which browser launches. */
-export interface LaunchConfig extends BrowserMcpLaunchConfig {
+export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig {
   /**
    * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
    * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
@@ -28,15 +44,22 @@ export interface LaunchConfig extends BrowserMcpLaunchConfig {
   browser: BrowserChoice
 }
 
+/** Existing-browser attachment settings. */
+export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig {}
+
 /** Chrome or Chromium launch, or existing-browser attachment settings. */
-export type Config = LaunchConfig | BrowserMcpAttachConfig
+export type Config = LaunchConfig | AttachConfig
+
+const deniedTools = Schema.array(Schema.string().pattern(/^[\w-]+$/u)).default([...SERVER_CODE_TOOLS])
 
 /** Validate the launch or attachment configuration before activation. */
 export const Config: Schema<
-  BrowserMcpAttachConfig | (Omit<LaunchConfig, 'headless' | 'browser'> & { headless?: boolean; browser?: BrowserChoice }), Config
+  | (BrowserMcpAttachConfig & Partial<DeniedToolsConfig>)
+  | (Omit<LaunchConfig, 'headless' | 'browser' | 'deniedTools'> & { headless?: boolean; browser?: BrowserChoice } & Partial<DeniedToolsConfig>),
+  Config
 > = Schema.union([
-  Schema.object({ ...browserMcpLaunchFields, browser: Schema.union([...BROWSER_CHOICES]).default(UNSET_BROWSER_CHOICE) }),
-  Schema.object(browserMcpAttachFields),
+  Schema.object({ ...browserMcpLaunchFields, browser: Schema.union([...BROWSER_CHOICES]).default(UNSET_BROWSER_CHOICE), deniedTools }),
+  Schema.object({ ...browserMcpAttachFields, deniedTools }),
 ])
 
 /**
@@ -97,6 +120,15 @@ export const OUTPUT_FOLDER = '.playwright-mcp'
 export function explainMissingBrowser(message: string): string | undefined {
   if (MISSING_BROWSER_PATTERN.test(message)) return MISSING_BROWSER_MESSAGE
   return MISSING_CHROME_PATTERN.test(message) ? MISSING_CHROME_MESSAGE : undefined
+}
+
+/**
+ * The refusal of a call to a tool that is turned off.
+ * @param tool - the server's own tool name.
+ * @returns the model-visible text.
+ */
+export function deniedToolMessage(tool: string): string {
+  return `The browser tool "${tool}" is turned off here because it runs code outside the page. Use the other browser tools.`
 }
 
 /**
@@ -203,7 +235,9 @@ export function apply(ctx: Context, config: Config): void {
     env,
     outputFolder: OUTPUT_FOLDER,
     explainFailure: explainMissingBrowser,
-    refuseCall: refuseOutsideFolder,
+    deniedTools: config.deniedTools,
+    // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
+    refuseCall: call => config.deniedTools.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },
   })

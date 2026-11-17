@@ -37,6 +37,8 @@ export interface ToolBridgeOptions {
    * @returns the text with secret values replaced.
    */
   redact?: (text: string) => string
+  /** The server's own tool names that are never registered, so no caller sees or reaches them. */
+  deniedTools?: ReadonlySet<string>
 }
 
 /** Registration failed after the prior generation was removed and partial registrations were rolled back. */
@@ -136,6 +138,7 @@ export async function syncTools(
     ? { tools: [] }
     : await client.listTools(undefined, { cacheMode: 'refresh', signal: opts.signal })
   for (const tool of response.tools) {
+    if (opts.deniedTools?.has(tool.name) === true) continue
     const publicName = publicToolName(opts.serverName, tool.name)
     if (definitions.has(publicName)) {
       throw new Error(

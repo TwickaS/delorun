@@ -216,6 +216,7 @@ export function startConnection(
           toolCallTimeoutMs: config.toolCallTimeoutMs,
           signal,
           ...config.expandTemplates ? { redact: (text: string) => binding.redact(text) } : {},
+          ...config.deniedTools === undefined ? {} : { deniedTools: new Set(config.deniedTools) },
         }, disposers, () => isCurrent(record))
       })
     })

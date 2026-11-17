@@ -143,7 +143,7 @@ export function hostEnvironment(): CheckEnvironment {
     env: process.env,
     home: homedir(),
     exists: existsSync,
-    readJson: path => JSON.parse(readFileSync(path, 'utf8')) as unknown,
+    readJson: (path): unknown => JSON.parse(readFileSync(path, 'utf8')),
     resolvePackage: (from, name) => createRequire(from).resolve(`${name}/package.json`),
     homePath: dshHomePath,
     isExecutable: (path) => {

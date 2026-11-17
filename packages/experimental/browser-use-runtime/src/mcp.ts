@@ -145,6 +145,11 @@ export interface SessionMcpOptions {
    * @returns the model-visible refusal, or `undefined` to let the call through.
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
+  /**
+   * The server's own tool names that are turned off, such as one that runs model-written code in the server process:
+   * the MCP client never registers them, so no Session is offered them and a call to one never reaches the server.
+   */
+  deniedTools?: string[]
 }
 
 /** One browser tool call offered to a provider's {@link SessionMcpOptions.refuseCall}. */
@@ -300,6 +305,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             ...options.env === undefined ? {} : { env: options.env },
             cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
             roots: [sessionDirectory],
+            ...options.deniedTools === undefined ? {} : { deniedTools: options.deniedTools },
             ...options.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: options.toolCallTimeoutMs },
             failOnStartupError: true,
             reconnect: { enabled: false },
