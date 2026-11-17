@@ -1879,6 +1879,48 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/bundle-agent-hooks:
+    dependencies:
+      '@deepseek-ai/dsh-experimental-claude-code-mods':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/claude-code-mods
+      '@deepseek-ai/dsh-experimental-client-ui-claude-code-mods':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/client-ui-claude-code-mods
+      '@deepseek-ai/dsh-hooks-claude-code':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/hooks-claude-code
+      '@deepseek-ai/dsh-hooks-codex':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/hooks-codex
+
+  delorun/packages/bundle-browser:
+    dependencies:
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-chrome-devtools-mcp
+      '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-playwright-mcp
+      '@deepseek-ai/dsh-experimental-browser-use-stagehand-native':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-stagehand-native
+
+  delorun/packages/bundle-code-intelligence:
+    dependencies:
+      '@deepseek-ai/dsh-lsp':
+        specifier: workspace:*
+        version: link:../../../packages/lsp/lsp
+      '@deepseek-ai/dsh-lsp-stdio':
+        specifier: workspace:*
+        version: link:../../../packages/lsp/lsp-stdio
+      '@deepseek-ai/dsh-tool-lsp':
+        specifier: workspace:*
+        version: link:../../../packages/lsp/tool-lsp
+
   delorun/packages/bundle-headless:
     dependencies:
       '@delorun/bundle-local':
@@ -2162,6 +2204,18 @@ importers:
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
+
+  delorun/packages/bundle-webhooks:
+    dependencies:
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@deepseek-ai/dsh-webhook':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/webhook
+      '@deepseek-ai/dsh-webhook-github':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/webhook-github
 
   delorun/packages/changes:
     dependencies:
