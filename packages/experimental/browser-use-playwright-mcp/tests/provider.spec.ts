@@ -345,7 +345,7 @@ it('copies a file the server would read from the chat\'s folder into the output 
   const prepared = await prepare('browser_file_upload', { paths: ['photo.png', join(chat, 'photo.png'), join(outputDirectory, 'earlier.png')] })
   const { arguments: { paths }, note } = prepared as { arguments: { paths: string[] }; note: string }
   expect(note).toContain('Delorun uploaded a copy of "photo.png" as')
-  expect(note).not.toContain('earlier.png')
+  expect(note).toContain('earlier.png')
   expect(paths).toHaveLength(3)
   for (const copy of paths.slice(0, 2)) {
     expect(copy.startsWith(outputDirectory)).toBe(true)
@@ -353,7 +353,8 @@ it('copies a file the server would read from the chat\'s folder into the output 
     expect(statSync(copy).mode & 0o777).toBe(0o600)
   }
   expect(paths[0]).not.toBe(paths[1])
-  expect(paths[2]).toBe(join(outputDirectory, 'earlier.png'))
+  expect(readFileSync(paths[2]!, 'utf8')).toBe('earlier')
+  expect(paths[2]).not.toBe(join(outputDirectory, 'earlier.png'))
   // A link swapped in after the copy changes nothing the server reads.
   await rm(join(chat, 'photo.png'))
   await writeFile(join(outside, 'secret.txt'), 'secret')
@@ -365,7 +366,7 @@ it('copies a file the server would read from the chat\'s folder into the output 
   expect(await prepare('browser_take_screenshot', { filename: 'x.png' })).toBeUndefined()
 })
 
-it('hands the server the real path of a file in the output folder, never a path through a link the chat controls', async () => {
+it('copies a file in the output folder too, so a link the chat swaps in after the check changes nothing the server reads', async () => {
   const { chat, outside } = await chatFolder()
   const outputDirectory = join(outside, 'cache')
   const home = join(outside, 'home')
@@ -373,10 +374,13 @@ it('hands the server the real path of a file in the output folder, never a path 
   await writeFile(join(outputDirectory, 'credentials.json'), 'in the output folder')
   await writeFile(join(home, 'credentials.json'), 'home secret')
   await symlink(outputDirectory, join(chat, 'x'))
-  const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: ['x/credentials.json'] }, directory: chat, outputDirectory })
+  const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: ['x/credentials.json', join(outputDirectory, 'credentials.json')] }, directory: chat, outputDirectory })
   const { paths } = (prepared as { arguments: { paths: string[] } }).arguments
-  expect(paths).toEqual([join(outputDirectory, 'credentials.json')])
-  // The chat swaps the link after the check; the path the server got no longer goes through it.
+  for (const path of paths) {
+    expect(path).not.toContain(join(chat, 'x'))
+    expect(path.startsWith(join(outputDirectory, 'upload-'))).toBe(true)
+    expect(readFileSync(path, 'utf8')).toBe('in the output folder')
+  }
   await rm(join(chat, 'x'))
   await symlink(home, join(chat, 'x'))
   expect(readFileSync(paths[0]!, 'utf8')).toBe('in the output folder')

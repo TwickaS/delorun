@@ -348,17 +348,16 @@ export function unreadableMessage(name: string): string {
 }
 
 /**
- * Copy a file the server would read into the Session's output folder, so the server, which runs outside the sandbox,
- * never opens a path a confined command can swap. The Host opens the file, takes its identity from the open
- * descriptor, resolves the path again, and copies from the descriptor only when the resolved path is inside the
- * Session's folder and names the same file.
+ * Copy a file the server would read, from the Session's folder or its output folder, into the output folder, so the
+ * server, which runs outside the sandbox, never opens a path a confined command can swap. The Host opens the file, takes
+ * its identity from the open descriptor, resolves the path again, and copies from the descriptor only when the resolved path is inside the
+ * Session's folder or its output folder and names the same file.
  * @param name - the argument as the model wrote it.
  * @param call - the call.
  * @param folder - the Session's real folder.
  * @param output - the Session's output folder.
- * @returns the path the server reads: the copy, or the file's real path when it is already in the output folder, which a
- * confined command cannot write; or `undefined` when the file is not inside the Session's folder or changed during the
- * check.
+ * @returns the path of the copy the server reads, or `undefined` when the file is not inside the Session's folder or its
+ * output folder, or changed during the check.
  */
 async function readableCopy(name: string, call: BrowserToolCall, folder: string, output: string): Promise<string | undefined> {
   const path = resolve(call.directory, name)
@@ -375,10 +374,9 @@ async function readableCopy(name: string, call: BrowserToolCall, folder: string,
     if (real === undefined || !opened.isFile()) return undefined
     const resolved = await stat(real, { bigint: true })
     if (resolved.dev !== opened.dev || resolved.ino !== opened.ino) return undefined
-    // A file in the output folder, which a confined command cannot write, goes to the server by its real path, never by
-    // the path the model wrote, which can pass through a link the chat controls.
-    if (inside(await realpath(output), real)) return real
-    if (!inside(folder, real)) return undefined
+    // Every file is copied, the Host's own output files too: the server never gets a path the model wrote, which can pass
+    // through a link the chat controls.
+    if (!inside(folder, real) && !inside(await realpath(output), real)) return undefined
     const copy = join(output, `upload-${randomUUID()}-${basename(real)}`)
     await pipeline(handle.createReadStream({ autoClose: false }), createWriteStream(copy, { flags: 'wx', mode: 0o600 }))
     return copy

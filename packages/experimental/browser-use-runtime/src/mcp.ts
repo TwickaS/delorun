@@ -2,9 +2,10 @@
 
 import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, relative, sep } from 'node:path'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { pathWithin, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import Schema from '@deepseek-ai/schemastery'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
@@ -15,6 +16,7 @@ import { SessionResources } from './index.ts'
 import type {} from '@deepseek-ai/dsh-browser-use'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
 /** Browser launch settings shared by the MCP integrations. */
@@ -233,20 +235,25 @@ async function sessionOutputDirectory(root: string, sessionId: string): Promise<
 }
 
 /**
- * Refuse an output folder that overlaps the Session's working directory, which a confined command can write: inside it,
- * the chat could replace the folder; around it, the working directory would be inside the output folder.
+ * Refuse an output folder that overlaps a folder a confined command of the Session can write: inside one, the chat could
+ * replace the output folder; around one, that folder would be inside the output folder. The writable folders are the
+ * Session's working directory and, when a sandbox policy is provided, the policy's workspace-write roots, the
+ * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now.
+ * @param ctx - the provider context, which may provide the sandbox policy.
+ * @param agent - the Agent whose Session starts.
  * @param output - the Session's output folder.
  * @param sessionDirectory - the Session's working directory.
- * @throws when either folder is inside the other.
+ * @throws when either folder is inside the other, or the policy's roots cannot be read.
  */
-async function assertOutsideWorkingDirectory(output: string, sessionDirectory: string): Promise<void> {
-  const [folder, work] = await Promise.all([realpath(output), realpath(sessionDirectory)])
-  const within = (path: string, ancestor: string): boolean => {
-    const rest = relative(ancestor, path)
-    return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest))
-  }
-  if (within(folder, work) || within(work, folder)) {
-    throw new Error(`the output folder ${folder} overlaps the Session's working directory ${work}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the working directory`)
+async function assertOutsideWritableFolders(ctx: Context, agent: Agent, output: string, sessionDirectory: string): Promise<void> {
+  const policy = ctx.get('sandboxPolicy')?.resolve({ session: agent.session, mode: 'workspace-write' })
+  const writable = [sessionDirectory, ...policy === undefined ? [] : [policy.workspaceRoot, ...writableRoots(policy)]]
+  const folder = await realpath(output)
+  for (const candidate of writable) {
+    const real = await realpath(candidate).catch(() => candidate)
+    if (pathWithin(folder, real) || pathWithin(real, folder)) {
+      throw new Error(`the output folder ${folder} overlaps ${real}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the chat's writable folders`)
+    }
   }
 }
 
@@ -422,7 +429,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
           scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
             serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
           const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
-          if (outputDirectory !== undefined) await assertOutsideWorkingDirectory(outputDirectory, sessionDirectory)
+          if (outputDirectory !== undefined) await assertOutsideWritableFolders(ctx, agent, outputDirectory, sessionDirectory)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {

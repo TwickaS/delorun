@@ -610,14 +610,21 @@ describe('Session MCP Loader composition', () => {
     expect(await readdir(second)).toEqual([])
   })
 
-  it('does not start the server when the output folder overlaps the Session\'s working directory', async () => {
+  it('does not start the server when the output folder overlaps a folder the chat can write: its working directory, or a root of its sandbox policy', async () => {
     const outputRoot = join(tmpdir(), `dsh-overlap-root-${process.pid}`)
     roots.push(outputRoot)
     const { ctx, root } = await load({ outputRoot })
-    await expect((async () => {
-      const { agent } = await ctx.agents.create({ sessionId: SessionId('overlap'), meta: { cwd: tmpdir() } })
+    const start = async (id: string, cwd: string): Promise<void> => {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
       await warm(ctx, agent)
-    })()).rejects.toThrow('overlaps the Session\'s working directory')
+    }
+    // XDG_CACHE_HOME pointing into the workspace: the output folder lies inside the working directory.
+    await expect(start('overlap-inside', tmpdir())).rejects.toThrow('overlaps')
+    const quiet = join(root, 'quiet')
+    await mkdir(quiet)
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
+    await expect(start('overlap-extra-root', quiet)).rejects.toThrow('overlaps')
     expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
