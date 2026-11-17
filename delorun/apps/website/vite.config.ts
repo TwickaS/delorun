@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+import { replicaPlugins } from './src/replica/build/plugins.ts'
+import { replicaOptions } from './replica-options.ts'
 import { STUDIO_ALIASES } from './studio-aliases.ts'
 import { SITEMAP_PATHS } from './src/site/config.ts'
 import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
@@ -83,6 +85,7 @@ export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
+    ...replicaPlugins(replicaOptions(process.env)),
     changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
