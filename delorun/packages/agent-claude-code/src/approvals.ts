@@ -26,10 +26,17 @@ function exactRule(rule: PermissionRuleValue): boolean {
 }
 
 /**
+ * Characters that keep a rule from being built from a Bash call: parentheses, a redirect and a pipe, for which Claude
+ * Code's matching of a repeat was not shown. `*` and line breaks are excluded from every rule.
+ */
+const BUILT_RULE_EXCLUDED = /[()<>|]/
+
+/**
  * The rule "Allow for this run" may add for one question, which covers the exact command asked about and nothing else.
  * Claude Code's single suggested `addRules` allow entry is taken when it is for the tool that asked and its content
- * equals that command. Otherwise, for `Bash` only, the rule is built from the call itself: `Bash(<exact command>)`. A
- * command holding `*` or a line break gets no rule, and neither does any other tool whose suggestion is not exact.
+ * equals that command. Otherwise, for `Bash` only, the rule is built from the call itself: `Bash(<exact command>)`,
+ * unless the command holds a parenthesis, a redirect (`<`, `>`) or a pipe (`|`). A command holding `*` or a line
+ * break gets no rule, and neither does any other tool whose suggestion is not exact.
  * Mode changes (`setMode`) and folder grants (`addDirectories`) are never taken.
  * @param toolName - the tool that asked.
  * @param input - the call's input.
@@ -45,7 +52,7 @@ export function exactRunRules(toolName: string, input: Record<string, unknown>, 
     suggestion.type === 'addRules' && suggestion.behavior === 'allow' ? suggestion.rules : [])
   const [rule] = rules
   const suggestedExact = rules.length === 1 && rule !== undefined && rule.toolName === toolName && rule.ruleContent === command
-  return suggestedExact || toolName === 'Bash' ? [exact] : []
+  return suggestedExact || (toolName === 'Bash' && !BUILT_RULE_EXCLUDED.test(command)) ? [exact] : []
 }
 
 /**

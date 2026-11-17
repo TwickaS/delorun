@@ -161,13 +161,12 @@ describe('run rules', () => {
   it.each<[string, Record<string, unknown>, PermissionUpdate[] | undefined]>([
     ['no suggestion', { command: 'touch a.txt' }, undefined],
     ['a prefix suggestion', { command: 'rm -rf build' }, [allow({ toolName: 'Bash', ruleContent: 'rm:*' })]],
-    ['a wildcard suggestion', { command: 'echo run > run.txt' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
+    ['a wildcard suggestion', { command: 'echo run' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
     ['a bare tool suggestion', { command: 'make' }, [allow({ toolName: 'Bash' })]],
     ['a suggestion for another command', { command: 'make test' }, [allow({ toolName: 'Bash', ruleContent: 'make' })]],
     ['two suggested rules', { command: 'make' }, [allow({ toolName: 'Bash', ruleContent: 'make' }, { toolName: 'Bash', ruleContent: 'ls' })]],
     ['a mode change', { command: 'make' }, [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }]],
     ['a folder grant', { command: 'make' }, [{ type: 'addDirectories', directories: ['/'], destination: 'session' }]],
-    ['parentheses, escaped in the rule text', { command: 'echo (a)' }, undefined],
   ])('builds the exact Bash rule from the call for %s', (_case, input, suggestions) => {
     expect(exactRunRules('Bash', input, suggestions)).toEqual([{ toolName: 'Bash', ruleContent: input.command }])
   })
@@ -175,6 +174,11 @@ describe('run rules', () => {
   it.each<[string, string, Record<string, unknown>, PermissionUpdate[]]>([
     ['a wildcard in the command', 'Bash', { command: 'rm *.txt' }, [allow({ toolName: 'Bash', ruleContent: 'rm *.txt' })]],
     ['a multi-line command', 'Bash', { command: 'make\nmake install' }, []],
+    ['an opening parenthesis', 'Bash', { command: 'echo (a' }, []],
+    ['a closing parenthesis', 'Bash', { command: 'echo a)' }, []],
+    ['an output redirect', 'Bash', { command: 'echo run > run.txt' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
+    ['an input redirect', 'Bash', { command: 'sort < names.txt' }, []],
+    ['a pipe', 'Bash', { command: 'ls | head' }, [allow({ toolName: 'Bash', ruleContent: 'ls:*' })]],
     ['a command with a carriage return', 'Bash', { command: 'make\rrm -rf /' }, []],
     ['a Bash call without a command', 'Bash', { description: 'nothing' }, []],
     ['a path glob', 'Edit', { file_path: '/w/src/a.ts' }, [allow({ toolName: 'Edit', ruleContent: '/w/src/**' })]],
