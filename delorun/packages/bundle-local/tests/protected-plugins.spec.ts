@@ -37,7 +37,7 @@ describe('the plugin-manager row of @delorun/bundle-local', () => {
     const guards = inserted.filter(row => (row['config'] as Patch | undefined)?.['enabled'] === true && row['disabled'] === undefined && row['name'] !== '@delorun/bundle-local/workspace-rename').map(row => row['name'])
     expect(guards).toEqual([
       '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent', '@delorun/plugin-permission-defaults',
-      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-delegation-consent', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
+      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-delegation-consent', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
       '@delorun/bundle-local/trust', '@delorun/plugin-install-check', '@delorun/reach',
     ])
     // home-auth has no switch; it is protected so no chat points the home's device records elsewhere.

@@ -23,6 +23,10 @@
 #                           parity composition leaves the fetchGuard service
 #                           unmounted, and the provider reads its absence per
 #                           hop and runs unguarded;
+#   tool_failure_guard      the switch is off because its row of
+#                           @delorun/bundle-local is restated disabled below, so
+#                           no listener counts failed tool calls and no turn
+#                           stops for them;
 #   one_time_launch_tokens  the connection row carries the web bundle's
 #                           trustedHosts expression, which a row here would
 #                           erase; the bundle's patch of the row is left out,
@@ -104,6 +108,17 @@
       name: '@delorun/plugin-fetch-guard'
       config:
         enabled: true
+      disabled: true
+
+    - id: delorun-tool-failure-guard
+      name: '@delorun/plugin-tool-failure-guard'
+      config:
+        enabled: true
+        consecutiveFailures: 6
+        windowSize: 12
+        windowFailures: 8
+        reminderAfter: 3
+        exclude: []
       disabled: true
 
     - id: delorun-plugin-authoring

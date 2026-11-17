@@ -202,6 +202,25 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'tool_failure_guard',
+    state: 'built',
+    registeredBy: '@delorun/plugin-tool-failure-guard',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-tool-failure-guard',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delorun/plugin-tool-failure-guard',
+      source: 'delorun/packages/plugin-tool-failure-guard/src/index.ts',
+      key: 'enabled',
+    },
+    // The reminder text and the turn stop are registered here; off, the plugin registers no listener.
+    sources: [
+      'delorun/packages/plugin-tool-failure-guard/src/index.ts',
+    ],
+  },
+  {
     id: 'preset_inspect',
     state: 'built',
     registeredBy: 'Delorun edit of upstream preset tools',

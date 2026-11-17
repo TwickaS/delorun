@@ -169,6 +169,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/plugin-permission-defaults',
       '@delorun/plugin-schedule-consent',
       '@delorun/plugin-fetch-guard',
+      '@delorun/plugin-tool-failure-guard',
       '@delorun/skill-plugin-authoring',
       '@delorun/skill-report-problem',
       '@delorun/plugin-delegation-consent',

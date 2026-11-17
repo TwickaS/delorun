@@ -154,6 +154,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delorun-tool-failure-guard',
+    kind: 'added',
+    reason: 'The C16 switch `tool_failure_guard` on: after 3 failed tool calls in a row the model reads one reminder, and a turn with 6 failed calls in a row, or 8 of its last 12, stops before its next model request with one notice in the chat; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: recorded scenarios whose tool calls fail keep running as they were recorded.' },
+  },
+  {
     id: 'delorun-plugin-authoring',
     kind: 'added',
     reason: 'The delorun-plugin-authoring skill: it teaches the agent to scaffold a plugin in the chat\'s workspace with `delorun plugin new`, and that turning the plugin on is the person\'s step at the computer; upstream has no such skill.',
