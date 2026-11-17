@@ -1,0 +1,25 @@
+# The language-server provider and the model tool mount only when typescript-language-server is on PATH: the provider
+# resolves every configured executable at load, so a missing one would stop it from registering. Add more servers in
+# the profile's cordis.patch.yml by replacing the lsp-stdio row's config.
+- insert:
+    - id: lsp
+      name: '@deepseek-ai/dsh-lsp'
+    - id: lsp-stdio
+      name: '@deepseek-ai/dsh-lsp-stdio'
+      disabled: !!js "(() => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return !(process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, 'typescript-language-server' + e)))) })()"
+      config:
+        servers:
+          typescript:
+            command: typescript-language-server
+            args:
+              - --stdio
+            extensionToLanguage:
+              .ts: typescript
+              .tsx: typescriptreact
+              .js: javascript
+              .jsx: javascriptreact
+              .mjs: javascript
+              .cjs: javascript
+    - id: tool-lsp
+      name: '@deepseek-ai/dsh-tool-lsp'
+      disabled: !!js "(() => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return !(process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, 'typescript-language-server' + e)))) })()"

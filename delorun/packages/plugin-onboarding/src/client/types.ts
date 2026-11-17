@@ -295,8 +295,6 @@ export interface CustomEndpoint {
 export interface AgentRowSettings {
   /** The model the agent runs, or absent for the agent's own default. */
   readonly model?: string | undefined
-  /** How Claude Code treats a tool it would ask about; Delorun sets `acceptEdits` when it adds the agent. */
-  readonly permissionMode?: string | undefined
 }
 
 /** The settings the agents step reads and writes, by the agent's connection id. */

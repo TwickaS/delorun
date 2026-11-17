@@ -3,6 +3,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createFakeDownloadsSource, provideDownloadsSource } from '@delorun/plugin-downloads/row'
 import { OnboardingStepEntry, UPSTREAM_KEY_STEP, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { en } from '../src/client/locales.ts'
 import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
@@ -652,5 +653,33 @@ describe('at the computer, opened from the Finish setup entry', () => {
   it('lists phone access then the PIN step, in the guide\'s order', async () => {
     await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'off', record: { reachSetUp: false, deferred: ['pin', 'reach'] } })
     expect(titles()).toEqual([en['step.reach'], en['step.pin']])
+  })
+})
+
+describe('the plugin downloads row in the footer', () => {
+  const phone = (matches: boolean) => { vi.stubGlobal('matchMedia', () => ({ matches, addEventListener: () => {}, removeEventListener: () => {} })) }
+  const queue = () => createFakeDownloadsSource([{ key: 'a', title: 'Alpha', state: 'downloading', receivedBytes: 1, totalBytes: 4 }])
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('shows one line above Back and Continue at phone width while the queue has plugins', async () => {
+    phone(true)
+    const release = provideDownloadsSource(queue())
+    await mountEntry()
+    expect(screen.getByRole('button', { name: /Installing 1 of 1/ })).toBeTruthy()
+    release()
+  })
+
+  it('shows nothing at a computer width', async () => {
+    phone(false)
+    const release = provideDownloadsSource(queue())
+    await mountEntry()
+    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
+    release()
+  })
+
+  it('shows nothing when the queue is empty', async () => {
+    phone(true)
+    await mountEntry()
+    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
   })
 })

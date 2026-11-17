@@ -1,0 +1,34 @@
+{
+  "name": "@delorun/bundle-computer-use-driver",
+  "description": "Computer use (Cua Driver) as an optional bundle: lets the agent see and operate desktop windows on Linux and Windows through the Cua Driver SDK. macOS has Computer use. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml",
+      "platforms": [
+        "linux",
+        "win32"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-computer-use": "workspace:*",
+    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-native": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental",
+    "pack": true
+  }
+}

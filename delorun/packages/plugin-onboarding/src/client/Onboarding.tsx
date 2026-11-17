@@ -6,7 +6,8 @@
  * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
  * upstream's steps do.
  */
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Modal, usePhone } from '@deepseek-ai/dsh-client-ui-primitives'
+import { OnboardingDownloadsRow } from '@delorun/plugin-downloads/row'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
@@ -213,6 +214,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const next = (): void => {
     void guide.passGates().then((open) => { if (open) advance() })
   }
+  const onPhone = usePhone()
   const title = step.title()
   // The last step has nothing left to skip, and Welcome offers no Skip while the preview notice is owed.
   const showSkip = !last && (notice === undefined || step.id !== STEPS.welcome.id)
@@ -227,7 +229,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   return (
     <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: later } }} footer={footer}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: later } }} footer={footer} above={onPhone ? <OnboardingDownloadsRow /> : undefined}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>

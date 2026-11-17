@@ -47,7 +47,6 @@ import type {} from '@delorun/plugin-theme/client'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
-import { setAddedAgentDefaults } from './agent-defaults.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
@@ -266,7 +265,6 @@ export function applyStudio(ctx: Context): void {
     bundles: createBundleInstaller(ctx, {
       addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
       pollMs: 3000,
-      afterAdd: name => setAddedAgentDefaults(name, ctx.configForms.get<AgentRowSettings>(AGENT_ROWS['claude-code']), (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000),
     }),
     host: {
       ...hostApi,

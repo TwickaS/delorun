@@ -17,6 +17,7 @@ import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delorun/bundle-local/update-gate'
+import type {} from '@delorun/plugin-packs'
 import { protectedPluginsIn } from '@delorun/home-auth'
 import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delorun/home-process'
 import { bundleListOf } from '@delorun/profile-safety'
@@ -52,6 +53,7 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     }
     ends.get(agent)?.()
     ends.delete(agent)
+    ctx.get('delorunChatGate')?.chatEnded()
   })
   ctx.inject(['jobs'], (scope) => {
     const jobs = new Map<JobId, () => void>()
@@ -79,6 +81,9 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
   })
   ctx.inject(['delorunTurnGate'], (scope) => {
     scope.effect(() => scope.delorunTurnGate.attach(() => gate.held))
+  })
+  ctx.inject(['delorunChatGate'], (scope) => {
+    scope.effect(() => scope.delorunChatGate.attach(gate))
   })
 }
 

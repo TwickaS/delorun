@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "External agents",
+    "description": "Lets the agent hand a task to the Codex or Claude Code program you already have installed, and runs Python code in tool programs"
+  }
+}

@@ -1,0 +1,7 @@
+# Linux and Windows only (dsh.bundle.platforms). macOS has the Computer use bundle, which registers the same exclusive
+# computer-use provider, so the two are never on together.
+- insert:
+    - id: computer-use-registry
+      name: '@deepseek-ai/dsh-computer-use'
+    - id: computer-use-cua-driver-native
+      name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-native'

@@ -58,6 +58,33 @@ export function logEntryName(version: string): string {
 }
 
 /**
+ * The name of a release's packs file.
+ * @param version - the release.
+ * @returns `delorun-<version>.packs.json`.
+ */
+export function packsName(version: string): string {
+  return `delorun-${version}.packs.json`
+}
+
+/**
+ * The name of the file that carries the packs file's log entry request to the release workflow.
+ * @param version - the release.
+ * @returns `delorun-<version>.packs.entry.json`.
+ */
+export function packsEntryName(version: string): string {
+  return `delorun-${version}.packs.entry.json`
+}
+
+/**
+ * The name of the packs file's release-log bundle.
+ * @param version - the release.
+ * @returns `delorun-<version>.packs.log.json`.
+ */
+export function packsLogName(version: string): string {
+  return `delorun-${version}.packs.log.json`
+}
+
+/**
  * Read a bundle file.
  * @param bytes - the file's bytes.
  * @returns the bundle.

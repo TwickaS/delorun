@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests"
+  ],
+  "exclude": [
+    "tests/**/*.client.spec.tsx",
+    "tests/**/*.client.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    }
+  ]
+}

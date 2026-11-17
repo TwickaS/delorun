@@ -256,3 +256,44 @@ describe('GitHub webhook HTTP handler', () => {
     expect(diagnostics).not.toContain('payload-secret')
   })
 })
+
+describe('replayed deliveries', () => {
+  it('dispatches a verified delivery once and acknowledges its repeat without starting another Session', async () => {
+    const fake = fakeContext()
+    const base = await serve(fake.ctx)
+    const body = JSON.stringify({ action: 'opened' })
+    expect((await post(base, body, { delivery: 'replay-1' })).status).toBe(202)
+    const again = await post(base, body, { delivery: 'replay-1' })
+    expect(again.status).toBe(200)
+    expect(fake.dispatch).toHaveBeenCalledTimes(1)
+    expect((await post(base, body, { delivery: 'replay-2' })).status).toBe(202)
+    expect(fake.dispatch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not remember an id whose signature failed, so an attacker cannot use up a real delivery id', async () => {
+    const fake = fakeContext()
+    const base = await serve(fake.ctx)
+    const body = JSON.stringify({ action: 'opened' })
+    expect((await post(base, body, { delivery: 'replay-3', secret: 'wrong' })).status).toBe(401)
+    expect((await post(base, body, { delivery: 'replay-3' })).status).toBe(202)
+    expect(fake.dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts the sender\'s retry when dispatch was unavailable', async () => {
+    const fake = fakeContext()
+    fake.dispatch.mockImplementationOnce(() => { throw new Error('down') })
+    const base = await serve(fake.ctx)
+    const body = JSON.stringify({ action: 'opened' })
+    expect((await post(base, body, { delivery: 'replay-4' })).status).toBe(503)
+    expect((await post(base, body, { delivery: 'replay-4' })).status).toBe(202)
+  })
+
+  it('forgets the oldest ids once more than the bound have been seen', async () => {
+    const fake = fakeContext()
+    const base = await serve(fake.ctx)
+    const body = JSON.stringify({ action: 'opened' })
+    for (let index = 0; index <= 1024; index += 1) await post(base, body, { delivery: `bound-${String(index)}` })
+    expect((await post(base, body, { delivery: 'bound-0' })).status).toBe(202)
+    expect((await post(base, body, { delivery: 'bound-1024' })).status).toBe(200)
+  })
+})

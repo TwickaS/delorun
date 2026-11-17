@@ -50,6 +50,8 @@
     "@delorun/home": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/plugin-delegation-consent": "workspace:*",
+    "@delorun/plugin-packs": "workspace:*",
+    "@delorun/plugin-downloads": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
     "@delorun/reach": "workspace:*",
     "zod": "4.6.6"

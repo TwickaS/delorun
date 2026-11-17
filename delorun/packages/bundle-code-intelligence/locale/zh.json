@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "代码智能",
+    "description": "让智能体向语言服务器查询定义、引用和悬停信息。需要 PATH 中有 typescript-language-server"
+  }
+}
