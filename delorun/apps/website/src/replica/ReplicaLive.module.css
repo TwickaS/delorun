@@ -55,7 +55,8 @@
 /* On a phone the chapters are one row that scrolls sideways and snaps, with Pause beside it on the same line. */
 @media (max-width: 479.98px) {
   .controls { flex-wrap: nowrap; align-items: stretch; gap: var(--dl-space-1); }
-  .controls .rail { flex: 1 1 0; scroll-snap-type: x proximity; }
+  /* The right edge fades, so a tab cut by the edge reads as more to scroll to. */
+  .controls .rail { flex: 1 1 0; scroll-snap-type: x proximity; mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
   .controls .rail [role='tab'] { padding-inline: var(--dl-space-1); font-size: 14px; white-space: nowrap; }
   .toggle { align-self: center; }
 }
