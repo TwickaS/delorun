@@ -8,7 +8,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { en, zh } from '../src/client/consents-locales.ts'
 import { FullAccessStartNotice, type FullAccessStartNoticeProps } from '../src/client/FullAccessStartNotice.tsx'
 import {
-  APPROVAL_POLICY_KIND, approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, SANDBOX_MODE_KIND, sandboxModeDefinition,
+  APPROVAL_POLICY_KIND, approvalPolicyDefinition, DELEGATED_KIND, delegatedSessionDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, SANDBOX_MODE_KIND, sandboxModeDefinition,
 } from '../src/client/full-access-start.ts'
 import { AgentLevelsNotice } from '../src/client/AgentLevelsNotice.tsx'
 import { AGENT_LEVEL_NOTICE_KIND, agentLevelNoticeDefinition } from '../src/client/agent-level-notice.ts'
@@ -32,20 +32,21 @@ function mode(value: string): SessionEvent {
 }
 
 /** The reader a start sees, holding the nearest recorded policy and sandbox mode, or none. */
-function readerOf(value: string | undefined, sandbox?: string): ConversationContextReader {
+function readerOf(value: string | undefined, sandbox?: string, delegated = false): ConversationContextReader {
   return {
     previous: (kind: string) => {
       if (kind === APPROVAL_POLICY_KIND && value !== undefined) return { state: { policy: value } } as never
       if (kind === SANDBOX_MODE_KIND && sandbox !== undefined) return { state: { mode: sandbox } } as never
+      if (kind === DELEGATED_KIND && delegated) return { state: true } as never
       return undefined
     },
   }
 }
 
 /** The line's node for an external start under a recorded policy and sandbox mode, or null. */
-function nodeFor(value: string | undefined, sandbox: string | null = 'danger-full-access') {
+function nodeFor(value: string | undefined, sandbox: string | null = 'danger-full-access', delegated = false) {
   const match = { event: catalog('external'), location: { kind: 'unresolved' }, role: 'start' } as ConversationStartMatch
-  const state = fullAccessStartDefinition.start({} as never, match, readerOf(value, sandbox ?? undefined))
+  const state = fullAccessStartDefinition.start({} as never, match, readerOf(value, sandbox ?? undefined, delegated))
   const base = { key: 'k', kind: fullAccessStartDefinition.kind, id: 'child-1', matches: [match], start: match }
   return fullAccessStartDefinition.buildViewNode?.({ ...base, state } as never)
 }
@@ -77,6 +78,17 @@ describe('which starts get the line', () => {
     expect(nodeFor('never', sandbox)).toBeNull()
   })
 
+  it('marks a session whose policy or sandbox a delegation seeded, and shows no line there', () => {
+    const seeded = (type: string, data: object): SessionEvent => ({ type, seq: 2, time: 1, data } as never)
+    expect(delegatedSessionDefinition.match(seeded('approval/policy', { policy: 'never', source: 'delegation' }))).toEqual({ id: '2', role: 'start' })
+    expect(delegatedSessionDefinition.match(seeded('sandbox/mode', { mode: 'danger-full-access', source: 'delegation' }))).toEqual({ id: '2', role: 'start' })
+    expect(delegatedSessionDefinition.match(seeded('approval/policy', { policy: 'never' }))).toBeNull()
+    expect(delegatedSessionDefinition.match(catalog('external'))).toBeNull()
+    expect(delegatedSessionDefinition.start({} as never, {} as never, readerOf(undefined))).toBe(true)
+    expect(delegatedSessionDefinition.update({ state: true } as never, {} as never)).toBe(true)
+    expect(nodeFor('never', 'danger-full-access', true)).toBeNull()
+  })
+
   it('shows one node at the start when the recorded policy is never', () => {
     expect(nodeFor('never')).toMatchObject({ kind: FULL_ACCESS_START_KIND, target: 'chat', anchorSeq: 30, visibility: 'visible', groupTree: 'process', data: { time: 1_700_000_000_000 } })
   })
@@ -86,7 +98,7 @@ describe('which starts get the line', () => {
   })
 
   it('keeps its state when a later event arrives', () => {
-    const state = { seq: 30, time: 1, policy: 'never', mode: 'danger-full-access' }
+    const state = { seq: 30, time: 1, policy: 'never', mode: 'danger-full-access', delegated: false }
     expect(fullAccessStartDefinition.update({ state } as never, {} as never)).toBe(state)
     expect(approvalPolicyDefinition.update({ state: { policy: 'never' } } as never, {} as never)).toEqual({ policy: 'never' })
     expect(sandboxModeDefinition.update({ state: { mode: 'read-only' } } as never, {} as never)).toEqual({ mode: 'read-only' })
@@ -117,7 +129,7 @@ describe('registration', () => {
     ctx.provide('sessions', {} as never)
     const fiber = ctx.plugin({ name: 'consents', inject: ['slots', 'locale', 'configForms', 'sessions'], apply: scope => { applyConsents(scope, (() => Promise.reject(new Error('unused'))) as never) } })
     await fiber
-    expect([...definitions]).toEqual([approvalPolicyDefinition, sandboxModeDefinition, fullAccessStartDefinition, agentLevelNoticeDefinition])
+    expect([...definitions]).toEqual([approvalPolicyDefinition, sandboxModeDefinition, delegatedSessionDefinition, fullAccessStartDefinition, agentLevelNoticeDefinition])
     expect(rows.get(`conversation.chat.node#${AGENT_LEVEL_NOTICE_KIND}`)).toBe(AgentLevelsNotice)
     expect(rows.get(`conversation.chat.node#${FULL_ACCESS_START_KIND}`)).toBe(FullAccessStartNotice)
     await fiber.dispose()

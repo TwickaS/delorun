@@ -39,6 +39,11 @@ function folders(): { home: string, workspace: string, other: string } {
   return paths
 }
 
+/** A local subagent's chat: its session header names the delegating chat as its parent. */
+function child(cwd: string | undefined, id: string, parent: Agent): Agent {
+  return { id: SessionId(id), session: { id: SessionId(id), header: { cwd, origin: 'subagent', parentSession: parent.id } } } as never
+}
+
 /** A parent chat whose session runs in a folder. */
 function chat(cwd: string | undefined, id = 'chat-1'): Agent {
   const agent: Agent = { id: SessionId(id), session: { id: SessionId(id), header: { cwd } } } as never
@@ -62,22 +67,26 @@ interface Mounted {
 async function mounted(options: {
   mode?: 'read-only' | 'workspace-write' | 'danger-full-access' | null
   answer?: (() => ApprovalOutcome) | null
-  agents?: readonly Agent[]
+  agents?: readonly Agent[] | ((paths: { workspace: string }) => readonly Agent[])
   providers?: Record<string, { prepareContinuable?: () => void }>
   /** The approval policy of the configured approval service. */
   policy?: 'ask' | 'never'
   /** The `fullAccessStartsAgents` switch; on by default, as the schema defaults it. */
   fullAccess?: boolean
+  /** A chat's own logged sandbox mode by session id, over `mode`. */
+  modeOf?: Record<string, 'workspace-write' | 'danger-full-access'>
+  /** A chat's own logged approval policy by session id, over the configured one. */
+  policyOf?: Record<string, 'ask' | 'never'>
 } = {}): Promise<Mounted> {
   const paths = folders()
   const ctx = new Context()
   const asks: ApprovalRequest[] = []
-  if (options.mode !== null) ctx.provide('sandboxPolicy', { resolve: () => ({ mode: options.mode ?? 'workspace-write' }) } as never)
+  if (options.mode !== null) ctx.provide('sandboxPolicy', { resolve: (request: { session: { id: string } }) => ({ mode: options.modeOf?.[request.session.id] ?? options.mode ?? 'workspace-write' }) } as never)
   if (options.answer !== null) {
     const answer = options.answer ?? (() => 'allowed-once')
-    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) }, config: { policy: options.policy ?? 'ask' }, overrideOf: () => undefined } as never)
+    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) }, config: { policy: options.policy ?? 'ask' }, overrideOf: (session: { id: string }) => options.policyOf?.[session.id] } as never)
   }
-  const agents = options.agents ?? []
+  const agents = typeof options.agents === 'function' ? options.agents(paths) : options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
   await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => options.fullAccess ?? true, env: { DELORUN_HOME: paths.home }, now: () => 1_000, levelOf: () => 'standard', missingSandboxTools: () => [] })
@@ -164,6 +173,51 @@ describe('the review', () => {
       const { consent, asks, workspace } = await mounted({ policy: 'never', mode: 'workspace-write', fullAccess: true, answer: () => 'rejected' })
       await expect(consent.review(review(chat(workspace), workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
       expect(asks).toHaveLength(1)
+    })
+
+    describe('for a local subagent', () => {
+      /** The chats of a root, its child and its grandchild, in the workspace of the mounted folders. */
+      const lineage = (paths: { workspace: string }): Agent[] => {
+        const root = chat(paths.workspace, 'root')
+        const first = child(paths.workspace, 'child', root)
+        return [root, first, child(paths.workspace, 'grand', first)]
+      }
+
+      it('asks for the child and the grandchild of an Ask root on danger-full-access', async () => {
+        const mount = await mounted({ policy: 'ask', mode: 'danger-full-access', policyOf: { child: 'never', grand: 'never' }, agents: lineage, answer: () => 'rejected' })
+        const [, first, second] = lineage(mount)
+        for (const delegating of [first as Agent, second as Agent]) {
+          await expect(mount.consent.review(review(delegating, mount.workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', mount.workspace) })
+        }
+        expect(mount.asks).toHaveLength(2)
+      })
+
+      it('starts the child and the grandchild of a Full access root without asking', async () => {
+        const mount = await mounted({ policy: 'ask', mode: 'danger-full-access', policyOf: { root: 'never', child: 'never', grand: 'never' }, agents: lineage })
+        const [, first, second] = lineage(mount)
+        for (const delegating of [first as Agent, second as Agent]) await expect(mount.consent.review(review(delegating, mount.workspace))).resolves.toMatchObject({ kind: 'allow' })
+        expect(mount.asks).toEqual([])
+      })
+
+      it('reads the root\'s own sandbox mode, not the inherited one', async () => {
+        const mount = await mounted({ policy: 'ask', mode: 'danger-full-access', modeOf: { root: 'workspace-write' }, policyOf: { root: 'never', child: 'never' }, agents: lineage, answer: () => 'rejected' })
+        const [, first] = lineage(mount)
+        await expect(mount.consent.review(review(first as Agent, mount.workspace))).resolves.toMatchObject({ kind: 'refuse' })
+        expect(mount.asks).toHaveLength(1)
+      })
+
+      it('counts an ancestor it cannot find, or a cycle, as not Full access', async () => {
+        const lost = await mounted({ policy: 'never', mode: 'danger-full-access', answer: () => 'rejected' })
+        const orphan = child(lost.workspace, 'child', chat(lost.workspace, 'root'))
+        await expect(lost.consent.review(review(orphan, lost.workspace))).resolves.toMatchObject({ kind: 'refuse' })
+        const ring = (paths: { workspace: string }): Agent[] => {
+          const a = { id: SessionId('a'), session: { id: SessionId('a'), header: { cwd: paths.workspace, origin: 'subagent', parentSession: SessionId('b') } } } as never as Agent
+          const b = { id: SessionId('b'), session: { id: SessionId('b'), header: { cwd: paths.workspace, origin: 'subagent', parentSession: SessionId('a') } } } as never as Agent
+          return [a, b]
+        }
+        const cycle = await mounted({ policy: 'never', mode: 'danger-full-access', answer: () => 'rejected', agents: ring })
+        await expect(cycle.consent.review(review(ring(cycle)[0] as Agent, cycle.workspace))).resolves.toMatchObject({ kind: 'refuse' })
+      })
     })
 
     it('still refuses a read-only chat, a chat without a workspace and a folder outside it, and a grants file that cannot be read', async () => {
