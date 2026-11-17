@@ -1554,7 +1554,7 @@
       "path": "pnpm-workspace.yaml",
       "class": "security",
       "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code.",
-      "sha256": "5484bc9a613bb1b873e0fa301b0be132fd69c36702bfb9b2e6268a992b5bf9a8"
+      "sha256": "bdddecdd5fc2341a20f47a3ffc89926dc6f672ce930d0f6b31ed6d746aada92a"
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
