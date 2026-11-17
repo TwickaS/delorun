@@ -34,8 +34,16 @@ const LOOPBACK_REQUIRED = JSON.stringify({ error: 'LOOPBACK_REQUIRED' })
 
 /** Why the install-time files are served to a device. */
 const STATIC = 'upstream\'s frontend-static fallback: the studio page, its built assets and its install-time files'
-/** Why the Changes routes are reached by a device: reads answer it, and every action and setup route attests the person at the computer and answers a device `403 LOOPBACK_REQUIRED`. */
-const CHANGES = '@delorun/plugin-changes: reads for any signed-in device; actions and setup refused to a device, whose request is not the person at the computer'
+/** Why the Changes reads are reached by a device: they answer any signed-in device. */
+const CHANGES = '@delorun/plugin-changes: reads for any signed-in device'
+/**
+ * Why the Changes controls of `@delorun/plugin-changes` are reached by a device: each action, setup and protection route
+ * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change, Discard
+ * of a change to Delorun and turning protection on need an unlocked device at either Phone powers level; every other
+ * action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off need an unlocked
+ * device and Phone powers Full; dismissing the notice of a device's change is the computer's alone.
+ */
+const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level and Phone powers allow, with an unlock it entered; the notice of a device\'s change only at the computer'
 /** Why the routes of `@delorun/home-auth` are reached by a device. */
 const HOME_AUTH = '@delorun/home-auth: sign-in and the device routes, which refuse a reach session where C5 reserves them'
 
@@ -51,23 +59,30 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /plugins/events': 'upstream\'s client HMR events: the module graph updates the client loader follows',
   'exact /delorun/reach/status': '@delorun/reach: the reach status the studio shows',
   'exact /delorun/branding/icon': '@delorun/plugin-theme: the studio\'s custom icon, which the page and the installed app show',
-  'exact /delorun/changes/apply': CHANGES,
-  'exact /delorun/changes/create': CHANGES,
-  'exact /delorun/changes/discard': CHANGES,
-  'exact /delorun/changes/done': CHANGES,
-  'exact /delorun/changes/off': CHANGES,
-  'exact /delorun/changes/on': CHANGES,
-  'exact /delorun/changes/request': CHANGES,
-  'exact /delorun/changes/reveal': CHANGES,
-  'exact /delorun/changes/safe-mode': CHANGES,
-  'exact /delorun/changes/setup-apply': CHANGES,
-  'exact /delorun/changes/setup-export': CHANGES,
-  'exact /delorun/changes/setup-inspect': CHANGES,
+  'exact /delorun/changes/apply': CHANGES_CONTROLS,
+  'exact /delorun/changes/create': CHANGES_CONTROLS,
+  'exact /delorun/changes/discard': CHANGES_CONTROLS,
+  'exact /delorun/changes/done': CHANGES_CONTROLS,
+  'exact /delorun/changes/off': CHANGES_CONTROLS,
+  'exact /delorun/changes/on': CHANGES_CONTROLS,
+  'exact /delorun/changes/request': CHANGES_CONTROLS,
+  'exact /delorun/changes/reveal': CHANGES_CONTROLS,
+  'exact /delorun/changes/safe-mode': CHANGES_CONTROLS,
+  'exact /delorun/changes/setup-apply': CHANGES_CONTROLS,
+  'exact /delorun/changes/setup-export': CHANGES_CONTROLS,
+  'exact /delorun/changes/setup-inspect': CHANGES_CONTROLS,
   'exact /delorun/changes/show': CHANGES,
   'exact /delorun/changes/state': CHANGES,
-  'exact /delorun/changes/undo': CHANGES,
-  'exact /delorun/changes/work': CHANGES,
+  'exact /delorun/changes/undo': CHANGES_CONTROLS,
+  'exact /delorun/changes/work': CHANGES_CONTROLS,
   'exact /delorun/changes/workspaces': CHANGES,
+  'exact /delorun/changes/harness-apply': CHANGES_CONTROLS,
+  'exact /delorun/changes/harness-undo': CHANGES_CONTROLS,
+  'exact /delorun/changes/harness-discard': CHANGES_CONTROLS,
+  'exact /delorun/changes/harness-copy': CHANGES_CONTROLS,
+  'exact /delorun/changes/protection-off': CHANGES_CONTROLS,
+  'exact /delorun/changes/protection-on': CHANGES_CONTROLS,
+  'exact /delorun/changes/notice-seen': CHANGES_CONTROLS,
   'exact /auth/owner/claim': HOME_AUTH,
   'exact /auth/branding/icon': HOME_AUTH,
   'exact /auth/devices': HOME_AUTH,
@@ -98,6 +113,7 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/pin/off': HOME_AUTH,
   'exact /auth/pin/options': HOME_AUTH,
   'exact /auth/pin/resume': HOME_AUTH,
+  'exact /auth/phone-powers': '@delorun/home-auth: a signed-in device reads the Phone powers level; setting it answers only the person at the computer, so a phone never changes what a phone may do',
 }
 
 /**
@@ -126,6 +142,8 @@ const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the 
  * upstream declares owner-only stays refused.
  */
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
+  '/api/delorunBrowsePair.start': { device: 'refused', reason: 'pairing runs browse on the computer and links the person\'s own Chrome, with their sign-ins; only the computer\'s own studio starts it' },
+  '/api/delorunPreviewFlags.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
   '/api/delorunChatStates.list': READ('snooze and settle states order the chat list, which a phone shows too'),
   '/api/delorunChatStates.set': OPEN('snoozing or settling a chat is everyday organising', 400),
   '/api/delorunNewWorkspace.places': UNLOCKED('lists the computer\'s recent workspaces and folders by path'),
