@@ -158,7 +158,7 @@ export function registerBrowsePairing(scope: Context, find: FindPairProgram): vo
   scope.effect(() => () => { running.current?.abort() }, 'delorun-requirements: browse pairing')
   scope.connection.fetch.register({
     path: BROWSE_PAIR_ROUTE, methods: ['POST'], requestBody: 'buffered', requestMediaType: 'application/json',
-    // No `admitPeer`: only the owner's own studio reaches the route; `answerBrowsePair` also refuses a non-loopback Host.
+    // Admits no paired device: only the owner's own studio reaches the route; `answerBrowsePair` also refuses a non-loopback Host.
     fetch: request => answerBrowsePair(request, find, process.env, running),
   })
 }

@@ -1,0 +1,66 @@
+{
+  "name": "@delorun/bundle-real-browser",
+  "description": "Your own browser as an optional bundle: in a chat where you allow it, the agent works in your own Chrome, signed in as you, through browse. Needs the browse extension paired once. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@delorun/browser-use-browse": "workspace:*",
+    "@delorun/skill-real-browser": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental",
+    "pack": true,
+    "packNatives": {
+      "linux-x64": [
+        "@opencode/browse-linux-x64",
+        "@opencode/browse-windows-x64"
+      ],
+      "linux-arm64": [
+        "@opencode/browse-linux-arm64"
+      ],
+      "darwin-x64": [
+        "@opencode/browse-darwin-x64"
+      ],
+      "darwin-arm64": [
+        "@opencode/browse-darwin-arm64"
+      ],
+      "win32-x64": [
+        "@opencode/browse-windows-x64"
+      ]
+    },
+    "requires": {
+      "browser-use-browse": {
+        "needs": [
+          {
+            "kind": "browse-paired",
+            "via": [
+              "@delorun/browser-use-browse",
+              "@opencode/browse"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "browse-pair",
+          "extension": "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",
+          "guide": "https://docs.delorun.com/guide/use-your-own-browser"
+        }
+      }
+    }
+  }
+}

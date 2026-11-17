@@ -38,6 +38,7 @@ const BUNDLES = [
   { dir: 'bundle-webhooks', rows: ['webhook-runtime', 'github-webhook-ingress'], on: ['webhook-runtime'] },
   { dir: 'bundle-external-agents', rows: ['experimental-subagent-oar-codex', 'experimental-subagent-oar-claude', 'tool-subagent-oar', 'ptc-runtime-python'], on: [] },
   { dir: 'bundle-computer-use-driver', rows: ['computer-use-registry', 'computer-use-cua-driver-native'], on: ['computer-use-registry', 'computer-use-cua-driver-native'] },
+  { dir: 'bundle-real-browser', rows: ['browser-use-browse', 'skill-real-browser'], on: ['skill-real-browser'] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string>; exports: Record<string, string> } =>
@@ -164,6 +165,21 @@ describe('what needs setup', () => {
       const row = answer.rows[0]
       const command = row?.state === 'needs-setup' && row.fix.kind === 'command' ? row.fix.command : ''
       expect(command).toMatch(/^npx -y @playwright\/mcp@\d+\.\d+\.\d+ install-browser chromium$/u)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('says Your own browser needs Chrome connected until browse has seen a paired browser, reading only browsers.json', () => {
+    const data = mkdtempSync(join(scratch, 'xdg-data-'))
+    vi.stubEnv('XDG_DATA_HOME', data)
+    try {
+      const check = () => checkRequirements([{ name: '@delorun/bundle-real-browser', dir: join(PACKAGES, 'bundle-real-browser'), rowIds: flat(patchRows('bundle-real-browser')).map(row => String(row.id)) }], 'en')
+      const unpaired = check()
+      expect(unpaired).toMatchObject({ problems: [], rows: [{ rowId: 'browser-use-browse', state: 'needs-setup', reason: 'Connect Chrome', fix: { kind: 'browse-pair', extension: expect.stringMatching(/^https:\/\/chromewebstore\.google\.com\//u) } }] })
+      mkdirSync(join(data, 'browse'))
+      writeFileSync(join(data, 'browse', 'browsers.json'), JSON.stringify({ profile: { id: 'profile', name: 'Chrome' } }))
+      expect(check()).toEqual({ problems: [], rows: [{ packageName: '@delorun/bundle-real-browser', rowId: 'browser-use-browse', state: 'ready' }] })
     } finally {
       vi.unstubAllEnvs()
     }

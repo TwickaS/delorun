@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimePlatform } from '@delorun/contract-release-manifest'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
@@ -157,5 +158,37 @@ describe('the deploy selection and the lockfile systems', () => {
     expect(PackNatives.safeParse({ 'win32-arm64': ['@vendor/tool'] }).success).toBe(false)
     expect(PackNatives.safeParse({ 'linux-x64': ['../escape'] }).success).toBe(false)
     expect(PackNatives.safeParse({ 'linux-x64': [] }).success).toBe(false)
+  })
+})
+
+describe('the Your own browser pack in the workspace', () => {
+  const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
+  const json = (path: string): { [key: string]: unknown } => JSON.parse(readFileSync(join(ROOT, path), 'utf8')) as { [key: string]: unknown }
+  const bundle = json('delorun/packages/bundle-real-browser/package.json') as { delorun: { packNatives: unknown } }
+  const driver = json('delorun/packages/browser-use-browse/package.json') as { dependencies: Record<string, string> }
+  const platforms = (json('delorun/apps/release/closure.json') as { platforms: RuntimePlatform[] }).platforms
+  const lockfile = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8')
+  const OWN: Readonly<Record<RuntimePlatform, { readonly os: string, readonly cpu: string }>> = {
+    'linux-x64': { os: 'linux', cpu: 'x64' }, 'linux-arm64': { os: 'linux', cpu: 'arm64' },
+    'darwin-x64': { os: 'darwin', cpu: 'x64' }, 'darwin-arm64': { os: 'darwin', cpu: 'arm64' }, 'win32-x64': { os: 'win32', cpu: 'x64' },
+  }
+
+  it('carries browse\'s program for each release platform\'s own system, pinned with its integrity at the driver\'s browse version', () => {
+    const natives = PackNatives.parse(bundle.delorun.packNatives)
+    const version = driver.dependencies['@opencode/browse']
+    expect(version).toMatch(/^\d+\.\d+\.\d+$/u)
+    for (const platform of platforms) {
+      const listed = natives[platform] ?? []
+      const locked = listed.map(name => [name, lockedFrom(lockfile, name)] as const)
+      for (const [name, pin] of locked) {
+        expect(pin, `${platform}: ${name} is pinned in the lockfile`).toMatchObject({ version, integrity: expect.stringMatching(/^sha512-/u) })
+      }
+      const own = locked.filter(([, pin]) => pin?.system?.os?.includes(OWN[platform].os) === true && pin.system.cpu?.includes(OWN[platform].cpu) === true && pin.system.libc?.includes('musl') !== true)
+      expect(own.map(([name]) => name), platform).toHaveLength(1)
+    }
+  })
+
+  it('also carries the Windows program in the linux-x64 variant, for WSL with Chrome on Windows', () => {
+    expect(PackNatives.parse(bundle.delorun.packNatives)['linux-x64']).toContain('@opencode/browse-windows-x64')
   })
 })

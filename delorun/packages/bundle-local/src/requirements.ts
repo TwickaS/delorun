@@ -35,8 +35,7 @@
  *
  * @module @delorun/bundle-local/requirements
  */
-import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -111,7 +110,8 @@ export interface CheckEnvironment {
    */
   readJson(path: string): unknown
   /**
-   * Resolve a package's `package.json` as the package whose `package.json` is given would import it.
+   * Find a package's `package.json` in the `node_modules` folders above the given package, as Node's lookup finds the
+   * package's folder, whatever the package's `exports` allow, following links to the real folder.
    * @param from - the importing package's `package.json`.
    * @param name - the package to resolve.
    * @returns the absolute path of the resolved `package.json`.
@@ -140,7 +140,13 @@ export function hostEnvironment(): CheckEnvironment {
     home: homedir(),
     exists: existsSync,
     readJson: path => JSON.parse(readFileSync(path, 'utf8')) as unknown,
-    resolvePackage: (from, name) => createRequire(from).resolve(`${name}/package.json`),
+    resolvePackage: (from, name) => {
+      for (let dir = dirname(from); ; dir = dirname(dir)) {
+        const manifest = join(dir, 'node_modules', name, 'package.json')
+        if (existsSync(manifest)) return realpathSync(manifest)
+        if (dirname(dir) === dir) throw new Error(`Cannot find the package ${name} from ${from}`)
+      }
+    },
     isExecutable: (path) => {
       if (!existsSync(path) || !statSync(path).isFile()) return false
       if (process.platform === 'win32') return true

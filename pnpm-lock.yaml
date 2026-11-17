@@ -2277,6 +2277,15 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delorun/packages/bundle-real-browser:
+    dependencies:
+      '@delorun/browser-use-browse':
+        specifier: workspace:*
+        version: link:../browser-use-browse
+      '@delorun/skill-real-browser':
+        specifier: workspace:*
+        version: link:../skill-real-browser
+
   delorun/packages/bundle-studio:
     dependencies:
       '@delorun/plugin-chat-states':
