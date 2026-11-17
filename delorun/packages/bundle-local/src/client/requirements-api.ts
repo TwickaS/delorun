@@ -4,7 +4,7 @@
  * [`./host-api.ts`](./host-api.ts).
  * @module @delorun/bundle-local/client/requirements-api
  */
-import { call, fields, isString, listOf, optional, type Check, type HostFetch } from './host-api.ts'
+import { call, fields, isString, listOf, type Check, type HostFetch } from './host-api.ts'
 
 /** The routes under `/api`. */
 export const REQUIREMENT_ROUTES = {
@@ -12,11 +12,11 @@ export const REQUIREMENT_ROUTES = {
   check: '/api/delorunRequirements.check',
 } as const
 
-/** The action that meets a need. `label` is the bundle's own words for it, when it supplies any. */
+/** The action that meets a need. */
 export type RequirementFix =
-  | { readonly kind: 'command', readonly command: string, readonly label?: string }
-  | { readonly kind: 'settings', readonly section: string, readonly label?: string }
-  | { readonly kind: 'docs', readonly url: string, readonly label?: string }
+  | { readonly kind: 'command', readonly command: string }
+  | { readonly kind: 'settings', readonly section: string }
+  | { readonly kind: 'docs', readonly url: string }
 
 /** One row's state: ready, or what it needs and how to meet that. */
 export type RequirementRow =
@@ -35,7 +35,7 @@ export interface RequirementsAnswer {
   readonly problems: readonly RequirementProblem[]
 }
 
-const isFix: Check = value => fields({ kind: isString, label: optional(isString) })(value)
+const isFix: Check = value => fields({ kind: isString })(value)
   && ((value as { kind: string }).kind === 'command' ? fields({ command: isString })(value)
     : (value as { kind: string }).kind === 'settings' ? fields({ section: isString })(value)
       : (value as { kind: string }).kind === 'docs' && fields({ url: isString })(value))

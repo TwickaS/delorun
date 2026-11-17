@@ -127,6 +127,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunTrust.check': { device: 'refused', reason: 'Check now hashes the runtime and runs the release-log check, which only the home\'s computer starts' },
   '/api/delorunVersions.list': { device: 'read', reason: 'the setup versions screen lists the saved versions and which one runs, which a signed-in studio reads; it names no secret' },
   '/api/delorunVersions.changes': { device: 'read', reason: 'the setup versions screen compares a saved version with the running one, which a signed-in studio reads; the history\'s admission keeps secret fields out; the probe names no version, so the route answers 400 BAD_REQUEST', answers: 400 },
+  '/api/delorunRequirements.check': { device: 'read', reason: 'Plugins shows which programs and settings an optional plugin lacks, which a signed-in studio reads; it runs nothing, names no secret and changes nothing' },
   '/api/delorunReport.details': { device: 'refused', reason: 'the report holds an excerpt of the home\'s log, which only the computer the home runs on may read; a device reports its versions without it' },
   '/api/delorunVersions.save': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
   '/api/delorunVersions.switch': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },

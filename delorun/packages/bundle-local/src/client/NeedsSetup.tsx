@@ -55,9 +55,9 @@ function Fix({ fix, t, openSettings, copy }: { readonly fix: RequirementFix, rea
   switch (fix.kind) {
     case 'command': return <CommandFix command={fix.command} t={t} copy={copy} />
     case 'settings':
-      return <Button variant="outline" onClick={() => { openSettings(fix.section) }}>{fix.label ?? t('openSettings')}</Button>
+      return <Button variant="outline" onClick={() => { openSettings(fix.section) }}>{t('openSettings')}</Button>
     case 'docs':
-      return <a className={css.link} href={fix.url} target="_blank" rel="noreferrer noopener">{fix.label ?? t('openDocs')}</a>
+      return <a className={css.link} href={fix.url} target="_blank" rel="noreferrer noopener">{t('openDocs')}</a>
   }
 }
 

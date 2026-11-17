@@ -5,14 +5,15 @@
  *
  * ```json
  * "delorun": { "requires": { "lsp-stdio": {
- *   "needs": [{ "kind": "program", "names": ["typescript-language-server"] }],
+ *   "needs": [{ "kind": "program", "names": ["typescript-language-server"], "label": "typescript-language-server" }],
  *   "fix": { "kind": "command", "command": "npm install -g typescript-language-server typescript" }
  * } } }
  * ```
  *
- * The sentence a person reads is the bundle's own locale entry `requirements.<rowId>.reason` (`fix` is the optional
- * label of the fix), in the studio's language with English as the fallback. A need is a `program` found on `PATH` or at
- * one of its listed absolute `paths`, an `env` variable that is set and not empty, or a `platform` the row runs on.
+ * The sentence a person reads is derived from the first unmet need and this module's dictionary, in the studio's
+ * language: "Needs <label or names> installed", "Needs <name> set" or "Not available on this kind of computer". A need is
+ * a `program` that exists and is executable on `PATH` or at one of its listed absolute `paths` (it is never run), with an
+ * optional friendly `label`; an `env` variable that is set and not empty; or a `platform` the row runs on.
  *
  * A check never stops a row and never throws across bundles: a bundle whose declaration cannot be read, names a row its
  * patch does not declare, or lacks the reason in English is reported as a problem of that bundle, and every other bundle
@@ -20,13 +21,14 @@
  *
  * @module @delorun/bundle-local/requirements
  */
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
 import { delimiter, join, posix, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveBundleDir } from '@deepseek-ai/dsh-app-boot'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.pluginManager service.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
+import { REACH_DEVICE } from '@delorun/home-auth'
 import { z } from 'zod'
 import { REQUIREMENT_ROUTES, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
 
@@ -36,6 +38,7 @@ export const name = 'delorun-requirements'
 const Program = z.strictObject({
   kind: z.literal('program'),
   names: z.array(z.string().min(1)).min(1),
+  label: z.string().min(1).optional(),
   paths: z.array(z.string().refine(path => posix.isAbsolute(path) || win32.isAbsolute(path), 'a program path must be absolute')).optional(),
 })
 const Env = z.strictObject({ kind: z.literal('env'), name: z.string().min(1) })
@@ -63,11 +66,11 @@ export interface CheckEnvironment {
   /** The environment variables. */
   readonly env: Readonly<Record<string, string | undefined>>
   /**
-   * Whether a regular file exists.
+   * Whether an executable regular file exists; nothing is run.
    * @param path - an absolute path.
-   * @returns true when the path is a file.
+   * @returns true when the path is a file the user may execute (any file on Windows).
    */
-  isFile(path: string): boolean
+  isExecutable(path: string): boolean
 }
 
 /**
@@ -78,9 +81,16 @@ export function hostEnvironment(): CheckEnvironment {
   return {
     platform: process.platform,
     env: process.env,
-    isFile: (path) => {
-      if (!existsSync(path)) return false
-      return statSync(path).isFile()
+    isExecutable: (path) => {
+      if (!existsSync(path) || !statSync(path).isFile()) return false
+      if (process.platform === 'win32') return true
+      try {
+        accessSync(path, constants.X_OK)
+        return true
+      } catch (error) {
+        // Not executable by this user (EACCES) is the answer "no"; any other failure is the same answer for a lookup.
+        return (error as NodeJS.ErrnoException).code === undefined
+      }
     },
   }
 }
@@ -97,8 +107,8 @@ const WINDOWS_SUFFIXES: readonly string[] = ['.exe', '.cmd', '.bat', '']
 function hasProgram(need: Extract<Need, { kind: 'program' }>, host: CheckEnvironment): boolean {
   const suffixes = host.platform === 'win32' ? WINDOWS_SUFFIXES : ['']
   const dirs = (host.env.PATH ?? '').split(delimiter).filter(dir => dir !== '')
-  const onPath = dirs.some(dir => need.names.some(program => suffixes.some(suffix => host.isFile(join(dir, program + suffix)))))
-  return onPath || (need.paths ?? []).some(path => host.isFile(path))
+  const onPath = dirs.some(dir => need.names.some(program => suffixes.some(suffix => host.isExecutable(join(dir, program + suffix)))))
+  return onPath || (need.paths ?? []).some(path => host.isExecutable(path))
 }
 
 /**
@@ -122,26 +132,35 @@ export interface BundleToCheck {
   readonly rowIds: readonly string[]
 }
 
-/** The text of a bundle's locale file for the requirement entries. */
-type Texts = Readonly<Record<string, { readonly reason?: string, readonly fix?: string }>>
+/** The sentences of the reasons, by studio language. */
+const REASONS = {
+  en: {
+    program: (names: string) => `Needs ${names} installed`,
+    or: ' or ',
+    env: (name: string) => `Needs ${name} set`,
+    platform: 'Not available on this kind of computer',
+  },
+  zh: {
+    program: (names: string) => `需要安装 ${names}`,
+    or: ' 或 ',
+    env: (name: string) => `需要设置 ${name}`,
+    platform: '此类电脑不支持',
+  },
+} as const
 
 /**
- * Read a bundle's requirement texts in one language.
- * @param dir - the bundle's directory.
- * @param language - a locale file name such as `en` or `zh`.
- * @returns the texts, or an empty record when the file has none.
+ * The reason a need is unmet, in the studio's language.
+ * @param need - the unmet need.
+ * @param language - `en` or `zh`.
+ * @returns the sentence.
  */
-function readTexts(dir: string, language: string): Texts {
-  let text: string
-  try {
-    text = readFileSync(join(dir, 'locale', `${language}.json`), 'utf8')
-  } catch (error) {
-    // No locale file for this language: the caller falls back to English, which a declaration requires.
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
-    throw error
+function reasonOf(need: Need, language: string): string {
+  const words = language === 'zh' ? REASONS.zh : REASONS.en
+  switch (need.kind) {
+    case 'program': return words.program(need.label ?? need.names.join(words.or))
+    case 'env': return words.env(need.name)
+    case 'platform': return words.platform
   }
-  const parsed = z.object({ requirements: z.record(z.string(), z.object({ reason: z.string().optional(), fix: z.string().optional() })).optional() }).parse(JSON.parse(text))
-  return parsed.requirements ?? {}
 }
 
 /**
@@ -150,7 +169,7 @@ function readTexts(dir: string, language: string): Texts {
  * @param language - the studio's language; English answers where it has no entry.
  * @param host - the computer.
  * @returns the rows it declares needs for, or null for a bundle that declares none.
- * @throws {Error} when the declaration cannot be read, names a row the patch does not declare, or has no English reason.
+ * @throws {Error} when the declaration cannot be read or names a row the patch does not declare.
  */
 function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnvironment): RequirementRow[] | null {
   const manifest = z.object({ delorun: z.object({ requires: z.unknown().optional() }).optional() })
@@ -158,18 +177,11 @@ function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnviron
   const raw = manifest.delorun?.requires
   if (raw === undefined) return null
   const declared = Declaration.parse(raw)
-  const english = readTexts(bundle.dir, 'en')
-  const local = language === 'en' ? english : readTexts(bundle.dir, language)
   return Object.entries(declared).map(([rowId, requirement]) => {
     if (!bundle.rowIds.includes(rowId)) throw new Error(`"requires" names the row "${rowId}", which the patch does not declare`)
-    const reason = local[rowId]?.reason ?? english[rowId]?.reason
-    if (english[rowId]?.reason === undefined || reason === undefined) throw new Error(`locale/en.json has no requirements.${rowId}.reason`)
-    if (requirement.needs.every(need => isMet(need, host))) return { packageName: bundle.name, rowId, state: 'ready' as const }
-    const label = local[rowId]?.fix ?? english[rowId]?.fix
-    return {
-      packageName: bundle.name, rowId, state: 'needs-setup' as const, reason,
-      fix: { ...requirement.fix, ...label === undefined ? {} : { label } },
-    }
+    const unmet = requirement.needs.find(need => !isMet(need, host))
+    if (unmet === undefined) return { packageName: bundle.name, rowId, state: 'ready' as const }
+    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language), fix: requirement.fix }
   })
 }
 
@@ -225,6 +237,8 @@ export function apply(ctx: Context): void {
   ctx.inject(['connection'], (scope) => {
     scope.connection.fetch.register({
       path: REQUIREMENT_ROUTES.check, methods: ['GET'], requestBody: 'buffered',
+      // A read of which programs and settings are present; a signed-in device may see it as the owner does.
+      admitPeer: (_request, peer) => peer.principal.kind === REACH_DEVICE,
       fetch: async (request) => {
         const asked = new URL(request.url).searchParams.get('language') ?? 'en'
         const answer = checkRequirements(await listedBundles(scope), LANGUAGES.has(asked) ? asked : 'en')

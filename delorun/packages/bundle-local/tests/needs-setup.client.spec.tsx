@@ -40,12 +40,12 @@ const row = { kind: 'row', pkg: PKG, row: ROW } as const
 
 describe('the Needs setup state', () => {
   it('reads "Needs setup · reason" with a docs link', async () => {
-    const { fetch, urls } = host(needs({ kind: 'docs', url: 'https://example.com/chrome', label: 'Get Chrome' }))
+    const { fetch, urls } = host(needs({ kind: 'docs', url: 'https://example.com/chrome' }))
     render(<></>)
     show(fetch, row)
     expect(await screen.findByText('Needs setup · Needs Chrome installed')).toBeTruthy()
     expect(urls[0]).toBe(`${REQUIREMENT_ROUTES.check}?language=en`)
-    const link = screen.getByRole('link', { name: 'Get Chrome' })
+    const link = screen.getByRole('link', { name: en.openDocs })
     expect(link.getAttribute('href')).toBe('https://example.com/chrome')
     expect(link.getAttribute('rel')).toContain('noopener')
   })
