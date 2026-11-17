@@ -144,7 +144,7 @@ export function PluginBrowser({ words }: { readonly words: PluginBrowserWords })
   useEffect(() => { setReady(true) }, [])
   if (!ready) return <div className={css.root}><span /><PluginBrowserStill words={words} /></div>
   return (
-    <div className={css.root}>
+    <div className={css.root} data-plugin-browser="live">
       <TabList label={words.tabsLabel} idBase="plugin-browser" selected={tab} onSelect={setTab} tabs={[{ id: 'plugins', label: words.pluginsTab }, { id: 'make', label: words.makeYourOwnTab }]} />
       <TabPanel idBase="plugin-browser" selected={tab} focusable={false} className={css.panel}>
         {tab === 'plugins' ? <Plugins words={words} /> : <Make words={words} />}

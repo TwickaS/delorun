@@ -6,18 +6,25 @@
  */
 
 /*
- * The box the page holds for the strip; the still and the live strip both fill it, so nothing moves when one replaces the
- * other. Each height holds the tallest strip, with the spacious density and the longest entry.
+ * The box the page holds for the strip: the live strip's first height at each width, which the shorter still fills too,
+ * so nothing moves when one replaces the other. A change that writes more keys or a larger density grows the strip from
+ * the visitor's own press.
  */
 .strip {
   position: relative;
-  min-height: 1280px;
+  min-height: 1220px;
   color: var(--dl-text);
+}
+
+@media (min-width: 640px) {
+  .strip {
+    min-height: 1120px;
+  }
 }
 
 @media (min-width: 1024px) {
   .strip {
-    min-height: 640px;
+    min-height: 600px;
   }
 }
 
@@ -42,12 +49,18 @@
   min-width: 0;
 }
 
+/* The heading and the way back share a row; on a narrow strip the way back moves under the heading whole. */
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--dl-space-3);
+  gap: var(--dl-space-2) var(--dl-space-3);
   min-height: 2rem;
+}
+
+.back {
+  white-space: nowrap;
 }
 
 .side {

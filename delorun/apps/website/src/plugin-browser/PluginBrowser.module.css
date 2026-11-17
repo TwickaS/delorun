@@ -4,7 +4,7 @@
  */
 .root,
 .plain {
-  --browser-first: 560px;
+  --browser-first: 500px;
 }
 
 .root {
@@ -55,7 +55,7 @@
   line-height: 20px;
 }
 
-.groupName:first-child { margin-top: 0; }
+.list > li:first-child > .groupName { margin-top: 0; }
 
 .row {
   display: block;

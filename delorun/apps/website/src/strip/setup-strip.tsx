@@ -149,7 +149,7 @@ function StripBody({ look, state, onLook, announcement }: {
               <h3 className={css.label}>{versionsCopy.title}</h3>
               {earlier === undefined
                 ? null
-                : <Button variant="secondary" size="sm" onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{copy.back(differenceName(earlier, look))}</Button>}
+                : <Button variant="secondary" size="sm" className={css.back} onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{copy.back(differenceName(earlier, look))}</Button>}
             </div>
             <div className={css.list}><Versions state={state} /></div>
           </section>
