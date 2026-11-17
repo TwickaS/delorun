@@ -271,9 +271,9 @@ export async function storeFolderContent(home: string, source: string, scanCache
   }
   try {
     const { manifest, version } = await storeFolder(home, source, { scanCache, dependencies: 'link' })
-    const outside = manifest.entries.flatMap((entry) => entry.type === 'link' && entry.outside ? [entry.target] : [])
+    const outside = manifest.entries.flatMap((entry) => entry.type === 'link' && entry.outside && entry.runtime !== true ? [entry.target] : [])
     const osHome = homedir()
-    return { kind: 'stored', version, linkedDependencies: { underHome: outside.some((target) => isInside(osHome, target) && !isInRuntimeStore(home, target)) } }
+    return { kind: 'stored', version, linkedDependencies: { underHome: outside.some((target) => isInside(osHome, target)) } }
   } catch (error) {
     return { kind: 'unreadable', detail: failureDetail(error) }
   }
@@ -418,9 +418,10 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     try {
       await holdContent(home, activeDirectory(home, profile, plugin), active?.version)
     } catch (error) {
-      if (!isChangesError(error) || error.code !== 'STORE_CORRUPT') throw error
+      if (!isChangesError(error) || (error.code !== 'STORE_CORRUPT' && error.code !== 'RUNTIME_CHANGED')) throw error
       // Content the store no longer holds, such as a version a restored history version names after collection
-      // removed it: the plugin loads nothing until the person applies a change again.
+      // removed it, or a link to a package the release carries while the home runs no installed release: the plugin
+      // loads nothing until the person applies a change again.
       failed.push({ plugin, detail: error.detail })
       await holdContent(home, activeDirectory(home, profile, plugin), undefined)
       active = undefined
@@ -541,7 +542,7 @@ function withApproval(record: ApprovedRecord, plugin: string, approval: Approved
  * @param version - the version; undefined for an empty directory.
  */
 export async function holdContent(home: string, directory: string, version: ContentVersion | undefined): Promise<void> {
-  if (await holdsVersion(directory, version ?? EMPTY_CONTENT_VERSION)) return
+  if (await holdsVersion(home, directory, version ?? EMPTY_CONTENT_VERSION)) return
   if (version !== undefined) {
     await materialize(home, version, directory)
     return

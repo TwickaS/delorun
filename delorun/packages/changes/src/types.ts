@@ -124,6 +124,12 @@ export type VersionEntry =
      * names is not part of the approved content. Other outside targets are included in the content instead of linked.
      */
     readonly outside: boolean
+    /**
+     * Present on an outside link to a package the running release carries: `target` is then its path below the active
+     * runtime's `app/node_modules`, `/`-separated, and the link is written to that package in whichever release
+     * `runtimes/current` names. An update or a rollback changes neither the version nor what was approved.
+     */
+    readonly runtime?: true
   }
 
 /** The file under `store/versions/` that lists one content version. */

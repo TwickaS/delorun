@@ -21,7 +21,7 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = Buffer.from('registry tarball bytes')
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean }): PackSources {
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string> }): PackSources {
   const closure = temp()
   const extra = options.extra
   put(closure, { ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"2.0.0"}` }, 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
@@ -44,6 +44,7 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer, 
         'node_modules/shared-peer/index.js': 'peer\n',
         'node_modules/own-dep/package.json': '{"name":"own-dep","version":"1.0.0"}',
         ...options.native ? { [`node_modules/@vendor/native-${platform}/package.json`]: '{}' } : {},
+        ...options.files,
       })
       await Promise.resolve()
     },
@@ -72,6 +73,17 @@ describe('building a pack', () => {
     expect(JSON.parse(readFileSync(join(deployed, 'package.json'), 'utf8'))).toMatchObject({ exports: { './server': './src/server.js' } })
     expect(readFileSync(join(deployed, 'src/server.js'), 'utf8')).toBe('export { default } from \'shared-peer\';\nexport const port = 3081;\n')
     expect(JSON.parse(readFileSync(join(deployed, 'node_modules/@delorun/helper/package.json'), 'utf8'))).toMatchObject({ exports: { '.': './src/index.js' } })
+  })
+
+  it('keeps another package\'s TypeScript sources but refuses a pack that carries a Delorun package\'s untranspiled', async () => {
+    const theirs = { 'node_modules/own-dep/src/index.ts': 'export const own: number = 1\n', 'node_modules/own-dep/index.d.ts': 'export declare const own: number\n' }
+    const kept = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, files: theirs }), temp())
+    expect(kept.entry.variants.any!.files.map(file => file.path)).toEqual(expect.arrayContaining(Object.keys(theirs)))
+    // The transpile step reaches the pack's own `node_modules/@delorun`, not a Delorun package nested deeper.
+    const nested = { ...theirs, 'node_modules/own-dep/node_modules/@delorun/deep/src/index.ts': 'export const deep: number = 2\n' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, files: nested }), temp()))
+      .rejects.toThrow(/@delorun\/demo for linux-x64 carries TypeScript sources of a Delorun package.*node_modules\/own-dep\/node_modules\/@delorun\/deep\/src\/index\.ts/u)
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, files: { 'lib/extra.mts': 'export {}\n' } }), temp())).rejects.toThrow(/lib\/extra\.mts/u)
   })
 
   it('pins an external package per platform by URL and SHA-512, leaving its files out of the archive', async () => {

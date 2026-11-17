@@ -9,7 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { lstat, mkdir, open, rename, rm, rmdir, symlink, type FileHandle } from 'node:fs/promises'
+import { lstat, mkdir, open, realpath, rename, rm, rmdir, symlink, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -17,7 +17,7 @@ import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delorun/contract-home-la
 import { HomeLayoutError, readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { ChangesError } from './errors.ts'
 import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
-import { compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
+import { activeRuntimeModules, compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
 
 /** The mode of an active file whose owner execute bit is set. */
@@ -28,7 +28,7 @@ const EXECUTABLE_FILE_MODE = 0o700
  * keeps installed packages as outside links (one stored with `dependencies: 'link'`) reads back as itself, and a link
  * planted there is never read through.
  */
-const ACTIVE_SCAN: ScanOptions = { active: true }
+const ACTIVE_SCAN = { active: true } as const satisfies ScanOptions
 
 /** How long storing a folder waits for the store's lock, which a collection or another store holds. */
 export const STORE_LOCK_WAIT_MS = 120_000
@@ -272,7 +272,9 @@ function parseEntry(value: unknown): VersionEntry | undefined {
   }
   if (entry.type === 'link') {
     if (typeof entry.target !== 'string' || entry.target === '' || typeof entry.outside !== 'boolean') return undefined
-    return { type: 'link', path: entry.path, target: entry.target, outside: entry.outside }
+    if (entry.runtime === undefined) return { type: 'link', path: entry.path, target: entry.target, outside: entry.outside }
+    if (entry.runtime !== true || !entry.outside || !validPath(entry.target)) return undefined
+    return { type: 'link', path: entry.path, target: entry.target, outside: true, runtime: true }
   }
   return undefined
 }
@@ -349,7 +351,7 @@ export async function readObject(home: string, digest: ObjectDigest): Promise<Bu
  */
 function sameEntry(a: VersionEntry, b: VersionEntry): boolean {
   if (a.type === 'file') return b.type === 'file' && a.digest === b.digest && a.executable === b.executable
-  return b.type === 'link' && a.target === b.target
+  return b.type === 'link' && a.target === b.target && a.runtime === b.runtime
 }
 
 /**
@@ -376,12 +378,23 @@ async function removeEmptyParents(root: string, path: string): Promise<void> {
  * @param target - the directory.
  * @param entry - the entry.
  */
+/**
+ * @param home - the Delorun home.
+ * @returns the real path of the active runtime's installed packages, which a `runtime` link entry names.
+ * @throws {ChangesError} `RUNTIME_CHANGED` when `runtimes/current` names no installed runtime.
+ */
+async function requireRuntimeModules(home: string): Promise<string> {
+  const modules = await activeRuntimeModules(await realpath(home))
+  if (modules === undefined) throw new ChangesError('RUNTIME_CHANGED', home, `${home} runs no installed release, so a link to a package the release carries cannot be written`)
+  return modules
+}
+
 async function writeEntry(home: string, target: string, entry: VersionEntry): Promise<void> {
   const path = join(target, ...entry.path.split('/'))
   await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
   if (entry.type === 'link') {
     const temporary = temporaryPath(path)
-    await symlink(entry.target, temporary)
+    await symlink(entry.runtime === true ? join(await requireRuntimeModules(home), ...entry.target.split('/')) : entry.target, temporary)
     await rename(temporary, path)
     return
   }
@@ -424,7 +437,7 @@ export async function materialize(home: string, version: ContentVersion, target:
   let current: readonly VersionEntry[]
   let strays: readonly string[] = []
   if (previous === undefined) {
-    const scanned = await scanFolder(target, ACTIVE_SCAN)
+    const scanned = await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home })
     current = scanned.entries
     strays = scanned.skipped
   } else {
@@ -441,19 +454,20 @@ export async function materialize(home: string, version: ContentVersion, target:
     const before = held.get(entry.path)
     if (before === undefined || !sameEntry(before, entry)) await writeEntry(home, target, entry)
   }
-  if (!await holdsVersion(target, version)) throw new ChangesError('STORE_CORRUPT', target, `${target} does not hold version ${version} after it was written`)
+  if (!await holdsVersion(home, target, version)) throw new ChangesError('STORE_CORRUPT', target, `${target} does not hold version ${version} after it was written`)
   return manifest
 }
 
 /**
  * Whether a directory holds a content version.
+ * @param home - the Delorun home, whose active runtime a `runtime` link must name.
  * @param target - the directory.
  * @param version - the version id.
  * @returns whether a scan of it gives the version; false when it does not exist.
  */
-export async function holdsVersion(target: string, version: ContentVersion): Promise<boolean> {
+export async function holdsVersion(home: string, target: string, version: ContentVersion): Promise<boolean> {
   try {
-    return versionOf((await scanFolder(target, ACTIVE_SCAN)).entries) === version
+    return versionOf((await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home })).entries) === version
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error

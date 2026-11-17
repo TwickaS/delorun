@@ -38,7 +38,7 @@ describe('the first start under Changes', () => {
     })
     expect(recorded(fx, 'plug')).toEqual(namingActive(fx, 'plug'))
     expect(recorded(fx, '@x/scoped')).toEqual(namingActive(fx, '@x/scoped'))
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), stored)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), stored)).toBe(true)
     expect((await readApproved(fx.profileDir)).plugins.plug).toEqual({ source: plug, version: stored, approvedAt: NOW.toISOString(), approvedAtUpgrade: true })
     expect(await history(fx)).toEqual(['Changes: approved at upgrade plug, @x/scoped'])
     const log = await readChangeLog(fx.home, PROFILE)
@@ -109,7 +109,7 @@ describe('the first start under Changes', () => {
 
     expect((await start(fx)).approvedAtUpgrade).toEqual([{ plugin: 'plug', source: plug }])
     const active = activeDirectory(fx.home, PROFILE, 'plug')
-    expect(await holdsVersion(active, await approvedVersion(fx, 'plug'))).toBe(true)
+    expect(await holdsVersion(fx.home, active, await approvedVersion(fx, 'plug'))).toBe(true)
     const loaded = await import(pathToFileURL(join(active, 'index.js')).href) as { value: string }
     expect(loaded.value).toBe('plug+sib+dep')
   })
@@ -195,7 +195,7 @@ describe('a start with protection on', () => {
     writeFileSync(join(source, 'added.js'), 'export const added = 1\n')
     await start(fx)
     const active = activeDirectory(fx.home, PROFILE, 'plug')
-    expect(await holdsVersion(active, approved)).toBe(true)
+    expect(await holdsVersion(fx.home, active, approved)).toBe(true)
     expect(readFileSync(join(active, 'index.js'), 'utf8')).toBe('export default "one"\n')
     expect(recorded(fx, 'plug')).toEqual(namingActive(fx, 'plug'))
     expect(Object.values(recorded(fx, 'plug')).some(value => value.includes(source))).toBe(false)
@@ -242,7 +242,7 @@ describe('a start with protection on', () => {
     writeFileSync(join(active, 'index.js'), 'export default "tampered"\n')
     writeFileSync(join(active, 'planted.js'), 'export const planted = 1\n')
     await start(fx)
-    expect(await holdsVersion(active, approved)).toBe(true)
+    expect(await holdsVersion(fx.home, active, approved)).toBe(true)
     expect(existsSync(join(active, 'planted.js'))).toBe(false)
     // Content planted in the empty active directory of a plugin with none approved is removed too.
     linkAs(fx, 'added', folder(fx, 'added'))
@@ -267,7 +267,7 @@ describe('a start with protection on', () => {
     const { fx, source, approved } = await migrated()
     rmSync(source, { recursive: true })
     expect((await start(fx)).pending).toEqual([])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('loads nothing for a link to its active directory that no record names a folder for', async () => {
@@ -275,7 +275,7 @@ describe('a start with protection on', () => {
     linkAs(fx, 'orphan', activeDirectory(fx.home, PROFILE, 'orphan'))
     await writeChangeLog(fx.home, PROFILE, { schema: 'delorun.changes-log/1', migratedAt: NOW.toISOString(), entries: [] })
     expect(await start(fx)).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'orphan'), EMPTY_CONTENT_VERSION)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'orphan'), EMPTY_CONTENT_VERSION)).toBe(true)
   })
 })
 
@@ -342,7 +342,7 @@ describe('a start with protection off', () => {
     const { fx, source, approved } = await migrated({ protection: 'off' })
     rmSync(source, { recursive: true })
     expect((await start(fx)).unreviewed).toEqual([])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('does not load content the person declined, and loads the folder again once it holds something else', async () => {
@@ -360,7 +360,7 @@ describe('a start with protection off', () => {
     const kept = await start(fx)
     expect(kept.unreviewed).toEqual([])
     expect(kept.pending).toEqual([{ id: loaded.id, plugin: 'plug', kind: 'plugin-edit' }])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
     expect(declined).not.toBe(approved)
 

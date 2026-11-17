@@ -91,7 +91,7 @@ async function sideBinary(home: string, cache: ObjectCache, entry: VersionEntry 
  */
 function differs(a: VersionEntry, b: VersionEntry): boolean {
   if (a.type === 'file') return b.type !== 'file' || a.digest !== b.digest || a.executable !== b.executable
-  return b.type !== 'link' || a.target !== b.target
+  return b.type !== 'link' || a.target !== b.target || a.runtime !== b.runtime
 }
 
 /**

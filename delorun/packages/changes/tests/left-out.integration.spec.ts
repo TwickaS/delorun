@@ -179,7 +179,7 @@ describe('leaving a change out after a failed start', () => {
     expect(leftOutContent(left!)).toEqual({ kind: 'left-out' })
     await start(fx)
     expect(activeText(fx)).toBeUndefined()
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), EMPTY_CONTENT_VERSION)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), EMPTY_CONTENT_VERSION)).toBe(true)
     expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([])
     expect(await leftOutFacts(fx.home, PROFILE)).toEqual([expect.objectContaining({ id: on.entry.id, kind: 'plugin-on' })])
     const undone = await undoChange(contextOf(fx), on.entry.id, terminal(), { reload: answering({ ok: true }).reload })

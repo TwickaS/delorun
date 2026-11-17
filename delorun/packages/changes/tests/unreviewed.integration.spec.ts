@@ -73,7 +73,7 @@ describe('a live reload with protection off', () => {
     await undoChange(ctx, entry.id, terminal(), { reload: async () => Promise.resolve({ ok: true }) })
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
     expect(await loadUnreviewed(ctx, 'plug', host.reload)).toEqual({ kind: 'unchanged', plugin: 'plug' })
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('goes back when the reload fails, logs the failure, and does not try the same content again', async () => {
@@ -85,7 +85,7 @@ describe('a live reload with protection off', () => {
     expect(sync).toMatchObject({ kind: 'went-back', plugin: 'plug', failure: 'SyntaxError: nope', again: { ok: true }, entry: { state: 'pending', lastFailure: { at: NOW.toISOString(), failure: 'SyntaxError: nope' } } })
     expect(host.calls()).toBe(2)
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(await activeOf(fx, 'plug')).toBe(approved)
     expect((await history(fx)).slice(0, 2)).toEqual([expect.stringMatching(/^Went back: c[0-9a-f]{10} failed to load$/), `Loaded without review: plug: changes in ${source}`])
     expect((await listChanges(ctx)).pending[0]).toMatchObject({ lastFailure: { failure: 'SyntaxError: nope' } })
@@ -150,7 +150,7 @@ describe('a live reload with protection off', () => {
     const host = reloads({ ok: true })
     expect(await loadUnreviewed(ctx, 'plug', host.reload)).toEqual({ kind: 'unchanged', plugin: 'plug' })
     expect((await start(fx)).leftOut).toEqual([expect.objectContaining({ id: loaded.id })])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     writeFileSync(join(source, 'index.js'), 'export default "fixed"\n')
     expect((await loadUnreviewed(ctx, 'plug', host.reload)).kind).toBe('loaded')
     expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "fixed"\n')

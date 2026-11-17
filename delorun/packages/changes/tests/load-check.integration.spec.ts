@@ -76,7 +76,7 @@ describe('a start whose folder cannot be read', () => {
     lockOut(join(source, 'locked'))
     const changes = await start(fx)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining('EACCES') }])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(startNotice(changes)).toContain('plug runs the content you approved, or nothing if you approved none, because Delorun could not read its folder: ')
   })
 
@@ -86,7 +86,7 @@ describe('a start whose folder cannot be read', () => {
     const changes = await start(fx)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining(`so Delorun does not copy it. Remove its development packages with \`npm prune --omit=dev\` in ${source}, or link a folder that holds only the built plugin, then start again.`) }])
     expect(changes.pending).toEqual([])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('with protection off, keeps the approved content of a folder that cannot be read, even without its installed packages', async () => {
@@ -95,7 +95,7 @@ describe('a start whose folder cannot be read', () => {
     oversized(join(source, 'big.bin'))
     const changes = await start(fx)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining('MiB') }])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('with protection off, keeps the approved content of a folder that changed while it was read', async () => {
@@ -105,7 +105,7 @@ describe('a start whose folder cannot be read', () => {
     const changes = await start(fx)
     chmodSync(source, 0o700)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining('EACCES') }])
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
   it('moves a new link whose folder cannot be read to its empty active directory, waiting for review with no content', async () => {
@@ -220,7 +220,7 @@ describe('what a start checks after it prepared the profile', () => {
     expect(existsSync(versionFile)).toBe(true)
     await start(fx)
     expect(existsSync(versionFile)).toBe(false)
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), await approvedVersion(fx, 'plug'))).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), await approvedVersion(fx, 'plug'))).toBe(true)
   })
 })
 
@@ -243,7 +243,7 @@ describe('the check before a reload', () => {
     const changes = await prepareReload(reload(fx))
     expect(recorded(fx, 'plug')).toEqual(namingActive(fx, 'plug'))
     expect(recorded(fx, 'added')).toEqual(namingActive(fx, 'added'))
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(readdirSync(activeDirectory(fx.home, PROFILE, 'added'))).toEqual([])
     expect(changes).toMatchObject({ approvedAtUpgrade: [], pending: [{ plugin: 'added', kind: 'plugin-install' }] })
     expect(startNotice(changes)).toContain('added is not loaded until you review it')
