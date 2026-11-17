@@ -38,7 +38,6 @@ export const SECTIONS_EN = {
     makeItYours: {
       heading: 'Make it yours',
       lead: 'This page is a setup. Change it, see what Delorun would write, and go back.',
-      still: 'Theme tiles beside the entry Delorun writes for them, and a list of versions.',
       link: { text: 'Change one thing, see it, undo it', href: `${DOCS_URL}/guide/customise#change-one-thing-see-it-undo-it` },
     },
     parts: {
@@ -49,14 +48,11 @@ export const SECTIONS_EN = {
     replays: {
       heading: 'Watch it change',
       lead: 'Sessions replayed from real runs: asking for a plugin, changing Delorun itself, reviewing a change before it loads, and going back.',
-      still: 'A replayed session in the studio, paused on its first chapter.',
       link: { text: 'How changes to Delorun are reviewed', href: `${DOCS_URL}/guide/changing-your-harness` },
     },
     phone: {
       heading: 'From your phone',
       lead: 'Your chats from your computer, on your phone. A few sensitive steps need your approval at the computer.',
-      wideLabel: 'The studio at desktop width',
-      narrowLabel: 'The studio at phone width',
       link: { text: 'Reach the studio from your phone', href: `${DOCS_URL}/guide/reach#start-from-nothing` },
     },
   },
