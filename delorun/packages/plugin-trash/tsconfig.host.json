@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
+    "jsx": "react-jsx",
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
@@ -34,6 +35,15 @@
     },
     {
       "path": "../../../packages/workspace/workspace"
+    },
+    {
+      "path": "../../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../../packages/boot/config-editor"
+    },
+    {
+      "path": "../../../packages/boot/hmr"
     }
   ]
 }
