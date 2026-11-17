@@ -37,7 +37,7 @@ describe('which turns get the notice', () => {
     const base = { key: 'k', kind: stopNoticeDefinition.kind, id: '2', matches: [match], start: match }
     const state = stopNoticeDefinition.start(base as never, match, {} as never)
     const node = stopNoticeDefinition.buildViewNode?.({ ...base, state } as never)
-    expect(node).toMatchObject({ kind: STOP_NOTICE_KIND, target: 'chat', anchorSeq: 41, visibility: 'visible', data: { turn: 2, time: 1_700_000_000_000 } })
+    expect(node).toMatchObject({ kind: STOP_NOTICE_KIND, target: 'chat', anchorSeq: 41, visibility: 'visible', groupTree: 'turn', data: { turn: 2, time: 1_700_000_000_000 } })
   })
 })
 

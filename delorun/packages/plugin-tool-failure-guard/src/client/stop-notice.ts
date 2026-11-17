@@ -64,6 +64,8 @@ export const stopNoticeDefinition: ConversationNodeDefinition<StopState> = {
       anchorSeq: context.state.seq,
       location: context.start?.location ?? { kind: 'unresolved' },
       visibility: 'visible',
+      // At turn level, as upstream's turn-error row; without it the row folds into the turn's collapsed tool calls.
+      groupTree: 'turn',
       data: { turn: context.state.turn, time: context.state.time },
     }
   },
