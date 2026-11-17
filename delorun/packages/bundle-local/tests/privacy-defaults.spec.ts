@@ -156,7 +156,7 @@ describe('a Delorun CLI profile', () => {
     expect(destinations).toContain('dsh-otel-collector.deepseeksvc.com')
     expect(destinations.filter(host => host?.includes('delorun') === true)).toEqual([])
     const delorunRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delorun/')))
-    const studioRows = ['delorun-theme', 'delorun-settings-layout', 'delorun-chat-states', 'delorun-sidebar', 'delorun-onboarding', 'delorun-cost-meter', 'delorun-thinking-rsvp']
+    const studioRows = ['delorun-theme', 'delorun-settings-layout', 'delorun-chat-states', 'delorun-sidebar', 'delorun-onboarding', 'delorun-downloads', 'delorun-cost-meter', 'delorun-thinking-rsvp']
     expect(delorunRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
     // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, its update check, which fetches
     // the release channel's signed files and sends nothing about the person, the trust bill, which serves what the start check and the stored records say, the plugin packs, which fetch the signed packs file and a pack only when the person adds one, the plugin install check, which asks the advisory
@@ -189,6 +189,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/plugin-chat-states',
       '@delorun/plugin-sidebar',
       '@delorun/plugin-onboarding',
+      '@delorun/plugin-downloads',
       '@delorun/plugin-cost-meter',
       '@delorun/plugin-thinking-rsvp',
     ])

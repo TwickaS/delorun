@@ -2203,6 +2203,9 @@ importers:
       '@delorun/plugin-cost-meter':
         specifier: workspace:*
         version: link:../plugin-cost-meter
+      '@delorun/plugin-downloads':
+        specifier: workspace:*
+        version: link:../plugin-downloads
       '@delorun/plugin-onboarding':
         specifier: workspace:*
         version: link:../plugin-onboarding
