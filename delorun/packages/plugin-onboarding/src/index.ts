@@ -33,6 +33,8 @@ import { systemTailscale } from '@delorun/reach'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delorun/contract-setup-answers'
 // Type-only: the ctx.previewFlags merge.
 import type {} from '@delorun/preview-flags'
+// Type-only: the ctx.agentAccounts merge.
+import type {} from '@delorun/external-agents'
 import { readSetupRecord } from './answers.ts'
 import { createDeferredStore } from './deferred.ts'
 import type { Config } from './config.ts'
@@ -41,7 +43,7 @@ import { VARIABLE_NAME, type KeySource, type KeySourceKind } from './wire.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
 import { PREVIEW_FLAGS } from './preview-flags.ts'
-import { processReadinessEnvironment, readReadiness } from './readiness.ts'
+import { processReadinessEnvironment, readReadiness, type ReadinessEnvironment } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
   AGENT_MODELS_PATH, AgentModelsRequest, DEFER_STEP_PATH, DeferStepRequest, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, START_PATH, WORKSPACE_NOTICE_PATH,
@@ -73,6 +75,21 @@ export const inject = ['connection']
  */
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+}
+
+/**
+ * The reader of the account store's figures, when the profile holds the store.
+ * @param ctx - the plugin context.
+ * @returns the reader, or undefined without a store.
+ */
+function readStoredAccounts(ctx: Context): ReadinessEnvironment['accounts'] {
+  const store = ctx.get('agentAccounts')
+  if (store === undefined) return undefined
+  return async () => (await store.readAll()).accounts.map(({ provider, installed, signedIn, plan, windows, checkedAt }) => ({
+    provider, installed, signedIn, windows,
+    ...(plan === undefined ? {} : { plan }),
+    ...(checkedAt === undefined ? {} : { checkedAt }),
+  }))
 }
 
 /**
@@ -171,7 +188,8 @@ export function apply(ctx: Context, config: Config): void {
     methods: ['GET'],
     requestBody: 'buffered',
     admitPeer: admitApprovedDevice(),
-    fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale()))),
+    // The stored figures only: a readiness request never asks the store to check (T12).
+    fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale(), readStoredAccounts(ctx)))),
   })
   // Named once per start, so "Complete setup later" holds until Delorun next starts and not longer.
   const startId = randomUUID()

@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./contract": "./src/contract.ts",
-    "./locate": "./src/locate.ts"
+    "./locate": "./src/locate.ts",
+    "./accounts/wire": "./src/accounts/wire.ts"
   },
   "dependencies": {
     "@delorun/contract-home-layout": "workspace:*",

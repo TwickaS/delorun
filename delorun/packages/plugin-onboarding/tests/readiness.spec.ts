@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TailscaleResult, TailscaleRunner } from '@delorun/reach'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claudeSignIn, codexSignIn, processReadinessEnvironment, readReadiness, tailscaleReadiness, type ReadinessEnvironment } from '../src/readiness.ts'
 
 let home = ''
@@ -106,5 +106,21 @@ describe('the Tailscale probe', () => {
   it('reads this process\'s environment', () => {
     const run = tailscale().run
     expect(processReadinessEnvironment(run)).toMatchObject({ env: process.env, platform: process.platform, tailscale: run })
+  })
+})
+
+describe('the stored account figures', () => {
+  const account = { provider: 'claude-code', installed: true, signedIn: 'yes', plan: 'max', windows: [], checkedAt: 1 } as const
+
+  it('are read as stored with the time, and a readiness request never asks for a check', async () => {
+    const read = vi.fn(() => Promise.resolve([account]))
+    const answer = await readReadiness(environment({ accounts: read, now: () => 42 }))
+    expect(answer.accounts).toEqual({ agents: [account], now: 42 })
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it('are left out when the profile has no store or the store cannot be read', async () => {
+    expect((await readReadiness(environment())).accounts).toBeUndefined()
+    expect((await readReadiness(environment({ accounts: () => Promise.reject(new Error('unreadable')) }))).accounts).toBeUndefined()
   })
 })
