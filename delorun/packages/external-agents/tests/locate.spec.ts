@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { agentExecutables, locateClaudeProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
+import { agentExecutables, locateClaudeProgram, locateCodexProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
 
 const roots: string[] = []
 const nodePath = process.env.NODE_PATH
@@ -62,6 +62,35 @@ const CODEX_ADDED = {
   [`${CODEX}/package.json`]: manifest('@openai/codex', { version: '0.153.4', bin: { codex: 'bin/codex.js' } }),
   [`${CODEX}/bin/codex.js`]: '\n',
 }
+
+/** The Codex platform package is installed under its alias with the name `@openai/codex`, as npm and pnpm do. */
+const CODEX_PLATFORM = `${CODEX}/node_modules/@openai/codex-linux-x64`
+const CODEX_BINARY = `${CODEX_PLATFORM}/vendor/x86_64-unknown-linux-musl/bin/codex`
+const CODEX_WITH_BINARY = {
+  ...CODEX_ADDED,
+  [`${CODEX_PLATFORM}/package.json`]: manifest('@openai/codex', { version: '0.153.4-linux-x64' }),
+  [CODEX_BINARY]: '#!/bin/sh\n',
+}
+
+describe('finding the native Codex program', () => {
+  it('finds it in the platform package the launcher uses, else in the Codex package\'s own vendor folder', () => {
+    const dir = profileWith(CODEX_WITH_BINARY)
+    const codex = locateCodex(dir)
+    if (codex === undefined) throw new Error('the fixture Codex was not found')
+    expect(locateCodexProgram(codex, LINUX)).toBe(join(dir, 'node_modules', CODEX_BINARY))
+    expect(locateCodexProgram(codex, { platform: 'linux', arch: 'arm64' })).toBeUndefined()
+    expect(locateCodexProgram(codex, { platform: 'freebsd', arch: 'x64' })).toBeUndefined()
+    const own = profileWith({ ...CODEX_ADDED, [`${CODEX}/vendor/x86_64-unknown-linux-musl/bin/codex`]: '#!/bin/sh\n' })
+    expect(locateCodexProgram(locateCodex(own)!, LINUX)).toBe(join(own, 'node_modules', CODEX, 'vendor/x86_64-unknown-linux-musl/bin/codex'))
+  })
+
+  it('names the located Codex program as an executable a reap may stop', () => {
+    const dir = profileWith({ ...CLAUDE_ADDED, ...CODEX_WITH_BINARY })
+    expect(agentExecutables(dir, LINUX, process.execPath)).toEqual([
+      realpathSync(process.execPath), realpathSync(join(dir, 'node_modules', PLATFORM, 'claude')), realpathSync(join(dir, 'node_modules', CODEX_BINARY)),
+    ])
+  })
+})
 
 describe('finding a package whose exports leave out its manifest', () => {
   it('finds the folder and version through the main export', () => {

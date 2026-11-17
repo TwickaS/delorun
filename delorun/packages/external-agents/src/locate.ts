@@ -196,10 +196,36 @@ export function locateCodex(profileDirectory: string): LocatedCodex | undefined 
   return existsSync(script) ? { ...codex, script } : undefined
 }
 
+/** Codex's target triples and platform packages by Node platform and architecture, as its launcher `bin/codex.js` maps them. */
+const CODEX_TARGETS: Readonly<Record<string, { readonly triple: string, readonly pack: string }>> = {
+  'linux-x64': { triple: 'x86_64-unknown-linux-musl', pack: '@openai/codex-linux-x64' },
+  'linux-arm64': { triple: 'aarch64-unknown-linux-musl', pack: '@openai/codex-linux-arm64' },
+  'darwin-x64': { triple: 'x86_64-apple-darwin', pack: '@openai/codex-darwin-x64' },
+  'darwin-arm64': { triple: 'aarch64-apple-darwin', pack: '@openai/codex-darwin-arm64' },
+  'win32-x64': { triple: 'x86_64-pc-windows-msvc', pack: '@openai/codex-win32-x64' },
+  'win32-arm64': { triple: 'aarch64-pc-windows-msvc', pack: '@openai/codex-win32-arm64' },
+}
+
+/**
+ * Find the native Codex program the launcher runs, where the launcher looks: the platform package's `vendor` folder,
+ * else the Codex package's own.
+ * @param codex - the Codex package, from {@link locateCodex}.
+ * @param machine - the platform and architecture.
+ * @returns the program, an absolute path, or undefined when this machine has no Codex build or none is installed.
+ */
+export function locateCodexProgram(codex: LocatedPackage, machine: Machine): string | undefined {
+  const target = CODEX_TARGETS[`${machine.platform}-${machine.arch}`]
+  if (target === undefined) return undefined
+  const manifest = resolveFrom(join(codex.directory, 'package.json'), `${target.pack}/package.json`)
+  const vendor = manifest === undefined ? join(codex.directory, 'vendor') : join(dirname(manifest), 'vendor')
+  const program = join(vendor, target.triple, 'bin', machine.platform === 'win32' ? 'codex.exe' : 'codex')
+  return existsSync(program) ? program : undefined
+}
+
 /**
  * The executables a live agent's process-group leader runs, as real paths, for reaping only located programs: the Node
- * binary that runs the subprocess runner, the Codex launcher and Claude Code's watcher, and Claude Code's native
- * program when the added pack brings one.
+ * binary that runs the subprocess runner, the Codex launcher and Claude Code's watcher, Claude Code's native program
+ * and the native Codex program when the added packs bring them.
  * @param profileDirectory - the profile's directory, when known.
  * @param machine - the platform and architecture.
  * @param nodePath - the Node binary the Host runs, `process.execPath`.
@@ -208,7 +234,9 @@ export function locateCodex(profileDirectory: string): LocatedCodex | undefined 
 export function agentExecutables(profileDirectory: string | undefined, machine: Machine, nodePath: string): string[] {
   const sdk = profileDirectory === undefined ? undefined : locateClaudeSdk(profileDirectory)
   const claude = sdk === undefined ? undefined : locateClaudeProgram(sdk, machine)
-  return [...new Set([nodePath, claude].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
+  const codex = profileDirectory === undefined ? undefined : locateCodex(profileDirectory)
+  const codexProgram = codex === undefined ? undefined : locateCodexProgram(codex, machine)
+  return [...new Set([nodePath, claude, codexProgram].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
 }
 
 /**

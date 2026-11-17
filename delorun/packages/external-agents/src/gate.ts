@@ -69,6 +69,7 @@ interface Live {
 /**
  * Credential and ambient-authority names a driver's overlay may not set, beyond upstream's `SENSITIVE_ENV_PATTERN`: the
  * names the subprocess owner's scrub drops from the Host's own environment, which an explicit overlay would bypass.
+ * Mirrors `DENIED_ENV_NAMES` in `packages/subprocess/subprocess/src/index.ts`, which upstream does not export.
  */
 const CREDENTIAL_NAME = /^(?:SSH_AUTH_SOCK|DOCKER_HOST|KUBECONFIG|KRB5CCNAME|MYSQL_PWD|(?:AWS|AZURE|SLACK|DISCORD)_.*|.*_CREDENTIALS|.*_WEBHOOK.*|.*PASSPHRASE.*|.*_PASSWD)$/iu
 

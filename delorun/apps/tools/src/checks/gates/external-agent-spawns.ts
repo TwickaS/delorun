@@ -8,7 +8,7 @@
  *   a type-only import;
  * - `codex`: a string naming the Codex package or its platform packages (`@openai/codex…`);
  * - `locate`: a use of the locator functions that find those programs (`locateClaudeSdk`, `locateClaudeProgram`,
- *   `locateCodex`, `loginProgramFor`);
+ *   `locateCodex`, `locateCodexProgram`, `loginProgramFor`);
  * - `child-process`: `child_process` imported in the gate's package or a driver package;
  * - `subprocess`: `subprocess` used in the gate's package or a driver package, other than in the gate's module;
  * - `provider`: `getProvider('claude-code')` or `getProvider('codex')` used for anything but a presence check
@@ -54,7 +54,7 @@ export const GATED_PACKAGES = ['delorun/packages/external-agents/', 'delorun/pac
 const SOURCE = /(?<!\.d)\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/u
 const SDK_NAME = /^@anthropic-ai\/claude-agent-sdk(?:[-/]|$)/u
 const CODEX_NAME = /^@openai\/codex(?:[-/]|$)/u
-const LOCATORS = new Set(['locateClaudeSdk', 'locateClaudeProgram', 'locateCodex', 'loginProgramFor'])
+const LOCATORS = new Set(['locateClaudeSdk', 'locateClaudeProgram', 'locateCodex', 'locateCodexProgram', 'loginProgramFor'])
 const PROVIDERS = new Set(['claude-code', 'codex'])
 const SPAWNERS = new Set(['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'])
 const SHELL_SPAWNERS = new Set(['exec', 'execSync'])
