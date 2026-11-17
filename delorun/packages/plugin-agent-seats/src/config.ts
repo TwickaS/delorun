@@ -19,6 +19,8 @@ export interface SeatConfig {
   toolName: string
   /** The deepest chain of seat children that may hand work on; 1 means a seat child cannot hand over again. */
   maxDepth: number
+  /** The program's context window in tokens, which the chat's token meter divides by. */
+  contextWindow: number
 }
 
 /** The row's configuration. */
@@ -32,12 +34,13 @@ const Seat: z<SeatConfig> = z.object({
   preset: z.string().required(),
   toolName: z.string().pattern(/^[a-z][a-z0-9_]{0,63}$/).required(),
   maxDepth: z.natural().min(1).default(1),
+  contextWindow: z.natural().min(1).default(200_000),
 })
 
 /** Validates the row's configuration. Two seats may not share a provider, route or tool name. */
 export const Config: z<Config> = z.object({
   seats: z.array(Seat).default([
-    { provider: 'claude-code', route: 'claude-code-seat', preset: 'claude-code-seat', toolName: 'claude_code', maxDepth: 1 },
-    { provider: 'codex', route: 'codex-seat', preset: 'codex-seat', toolName: 'codex', maxDepth: 1 },
+    { provider: 'claude-code', route: 'claude-code-seat', preset: 'claude-code-seat', toolName: 'claude_code', maxDepth: 1, contextWindow: 200_000 },
+    { provider: 'codex', route: 'codex-seat', preset: 'codex-seat', toolName: 'codex', maxDepth: 1, contextWindow: 200_000 },
   ]),
 }).description('Live agents') as z<Config>

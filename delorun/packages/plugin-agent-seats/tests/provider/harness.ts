@@ -3,7 +3,7 @@
  * for the start gate, the preset registry's presets and the seat route's model.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
@@ -16,7 +16,7 @@ import { Config } from '../../src/config.ts'
 import { registerSeatProviders } from '../../src/provider/index.ts'
 
 /** The default two seats. */
-export const SEATS = Config({}).seats
+export const SEATS = Config(null).seats
 
 /** The gate the last plugin mount made. */
 let mounted: FakeGate | undefined
@@ -101,6 +101,10 @@ export async function mountStack(options: { readonly flag?: boolean, readonly on
       name,
       description: `upstream one-shot ${name}`,
       parameters: {},
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
       execute: () => Promise.resolve('ran'),
     }))
   }
@@ -115,7 +119,7 @@ export async function mountStack(options: { readonly flag?: boolean, readonly on
         agentOptions: { provider: 'mock', model: 'mock' },
       })
       // A parked agent: the result a child delivers must not start a lead turn in these specs.
-      ctx.on('agent/pre-step', ({ agent }, next) => agent === created.agent ? { kind: 'reject' } : next())
+      ctx.on('agent/pre-step', ({ agent }, next): Promise<PreStepDecision> => agent === created.agent ? Promise.resolve({ kind: 'reject' }) : next())
       return created.agent
     },
     call: (agent, name, args) => executeToolFixture(ctx, {

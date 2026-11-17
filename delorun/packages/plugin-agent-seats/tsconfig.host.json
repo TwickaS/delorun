@@ -5,11 +5,57 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "include": ["src"],
-  "exclude": ["src/client"],
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/client"
+  ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" },
-    { "path": "../../../packages/subagent/subagent" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/interaction/user-approval"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/preset/agent-preset-registry"
+    },
+    {
+      "path": "../../../packages/session/session-projection"
+    },
+    {
+      "path": "../../../packages/spill/spill-policy"
+    },
+    {
+      "path": "../../../packages/subagent/subagent"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    }
   ]
 }
