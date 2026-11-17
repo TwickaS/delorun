@@ -39,3 +39,30 @@ describe('an unavailable card', () => {
     expect(screen.queryByText(en['bundle.unavailable'])).toBeNull()
   })
 })
+
+describe('the state slot of a row', () => {
+  it('holds Add, Adding and Added in one slot of the same class, on the right of the row', () => {
+    const slots = (['available', 'installing', 'installed'] as const).map((state) => {
+      const { container } = render(<ul><AddableCard services={stepServices()} state={state} title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+      const slot = container.querySelector('[class*="slot"]')
+      const text = slot?.textContent
+      cleanup()
+      return [state, slot !== null, text]
+    })
+    expect(slots).toEqual([['available', true, en['bundle.add']], ['installing', true, en['bundle.adding']], ['installed', true, `✓ ${en['bundle.added']}`]])
+  })
+
+  it('puts the Adding words in the slot, not in a line under the description, and shows the download when the queue knows it', () => {
+    const { container } = render(<ul><AddableCard services={stepServices()} state="installing" progress={0.4} title="Pi" description="About it" onAdd={vi.fn()} /></ul>)
+    expect(container.querySelector('[class*="slot"]')?.textContent).toContain(en['bundle.adding'])
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('40')
+  })
+
+  it('draws Add as a button with a plus and the label Add, named for the plugin', () => {
+    const { container } = render(<ul><AddableCard services={stepServices()} state="available" title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+    const button = screen.getByRole('button', { name: /Pi/ })
+    expect(button.querySelector('svg')).not.toBeNull()
+    expect(button.textContent).toBe(en['bundle.add'])
+    expect(container.querySelectorAll('[class*="slot"]').length).toBeGreaterThan(0)
+  })
+})

@@ -393,6 +393,15 @@ describe('a key Delorun already has', () => {
     }
   })
 
+  it('explains how Delorun knows once for the step, however many connected providers it lists', async () => {
+    await mount({}, { providers: [
+      { provider: 'deepseek-official', name: 'DeepSeek', result: 'works', source: { kind: 'environment', variable: 'DEEPSEEK_API_KEY' } },
+      { provider: 'openai', name: 'OpenAI', result: 'works', source: { kind: 'saved', variable: 'OPENAI_API_KEY' } },
+    ] })
+    expect(screen.getAllByText(en['providers.how'])).toHaveLength(1)
+    expect(screen.getAllByText(/^Connected ·/)).toHaveLength(2)
+  })
+
   it('says it on the key\'s own screen too, in the full sentence', async () => {
     await walk({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
     expect(screen.getByText('From DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
