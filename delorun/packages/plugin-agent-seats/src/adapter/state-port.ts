@@ -6,10 +6,10 @@
  */
 import type { ExternalAgentName, OfferedModel, ProgramFailure, SessionId } from '@delorun/external-agents/contract'
 
-/** A seat's logged state: which program session backs it and how far input has reached the program. */
+/** A seat's logged state: which program session backs it (absent after an unreadable resume, so the next message starts a fresh one) and how far input has reached the program. */
 export interface SeatState {
   /** The program's own session or thread id, which `resume` takes. */
-  readonly programSessionId: string
+  readonly programSessionId?: string
   /** Id of the last harness message handed to the program; absent before the first input. */
   readonly cursor?: string
 }
