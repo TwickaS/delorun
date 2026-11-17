@@ -9,5 +9,5 @@
     "declarationMap": false,
     "types": ["node"]
   },
-  "include": ["tests/tokens.spec.ts"]
+  "include": ["tests/tokens.spec.ts", "tests/settings-choice-group.spec.ts"]
 }

@@ -2792,6 +2792,12 @@
       "class": "delorun-feature",
       "feature": "copy-plurals",
       "reason": "Picks the singular or plural form of the turns and steps counts, so one turn and one step read correctly."
+    },
+    {
+      "path": "packages/llm/llm-pi-ai/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "setup-transfer",
+      "reason": "Exports the provider catalog so a setup can check a key variable against its provider without importing upstream source."
     }
   ],
   "retired": []

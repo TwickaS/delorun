@@ -1,6 +1,5 @@
 /** The packs routes: which Peers each admits (a locked phone cannot add, retry or remove) and what a body may hold. */
 import { describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { REACH_DEVICE } from '@delorun/home-auth'
 import { registerPackRoutes } from '../src/routes.ts'
 import { createPacksClient } from '../src/client.ts'
@@ -29,8 +28,8 @@ function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}
       arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, pinEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
     } : undefined),
     connection: { fetch: { register: (route: Registered) => { routes.set(route.path, route); return () => Promise.resolve() } } },
-  } as unknown as Context
-  registerPackRoutes(ctx, hub as never)
+  }
+  registerPackRoutes(ctx as never, hub as never)
   return { routes, hub, touched }
 }
 

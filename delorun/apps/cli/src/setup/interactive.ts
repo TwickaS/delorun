@@ -9,7 +9,7 @@
  */
 import { SETUP_DEFAULTS, type SetupAnswers, type SetupUseCase } from '@delorun/contract-setup-answers'
 import { BACK, runSteps, type Back, type RunStep } from './steps.ts'
-import { SetupCancelled, type Prompter } from './prompts.ts'
+import { SetupCancelled, type Prompter, type PromptOption } from './prompts.ts'
 import { choiceNote, USE_CASE_EXPLAIN, USE_CASE_HINT, USE_CASE_ORDER, USE_CASE_QUESTION, USE_CASE_REVIEW, USE_CASE_TEXT } from './choices.ts'
 import { withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupPhase, type SetupSection } from './sections.ts'
 
@@ -134,7 +134,7 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
   const useCaseStep: RunStep<Draft> = {
     asks: alwaysAsks,
     async run(io, draft) {
-      const options = [...USE_CASE_ORDER.map(each => ({ value: each, label: USE_CASE_TEXT[each].label, hint: USE_CASE_HINT[each] })), { value: EXPLAIN, label: USE_CASE_EXPLAIN }]
+      const options: PromptOption<SetupUseCase | typeof EXPLAIN>[] = [...USE_CASE_ORDER.map(each => ({ value: each, label: USE_CASE_TEXT[each].label, hint: USE_CASE_HINT[each] })), { value: EXPLAIN, label: USE_CASE_EXPLAIN }]
       let useCase = await io.select<SetupUseCase | typeof EXPLAIN>(USE_CASE_QUESTION, options, draft.answers.useCase)
       while (useCase === EXPLAIN) {
         io.note(choiceNote(USE_CASE_ORDER.map(each => USE_CASE_TEXT[each])), 'What each one means')

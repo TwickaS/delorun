@@ -68,7 +68,7 @@ describe('the pack transport', () => {
 
   it('fetches an external only from registry.npmjs.org over https, and only the signed URL', async () => {
     const seen: string[] = []
-    const fetcher = vi.fn((url: string | URL | Request) => { seen.push(String(url)); return Promise.resolve(new Response('abc')) }) as unknown as typeof fetch
+    const fetcher: typeof fetch = vi.fn((url: string | URL | Request) => { seen.push(String(url)); return Promise.resolve(new Response('abc')) })
     const files = createPackFiles({ channel: 'https://releases.example/x/', fetch: fetcher })
     await files.fetchExternal(pin('https://registry.npmjs.org/native/-/native-1.0.0.tgz', 3))
     expect(seen).toEqual(['https://registry.npmjs.org/native/-/native-1.0.0.tgz'])
