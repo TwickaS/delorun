@@ -38,7 +38,7 @@ English | [中文](README.zh.md)
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `requestTimeoutSeconds` | 120 | How long one request may wait for Codex's answer; a fresh thread can take 30 s. |
+| `requestTimeoutSeconds` | 300 | How long one request may wait for Codex's answer; a fresh thread can take 30 s, and over 120 s on a loaded machine. |
 | `closeWaitSeconds` | 5 | How long the app-server gets to exit after its input ends before it is terminated. |
 | `harnessToolTimeoutSeconds` | 900 | How long Codex waits for one harness tool call before it fails the call, set as the server's `tool_timeout_sec`. |
 

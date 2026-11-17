@@ -31,7 +31,7 @@ export interface Config {
 
 /** The configuration schema, with the shipped defaults. */
 export const Config: z<Partial<Config>, Config> = z.object({
-  requestTimeoutSeconds: z.natural().min(1).default(120),
+  requestTimeoutSeconds: z.natural().min(1).default(300),
   closeWaitSeconds: z.natural().min(1).default(5),
   harnessToolTimeoutSeconds: z.natural().min(1).default(900),
 })

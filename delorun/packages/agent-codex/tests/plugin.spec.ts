@@ -95,7 +95,7 @@ describe('the agent-codex plugin', () => {
 
 describe('Config', () => {
   it('fills the shipped defaults', () => {
-    expect(plugin.Config({})).toEqual({ requestTimeoutSeconds: 120, closeWaitSeconds: 5, harnessToolTimeoutSeconds: 900 })
+    expect(plugin.Config({})).toEqual({ requestTimeoutSeconds: 300, closeWaitSeconds: 5, harnessToolTimeoutSeconds: 900 })
   })
 
   it('refuses a zero or fractional wait at load', () => {

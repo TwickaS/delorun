@@ -88,7 +88,8 @@ export interface WorkspaceSandbox {
 
 /**
  * The sandbox every turn runs in, Codex's own default: the workspace, `/tmp` and `$TMPDIR` are writable, with no
- * network, so builds and tests behave as in the person's terminal Codex.
+ * network, so builds and tests behave as in the person's terminal Codex. Every turn's policy and the clean-up's
+ * writable roots come from here only.
  * @param workspace - the run folder.
  * @returns Codex's `workspaceWrite` sandbox policy.
  */
