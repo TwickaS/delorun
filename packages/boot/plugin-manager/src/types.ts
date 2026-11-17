@@ -689,4 +689,10 @@ export interface PackFolderCheck {
    * @returns false once an update has switched away from it.
    */
   runsCurrentRelease(): Promise<boolean>
+  /**
+   * Whether a pack's files in the home match the release's signed list now, read afresh at every call.
+   * @param name - the package name of a pack.
+   * @returns false when a file is missing or differs.
+   */
+  intact?(name: string): Promise<boolean>
 }

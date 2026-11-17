@@ -212,6 +212,25 @@ describe('the pack hub', () => {
     expect(hub.installedTarget('one', '0.1.0')).toBeDefined()
   })
 
+  it('checks a pack\'s files afresh for an install, whatever the stored check says, and stops offering a changed pack', async () => {
+    const { hub, paths } = await setup({ verifyCacheMs: 60_000 })
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    expect(await hub.intactNow('one')).toBe(true)
+    makeWritable(paths.pack(V1, 'one'))
+    writeFileSync(join(paths.pack(V1, 'one'), 'package', 'package.json'), '{"name":"one","version":"9.9.9","type":"module"}')
+    expect(await hub.intactNow('one')).toBe(false)
+    expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
+    expect(await hub.intactNow('nope')).toBe(false)
+  })
+
+  it('keeps the plugin manager\'s own words when it refuses a pack', async () => {
+    const { hub } = await setup({ install: () => Promise.resolve({ application: 'failed', error: { code: 'operation-error', diagnostic: 'Protection holds this add for review.' } }) })
+    await hub.enqueue(['one'])
+    const snapshot = await until(hub, each => each.queue[0]?.state === 'failed')
+    expect(snapshot.queue[0]?.failure?.message).toBe('Protection holds this add for review.')
+  })
+
   it('refuses an install once an update has switched away from this Host\'s release, changing nothing in the profile', async () => {
     const { hub, paths, installs } = await setup()
     await fixture.install('0.2.0')

@@ -96,6 +96,12 @@ export interface PackInstallTargets {
    * @returns whether it is a pack.
    */
   isPack(name: string): Promise<boolean>
+  /**
+   * Whether an installed pack's files match the signed list, read afresh.
+   * @param name - the package name of a pack.
+   * @returns false when a file is missing or differs.
+   */
+  intact(name: string): Promise<boolean>
 }
 
 /**
@@ -202,7 +208,7 @@ export function apply(ctx: Context, config: Config): void {
         requestId: packRequestId,
       })
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))
-      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName), runsCurrentRelease: () => hub.runsCurrentRelease() })
+      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName), intact: packName => hub.intactNow(packName), runsCurrentRelease: () => hub.runsCurrentRelease() })
       // Each listed item is announced on the plugin manager's install-state under its request id, as an install of Plugins is.
       scope.effect(() => hub.subscribe((snapshot) => {
         for (const item of snapshot.queue) scope.emit('plugin-manager/install-state', { requestId: packRequestId(item.key) as PluginInstallRequestId, phase: item.state === 'ready' || item.state === 'needs-reload' ? 'applying' : 'installing' })
