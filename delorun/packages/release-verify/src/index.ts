@@ -13,7 +13,7 @@
  *
  * @module @delorun/release-verify
  */
-export { BundleSchema, checkBundle, readBundle, verifyBundle, type BundleVerdict, type VerifiedBundle } from './bundle.ts'
+export { BundleSchema, checkBundle, checkPacksBundle, readBundle, verifyBundle, type BundleVerdict, type SignedDocument, type VerifiedBundle } from './bundle.ts'
 export {
   advanceCheckpoint,
   readStoredCheckpoint,
