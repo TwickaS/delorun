@@ -24,7 +24,8 @@
     "./workspace-badge": "./src/workspace-badge.tsx",
     "./icon-picker": "./src/icon-picker.tsx",
     "./icon-picker-locales": "./src/icon-picker-locales.ts",
-    "./toast": "./src/toast.web.tsx"
+    "./toast": "./src/toast.web.tsx",
+    "./button-link": "./src/button-link.web.tsx"
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",

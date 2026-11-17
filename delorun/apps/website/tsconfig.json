@@ -25,6 +25,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@brand/*": [
+        "../../packages/brand/src/*"
+      ],
       "@brand": [
         "../../packages/brand/src/index.ts"
       ],
@@ -55,6 +58,7 @@
   "exclude": [
     "tests",
     "scripts",
+    "review",
     "node_modules",
     "out",
     ".build",

@@ -48,6 +48,21 @@ export function usePackageManager(): readonly [PackageManager, (manager: Package
 }
 
 /**
+ * Removes the stored choice, so the page shows the default again on the next visit.
+ * @returns whether the store could be reached; false where storage is blocked, which also means nothing was kept.
+ */
+export function forgetPackageManager(): boolean {
+  try {
+    localStorage.removeItem(PACKAGE_MANAGER_KEY)
+    return true
+  } catch (error) {
+    // Storage is blocked (private mode, policy), so no choice was kept in it.
+    void error
+    return false
+  }
+}
+
+/**
  * The package managers as brand's segmented radio group, filling the width of the install box below it: arrow keys move
  * and select, Home and End jump, and only the selected segment is in the tab order.
  * @param props.value - the selected manager.
@@ -57,7 +72,7 @@ export function usePackageManager(): readonly [PackageManager, (manager: Package
 export function PackageManagerPicker({ value, onChange }: { value: PackageManager, onChange: (manager: PackageManager) => void }) {
   return (
     <ChoiceGroup
-      label={COPY.packageManagerLabel}
+      label={COPY.hero.packageManagerLabel}
       value={value}
       options={PACKAGE_MANAGERS.map(manager => ({ value: manager, label: manager }))}
       onChange={onChange}

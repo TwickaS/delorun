@@ -8,6 +8,7 @@
 import '../src/fonts.css'
 import { useState, type CSSProperties } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ButtonLink } from '../src/button-link.web.tsx'
 import { Button, CodeBlock, Frame, SectionHeading, TabList, TabPanel } from '../src/index.ts'
 import { Composer, MessageBubble, ToolCard, Transcript } from '../src/replica/index.ts'
 import { Switch } from '#upstream'
@@ -42,6 +43,12 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
       </div>
       <CodeBlock code="npm install -g delorun" {...COPY} />
       <CodeBlock code="delorun" caption="Then start it" size="lg" {...COPY} />
+      <p>
+        <ButtonLink href="#top" variant="primary">A link as the main button</ButtonLink>{' '}
+        <ButtonLink href="#top">A link as a button</ButtonLink>{' '}
+        <ButtonLink unavailable aria-describedby="link-why">An unavailable link</ButtonLink>
+      </p>
+      <p id="link-why">The unavailable link has no address yet.</p>
       <CodeBlock code="npm install -g delorun" caption="The main button" emphasis="primary" {...COPY} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Frame width={480} height={300} label="The studio, still" still={still} />

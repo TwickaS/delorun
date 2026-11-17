@@ -7,7 +7,7 @@
 import { LOOK_NAMES } from '@design/looks.ts'
 import type { SearchCopy } from '@design/search-form.tsx'
 import type { FooterCopy, HeaderCopy, ShellLink, ThemeCopy } from '@design/shell-copy.ts'
-import { ARTICLES } from '@/site/articles.ts'
+import { ARTICLE_COUNT } from '@/site/articles.ts'
 import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL, UPSTREAM_URL } from '@/site/config.ts'
 import { NOTICES_COPY } from '@/site/notices-copy.ts'
 import { COPY } from '@/site/copy.ts'
@@ -38,7 +38,7 @@ export const HEADER_COPY: HeaderCopy = { title: COPY.siteTitle, navLabel: COPY.f
 /** The header's links: Docs, Blog once an article exists, and GitHub. */
 export const HEADER_LINKS: readonly ShellLink[] = [
   { label: COPY.nav.docs, href: DOCS_URL, site: 'other' },
-  ...ARTICLES.length === 0 ? [] : [{ label: COPY.nav.blog, href: '/blog' }],
+  ...ARTICLE_COUNT === 0 ? [] : [{ label: COPY.nav.blog, href: '/blog' }],
   { label: COPY.nav.github, href: GITHUB_URL },
 ]
 
@@ -58,7 +58,7 @@ export const FOOTER_LINKS: readonly ShellLink[] = [
   { label: COPY.footer.roadmap, href: `${DOCS_URL}/guide/roadmap`, site: 'other' },
   { label: COPY.footer.questions, href: `${DOCS_URL}/guide/questions`, site: 'other' },
   { label: COPY.footer.knownIssues, href: `${DOCS_URL}/guide/known-issues`, site: 'other' },
-  ...ARTICLES.length === 0 ? [] : [{ label: COPY.footer.blog, href: '/blog' }],
+  ...ARTICLE_COUNT === 0 ? [] : [{ label: COPY.footer.blog, href: '/blog' }],
   { label: COPY.footer.github, href: GITHUB_URL },
   { label: COPY.footer.privacy, href: '/privacy' },
   { label: NOTICES_COPY.footerLabel, href: '/notices' },

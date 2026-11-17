@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { EmailSender, Env, OutgoingEmail } from '../src/worker/env.ts'
 import { route, sweep, type Deps } from '../src/worker/routes.ts'
-import { CONSENT_TEXT_VERSION } from '../src/site/signup.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT_VERSION } from '../src/site/signup.ts'
 import { createDb, type TestDb } from './d1-sqlite.ts'
 
 const ORIGIN = 'https://delorun.test'
@@ -104,7 +104,7 @@ describe('POST /api/subscribe', () => {
     for (const fields of [{ ...SIGNUP, consent_version: 'old' }, withoutVersion, { ...SIGNUP, consent_version: `${CONSENT_TEXT_VERSION}\u0000` }, { ...SIGNUP, consent_version: 'x'.repeat(1000) }]) {
       const response = await route(post('/api/subscribe', fields), h.env, h.deps)
       expect(response.status).toBe(409)
-      expect(await response.json()).toEqual({ ok: false, message: expect.stringContaining('out of date'), code: 'out_of_date' })
+      expect(await response.json()).toEqual({ ok: false, message: CONSENT_OUT_OF_DATE, code: 'out_of_date' })
     }
     const page = await route(post('/api/subscribe', { ...SIGNUP, consent_version: 'old' }, 'text/html'), h.env, h.deps)
     expect(page.status).toBe(409)

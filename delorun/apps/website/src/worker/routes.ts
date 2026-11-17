@@ -4,7 +4,7 @@
  *
  * @module @delorun/website/worker/routes
  */
-import { CONSENT_TEXT_VERSION, FIELDS, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH, UNCONFIRMED_DAYS } from '../site/signup.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT_VERSION, FIELDS, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH, UNCONFIRMED_DAYS } from '../site/signup.ts'
 import type { Env } from './env.ts'
 import { sendConfirmation } from './mail.ts'
 import { page } from './pages.ts'
@@ -37,7 +37,7 @@ const PROBLEMS: Record<SignupProblem, string> = {
   email: 'That does not look like an email address. Check it and try again.',
   name: 'That first name is too long. Shorten it or leave it empty.',
   consent: 'Tick the box to say you want Delorun release news.',
-  version: 'This page is out of date. Reload it and try again.',
+  version: CONSENT_OUT_OF_DATE,
 }
 
 /**
