@@ -3,7 +3,7 @@
  * takes it from `--phone-powers` and a `--config` document from `phonePowers`; every form records it as the person's
  * choice, and a form that names no level leaves the home's level as it is.
  */
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -102,6 +102,7 @@ describe('the Phone powers choice in setup', { timeout: TIMEOUT_MS }, () => {
     rmSync(phonePowersPath(secrets()))
     writeFileSync(phonePowersPath(secrets()), 'not json', { mode: 0o600 })
     await expect(runSetup(request({ kind: 'yes' }, { profile: other, phonePowersAnswer: 'full' }))).rejects.toMatchObject(refused)
+    expect(readFileSync(phonePowersPath(secrets()), 'utf8')).toBe('not json')
     // Careful never widens, and Full over Full changes nothing.
     rmSync(phonePowersPath(secrets()))
     await writePhonePowers(secrets(), 'full')
