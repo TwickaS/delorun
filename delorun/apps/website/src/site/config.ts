@@ -23,13 +23,6 @@ export const SUPPORT_EMAIL = 'support@delorun.com'
 /** The site path of the image that link previews show. */
 export const OG_IMAGE_PATH = '/og.png'
 
-/**
- * The site path of the studio picture that stands in the hero until the studio replica loads, and with scripts off: a
- * 1440 by 900 screenshot of the demonstration home (`delorun/apps/tools/README.md` lists how it is taken). Change this
- * path when the picture has another name or type.
- */
-export const HERO_IMAGE_PATH = '/hero-studio.webp'
-
 /** The pages the sitemap lists besides the blog index, which it lists once an article is published. */
 export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy', '/notices']
 
@@ -69,3 +62,10 @@ export const DESKTOP_DOWNLOAD_PLACES = [
 export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {
   'index.html': ['home-below'],
 }
+
+/**
+ * Class names that only scope rules loaded later, so a prerendered page may use them with no rule of their own in its
+ * stylesheets: `studio-replica` scopes the replica's token block, which loads with the replica. With scripts off the
+ * still draws in the page's own look. `scripts/check-styles.ts` skips these names.
+ */
+export const SCOPE_CLASSES: readonly string[] = ['studio-replica']

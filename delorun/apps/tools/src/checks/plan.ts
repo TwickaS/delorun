@@ -549,10 +549,10 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     {
       id: FORK_UNIT_ID,
       group: 'tests',
-      title: 'The unit and client component specs under `delorun/apps/*/tests` and `delorun/packages/*/tests` (`delorun/vitest.config.ts`, projects `fork` and `fork-client`)',
+      title: 'The unit and client component specs under `delorun/apps/*/tests` and `delorun/packages/*/tests` (`delorun/vitest.config.ts`, projects `fork`, `fork-client` and `fork-client-website`)',
       cwd: '',
       // A narrowed run can reach a package whose specs are all integration specs, so a phase with none passes.
-      command: [VITEST, 'run', '--config', FORK_CONFIG, '--project', 'fork', '--project', 'fork-client', `--maxWorkers=${String(workers.fork)}`, '--passWithNoTests'],
+      command: [VITEST, 'run', '--config', FORK_CONFIG, '--project', 'fork', '--project', 'fork-client', '--project', 'fork-client-website', `--maxWorkers=${String(workers.fork)}`, '--passWithNoTests'],
       needs: upstreamSuiteNeeds,
       inputs: ['delorun/**', ...UPSTREAM_CODE],
       env: TEST_ENV,

@@ -23,6 +23,17 @@ describe('the styles of a prerendered page', () => {
     expect(unstyledClasses(out, 'index.html')).toEqual([])
   })
 
+  it('counts the rules in a style block the page carries', () => {
+    const out = site('flex inlineOnly_a1', { 'app.css': '.flex{}' }, ['app.css'])
+    writeFileSync(join(out, 'index.html'), readFileSync(join(out, 'index.html'), 'utf8').replace('</head>', '<style>.inlineOnly_a1{color:red}</style></head>'))
+    expect(unstyledClasses(out, 'index.html')).toEqual([])
+  })
+
+  it('skips a class that only scopes rules loaded later, and still names every other', () => {
+    const out = site('flex scopeOnly other_a1', { 'app.css': '.flex{}' }, ['app.css'])
+    expect(unstyledClasses(out, 'index.html', ['scopeOnly'])).toEqual(['other_a1'])
+  })
+
   it('names a class whose rule is only in a stylesheet the page does not link', () => {
     const out = site('flex stillBox_a1', { 'app.css': '.flex{}', 'home-below-x.css': '.stillBox_a1{height:1px}' }, ['app.css'])
     expect(unstyledClasses(out, 'index.html')).toEqual(['stillBox_a1'])

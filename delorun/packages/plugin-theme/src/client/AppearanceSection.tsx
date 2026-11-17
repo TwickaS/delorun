@@ -7,9 +7,10 @@ import { useCallback, useMemo, useState, useSyncExternalStore, type CSSPropertie
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice, type PaletteChoice, type ThemeSettings } from '../config.ts'
+import { writesFor, type CustomValues, type ThemeChange } from '../settings.ts'
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors } from '../palette/layers.ts'
-import { customSeed, lookOf } from '../palette/migrate.ts'
+import { lookOf } from '../palette/migrate.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
@@ -100,7 +101,7 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
  * @returns the section.
  */
 export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: AppearanceSectionProps) {
-  const { snapshot, disabled, failed, track, save } = useFormWrites(settings)
+  const { snapshot, disabled, failed, track } = useFormWrites(settings)
   // A stable subscribe function: a new one per render would resubscribe on every render, including after the plugin is disposed.
   const subscribeScheme = useCallback((listener: () => void) => scheme.subscribe(listener), [scheme])
   const stored = snapshot.value ?? DEFAULT_SETTINGS
@@ -113,21 +114,10 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
     [current],
   )
 
-  // One atomic write holds the whole custom theme, so a legacy preset-plus-accent pair becomes the custom palette it drew.
-  const writeCustom = (patch: Partial<Pick<ThemeSettings, 'accent' | 'customAccent' | 'contrast'>>): void => {
-    const next = { ...customSeed(current), ...patch }
-    track(settings.mutate([
-      { op: 'set', path: ['accent'], value: next.accent },
-      { op: 'set', path: ['customAccent'], value: next.customAccent },
-      { op: 'set', path: ['contrast'], value: next.contrast },
-      { op: 'set', path: ['palette'], value: 'custom' },
-    ]))
-  }
-  // Choosing a preset leaves the custom values as they were; choosing Custom starts from the preset the person had.
-  const choosePalette = (palette: PaletteChoice): void => {
-    if (palette === 'custom') writeCustom({})
-    else save('palette', palette)
-  }
+  // The writes come from `writesFor`, which the website's setup strip also calls, so the entry it shows is this one.
+  const write = (change: ThemeChange): void => { track(settings.mutate(writesFor(change, current))) }
+  const writeCustom = (values: Partial<CustomValues>): void => { write({ kind: 'custom', values }) }
+  const choosePalette = (palette: PaletteChoice): void => { write({ kind: 'palette', palette }) }
   const customColour = parseHex(current.customAccent) === undefined ? DEFAULT_SETTINGS.customAccent : current.customAccent
 
   return (

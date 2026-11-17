@@ -1,0 +1,14 @@
+{
+  "command": "delorun logs",
+  "output": [
+    "Logs under ~/.delorun/logs",
+    "  home-default  ~/.delorun/logs/home-default/home.log  441 B in 1 file, oldest record 2026-11-17T09:30:00.400Z",
+    "  supervisor-default  ~/.delorun/logs/supervisor-default/supervisor.log  not created",
+    "  desktop-host  ~/.delorun/logs/desktop-host/desktop-host.log  not created",
+    "  startup  ~/.delorun/logs/startup-*.log  0 upstream startup reports",
+    "",
+    "Last 50 records of home-default:",
+    "2026-11-17T09:30:00.400Z info home-default update channel listening",
+    "2026-11-17T09:30:01.600Z info home-default running {\"runtime\":\"0.1.0-preview.2\",\"supervisor\":\"not launched\"}"
+  ]
+}

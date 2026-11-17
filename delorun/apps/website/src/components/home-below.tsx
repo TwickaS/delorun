@@ -7,11 +7,12 @@
  */
 import type { ReactNode } from 'react'
 import view from 'virtual:delorun-changelog'
-import { Frame as Picture, Link, SectionHeading } from '@brand'
+import { Link, SectionHeading } from '@brand'
 import { DOCS_URL } from '@/site/config.ts'
 import { SECTIONS_EN as WORDS } from '@/site/words/sections-en.ts'
 import { SignupSection } from '@/components/signup-section.tsx'
-import { StudioStill } from '@/components/studio-still.tsx'
+import { ReplicaFrame, ReplicaPair } from '@/replica/ReplicaFrame.tsx'
+import { SetupStripStill } from '@/strip/still.tsx'
 import { NearScreen } from '@/components/near-screen.tsx'
 import { PluginBrowserStill } from '@/plugin-browser/PluginBrowserStill.tsx'
 import { GRID, SPACE } from '@/components/grid.ts'
@@ -27,24 +28,7 @@ const CLASSES = {
   number: 'text-[clamp(16px,0.9rem_+_0.4vw,20px)] text-(--dl-text-muted) tabular-nums lg:col-span-4',
   sentence: 'col-span-3 max-w-[34ch] text-[clamp(20px,0.95rem_+_1.1vw,32px)] font-medium leading-[1.2] tracking-[-0.02em] text-pretty underline decoration-transparent decoration-1 underline-offset-[0.18em] transition-[text-decoration-color] duration-(--dl-duration-quick) ease-(--dl-ease) group-focus-visible:decoration-current pointer-fine:group-hover:decoration-current lg:col-span-8',
   headline: 'text-[clamp(22px,1rem_+_1.2vw,36px)] font-medium leading-[1.15] tracking-[-0.02em] text-balance',
-  // On a phone the desktop-width studio sits in a frame that scrolls sideways and snaps to its edges.
-  sideways: 'focus-visible:rounded-(--dl-radius-xs) focus-visible:[outline:var(--dl-focus-ring)] focus-visible:[outline-offset:var(--dl-focus-ring-offset)] overflow-x-auto overscroll-x-contain snap-x snap-mandatory [scrollbar-width:thin] *:snap-start lg:overflow-visible',
 } as const
-
-/**
- * A still that holds a living section's place until its lane delivers the section: the box at the section's height,
- * with the caption that names what will be there.
- * @param props.caption - what the section shows.
- * @param props.className - the box's heights at each width.
- * @returns the box.
- */
-function SectionStill({ caption, className }: { caption: string, className: string }) {
-  return (
-    <figure className={`col-span-full m-0 grid place-items-center rounded-(--dl-radius-md) border border-(--dl-border) bg-(--dl-surface-raised) p-6 text-center text-(--dl-text-muted) ${className}`}>
-      <figcaption className="max-w-md text-sm">{caption}</figcaption>
-    </figure>
-  )
-}
 
 /**
  * The one link at the end of a living section to the guide page that teaches it.
@@ -100,7 +84,8 @@ function MakeItYours() {
       <SectionHeading id="make-it-yours" title={copy.heading} className="col-span-full lg:col-span-6" />
       <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
       <div className="col-span-full mt-10 lg:mt-14">
-        <SectionStill caption={copy.still} className="h-[1040px] lg:h-[640px]" />
+        {/* The strip and its still set their own heights: 640 px from 1024 px wide, 1280 px below. */}
+        <NearScreen load={() => import('@/strip/setup-strip.tsx')} still={<SetupStripStill />} />
       </div>
       <GuideLink link={copy.link} />
     </Section>
@@ -140,7 +125,7 @@ function Replays() {
       <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-6" />
       <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
       <div className="col-span-full mt-10 lg:mt-14">
-        <Picture width={1392} height={870} label={copy.still} still={<StudioStill alt="" />} />
+        <ReplicaFrame session="changes-and-versions" width="responsive" />
       </div>
       <GuideLink link={copy.link} />
     </Section>
@@ -148,8 +133,8 @@ function Replays() {
 }
 
 /**
- * From your phone: the studio at desktop width on eight columns and at phone width on three, offset downwards. On a
- * phone the phone-width studio comes first and the wide one scrolls sideways.
+ * From your phone: the replayed session at desktop width and at phone width side by side, as the replica lays out its
+ * pair.
  * @returns the section.
  */
 function Phone() {
@@ -157,16 +142,8 @@ function Phone() {
   return (
     <Section id="phone" space="normal">
       <SectionHeading id="phone" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-span-7" />
-      <div className="col-span-full mt-10 grid grid-cols-subgrid gap-y-8 lg:mt-14">
-        <div className="col-span-full lg:order-2 lg:col-start-10 lg:col-end-13 lg:mt-32">
-          <Picture width={330} height={660} label={copy.narrowLabel} still={<StudioStill alt="" />} />
-        </div>
-        {/* Focusable so a keyboard can scroll it sideways on a phone; it names the studio it holds. */}
-        <div role="region" aria-label={copy.wideLabel} tabIndex={0} className={`col-span-full lg:order-1 lg:col-start-1 lg:col-end-9 ${CLASSES.sideways}`}>
-          <div className="w-[920px] max-w-none lg:w-auto">
-            <Picture width={920} height={575} label={copy.wideLabel} still={<StudioStill alt="" />} />
-          </div>
-        </div>
+      <div className="col-span-full mt-10 lg:mt-14">
+        <ReplicaPair session="changes-and-versions" />
       </div>
       <GuideLink link={copy.link} />
     </Section>

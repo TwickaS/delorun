@@ -1,0 +1,336 @@
+/*
+ * The setup strip. Spacing uses the brand's spacing tokens, so the density the visitor chooses applies here. Colours come
+ * from the brand's tokens, and the theme swatches and accent dots read the looks stylesheet's `--look-*` roles on their
+ * own `data-look` element. Only opacity and transform move; under reduced motion the `--dl-motion-*` tokens are 0ms, so
+ * the seat keeps its fade and drops its travel.
+ */
+
+/*
+ * The box the page holds for the strip; the still and the live strip both fill it, so nothing moves when one replaces the
+ * other. Each height holds the tallest strip, with the spacious density and the longest entry.
+ */
+.strip {
+  position: relative;
+  min-height: 1280px;
+  color: var(--dl-text);
+}
+
+@media (min-width: 1024px) {
+  .strip {
+    min-height: 640px;
+  }
+}
+
+/* The columns and the gap between them are the page's grid utilities on the same element; only the row gap is set here. */
+.body {
+  row-gap: var(--dl-space-6);
+  align-content: start;
+}
+
+.controls {
+  --delorun-segmented-max: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+/* The entry and the versions side by side on a wide screen, the notes under both. */
+.record {
+  align-content: start;
+  row-gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dl-space-3);
+  min-height: 2rem;
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+  grid-column: 1 / -1;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dl-text);
+}
+
+/* The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. */
+.tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1023px) {
+  .tiles {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 7.5rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--dl-space-1);
+    padding: var(--dl-space-1);
+    margin: calc(-1 * var(--dl-space-1));
+  }
+
+  .tiles > * {
+    scroll-snap-align: start;
+  }
+}
+
+.swatch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 2.75rem;
+  overflow: hidden;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-xs);
+}
+
+.half {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  color-scheme: light;
+  background: var(--look-surface);
+}
+
+.half[data-half='dark'] {
+  color-scheme: dark;
+}
+
+.line {
+  width: 75%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--look-text);
+}
+
+.pill {
+  width: 45%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--look-accent);
+}
+
+.dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--look-accent);
+}
+
+/* The entry and the versions keep their room as they change, so nothing around them moves. */
+.entry {
+  min-height: 15.5rem;
+}
+
+/* Every change of the Theme entry has the same title, so the studio's list collapses them into one row. */
+.list {
+  min-height: 5rem;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--dl-space-4);
+  border: 1px dashed var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+.versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border-top: 1px solid var(--dl-border);
+}
+
+.version:first-child {
+  border-top: 0;
+}
+
+.versionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-2);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.versionLine {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The accent marks the current version, one of the accent's three places on the page. */
+.current {
+  padding: 0 var(--dl-space-2);
+  border-radius: var(--dl-radius-xs);
+  background: var(--dl-accent);
+  color: var(--dl-on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.note {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* A new entry and a new version seat: a short travel up and a fade, the version a moment after the entry. */
+.seat {
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+
+.later {
+  transition-delay: calc(var(--dl-duration-press) / 2);
+}
+
+@starting-style {
+  .seat {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The still: the same parts drawn as plain markup, after the studio's tile group, segmented control and code block. */
+.stillCaption {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* The still's tiles never scroll, so the row is not a keyboard stop. */
+.stillTiles {
+  overflow: hidden;
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stillTile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.stillTile[aria-current] {
+  border-color: var(--dl-accent);
+  box-shadow: inset 0 0 0 1px var(--dl-accent);
+}
+
+.segments {
+  display: flex;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.segment {
+  flex: 1;
+  padding: 6px var(--dl-space-2);
+  border-radius: var(--dl-radius-sm);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--dl-text-muted);
+}
+
+.segment[aria-current] {
+  background: var(--dl-surface);
+  color: var(--dl-text);
+  font-weight: 500;
+}
+
+.code {
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+}
+
+.codeCaption {
+  font-size: 13px;
+  color: var(--dl-text-muted);
+}
+
+.codePre {
+  margin: 0;
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-sunken);
+  font-family: var(--dl-font-mono);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* The spread: the new page is revealed by the clip the script animates, not cross-faded. */
+:global(html.strip-spread)::view-transition-old(root),
+:global(html.strip-spread)::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
