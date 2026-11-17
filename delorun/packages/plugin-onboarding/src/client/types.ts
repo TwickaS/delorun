@@ -360,6 +360,7 @@ export interface LaterStore {
   subscribe(listener: () => void): () => void
   /**
    * @param value - whether the guide is set aside.
+   * @param remember - whether to keep the pause in the home so a reload keeps the guide closed; default true. Escape sets it aside for this page only.
    */
-  set(value: boolean): void
+  set(value: boolean, remember?: boolean): void
 }

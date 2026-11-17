@@ -64,7 +64,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type Co
 import { holderAlive, HomeLayoutError, isFailClosedStub, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delorun/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delorun/bundle-local/profile'
-import { delorunRowIds, inactiveDelorunRows, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
+import { delorunRowIds, inactiveDelorunRows, insertedRowsByLayer, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
 import { announceStudio } from './open/announce.ts'
@@ -792,7 +792,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     await retry.afterFailure(error)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
-  await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
+  await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows(), undefined, insertedRowsByLayer(composed.resolvedProfile.profile))
   try {
     const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile, composed.packBundles), composed.packBundles)
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)

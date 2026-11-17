@@ -8,7 +8,7 @@
  * the page declares.
  */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PluginAuditResult, PluginInstallFailureKind, ProfileChangedBy, ProfileVersionId, Registry } from '@deepseek-ai/dsh-api-remotes/client'
 import {
@@ -636,12 +636,13 @@ function updateAvailable(pkg: PackageView): boolean {
  * One package as a card that opens its page: its name, its one-liner, its tags, its bundle switch, and why the Host
  * skipped it or does not support its platform.
  */
-function PackageCard({ pkg, t, resolveText, renderSlotChain, busy, highlighted, newer, onOpen, onSetEnabled }: {
+function PackageCard({ pkg, t, resolveText, renderSlot, renderSlotChain, busy, highlighted, newer, onOpen, onSetEnabled }: {
   readonly pkg: PackageView
   /** The newer registry version a version check offers. */
   readonly newer: string | undefined
   readonly t: Translate
   readonly resolveText: ResolveText
+  readonly renderSlot: RenderConfig
   readonly renderSlotChain: RenderChain
   readonly busy: boolean
   readonly highlighted: boolean
@@ -677,6 +678,10 @@ function PackageCard({ pkg, t, resolveText, renderSlotChain, busy, highlighted, 
       {/* The card names an incompatibility without its requirement list; the page lists them. */}
       {pkg.error !== undefined && (status === 'not-running' || pkg.error.code === 'unsupported-platform')
         ? <p className={css.reason} role="status">{managementText({ ...pkg.error, incompatible: [] }, t)}</p>
+        : null}
+      {/* A row's contributed state, such as "Needs setup", shows on the card as it does on the page. */}
+      {pkg.installed && pkg.availability !== 'missing'
+        ? pkg.rows.map(row => <Fragment key={row.rowId}>{renderSlot('plugins.row.state', { subject: { kind: 'row', pkg: packageRef(pkg), row: rowRef(row) } })}</Fragment>)
         : null}
     </li>
   )
@@ -1800,6 +1805,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
       pkg={pkg}
       t={t}
       resolveText={resolveText}
+      renderSlot={renderSlot}
       renderSlotChain={renderSlotChain}
       busy={packageBusy(pkg)}
       highlighted={state.highlight === pkg.name}

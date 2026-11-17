@@ -291,6 +291,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
     }
     if (this.reviews.get(serverName) === review) this.reviews.delete(serverName)
     this.ctx.logger.info(`mcp-consent: the person accepted the start of the stdio server ${serverName} at the home's computer`)
+    await this.ctx.parallel('mcp-client/consent-accepted', serverName)
     return { started: await this.startRefusedRows(serverName) }
   }
 
@@ -694,4 +695,16 @@ function configuresServer(config: unknown, serverName: string): boolean {
  */
 function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : 'the home could not be resolved'
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again
+     * in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+     * @param serverName - the accepted server.
+     * @mode parallel
+     */
+    'mcp-client/consent-accepted'(serverName: string): void | Promise<void>
+  }
 }

@@ -246,6 +246,18 @@ async function ignoredOutputFolder(folder: string): Promise<void> {
   }
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again
+     * in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+     * @param serverName - the accepted server.
+     * @mode parallel
+     */
+    'mcp-client/consent-accepted'(serverName: string): void | Promise<void>
+  }
+}
+
 interface ClientState {
   /**
    * `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did
@@ -253,13 +265,15 @@ interface ClientState {
    */
   status: 'ready' | 'blocked' | 'refused' | 'unadmitted'
   mask?: Scope
-  /** The admission change running for this Session; changes run one after another. */
+  /** The admission change or consent retry running for this Session; they run one after another. */
   transition?: Promise<void>
   /**
    * Whether an admission change is starting or closing the Session's server: its own tools, which the start adds and
    * the close removes, are not masked meanwhile.
    */
   changing?: boolean
+  /** The Agent's creation signal, which a later start of a `refused` Session runs under. */
+  signal?: AbortSignal | undefined
 }
 
 /**
@@ -277,7 +291,10 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * A busy attachment leaves that activation without browser tools; its other turns continue. A start the mounted
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
- * activation reviews the start again. Every other startup failure fails the Agent's creation.
+ * activation reviews the start again. When the consent accepts that server's start (`mcp-client/consent-accepted`),
+ * each live Session left without tools by a refusal runs the same consent check once more and, when it passes, gets the
+ * server's tools; a Session the check still refuses stays without them and starts nothing.
+ * Every other startup failure fails the Agent's creation.
  * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
  * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
  * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
@@ -450,7 +467,10 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
 
   ctx.on('agent/created', async ({ agent, signal }) => {
     const unadmitted = options.admission !== undefined && !options.admission.admitted(agent)
-    const state: ClientState = { status: unadmitted ? 'unadmitted' : resources.available(agent) ? 'ready' : 'blocked' }
+    const state: ClientState = {
+      status: unadmitted ? 'unadmitted' : resources.available(agent) ? 'ready' : 'blocked',
+      signal: signal ?? new AbortController().signal,
+    }
     agent.ctx.effect(() => async () => {
       clients.delete(agent)
       await state.transition
@@ -475,6 +495,43 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     clients.set(agent, state)
   }, { prepend: true })
   ctx.on('tools/change', refreshBlockedMasks)
+  /** Start the server again in a `refused` Session the person's acceptance may now allow; the consent decides again. */
+  const retryRefused = async (agent: Agent, state: ClientState): Promise<void> => {
+    if (stopping || clients.get(agent) !== state || state.status !== 'refused' || state.signal?.aborted !== false) return
+    if (options.admission !== undefined && !options.admission.admitted(agent)) return
+    // The mask denies the server's tools in this Session; it comes off first, because the new registration names them.
+    const mask = state.mask
+    delete state.mask
+    try {
+      await mask?.dispose()
+    } catch (error) {
+      // The accept already took effect; a Session whose mask would not come off stays as it was.
+      if (mask !== undefined) state.mask = mask
+      ctx.logger.warn(`${options.name}: the browser tools stay off in Session ${agent.id}: ${(error as Error).message}`)
+      return
+    }
+    state.changing = true
+    try {
+      await start(agent, state, state.signal)
+    } catch (error) {
+      state.status = 'refused'
+      ctx.logger.warn(`${options.name}: the browser tools could not start in Session ${agent.id} after the server was allowed: ${(error as Error).message}`)
+    } finally {
+      state.changing = false
+      refreshBlockedMasks()
+    }
+  }
+  ctx.on('mcp-client/consent-accepted', async (serverName) => {
+    if (stopping || serverName !== options.name) return
+    const transitions: Promise<void>[] = []
+    for (const [agent, state] of [...clients]) {
+      if (state.status !== 'refused') continue
+      const previous = state.transition ?? Promise.resolve()
+      state.transition = previous.then(() => retryRefused(agent, state))
+      transitions.push(state.transition)
+    }
+    await Promise.all(transitions)
+  })
   ctx.on('tools/execute', async (exec, next) => {
     const ownResource = resourceTools.has(exec.name)
       && typeof exec.arguments === 'object' && exec.arguments !== null
