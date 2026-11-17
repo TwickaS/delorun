@@ -26,6 +26,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { binaryIn, childEnv, Config, resolveCommand } from '../src/config.ts'
+import { lockIntegrity } from './lock-integrity.ts'
 
 /** The pinned version, as the package's dependency names it. */
 const PINNED = '0.1.1'
@@ -75,18 +76,6 @@ async function confirm(prompt: ReturnType<typeof createInterface>, question: str
 }
 
 /**
- * The lockfile's sha512 integrity of one pinned package.
- * @param name - the package name.
- * @returns the integrity string.
- */
-function lockIntegrity(name: string): string {
-  const lock = readFileSync(join(REPO, 'pnpm-lock.yaml'), 'utf8')
-  const match = new RegExp(`'${name.replace(/[/@.-]/gu, '\\$&')}@${PINNED.replace(/\./gu, '\\.')}':\\n\\s+resolution: \\{integrity: (sha512-[^}]+)\\}`, 'u').exec(lock)
-  if (match?.[1] === undefined) throw new Error(`pnpm-lock.yaml pins no ${name}@${PINNED}`)
-  return match[1]
-}
-
-/**
  * Fetch the windows-x64 package with npm, check it against the lockfile and unpack it.
  * @param scratch - the scratch folder.
  * @returns the unpacked package's folder.
@@ -100,7 +89,7 @@ function fetchWindowsPackage(scratch: string): string {
   if (tarball === undefined) throw new Error(`npm pack wrote no tarball for ${name}`)
   const bytes = readFileSync(join(into, tarball))
   const actual = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
-  const expected = lockIntegrity(name)
+  const expected = lockIntegrity(readFileSync(join(REPO, 'pnpm-lock.yaml'), 'utf8'), name, PINNED)
   if (actual !== expected) throw new Error(`${name}@${PINNED} does not match the lockfile: ${actual} is not ${expected}`)
   execFileSync('tar', ['-xzf', join(into, tarball), '-C', into])
   const directory = join(into, 'package')
