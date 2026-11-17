@@ -6,7 +6,7 @@
 import { act, createElement, type RefObject } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { usePlayer, type Player } from '../src/replica/player.ts'
+import { PRESS_RETRY_MS, usePlayer, type Player } from '../src/replica/player.ts'
 import { CHAPTER_FILES } from '../src/replica/sessions/index.ts'
 
 const FILE = CHAPTER_FILES['ordinary-work']
@@ -48,14 +48,14 @@ afterEach(() => {
 })
 
 /** Plays the "asks first" chapter until its press is queued, with the frame that would run it still unreleased. */
-function playToThePress(press: (target: unknown) => Promise<boolean>): { readonly player: () => Player } {
+function playToThePress(press: (target: unknown) => Promise<boolean>): { readonly player: () => Player; readonly unmount: () => void } {
   const frame: RefObject<Element | null> = { current: document.createElement('div') }
   let latest: Player | undefined
   const Probe = () => { latest = usePlayer({ file: FILE, ready: true, frame, press: press as never, opening: ASKS_FIRST }); return null }
   root = createRoot(document.createElement('div'))
   act(() => { root?.render(createElement(Probe)) })
   act(() => { vi.advanceTimersByTime(4300) })
-  return { player: () => latest! }
+  return { player: () => latest!, unmount: () => { act(() => { root?.unmount() }); root = undefined } }
 }
 
 describe('the player\'s presses', () => {
@@ -80,6 +80,28 @@ describe('the player\'s presses', () => {
     for (let frame = 0; frame < 6; frame++) await act(async () => { releaseFrames(); await vi.advanceTimersByTimeAsync(20) })
     expect(press).toHaveBeenCalledTimes(3)
     expect(report).not.toHaveBeenCalled()
+  })
+
+  it('stops a press that is retrying when the player unmounts: no press and no report afterwards', async () => {
+    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const press = vi.fn(async () => false)
+    const hook = playToThePress(press)
+    // One frame runs, the control is not there yet, and the next look is queued.
+    for (let frame = 0; frame < 6 && press.mock.calls.length === 0; frame++) await act(async () => { releaseFrames(); await vi.advanceTimersByTimeAsync(20) })
+    const looked = press.mock.calls.length
+    expect(looked).toBeGreaterThan(0)
+    hook.unmount()
+    for (let frame = 0; frame < 30; frame++) await act(async () => { releaseFrames(); await vi.advanceTimersByTimeAsync(20) })
+    expect(press).toHaveBeenCalledTimes(looked)
+    expect(report).not.toHaveBeenCalled()
+  })
+
+  it('holds every press in both sessions longer than the time it looks for its control', () => {
+    for (const file of Object.values(CHAPTER_FILES)) {
+      const holds = file.chapters.flatMap(chapter => chapter.steps.filter(step => step.kind === 'press').map(step => step.hold))
+      expect(holds.length).toBeGreaterThan(0)
+      for (const hold of holds) expect(hold, file.session).toBeGreaterThanOrEqual(PRESS_RETRY_MS)
+    }
   })
 
   it('reports a control that never appears in its own chapter run, once, after the retry window', async () => {
