@@ -28,26 +28,20 @@ export interface ExternalRunHandle {
  * @param ctx - context carrying the Agent registry.
  * @param residentAncestors - verified creation ancestors for an exact managed Agent, absent before publication or for unmanaged Agents.
  * @param identityOf - ready service-owned descriptor identity reader; absent or invalid descriptors yield no identity.
- * @param externalRunsOf - live external runs beneath a Session; they are listed as activity and stopped with it.
  */
 export function installSubagentArchiveAdmission(
   ctx: Context,
   residentAncestors: (agent: Agent) => readonly SessionId[] | undefined,
   identityOf: (session: Session) => SubagentIdentityProjection | undefined,
-  externalRunsOf: (sessionId: SessionId) => readonly ExternalRunHandle[],
 ): void {
   const ancestorsOf = (agent: Agent): readonly SessionId[] => residentAncestors(agent) ?? headerAncestors(ctx, agent)
   const runningDescendants = (sessionId: SessionId): Agent[] => ctx.agents.list()
     .filter(agent => agent.status === 'running' && ancestorsOf(agent).includes(sessionId))
   ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
     const running = runningDescendants(sessionId)
-    const external = externalRunsOf(sessionId)
     const rest = await next()
-    if (running.length === 0 && external.length === 0) return rest
-    const own: SessionActivity = {
-      kind: 'subagent',
-      items: [...running.map(child => describe(child, identityOf(child.session))), ...external.map(run => ({ id: run.id }))],
-    }
+    if (running.length === 0) return rest
+    const own: SessionActivity = { kind: 'subagent', items: running.map(child => describe(child, identityOf(child.session))) }
     return [own, ...rest]
   })
   ctx.on('workspace/session-stop', ({ sessionId }) => {
@@ -59,13 +53,39 @@ export function installSubagentArchiveAdmission(
         ctx.logger.warn(`subagent: cancelling "${child.id}" for an archived Session failed: ${String(error)}`)
       }
     }
-    for (const run of externalRunsOf(sessionId)) run.stop()
   })
   ctx.on('agent/pre-step', ({ agent }, next) => {
     const archived = ctx.get('workspaceRegistry')?.archivedSessionIds
     return archived !== undefined && ancestorsOf(agent).some(id => archived.includes(id))
       ? Promise.resolve({ kind: 'reject' as const })
       : next()
+  })
+}
+
+/**
+ * List the external runs beneath a Session as `subagent` activity and stop them with it, beside
+ * {@link installSubagentArchiveAdmission}. The listing joins the `subagent` entry that listener prepends, or adds one when
+ * the Session has no running local descendant, so a Session shows one `subagent` entry. All listeners live as long as
+ * `ctx`'s fiber.
+ * @param ctx - context carrying the Workspace registry's events.
+ * @param externalRunsOf - live external runs beneath a Session.
+ */
+export function installExternalRunArchiveAdmission(
+  ctx: Context,
+  externalRunsOf: (sessionId: SessionId) => readonly ExternalRunHandle[],
+): void {
+  // Registered first in the waterfall so the entry of the local descendants is already in `rest` to join.
+  ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+    const external = externalRunsOf(sessionId)
+    const rest = await next()
+    if (external.length === 0) return rest
+    const items = external.map(run => ({ id: run.id }))
+    const own = rest.findIndex(entry => entry.kind === 'subagent')
+    if (own < 0) return [{ kind: 'subagent' as const, items }, ...rest]
+    return rest.map((entry, index) => index === own ? { ...entry, items: [...entry.items ?? [], ...items] } : entry)
+  }, { prepend: true })
+  ctx.on('workspace/session-stop', ({ sessionId }) => {
+    for (const run of externalRunsOf(sessionId)) run.stop()
   })
 }
 
