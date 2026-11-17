@@ -7,7 +7,7 @@ import type { NewWorkspaceApi } from '../src/client/api.ts'
 import type { FolderListing } from '../src/client/screens/FolderScreen.tsx'
 import type { FullAccessAsk } from '../src/client/create.ts'
 import type { ModelCatalogView } from '../src/client/models.ts'
-import { CATALOG, failure, fakeApi, fakeBrowse, fakeFullAccess, HOME, listingOf, NOW, ok, PLACES, t } from './fixtures.client.ts'
+import { CATALOG, failure, fakeApi, fakeBrowse, fakeBrowser, fakeFullAccess, HOME, listingOf, NOW, ok, PLACES, t } from './fixtures.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -40,8 +40,9 @@ async function mount(options: Options = {}) {
   const onClose = vi.fn()
   const onCreated = vi.fn()
   const access = fakeFullAccess()
+  const shown = fakeBrowser()
   const readModels = vi.fn(async () => options.catalog === null ? undefined : options.catalog ?? CATALOG)
-  render(<NewWorkspaceDialog t={t} api={fake.api} browse={folders.browse} readModels={readModels} fullAccess={options.fullAccess ?? access.fullAccess}
+  render(<NewWorkspaceDialog t={t} api={fake.api} browse={folders.browse} readModels={readModels} fullAccess={options.fullAccess ?? access.fullAccess} browser={shown.browser}
     from="sidebar" onClose={onClose} onCreated={onCreated} wait={options.wait ?? (async () => {})} now={() => NOW} />)
   await settle()
   return { ...fake, folders, onClose, onCreated, askFullAccess: access.ask }
@@ -57,7 +58,7 @@ describe('the first screen', () => {
   it('asks how to start with three cards, the step count and the recent workspaces', async () => {
     await mount()
     expect(heading()).toBe('New workspace')
-    expect(screen.getByText('Step 1 of 4')).toBeTruthy()
+    expect(screen.getByText('Step 1 of 5')).toBeTruthy()
     expect(screen.getByText(en['how.title'])).toBeTruthy()
     for (const card of [/^New folder/, /^Folder on this computer/, /^Clone from Git/]) expect(button(card)).toBeTruthy()
     expect(screen.getByText(en['how.new.body'])).toBeTruthy()
@@ -75,7 +76,7 @@ describe('the first screen', () => {
     expect(button(/^Clone from Git/).getAttribute('aria-pressed')).toBe('true')
     await click(button(en.continue))
     expect(heading()).toBe('New workspace · Clone from Git')
-    expect(screen.getByText('Step 2 of 4')).toBeTruthy()
+    expect(screen.getByText('Step 2 of 5')).toBeTruthy()
   })
 
   it('does not let a card be chosen before the places are read', async () => {
@@ -227,7 +228,7 @@ describe('a folder on this computer', () => {
     const { add, onCreated } = await open({ api: { add: async () => answers.shift() ?? failure('failed') } })
     await click(screen.getByRole('option', { name: 'src' }))
     await click(button('Use "src"'))
-    expect(heading()).toBe('New workspace · Model')
+    expect(heading()).toBe('New workspace · Browser')
     expect(add).not.toHaveBeenCalled()
     await click(button(en.createNow))
     expect(add).toHaveBeenCalledExactlyOnceWith(`${HOME}/src`)
@@ -358,7 +359,7 @@ describe('a new folder', () => {
     await type(field(en['new.name']), 'a')
     await click(button(en.continue))
     await click(button(en.createNow))
-    expect(heading()).toBe('New workspace · Model')
+    expect(heading()).toBe('New workspace · Browser')
     expect(screen.getByRole('alert').textContent).toBe(en['problem.locked'])
     await click(button(en.createNow))
     expect(onCreated).toHaveBeenCalledOnce()
@@ -464,10 +465,10 @@ describe('a clone', () => {
     await fill()
     await click(button(en['clone.start']))
     expect(clone).toHaveBeenCalledExactlyOnceWith({ url: 'https://github.com/acme/site.git', parent: `${HOME}/Projects`, name: 'site' })
-    expect(heading()).toBe('New workspace · Model')
+    expect(heading()).toBe('New workspace · Browser')
     expect(cloneStatus).not.toHaveBeenCalled()
     await click(button(en.createNow))
-    expect(screen.getByRole('status').textContent).toBe('Cloning site · 42 %')
+    expect(screen.getByText('Cloning site · 42 %').textContent).toBe('Cloning site · 42 %')
     expect(button(en.createNow).disabled).toBe(true)
     expect(onCreated).not.toHaveBeenCalled()
     await act(async () => { release() })
@@ -514,7 +515,7 @@ describe('a clone', () => {
     await fill()
     await click(button(en['clone.start']))
     await click(button(en.createNow))
-    expect(screen.getByRole('status').textContent).toBe('Cloning site…')
+    expect(screen.getByText('Cloning site…').textContent).toBe('Cloning site…')
     cleanup()
     await settle()
     expect(cloneStatus).toHaveBeenCalledOnce()
@@ -527,7 +528,7 @@ describe('a clone', () => {
     await click(button(en.back))
     expect(heading()).toBe('New workspace · Clone from Git')
     await click(button(en['clone.start']))
-    expect(heading()).toBe('New workspace · Model')
+    expect(heading()).toBe('New workspace · Browser')
     expect(clone).toHaveBeenCalledOnce()
   })
 

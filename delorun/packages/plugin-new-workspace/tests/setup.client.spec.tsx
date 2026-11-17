@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { BrowserReadiness } from '@delorun/browser-setup'
 import type { NewWorkspaceApi } from '../src/client/api.ts'
 import type { FullAccessAsk } from '../src/client/create.ts'
 import { en } from '../src/client/locales.ts'
 import type { ModelCatalogView } from '../src/client/models.ts'
 import { NewWorkspaceDialog } from '../src/client/NewWorkspaceDialog.tsx'
-import { CATALOG, failure, fakeApi, fakeBrowse, fakeFullAccess, HOME, NOW, ok, t } from './fixtures.client.ts'
+import { CATALOG, failure, fakeApi, fakeBrowse, fakeBrowser, fakeFullAccess, HOME, NOW, ok, t } from './fixtures.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -29,6 +30,7 @@ interface Options {
   readonly api?: Partial<NewWorkspaceApi>
   readonly catalog?: ModelCatalogView | null
   readonly fullAccess?: FullAccessAsk
+  readonly readiness?: BrowserReadiness
 }
 
 /** The dialog over a fake Host, on the model screen of a new folder called `site`. */
@@ -37,13 +39,15 @@ async function atModel(options: Options = {}) {
   const folders = fakeBrowse()
   const onCreated = vi.fn()
   const access = fakeFullAccess()
-  render(<NewWorkspaceDialog t={t} api={fake.api} browse={folders.browse}
+  const shown = fakeBrowser(options.readiness)
+  render(<NewWorkspaceDialog t={t} api={fake.api} browse={folders.browse} browser={shown.browser}
     readModels={async () => options.catalog === null ? undefined : options.catalog ?? CATALOG}
     fullAccess={options.fullAccess ?? access.fullAccess} from="sidebar" onClose={vi.fn()} onCreated={onCreated} wait={async () => {}} now={() => NOW} />)
   await settle()
   await click(button(/^New folder/))
   await click(button(en.continue))
   await type(screen.getByLabelText(en['new.name']), 'site')
+  await click(button(en.continue))
   await click(button(en.continue))
   return { ...fake, onCreated, askFullAccess: access.ask }
 }
@@ -58,10 +62,10 @@ async function toSafety(options: Options = {}) {
 const SITE = `${HOME}/Projects/site`
 
 describe('the model screen', () => {
-  it('is step 3 and opens on the home\'s default model and thinking level', async () => {
+  it('is step 4 and opens on the home\'s default model and thinking level', async () => {
     await atModel()
     expect(heading()).toBe('New workspace · Model')
-    expect(screen.getByText('Step 3 of 4')).toBeTruthy()
+    expect(screen.getByText('Step 4 of 5')).toBeTruthy()
     expect(screen.getByText(en['model.title'])).toBeTruthy()
     expect(shown(modelSelect())).toBe('DeepSeek Pro (your default)')
     expect(shown(thinkingSelect())).toBe('High')
@@ -100,13 +104,13 @@ describe('the model screen', () => {
     expect(heading()).toBe('New workspace · Safety')
   })
 
-  it('shows the shared copy block, offers Back and Create now, and goes back to the place screen', async () => {
+  it('shows the shared copy block, offers Back and Create now, and goes back to the browser screen', async () => {
     await atModel()
     expect(screen.getByText(en['chats.intro'])).toBeTruthy()
     for (const key of ['chats.model', 'chats.permission', 'chats.network'] as const) expect(screen.getByText(en[key])).toBeTruthy()
     expect(button(en.createNow).disabled).toBe(false)
     await click(button(en.back))
-    expect(heading()).toBe('New workspace · New folder')
+    expect(heading()).toBe('New workspace · Browser')
   })
 })
 
@@ -114,7 +118,7 @@ describe('the safety screen', () => {
   it('is the last step, opens on the safe choices and creates with its primary button', async () => {
     await toSafety()
     expect(heading()).toBe('New workspace · Safety')
-    expect(screen.getByText('Step 4 of 4')).toBeTruthy()
+    expect(screen.getByText('Step 5 of 5')).toBeTruthy()
     expect(radio(en['safety.files.title']).checked).toBe(true)
     expect(radio(en['safety.network.open']).checked).toBe(true)
     expect(button(en.create).disabled).toBe(false)
@@ -184,7 +188,7 @@ describe('finishing', () => {
     const { create, setDefaults, setNetwork, askFullAccess, onCreated } = await atModel()
     await click(button(en.createNow))
     expect(create).toHaveBeenCalledExactlyOnceWith({ parent: `${HOME}/Projects`, name: 'site', git: true })
-    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { model: { provider: 'deepseek', model: 'deepseek-pro', reasoningEffort: 'high' } })
+    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { model: { provider: 'deepseek', model: 'deepseek-pro', reasoningEffort: 'high' }, browser: 'isolated' })
     expect(setNetwork).not.toHaveBeenCalled()
     expect(askFullAccess).not.toHaveBeenCalled()
     expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE, folder: 'code' })
@@ -195,20 +199,20 @@ describe('finishing', () => {
     await choose(modelSelect(), '1')
     await choose(thinkingSelect(), 'on')
     await click(button(en.createNow))
-    expect(setDefaults).toHaveBeenCalledExactlyOnceWith('/real/site', { model: { provider: 'deepseek', model: 'deepseek-flash', reasoningEffort: 'on' } })
+    expect(setDefaults).toHaveBeenCalledExactlyOnceWith('/real/site', { model: { provider: 'deepseek', model: 'deepseek-flash', reasoningEffort: 'on' }, browser: 'isolated' })
   })
 
   it('stores a model without thinking levels with no level', async () => {
     const { setDefaults } = await atModel()
     await choose(modelSelect(), '2')
     await click(button(en.createNow))
-    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { model: { provider: 'other', model: 'plain' } })
+    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { model: { provider: 'other', model: 'plain' }, browser: 'isolated' })
   })
 
-  it('stores no model when the catalogue could not be read', async () => {
+  it('stores only the browser choice when the catalogue could not be read', async () => {
     const { setDefaults, onCreated } = await atModel({ catalog: null })
     await click(button(en.createNow))
-    expect(setDefaults).not.toHaveBeenCalled()
+    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { browser: 'isolated' })
     expect(onCreated).toHaveBeenCalledOnce()
   })
 
@@ -349,7 +353,7 @@ describe('finishing', () => {
   it('sets nothing up for a recent workspace, which keeps what it has', async () => {
     const fake = fakeApi()
     const onCreated = vi.fn()
-    render(<NewWorkspaceDialog t={t} api={fake.api} browse={fakeBrowse().browse} readModels={async () => CATALOG} fullAccess={fakeFullAccess().fullAccess}
+    render(<NewWorkspaceDialog t={t} api={fake.api} browse={fakeBrowse().browse} readModels={async () => CATALOG} fullAccess={fakeFullAccess().fullAccess} browser={fakeBrowser().browser}
       from="sidebar" onClose={vi.fn()} onCreated={onCreated} now={() => NOW} />)
     await settle()
     await click(screen.getByRole('button', { name: /^delorun/ }))

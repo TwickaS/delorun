@@ -52,7 +52,7 @@ export function DialogFooter({ back, extra, primary }: DialogFooterProps): React
       {note !== undefined && <p className={css.note} role="status">{note}</p>}
       <span className={css.spacer} />
       {back !== undefined && <Button variant="outline" className={css.button} disabled={back.disabled} onClick={back.onClick}>{back.label}</Button>}
-      {extra !== undefined && <Button variant="outline" className={css.button} disabled={extra.disabled} onClick={extra.onClick}>{extra.label}</Button>}
+      {extra !== undefined && <Button variant="outline" className={`${css.button} ${css.extra}`} disabled={extra.disabled} onClick={extra.onClick}>{extra.label}</Button>}
       <Button variant="primary" className={css.button} disabled={primary.disabled} onClick={primary.onClick}>{primary.label}</Button>
     </div>
   ), element)

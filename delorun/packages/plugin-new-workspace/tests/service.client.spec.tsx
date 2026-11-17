@@ -39,11 +39,12 @@ function stubHost(overrides: Readonly<Record<string, () => Response>> = {}) {
 }
 
 /** The page as far as the plugin uses it, with the Delorun look on unless asked otherwise. */
-async function harness(options: { readonly studio?: boolean } = {}) {
+async function harness(options: { readonly studio?: boolean, readonly language?: string } = {}) {
   const ctx = new Context()
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
     bind: () => makeTranslate(en),
+    getLocale: () => ({ active: options.language ?? 'en' }),
     register: (namespace: string, dictionary: unknown) => {
       dictionaries.set(namespace, dictionary)
       return () => { dictionaries.delete(namespace) }
@@ -126,6 +127,28 @@ describe('the studio services the dialog reads', () => {
     ctx.provide('remote.session', { modelCatalog: () => answers.shift()?.() } as never)
     expect(await injected(entries).readModels()).toBeUndefined()
     expect(await injected(entries).readModels()).toBeUndefined()
+  })
+
+  it('opens a Settings section through the shell, and offers it only while a shell exists', async () => {
+    const { ctx, entries } = await harness()
+    const { settings } = injected(entries).browser
+    expect(settings.available()).toBe(false)
+    expect(() => { settings.open('plugins') }).not.toThrow()
+    const openSection = vi.fn<(id: string) => void>()
+    ctx.provide('settingsShell', { open: vi.fn(), openSection, openOnboarding: vi.fn() } as never)
+    expect(settings.available()).toBe(true)
+    settings.open('plugins')
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('plugins')
+  })
+
+  it('reads whether Browser is ready from the Host in the studio\'s language, once per page', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ rows: [], problems: [] }))
+    vi.stubGlobal('fetch', fetch)
+    const { entries } = await harness({ language: 'zh-CN' })
+    const { setup } = injected(entries).browser
+    expect(setup.getSnapshot()).toEqual({ kind: 'checking' })
+    expect(await setup.refresh()).toEqual({ kind: 'not-added' })
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual(['/api/delorunRequirements.check?language=zh'])
   })
 
   it('asks the Full access consent service for one workspace, or says it is absent', async () => {

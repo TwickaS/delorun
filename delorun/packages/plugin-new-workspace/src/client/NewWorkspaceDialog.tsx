@@ -6,9 +6,10 @@
  * on the Host.
  */
 import { IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { browserAdded } from '@delorun/browser-setup'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import type { FolderKind } from '../wire.ts'
+import type { BrowserChoice, FolderKind } from '../wire.ts'
 import type { NewWorkspaceApi } from './api.ts'
 import { createChosen, problemOfFailure, setUpWorkspace, type CreateOptions, type FullAccessAsk, type SetupNote, type SetupPlan } from './create.ts'
 import { FooterContext } from './footer.tsx'
@@ -17,6 +18,7 @@ import { parseHosts } from './hosts.ts'
 import type { Translate } from './locales.ts'
 import { modelToStore, type ModelCatalogView, type ModelsState } from './models.ts'
 import { baseName } from './paths.ts'
+import { BrowserScreen, type BrowserFace } from './screens/BrowserScreen.tsx'
 import { CloneScreen, type CloneEdit } from './screens/CloneScreen.tsx'
 import { DoneScreen } from './screens/DoneScreen.tsx'
 import { FolderScreen, type FolderBrowse } from './screens/FolderScreen.tsx'
@@ -51,6 +53,8 @@ export interface NewWorkspaceDialogProps {
   readonly readModels: () => Promise<ModelCatalogView | undefined>
   /** The Full access consent, asked when the person chose Full access. */
   readonly fullAccess: FullAccessAsk
+  /** Whether Browser is ready and the Settings opener, for the browser screen. */
+  readonly browser: BrowserFace
   /** The surface that opened the flow, kept on the dialog as `data-from`. */
   readonly from: string
   /** Called when the person closes the dialog. */
@@ -95,6 +99,7 @@ function headingOf(t: Translate, step: Step, picking: boolean): string {
     case 'folder': return t('title.screen', { screen: t(picking ? 'screen.place' : 'screen.folder') })
     case 'new-folder': return t('title.screen', { screen: t('screen.newFolder') })
     case 'clone': return t('title.screen', { screen: t('screen.clone') })
+    case 'browser': return t('title.screen', { screen: t('screen.browser') })
     case 'model': return t('title.screen', { screen: t('screen.model') })
     case 'safety': return t('title.screen', { screen: t('screen.safety') })
     default: return assertNever(step)
@@ -106,7 +111,7 @@ function headingOf(t: Translate, step: Step, picking: boolean): string {
  * @param props - the copy, the services and what closing and finishing do.
  * @returns the dialog.
  */
-export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, from, onClose, onCreated, wait, now = Date.now }: NewWorkspaceDialogProps): ReactNode {
+export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, browser, from, onClose, onCreated, wait, now = Date.now }: NewWorkspaceDialogProps): ReactNode {
   const [state, dispatch] = useReducer(reduce, INITIAL)
   const [places, setPlaces] = useState<PlacesState>({ status: 'loading' })
   const [running, setRunning] = useState<Running | undefined>()
@@ -144,6 +149,9 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, fro
   }, [readModels])
 
   const ready = places.status === 'ready' ? places.places : undefined
+  const readiness = useSyncExternalStore(browser.setup.subscribe, browser.setup.getSnapshot)
+  /** The person's pick; until then the choice follows whether Browser is on in the home as it is read. */
+  const browserChoice: BrowserChoice = state.browser ?? (browserAdded(readiness) ? 'isolated' : 'none')
 
   /**
    * What setting the workspace up stores and asks, from the choices made so far.
@@ -154,6 +162,7 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, fro
     const parsed = parseHosts(hosts)
     return {
       model: modelToStore(await catalogRead.current, state.model),
+      browser: browserChoice,
       permission,
       network: { access, hosts: access === 'allowlist' && 'hosts' in parsed ? [...parsed.hosts] : [] },
     }
@@ -266,6 +275,13 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, fro
             onSubmit={() => { if (choice.job === undefined) void startClone(choice); else dispatch({ type: 'continue' }) }} onBack={() => { dispatch({ type: 'back' }) }} />
         )
       }
+      break
+    case 'browser':
+      screen = (
+        <BrowserScreen t={t} browser={browser} choice={browserChoice} busy={busy} problem={problem} canCreateNow={canCreateNow(state)}
+          onChoice={(next) => { dispatch({ type: 'browser', choice: next }) }} onContinue={() => { dispatch({ type: 'continue' }) }}
+          onCreateNow={createNow} onBack={() => { dispatch({ type: 'back' }) }} />
+      )
       break
     case 'model':
       screen = (

@@ -5,6 +5,7 @@ import type { FullAccessAsk } from './create.ts'
 import type { ModelCatalogView } from './models.ts'
 import type { CreatedWorkspace } from './NewWorkspaceDialog.tsx'
 import { NewWorkspaceDialog } from './NewWorkspaceDialog.tsx'
+import type { BrowserFace } from './screens/BrowserScreen.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
 
 /** One open flow: its number, which surface opened it, and the call that ends it. */
@@ -30,6 +31,8 @@ export interface OverlayInjected {
   readonly readModels: () => Promise<ModelCatalogView | undefined>
   /** The Full access consent service, if the studio has one. */
   readonly fullAccess: FullAccessAsk
+  /** Whether Browser is ready and the Settings opener. */
+  readonly browser: BrowserFace
   /**
    * End a flow without a workspace.
    * @param id - the flow's {@link OpenFlow.id}.
@@ -51,11 +54,11 @@ export type OverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'delorunN
  * @param props - the open flow hook, the services and the dictionary.
  * @returns the dialog, or nothing.
  */
-export function Overlay({ useOpen, api, browse, readModels, fullAccess, close, created, t }: OverlayProps) {
+export function Overlay({ useOpen, api, browse, readModels, fullAccess, browser, close, created, t }: OverlayProps) {
   const flow = useOpen(current => current)
   if (flow === null) return null
   return (
-    <NewWorkspaceDialog key={flow.id} t={t} api={api} browse={browse} readModels={readModels} fullAccess={fullAccess} from={flow.from}
+    <NewWorkspaceDialog key={flow.id} t={t} api={api} browse={browse} readModels={readModels} fullAccess={fullAccess} browser={browser} from={flow.from}
       onClose={() => { close(flow.id) }} onCreated={(workspace) => { created(flow.id, workspace) }} />
   )
 }

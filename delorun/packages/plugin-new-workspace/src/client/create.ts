@@ -119,7 +119,7 @@ async function followClone(api: NewWorkspaceApi, job: string | undefined, onProg
 export interface SetupPlan {
   /** The model and thinking level to keep, or undefined when the catalogue could not be read. */
   readonly model: WorkspaceModel | undefined
-  /** The browser choice to keep; absent until the browser screen exists. */
+  /** The browser choice to keep; the dialog always gives one, and a caller without one stores no browser choice. */
   readonly browser?: BrowserChoice
   /** Change files in the folder, or Full access, which asks for consent. */
   readonly permission: Permission

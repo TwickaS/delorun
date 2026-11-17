@@ -19,14 +19,18 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-api-gateway/client'
 // Type-only: the ctx.remote merge, whose `session` namespace answers the model catalogue.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+// Type-only: the ctx.settingsShell merge, which opens a Settings section.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: `ctx.delorunFullAccess`, the full-access consent for one workspace.
 import type {} from '@delorun/bundle-local/full-access'
+import { createBrowserSetup } from '@delorun/browser-setup'
 import type { FolderKind } from '../wire.ts'
 import { createApi } from './api.ts'
 import type { FullAccessAsk } from './create.ts'
 import { viewOfCatalog, type ModelCatalogView } from './models.ts'
 import { en, NS, zh, type NewWorkspaceLocaleKey } from './locales.ts'
 import { Overlay, type OpenFlow, type OverlayInjected } from './Overlay.tsx'
+import type { BrowserFace } from './screens/BrowserScreen.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
 import { DelorunDirectoryFlow, type DirectoryFlowInjected, type DirectoryFlowSource } from './DirectoryFlow.tsx'
 
@@ -152,12 +156,21 @@ function applyStudio(ctx: Context): void {
     available: () => ctx.get('delorunFullAccess') !== undefined,
     ask: async path => await ctx.get('delorunFullAccess')?.askForWorkspace(path) ?? false,
   }
+  const browser: BrowserFace = {
+    setup: createBrowserSetup((input, init) => globalThis.fetch(input, init), () => ctx.locale.getLocale().active),
+    // Looked up on use: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
+    settings: {
+      available: () => ctx.get('settingsShell') !== undefined,
+      open: (section) => { ctx.get('settingsShell')?.openSection(section) },
+    },
+  }
   const injected: OverlayInjected = {
     hooks: { open: store },
     api,
     browse,
     readModels,
     fullAccess,
+    browser,
     close: (id) => { settle({ kind: 'cancelled' }, id) },
     created: (id, created) => { settle({ kind: 'created', ...created }, id) },
   }

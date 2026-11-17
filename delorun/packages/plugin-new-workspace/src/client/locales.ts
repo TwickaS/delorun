@@ -1,10 +1,12 @@
 /** The new-workspace flow's copy. */
+import { en as browserEn, zh as browserZh } from '@delorun/browser-setup/locales'
 
 /** The dictionary namespace this plugin owns. */
 export const NS = 'delorunNewWorkspace'
 
 /** English dictionary. Plural pairs are chosen by the caller: `.one` for 1, `.other` otherwise. */
 export const en = {
+  ...browserEn,
   'title': 'New workspace',
   'title.screen': 'New workspace · {screen}',
   'step': 'Step {n} of {total}',
@@ -17,8 +19,13 @@ export const en = {
   'createNow': 'Create now',
   'setup.working': 'Setting up…',
 
+  'screen.browser': 'Browser',
   'screen.model': 'Model',
   'screen.safety': 'Safety',
+
+  'browser.heading': 'Can agents in this workspace use a web browser?',
+  'browser.notAdded': 'The Browser plugin is off for this home.',
+  'browser.openPlugins': 'Open Plugins',
 
   'model.title': 'New chats here start with',
   'model.model': 'Model',
@@ -190,6 +197,7 @@ export type NewWorkspaceLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: Record<NewWorkspaceLocaleKey, string> = {
+  ...browserZh,
   'title': '新建工作区',
   'title.screen': '新建工作区 · {screen}',
   'step': '第 {n} 步，共 {total} 步',
@@ -202,8 +210,13 @@ export const zh: Record<NewWorkspaceLocaleKey, string> = {
   'createNow': '立即创建',
   'setup.working': '正在设置…',
 
+  'screen.browser': '浏览器',
   'screen.model': '模型',
   'screen.safety': '安全',
+
+  'browser.heading': '此工作区中的智能体可以使用网页浏览器吗？',
+  'browser.notAdded': '此主目录中的“浏览器”插件已关闭。',
+  'browser.openPlugins': '打开插件',
 
   'model.title': '这里的新对话使用',
   'model.model': '模型',

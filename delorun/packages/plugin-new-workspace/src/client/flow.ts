@@ -4,11 +4,11 @@
  * there; nothing else counts screens.
  * @module @delorun/plugin-new-workspace/client/flow
  */
-import type { CloneFailure, CloneProblem, CreateProblem, PlaceProblem } from '../wire.ts'
+import type { BrowserChoice, CloneFailure, CloneProblem, CreateProblem, PlaceProblem } from '../wire.ts'
 import { parseHosts, type HostsProblem } from './hosts.ts'
 
 /** The screens built so far, in order. A screen is reached through one or more {@link Step}s. */
-export const SCREENS = ['how', 'where', 'model', 'safety'] as const
+export const SCREENS = ['how', 'where', 'browser', 'model', 'safety'] as const
 
 /** How many screens the flow has, which "Step n of N" shows. */
 export const STEP_TOTAL: number = SCREENS.length
@@ -17,11 +17,11 @@ export const STEP_TOTAL: number = SCREENS.length
 export type Screen = typeof SCREENS[number]
 
 /** A step the dialog can show; `folder` doubles as the place picker while {@link FlowState.picking} is set. */
-export type Step = 'how' | 'folder' | 'new-folder' | 'clone' | 'model' | 'safety'
+export type Step = 'how' | 'folder' | 'new-folder' | 'clone' | 'browser' | 'model' | 'safety'
 
 /** The screen each step belongs to. */
 const SCREEN_OF: Readonly<Record<Step, Screen>> = {
-  'how': 'how', 'folder': 'where', 'new-folder': 'where', 'clone': 'where', 'model': 'model', 'safety': 'safety',
+  'how': 'how', 'folder': 'where', 'new-folder': 'where', 'clone': 'where', 'browser': 'browser', 'model': 'model', 'safety': 'safety',
 }
 
 /** The three ways to start. */
@@ -80,6 +80,8 @@ export interface FlowState {
   readonly choice: Choice | undefined
   /** The step the place picker returns to, set while the folder step picks a place instead of a workspace. */
   readonly picking: 'new-folder' | 'clone' | undefined
+  /** The browser choice made on the browser screen; undefined while the choice follows whether Browser is on in the home. */
+  readonly browser: BrowserChoice | undefined
   /** The model picked on the model screen; undefined while the workspace follows the home's default. */
   readonly model: ModelPick | undefined
   /** The safety screen's choices. */
@@ -97,6 +99,7 @@ export type FlowAction =
   | { readonly type: 'edit-clone', readonly change: Partial<Omit<Extract<Choice, { kind: 'clone' }>, 'kind'>> }
   | { readonly type: 'pick-place' }
   | { readonly type: 'place-picked', readonly path: string }
+  | { readonly type: 'browser', readonly choice: BrowserChoice }
   | { readonly type: 'model', readonly pick: ModelPick }
   | { readonly type: 'safety', readonly change: Partial<SafetyChoice> }
   | { readonly type: 'back' }
@@ -107,7 +110,7 @@ export type FlowAction =
 
 /** The state a flow opens in: the first screen with nothing chosen and the safe choices made. */
 export const INITIAL: FlowState = {
-  step: 'how', method: undefined, choice: undefined, picking: undefined, model: undefined,
+  step: 'how', method: undefined, choice: undefined, picking: undefined, browser: undefined, model: undefined,
   safety: { permission: 'files', access: 'open', hosts: '' }, problem: undefined,
 }
 
@@ -145,9 +148,10 @@ function nextStep(state: FlowState): Step | undefined {
   const { step, choice } = state
   switch (step) {
     case 'how': return state.method
-    case 'folder': return state.picking === undefined && choice?.kind === 'existing' ? 'model' : undefined
-    case 'new-folder': return choice?.kind === 'new' ? 'model' : undefined
-    case 'clone': return choice?.kind === 'clone' && choice.job !== undefined ? 'model' : undefined
+    case 'folder': return state.picking === undefined && choice?.kind === 'existing' ? 'browser' : undefined
+    case 'new-folder': return choice?.kind === 'new' ? 'browser' : undefined
+    case 'clone': return choice?.kind === 'clone' && choice.job !== undefined ? 'browser' : undefined
+    case 'browser': return 'model'
     case 'model': return 'safety'
     case 'safety': return undefined
     default: return assertNever(step)
@@ -165,7 +169,8 @@ function previousStep(state: FlowState): Step | undefined {
     case 'folder':
     case 'new-folder':
     case 'clone': return 'how'
-    case 'model': return state.method ?? 'how'
+    case 'browser': return state.method ?? 'how'
+    case 'model': return 'browser'
     case 'safety': return 'model'
     default: return assertNever(state.step)
   }
@@ -206,6 +211,8 @@ export function reduce(state: FlowState, action: FlowAction): FlowState {
         : { ...state.choice, parent: action.path }
       return { ...state, choice, step: state.picking, picking: undefined, problem: undefined }
     }
+    case 'browser':
+      return { ...state, browser: action.choice }
     case 'model':
       return { ...state, model: action.pick }
     case 'safety':

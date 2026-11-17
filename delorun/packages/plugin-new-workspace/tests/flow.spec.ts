@@ -7,12 +7,12 @@ const PARENT = '/home/person/Projects'
 const run = (actions: readonly FlowAction[], from: FlowState = INITIAL): FlowState => actions.reduce(reduce, from)
 
 describe('the flow\'s first screen', () => {
-  it('opens on the how screen with nothing chosen and the safe choices made, in step 1 of 4', () => {
+  it('opens on the how screen with nothing chosen and the safe choices made, in step 1 of 5', () => {
     expect(INITIAL).toEqual({
-      step: 'how', method: undefined, choice: undefined, picking: undefined, model: undefined,
+      step: 'how', method: undefined, choice: undefined, picking: undefined, browser: undefined, model: undefined,
       safety: { permission: 'files', access: 'open', hosts: '' }, problem: undefined,
     })
-    expect([stepNumber(INITIAL.step), STEP_TOTAL]).toEqual([1, 4])
+    expect([stepNumber(INITIAL.step), STEP_TOTAL]).toEqual([1, 5])
   })
 
   it('does not go on until a way to start is chosen', () => {
@@ -99,31 +99,39 @@ describe('a clone', () => {
 
 describe('the screens list', () => {
   it('counts the screens from one array, and finishes on the last of them', () => {
-    expect(SCREENS).toEqual(['how', 'where', 'model', 'safety'])
+    expect(SCREENS).toEqual(['how', 'where', 'browser', 'model', 'safety'])
     expect(STEP_TOTAL).toBe(SCREENS.length)
-    expect(['how', 'folder', 'new-folder', 'clone', 'model', 'safety'].map(step => stepNumber(step as 'how'))).toEqual([1, 2, 2, 2, 3, 4])
-    expect(['how', 'folder', 'new-folder', 'clone', 'model', 'safety'].map(step => isLastScreen(step as 'how'))).toEqual([false, false, false, false, false, true])
+    expect(['how', 'folder', 'new-folder', 'clone', 'browser', 'model', 'safety'].map(step => stepNumber(step as 'how'))).toEqual([1, 2, 2, 2, 3, 4, 5])
+    expect(['how', 'folder', 'new-folder', 'clone', 'browser', 'model', 'safety'].map(step => isLastScreen(step as 'how'))).toEqual([false, false, false, false, false, false, true])
   })
 })
 
-describe('the model and safety screens', () => {
+describe('the browser, model and safety screens', () => {
   const onFolder = run([{ type: 'method', method: 'new-folder', parent: PARENT }, { type: 'continue' }, { type: 'edit-new', change: { name: 'site' } }])
-  const onModel = reduce(onFolder, { type: 'continue' })
+  const onBrowser = reduce(onFolder, { type: 'continue' })
+  const onModel = reduce(onBrowser, { type: 'continue' })
 
-  it('goes from the second screen to the model screen, then the safety screen, which has nothing after it', () => {
-    expect([onModel.step, stepNumber(onModel.step)]).toEqual(['model', 3])
+  it('goes from the second screen to the browser screen, then the model screen, then the safety screen, which has nothing after it', () => {
+    expect([onBrowser.step, stepNumber(onBrowser.step)]).toEqual(['browser', 3])
+    expect([onModel.step, stepNumber(onModel.step)]).toEqual(['model', 4])
     const onSafety = reduce(onModel, { type: 'continue' })
-    expect([onSafety.step, stepNumber(onSafety.step)]).toEqual(['safety', 4])
+    expect([onSafety.step, stepNumber(onSafety.step)]).toEqual(['safety', 5])
     expect(reduce(onSafety, { type: 'continue' })).toBe(onSafety)
+  })
+
+  it('keeps the browser choice once made, and none before', () => {
+    expect(onBrowser.browser).toBeUndefined()
+    expect(run([{ type: 'browser', choice: 'none' }], onBrowser).browser).toBe('none')
+    expect(run([{ type: 'browser', choice: 'none' }, { type: 'continue' }, { type: 'back' }], onBrowser).browser).toBe('none')
   })
 
   it('goes on from a folder on this computer once one is chosen, and from a clone once it started', () => {
     const folder = run([{ type: 'method', method: 'folder', parent: PARENT }, { type: 'continue' }])
     expect(reduce(folder, { type: 'continue' })).toBe(folder)
-    expect(run([{ type: 'existing', path: '/home/person/src' }, { type: 'continue' }], folder).step).toBe('model')
+    expect(run([{ type: 'existing', path: '/home/person/src' }, { type: 'continue' }], folder).step).toBe('browser')
     const clone = run([{ type: 'method', method: 'clone', parent: PARENT }, { type: 'continue' }])
     expect(reduce(clone, { type: 'continue' })).toBe(clone)
-    expect(run([{ type: 'clone-started', job: 'job-1' }, { type: 'continue' }], clone).step).toBe('model')
+    expect(run([{ type: 'clone-started', job: 'job-1' }, { type: 'continue' }], clone).step).toBe('browser')
   })
 
   it('does not go on while a place is being picked', () => {
@@ -134,7 +142,8 @@ describe('the model and safety screens', () => {
   it('goes back one screen at a time, to the second screen of the card chosen', () => {
     const onSafety = reduce(onModel, { type: 'continue' })
     expect(reduce(onSafety, { type: 'back' }).step).toBe('model')
-    expect(reduce(onModel, { type: 'back' }).step).toBe('new-folder')
+    expect(reduce(onModel, { type: 'back' }).step).toBe('browser')
+    expect(reduce(onBrowser, { type: 'back' }).step).toBe('new-folder')
     const clone = run([{ type: 'method', method: 'clone', parent: PARENT }, { type: 'continue' }, { type: 'clone-started', job: 'j' }, { type: 'continue' }, { type: 'back' }])
     expect(clone.step).toBe('clone')
     expect(clone.choice).toMatchObject({ job: 'j' })
@@ -156,8 +165,8 @@ describe('the model and safety screens', () => {
     expect(picked.safety).toEqual({ permission: 'full', access: 'allowlist', hosts: 'pypi.org' })
   })
 
-  it('offers Create now from the model screen onward, once a place is chosen and the safety choices are usable', () => {
-    expect([INITIAL, onFolder, onModel, reduce(onModel, { type: 'continue' })].map(canCreateNow)).toEqual([false, false, true, true])
+  it('offers Create now from the browser screen onward, once a place is chosen and the safety choices are usable', () => {
+    expect([INITIAL, onFolder, onBrowser, onModel, reduce(onModel, { type: 'continue' })].map(canCreateNow)).toEqual([false, false, true, true, true])
     const noPlace = { ...onModel, choice: undefined }
     expect(canCreateNow(noPlace)).toBe(false)
     expect(canCreateNow(run([{ type: 'safety', change: { access: 'allowlist' } }], onModel))).toBe(false)

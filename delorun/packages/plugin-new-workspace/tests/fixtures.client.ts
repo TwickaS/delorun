@@ -1,10 +1,12 @@
 /** Test doubles the client specs share: the copy, a fake Host client and fake folder navigation. */
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import type { BrowserReadiness, BrowserSetupStore } from '@delorun/browser-setup'
 import { vi } from 'vitest'
 import type { ApiResult, NewWorkspaceApi } from '../src/client/api.ts'
 import type { FullAccessAsk } from '../src/client/create.ts'
 import { en, type Translate } from '../src/client/locales.ts'
 import type { ModelCatalogView } from '../src/client/models.ts'
+import type { BrowserFace } from '../src/client/screens/BrowserScreen.tsx'
 import type { FolderBrowse, FolderListing } from '../src/client/screens/FolderScreen.tsx'
 import type { PlacesAnswer, PreviewAnswer } from '../src/wire.ts'
 
@@ -114,4 +116,32 @@ export function fakeFullAccess(granted = true, available = true) {
   const ask = vi.fn(async (_path: string) => granted)
   const fullAccess: FullAccessAsk = { available: () => available, ask }
   return { fullAccess, ask }
+}
+
+/**
+ * A Browser readiness store the spec drives: `set` changes what it holds and tells the listeners, and `refresh` is a spy
+ * that answers what it holds.
+ * @param first - what the store holds at first.
+ * @param shell - whether the page has a Settings shell.
+ * @returns the face the dialog is given, the spies and `set`.
+ */
+export function fakeBrowser(first: BrowserReadiness = { kind: 'ready' }, shell = true) {
+  let current = first
+  const listeners = new Set<() => void>()
+  const refresh = vi.fn(async (): Promise<BrowserReadiness> => current)
+  const open = vi.fn<(section: string) => void>()
+  const setup: BrowserSetupStore = {
+    getSnapshot: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    refresh,
+  }
+  const browser: BrowserFace = { setup, settings: { available: () => shell, open } }
+  const set = (next: BrowserReadiness): void => {
+    current = next
+    for (const listener of listeners) listener()
+  }
+  return { browser, refresh, open, set }
 }

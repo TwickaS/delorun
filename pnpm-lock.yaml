@@ -3312,6 +3312,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/browser-setup':
+        specifier: workspace:*
+        version: link:../browser-setup
       '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
@@ -3364,6 +3367,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: workspace:*
         version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../../packages/client/ui-slots

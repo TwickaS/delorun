@@ -544,6 +544,16 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.notAdded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nw-gap-1);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
 /* On a phone the browser shows one column at a time: the folders, then the selected folder's preview with a way back. */
 @media (max-width: 640px) {
   .cards {
@@ -575,5 +585,25 @@
 
   .recentPath {
     display: none;
+  }
+
+  .recentName {
+    max-width: none;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .searchRow,
+  .newFolderForm {
+    flex-wrap: wrap;
+  }
+
+  .searchRow > .input,
+  .newFolderForm > .input {
+    flex: 1 1 100%;
+  }
+
+  .choice {
+    padding: var(--nw-gap-1);
   }
 }

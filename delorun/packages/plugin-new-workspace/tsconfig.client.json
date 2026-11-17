@@ -28,6 +28,9 @@
       "path": "../../../packages/client/ui-renderer"
     },
     {
+      "path": "../../../packages/client/ui-settings/tsconfig.client.json"
+    },
+    {
       "path": "../../../packages/client/ui-slots"
     },
     {
@@ -41,6 +44,9 @@
     },
     {
       "path": "../../../packages/api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../bundle-local/tsconfig.client.json"
     }
   ]
 }
