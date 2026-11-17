@@ -59,6 +59,7 @@ import { approveDevices, changePin, elevateDevices, removeDevice } from './devic
 import { reloadChanges } from './reload.ts'
 import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
 import { reachApply, reachStatus } from './reach.ts'
+import { agentsAccounts, agentsRefresh } from './agents.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -627,6 +628,10 @@ export class HomeProcess implements HandshakeSubject {
         return reachStatus(request, check.callerOf(request.token), this.host?.reach)
       case 'reach.apply':
         return reachApply(request, check.callerOf(request.token), this.host?.reach)
+      case 'agents.accounts':
+        return agentsAccounts(request, this.host?.agents)
+      case 'agents.refresh':
+        return agentsRefresh(request, check.callerOf(request.token), this.host?.agents)
       case 'changes.reload':
         this.refuseOutsideRunning()
         // `running` is entered only after the Host booted, and left before it closes.
