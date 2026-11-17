@@ -69,10 +69,11 @@ export class SeatRelay {
    */
   constructor(private readonly ctx: Context, private readonly options: SeatRelayOptions, private readonly scope = new RunScope()) {
     ctx.effect(() => this.scope.mount(ctx), 'agent seats: the relay\'s approval listener')
+    // Prepended: an earlier listener that decides the step without `next()` must not hide the turn's signal from the relay.
     ctx.on('agent/pre-step', (payload, next) => {
       if (this.isSeat(payload.agent)) this.turnSignals.set(payload.agent.id, payload.signal)
       return next()
-    })
+    }, { prepend: true })
     // The stop boundary comes before `turn/end` is written, so the cancelled decision lands inside the turn.
     ctx.on('agent/turn-stopping', async ({ agent }) => {
       const entries = [...this.pending.get(agent.id) ?? []]
@@ -110,6 +111,22 @@ export class SeatRelay {
     if (!this.isSeat(child)) return 'not-a-seat'
     setApprovalPolicy(child.session, 'ask')
     return 'lifted'
+  }
+
+  /**
+   * Lift the delegation pin of a seat child at most once. The lease that makes a Session a seat is granted when the
+   * program starts, after the child was created, so the lift happens when its first question arrives. The pin is
+   * lifted only while it is still the latest `approval/policy` event: a lift already logged, or a later switch of the
+   * child's own policy, stays as it is, and a restarted Host does not append a second one.
+   * @param child - the child whose program asks.
+   * @returns `lifted`, `kept` when the log holds no pin to lift, or `not-a-seat`.
+   */
+  liftOnce(child: Agent): PrepareResult | 'kept' {
+    if (!this.isSeat(child)) return 'not-a-seat'
+    const events = child.session.snapshotEvents()
+    const latest = events.findLast(event => event.type === 'approval/policy')
+    if (latest?.type !== 'approval/policy' || latest.data.source !== 'delegation') return 'kept'
+    return this.prepareChild(child)
   }
 
   /**

@@ -196,6 +196,75 @@ describe('the lifted pin', () => {
   })
 })
 
+describe('the lift at the first question', () => {
+  const pin = (w: World): void => { w.child.session.append('approval/policy', { policy: 'never', source: 'delegation' }) }
+  const policies = (w: World): unknown[] => w.events(w.child, 'approval/policy').map(data => data['policy'])
+
+  it('lifts the pin once, however many questions follow', async () => {
+    const w = await world()
+    pin(w)
+    expect(w.relay.liftOnce(w.child)).toBe('lifted')
+    expect(w.relay.liftOnce(w.child)).toBe('kept')
+    expect(w.ctx.approval.overrideOf(w.child.session)).toBe('ask')
+    expect(policies(w)).toEqual(['never', 'ask'])
+  })
+
+  it('appends nothing to a child whose latest policy is not the pin: a lift already logged or a switch of its own', async () => {
+    const w = await world()
+    pin(w)
+    setApprovalPolicy(w.child.session, 'never')
+    expect(w.relay.liftOnce(w.child)).toBe('kept')
+    expect(w.ctx.approval.overrideOf(w.child.session)).toBe('never')
+    expect(policies(w)).toEqual(['never', 'never'])
+  })
+
+  it('has no pin to lift on a seat whose log holds no policy event', async () => {
+    const w = await world()
+    const bare = agentOf(w.ctx)
+    w.seats.set(bare.id, { child: bare.id, root: w.root.id, provider: 'claude-code' })
+    w.descriptors.set(bare.id, 'agent-seat')
+    expect(w.relay.liftOnce(bare)).toBe('kept')
+    expect(bare.session.snapshotEvents().some(event => event.type === 'approval/policy')).toBe(false)
+  })
+
+  it('leaves a Session that is not a seat pinned', async () => {
+    const w = await world()
+    const ordinary = agentOf(w.ctx)
+    ordinary.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    expect(w.relay.liftOnce(ordinary)).toBe('not-a-seat')
+    expect(w.ctx.approval.overrideOf(ordinary.session)).toBe('never')
+  })
+})
+
+describe('the turn signal listener', () => {
+  it('runs ahead of an earlier listener that decides the step without calling next', async () => {
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(ApprovalService)
+    const child = agentOf(ctx)
+    ctx.provide('externalAgents', { seat: (id: SessionId) => id === child.id ? { child: child.id, root: child.id, provider: 'claude-code' } : undefined } as never)
+    ctx.provide('agents', { get: () => child, turnBoundaryOf: () => ({ openTurnStartSeq: 1 }) } as never)
+    ctx.on('agent/pre-step', () => Promise.resolve({}) as never)
+    let relay: SeatRelay | undefined
+    await ctx.plugin(class {
+      constructor(scope: Context) {
+        relay = new SeatRelay(scope, {
+          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recorded: () => new Promise<void>(() => {}), recordName: (_a, name) => name,
+        }, new UnmountedRunScope())
+      }
+    })
+    const turn = new AbortController()
+    await ctx.waterfall('agent/pre-step', { agent: child, messages: [], turn: 1, step: 1, signal: turn.signal } as never, (() => Promise.resolve({})) as never)
+    const result = relay!.onApproval(child, new AbortController().signal)(question())
+    await settle()
+    expect(relay!.pendingOf(child.id)).toBe(true)
+    turn.abort()
+    await expect(result).resolves.toBe('cancel')
+  })
+})
+
 describe('the question', () => {
   it('asks on the seat child with the external-agent marker, the recorded call and a plain reason', async () => {
     const w = await world()
