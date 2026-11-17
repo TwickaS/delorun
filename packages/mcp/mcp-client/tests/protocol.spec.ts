@@ -91,6 +91,14 @@ describe('MCP roots on 2025-era connections', () => {
     expect(server.server.getClientCapabilities()?.roots).toBeUndefined()
   })
 
+  it('advertises no roots capability for an empty list of roots', async () => {
+    const server = await connectLegacy({ roots: [] })
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(server.server.getClientCapabilities()).toBeDefined()
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(server.server.getClientCapabilities()?.roots).toBeUndefined()
+  })
+
   it('rejects a relative root in the config', () => {
     expect(() => Config({ transport: 'stdio', serverName: 'fixture', command: 'fixture', roots: ['project'] })).toThrow()
   })

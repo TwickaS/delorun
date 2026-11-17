@@ -1028,12 +1028,22 @@ export type Config = BrowserMcpConfig
 ## `@deepseek-ai/dsh-experimental-browser-use-playwright-mcp`
 
 - `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `workingDirectory`
-- `refs`: `BrowserMcpConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
-- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:16`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
+- `refs`: `BrowserChoice` (`@deepseek-ai/dsh-native-command/chrome-channel`) · `BrowserMcpAttachConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`) · `BrowserMcpLaunchConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
+- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:31`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 
 ```ts config-catalog
-/** Fixed Chromium launch or existing-browser attachment settings. */
-export type Config = BrowserMcpConfig
+/** Chrome or Chromium launch, or existing-browser attachment settings. */
+export type Config = LaunchConfig | BrowserMcpAttachConfig
+
+/** Launch settings: the shared ones and which browser launches. */
+export interface LaunchConfig extends BrowserMcpLaunchConfig {
+  /**
+   * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
+   * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
+   * profile Playwright creates for the launch, never the person's own.
+   */
+  browser: BrowserChoice
+}
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-playwright-mcp -->
 

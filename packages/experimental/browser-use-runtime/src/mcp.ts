@@ -1,6 +1,7 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
-import { mkdir } from 'node:fs/promises'
+import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -51,21 +52,27 @@ export type BrowserServerDirectory = 'session' | 'home'
 /** Fixed launch or attachment choice for one MCP browser provider. */
 export type BrowserMcpConfig = BrowserMcpLaunchConfig | BrowserMcpAttachConfig
 
+/** The launch fields every MCP browser provider accepts; a provider with fields of its own adds them to these. */
+export const browserMcpLaunchFields = {
+  mode: Schema.const('launch').required(),
+  headless: Schema.boolean().default(true),
+  executablePath: Schema.string().pattern(/\S/u),
+  toolCallTimeoutMs: Schema.number().min(1),
+  serverDirectory: Schema.union(['session', 'home']),
+}
+
+/** The attachment fields every MCP browser provider accepts. */
+export const browserMcpAttachFields = {
+  mode: Schema.const('attach').required(),
+  endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
+  toolCallTimeoutMs: Schema.number().min(1),
+  serverDirectory: Schema.union(['session', 'home']),
+}
+
 /** Validate the browser mode before the provider reserves browser use. */
 export const BrowserMcpConfig: Schema<BrowserMcpAttachConfig | (Omit<BrowserMcpLaunchConfig, 'headless'> & { headless?: boolean }), BrowserMcpConfig> = Schema.union([
-  Schema.object({
-    mode: Schema.const('launch').required(),
-    headless: Schema.boolean().default(true),
-    executablePath: Schema.string().pattern(/\S/u),
-    toolCallTimeoutMs: Schema.number().min(1),
-    serverDirectory: Schema.union(['session', 'home']),
-  }),
-  Schema.object({
-    mode: Schema.const('attach').required(),
-    endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
-    toolCallTimeoutMs: Schema.number().min(1),
-    serverDirectory: Schema.union(['session', 'home']),
-  }),
+  Schema.object(browserMcpLaunchFields),
+  Schema.object(browserMcpAttachFields),
 ])
 
 /**
@@ -106,11 +113,19 @@ export interface SessionMcpOptions {
   /** Arguments passed directly without a shell. */
   args: string[]
   /**
-   * Absolute folder every Session's server runs in, created with mode 0700 before a start when it is missing.
+   * Absolute folder every Session's server runs in, created with mode 0700 before a start when it is missing and
+   * narrowed to that mode when it exists with access for others.
    * Omission starts each Session's server in that Session's working directory. Either way the server is told the
    * Session's working directory as its one MCP root, where a server such as Playwright's saves its output files.
    */
   directory?: string
+  /**
+   * The folder, relative to the Session's working directory, that the server saves its output files to. When a
+   * Session's server has started, that folder is created if missing and given a `.gitignore` of `*` if it has none, so
+   * Git leaves the files out of commits. A link at the folder's name, an existing `.gitignore` and the project's own
+   * `.gitignore` are never changed, and a Session whose server did not start gets no folder.
+   */
+  outputFolder?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -122,6 +137,33 @@ export interface SessionMcpOptions {
    * @returns the replacement, or `undefined` to keep the failure as the server reported it.
    */
   explainFailure?: (message: string) => string | undefined
+  /**
+   * Refuse one browser tool call before it reaches the server, such as one whose file argument leads outside the
+   * Session's folder. A refused call fails with the returned text and the server never sees it.
+   * @param call - the tool's name without the server prefix, the model's arguments as received, and the folder the
+   * Session's server was told as its MCP root.
+   * @returns the model-visible refusal, or `undefined` to let the call through.
+   */
+  refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
+}
+
+/** One browser tool call offered to a provider's {@link SessionMcpOptions.refuseCall}. */
+export interface BrowserToolCall {
+  /** The server's own tool name, without the `mcp__<server>__` prefix. */
+  tool: string
+  /** The arguments the model sent, not yet validated against the tool's schema. */
+  arguments: unknown
+  /** The Session's working directory when its server started, which the server was told as its one MCP root. */
+  directory: string
+}
+
+/**
+ * A failed tool result carrying one message.
+ * @param message - the model-visible failure.
+ * @returns the failure.
+ */
+function failure(message: string): ToolExecutionResult {
+  return { isError: true, error: { message }, content: [{ type: 'text', text: `Error: ${message}` }] }
 }
 
 /**
@@ -133,18 +175,41 @@ export interface SessionMcpOptions {
 function explained(result: ToolExecutionResult, explain: SessionMcpOptions['explainFailure']): ToolExecutionResult {
   if (!result.isError || explain === undefined) return result
   const message = explain(result.error.message)
-  if (message === undefined) return result
-  return { isError: true, error: { message }, content: [{ type: 'text', text: `Error: ${message}` }] }
+  return message === undefined ? result : failure(message)
 }
 
 /**
- * A fixed server folder, created when missing.
+ * A fixed server folder that only its owner can enter: created with mode 0700 when missing, and an existing folder
+ * that others can enter is narrowed to it.
  * @param directory - the absolute folder.
  * @returns the folder.
  */
 async function fixedDirectory(directory: string): Promise<string> {
   await mkdir(directory, { recursive: true, mode: 0o700 })
+  if (((await stat(directory)).mode & 0o077) !== 0) await chmod(directory, 0o700)
   return directory
+}
+
+/**
+ * Make Git ignore everything in a server's output folder: create the folder when it is missing, and give it a
+ * `.gitignore` of `*` when it has none. Nothing is written through a link: a link or a file at the folder's name is
+ * left alone, and so is whatever exists at `.gitignore`, a link included.
+ * @param folder - the absolute folder.
+ * @throws when the folder or its `.gitignore` cannot be created for a reason other than already existing.
+ */
+async function ignoredOutputFolder(folder: string): Promise<void> {
+  try {
+    await mkdir(folder, { mode: 0o700 })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    if (!(await lstat(folder)).isDirectory()) return
+  }
+  try {
+    // Exclusive creation fails on any existing name without following it, so a person's own rules stay theirs.
+    await writeFile(join(folder, '.gitignore'), '*\n', { flag: 'wx' })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
 }
 
 interface ClientState {
@@ -169,6 +234,9 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
  * activation reviews the start again. Every other startup failure fails the Agent's creation.
+ * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
+ * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
+ * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.
  * @param options - provider identity, attachment exclusivity, and executable configuration.
@@ -212,15 +280,18 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         signal.addEventListener('abort', cancel, { once: true })
         try {
           signal.throwIfAborted()
+          const sessionDirectory = await workingDirectory.ensure(agent, signal)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {
               if (ctx.tools.get(exec.name, exec.agent) !== ctx.tools.get(exec.name, agent)) return next()
               throw new Error(`${options.name}: browser tool belongs to another Session`)
             }
-            return next()
+            const refusal = await options.refuseCall?.({
+              tool: exec.name.slice(toolPrefix.length), arguments: exec.arguments, directory: sessionDirectory,
+            })
+            return refusal === undefined ? next() : failure(refusal)
           })
-          const sessionDirectory = await workingDirectory.ensure(agent, signal)
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
             serverName: options.name,
@@ -233,6 +304,14 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             failOnStartupError: true,
             reconnect: { enabled: false },
           }))
+          if (options.outputFolder !== undefined) {
+            try {
+              await ignoredOutputFolder(join(sessionDirectory, options.outputFolder))
+            } catch (error) {
+              // The browser tools still work; only the Git protection of their saved files is missing, which the log names.
+              ctx.logger.warn(`${options.name}: could not create ${options.outputFolder} with a .gitignore in Session ${agent.id}'s folder, so Git may pick up files the browser saves there: ${(error as Error).message}`)
+            }
+          }
           signal.throwIfAborted()
           return {
             value: scope,

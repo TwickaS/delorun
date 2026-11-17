@@ -1,7 +1,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -28,7 +28,7 @@ import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { bindScopeParent } from '@deepseek-ai/dsh-scope'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
-import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig } from '../src/mcp.ts'
+import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig, type BrowserToolCall, type SessionMcpOptions } from '../src/mcp.ts'
 
 const fixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url))
 const roots: string[] = []
@@ -92,12 +92,19 @@ class RefuseBrowserConsent extends McpClient.McpAddConsent {
   }
 }
 
+/** A row that declares the add-time consent and fails to start, so no consent service exists. */
+const FailedConsent = {
+  providesMcpAddConsent: true,
+  apply(): void { throw new Error('the consent row failed to start') },
+}
+
 /** A Loader row of an MCP server outside the browser provider, beside the refused browser server. */
 const OTHER_TOOL = 'mcp__other-fixture__visit'
 
 async function load(
-  exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
-  explainFailure?: (message: string) => string | undefined, directory?: string,
+  exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent: boolean | 'failed' = false,
+  explainFailure?: (message: string) => string | undefined, directory?: string, outputFolder?: string,
+  refuseCall?: SessionMcpOptions['refuseCall'],
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
@@ -113,10 +120,12 @@ async function load(
       mountSessionMcp(ctx, {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
-        ...directory === undefined ? {} : { directory },
+        ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
+        ...refuseCall === undefined ? {} : { refuseCall },
       })
     } }],
-    ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === true ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === 'failed' ? [['consent', FailedConsent]] as const : [],
   ])
   const otherRoot = join(root, 'other')
   await mkdir(otherRoot)
@@ -151,6 +160,11 @@ async function warm(ctx: Context, agent: Agent, signal = new AbortController().s
 
 function execute(ctx: Context, agent: Agent, name = TOOL) {
   return executeToolFixture(ctx, { agent, name, arguments: name === TOOL ? { label: 'direct' } : {}, callId: ToolCallId('direct'), signal: new AbortController().signal })
+}
+
+function visit(ctx: Context, agent: Agent, label: string) {
+  const signal = new AbortController().signal
+  return executeToolFixture(ctx, { agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal })
 }
 
 function resource(ctx: Context, agent: Agent | undefined, name = 'read_mcp_resource', server = 'browser-fixture', callId = name) {
@@ -373,6 +387,31 @@ describe('Session MCP Loader composition', () => {
     expect(warnings).toHaveLength(2)
   })
 
+  it('creates the Session without browser tools when a row declares the add-time consent and did not start', async () => {
+    const { ctx, root, warnings } = await load(false, undefined, undefined, undefined, 'failed')
+    const created = await ctx.agents.create({ sessionId: SessionId('unavailable'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    expect(ctx.agents.get(created.agent.id)).toBe(created.agent)
+    const assembled = await warm(ctx, created.agent)
+    expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect(warnings).toEqual([expect.stringContaining('browser-fixture: the browser tools are off in Session unavailable until the server\'s start is allowed')])
+    expect(warnings[0]).toContain('declares the add-time consent but did not start, so the server stays stopped')
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await execute(ctx, created.agent)).isError).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('narrows an existing fixed directory that others can enter to its owner', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-wide-'))
+    roots.push(base)
+    const fixed = join(base, 'fixed')
+    await mkdir(fixed, { mode: 0o755 })
+    await chmod(fixed, 0o755)
+    const { ctx } = await load(false, undefined, undefined, undefined, false, undefined, fixed)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('narrowed') })
+    await warm(ctx, agent)
+    expect((await stat(fixed)).mode & 0o777).toBe(0o700)
+  })
+
   it('starts every Session\'s server in the fixed directory, creating it, whatever each Session\'s working directory', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-fixed-'))
     roots.push(base)
@@ -409,14 +448,93 @@ describe('Session MCP Loader composition', () => {
     ]))
   })
 
+  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and adds one to an existing folder that has none', async () => {
+    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, undefined, '.fixture-output')
+    const fresh = join(root, 'fresh'), used = join(root, 'used')
+    await Promise.all([mkdir(fresh), mkdir(join(used, '.fixture-output'), { recursive: true })])
+    await writeFile(join(used, '.fixture-output', 'kept.png'), 'kept')
+    for (const [id, cwd] of [['output-fresh', fresh], ['output-used', used]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(fresh)).toEqual(['.fixture-output'])
+    expect(await readdir(join(fresh, '.fixture-output'))).toEqual(['.gitignore'])
+    expect(await readFile(join(fresh, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readdir(used)).toEqual(['.fixture-output'])
+    expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
+    expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('never writes through a link or over a person\'s own rules in the output folder', async () => {
+    const { ctx, root, warnings } = await load(false, undefined, undefined, undefined, false, undefined, undefined, '.fixture-output')
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(elsewhere)
+    const linked = join(root, 'linked'), ruled = join(root, 'ruled'), dangling = join(root, 'dangling'), file = join(root, 'file')
+    await Promise.all([mkdir(linked), mkdir(join(ruled, '.fixture-output'), { recursive: true }), mkdir(join(dangling, '.fixture-output'), { recursive: true }), mkdir(file)])
+    await symlink(elsewhere, join(linked, '.fixture-output'))
+    await writeFile(join(ruled, '.fixture-output', '.gitignore'), '!keep.png\n')
+    await symlink(join(elsewhere, 'written-through'), join(dangling, '.fixture-output', '.gitignore'))
+    await writeFile(join(file, '.fixture-output'), 'a file, not a folder')
+    for (const [id, cwd] of [['output-linked', linked], ['output-ruled', ruled], ['output-dangling', dangling], ['output-file', file]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(elsewhere)).toEqual([])
+    expect(await readFile(join(ruled, '.fixture-output', '.gitignore'), 'utf8')).toBe('!keep.png\n')
+    expect(await readlink(join(dangling, '.fixture-output', '.gitignore'))).toBe(join(elsewhere, 'written-through'))
+    expect(await readFile(join(file, '.fixture-output'), 'utf8')).toBe('a file, not a folder')
+    expect(warnings).toEqual([])
+  })
+
+  it('creates no output folder for a Session whose server the add-time consent refuses', async () => {
+    const { ctx, root } = await load(false, undefined, undefined, undefined, true, undefined, undefined, '.fixture-output')
+    const cwd = join(root, 'refused')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-refused'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(await readdir(cwd)).toEqual([])
+  })
+
+  it('keeps the browser tools and logs a warning when the output folder cannot be created', async () => {
+    const { ctx, root, warnings } = await load(false, undefined, undefined, undefined, false, undefined, undefined, join('absent', 'output'))
+    const cwd = join(root, 'unwritable')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-failed'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect(await readdir(cwd)).toEqual([])
+    expect(warnings).toEqual([expect.stringContaining('with a .gitignore in Session output-failed\'s folder, so Git may pick up files')])
+    expect(warnings[0]).toMatch(/^browser-fixture: could not create absent[/\\]output .*ENOENT/u)
+  })
+
+  it('fails a call the provider refuses without sending it to the server, and sends every other call', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, undefined, undefined, async (call) => {
+      offered.push(call)
+      return (call.arguments as { label: string }).label === 'refused' ? 'This call is refused.' : undefined
+    })
+    const cwd = join(root, 'guarded')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('guarded'), meta: { cwd } })
+    await warm(ctx, agent)
+    const call = (label: string) => visit(ctx, agent, label)
+    const refused = await call('refused')
+    expect(refused).toMatchObject({ isError: true, error: { message: 'This call is refused.' }, content: [{ type: 'text', text: 'Error: This call is refused.' }] })
+    expect((await events(root)).filter(event => event.event === 'call')).toEqual([])
+    expect((await call('allowed')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    expect(offered).toEqual([
+      { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
+      { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
+    ])
+  })
+
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
     const explainFailure = (message: string) => message.includes('is not installed') ? 'Browser needs setup; ask the person.' : undefined
     const { ctx } = await load(false, undefined, undefined, undefined, false, explainFailure)
     const { agent } = await ctx.agents.create({ sessionId: SessionId('explained') })
     await warm(ctx, agent)
-    const call = (label: string) => executeToolFixture(ctx, {
-      agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal: new AbortController().signal,
-    })
+    const call = (label: string) => visit(ctx, agent, label)
     const missing = await call('missing-browser')
     expect(missing.isError).toBe(true)
     expect(missing.content).toEqual([{ type: 'text', text: 'Error: Browser needs setup; ask the person.' }])

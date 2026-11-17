@@ -37,7 +37,8 @@
               "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp",
               "@playwright/mcp"
             ],
-            "browser": "chromium"
+            "browser": "chromium",
+            "server": "playwright-mcp"
           }
         ],
         "fix": {

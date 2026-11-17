@@ -1,36 +1,129 @@
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
+import { join, win32 } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
 import { mountSessionMcp } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
+import { chromeChannelCandidates, launchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import * as Provider from '../src/index.ts'
+
+const CHROME = '/opt/google/chrome/chrome'
+const computer = vi.hoisted(() => ({ chromeInstalled: false }))
+
+// The real choice logic, reading a Linux computer whose Chrome the spec installs or removes.
+vi.mock('@deepseek-ai/dsh-native-command/chrome-channel', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@deepseek-ai/dsh-native-command/chrome-channel')>()
+  return {
+    ...original,
+    launchedBrowser: vi.fn((choice: Parameters<typeof original.launchedBrowser>[0]) =>
+      original.launchedBrowser(choice, { platform: 'linux', env: {}, exists: path => computer.chromeInstalled && path === CHROME })),
+  }
+})
 
 vi.mock('@deepseek-ai/dsh-experimental-browser-use-runtime/mcp', async importOriginal => ({
   ...await importOriginal<typeof import('@deepseek-ai/dsh-experimental-browser-use-runtime/mcp')>(),
   mountSessionMcp: vi.fn(),
 }))
-afterEach(() => {
+const scratch: string[] = []
+afterEach(async () => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
+  await Promise.all(scratch.splice(0).map(folder => rm(folder, { recursive: true, force: true })))
 })
+
+/** A chat's folder and a folder outside it, both real paths. */
+async function chatFolder(): Promise<{ chat: string; outside: string }> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'dsh-playwright-guard-')))
+  scratch.push(root)
+  const chat = join(root, 'chat'), outside = join(root, 'outside')
+  await Promise.all([mkdir(chat), mkdir(outside)])
+  return { chat, outside }
+}
+
+/** The server arguments, after the CLI path, that a configuration starts on a computer with or without Chrome installed. */
+function launchArgs(config: Parameters<typeof Provider.Config>[0], chromeInstalled: boolean): string[] {
+  computer.chromeInstalled = chromeInstalled
+  Provider.apply(new Context(), Provider.Config(config))
+  return vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].args.slice(1)
+}
 
 it('uses the pinned Playwright executable with isolated Chromium launch settings', () => {
   vi.stubEnv('PLAYWRIGHT_MCP_CDP_ENDPOINT', 'http://invalid.example:1')
   Provider.apply(new Context(), Provider.Config({ mode: 'launch', executablePath: '/custom/chromium', toolCallTimeoutMs: 123 }))
   const options = vi.mocked(mountSessionMcp).mock.calls[0]![1]
   expect(existsSync(options.args[0]!)).toBe(true)
-  expect(options).toMatchObject({ name: 'playwright-mcp', exclusive: false, command: process.execPath, toolCallTimeoutMs: 123 })
+  expect(options).toMatchObject({ name: 'playwright-mcp', exclusive: false, command: process.execPath, toolCallTimeoutMs: 123, outputFolder: '.playwright-mcp' })
   expect(options.env?.PLAYWRIGHT_MCP_CDP_ENDPOINT).toBe('')
   expect(options.args.slice(1)).toEqual(['--browser', 'chromium', '--isolated', '--headless', '--executable-path', '/custom/chromium'])
+  expect(options.args).toHaveLength(7)
   expect('default' in Provider).toBe(false)
 })
 
 it('supports headed launch and attaches without launching a browser or creating a profile', () => {
-  Provider.apply(new Context(), Provider.Config({ mode: 'launch', headless: false }))
-  expect(vi.mocked(mountSessionMcp).mock.calls[0]![1].args.slice(1)).toEqual(['--browser', 'chromium', '--isolated'])
-  Provider.apply(new Context(), Provider.Config({ mode: 'attach', endpoint: 'http://127.0.0.1:9222' }))
-  const options = vi.mocked(mountSessionMcp).mock.calls[1]![1]
-  expect(options.exclusive).toBe(true)
-  expect(options.args.slice(1)).toEqual(['--browser', 'chromium', '--cdp-endpoint', 'http://127.0.0.1:9222'])
+  expect(launchArgs({ mode: 'launch', headless: false }, false)).toEqual(['--browser', 'chromium', '--isolated'])
+  expect(launchArgs({ mode: 'attach', endpoint: 'http://127.0.0.1:9222' }, true)).toEqual(['--browser', 'chromium', '--cdp-endpoint', 'http://127.0.0.1:9222'])
+  expect(vi.mocked(mountSessionMcp).mock.calls[1]![1].exclusive).toBe(true)
+})
+
+it('defaults browser to auto, which launches the installed Chrome in an isolated profile and Chromium when there is none', () => {
+  expect(Provider.Config({ mode: 'launch' })).toMatchObject({ browser: 'auto' })
+  expect(launchArgs({ mode: 'launch' }, true)).toEqual(['--browser', 'chrome', '--isolated', '--headless'])
+  expect(launchArgs({ mode: 'launch', browser: 'auto' }, false)).toEqual(['--browser', 'chromium', '--isolated', '--headless'])
+})
+
+it('launches the forced browser whether or not Chrome is installed, and rejects any other browser', () => {
+  for (const installed of [true, false]) {
+    expect(launchArgs({ mode: 'launch', browser: 'chrome' }, installed)).toEqual(['--browser', 'chrome', '--isolated', '--headless'])
+    expect(launchArgs({ mode: 'launch', browser: 'chromium' }, installed)).toEqual(['--browser', 'chromium', '--isolated', '--headless'])
+  }
+  expect(vi.mocked(launchedBrowser).mock.calls.map(([choice]) => choice)).toEqual(['chrome', 'chromium', 'chrome', 'chromium'])
+  expect(() => Provider.Config({ mode: 'launch', browser: 'firefox' } as never)).toThrow()
+})
+
+it('keeps Chromium launch settings for a configured executable under auto, and the same arguments on every start', () => {
+  expect(launchArgs({ mode: 'launch', executablePath: '/custom/chromium' }, true))
+    .toEqual(['--browser', 'chromium', '--isolated', '--headless', '--executable-path', '/custom/chromium'])
+  expect(launchArgs({ mode: 'launch', browser: 'chrome', executablePath: '/custom/chrome' }, false))
+    .toEqual(['--browser', 'chrome', '--isolated', '--headless', '--executable-path', '/custom/chrome'])
+  expect(launchArgs({ mode: 'launch' }, true)).toEqual(launchArgs({ mode: 'launch' }, true))
+})
+
+it('lists the Chrome paths that the pinned Playwright\'s own chrome channel tries on each platform', () => {
+  const require = createRequire(import.meta.url)
+  const mcp = createRequire(require.resolve('@playwright/mcp/package.json'))
+  const { registry } = mcp('playwright-core/lib/coreBundle') as {
+    registry: { registry: { findExecutable(name: string): { executablePath(): string | undefined } } }
+  }
+  const fs = require('node:fs') as typeof import('node:fs')
+  const hosts: { platform: NodeJS.Platform; env: Record<string, string> }[] = [
+    { platform: 'linux', env: {} },
+    { platform: 'darwin', env: {} },
+    { platform: 'win32', env: {
+      LOCALAPPDATA: 'C:\\Users\\p\\AppData\\Local', PROGRAMFILES: 'C:\\Program Files', 'PROGRAMFILES(X86)': 'C:\\Program Files (x86)', HOMEDRIVE: 'C:',
+    } },
+    { platform: 'win32', env: { LOCALAPPDATA: '', PROGRAMFILES: 'D:\\Programs', 'PROGRAMFILES(X86)': '', HOMEDRIVE: 'D:' } },
+  ]
+  for (const host of hosts) {
+    for (const name of ['LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'HOMEDRIVE']) vi.stubEnv(name, host.env[name] ?? '')
+    const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue(host.platform)
+    const tried: string[] = []
+    const access = vi.spyOn(fs, 'accessSync').mockImplementation((path) => {
+      tried.push(String(path))
+      throw new Error('absent')
+    })
+    try {
+      expect(registry.registry.findExecutable('chrome').executablePath()).toBeUndefined()
+    } finally {
+      access.mockRestore()
+      platform.mockRestore()
+    }
+    // Playwright joins with this computer's separator; on Windows that is the win32 join the candidates use.
+    const normal = (path: string): string => host.platform === 'win32' ? win32.normalize(path) : path
+    expect(tried.map(normal)).toEqual(chromeChannelCandidates(host))
+    expect(tried.length).toBeGreaterThan(0)
+  }
 })
 
 it('rejects malformed endpoints before mounting any browser resources', () => {
@@ -47,7 +140,22 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
   ]) {
     expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
   }
-  expect(explain('page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/')).toBeUndefined()
+  for (const message of [
+    'Browser "chromium" is not installed. Run `npx @playwright/mcp install-browser chromium` to install',
+    'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1243/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
+    'Executable doesn\'t exist at /cache/chromium-1243/chrome-linux64/chrome\n╔═ Looks like Playwright was just installed ═╗',
+  ]) {
+    expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
+  }
+  for (const message of [
+    'page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/',
+    'page.evaluate: Error: the page says Executable doesn\'t exist at /usr/bin/tool',
+    'expect(locator).toHaveText failed: received "Browser "chromium" is not installed; expected executable at /x. Run `npx @playwright/mcp install-browser chromium` to install"',
+    'The plugin is not installed; expected executable at /usr/bin/plugin',
+    'Browser "chromium" is not installed; expected executable at /x',
+  ]) {
+    expect(explain(message)).toBeUndefined()
+  }
   expect(Provider.MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
 })
 
@@ -59,4 +167,49 @@ it('runs the server in one folder of the Harness home for every Session when ser
   const directories = vi.mocked(mountSessionMcp).mock.calls.map(([, options]) => options.directory)
   expect(directories).toEqual(['/home/person/.delorun/browser-use/playwright-mcp', undefined, undefined])
   expect(() => Provider.Config({ mode: 'launch', serverDirectory: 'workspace' } as never)).toThrow()
+})
+
+it('refuses a file argument that a link inside the chat\'s folder leads outside, for saved files and for uploads', async () => {
+  const { chat, outside } = await chatFolder()
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(outside, join(chat, 'link'))
+  await symlink(join(outside, 'secret.txt'), join(chat, 'notes.txt'))
+  await symlink(join(outside, 'not-yet.png'), join(chat, 'dangling.png'))
+  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
+  await symlink(join(chat, 'loop-b'), join(chat, 'loop-a'))
+  await symlink(join(chat, 'loop-a'), join(chat, 'loop-b'))
+  for (const filename of ['link/shot.png', join(chat, 'link', 'shot.png'), 'link/new/deep/shot.png', 'notes.txt', 'dangling.png', '../link/shot.png', 'loop-a/shot.png']) {
+    expect(await refuse({ filename })).toBe(Provider.outsideFolderMessage(filename))
+  }
+  expect(await refuse({ paths: [join(chat, 'ok.txt'), join(chat, 'link', 'secret.txt')] })).toBe(Provider.outsideFolderMessage(join(chat, 'link', 'secret.txt')))
+  expect(await refuse({ filename: join(outside, 'shot.png') })).toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+  expect(await refuse({ filename: '../outside/shot.png' })).toContain('leads outside it')
+  expect(existsSync(join(outside, 'shot.png'))).toBe(false)
+})
+
+it('refuses a file argument when the output folder itself is a link that leads outside the chat\'s folder', async () => {
+  const { chat, outside } = await chatFolder()
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
+  expect(await Provider.refuseOutsideFolder({ tool: 'browser_pdf_save', arguments: { filename: 'page.pdf' }, directory: chat }))
+    .toBe(Provider.outsideFolderMessage('page.pdf'))
+})
+
+it('lets through file arguments that stay inside the chat\'s folder, and calls without file arguments', async () => {
+  const { chat } = await chatFolder()
+  await mkdir(join(chat, 'real'))
+  await symlink(join(chat, 'real'), join(chat, 'inside-link'))
+  await writeFile(join(chat, 'real', 'upload.txt'), 'upload')
+  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_file_upload', arguments: args, directory: chat })
+  for (const args of [
+    { filename: 'shot.png' }, { filename: 'new/deep/shot.png' }, { filename: 'real/upload.txt/under-a-file.png' }, { filename: join(chat, 'real', 'shot.png') }, { filename: 'inside-link/shot.png' },
+    { paths: [join(chat, 'real', 'upload.txt'), join(chat, 'inside-link', 'upload.txt')] },
+    { url: 'https://example.com' }, { filename: 7, paths: 'not-a-list' }, { paths: [7] }, {}, null, 'text', undefined,
+  ]) {
+    expect(await refuse(args)).toBeUndefined()
+  }
+})
+
+it('passes the folder guard to the Session MCP mount', () => {
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  expect(vi.mocked(mountSessionMcp).mock.calls[0]![1].refuseCall).toBe(Provider.refuseOutsideFolder)
 })
