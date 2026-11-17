@@ -22,7 +22,7 @@ import { originOf } from '../../../packages/profile-safety/src/versions.ts'
 import { applyWrites, BUNDLE_CONFIG, changesBetween, earlierLook, entryYaml, FRESH_STUDIO, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
 import { differenceName, themeName } from '../src/strip/names.ts'
 import { fill, SetupStrip, STILL } from '../src/strip/setup-strip.tsx'
-import { coverRadius } from '../src/strip/spread.ts'
+import { coverRadius, spread, SPREAD_CLASS } from '../src/strip/spread.ts'
 
 vi.mock('../../../packages/plugin-theme/src/settings.ts', async (original) => {
   const actual = await original<typeof settings>()
@@ -199,6 +199,16 @@ describe('the strip on the page', () => {
     expect(host.querySelector('[data-current="true"]')?.textContent).toContain('3 identical changes in a row')
   })
 
+  it('keeps the focus on the pressed tile and announces each change once', () => {
+    const ocean = radio(studio.palette, 'Ocean')
+    press(ocean)
+    expect(document.activeElement).toBe(ocean)
+    expect(host.querySelectorAll('[data-strip-announce] span')).toHaveLength(1)
+    press(radio(studio.density, 'Spacious'))
+    expect(document.documentElement.dataset['density']).toBe('spacious')
+    expect(status()).toBe('Spacious density. The entry and a new version are listed beside the controls.')
+  })
+
   it('records a change made with the header\'s control too', () => {
     act(() => { setLook(look({ look: 'iris' })) })
     expect(host.querySelector('pre')?.textContent).toContain('palette: iris')
@@ -218,8 +228,46 @@ describe('the still for scripts off', () => {
 })
 
 describe('the spread', () => {
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--dl-motion-explain')
+    Reflect.deleteProperty(document, 'startViewTransition')
+  })
+
   it('covers the window from any point', () => {
     expect(coverRadius({ x: 0, y: 0 }, 300, 400)).toBe(500)
     expect(coverRadius({ x: 150, y: 200 }, 300, 400)).toBe(250)
+  })
+
+  it('changes in place where the browser has no view transitions, or motion is reduced to 0ms', () => {
+    const update = vi.fn()
+    document.documentElement.style.setProperty('--dl-motion-explain', '360ms')
+    spread({ x: 10, y: 10 }, update)
+    expect(update).toHaveBeenCalledOnce()
+    const start = vi.fn()
+    Object.assign(document, { startViewTransition: start })
+    document.documentElement.style.setProperty('--dl-motion-explain', '0ms')
+    spread({ x: 10, y: 10 }, update)
+    expect(start).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalledTimes(2)
+  })
+
+  it('spreads from the pressed point through a view transition and tidies up after it', async () => {
+    let finish = (): void => undefined
+    const finished = new Promise<void>((resolve) => { finish = resolve })
+    const start = vi.fn((update: () => void) => { update(); return { ready: Promise.resolve(), finished } })
+    const animate = vi.fn()
+    Object.assign(document, { startViewTransition: start })
+    Object.assign(document.documentElement, { animate })
+    document.documentElement.style.setProperty('--dl-motion-explain', '360ms')
+    const update = vi.fn()
+    spread({ x: 0, y: 0 }, update)
+    expect(update).toHaveBeenCalledOnce()
+    expect(document.documentElement.classList.contains(SPREAD_CLASS)).toBe(true)
+    await Promise.resolve()
+    expect(animate.mock.calls[0]?.[1]).toMatchObject({ duration: 360, pseudoElement: '::view-transition-new(root)' })
+    finish()
+    await finished
+    await Promise.resolve()
+    expect(document.documentElement.classList.contains(SPREAD_CLASS)).toBe(false)
   })
 })

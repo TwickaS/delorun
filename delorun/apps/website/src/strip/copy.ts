@@ -36,10 +36,10 @@ export const STRIP_COPY = {
   backCovers: 'Going back covers Delorun\'s setup and your chats. It does not cover the files an agent changes in a workspace, a patch edited by hand is not saved as a version, and saving or switching a version is done at the computer and takes effect after a restart.',
   /**
    * What the live region says after a change.
-   * @param name - the look now shown.
+   * @param name - the look now shown; its first letter is capitalised to start the sentence.
    * @returns the sentence.
    */
-  announce: (name: string): string => `${name}. The entry and a new version are listed beside the controls.`,
+  announce: (name: string): string => `${name.charAt(0).toUpperCase()}${name.slice(1)}. The entry and a new version are listed beside the controls.`,
   /**
    * A custom look's name.
    * @param custom - the studio's name for the custom theme.
