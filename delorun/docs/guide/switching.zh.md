@@ -151,7 +151,7 @@ delorun plugin --profile web install
 | 开关 | 位置 | 它改变什么 |
 | --- | --- | --- |
 | 提示：**Ask less (like DeepSeek Harness)** | `delorun setup prompts`，或 setup 中的提示问题 | 关闭完全访问同意、指令文件同意、MCP 服务器同意和计划任务同意。`web_fetch` 防护保持开启。 |
-| 外观：关闭 **Delorun look** | “设置”→“通用”→“外观”，或新手引导的 studio 外观 | 原始外观，没有 Delorun 的主题、侧边栏、chat 状态、设置布局和新手引导。在“设置”→“通用”中再次开启 **Delorun look** 即可切换回来。 |
+| 外观：关闭 **Delorun look** | “设置”→“通用”→“外观”，或新手引导的 studio 外观 | 原始外观，没有 Delorun 的主题、侧边栏、chat 状态、设置布局和新手引导。在“设置”→“通用”中再次开启 **Delorun look** 即可切换回来。新手引导的“外观”步骤只记录这个选择，并在引导完成时应用它。 |
 | 关闭 **Check for new releases** | “设置”→“通用”→“更新”，或 `delorun setup privacy` | 不发出检查发布版本的请求；你运行 `delorun update` 时它仍然可用。 |
 | 开启 **DeepSeek session-log upload** | “设置”→“安全”→“隐私” | 发往 DeepSeek API 的每个请求都携带你的一部分会话日志，与 DeepSeek Harness 相同。 |
 
