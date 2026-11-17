@@ -5,7 +5,8 @@
  *
  * @module @delorun/website/review/audit
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import type { Browser, Page } from './browser.ts'
 import { throttleAsPhone } from './browser.ts'
@@ -118,6 +119,7 @@ export async function audit(browser: Browser, base: string, out: string): Promis
   if (desktopRate.fps < 30) findings.push(warn('scroll', '1440 px', `${String(desktopRate.fps)} frames per second while scrolling (worst frame ${String(desktopRate.worstFrameMs)} ms)`))
   measurements['scrollSmoothness'] = { w1440: desktopRate, 'w390-phone-profile': { medianFps: median(fps), runs: rates }, note: 'headless Chromium on a software renderer: a floor, not a measure of real hardware' }
 
+  measurements['serverEncoding'] = await encodings(base, out)
   const head = await headTags(base)
   measurements['headTags'] = head.tags
   findings.push(...head.findings)
@@ -310,4 +312,22 @@ export async function frameRate(page: Page): Promise<{ fps: number; worstFrameMs
     }
     requestAnimationFrame(step)
   }))
+}
+
+/**
+ * The encoding the review server sends for the home page and one stylesheet, script and data file, to a browser that
+ * accepts brotli.
+ * @param base - the server's origin.
+ * @param out - the built directory, to find an asset of each kind.
+ * @returns the `Content-Encoding` and `Vary` headers by path.
+ */
+async function encodings(base: string, out: string): Promise<Record<string, { encoding: string | null; vary: string | null }>> {
+  const assets = readdirSync(join(out, 'assets'))
+  const paths = ['/', ...['.css', '.js', '.json'].map(extension => assets.find(file => file.endsWith(extension))).filter((file): file is string => file !== undefined).map(file => `/assets/${file}`)]
+  const result: Record<string, { encoding: string | null; vary: string | null }> = {}
+  for (const path of paths) {
+    const response = await fetch(new URL(path, base), { headers: { 'accept-encoding': 'br, gzip' } })
+    result[path] = { encoding: response.headers.get('content-encoding'), vary: response.headers.get('vary') }
+  }
+  return result
 }

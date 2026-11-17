@@ -27,7 +27,7 @@ Sections are found by landmark (the id, label or first heading), not by a fixed 
 - `run-pass.ts`: the command.
 - `capture.ts`, `worst.ts`: the pictures. `audit.ts`: the measurements. `page-tools.ts`: opening pages and finding sections.
 - `naming.ts`, `report.ts`: picture names and the report format, with their specs in `tests/review-format.spec.ts`.
-- `serve.ts`, `browser.ts`, `resources.ts`: the static server, the browser (Playwright from `apps/tools`) and the wait for free memory and disk.
+- `serve.ts`, `browser.ts`, `resources.ts`: the static server (brotli, or gzip, for text types with `Content-Encoding` and `Vary`, as Cloudflare sends them; `report.json` records the encodings under `serverEncoding`), the browser (Playwright from `apps/tools`) and the wait for free memory and disk.
 
 Every browser context refuses any request that is not to the local server and records it as "blocked, would have left the machine" (the sign-up field would otherwise load Turnstile from Cloudflare). The refused sign-up case runs without Turnstile.
 

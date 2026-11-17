@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { shortfalls } from '../review/resources.ts'
-import { resolveFile, serve, TYPES } from '../review/serve.ts'
+import { get as httpGet } from 'node:http'
+import { brotliDecompressSync, gunzipSync } from 'node:zlib'
+import { chooseEncoding, resolveFile, serve, TYPES } from '../review/serve.ts'
 
 describe('review static server', () => {
   const root = mkdtempSync(join(tmpdir(), 'qa-serve-'))
@@ -12,7 +14,7 @@ describe('review static server', () => {
 
   beforeAll(async () => {
     mkdirSync(join(root, 'assets'))
-    writeFileSync(join(root, 'index.html'), '<h1>home</h1>')
+    writeFileSync(join(root, 'index.html'), `<h1>home</h1>${'x'.repeat(500)}`)
     writeFileSync(join(root, 'privacy.html'), '<h1>privacy</h1>')
     writeFileSync(join(root, '404.html'), '<h1>lost</h1>')
     writeFileSync(join(root, 'assets', 'a.woff2'), 'x')
@@ -41,6 +43,43 @@ describe('review static server', () => {
 
   it('never reads outside the root', () => {
     expect(resolveFile(root, '/../../etc/passwd')).toBeUndefined()
+  })
+
+  /** The response as sent: fetch would decode the body, so this reads the raw bytes. */
+  const get = (path: string, acceptEncoding: string): Promise<{ headers: Record<string, string | string[] | undefined>; bytes: Buffer }> => new Promise((done, fail) => {
+    httpGet(`${origin}${path}`, { headers: { 'accept-encoding': acceptEncoding } }, response => {
+      const chunks: Buffer[] = []
+      response.on('data', (chunk: Buffer) => chunks.push(chunk))
+      response.on('end', () => { done({ headers: response.headers, bytes: Buffer.concat(chunks) }) })
+    }).on('error', fail)
+  })
+
+  it('sends brotli with Content-Encoding and Vary to a browser that accepts it', async () => {
+    const response = await get('/', 'br, gzip')
+    expect(response.headers['content-encoding']).toBe('br')
+    expect(response.headers['vary']).toBe('Accept-Encoding')
+    expect(brotliDecompressSync(response.bytes).toString()).toContain('<h1>home</h1>')
+  })
+
+  it('sends gzip when brotli is not accepted and nothing when neither is', async () => {
+    const zipped = await get('/', 'gzip')
+    expect(zipped.headers['content-encoding']).toBe('gzip')
+    expect(gunzipSync(zipped.bytes).toString()).toContain('home')
+    const plain = await get('/', 'identity')
+    expect(plain.headers['content-encoding']).toBeUndefined()
+    expect(plain.headers['vary']).toBe('Accept-Encoding')
+  })
+
+  it('does not compress fonts or pictures', async () => {
+    expect((await get('/assets/a.woff2', 'br, gzip')).headers['content-encoding']).toBeUndefined()
+    expect((await get('/assets/a.webp', 'br, gzip')).headers['content-encoding']).toBeUndefined()
+  })
+
+  it('chooses brotli, then gzip, then nothing', () => {
+    expect(chooseEncoding('gzip, br', '.css')).toBe('br')
+    expect(chooseEncoding('gzip;q=1', '.js')).toBe('gzip')
+    expect(chooseEncoding(undefined, '.html')).toBe('identity')
+    expect(chooseEncoding('br', '.webp')).toBe('identity')
   })
 
   it('knows the types the site ships', () => {
