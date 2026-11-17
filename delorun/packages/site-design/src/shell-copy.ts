@@ -17,6 +17,8 @@ export interface ThemeCopy {
   readonly themes: string
   /** The name of the light or dark group. */
   readonly scheme: string
+  /** The choice that follows the device's setting. */
+  readonly device: string
   readonly light: string
   readonly dark: string
   /** The button that returns the page to how it started. */

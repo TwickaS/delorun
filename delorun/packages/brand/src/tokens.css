@@ -7,7 +7,14 @@
  */
 :where(:root) {
   color-scheme: light dark;
+}
 
+/*
+ * The tokens read the studio's `--dsw-*` roles where they are declared, so an element that sets its own (a page region
+ * drawn in another look, which the product site's setup strip does with `data-look`) draws its `--dl-*` tokens in that
+ * look and not in the root's. The colour scheme stays the root's.
+ */
+:where(:root, [data-look]) {
   --dl-peach: #E5734A;
   --dl-accent: var(--dsw-alias-brand-primary, var(--dl-peach));
   --dl-accent-text: var(--dsw-alias-brand-text, light-dark(#B84A1B, #E5734A));

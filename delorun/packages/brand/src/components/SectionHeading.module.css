@@ -8,9 +8,9 @@
 
 .title {
   margin: 0;
+  /* Tabular figures are not set on titles: they widen the full stop. */
   font-weight: 600;
   text-wrap: balance;
-  font-feature-settings: 'tnum';
 }
 
 .group[data-level='1'] .title { font-size: clamp(40px, 1.6rem + 4vw, 80px); line-height: 0.95; letter-spacing: -0.04em; }

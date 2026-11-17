@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Permission defaults",
+    "description": "Gives each new workspace the safer permission level, asks once before a workspace gets full access, and sets what its commands can reach on the network"
+  }
+}

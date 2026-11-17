@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Workspaces",
+    "description": "Creates new workspace folders, clones a repository with your own git credentials, and reads and writes the AGENTS.md of a workspace"
+  }
+}

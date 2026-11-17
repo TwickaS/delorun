@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { PALETTES, PRESET_PALETTES } from '../../plugin-theme/src/config.ts'
 import { en, zh } from '../../plugin-theme/src/client/locales.ts'
 import { ACCENT_IDS } from '../../plugin-theme/src/palette/soft.ts'
+import { formatRgb } from '../../plugin-theme/src/palette/color.ts'
 import { aaFailures, buildLooks, buildSwatches, CONTRAST_STOPS, LOOKS, ratio, resolveLook, ROLES, selector, type RoleName } from '../scripts/looks.ts'
 import { KNOWN_LOOKS, LOOK_NAMES, LOOK_NAMES_ZH, lookName } from '../src/looks.ts'
 
@@ -16,6 +17,11 @@ describe('the looks stylesheet', () => {
 
   it('has swatches equal to the ones the Theme plugin generates now', () => {
     expect(readFileSync(fileURLToPath(new URL('../src/look-swatches.ts', import.meta.url)), 'utf8')).toBe(buildSwatches())
+  })
+
+  it('carries the accent of each custom preset in both schemes', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/look-swatches.ts', import.meta.url)), 'utf8')
+    for (const accent of ACCENT_IDS) expect(source).toContain(`'${accent}': { light: '${formatRgb(resolveLook({ palette: 'custom', accent }, 'light').accent)}'`)
   })
 
   it('keeps the T3 Code copyright comment', () => {

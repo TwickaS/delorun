@@ -8,6 +8,6 @@
 :root { color-scheme: light; }
 .dark { color-scheme: dark; }
 
-body { background: var(--color-fd-background); color: var(--color-fd-foreground); font-family: var(--dl-font-sans); -webkit-font-smoothing: antialiased; }
+body { background: var(--dl-surface); color: var(--dl-text); font-family: var(--dl-font-sans); -webkit-font-smoothing: antialiased; }
 
 a { transition: color var(--dl-duration-quick) var(--dl-ease), text-decoration-color var(--dl-duration-quick) var(--dl-ease); }

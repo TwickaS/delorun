@@ -22,3 +22,11 @@ export const LOOK_SWATCHES: Readonly<Record<string, { readonly light: Swatch; re
   'ember': { light: { page: 'rgb(250 246 244)', text: 'rgb(21 16 12)', accent: 'rgb(174 85 42)' }, dark: { page: 'rgb(26 20 17)', text: 'rgb(252 249 248)', accent: 'rgb(245 150 106)' } },
   'iris': { light: { page: 'rgb(248 246 251)', text: 'rgb(18 16 23)', accent: 'rgb(114 83 185)' }, dark: { page: 'rgb(22 20 27)', text: 'rgb(250 249 253)', accent: 'rgb(156 128 234)' } },
 }
+
+/** The accent of each custom accent preset, by scheme, for the swatches of an accent picker. */
+export const ACCENT_SWATCHES: Readonly<Record<string, { readonly light: string; readonly dark: string }>> = {
+  'peach': { light: 'rgb(229 115 74)', dark: 'rgb(229 115 74)' },
+  'cobalt': { light: 'rgb(58 94 232)', dark: 'rgb(58 94 232)' },
+  'moss': { light: 'rgb(63 122 79)', dark: 'rgb(63 122 79)' },
+  'mono': { light: 'rgb(27 26 24)', dark: 'rgb(230 228 226)' },
+}

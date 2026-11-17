@@ -1,0 +1,137 @@
+.root {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 640px;
+  min-width: 0;
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+}
+
+@media (min-width: 960px) {
+  .root { height: 560px; }
+}
+
+.panel { min-height: 0; overflow: hidden; }
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+@media (min-width: 960px) {
+  .split {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--dl-space-5);
+  }
+  .list { grid-column: 1 / 5; }
+  .detail { grid-column: 5 / 13; }
+}
+
+.list {
+  margin: 0;
+  padding: var(--dl-space-3) 0 var(--dl-space-3);
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.group { margin: 0; padding: 0; list-style: none; }
+
+.groupName {
+  margin: var(--dl-space-4) 0 var(--dl-space-1);
+  padding: 0 var(--dl-space-3);
+  color: var(--dl-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.groupName:first-child { margin-top: 0; }
+
+.row {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--dl-space-2) var(--dl-space-3);
+  border: 0;
+  border-radius: var(--dl-radius-sm);
+  background: transparent;
+  color: var(--dl-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--dl-duration-quick) var(--dl-ease),
+    transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+.row[aria-current="true"] { background: var(--dl-surface-sunken); font-weight: 600; }
+.row:active { transform: scale(var(--dl-scale-pressed)); }
+.row:focus-visible { outline: var(--dl-focus-ring); outline-offset: calc(var(--dl-focus-ring-offset) * -1); }
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover:not([aria-selected='true']) { background: var(--dl-surface-sunken); }
+}
+
+/* On a phone the detail opens under the chosen row; on a wide screen it fills the right-hand columns. */
+.inline { display: block; padding: var(--dl-space-1) var(--dl-space-3) var(--dl-space-4); }
+.aside { display: none; }
+
+@media (min-width: 960px) {
+  .inline { display: none; }
+  .aside { display: block; }
+}
+
+.detail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--dl-space-3) 0;
+}
+
+.card { min-width: 0; }
+
+.title { margin: 0; font-size: 22px; font-weight: 600; line-height: 28px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.sentence { margin: var(--dl-space-2) 0 0; font-size: 16px; line-height: 24px; max-width: 60ch; overflow-wrap: anywhere; }
+.facts { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
+.standing { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; }
+
+.needsHeading { margin: var(--dl-space-4) 0 var(--dl-space-1); font-size: 14px; font-weight: 600; line-height: 20px; }
+.needs { margin: 0; padding-inline-start: 1.2em; font-size: 15px; line-height: 24px; overflow-wrap: anywhere; }
+.nothing { margin: 0; color: var(--dl-text-muted); font-size: 15px; line-height: 24px; }
+
+.files { margin: var(--dl-space-4) 0 0; font-size: 14px; line-height: 20px; }
+.files summary { min-height: 24px; cursor: pointer; border-radius: var(--dl-radius-xs); }
+.files summary:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.files p { margin: var(--dl-space-2) 0 0; }
+.files a { color: var(--dl-accent-text); overflow-wrap: anywhere; }
+
+/* The list without scripts: every plugin as text. */
+.plain { height: 100%; overflow-y: auto; padding: var(--dl-space-3) 0; }
+.plain h3 { margin: var(--dl-space-5) 0 var(--dl-space-2); font-size: 14px; font-weight: 600; }
+.plain h3:first-child { margin-top: 0; }
+.plain ul { margin: 0; padding: 0; list-style: none; }
+.plain li { padding: var(--dl-space-2) 0; border-bottom: 1px solid var(--dl-border); }
+.plain strong { display: block; font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
+.plain span { display: block; font-size: 15px; line-height: 24px; max-width: 70ch; overflow-wrap: anywhere; }
+.plain small { display: block; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; }
+
+.kinds { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
+.make { height: 100%; overflow-y: auto; padding: var(--dl-space-3) 0; }
+.make p { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
+.make .kindSummary { margin-top: var(--dl-space-3); color: var(--dl-text-muted); }
+.fileList { margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
+.fileList li { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: var(--dl-space-1) var(--dl-space-4); padding: var(--dl-space-2) 0; border-bottom: 1px solid var(--dl-border); font-size: 15px; line-height: 24px; }
+.fileList code { font-family: var(--dl-font-mono); font-size: 14px; overflow-wrap: anywhere; }
+.fileHeading { margin: var(--dl-space-4) 0 0; font-size: 14px; font-weight: 600; line-height: 20px; }
+.guide { display: inline-block; margin-top: var(--dl-space-4); color: var(--dl-accent-text); font-size: 15px; }
+.make .note { margin-top: var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
+
+@media (max-width: 599px) {
+  .fileList li { grid-template-columns: minmax(0, 1fr); }
+}
