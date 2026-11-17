@@ -5,6 +5,7 @@
  * @module @delorun/website/words/sections-en
  */
 import { DOCS_URL, SUPPORT_EMAIL } from '../config.ts'
+import { ENGLISH_WORDS as PLUGIN_BROWSER_EN } from '../../plugin-browser/words.ts'
 
 /** The lower home page's text in English. */
 export const SECTIONS_EN = {
@@ -43,7 +44,6 @@ export const SECTIONS_EN = {
     parts: {
       heading: 'Made of parts you can change',
       lead: 'Delorun is built from plugins. These are the ones it ships with, in the words the studio uses.',
-      still: 'The plugins Delorun ships, each with what it does.',
       link: { text: 'Write your first plugin', href: `${DOCS_URL}/guide/first-plugin` },
     },
     replays: {
@@ -76,4 +76,6 @@ export const SECTIONS_EN = {
     heading: 'Get release news by email',
     text: 'A short email when a new version or a major article comes out, and nothing more often. We send one message to confirm your address first.',
   },
+  /** The plugin browser's own words, which its lane keeps beside the component. */
+  plugins: PLUGIN_BROWSER_EN,
 } as const

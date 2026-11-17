@@ -12,6 +12,8 @@ import { DOCS_URL } from '@/site/config.ts'
 import { SECTIONS_EN as WORDS } from '@/site/words/sections-en.ts'
 import { SignupSection } from '@/components/signup-section.tsx'
 import { StudioStill } from '@/components/studio-still.tsx'
+import { NearScreen } from '@/components/near-screen.tsx'
+import { PluginBrowserStill } from '@/plugin-browser/PluginBrowserStill.tsx'
 import { GRID, SPACE } from '@/components/grid.ts'
 
 /**
@@ -115,7 +117,10 @@ function Parts() {
     <Section id="parts" space="normal">
       <SectionHeading id="parts" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-start-5 lg:col-end-12" />
       <div className="col-span-full mt-10 lg:mt-14">
-        <SectionStill caption={copy.still} className="h-[640px] lg:h-[560px]" />
+        <NearScreen
+          load={() => import('@/plugin-browser/PluginBrowser.tsx').then(module => ({ default: () => <module.PluginBrowser words={WORDS.plugins} /> }))}
+          still={<PluginBrowserStill words={WORDS.plugins} />}
+        />
       </div>
       <GuideLink link={copy.link} />
     </Section>
