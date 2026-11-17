@@ -43,6 +43,7 @@
           # Optional bundles the release publishes as signed packs (A405): off until the person adds one, then downloaded
           # through the install queue. Claude Code and Codex have their own step.
           - '@delorun/bundle-browser'
+          - '@delorun/bundle-real-browser'
           - '@delorun/bundle-code-intelligence'
           - '@delorun/bundle-agent-hooks'
           - '@delorun/bundle-webhooks'

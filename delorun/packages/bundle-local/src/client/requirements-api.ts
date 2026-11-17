@@ -17,6 +17,8 @@ export type RequirementFix =
   | { readonly kind: 'command', readonly command: string }
   | { readonly kind: 'settings', readonly section: string }
   | { readonly kind: 'docs', readonly url: string }
+  /** Pair the browse extension: the steps and a button that asks the computer for a one-time code. */
+  | { readonly kind: 'browse-pair', readonly extension: string }
 
 /** One row's state: ready, or what it needs and how to meet that. */
 export type RequirementRow =
@@ -38,7 +40,8 @@ export interface RequirementsAnswer {
 const isFix: Check = value => fields({ kind: isString })(value)
   && ((value as { kind: string }).kind === 'command' ? fields({ command: isString })(value)
     : (value as { kind: string }).kind === 'settings' ? fields({ section: isString })(value)
-      : (value as { kind: string }).kind === 'docs' && fields({ url: isString })(value))
+      : (value as { kind: string }).kind === 'docs' ? fields({ url: isString })(value)
+        : (value as { kind: string }).kind === 'browse-pair' && fields({ extension: isString })(value))
 const isRow: Check = value => fields({ packageName: isString, rowId: isString, state: isString })(value)
   && ((value as { state: string }).state === 'ready'
     || ((value as { state: string }).state === 'needs-setup' && fields({ reason: isString, fix: isFix })(value)))

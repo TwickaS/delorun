@@ -46,6 +46,7 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **找出某件事为何失败：**[Delorun 的日志存放在哪里](logs.zh.md)。
 - **带上我在 DeepSeek 网站上的 chat：**[导入你的 DeepSeek 网站 chat](import-deepseek-chats.zh.md)。
 - **查看一次 chat 花了多少钱：**[查看一次 chat 的花费](cost-meter.zh.md)。
+- **让智能体以我的登录状态在我自己的 Chrome 中操作：**[使用你自己的浏览器](use-your-own-browser.zh.md)。
 - **逐字阅读模型的思考过程：**[逐字阅读模型的思考过程](thinking-tab.zh.md)。
 
 <a id="i-want-to-choose-or-change-the-model"></a>

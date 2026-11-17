@@ -22,6 +22,13 @@
  * `playwright-install`, answers as the command that runs that exact MCP package version's own installer:
  * `npx -y <package>@<version> install-browser <browser>`.
  *
+ * A `browse-paired` need is met when browse's program for this computer is in the bundle's packages (`via` leads from
+ * the bundle to `@opencode/browse`, whose platform package holds the program) and browse's `browsers.json` lists at
+ * least one browser. browse writes that file when a paired browser connects; it holds each browser's id and name and
+ * no secret. The check never reads browse's `relay-token` or `browser-tokens.json`, which hold the secrets. Its fix,
+ * `browse-pair`, answers as the pairing steps Plugins shows, with the extension's store page; on a computer browse
+ * has no program for (Windows on Arm, for one), the reason says so and the fix links the guide instead.
+ *
  * A `chromium` need tests the browser that will launch. The row's own configuration, read from its Loader entry, names
  * a `browser` of `auto`, `chrome` or `chromium` (`auto` when the row has no entry or names none), and the same function
  * the Playwright provider builds its launch arguments with, `launchedBrowser`, answers Chrome or Chromium. When Chrome
@@ -41,8 +48,7 @@
  *
  * @module @delorun/bundle-local/requirements
  */
-import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -54,6 +60,7 @@ import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import { admitApprovedDevice } from '@delorun/home-auth'
 import { z } from 'zod'
+import { registerBrowsePairing } from './browse-pairing.ts'
 import { REQUIREMENT_ROUTES, type RequirementFix, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -73,10 +80,13 @@ const PlaywrightBrowser = z.strictObject({
   browser: z.enum(['chromium', 'firefox', 'webkit']),
   server: z.string().regex(/^[\w-]+$/u).optional(),
 })
-const Need = z.discriminatedUnion('kind', [Program, Env, Platform, PlaywrightBrowser])
+const BrowsePaired = z.strictObject({ kind: z.literal('browse-paired'), via: z.array(z.string().min(1)).min(1) })
+const Need = z.discriminatedUnion('kind', [Program, Env, Platform, PlaywrightBrowser, BrowsePaired])
+const HttpsUrl = z.url().refine(url => url.startsWith('https://'), 'a link must be https')
 const Fix = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('command'), command: z.string().min(1) }),
   z.strictObject({ kind: z.literal('playwright-install') }),
+  z.strictObject({ kind: z.literal('browse-pair'), extension: HttpsUrl, guide: HttpsUrl }),
   z.strictObject({ kind: z.literal('settings'), section: z.string().min(1) }),
   z.strictObject({ kind: z.literal('docs'), url: z.url().refine(url => url.startsWith('https://'), 'a docs link must be https') }),
 ])
@@ -94,6 +104,10 @@ export type RowRequirement = z.infer<typeof RowRequirement>
 export interface CheckEnvironment {
   /** The operating system, as `process.platform`. */
   readonly platform: NodeJS.Platform
+  /** The processor, as `process.arch`. */
+  readonly arch: string
+  /** The C library on Linux: `musl` when the Node build reports no glibc; `glibc` elsewhere, where it does not apply. */
+  readonly libc: 'glibc' | 'musl'
   /** The environment variables. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The person's operating-system home directory (`os.homedir()`), not the Delorun home. */
@@ -112,7 +126,8 @@ export interface CheckEnvironment {
    */
   readJson(path: string): unknown
   /**
-   * Resolve a package's `package.json` as the package whose `package.json` is given would import it.
+   * Find a package's `package.json` in the `node_modules` folders above the given package, as Node's lookup finds the
+   * package's folder, whatever the package's `exports` allow, following links to the real folder.
    * @param from - the importing package's `package.json`.
    * @param name - the package to resolve.
    * @returns the absolute path of the resolved `package.json`.
@@ -138,13 +153,22 @@ export interface CheckEnvironment {
  * @returns its platform, environment and file system.
  */
 export function hostEnvironment(): CheckEnvironment {
+  const report = process.platform === 'linux' ? process.report.getReport() as { header?: { glibcVersionRuntime?: string } } : undefined
   return {
     platform: process.platform,
+    arch: process.arch,
+    libc: report !== undefined && report.header?.glibcVersionRuntime === undefined ? 'musl' : 'glibc',
     env: process.env,
     osHome: homedir(),
     exists: existsSync,
     readJson: (path): unknown => JSON.parse(readFileSync(path, 'utf8')),
-    resolvePackage: (from, name) => createRequire(from).resolve(`${name}/package.json`),
+    resolvePackage: (from, name) => {
+      for (let dir = dirname(from); ; dir = dirname(dir)) {
+        const manifest = join(dir, 'node_modules', name, 'package.json')
+        if (existsSync(manifest)) return realpathSync(manifest)
+        if (dirname(dir) === dir) throw new Error(`Cannot find the package ${name} from ${from}`)
+      }
+    },
     homePath: dshHomePath,
     isExecutable: (path) => {
       if (!existsSync(path) || !statSync(path).isFile()) return false
@@ -260,6 +284,70 @@ export function playwrightBuild(need: Extract<Need, { kind: 'playwright-browser'
   return { installer: `${mcp.name}@${mcp.version}`, folders: builds.map(entry => join(cache, `${entry.name.replaceAll('-', '_')}-${entry.revision}`)) }
 }
 
+/** browse's platform packages (`@opencode/browse-<suffix>`), by operating system, processor and, on Linux, C library. */
+const BROWSE_BUILDS: Readonly<Record<string, string>> = {
+  'linux-x64-glibc': 'linux-x64',
+  'linux-x64-musl': 'linux-x64-musl',
+  'linux-arm64-glibc': 'linux-arm64',
+  'linux-arm64-musl': 'linux-arm64-musl',
+  'darwin-x64': 'darwin-x64',
+  'darwin-arm64': 'darwin-arm64',
+  'win32-x64': 'windows-x64',
+}
+
+/**
+ * The absolute path of browse's program for this computer, from the packages a `browse-paired` need names.
+ * @param need - the need.
+ * @param bundleDir - the bundle's folder, from which `via` is resolved.
+ * @param host - the computer.
+ * @returns the program's path, or undefined when browse publishes no program for this computer.
+ * @throws when a package cannot be resolved, which a pack carrying its program for this computer never meets.
+ */
+export function browseProgram(need: Extract<Need, { kind: 'browse-paired' }>, bundleDir: string, host: CheckEnvironment): string | undefined {
+  const build = BROWSE_BUILDS[host.platform === 'linux' ? `linux-${host.arch}-${host.libc}` : `${host.platform}-${host.arch}`]
+  if (build === undefined) return undefined
+  let manifest = join(bundleDir, 'package.json')
+  for (const name of need.via) manifest = host.resolvePackage(manifest, name)
+  const program = join(dirname(host.resolvePackage(manifest, `@opencode/browse-${build}`)), 'bin', host.platform === 'win32' ? 'browse.exe' : 'browse')
+  if (!host.isExecutable(program)) throw new Error(`browse's program ${program} is missing or not executable`)
+  return program
+}
+
+/**
+ * browse's data folder as the browse Delorun starts sees it: `browse` in an absolute `XDG_DATA_HOME`, else
+ * `.local/share/browse` in the home folder (`HOME`, then `USERPROFILE`), on every operating system. Delorun starts
+ * browse with every `OPENCODE_BROWSER_*` variable unset, so `OPENCODE_BROWSER_HOME` from Delorun's environment does
+ * not move it.
+ * @param host - the computer.
+ * @returns the absolute folder.
+ */
+export function browseDataDir(host: CheckEnvironment): string {
+  const data = host.env.XDG_DATA_HOME ?? ''
+  if (data !== '' && isAbsolute(data)) return join(data, 'browse')
+  const home = [host.env.HOME, host.env.USERPROFILE].find(value => value !== undefined && value !== '') ?? host.osHome
+  return join(home, '.local', 'share', 'browse')
+}
+
+/** browse's `browsers.json`: each connected browser profile's id and display name, keyed by profile. */
+const KnownBrowsers = z.record(z.string(), z.object({ id: z.string().min(1), name: z.string() }))
+
+/**
+ * How many browsers browse has paired and seen connect, from `browsers.json` alone; the token files are never read.
+ * @param host - the computer.
+ * @returns the count; 0 when the file is absent or unreadable.
+ */
+export function pairedBrowsers(host: CheckEnvironment): number {
+  const path = join(browseDataDir(host), 'browsers.json')
+  if (!host.exists(path)) return 0
+  try {
+    return Object.keys(KnownBrowsers.parse(host.readJson(path))).length
+  } catch (_unreadable) {
+    // `_unreadable`: a file browse is rewriting, or one another browse version writes differently, reads as "not
+    // paired"; the row keeps showing the pairing steps, and pairing again is safe.
+    return 0
+  }
+}
+
 const RowBrowser = z.looseObject({ browser: z.unknown().optional(), executablePath: z.unknown().optional() })
 
 /**
@@ -306,6 +394,8 @@ export function isMet(need: Need, host: CheckEnvironment, bundleDir: string, row
       if (need.browser === 'chromium' && rowExecutable(rowConfig) !== undefined) return true
       if (launchesChrome(need, rowConfig, host)) return chromeChannelExecutable(host) !== undefined
       return playwrightBuild(need, bundleDir, host, rowConfig).folders.every(folder => host.exists(join(folder, 'INSTALLATION_COMPLETE')))
+    case 'browse-paired':
+      return browseProgram(need, bundleDir, host) !== undefined && pairedBrowsers(host) > 0
   }
 }
 
@@ -326,6 +416,8 @@ const REASONS = {
     env: (name: string) => `Needs ${name} set`,
     platform: 'Not available on this kind of computer',
     download: (browser: string) => `${browser} download`,
+    pair: 'Connect Chrome',
+    windowsArm: 'Not available on Windows on Arm',
   },
   zh: {
     program: (names: string) => `需要安装 ${names}`,
@@ -333,6 +425,8 @@ const REASONS = {
     env: (name: string) => `需要设置 ${name}`,
     platform: '此类电脑不支持',
     download: (browser: string) => `需要下载 ${browser}`,
+    pair: '需要连接 Chrome',
+    windowsArm: 'Windows on Arm 不支持',
   },
 } as const
 
@@ -341,15 +435,20 @@ const REASONS = {
  * @param need - the unmet need.
  * @param language - `en` or `zh`.
  * @param chrome - whether a `playwright-browser` need tests the installed Chrome.
+ * @param supported - for a `browse-paired` need, whether browse has a program for this computer.
+ * @param host - the computer.
  * @returns the sentence.
  */
-function reasonOf(need: Need, language: string, chrome: boolean): string {
+function reasonOf(need: Need, language: string, chrome: boolean, supported: boolean, host: CheckEnvironment): string {
   const words = language === 'zh' ? REASONS.zh : REASONS.en
   switch (need.kind) {
     case 'program': return words.program(need.label ?? need.names.join(words.or))
     case 'env': return words.env(need.name)
     case 'platform': return words.platform
     case 'playwright-browser': return chrome ? words.program('Google Chrome') : words.download(BROWSER_NAMES[need.browser])
+    case 'browse-paired':
+      if (supported) return words.pair
+      return host.platform === 'win32' && host.arch === 'arm64' ? words.windowsArm : words.platform
   }
 }
 
@@ -365,14 +464,35 @@ const BROWSER_NAMES = { chromium: 'Chromium', firefox: 'Firefox', webkit: 'WebKi
  * @param host - the computer.
  * @param rowConfig - the row's Loader entry configuration.
  * @returns the fix to show.
- * @throws when a `playwright-install` fix has no `playwright-browser` need beside it.
+ * @throws when a `playwright-install` fix has no `playwright-browser` need beside it, or a `browse-pair` fix no
+ * `browse-paired` need.
  */
 function shownFix(requirement: RowRequirement, bundle: BundleToCheck, host: CheckEnvironment, rowConfig: unknown): RequirementFix {
+  if (requirement.fix.kind === 'browse-pair') {
+    const need = requirement.needs.find(entry => entry.kind === 'browse-paired')
+    if (need === undefined) throw new Error('a "browse-pair" fix needs a "browse-paired" need in the same row')
+    // No program for this computer: nothing to pair, so the guide explains what works instead.
+    if (browseProgram(need, bundle.dir, host) === undefined) return { kind: 'docs', url: requirement.fix.guide }
+    return { kind: 'browse-pair', extension: requirement.fix.extension }
+  }
   if (requirement.fix.kind !== 'playwright-install') return requirement.fix
   const need = requirement.needs.find(entry => entry.kind === 'playwright-browser')
   if (need === undefined) throw new Error('a "playwright-install" fix needs a "playwright-browser" need in the same row')
   const browser = launchesChrome(need, rowConfig, host) ? 'chrome' : need.browser
   return { kind: 'command', command: `npx -y ${playwrightBuild(need, bundle.dir, host, rowConfig).installer} install-browser ${browser}` }
+}
+
+/**
+ * A bundle's declaration, read from its `package.json`.
+ * @param bundle - the bundle.
+ * @returns each declared row's needs and fix, or null for a bundle that declares none.
+ * @throws {Error} when the package cannot be read or the declaration is not valid.
+ */
+export function declarationOf(bundle: BundleToCheck): Readonly<Record<string, RowRequirement>> | null {
+  const manifest = z.object({ delorun: z.object({ requires: z.unknown().optional() }).optional() })
+    .parse(JSON.parse(readFileSync(join(bundle.dir, 'package.json'), 'utf8')))
+  const raw = manifest.delorun?.requires
+  return raw === undefined ? null : Declaration.parse(raw)
 }
 
 /**
@@ -384,11 +504,8 @@ function shownFix(requirement: RowRequirement, bundle: BundleToCheck, host: Chec
  * @throws {Error} when the declaration cannot be read or names a row the patch does not declare.
  */
 function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnvironment): RequirementRow[] | null {
-  const manifest = z.object({ delorun: z.object({ requires: z.unknown().optional() }).optional() })
-    .parse(JSON.parse(readFileSync(join(bundle.dir, 'package.json'), 'utf8')))
-  const raw = manifest.delorun?.requires
-  if (raw === undefined) return null
-  const declared = Declaration.parse(raw)
+  const declared = declarationOf(bundle)
+  if (declared === null) return null
   return Object.entries(declared).map(([rowId, requirement]) => {
     if (!bundle.rowIds.includes(rowId)) throw new Error(`"requires" names the row "${rowId}", which the patch does not declare`)
     const rowConfig = bundle.rowConfigs?.[rowId]
@@ -396,7 +513,8 @@ function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnviron
     const unmet = requirement.needs.find(need => !isMet(need, host, bundle.dir, rowConfig))
     if (unmet === undefined) return { packageName: bundle.name, rowId, state: 'ready' as const }
     const chrome = unmet.kind === 'playwright-browser' && launchesChrome(unmet, rowConfig, host)
-    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language, chrome), fix }
+    const supported = unmet.kind !== 'browse-paired' || browseProgram(unmet, bundle.dir, host) !== undefined
+    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language, chrome, supported, host), fix }
   })
 }
 
@@ -428,7 +546,7 @@ const LANGUAGES: ReadonlySet<string> = new Set(['en', 'zh'])
  * @param ctx - the scope that holds the plugin manager and the profile.
  * @returns the bundles to check.
  */
-async function listedBundles(ctx: Context): Promise<BundleToCheck[]> {
+export async function listedBundles(ctx: Context): Promise<BundleToCheck[]> {
   const manager = ctx.get('pluginManager')
   const profile = ctx.get('profileContext') as ProfileContext | undefined
   if (manager === undefined || profile === undefined) return []
@@ -452,11 +570,18 @@ async function listedBundles(ctx: Context): Promise<BundleToCheck[]> {
 }
 
 /**
- * Mount the check route once the Connection is up.
+ * Mount the check route, and the pairing route of rows that need a browse pairing, once the Connection is up.
  * @param ctx - the row's scope.
  */
 export function apply(ctx: Context): void {
   ctx.inject(['connection'], (scope) => {
+    registerBrowsePairing(scope, async (request) => {
+      const bundle = (await listedBundles(scope)).find(each => each.name === request.packageName)
+      const need = bundle === undefined ? undefined : declarationOf(bundle)?.[request.rowId]?.needs.find(each => each.kind === 'browse-paired')
+      if (bundle === undefined || need?.kind !== 'browse-paired') return { kind: 'unknown-row' }
+      const path = browseProgram(need, bundle.dir, hostEnvironment())
+      return path === undefined ? { kind: 'unsupported' } : { kind: 'program', path }
+    })
     scope.connection.fetch.register({
       path: REQUIREMENT_ROUTES.check, methods: ['GET'], requestBody: 'buffered',
       // A read of which programs and settings are present; a signed-in device may see it as the owner does.

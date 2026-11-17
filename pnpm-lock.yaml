@@ -2099,6 +2099,9 @@ importers:
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:*
+        version: link:../../../packages/subprocess/subprocess
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -2274,9 +2277,6 @@ importers:
       '@deepseek-ai/dsh-session-log-deepseek':
         specifier: workspace:*
         version: link:../../../packages/session/session-log-deepseek
-      '@deepseek-ai/dsh-subprocess':
-        specifier: workspace:*
-        version: link:../../../packages/subprocess/subprocess
       '@deepseek-ai/dsh-subprocess-local':
         specifier: workspace:*
         version: link:../../../packages/subprocess/subprocess-local
@@ -2316,6 +2316,24 @@ importers:
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delorun/packages/bundle-real-browser:
+    dependencies:
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-experimental-browser-use-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-runtime
+      '@delorun/browser-use-browse':
+        specifier: workspace:*
+        version: link:../browser-use-browse
+      '@delorun/skill-real-browser':
+        specifier: workspace:*
+        version: link:../skill-real-browser
+      '@opencode/browse':
+        specifier: 0.1.1
+        version: 0.1.1
 
   delorun/packages/bundle-studio:
     dependencies:
@@ -4371,6 +4389,15 @@ importers:
         version: 18.3.1
 
   delorun/packages/skill-plugin-authoring:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../../packages/skill/skill
+
+  delorun/packages/skill-real-browser:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -24388,6 +24415,50 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@opencode/browse-darwin-arm64@0.1.1':
+    resolution: {integrity: sha512-1fIzN9OrxqD3ZGQ0n7K+iZgRQWIZrUZIsma5FWvSi4haWB1QumsmRNfh1kaRzSOsthn863RbUQvLsplO2KAv2g==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@opencode/browse-darwin-x64@0.1.1':
+    resolution: {integrity: sha512-8wsSqYMW0GWXiURTd5puvPG3rmE2aCnbx6fkT/P9TobYfQ1bGu3K7RgLD0wak4UslzZTNCgYVZhwFhT/jqQ6kA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@opencode/browse-linux-arm64-musl@0.1.1':
+    resolution: {integrity: sha512-diosJYaWLoNs75gE9iiC+YXpgNQbN+UyjcNM3cDAeRaUhWBCrzMt35P+bFI7HXjfuZiR2C1aUqIfWdV2cEb/aw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@opencode/browse-linux-arm64@0.1.1':
+    resolution: {integrity: sha512-klF2M7mElXniJQ4pDwhtg6m/8FgAx+EDoWzuNN8QlfA/gtYqrG1Hl2j5DsRXxF0s2JrhdJr/Zld9Q2rg8Ncc2Q==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@opencode/browse-linux-x64-musl@0.1.1':
+    resolution: {integrity: sha512-aU0CYeZGQFmGkvSM7cFFLtYWQwvDFk+GsG8sCmpp3ilUKdBYgjPwBazerPY2fIa7zrwbfkzjG7cKBV/N4WtZUQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@opencode/browse-linux-x64@0.1.1':
+    resolution: {integrity: sha512-N0dEMW6hBj8Duzv9lF51uHMUg9TAsJGElJ+NMHMK+yl0rW2PGVc44Lsk4rICe2ctXBHvIdbzQybjTvbGdXXyiQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@opencode/browse-windows-x64@0.1.1':
+    resolution: {integrity: sha512-hFBDowhYmyDVfy4/Lt1lSDPHMLA2jo3uESRlCG2WIEWJbOq4Oc32oF4S9dbjfNX05dAqpkESLkA+F7mfg8rVlA==}
+    cpu: [x64]
+    os: [win32]
+
+  '@opencode/browse@0.1.1':
+    resolution: {integrity: sha512-AytWqCqD/iinW1nyaFoY9633+Escj6gca6ZBX1MFa85diEuNThSd9h2tEzw1DqTD/cB7r2pShL164XjzD0BPtQ==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   '@opentelemetry/api-logs@0.222.0':
     resolution: {integrity: sha512-9mb1If+IF6u0ZVXkHQ6ogEae5HwA6ajIVUgpSDQyRASxft6BSXHvBvPooRle3yFN/fKnCdSOnuu0OC3PLcF6+g==}
     engines: {node: '>=8.0.0'}
@@ -32294,6 +32365,37 @@ snapshots:
 
   '@openai/codex@0.153.4-win32-x64':
     optional: true
+
+  '@opencode/browse-darwin-arm64@0.1.1':
+    optional: true
+
+  '@opencode/browse-darwin-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-arm64-musl@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-arm64@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-x64-musl@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse-windows-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse@0.1.1':
+    optionalDependencies:
+      '@opencode/browse-darwin-arm64': 0.1.1
+      '@opencode/browse-darwin-x64': 0.1.1
+      '@opencode/browse-linux-arm64': 0.1.1
+      '@opencode/browse-linux-arm64-musl': 0.1.1
+      '@opencode/browse-linux-x64': 0.1.1
+      '@opencode/browse-linux-x64-musl': 0.1.1
+      '@opencode/browse-windows-x64': 0.1.1
 
   '@opentelemetry/api-logs@0.222.0':
     dependencies:

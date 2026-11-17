@@ -8,6 +8,7 @@ import { REQUIREMENT_ROUTES, type RequirementRow, type RequirementsAnswer } from
 import { en, zh } from '../src/client/requirements-locales.ts'
 import { RequirementsStore } from '../src/client/requirements-store.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
+import { BrowsePairError, type BrowsePairEvent, type BrowsePairRequest } from '../src/client/browse-pair-api.ts'
 
 afterEach(cleanup)
 
@@ -30,12 +31,72 @@ function host(...answers: Array<RequirementsAnswer | 'down'>): { fetch: HostFetc
   return { fetch, urls }
 }
 
-function show(fetch: HostFetch, subject: NeedsSetupProps['subject'], extra: { openSettings?: (s: string) => void, copy?: (t: string) => Promise<void> } = {}) {
+type PairBrowse = (request: BrowsePairRequest, signal: AbortSignal) => AsyncIterable<BrowsePairEvent>
+
+function show(fetch: HostFetch, subject: NeedsSetupProps['subject'], extra: { openSettings?: (s: string) => void, copy?: (t: string) => Promise<void>, pairBrowse?: PairBrowse } = {}) {
   const store = new RequirementsStore(fetch, () => 'en')
-  return { store, ...render(<NeedsSetup t={makeTranslate(en)} subject={subject} store={store} openSettings={extra.openSettings ?? vi.fn()} copy={extra.copy ?? (async () => {})} />) }
+  const pairBrowse: PairBrowse = extra.pairBrowse ?? (async function* () { /* no pairing in this test */ })
+  return { store, ...render(<NeedsSetup t={makeTranslate(en)} subject={subject} store={store} openSettings={extra.openSettings ?? vi.fn()} copy={extra.copy ?? (async () => {})} pairBrowse={pairBrowse} />) }
 }
 
 const row = { kind: 'row', pkg: PKG, row: ROW } as const
+
+describe('pairing the browse extension', () => {
+  const pair = needs({ kind: 'browse-pair', extension: 'https://chromewebstore.google.com/detail/browse' })
+  /** A pairing that yields the scripted events, recording each request; a test resolves `release` to let it finish. */
+  function pairing(events: BrowsePairEvent[], fail?: Error) {
+    const requests: BrowsePairRequest[] = []
+    let release = (): void => {}
+    const finished = new Promise<void>((resolve) => { release = resolve })
+    const pairBrowse: PairBrowse = async function* (request) {
+      requests.push(request)
+      const [first, ...rest] = events
+      if (first !== undefined) yield first
+      await finished
+      if (fail !== undefined) throw fail
+      yield* rest
+    }
+    return { pairBrowse, requests, release }
+  }
+
+  it('shows the steps: the extension\'s store page, then a code from the computer, then the browser that connected', async () => {
+    const { fetch, urls } = host(pair, { rows: [{ packageName: PKG.name, rowId: 'row', state: 'ready' }], problems: [] })
+    const flow = pairing([{ kind: 'code', code: 'AB12-CD34' }, { kind: 'paired', name: 'Chrome on this computer' }])
+    show(fetch, row, { pairBrowse: flow.pairBrowse })
+    expect((await screen.findByRole('link', { name: en.pairOpenStore })).getAttribute('href')).toBe('https://chromewebstore.google.com/detail/browse')
+    fireEvent.click(screen.getByRole('button', { name: en.pairStart }))
+    expect((await screen.findByLabelText(en.pairCodeLabel)).textContent).toBe('AB12-CD34')
+    expect(screen.getByText(en.pairWaiting)).toBeTruthy()
+    expect(flow.requests).toEqual([{ packageName: PKG.name, rowId: 'row' }])
+    const reads = urls.length
+    await act(async () => { flow.release() })
+    await waitFor(() => { expect(urls.length).toBeGreaterThan(reads) })
+  })
+
+  it('offers a new code when the code ran out, and says what failed', async () => {
+    const expired = pairing([{ kind: 'code', code: 'AB12-CD34' }, { kind: 'expired' }])
+    show(host(pair).fetch, row, { pairBrowse: expired.pairBrowse })
+    fireEvent.click(await screen.findByRole('button', { name: en.pairStart }))
+    await screen.findByLabelText(en.pairCodeLabel)
+    await act(async () => { expired.release() })
+    expect(await screen.findByText(en.pairExpired)).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.pairAgain })).toBeTruthy()
+    cleanup()
+    const failed = pairing([{ kind: 'failed', message: 'the relay did not start' }])
+    show(host(pair).fetch, row, { pairBrowse: failed.pairBrowse })
+    fireEvent.click(await screen.findByRole('button', { name: en.pairStart }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Pairing did not work: the relay did not start')
+  })
+
+  it('tells a page away from the computer to pair at the computer when the Host refuses it', async () => {
+    const refused = pairing([], new BrowsePairError(403, 'forbidden'))
+    show(host(pair).fetch, row, { pairBrowse: refused.pairBrowse })
+    fireEvent.click(await screen.findByRole('button', { name: en.pairStart }))
+    await act(async () => { refused.release() })
+    expect(await screen.findByText(en.pairComputerOnly)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.pairStart })).toBeNull()
+  })
+})
 
 describe('the Needs setup state', () => {
   it('reads "Needs setup · reason" with a docs link', async () => {

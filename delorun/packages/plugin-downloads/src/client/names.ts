@@ -4,6 +4,7 @@ import type { DownloadsLocaleKey, Translate } from './locales.ts'
 /** Dictionary keys of the packs the release ships, by package name. */
 export const PACK_TITLE_KEYS: Readonly<Record<string, DownloadsLocaleKey>> = {
   '@delorun/bundle-browser': 'pack.browser',
+  '@delorun/bundle-real-browser': 'pack.realBrowser',
   '@delorun/bundle-code-intelligence': 'pack.codeIntelligence',
   '@delorun/bundle-agent-hooks': 'pack.agentHooks',
   '@delorun/bundle-webhooks': 'pack.webhooks',

@@ -69,6 +69,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     NETWORK_LIST_PATH: READ('reads a workspace\'s network allowlist'),
     NETWORK_SET_PATH: UNLOCKED('a looser allowlist lets commands reach more of the network'),
   },
+  'bundle-local/src/browse-pairing.ts': {
+    BROWSE_PAIR_ROUTE: { level: 'C', reason: 'pairing runs browse on the computer and shows a code that links the person\'s own Chrome, with their sign-ins' },
+  },
   'bundle-local/src/profile-versions.ts': {
     'PROFILE_VERSION_ROUTES.list': READ('lists the saved setup versions'),
     'PROFILE_VERSION_ROUTES.changes': READ('shows what differs between versions'),
