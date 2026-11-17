@@ -198,12 +198,20 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     options: [PROFILE],
   },
   agents: {
-    usage: ['delorun agents login <claude-code|codex> [--profile <name>]'],
-    about: ['Signs an agent you added in, using the provider\'s own sign-in from the copy Delorun brought, so you need no separately installed command. Run it in a terminal.'],
-    actions: [
-      { name: 'login', text: 'Run the agent\'s own sign-in, interactively. Add the agent first, in setup or in Plugins.' },
+    usage: ['delorun agents login <claude-code|codex> [--profile <name>]', 'delorun agents status [claude-code|codex] [--refresh] [--json] [--profile <name>]'],
+    about: [
+      'Signs an agent you added in, using the provider\'s own sign-in from the copy Delorun brought, so you need no separately installed command. Run it in a terminal.',
+      'Shows whether each agent is signed in, its plan, and how much of each plan limit is used, with when each resets and when Delorun last saw the figures. While Delorun runs it checks an agent after you add it or sign in.',
     ],
-    options: [PROFILE],
+    actions: [
+      { name: 'login', text: 'Run the agent\'s own sign-in, interactively. Add the agent first, in setup or in Plugins. A running Delorun then checks its plan limits.' },
+      { name: 'status', text: 'Show sign-in, plan and limits for each agent, or the one named. Without a running Delorun it shows the figures last seen.' },
+    ],
+    options: [
+      { name: '--refresh', text: 'Ask the running Delorun to check now, by starting the agent\'s own program with no task. Soon after the last check nothing starts, and the answer says when the next check can run.' },
+      JSON_OUTPUT,
+      PROFILE,
+    ],
   },
   preview: {
     usage: ['delorun preview list [--profile <name>]', 'delorun preview on <flag> [--profile <name>]', 'delorun preview off <flag> [--profile <name>]'],

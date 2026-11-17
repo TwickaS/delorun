@@ -1361,6 +1361,9 @@ importers:
       '@delorun/contract-verification-checks':
         specifier: workspace:*
         version: link:../../packages/contract-verification-checks
+      '@delorun/external-agents':
+        specifier: workspace:*
+        version: link:../../packages/external-agents
       '@delorun/home':
         specifier: workspace:*
         version: link:../../packages/home
