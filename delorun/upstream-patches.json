@@ -714,13 +714,13 @@
       "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
       "class": "delorun-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style. Secret fields (C1): the History view names why the latest change was not saved, above the versions."
+      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style. Secret fields (C1): the History view names why the latest change was not saved, above the versions. Plugin-manager improvements: each row of a bundle's row list renders the `plugins.row.state` slot."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/index.ts",
       "class": "delorun-feature",
       "feature": "plugin-manager-improvements",
-      "reason": "Plugin-manager improvements: `pluginNavigation.openItem(id)` opens an official plugin's page without changing the current Session. Upstream's navigation calls are unchanged."
+      "reason": "Plugin-manager improvements: `pluginNavigation.openItem(id)` opens an official plugin's page without changing the current Session. Upstream's navigation calls are unchanged. The page declares the `plugins.row.state` list slot."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/locales.ts",
@@ -2749,6 +2749,12 @@
       "class": "delorun-feature",
       "feature": "optional-bundles",
       "reason": "The Claude Code row starts with `permissionMode: acceptEdits`, so every way of adding the plugin (the setup guide, Plugins, the command line) gets edits accepted from one place instead of each writing it. A value the person sets in the profile's own patch replaces it, because that layer is read after the bundle's, and an update or a carry leaves that layer alone. Upstream's row has no config and runs with the provider's default mode."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/slot-contract.ts",
+      "class": "delorun-feature",
+      "feature": "plugin-manager-improvements",
+      "reason": "Plugin-manager improvements: the `plugins.row.state` list slot, one line under a row in a bundle's row list, rendered with the row's subject; Delorun's Needs setup state registers into it. The other slots are unchanged."
     }
   ],
   "retired": []
