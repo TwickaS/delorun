@@ -180,6 +180,14 @@ export class SeatAdapter extends LlmAdapter {
     await run.program.close()
   }
 
+  /**
+   * Drop and close every open program session, as when the plugin stops.
+   * @returns resolves when every program has been asked to close.
+   */
+  async releaseAll(): Promise<void> {
+    await Promise.all([...this.runs.keys()].map(child => this.release(child)))
+  }
+
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
     const child = this.recognise(options)

@@ -320,6 +320,15 @@ describe('turns that cannot run or end in failure', () => {
 })
 
 describe('closing a quiet agent\'s program', () => {
+  it('closes every open program when the plugin stops', async () => {
+    const w = world()
+    await turn(w, [user('task')], [{ kind: 'turn-end', outcome: 'completed' }])
+    expect(w.gate.latest.closed).toBe(false)
+    await w.adapter.releaseAll()
+    expect(w.gate.latest.closed).toBe(true)
+    expect(w.adapter.runOf(CHILD)).toBeUndefined()
+  })
+
   it('closes the program and starts it again with resume on the next message', async () => {
     const w = world()
     const first = user('task')
