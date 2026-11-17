@@ -3,7 +3,7 @@
  * program keyless in scratch Codex homes only (never the person's), one variant per home, and prints the lines each
  * variant added.
  *
- *   node_modules/.bin/tsx delorun/packages/agent-codex/live/trust-write.ts
+ *   node_modules/.bin/tsx delorun/packages/agent-codex/live/trust-write.ts [name filter]
  * @module @delorun/agent-codex/live/trust-write
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -28,6 +28,8 @@ const VARIANTS: Readonly<Record<string, (workspace: string) => Variant>> = {
   'untrusted + workspace-write': () => ({ thread: { approvalPolicy: 'untrusted', sandbox: 'workspace-write' } }),
   'untrusted, turn sandboxPolicy workspaceWrite': workspace => ({ thread: { approvalPolicy: 'untrusted' }, turn: { sandboxPolicy: WORKSPACE_WRITE(workspace) } }),
   'untrusted + read-only, turn sandboxPolicy workspaceWrite': workspace => ({ thread: { approvalPolicy: 'untrusted', sandbox: 'read-only' }, turn: { sandboxPolicy: WORKSPACE_WRITE(workspace) } }),
+  'on-request': () => ({ thread: { approvalPolicy: 'on-request' } }),
+  'on-request + read-only, turn sandboxPolicy workspaceWrite': workspace => ({ thread: { approvalPolicy: 'on-request', sandbox: 'read-only' }, turn: { sandboxPolicy: WORKSPACE_WRITE(workspace) } }),
   'untrusted + sandbox_mode workspace-write in thread config': () => ({ thread: { approvalPolicy: 'untrusted', config: { sandbox_mode: 'workspace-write' } } }),
   // Upstream's one-shot provider's three modes, on its ephemeral threads.
   'upstream never (ephemeral)': () => ({ thread: { ephemeral: true, approvalPolicy: 'never' } }),
@@ -37,7 +39,8 @@ const VARIANTS: Readonly<Record<string, (workspace: string) => Variant>> = {
 
 const ctx = new Context()
 await ctx.plugin(LocalSubprocessRuntime)
-for (const [name, variant] of Object.entries(VARIANTS)) {
+const filter = process.argv[2] ?? ''
+for (const [name, variant] of Object.entries(VARIANTS).filter(([candidate]) => candidate.includes(filter))) {
   const root = mkdtempSync(join(tmpdir(), 'ea1-codex-trust-'))
   try {
     const home = join(root, 'home')

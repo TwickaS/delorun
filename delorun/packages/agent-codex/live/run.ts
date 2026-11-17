@@ -9,10 +9,11 @@
  * @module @delorun/agent-codex/live/run
  */
 import { spawn as spawnChild } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { ProgramOpenError } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type ProgramHarnessTool } from '@delorun/external-agents/contract'
 import { REPO, answerText, listingDiff, live, processesIn, removeTask, sleep, taskFolder, topListing, untilTurnEnd, type Live } from './common.ts'
 
 /** Run one scenario with set-up, the leftover checks and clean-up around it. */
@@ -124,6 +125,35 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
         outcome: events.at(-1),
       })
     }
+    await session.close()
+  }),
+
+  /**
+   * Which questions remain under the driver's approval policy: a write in the task folder, a call of a Delorun harness
+   * tool and a write outside every writable root, each answered "reject" if asked.
+   */
+  quiet: () => scenario('quiet', async (run) => {
+    const outside = join(homedir(), 'ea1-codex-outside-probe.txt')
+    let echoed = 0
+    const echo: ProgramHarnessTool = {
+      name: 'harness_echo',
+      description: 'Echo the text back. Use it when asked to.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      call: () => {
+        echoed += 1
+        return Promise.resolve({ output: 'echoed', isError: false })
+      },
+    }
+    run.answers = ['reject', 'reject', 'reject']
+    const session = await run.driver.open(run.request({ harnessTools: [echo] }))
+    await session.send(`Do these three steps in order. 1. Run this shell command exactly: echo hello > hello.txt. 2. Call the harness_echo tool with the text "hi". 3. Run this shell command exactly: touch ${outside}. Then reply with the single word: done.`, 'start')
+    const events = await untilTurnEnd(session, run.log)
+    run.log.report('questions', run.questions.map(question => ({ tool: question.toolName, reason: question.reason })))
+    run.log.report('hello.txt made', existsSync(join(run.task, 'hello.txt')))
+    run.log.report('harness_echo calls answered', echoed)
+    run.log.report('tool results', events.filter(event => event.kind === 'tool-result').map(event => event.isError))
+    run.log.report('outside file made', existsSync(outside))
+    rmSync(outside, { force: true })
     await session.close()
   }),
 
