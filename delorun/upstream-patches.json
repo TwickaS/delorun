@@ -1242,7 +1242,7 @@
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
       "class": "security",
       "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it. Lead verdict (2026-11-11): kept; shows the configured env is the only pass-through to the stdio child.",
-      "sha256": "ab537a3a706e0fc69dfc443dd6352f7052f908a9e6d6322c865e9963f2997ea0"
+      "sha256": "a3c353e8c31e34be9f6f9e2a313983e2d213e5bdd757035ceee21cf291fa7806"
     },
     {
       "path": "packages/preset/agent-preset-registry/src/tools.ts",
@@ -2831,8 +2831,8 @@
     {
       "path": "packages/mcp/mcp-client/src/tools.ts",
       "class": "security",
-      "reason": "Denied tools: `syncTools` skips every server tool named in `ToolBridgeOptions.deniedTools`, at the first sync and at each list change, so a denied tool is registered in no scope, appears in no tool list and cannot be called through the client. Without the option every listed tool is registered as upstream does. The Playwright browser provider uses it to keep `browser_run_code_unsafe`, which runs model-written code in the server process, away from the model.",
-      "sha256": "47cf617548a6089ebc18cf8c6c9c7f0c5371f59b34471f1884608ff6a9dcd24f"
+      "reason": "Denied tools: `syncTools` skips every server tool named in `ToolBridgeOptions.deniedTools`, at the first sync and at each list change, so a denied tool is registered in no scope, appears in no tool list and cannot be called through the client. Without the option every listed tool is registered as upstream does. The Playwright browser provider uses it to keep `browser_run_code_unsafe`, which runs model-written code in the server process, away from the model. Call arguments: before each tools/call, after the tools/execute guards, a listener of the bail event `mcp-client/call-arguments` may replace only the arguments object sent to the server; the server, tool and execution stay fixed, the call's logged arguments stay the model's, and a throwing listener fails the call. Browser uses it to send Host-made copies of files the server would read. Lead verdict (2026-11-17, L72): approved after reading the hunk.",
+      "sha256": "5969369d366bddc89299d47ec6ed6fee01b75025f91872cff7003032e36cd815"
     },
     {
       "path": "packages/core/session/src/known-event-types.ts",
