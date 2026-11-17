@@ -97,10 +97,10 @@ export interface PluginRecordCaller {
 /**
  * Whether a repository path is a test file under the repository's lint-override globs.
  * @param file - repository-relative path, in POSIX separators.
- * @returns whether the file is a package, app, or example test, or a script spec.
+ * @returns whether the file is a package, app, example, or Delorun package or app test, or a script spec.
  */
 export function isTestFile(file: string): boolean {
-  return /^(?:packages\/[^/]+\/[^/]+|apps\/[^/]+|examples\/[^/]+)\/tests\//u.test(file)
+  return /^(?:packages\/[^/]+\/[^/]+|apps\/[^/]+|examples\/[^/]+|delorun\/packages\/[^/]+|delorun\/apps\/[^/]+)\/tests\//u.test(file)
     || /^scripts\/.+\.spec\.tsx?$/u.test(file)
 }
 

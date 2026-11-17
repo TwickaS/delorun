@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness, type AgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
-import { pluginRecordOf, SessionId } from '@deepseek-ai/dsh-session'
+import { appendPluginRecord, SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import type { DelorunWorkspaces, TrashEntry, WorkspacesListing } from '@delorun/plugin-workspaces/service'
@@ -20,6 +20,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import * as MainChat from '../src/index.ts'
 import { guardFree, MAIN_CHAT_PATHS, MAIN_CHAT_SESSION_ID, MAIN_CHAT_TOOLS, mainChatAccountTools, mainChatTools, MainChatToolError, OWNER_NOTES_END, OWNER_NOTES_START, WorkspaceRefusedError } from '../src/index.ts'
 import { ScriptedAdapter, text, toolCall } from './scripted-adapter.ts'
+
+declare module '@deepseek-ai/dsh-session' {
+  interface PluginRecordMap {
+    /** What an earlier preview wrote in place of `delorun-main-chat/handoff`. */
+    'plugin:delorun-main-chat/handoff': { readonly chat: string }
+    /** What an earlier preview wrote in place of `delorun-main-chat/read`. */
+    'plugin:delorun-main-chat/read': { readonly chat: string }
+  }
+}
 
 const ROOT = '/workspace'
 const MAIN = SessionId(MAIN_CHAT_SESSION_ID)
@@ -437,9 +446,20 @@ describe('the main chat\'s reports', () => {
     expect(adapter.requests.at(-1)).toContain('Chat new-in-ws-app in app asks the person a question: Which colour should the footer be?. It waits until the person answers in that chat.')
   })
 
+  it('ignore a handoff or read record an earlier preview wrote as a plugin record', async () => {
+    const { adapter, run, main, footer, restart } = await delegated()
+    appendPluginRecord(main.session, 'plugin:delorun-main-chat/handoff', { chat: 'old-chat' })
+    appendPluginRecord(main.session, 'plugin:delorun-main-chat/read', { chat: 'old-chat' })
+    expect(MainChat.readThisTurn(main.session)).toBe(false)
+    await restart()
+    adapter.script.push(text('Done after the restart.'))
+    await run(footer, 'Fix the footer.')
+    expect(main.session.ownEvents().some(event => event.type === 'delorun-main-chat/handoff' && event.data.chat === 'old-chat')).toBe(false)
+  })
+
   it('keep reporting on a chat the main chat delegated to after the plugin starts again, from the handoff in the main chat\'s log', async () => {
     const { adapter, run, main, footer, restart, routes } = await delegated()
-    expect(main.session.ownEvents().flatMap(event => { const record = pluginRecordOf(event); return record?.type === 'plugin:delorun-main-chat/handoff' ? [record.data] : [] })).toEqual([{ chat: 'new-in-ws-app' }])
+    expect(main.session.ownEvents().flatMap(event => (event.type === 'delorun-main-chat/handoff' ? [event.data] : []))).toEqual([{ chat: 'new-in-ws-app' }])
     await restart()
     adapter.script.push(text('Done after the restart.'))
     await run(footer, 'Fix the footer.')

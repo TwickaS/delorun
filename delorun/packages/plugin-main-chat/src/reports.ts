@@ -8,8 +8,8 @@
  * event of the main chat.
  *
  * A chat is watched from the main chat's `workspace_delegate` or `chat_send`
- * on: the handoff is a plugin record in the main chat's log
- * ({@link HANDOFF_RECORD}), so the watch outlasts a restart, and reports
+ * on: the handoff is an event in the main chat's log
+ * ({@link HANDOFF_EVENT}), so the watch outlasts a restart, and reports
  * only ever come from work the main chat started.
  *
  * @module @delorun/plugin-main-chat/reports
@@ -17,20 +17,20 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
-import { appendPluginRecord, isAppendSurfaceEvent, pluginRecordOf, SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
+import { isAppendSurfaceEvent, SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { chatLines, newestWithin } from './chat-text.ts'
 import { folders } from './folders.ts'
 import { MAIN_CHAT_SESSION_ID } from './wire.ts'
 
-/** The plugin record of a handoff: the main chat started or wrote to this chat, which then reports back. */
-export const HANDOFF_RECORD = 'plugin:delorun-main-chat/handoff'
+/** The Session event of a handoff: the main chat started or wrote to this chat, which then reports back. */
+export const HANDOFF_EVENT = 'delorun-main-chat/handoff'
 
-declare module '@deepseek-ai/dsh-session' {
-  interface PluginRecordMap {
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
     /** The main chat started or wrote to `chat`, which reports back to it. */
-    'plugin:delorun-main-chat/handoff': { readonly chat: string }
+    'delorun-main-chat/handoff': { readonly chat: string }
   }
 }
 
@@ -122,9 +122,7 @@ export function mainChatReports(ctx: Context, root: string, limits: ReportLimits
   // The handoffs a start finds in the main chat's log; a main chat not yet created has none.
   const loaded = ctx.sessionQuery.readSession(MAIN).then(({ events }) => {
     for (const event of events) {
-      const record = pluginRecordOf(event)
-      const chat = record?.type === HANDOFF_RECORD ? (record.data as { chat?: unknown }).chat : undefined
-      if (typeof chat === 'string') watched.add(SessionId(chat))
+      if (event.type === HANDOFF_EVENT) watched.add(SessionId(event.data.chat))
     }
   }, (error: unknown) => {
     // The session store answers a main chat it does not hold with an error; any other failure leaves the handoffs unread.
@@ -189,7 +187,7 @@ export function mainChatReports(ctx: Context, root: string, limits: ReportLimits
   return {
     watch: (main, chat) => {
       if (chat === MAIN || watched.has(chat)) return
-      appendPluginRecord(main, HANDOFF_RECORD, { chat })
+      main.append(HANDOFF_EVENT, { chat })
       watched.add(chat)
     },
     waiting: () => ({ waiting, version }),

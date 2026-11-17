@@ -12,7 +12,7 @@
  * text reaches a turn through fetched pages, files and other workspaces'
  * `AGENTS.md` as well as other chats. The question says so when the turn read
  * another chat's or workspace's text: `chat_read`, `chat_search` and
- * `workspace_instructions` record {@link READ_RECORD}, and a report the turn
+ * `workspace_instructions` record {@link READ_EVENT}, and a report the turn
  * took in is a `delorun-main-chat` message. The question is asked from inside
  * the tool call's own execution, so no `tools/pre-execute` listener can let
  * the change through unasked, and only `allowed-once` lets it run. Each
@@ -22,7 +22,7 @@
  * @module @delorun/plugin-main-chat/account-tools
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { appendPluginRecord, pluginRecordOf, type Session } from '@deepseek-ai/dsh-session'
+import type { Session } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
@@ -30,13 +30,16 @@ import { folders } from './folders.ts'
 import { newOwnerNoteId, OwnerNotesError, ownerNoteText, parseOwnerNotes, renderOwnerNotes } from './owner-notes.ts'
 import { CreateRequest, ImportRequest, WorkspaceRefusedError, type InstructionsResponse } from '@delorun/plugin-workspaces/service'
 
-/** The plugin record of another chat's or workspace's text read in the main chat's turn, by `chat_read`, `chat_search` or `workspace_instructions`. */
-export const READ_RECORD = 'plugin:delorun-main-chat/read'
+/** The Session event of another chat's or workspace's text read in the main chat's turn, by `chat_read`, `chat_search` or `workspace_instructions`. */
+export const READ_EVENT = 'delorun-main-chat/read'
 
-declare module '@deepseek-ai/dsh-session' {
-  interface PluginRecordMap {
-    /** The main chat read text that can carry instructions: the chat read, the query searched, or the workspace whose `AGENTS.md` it read. */
-    'plugin:delorun-main-chat/read': { readonly chat: string } | { readonly query: string } | { readonly workspace: string }
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * The main chat read text that can carry instructions: the chat read, the query searched, or the workspace whose `AGENTS.md` it read.
+     * Later changes in the same turn ask the person first. Informational for the model; the approval policy reads it.
+     */
+    'delorun-main-chat/read': { readonly chat: string } | { readonly query: string } | { readonly workspace: string }
   }
 }
 
@@ -67,7 +70,7 @@ const TEXT_OUTPUT = {
 const WORKSPACE = { type: 'string', required: true, description: 'The workspace\'s folder, as workspace_list answers it.' } as const
 
 /**
- * Whether the main chat's current turn read another chat's or workspace's text: a {@link READ_RECORD} or a report it
+ * Whether the main chat's current turn read another chat's or workspace's text: a {@link READ_EVENT} or a report it
  * took in since the turn started.
  * @param session - the main chat's Session.
  * @returns whether every change of the rest of the turn asks the person first.
@@ -77,7 +80,7 @@ export function readThisTurn(session: Session): boolean {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]!
     if (event.type === 'turn/start') return false
-    if (pluginRecordOf(event)?.type === READ_RECORD) return true
+    if (event.type === READ_EVENT) return true
     if (event.type === 'user/message' && event.data.source.kind === 'delorun-main-chat') return true
   }
   return false
@@ -224,7 +227,7 @@ export function accountTools(ctx: Context, root: string, limits: AccountLimits, 
         const main = mainChatOnly(exec)
         const workspace = workspaceNamed(args.workspace)
         // The file's text can carry instructions, so the rest of the turn asks before any change.
-        appendPluginRecord(main.session, READ_RECORD, { workspace: args.workspace })
+        main.session.append(READ_EVENT, { workspace: args.workspace })
         const read = await passOn(() => ctx.delorunWorkspaces.instructions(workspace.id))
         let notes: unknown
         try {
