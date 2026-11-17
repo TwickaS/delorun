@@ -2608,6 +2608,9 @@ importers:
       '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
@@ -2962,6 +2965,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/plugin-workspaces':
         specifier: workspace:*
         version: link:../plugin-workspaces
@@ -3642,6 +3648,9 @@ importers:
       '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/trash':
         specifier: workspace:*
         version: link:../trash

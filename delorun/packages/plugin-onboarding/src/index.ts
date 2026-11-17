@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitApprovedDevice, admitKeyDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, gateByUnlock, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 // Type-only: the ctx.subagents merge.
@@ -45,7 +45,7 @@ import {
   type WorkspaceNoticeAnswer,
 } from './wire.ts'
 import { listAgentModels } from './agent-models.ts'
-import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
+import { addWorkspace, arrivedAtComputerOrDevice } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
 export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, ROW_ID, type OnboardingSettings } from './config.ts'
@@ -94,24 +94,26 @@ export function apply(ctx: Context, config: Config): void {
     const deps = { registry: child.workspaceRegistry, env: process.env, warn }
     const clones = createCloneService({ ...deps, git: spawnGit, timeoutMs: config.cloneTimeoutMs })
     child.effect(() => () => { clones.dispose() }, 'delorun-onboarding: clones')
-    // Before the body is read: a reach or remote session never adds or clones a workspace.
-    const loopbackOnly = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, AGENT_MODELS_PATH])
+    // Before the body is read: only the computer or a reach device reaches these routes, and a device needs an unlock.
+    const gated = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, AGENT_MODELS_PATH])
     child.on('connection/request', async (request, response, next) => {
-      if (loopbackOnly.has(routedPathname(request.url)) && !arrivedOnLoopback(request, response, child.get('homeAuth'))) return
+      if (gated.has(routedPathname(request.url)) && !arrivedAtComputerOrDevice(request, response, child.get('homeAuth'))) return
       await next()
     })
     child.connection.fetch.register({
       path: WORKSPACE_NOTICE_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
+      admitPeer: admitApprovedDevice(),
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
-    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => addWorkspace(request, deps) })
+    const unlocked = (fetch: (request: Request) => Promise<Response>) => gateByUnlock(() => child.get('homeAuth'), fetch)
+    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => addWorkspace(request, deps)) })
     child.connection.fetch.register({
       path: AGENT_MODELS_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      fetch: async (request) => {
+      ...unlocked(async (request) => {
         let body: unknown
         try {
           body = await request.json()
@@ -127,16 +129,17 @@ export function apply(ctx: Context, config: Config): void {
           timeoutMs: config.agentModelsTimeoutMs,
           warn,
         }))
-      },
+      }),
     })
-    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.start(request) })
-    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.status(request) })
+    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.start(request)) })
+    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request)) })
   })
   const deferred = createDeferredStore(ctx.get('profileContext')?.dir, warn)
   ctx.connection.fetch.register({
     path: SETUP_RECORD_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: admitApprovedDevice(),
     fetch: async () => {
       const record = await readSetupRecord(ctx.get('profileContext')?.dir, warn)
       const steps = await deferred.read()
@@ -171,6 +174,7 @@ export function apply(ctx: Context, config: Config): void {
     path: READINESS_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: admitApprovedDevice(),
     fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale()))),
   })
   ctx.connection.fetch.register({
@@ -185,6 +189,7 @@ export function apply(ctx: Context, config: Config): void {
     path: LOCAL_MODELS_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: admitApprovedDevice(),
     fetch: async () => json(await findLocalServers(config.keyTestTimeoutMs)),
   })
   ctx.connection.fetch.register({

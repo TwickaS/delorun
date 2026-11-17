@@ -17,6 +17,9 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import { createReachAccessPolicy, reachDevicePrincipal, REACH_DEVICE } from '../../../src/reach-access.ts'
 
+/** The entry id of a row that only the computer changes. */
+const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
+
 /** The chat counts measured; the lead's question is about 1,000. */
 const COUNTS = [100, 1_000, 2_000] as const
 /** Chats per Workspace, so 1,000 chats sit in 50 Workspaces. */
@@ -57,7 +60,7 @@ async function serviceWith(count: number): Promise<{ readonly access: RemoteAcce
     sessionIds: Array.from({ length: Math.min(PER_WORKSPACE, count - index * PER_WORKSPACE) },
       (__, offset) => brandString<SessionId>(`session-${String(index * PER_WORKSPACE + offset)}`)),
   }))
-  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pinEnabled: () => false, keyRefs: () => new Set<string>(), pageUnlockOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false }))
+  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pinEnabled: () => false, keyRefs: () => new Set<string>(), pageUnlockOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => false }))
   return { access: ctx.remoteAccess, dispose: () => ctx.fiber.dispose(), sessionId: brandString<SessionId>(`session-${String(Math.floor(count / 2))}`) }
 }
 

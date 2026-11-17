@@ -19,7 +19,7 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and the Peer's type.
 import type { PeerScope } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { REACH_DEVICE } from '@delorun/home-auth'
+import { REACH_DEVICE, gateByUnlock } from '@delorun/home-auth'
 import { TRUST_BILL_PATH, TRUST_CHECK_PATH, type TrustBill } from './client/trust-bill.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -267,12 +267,12 @@ export function apply(ctx: Context, config: Config): void {
         }
       },
     }), `${name}: the bill route`)
-    // No `admitPeer`: Connection answers 403 to every Peer but the owner, so a check runs only from the home's computer.
+    // A check asks the network and spends the person's time, so a device needs an unlock to start one.
     scope.effect(() => scope.connection.fetch.register({
       path: TRUST_CHECK_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      fetch: async (request) => {
+      ...gateByUnlock(() => scope.get('homeAuth'), async (request) => {
         // A body-less POST passes Connection's media-type gate; requiring the JSON type keeps a cross-site page, which
         // cannot send it without a preflight, from starting a check.
         if (request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
@@ -283,7 +283,7 @@ export function apply(ctx: Context, config: Config): void {
         } catch (error) {
           return failure(error, 'TRUST_CHECK_FAILED')
         }
-      },
+      }),
     }), `${name}: the check route`)
   })
 }

@@ -178,11 +178,11 @@ async function mount(options: {
   readonly config?: object
 } = {}) {
   const ctx = new Context()
-  const routes = new Map<string, { readonly methods: readonly string[]; readonly fetch: (request: Request) => Promise<Response> }>()
+  const routes = new Map<string, { readonly methods: readonly string[]; readonly fetch: (request: Request) => Promise<Response>; readonly admitPeer?: (request: Request, peer: object) => boolean }>()
   const close = vi.fn()
   ctx.provide('connection', {
     fetch: {
-      register: (route: { path: string; methods: readonly string[]; fetch: (request: Request) => Promise<Response> }) => {
+      register: (route: { path: string; methods: readonly string[]; fetch: (request: Request) => Promise<Response>; admitPeer?: (request: Request, peer: object) => boolean }) => {
         routes.set(route.path, route)
         return () => { routes.delete(route.path) }
       },
@@ -430,6 +430,14 @@ describe('the routes', () => {
     expect([listed.status, listed.headers.get('cache-control'), await listed.json()]).toEqual([200, 'no-store', { chats: {} }])
     const settled = await post({ action: 'settle', session: 'a' })
     expect([settled.status, settled.headers.get('cache-control'), Object.keys(((await settled.json()) as { chats: object }).chats)]).toEqual([200, 'no-store', ['a']])
+  })
+
+  it('admit any approved device to list and change a chat\'s state, locked or not, and no other Peer', async () => {
+    const { routes } = await mount({ table: memoryTable().table })
+    for (const route of routes.values()) {
+      expect(route.admitPeer?.(new Request('http://harness.test/api'), { principal: { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } })).toBe(true)
+      expect(route.admitPeer?.(new Request('http://harness.test/api'), { principal: { kind: 'sdk' } })).toBe(false)
+    }
   })
 
   it('ask the settings service for no generated form, since the studio edits the settings, and give the request back with the plugin', async () => {

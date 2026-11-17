@@ -43,6 +43,9 @@ import {
 } from '../src/reach-access.ts'
 import { keyRefsOf } from '../src/authenticator.ts'
 
+/** The entry id of a row that only the computer changes. */
+const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
+
 const session = (id: string): SessionId => id as SessionId
 const workspace = (id: string): WorkspaceId => id as WorkspaceId
 const LISTENER = 'reach-tailscale-private'
@@ -80,7 +83,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
-    protectedEntryIds: () => new Set([PROTECTED_ROW]),
+    protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
     dangerousMode: () => false,
     ...overrides,
@@ -634,7 +637,7 @@ const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
-  /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
+  /^terminal\//, /^mcpManager\/(?!watch$)/, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 
 /**

@@ -15,7 +15,7 @@
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
  *   records, and {@link requireComputer}, which another Delorun plugin's route calls to refuse a request that did not, and
- *   {@link requireComputerUnlessDangerous}, which lets an unlocked device through while dangerous mode holds.
+ *   {@link requireComputerOrDevice}, which lets a reach device's request through to its route's own unlock check.
  * - The stores of the secrets directory with the bounds on the records they hold, the typed refusal and the secret
  *   primitives.
  *
@@ -99,7 +99,7 @@ export {
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
 export { hashImage, ICON_FILE_SEGMENTS, readIcon, storeIcon } from './icon-file.ts'
-export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
+export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, gateByUnlock, requireComputer, requireComputerOrDevice, routedPathname, unlockOf, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

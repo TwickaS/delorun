@@ -17,20 +17,24 @@ import { AddWorkspaceRequest, MAX_ADD_BODY_BYTES, type AddWorkspaceAnswer, type 
 export const LOOPBACK_ONLY_CODE = 'LOOPBACK_ONLY'
 
 /** The sentence that refusal carries. */
-const LOOPBACK_ONLY_SENTENCE = 'Add a workspace on the home\'s own computer, at the loopback listener, or through SSH port forwarding to it; this route answers no other address'
+const LOOPBACK_ONLY_SENTENCE = 'Add a workspace from the home\'s own computer, from an unlocked paired device, or through SSH port forwarding to the computer; this route answers no other address'
 
 /**
- * Refuse a request to add a workspace that did not arrive on the loopback listener under a loopback `Host`, before its
- * body is read: what a workspace holds is what the model may write, so only the person at the computer chooses it. A
- * mounted `homeAuth` service says which listener admitted the request, as the device routes ask it; without the
- * service, which fails closed the same way before it starts, nothing is known and the request is refused.
+ * Let a request to add or clone a workspace go on to its route when it arrived at the computer (the loopback listener
+ * under a loopback `Host`) or on a reach listener, where the route's unlock check decides the device; refuse every
+ * other request with {@link LOOPBACK_ONLY_CODE} before its body is read. What a workspace holds is what the model may
+ * write, so a device needs an unlock to choose one. A mounted `homeAuth` service says which listener admitted the
+ * request; without the service, which fails closed the same way before it starts, nothing is known and the request is
+ * refused.
  * @param request - the request the Connection received.
- * @param response - the response, answered 403 with {@link LOOPBACK_ONLY_CODE} when the arrival is not loopback.
+ * @param response - the response, answered 403 with {@link LOOPBACK_ONLY_CODE} when the request is placed nowhere.
  * @param homeAuth - the mounted `homeAuth` service, read when the request arrives; `undefined` while none is mounted.
  * @returns whether the request may go on to the route.
  */
-export function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse, homeAuth: Pick<HomeAuthService, 'arrivalOf'> | undefined): boolean {
-  if (homeAuth?.arrivalOf(request).listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
+export function arrivedAtComputerOrDevice(request: IncomingMessage, response: ServerResponse, homeAuth: Pick<HomeAuthService, 'arrivalOf'> | undefined): boolean {
+  const listener = homeAuth?.arrivalOf(request).listener
+  if (listener !== undefined && listener !== 'loopback') return true
+  if (listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
   response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
   response.end(JSON.stringify({ error: LOOPBACK_ONLY_CODE, message: LOOPBACK_ONLY_SENTENCE }))
   return false
