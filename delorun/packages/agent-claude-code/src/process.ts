@@ -99,6 +99,8 @@ export class GateProcess implements SpawnedProcess {
     void handle.done.then(
       (outcome) => {
         this.#exit = { code: outcome.exitCode, signal: outcome.signal }
+        // Whatever the program or a killed watcher left in the managed range ends with it; a no-op once the range is empty.
+        handle.terminate()
         this.#events.emit('exit', outcome.exitCode, outcome.signal)
       },
       (error: unknown) => { this.#events.emit('error', error instanceof Error ? error : new Error(String(error))) },

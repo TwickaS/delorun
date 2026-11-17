@@ -4,11 +4,11 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterEach, describe, expect, it } from 'vitest'
-import { watcherPath } from '../src/process.ts'
+import { GateProcess, watcherPath } from '../src/process.ts'
 
 /**
- * A stand-in for Claude Code: it starts a child in its own process group, as Claude Code starts a shell for a tool
- * call, prints both process ids, and ignores the end of its input, as Claude Code does while a tool call runs. With
+ * A stand-in for Claude Code: it starts a child in its process group, as Claude Code starts a shell for a tool call,
+ * prints its parent's, its own and its child's process ids, and ignores the end of its input, as Claude Code does while a tool call runs. With
  * `stubborn`, both ignore SIGTERM, so only the later SIGKILL ends them.
  */
 function standIn(stubborn: boolean): string[] {
@@ -17,7 +17,7 @@ function standIn(stubborn: boolean): string[] {
   const program = `${trap}
     const { spawn } = require('node:child_process')
     const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: 'ignore' })
-    console.log(JSON.stringify({ program: process.pid, command: child.pid }))
+    console.log(JSON.stringify({ watcher: process.ppid, program: process.pid, command: child.pid }))
     process.stdin.resume()
     setInterval(() => {}, 1000)`
   return [process.execPath, '-e', program]
@@ -49,9 +49,9 @@ function alive(pid: number): boolean {
   }
 }
 
-async function pidsFrom(stdout: NodeJS.ReadableStream): Promise<{ program: number, command: number }> {
+async function pidsFrom(stdout: NodeJS.ReadableStream): Promise<{ watcher: number, program: number, command: number }> {
   const line = await new Promise<string>((resolve) => { createInterface({ input: stdout }).once('line', resolve) })
-  const pids = JSON.parse(line) as { program: number, command: number }
+  const pids = JSON.parse(line) as { watcher: number, program: number, command: number }
   started.push(pids.program, pids.command)
   return pids
 }
@@ -103,15 +103,33 @@ describe.skipIf(process.platform === 'win32')('the watcher', () => {
     await goneWithin([pids.program, pids.command], 4000)
   })
 
-  it('ends the program\'s own group when the watcher does not lead a group', async () => {
+  it('refuses to start the program outside a process group of its own, so it never signals its starter\'s group', async () => {
     const watcher = spawn(process.execPath, [watcherPath(), ...standIn(false)], { stdio: ['pipe', 'pipe', 'ignore'] })
     children.push(watcher)
-    if (watcher.stdout === null || watcher.stdin === null) throw new Error('no pipes')
-    const exited = new Promise<number | null>((resolve) => { watcher.once('exit', resolve) })
-    const pids = await pidsFrom(watcher.stdout)
-    watcher.stdin.end()
-    await goneWithin([pids.program, pids.command], 4000)
-    expect(await exited).toBe(128 + 15)
+    let printed = ''
+    watcher.stdout?.on('data', (chunk: Buffer) => { printed += chunk.toString() })
+    const code = await new Promise<number | null>((resolve) => { watcher.once('exit', resolve) })
+    expect(code).toBe(126)
+    expect(printed).toBe('')
+  })
+
+  it('leaves nothing of a program that ignores SIGTERM once the subprocess owner terminates it', async () => {
+    const handle = await ownerSpawn([process.execPath, watcherPath(), ...standIn(true)])
+    if (handle.stdout === undefined) throw new Error('no pipes')
+    const pids = await pidsFrom(handle.stdout)
+    handle.terminate()
+    await handle.waitForExit()
+    await goneWithin([pids.program, pids.command], 6000)
+  })
+
+  it('leaves no program when the watcher is killed outright while the Host lives', async () => {
+    const handle = await ownerSpawn([process.execPath, watcherPath(), ...standIn(false)])
+    const program = new GateProcess(handle)
+    const pids = await pidsFrom(program.stdout)
+    const exited = new Promise((resolve) => { program.on('exit', resolve) })
+    process.kill(pids.watcher, 'SIGKILL')
+    await exited
+    await goneWithin([pids.program, pids.command], 8000)
   })
 
   it('passes the program\'s own exit code on when it ends by itself', async () => {

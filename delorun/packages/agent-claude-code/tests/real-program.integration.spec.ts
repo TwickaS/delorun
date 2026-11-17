@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
@@ -51,6 +52,8 @@ interface Harness {
   readonly handles: SubprocessHandle[]
   readonly argvs: string[][]
   readonly spawn: ProgramSpawn
+  /** The scratch home holding the Claude Code configuration folder, outside the task folder. */
+  readonly root: string
 }
 
 /** A scratch Claude Code home and task folder, a Messages fixture, and the gate's spawn over the harness's subprocess owner. */
@@ -95,7 +98,7 @@ async function harness(script: readonly MessagesStep[], signedIn = true): Promis
       NO_PROXY: '127.0.0.1,localhost',
     },
   })
-  return { driver, fixture, task, handles, argvs, spawn }
+  return { driver, fixture, task, handles, argvs, spawn, root }
 }
 
 function openRequest(h: Harness, extra: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
@@ -125,6 +128,21 @@ function answering(answers: ProgramApprovalAnswer[], asked: ProgramApprovalReque
     asked.push(request)
     return Promise.resolve(answers.shift() ?? 'reject')
   }
+}
+
+/** Every file under the scratch home outside the task folder, by relative path, with its SHA-256. */
+function homeFiles(h: Harness): Map<string, string> {
+  const files = new Map<string, string>()
+  const walk = (folder: string): void => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const path = join(folder, entry.name)
+      if (path === h.task) continue
+      if (entry.isDirectory()) walk(path)
+      else if (entry.isFile()) files.set(relative(h.root, path), createHash('sha256').update(readFileSync(path)).digest('hex'))
+    }
+  }
+  walk(h.root)
+  return files
 }
 
 describe(`the real Claude Agent SDK ${TESTED_SDK_VERSION} and its pinned Claude Code`, { timeout: 60_000 }, () => {
@@ -250,5 +268,30 @@ describe(`the real Claude Agent SDK ${TESTED_SDK_VERSION} and its pinned Claude 
     const observation = await h.driver.probe({ spawn: h.spawn, cwd: h.task, signal: AbortSignal.timeout(45_000) })
     expect(observation).toMatchObject({ provider: 'claude-code', signedIn: 'no', windows: [] })
     await quiescent(h)
+  })
+
+  it('leaves the person\'s Claude Code settings byte-identical and records no trust or rule for the run folder', async () => {
+    const h = await harness([
+      { tool: 'Bash', input: { command: 'touch a.txt', description: 'Make a file' } },
+      { text: 'made' },
+    ])
+    const global = join(h.root, 'claude-config', '.claude.json')
+    const elsewhere = { allowedTools: ['Bash(ls)'], hasTrustDialogAccepted: true }
+    writeFileSync(global, `${JSON.stringify({ numStartups: 3, hasCompletedOnboarding: true, projects: { '/elsewhere': elsewhere } }, null, 2)}\n`)
+    const before = homeFiles(h)
+    const session = await h.driver.open(openRequest(h, { onApproval: answering(['allow-run'], []) }))
+    await session.send('Make a.txt.', 'start')
+    expect((await turn(session)).at(-1)).toMatchObject({ outcome: 'completed' })
+    await session.close()
+    await h.driver.probe({ spawn: h.spawn, cwd: h.task, signal: AbortSignal.timeout(30_000) })
+    await quiescent(h)
+    const after = homeFiles(h)
+    expect(after.get('claude-config/settings.json')).toBe(before.get('claude-config/settings.json'))
+    const changed = [...after.entries()].filter(([path, hash]) => before.get(path) !== hash).map(([path]) => path)
+    // Claude Code's own bookkeeping, a backup of it, and the session history are all it writes.
+    for (const path of changed) expect(path).toMatch(/^claude-config\/(?:\.claude\.json|backups\/\.claude\.json\.backup\.\d+|projects\/[^/]+\/[\w-]+\.jsonl)$/)
+    const config = JSON.parse(readFileSync(global, 'utf8')) as { projects?: Record<string, unknown> }
+    expect(config.projects).toEqual({ '/elsewhere': elsewhere })
+    expect(existsSync(join(h.task, '.claude'))).toBe(false)
   })
 })
