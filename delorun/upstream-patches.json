@@ -2675,7 +2675,6 @@
     {
       "path": "packages/subagent/subagent-claude-code/cordis.patch.yml",
       "class": "security",
-      "feature": "optional-bundles",
       "reason": "The Claude Code row starts with `permissionMode: acceptEdits`, so every way of adding the plugin (the setup guide, Plugins, the command line) gets edits accepted from one place instead of each writing it. A value the person sets in the profile's own patch replaces it, because that layer is read after the bundle's, and an update or a carry leaves that layer alone. Upstream's row has no config and runs with the provider's default mode. Lead verdict (2026-11-17): approved; it auto-accepts file edits and basic file commands inside the run's workspace only; every other permission goes to canUseTool, which denies; a person's own value wins (A434, L3).",
       "sha256": "17a73a8fe4224d8bf032ef5bee84d9c7800ea0a666f3aba38cb845ddcc76ffae"
     },
@@ -2792,6 +2791,12 @@
       "class": "delorun-feature",
       "feature": "copy-plurals",
       "reason": "Picks the singular or plural form of the turns and steps counts, so one turn and one step read correctly."
+    },
+    {
+      "path": "packages/llm/llm-pi-ai/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "setup-transfer",
+      "reason": "Exports `PROVIDER_DATA` from the package entry, so the setup transfer policy reads provider environment names without importing upstream source."
     }
   ],
   "retired": []
