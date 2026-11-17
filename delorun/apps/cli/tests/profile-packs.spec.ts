@@ -1,12 +1,11 @@
 /**
  * Plugin packs a profile links but the home lacks: which are found, that the step fetches them before the Host boots,
- * and that a pack it cannot fetch refuses the start with the remedy instead of being skipped.
+ * and that a pack it cannot fetch carries on with the remedy instead of being skipped.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { CliError } from '../src/exit.ts'
 import type { PreStartContext } from '../src/pre-start.ts'
 import { missingProfilePacks, profilePacksStep } from '../src/profile-packs.ts'
 import { profileDirectory } from '../src/profile.ts'
@@ -64,11 +63,12 @@ describe('the profile-packs step', () => {
     await profilePacksStep(never)(start([], false))
   })
 
-  it('refuses the start with the remedy when a missing pack cannot be fetched', async () => {
+  it('carries on with one line naming the reason and the remedy when a missing pack cannot be fetched', async () => {
     profileLinks({ a: `link:${folder('0.1.0', 'x')}` })
-    const step = profilePacksStep(() => Promise.reject(new Error('x needs a connection')))
-    const refusal = await step(start([])).then(() => undefined, (error: unknown) => error)
-    expect(refusal).toBeInstanceOf(CliError)
-    expect((refusal as CliError).message).toMatch(/x needs a connection[\s\S]*delorun recover packs/u)
+    const errors: string[] = []
+    const context = { ...start([]), output: { stdout: () => undefined, stderr: (text: string) => { errors.push(text) } } }
+    await expect(profilePacksStep(() => Promise.reject(new Error('x needs a connection')))(context)).resolves.toBeUndefined()
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatch(/x needs a connection[\s\S]*delorun recover packs/u)
   })
 })

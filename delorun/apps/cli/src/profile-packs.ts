@@ -2,8 +2,9 @@
  * Plugin packs a profile links but the home lacks, fetched before a start boots the Host. A pack's files live in
  * `<home>/packs/<release>/<pack>/package` (the plugin manager links that folder into the profile), so a profile that
  * links a pack folder of the running release which is missing (an imported setup, a failed carry) would otherwise fail
- * to load that plugin. The step fetches it through the verified pack install, and refuses the start with the remedy
- * when it cannot: a missing pack is never skipped silently.
+ * to load that plugin. The step fetches it through the verified pack install; when it cannot, it prints one line with the
+ * reason and `delorun recover packs`, and the start carries on without those plugins. A damaged pack is a different
+ * case: the runtime store's start check refuses it.
  *
  * @module @delorun/cli/profile-packs
  */
@@ -13,7 +14,6 @@ import { join, relative, sep, resolve } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { hostPacksEnvironment } from '@delorun/plugin-packs/environment'
 import { acquirePacks, fetchPack, installFetchedPack, readStoredPacks } from '@delorun/runtime-store'
-import { CliError, EXIT } from './exit.ts'
 import { profileDirectory } from './profile.ts'
 import type { PreStartContext } from './pre-start.ts'
 
@@ -55,7 +55,8 @@ export function profilePacksStep(fetchPacks: FetchProfilePacks): (context: PreSt
     try {
       await fetchPacks(context, folders)
     } catch (error) {
-      throw new CliError(EXIT.failed, `delorun: a plugin pack this profile uses is missing and could not be fetched: ${error instanceof Error ? error.message : String(error)}\nConnect to the internet and start again, or run \`delorun recover packs\`, or turn the plugin off in Plugins.`)
+      // The start carries on: the rows of the missing packs do not load, and Plugins and the downloads panel offer Retry.
+      context.output.stderr(`delorun: could not fetch the plugin ${folders.length === 1 ? 'pack' : 'packs'} ${folders.map(folder => folder.replace('__', '/')).join(', ')} (${error instanceof Error ? error.message : String(error)}); starting without ${folders.length === 1 ? 'it' : 'them'}. Run \`delorun recover packs\` or retry in Plugins.\n`)
     }
   }
 }
