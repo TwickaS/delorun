@@ -187,7 +187,17 @@ export interface BootedRow {
  * The Delorun rows that are opt-in: a bundle inserts them disabled, and the person turns them on under Components on the Delorun studio page of the sidebar's Plugins.
  * A start does not require them to be enabled; once enabled they must be active like every other Delorun row.
  */
-export const OPT_IN_ROWS: ReadonlySet<string> = new Set(['delorun-cost-meter', 'delorun-thinking-rsvp'])
+export const OPT_IN_ROWS: ReadonlySet<string> = new Set([
+  'delorun-cost-meter',
+  'delorun-thinking-rsvp',
+  'lsp-stdio',
+  'tool-lsp',
+  'github-webhook-ingress',
+  'experimental-subagent-oar-codex',
+  'experimental-subagent-oar-claude',
+  'tool-subagent-oar',
+  'ptc-runtime-python',
+])
 
 /**
  * The ids of the rows that Delorun bundles insert into a profile.

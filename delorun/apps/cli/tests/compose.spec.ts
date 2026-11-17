@@ -336,12 +336,18 @@ describe('safe mode', { timeout: 60_000 }, () => {
 
   it('lets an opt-in Delorun row stay disabled, and still refuses a disabled row that is not opt-in', async () => {
     const composed = await compose()
-    const optIn = [...OPT_IN_ROWS]
-    expect(optIn.length).toBeGreaterThan(0)
-    for (const id of optIn) expect(composed.required.map(row => row.id)).toContain(id)
+    const optIn = [...OPT_IN_ROWS].filter(id => composed.required.some(row => row.id === id))
+    expect(optIn).toEqual(['delorun-cost-meter', 'delorun-thinking-rsvp'])
     const rowOf = (id: string): BootedRow => ({ id, name: composed.required.find(row => row.id === id)?.name ?? '', disabled: true, state: 'active' })
     expect(() => { assertDelorunInvariants(composed, booted(composed, optIn.map(rowOf))) }).not.toThrow()
     expect(await refused(() => { assertDelorunInvariants(composed, booted(composed, [rowOf('delorun-trash')])) })).toContain('delorun-trash is disabled')
+  })
+
+  it('treats the rows that the optional bundles insert disabled as opt-in, so a profile that adds one starts', () => {
+    expect([...OPT_IN_ROWS]).toEqual(expect.arrayContaining([
+      'lsp-stdio', 'tool-lsp', 'github-webhook-ingress',
+      'experimental-subagent-oar-codex', 'experimental-subagent-oar-claude', 'tool-subagent-oar', 'ptc-runtime-python',
+    ]))
   })
 
   it('composes the safe-mode overlay before the sandbox overlay', async () => {
