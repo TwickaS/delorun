@@ -70,7 +70,14 @@ function mountConsent(ctx: Context, config: Config): void {
   }))
   let disposed = false
   ctx.effect(() => () => { disposed = true })
-  ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => config.runTimeoutMinutes.get() * 60_000, env: process.env, now: Date.now })
+  ctx.plugin(DelorunDelegationConsent, {
+    timeoutMs: () => config.runTimeoutMinutes.get() * 60_000,
+    // TODO(lead decision 9): read the consent's `fullAccessStartsAgents` switch once fix/p2-fullaccess adds it to Config;
+    // its default is on.
+    fullAccessStartsAgents: () => true,
+    env: process.env,
+    now: Date.now,
+  })
     .await().catch((error: unknown) => {
       // The row stays active, so the declaring-row check of the subagent runtime cannot see this failure; a refusing
       // service takes the seam's slot, and every start is refused until the row starts again.

@@ -13,7 +13,7 @@ import type { SeatLease, SeatLeaseEnd, SeatReview, SeatReviewPhase } from '@delo
 import { DELEGATION_CONSENT_ROW_ID } from '@delorun/external-agents/contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DelorunDelegationConsent } from '../src/index.ts'
-import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal } from '../src/copy.ts'
+import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal, notApprovedRefusal } from '../src/copy.ts'
 import { changeGrantStore, grantStorePath } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROW } from '../src/wire.ts'
 
@@ -48,6 +48,9 @@ interface World {
   readonly asks: ApprovalRequest[]
   readonly ended: Array<{ lease: SeatLease, reason: SeatLeaseEnd }>
   readonly readOnly: Set<string>
+  /** Chats whose sandbox runs `danger-full-access`. */
+  readonly fullAccess: Set<string>
+  fullAccessStartsAgents: boolean
   readonly openTurns: Set<string>
   readonly policies: Map<string, 'ask' | 'never'>
   readonly archived: SessionId[]
@@ -67,6 +70,8 @@ async function world(): Promise<World> {
     asks: [] as ApprovalRequest[],
     ended: [] as Array<{ lease: SeatLease, reason: SeatLeaseEnd }>,
     readOnly: new Set<string>(),
+    fullAccess: new Set<string>(),
+    fullAccessStartsAgents: true,
     openTurns: new Set<string>(['root']),
     policies: new Map<string, 'ask' | 'never'>(),
     archived: [] as SessionId[],
@@ -74,7 +79,7 @@ async function world(): Promise<World> {
     agents: [] as Agent[],
     answer: 'allowed-once' as ApprovalOutcome,
   }
-  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: state.readOnly.has(session.id) ? 'read-only' : 'workspace-write' }) } as never)
+  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: state.readOnly.has(session.id) ? 'read-only' : state.fullAccess.has(session.id) ? 'danger-full-access' : 'workspace-write' }) } as never)
   ctx.provide('approval', {
     request: (request: ApprovalRequest) => {
       state.asks.push(request)
@@ -91,7 +96,7 @@ async function world(): Promise<World> {
     get archivedSessionIds() { return state.archived },
     list: () => state.listed.map(path => ({ path })),
   } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7 })
   const consent = ctx.get('delegationConsent') as DelorunDelegationConsent
   consent.onLeaseEnded((lease, reason) => { state.ended.push({ lease, reason }) })
   return Object.assign(state, { ctx, consent, ...paths })
@@ -164,6 +169,7 @@ describe('a seat review at hand-off', () => {
   it('allows a Full access root without a card or a grant, says so, and records a lease', async () => {
     const w = await world()
     w.policies.set('root', 'never')
+    w.fullAccess.add('root')
     w.openTurns.clear()
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: expect.any(Number), why: 'full-access' })
     expect(w.asks).toEqual([])
@@ -171,9 +177,24 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
   })
 
+  it('refuses a never root whose sandbox is not danger-full-access, and Full access while the switch is off', async () => {
+    const w = await world()
+    w.policies.set('root', 'never')
+    const refused = { kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', w.workspace) }
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual(refused)
+    w.fullAccess.add('root')
+    w.fullAccessStartsAgents = false
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual(refused)
+    expect(w.asks).toEqual([])
+    expect(w.consent.leaseOf(SessionId('seat'))).toBeUndefined()
+    await grant(w.home, w.workspace)
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'granted' })
+  })
+
   it('still refuses a read-only Full access root, and a run folder outside its workspace', async () => {
     const w = await world()
     w.policies.set('root', 'never')
+    w.fullAccess.add('root')
     w.readOnly.add('root')
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('this chat runs read-only') })
     w.readOnly.clear()
@@ -217,7 +238,7 @@ describe('a seat review at hand-off', () => {
     const w = await world()
     const bare = new Context()
     bare.provide('approval', w.ctx.get('approval') as never)
-    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, env: { DELORUN_HOME: w.home }, now: () => 1 })
+    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: w.home }, now: () => 1 })
     const consent = bare.get('delegationConsent') as DelorunDelegationConsent
     await expect(consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('no sandbox policy') })
   })

@@ -75,7 +75,7 @@ async function mounted(options: {
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 1_000 })
+  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1_000 })
   return { ctx, consent: ctx.get('delegationConsent') as DelorunDelegationConsent, asks, ...paths }
 }
 
@@ -636,7 +636,7 @@ describe('through the subagent runtime', () => {
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1 })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
@@ -672,7 +672,7 @@ describe('through the approval service', () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
     const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
     ctx.on('approval/request', answerer)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1 })
     const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
     session.append('turn/start', { turn: 1 })
     const parent: Agent = { id: session.id, session } as never
