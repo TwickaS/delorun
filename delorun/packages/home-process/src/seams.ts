@@ -18,6 +18,7 @@ import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts
 import type { LocalDeviceApproval } from './devices-approve.ts'
 import type { LocalConsents } from './consents.ts'
 import type { LocalReach } from './reach.ts'
+import type { LocalAgentAccounts } from './agents.ts'
 
 /** C1's two pointers. */
 export interface RuntimePointers {
@@ -389,6 +390,8 @@ export interface RunningHost {
   readonly consents?: LocalConsents
   /** The reach service's state and restart, which `reach.status` and `reach.apply` drive. */
   readonly reach?: LocalReach
+  /** The external agents' account figures and checks, which `agents.accounts` and `agents.refresh` drive. */
+  readonly agents?: LocalAgentAccounts
   /**
    * The sandbox protection the Host booted with, which a successor's H3 holds its own to.
    * @returns the protection, or `undefined` when the Host has no sandbox row that sets one.

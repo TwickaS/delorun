@@ -4,17 +4,21 @@
  * each recorded program whose identity still matches in full, and drops the record. A process id alone never
  * identifies a program: on Linux the record holds the kernel start time (`/proc/<pid>/stat` field 22), the boot id
  * and the executable path, and the systemd unit when the subprocess owner placed the program in a user scope, which
- * is then stopped instead of the process group; on macOS the kernel start time and the executable path. Windows
+ * is then stopped instead of the process group; on macOS the kernel start time and the executable path; for a Node
+ * executable on either, the script its command line runs. Windows
  * records nothing and reaps nothing, because the subprocess owner's kill-on-close Job ends the programs with the Host.
  * @module @delorun/external-agents/reap
  */
-import { mkdir, readFile, readlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { mkdir, readFile, readlink, realpath } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { z } from 'zod'
 import { EXTERNAL_AGENTS } from './locate.ts'
 import type { ExternalAgentName } from './contract.ts'
+
+/** How often the identity of a process starting in a systemd scope is read again, in milliseconds. */
+const SCOPE_SETTLE_POLL_MS = 20
 
 /** The record file's format version. */
 export const PROGRAM_RECORD_VERSION = 1 as const
@@ -34,6 +38,8 @@ export interface ProcessIdentity {
   readonly exe: string
   /** The systemd unit the process runs in, when it is a scope of the subprocess owner. */
   readonly unit?: string | undefined
+  /** For a Node executable, the script it runs: the first argument of its command line that is no Node option. */
+  readonly script?: string | undefined
 }
 
 /** One recorded program. */
@@ -73,6 +79,7 @@ const IdentitySchema = z.object({
   bootId: z.string().min(1).optional(),
   exe: z.string().min(1),
   unit: z.string().regex(/^[\w@.-]+\.scope$/u).optional(),
+  script: z.string().min(1).optional(),
 }).strict()
 
 const RecordFileSchema = z.object({
@@ -101,10 +108,39 @@ export function sameProcess(recorded: ProcessIdentity, current: ProcessIdentity)
     && recorded.bootId === current.bootId
     && recorded.exe === current.exe
     && recorded.unit === current.unit
+    && recorded.script === current.script
+}
+
+/** Node options whose value is the next argument. */
+const NODE_VALUE_OPTIONS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file', '--input-type', '--title'])
+
+/**
+ * Whether an executable is Node.
+ * @param exe - the executable path.
+ * @returns true for `node`, `nodejs` and `node.exe`.
+ */
+export function isNodeExecutable(exe: string): boolean {
+  return /^(?:node|nodejs)(?:\.exe)?$/iu.test(exe.split(/[\\/]/u).at(-1) ?? '')
+}
+
+/**
+ * The script a Node command line runs: the first argument after the executable that is no Node option or option value.
+ * @param argv - the command line, the executable first.
+ * @returns the script, or undefined when the command line runs none (`node -e …`, a REPL).
+ */
+export function nodeScript(argv: readonly string[]): string | undefined {
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index]!
+    if (arg === '--') return argv[index + 1]
+    if (arg === '-e' || arg === '--eval' || arg === '-p' || arg === '--print') return undefined
+    if (!arg.startsWith('-')) return arg
+    if (NODE_VALUE_OPTIONS.has(arg)) index += 1
+  }
+  return undefined
 }
 
 /** What a reap did with one record. */
-export type ReapOutcome = 'stopped-unit' | 'stopped-group' | 'gone' | 'not-the-program'
+export type ReapOutcome = 'stopped-unit' | 'stopped-group' | 'gone' | 'not-the-program' | 'not-located'
 
 /** Options of {@link ProgramRecords}. */
 export interface ProgramRecordsOptions {
@@ -114,6 +150,15 @@ export interface ProgramRecordsOptions {
   readonly table: ProcessTable
   /** How long a stopped group has after SIGTERM before SIGKILL, in milliseconds. */
   readonly graceMs: number
+  /** How long a process started in a systemd scope has to enter it before it goes unrecorded, in milliseconds. */
+  readonly settleMs: number
+  /** The real paths of the executables a live agent's leader runs; a record naming another executable is never stopped. */
+  readonly located: () => ReadonlySet<string>
+  /**
+   * The real paths of the scripts a Node leader of a live agent runs (the Codex launcher, Claude Code's watcher); a
+   * record whose executable is Node is stopped only when its script is one of these.
+   */
+  readonly locatedScripts: () => ReadonlySet<string>
   /** Report a problem the reaper contained. */
   readonly warn: (message: string) => void
 }
@@ -129,21 +174,43 @@ export class ProgramRecords {
   }
 
   /**
-   * Record a started program. On Windows nothing is recorded; a program whose identity cannot be read is not recorded
-   * and a warning names it, because a guessed identity could later stop another process.
+   * Record a started program. On Windows nothing is recorded; a program whose identity cannot be read, or that has not
+   * entered its scope within `settleMs`, is not recorded and a warning names it, because a guessed identity
+   * could later stop another process.
    * @param provider - the agent.
-   * @param pid - the program's process id.
+   * @param pid - the process id of the managed range's leader.
+   * @param unit - the systemd scope the subprocess owner started it in, from the handle.
    * @returns the identity recorded, or undefined when none was.
    */
-  async started(provider: ExternalAgentName, pid: number): Promise<ProcessIdentity | undefined> {
+  async started(provider: ExternalAgentName, pid: number, unit?: string): Promise<ProcessIdentity | undefined> {
     if (this.options.table.platform === 'win32') return undefined
-    const identity = await this.options.table.identify(pid)
+    const identity = unit === undefined ? await this.options.table.identify(pid) : await this.inScope(pid, unit)
     if (identity === undefined) {
       this.options.warn(`external agents: the identity of ${provider}'s process ${String(pid)} could not be read, so it is not recorded for reaping`)
       return undefined
     }
     await this.change(programs => [...programs.filter(record => record.identity.pid !== pid), { provider, identity }])
     return identity
+  }
+
+  /**
+   * The identity of a process the subprocess owner starts in a systemd scope. The handle's process id first runs
+   * `systemd-run`, which places itself in the scope and then runs the subprocess runner and the program in the same
+   * process; the identity is read again until the process sits in the handle's unit and runs neither `systemd-run`
+   * nor the runner.
+   * @param pid - the process id the handle names.
+   * @param unit - the scope unit the handle names.
+   * @returns the identity, or undefined when the process ended or did not settle within `settleMs`.
+   */
+  private async inScope(pid: number, unit: string): Promise<ProcessIdentity | undefined> {
+    const deadline = Date.now() + this.options.settleMs
+    for (;;) {
+      const identity = await this.options.table.identify(pid)
+      if (identity === undefined) return undefined
+      if (identity.unit === unit && basename(identity.exe) !== 'systemd-run' && !runnerScript(identity.script)) return identity
+      if (Date.now() >= deadline) return undefined
+      await new Promise(resolve => setTimeout(resolve, SCOPE_SETTLE_POLL_MS))
+    }
   }
 
   /**
@@ -155,9 +222,10 @@ export class ProgramRecords {
   }
 
   /**
-   * Stop every recorded program whose identity still matches in full, and clear the records. A record whose process
-   * is gone or whose id now names another process is dropped without a signal. An unreadable record file stops
-   * nothing and is left in place, with a warning.
+   * Stop every recorded program whose identity still matches in full and whose executable is a located one, and clear
+   * the records. A record whose process is gone, whose id now names another process or whose executable is not a
+   * located agent program is dropped without a signal, as is a Node leader whose script is not a located one. An unreadable
+   * record file stops nothing and is left in place, with a warning.
    * @returns each record with what was done.
    */
   async reap(): Promise<readonly { readonly record: ProgramRecord, readonly outcome: ReapOutcome }[]> {
@@ -180,6 +248,8 @@ export class ProgramRecords {
     const current = await table.identify(record.identity.pid)
     if (current === undefined) return 'gone'
     if (!sameProcess(record.identity, current)) return 'not-the-program'
+    if (!this.options.located().has(record.identity.exe)) return 'not-located'
+    if (isNodeExecutable(record.identity.exe) && !(await this.scriptLocated(record.identity.script))) return 'not-located'
     if (record.identity.unit !== undefined) {
       await table.stopUnit(record.identity.unit)
       return 'stopped-unit'
@@ -189,6 +259,25 @@ export class ProgramRecords {
     const after = await table.identify(record.identity.pid)
     if (after !== undefined && sameProcess(record.identity, after)) table.killGroup(record.identity.pid, 'SIGKILL')
     return 'stopped-group'
+  }
+
+  /**
+   * Whether a Node leader's script is one Delorun locates. A forged record can copy the script of a live process, so
+   * the match with the live process does not stand for this.
+   * @param script - the script the identity records.
+   * @returns true only for an absolute path whose real path is a located script.
+   */
+  private async scriptLocated(script: string | undefined): Promise<boolean> {
+    if (script === undefined || !isAbsolute(script)) return false
+    let real: string
+    try {
+      real = await realpath(script)
+    } catch (error) {
+      // A script that cannot be resolved (removed, unreadable) is not a located one; the reap leaves the process alone.
+      this.options.warn(`external agents: the script ${script} of a recorded process cannot be resolved, so the process is not stopped: ${String(error)}`)
+      return false
+    }
+    return this.options.locatedScripts().has(real)
   }
 
   /**
@@ -284,7 +373,10 @@ async function linuxIdentity(pid: number): Promise<ProcessIdentity | undefined> 
     ])
     const startTime = linuxStartTime(stat)
     if (startTime === undefined) return undefined
-    return { pid, startTime, bootId: bootId.trim(), exe, unit: linuxScopeUnit(cgroup) }
+    const script = isNodeExecutable(exe)
+      ? nodeScript((await readFile(`/proc/${String(pid)}/cmdline`, 'utf8')).split('\0').filter(arg => arg.length > 0))
+      : undefined
+    return { pid, startTime, bootId: bootId.trim(), exe, unit: linuxScopeUnit(cgroup), script }
   } catch {
     // ENOENT for a process that is gone, EACCES for one of another user: neither is a program this home recorded.
     return undefined
@@ -300,14 +392,26 @@ async function linuxIdentity(pid: number): Promise<ProcessIdentity | undefined> 
 async function macIdentity(run: RunCommand, pid: number): Promise<ProcessIdentity | undefined> {
   let startTime: string
   let exe: string
+  let args: string[]
   try {
     startTime = (await run(['/bin/ps', '-o', 'lstart=', '-p', String(pid)])).trim()
     exe = (await run(['/bin/ps', '-o', 'comm=', '-p', String(pid)])).trim()
+    // `ps` joins the arguments with spaces, so a path with a space reads the same way at the start and at the reap.
+    args = isNodeExecutable(exe) ? (await run(['/bin/ps', '-ww', '-o', 'args=', '-p', String(pid)])).trim().split(/\s+/u) : []
   } catch {
     // ps exits 1 when no process has the id.
     return undefined
   }
-  return startTime.length > 0 && exe.startsWith('/') ? { pid, startTime, exe } : undefined
+  return startTime.length > 0 && exe.startsWith('/') ? { pid, startTime, exe, script: nodeScript(args) } : undefined
+}
+
+/**
+ * Whether a Node script is the subprocess owner's runner, which runs before the program in a scope's process.
+ * @param script - the script, when the process runs Node.
+ * @returns true for a script inside the `dsh-subprocess-local` package.
+ */
+function runnerScript(script: string | undefined): boolean {
+  return script !== undefined && /[\\/](?:dsh-)?subprocess-local[\\/]/u.test(script)
 }
 
 /**

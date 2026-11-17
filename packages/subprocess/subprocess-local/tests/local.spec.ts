@@ -912,7 +912,7 @@ describe('LocalSubprocessRuntime', () => {
     const ctx = new Context()
     const fiber = await ctx.plugin(LocalSubprocessRuntime)
     const handle = ctx.subprocess.spawn(spec('echo managed'))
-    expect(handle).not.toHaveProperty('pid')
+    expect(handle.pid).toEqual(process.platform === 'win32' ? undefined : expect.any(Number))
     const result = await handle.done
     expect(result.exitCode).toBe(0)
     expect(handle.collected.stdout!.readFrom(0).text).toBe('managed\n')

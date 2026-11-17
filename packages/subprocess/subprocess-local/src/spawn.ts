@@ -446,6 +446,8 @@ export function bindManagedProcess(
       ...stdoutCollector !== undefined ? { stdout: stdoutCollector } : {},
       ...stderrCollector !== undefined ? { stderr: stderrCollector } : {},
     },
+    ...launch.pid === undefined ? {} : { pid: launch.pid },
+    ...launch.unit === undefined ? {} : { unit: launch.unit },
     done,
     terminate,
     terminateForHostExit,
@@ -496,5 +498,6 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     control: controlPipe(child, spec.stdio.control),
     direct,
     owner,
+    pid: platform === 'win32' ? undefined : pid,
   }, binding)
 }

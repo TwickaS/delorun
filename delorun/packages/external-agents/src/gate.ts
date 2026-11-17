@@ -3,16 +3,18 @@
  * runs, in order, the consent (review D6, D10), the limit, the capacity, then the driver's open with a spawn bound to
  * this program. The gate keeps one program per seat child, ends it when the child's Agent is disposed, its lease ends,
  * its driver leaves, or this plugin stops, and bounds each seat turn by the consent's time limit: interrupt, wait the
- * grace period, then end the program.
+ * grace period, then end the program. While a program runs, the identity of each of its processes that leads a process
+ * group is kept in the home's program records, and at the next start the gate stops what a dead Host left (review D15).
  * @module @delorun/external-agents/gate
  */
 import { rm } from 'node:fs/promises'
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { tmpdir } from 'node:os'
+import { Service, symbols, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { findDelegationConsent } from '@deepseek-ai/dsh-subagent'
-import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
+import { SENSITIVE_ENV_PATTERN, type SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import {
   DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
   type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent,
@@ -20,6 +22,7 @@ import {
   type SeatRecord, type SeatReviewPhase, type SeatStartRequest,
 } from './contract.ts'
 import { consentMissingRefusal, consentRowDisabledRefusal, limitRefusal, noRootRefusal } from './copy.ts'
+import { ProgramRecords, systemProcessTable, type ProcessTable } from './reap.ts'
 
 /** What the gate needs beyond its context. */
 export interface GateOptions {
@@ -35,6 +38,14 @@ export interface GateOptions {
   readonly now: () => number
   /** Make an empty folder for one limits check; the gate removes it afterwards. */
   readonly probeFolder: () => Promise<string>
+  /** The path of the home's program records; absent, nothing is recorded or reaped. */
+  readonly programRecords: (() => Promise<string>) | undefined
+  /** The process table the records read; absent, the computer's own. */
+  readonly processTable: ProcessTable | undefined
+  /** The real paths of the executables a live agent's leader runs, read at each reap; only these are ever stopped. */
+  readonly programExecutables: () => readonly string[]
+  /** The real paths of the scripts a Node leader of a live agent runs, read at each reap; a Node record is stopped only for these. */
+  readonly programScripts: () => readonly string[]
 }
 
 /** The consent for one seat start: none composed by the person's choice, or the service that reviews it. */
@@ -58,8 +69,15 @@ interface Live {
 }
 
 /**
- * The environment overlay a spawn gets: the driver's entries, then `NODE_OPTIONS` and every `DELORUN_*` name removed
- * (review D16).
+ * Credential and ambient-authority names a driver's overlay may not set, beyond upstream's `SENSITIVE_ENV_PATTERN`: the
+ * names the subprocess owner's scrub drops from the Host's own environment, which an explicit overlay would bypass.
+ * Mirrors `DENIED_ENV_NAMES` in `packages/subprocess/subprocess/src/index.ts`, which upstream does not export.
+ */
+const CREDENTIAL_NAME = /^(?:SSH_AUTH_SOCK|DOCKER_HOST|KUBECONFIG|KRB5CCNAME|MYSQL_PWD|(?:AWS|AZURE|SLACK|DISCORD)_.*|.*_CREDENTIALS|.*_WEBHOOK.*|.*PASSPHRASE.*|.*_PASSWD)$/iu
+
+/**
+ * The environment overlay a spawn gets: the driver's entries, then `NODE_OPTIONS`, every `DELORUN_*` name (review
+ * D16) and every credential-named entry of the overlay removed, so a program signs in only with its own login files.
  * @param overlay - the driver's entries.
  * @param env - the Host's environment.
  * @returns the overlay with the removals.
@@ -69,7 +87,22 @@ export function spawnEnvironment(overlay: NodeJS.ProcessEnv | undefined, env: Re
   for (const name of [...Object.keys(env), ...Object.keys(overlay ?? {})]) {
     if (name.toUpperCase().startsWith('DELORUN_')) result[name] = undefined
   }
+  for (const name of Object.keys(overlay ?? {})) {
+    if (SENSITIVE_ENV_PATTERN.test(name) || CREDENTIAL_NAME.test(name)) result[name] = undefined
+  }
   return result
+}
+
+/**
+ * The service object behind a Cordis context proxy: each `ctx.get` of a `Service` returns a new proxy, so two lookups
+ * of one service compare equal only through it.
+ * @param service - a looked-up service, or undefined.
+ * @returns the object the proxy wraps, or the value itself when it is no proxy.
+ */
+function serviceObject(service: unknown): unknown {
+  if (typeof service !== 'object' || service === null) return service
+  const original: unknown = Reflect.get(service, symbols.original)
+  return original ?? service
 }
 
 /** The start gate. */
@@ -79,10 +112,13 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
   private readonly registered = new Set<(provider: ExternalAgentName) => void>()
   private readonly live = new Set<Live>()
   private readonly seats = new Map<SessionId, Live>()
+  /** The program records, once their path is known; undefined when they are off or their path failed. */
+  private readonly records: Promise<ProgramRecords | undefined>
 
   constructor(ctx: Context, options: GateOptions) {
     super(ctx, 'externalAgents')
     this.options = options
+    this.records = this.openRecords()
     ctx.effect(() => () => this.endAll(), 'external agents: end every program')
     ctx.on('agent/disposed', ({ agent }) => { this.endSeat(agent.id) })
     ctx.inject(['delegationConsent'], (scope) => {
@@ -91,6 +127,11 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       // A program started while the consent was off stops once a consent appears (review D11).
       for (const live of [...this.live]) if (live.seat !== undefined && !live.reviewed) void this.end(live)
       scope.effect(() => consent.onLeaseEnded(lease => this.endSeat(lease.child)), 'external agents: lease ends stop programs')
+      // The consent stopping removes this scope before its own teardown ends the leases, so the lease listener above
+      // never hears those ends; every program it reviewed ends here instead.
+      scope.effect(() => () => {
+        for (const live of [...this.live]) if (live.seat !== undefined && live.reviewed) void this.end(live)
+      }, 'external agents: the consent stopping ends the programs it reviewed')
     })
   }
 
@@ -109,6 +150,82 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       this.drivers.delete(driver.provider)
       for (const live of [...this.live]) if (live.provider === driver.provider) void this.end(live)
     }
+  }
+
+  /**
+   * Open the program records and stop what a dead Host left, before any program of this start is recorded.
+   * @returns the records, or undefined when they are off or their path cannot be resolved.
+   */
+  private async openRecords(): Promise<ProgramRecords | undefined> {
+    const { programRecords } = this.options
+    if (programRecords === undefined) return undefined
+    let path: string
+    try {
+      path = await programRecords()
+    } catch (error) {
+      this.ctx.logger.warn(`external agents: the program records cannot be found, so no program is recorded or reaped: ${String(error)}`)
+      return undefined
+    }
+    const records = new ProgramRecords({
+      path,
+      table: this.options.processTable ?? systemProcessTable(process.platform, argv => this.runCommand(argv)),
+      graceMs: this.options.graceMs,
+      settleMs: this.options.graceMs,
+      located: () => new Set(this.options.programExecutables()),
+      locatedScripts: () => new Set(this.options.programScripts()),
+      warn: message => this.ctx.logger.warn(message),
+    })
+    const reaped = await records.reap()
+    for (const { record, outcome } of reaped) {
+      if (outcome === 'stopped-group' || outcome === 'stopped-unit') {
+        this.ctx.logger.warn(`external agents: stopped ${record.provider}'s process ${String(record.identity.pid)}, which a Host that ended left running`)
+      }
+      if (outcome === 'not-located') {
+        this.ctx.logger.warn(`external agents: left ${record.provider}'s recorded process ${String(record.identity.pid)} running, because ${record.identity.exe} is not a program Delorun locates`)
+      }
+    }
+    return records
+  }
+
+  /**
+   * Run a short command of the operating system (`ps`, `systemctl`) and read its output.
+   * @param argv - the command.
+   * @returns its standard output.
+   * @throws Error when it exits other than 0.
+   */
+  private async runCommand(argv: readonly string[]): Promise<string> {
+    const handle = this.ctx.subprocess.spawn({
+      argv, cwd: tmpdir(), stdio: { stdin: 'ignore', stdout: { maxBytes: 64 * 1024 }, stderr: { maxBytes: 4096 } }, graceMs: this.options.graceMs,
+    })
+    const outcome = await handle.done
+    if (outcome.exitCode !== 0) throw new Error(`${argv[0] ?? 'command'} exited with ${String(outcome.exitCode ?? outcome.signal)}`)
+    return handle.collected.stdout?.readFrom(0).text ?? ''
+  }
+
+  /**
+   * Keep a process's identity in the program records while its managed range runs. A process the provider names no
+   * leader for, such as on Windows, is not recorded.
+   * @param provider - the agent.
+   * @param handle - the process.
+   */
+  private track(provider: ExternalAgentName, handle: SubprocessHandle): void {
+    const { pid, unit } = handle
+    if (pid === undefined) return
+    const recorded = this.records.then(async (records) => {
+      const identity = await records?.started(provider, pid, unit)
+      return records === undefined || identity === undefined ? undefined : { records, identity }
+    })
+    // A range the provider can no longer observe keeps its record, so the next start checks it.
+    handle.waitForExit().then(async () => {
+      const entry = await recorded
+      await entry?.records.ended(entry.identity)
+    }, (error: unknown) => {
+      this.ctx.logger.warn(`external agents: ${provider}'s process ${String(pid)} cannot be observed, so its record stays: ${String(error)}`)
+    })
+  }
+
+  hasDriver(provider: ExternalAgentName): boolean {
+    return this.drivers.has(provider)
   }
 
   onDriverRegistered(listener: (provider: ExternalAgentName) => void): () => void {
@@ -315,6 +432,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
         env: spawnEnvironment(request.env, this.options.env),
       })
       live.handles.add(handle)
+      this.track(live.provider, handle)
       const forget = (): void => { live.handles.delete(handle) }
       handle.done.then(forget, forget)
       return handle
@@ -345,8 +463,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
    */
   private async reviewTurn(request: SeatStartRequest, consent: SeatConsent): Promise<string | undefined> {
     // The consent that allowed the program was replaced (its switch turned off and on): the program needs a new review.
-    const current: unknown = this.ctx.get('delegationConsent')
-    if (current !== consent) return consentMissingRefusal(request.provider)
+    if (serviceObject(this.ctx.get('delegationConsent')) !== serviceObject(consent)) return consentMissingRefusal(request.provider)
     const agents = this.seatAgents(request)
     const verdict = await consent.reviewSeat({ provider: request.provider, ...agents, cwd: request.cwd, phase: 'turn', signal: request.signal })
     return verdict.kind === 'refuse' ? verdict.reason : undefined
@@ -465,7 +582,14 @@ class GateSession implements SeatSession {
 
   async send(text: string, mode: 'start' | 'steer'): Promise<void> {
     if (mode === 'start') {
-      const refusal = await this.options.reviewTurn?.()
+      let refusal: string | undefined
+      try {
+        refusal = await this.options.reviewTurn?.()
+      } catch (error) {
+        // A review that cannot finish is no approval: the program ends before the error reaches the seat.
+        await this.options.end()
+        throw error
+      }
       if (refusal !== undefined) {
         await this.options.end()
         throw new GateRefusedError({ category: 'consent', reason: refusal })

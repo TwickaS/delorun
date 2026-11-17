@@ -19,8 +19,9 @@
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
  *
  * A live agent seat is reviewed by `reviewSeat` over the same ordered rules, with read-only checked on the seat's root
- * chat and its creator and the workspace taken from the root. Where a one-shot run asks, a seat whose root chat has
- * Full access (approval policy `never`) is allowed with no card and no grant, and the verdict says so. An allowed seat
+ * chat and its creator and the workspace taken from the root. A seat whose root chat has Full access (approval policy
+ * `never` and sandbox `danger-full-access`) is allowed with no card and no grant while `fullAccessStartsAgents` is on,
+ * and the verdict says so; any other `never` root is refused. An allowed seat
  * holds a lease in memory until the child,
  * the root or an ancestor is archived, the person revokes it, the workspace grant is revoked, the consent stops, or a
  * later review refuses or finds the root, workspace, run folder or agent changed. While the lease holds, no card is
@@ -71,6 +72,8 @@ export class DelegationConsentError extends Error {
 export interface ConsentOptions {
   /** The run time limit an allowed start carries, in milliseconds, read at each review. */
   readonly timeoutMs: () => number
+  /** Whether a Full access root chat starts a live agent with no card (the consent's `fullAccessStartsAgents`), read at each review. */
+  readonly fullAccessStartsAgents: () => boolean
   /** The environment the Delorun home is resolved from. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The clock a new grant records. */
@@ -243,12 +246,14 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const lease = this.leases.leaseOf(child.id)
     if (lease !== undefined) {
       const same = lease.root === root.id && lease.workspace === rules.workspace && lease.cwd === rules.cwd && lease.provider === provider
-      if (same && (!lease.workspaceListed || listed !== false)) return allowed('lease')
+      const stillFullAccess = lease.why !== 'full-access' || this.fullAccessRoot(root)
+      if (same && stillFullAccess && (!lease.workspaceListed || listed !== false)) return allowed('lease')
       this.leases.end(child.id, 'refused')
     }
-    const record = (why: SeatAllowReason): SeatVerdict => {
+    const record = (why: Exclude<SeatAllowReason, 'lease'>): SeatVerdict => {
       this.leases.record({
         child: child.id, root: root.id, workspace: rules.workspace, cwd: rules.cwd, provider, workspaceListed: listed === true, grantedAt: this.options.now(),
+        why,
       })
       return allowed(why)
     }
@@ -256,12 +261,28 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     if (review.phase === 'turn') return { kind: 'refuse', reason: leaseEndedRefusal(provider) }
     const approval = this.ctx.get('approval')
     if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', rules.workspace) }
-    // Full access on the root starts the seat with no card and no grant (owner, EA28), after the rules above.
-    if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') return record('full-access')
+    if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') {
+      // Full access starts the seat with no card and no grant (owner, EA28, EA33); any other `never` chat refuses (D10).
+      if (this.fullAccessRoot(root)) return record('full-access')
+      return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
+    }
     const asked = this.hasOpenTurn(root) ? root : review.phase === 'resume' ? child : undefined
     if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
     const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
     return outcome === 'allowed-once' ? record('asked') : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+  }
+
+  /**
+   * Whether a root chat is Full access (lead decision 10): its approval policy is `never`, its sandbox runs
+   * `danger-full-access`, and the consent's `fullAccessStartsAgents` is on.
+   * @param root - the root chat.
+   * @returns true for Full access.
+   */
+  private fullAccessRoot(root: Agent): boolean {
+    if (!this.options.fullAccessStartsAgents()) return false
+    const approval = this.ctx.get('approval')
+    if (approval === undefined || (approval.overrideOf(root.session) ?? approval.config.policy) !== 'never') return false
+    return this.ctx.get('sandboxPolicy')?.resolve({ session: root.session }).mode === 'danger-full-access'
   }
 
   /**

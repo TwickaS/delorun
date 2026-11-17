@@ -54,6 +54,73 @@ describe('gates:external-agent-spawns', () => {
     expect(violations('delorun/packages/home/src/a.ts', ['import { spawn } from \'node:child_process\'', 'ctx.subprocess.spawn(spec)'])).toEqual([])
   })
 
+  it('refuses claude and codex as the program a process runs, by name or path, outside the login command', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'spawn(\'claude\', [\'-p\', prompt])',
+      'execFileSync(\'/usr/local/bin/codex\', [\'exec\'])',
+      'fork(`${bin}/claude.exe`)',
+      'execSync(\'codex login\')',
+      'ctx.subprocess.spawn({ argv: [\'C:\\\\tools\\\\codex.exe\', \'exec\'], cwd })',
+      'spawnSync(\'node\', [\'claude-helper.js\'])',
+      'spawn(\'git\', [\'log\', \'--grep\', \'claude code\'])',
+    ])).toEqual([
+      '1:7 program claude',
+      '2:14 program /usr/local/bin/codex',
+      '3:6 program /claude.exe',
+      '4:10 program codex',
+      '5:31 program C:\\tools\\codex.exe',
+    ])
+    expect(violations('delorun/apps/cli/src/agents/login.ts', ['spawn(\'claude\', [\'login\'])'])).toEqual([])
+  })
+
+  it('refuses the Claude Code package, any argv element naming a program, and the first word of a shell or env command', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'spawn(\'npx\', [\'@anthropic-ai/claude-code\'])',
+      'spawn(\'sh\', [\'-c\', \'claude -p "fix it"\'])',
+      'spawn(\'env\', [\'claude\'])',
+      'ctx.subprocess.spawn({ argv: [\'bash\', \'-lc\', \'FOO=1 exec codex exec\'] })',
+      'execFile(\'npx\', [\'@openai/codex\', \'exec\'])',
+      'spawn(\'sh\', [\'-c\', \'echo claude\'])',
+      'spawn(\'git\', [\'commit\', \'-m\', \'claude fixed it\'])',
+    ])).toEqual([
+      '1:15 sdk @anthropic-ai/claude-code',
+      '2:20 program claude',
+      '3:15 program claude',
+      '4:46 program codex',
+      '5:18 codex @openai/codex',
+    ])
+  })
+
+  it('refuses a program named in any part of a shell command line, and in a command line given to a shell option', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'spawn(\'claude -p hi\', { shell: true })',
+      'spawn(\'bash\', [\'-c\', \'cd w && claude -p\'])',
+      'spawn(\'sh\', [\'-c\', \'true; codex\'])',
+      'exec(\'ls | FOO=1 nohup codex exec\')',
+      'execSync(\'make\\n/usr/local/bin/claude --version\')',
+      'execFile(\'codex exec\', { shell })',
+      'ctx.subprocess.spawn({ argv: [\'sh\', \'-lc\', \'git pull || exec env claude\'] })',
+    ])).toEqual([
+      '1:7 program claude',
+      '2:22 program claude',
+      '3:20 program codex',
+      '4:6 program codex',
+      '5:10 program /usr/local/bin/claude',
+      '6:10 program codex',
+      '7:44 program claude',
+    ])
+  })
+
+  it('allows shell command lines whose command words are not the programs', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'spawn(\'git log --grep claude\', { shell: true })',
+      'spawn(\'sh\', [\'-c\', \'echo codex && ls | grep claude; true\'])',
+      'spawn(\'git commit -m "claude fixed it"\')',
+      'spawn(\'claude-helper --run\', { shell: false })',
+      'exec(\'cd claude && make\')',
+    ])).toEqual([])
+  })
+
   it('allows only presence checks of the two providers', () => {
     expect(violations('delorun/packages/agent-claude-code/src/index.ts', [
       'if (ctx.subagents.getProvider(\'claude-code\') !== undefined) mount()',

@@ -68,6 +68,10 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     'DELEGATION_CONSENT_ROUTES.allow': UNLOCKED('allowing lets an external agent work in a workspace'),
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
   },
+  'external-agents/src/accounts/routes.ts': {
+    'ACCOUNT_ROUTES.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),
+    'ACCOUNT_ROUTES.refresh': UNLOCKED('a check starts the person\'s own Claude Code or Codex program on the computer'),
+  },
   'plugin-permission-defaults/src/routes.ts': {
     'PERMISSION_ROUTES.everywhere': READ('reads whether dangerous mode is on'),
     'PERMISSION_ROUTES.everywhereOff': READ('turning dangerous mode off only tightens; turning it on is setup and config only, at the computer'),

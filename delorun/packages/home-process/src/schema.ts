@@ -83,6 +83,8 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('reach.status') }),
   z.strictObject({ ...base, op: z.literal('reach.apply') }),
   z.strictObject({ ...base, op: z.literal('changes.reload') }),
+  z.strictObject({ ...base, op: z.literal('agents.accounts') }),
+  z.strictObject({ ...base, op: z.literal('agents.refresh'), args: z.strictObject({ provider: z.enum(['claude-code', 'codex']), reason: z.enum(['check-now', 'signed-in']) }) }),
 ])
 
 /**

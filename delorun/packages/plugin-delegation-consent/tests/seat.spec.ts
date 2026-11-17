@@ -11,14 +11,15 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { SeatLease, SeatLeaseEnd, SeatReview, SeatReviewPhase } from '@delorun/external-agents/contract'
 import { DELEGATION_CONSENT_ROW_ID } from '@delorun/external-agents/contract'
-import { afterEach, describe, expect, it } from 'vitest'
-import { DelorunDelegationConsent } from '../src/index.ts'
-import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal } from '../src/copy.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apply, DelorunDelegationConsent } from '../src/index.ts'
+import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal, notApprovedRefusal } from '../src/copy.ts'
 import { changeGrantStore, grantStorePath } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROW } from '../src/wire.ts'
 
 const roots: string[] = []
 afterEach(() => {
+  vi.unstubAllEnvs()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
@@ -48,6 +49,9 @@ interface World {
   readonly asks: ApprovalRequest[]
   readonly ended: Array<{ lease: SeatLease, reason: SeatLeaseEnd }>
   readonly readOnly: Set<string>
+  /** Chats whose sandbox runs `danger-full-access`. */
+  readonly fullAccess: Set<string>
+  fullAccessStartsAgents: boolean
   readonly openTurns: Set<string>
   readonly policies: Map<string, 'ask' | 'never'>
   readonly archived: SessionId[]
@@ -59,14 +63,20 @@ interface World {
   answer: ApprovalOutcome
 }
 
-/** The service with fake neighbours that each spec changes. */
-async function world(): Promise<World> {
+/**
+ * The service with fake neighbours that each spec changes.
+ * @param mount - `apply` mounts the consent row with this configuration instead of the service alone; its
+ * `fullAccessStartsAgents` is set only when given.
+ */
+async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<World> {
   const paths = folders()
   const ctx = new Context()
   const state = {
     asks: [] as ApprovalRequest[],
     ended: [] as Array<{ lease: SeatLease, reason: SeatLeaseEnd }>,
     readOnly: new Set<string>(),
+    fullAccess: new Set<string>(),
+    fullAccessStartsAgents: true,
     openTurns: new Set<string>(['root']),
     policies: new Map<string, 'ask' | 'never'>(),
     archived: [] as SessionId[],
@@ -74,7 +84,7 @@ async function world(): Promise<World> {
     agents: [] as Agent[],
     answer: 'allowed-once' as ApprovalOutcome,
   }
-  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: state.readOnly.has(session.id) ? 'read-only' : 'workspace-write' }) } as never)
+  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: state.readOnly.has(session.id) ? 'read-only' : state.fullAccess.has(session.id) ? 'danger-full-access' : 'workspace-write' }) } as never)
   ctx.provide('approval', {
     request: (request: ApprovalRequest) => {
       state.asks.push(request)
@@ -91,7 +101,14 @@ async function world(): Promise<World> {
     get archivedSessionIds() { return state.archived },
     list: () => state.listed.map(path => ({ path })),
   } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+  if (mount === undefined) {
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+  } else {
+    vi.stubEnv('DELORUN_HOME', paths.home)
+    const saved = mount.fullAccessStartsAgents
+    apply(ctx, { enabled: { get: () => true }, runTimeoutMinutes: { get: () => 30 }, ...(saved === undefined ? {} : { fullAccessStartsAgents: { get: () => saved } }) } as never)
+    await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
+  }
   const consent = ctx.get('delegationConsent') as DelorunDelegationConsent
   consent.onLeaseEnded((lease, reason) => { state.ended.push({ lease, reason }) })
   return Object.assign(state, { ctx, consent, ...paths })
@@ -131,7 +148,7 @@ describe('a seat review at hand-off', () => {
     expect(w.asks[0]).toMatchObject({ toolName: 'claude-code', grants: 'external-agent' })
     expect(w.asks[0]?.agent.id).toBe('root')
     expect(w.consent.leaseOf(SessionId('seat'))).toEqual({
-      child: 'seat', root: 'root', workspace: w.workspace, cwd: w.workspace, provider: 'claude-code', workspaceListed: true, grantedAt: 7,
+      child: 'seat', root: 'root', workspace: w.workspace, cwd: w.workspace, provider: 'claude-code', workspaceListed: true, grantedAt: 7, why: 'asked',
     })
   })
 
@@ -164,6 +181,7 @@ describe('a seat review at hand-off', () => {
   it('allows a Full access root without a card or a grant, says so, and records a lease', async () => {
     const w = await world()
     w.policies.set('root', 'never')
+    w.fullAccess.add('root')
     w.openTurns.clear()
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: expect.any(Number), why: 'full-access' })
     expect(w.asks).toEqual([])
@@ -171,9 +189,79 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
   })
 
+  it.for(['child', 'grandchild'] as const)('reads Full access from the root alone: a seat a %s of an Ask root starts still needs a card or a grant', async (depth) => {
+    const w = await world()
+    w.fullAccess.add('root')
+    const child = chat('child', w.workspace, 'root')
+    const creator = depth === 'child' ? child : chat('grandchild', w.workspace, 'child')
+    // A local subagent is pinned to `never` and inherits its parent's danger-full-access sandbox.
+    for (const id of ['child', 'grandchild']) {
+      w.policies.set(id, 'never')
+      w.fullAccess.add(id)
+    }
+    w.agents.push(child, creator)
+    const review = seat(w, 'hand-off', { creator, child: chat('seat', w.workspace, creator.id) })
+    await expect(w.consent.reviewSeat(review)).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    expect(w.asks).toHaveLength(1)
+    w.consent.endLease(SessionId('seat'), 'revoked')
+    w.openTurns.clear()
+    await expect(w.consent.reviewSeat(review)).resolves.toEqual({ kind: 'refuse', reason: noOpenTurnRefusal('claude-code', w.workspace) })
+    await grant(w.home, w.workspace)
+    await expect(w.consent.reviewSeat(review)).resolves.toMatchObject({ kind: 'allow', why: 'granted' })
+  })
+
+  it('ends a Full access lease when the root\'s policy or the switch changes', async () => {
+    for (const leave of ['policy', 'sandbox', 'switch'] as const) {
+      const w = await world()
+      w.policies.set('root', 'never')
+      w.fullAccess.add('root')
+      await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'full-access' })
+      expect(w.consent.leaseOf(SessionId('seat'))).toMatchObject({ why: 'full-access' })
+      if (leave === 'policy') w.policies.set('root', 'ask')
+      else if (leave === 'sandbox') w.fullAccess.delete('root')
+      else w.fullAccessStartsAgents = false
+      await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toEqual({ kind: 'refuse', reason: leaseEndedRefusal('claude-code') })
+      expect(w.consent.leaseOf(SessionId('seat'))).toBeUndefined()
+      expect(w.ended.map(ended => ended.reason)).toEqual(['refused'])
+    }
+  })
+
+  it('keeps a lease the person asked for when the root leaves Full access', async () => {
+    const w = await world()
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    w.fullAccessStartsAgents = false
+    await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
+  })
+
+  it('refuses a Full access seat with no grant when the consent row has no fullAccessStartsAgents switch, and allows it once the switch is on', async () => {
+    for (const [saved, verdict] of [[undefined, 'refuse'], [false, 'refuse'], [true, 'allow']] as const) {
+      const w = await world(saved === undefined ? {} : { fullAccessStartsAgents: saved })
+      w.policies.set('root', 'never')
+      w.fullAccess.add('root')
+      await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: verdict })
+      expect(w.asks).toEqual([])
+      await w.ctx.fiber.dispose()
+    }
+  })
+
+  it('refuses a never root whose sandbox is not danger-full-access, and Full access while the switch is off', async () => {
+    const w = await world()
+    w.policies.set('root', 'never')
+    const refused = { kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', w.workspace) }
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual(refused)
+    w.fullAccess.add('root')
+    w.fullAccessStartsAgents = false
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual(refused)
+    expect(w.asks).toEqual([])
+    expect(w.consent.leaseOf(SessionId('seat'))).toBeUndefined()
+    await grant(w.home, w.workspace)
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'granted' })
+  })
+
   it('still refuses a read-only Full access root, and a run folder outside its workspace', async () => {
     const w = await world()
     w.policies.set('root', 'never')
+    w.fullAccess.add('root')
     w.readOnly.add('root')
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('this chat runs read-only') })
     w.readOnly.clear()
@@ -217,7 +305,7 @@ describe('a seat review at hand-off', () => {
     const w = await world()
     const bare = new Context()
     bare.provide('approval', w.ctx.get('approval') as never)
-    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, env: { DELORUN_HOME: w.home }, now: () => 1 })
+    await bare.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: w.home }, now: () => 1 })
     const consent = bare.get('delegationConsent') as DelorunDelegationConsent
     await expect(consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('no sandbox policy') })
   })
