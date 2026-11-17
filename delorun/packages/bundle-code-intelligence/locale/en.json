@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Code intelligence",
+    "description": "Lets the agent ask a language server for definitions, references and hover information. Needs typescript-language-server on your PATH"
+  }
+}

@@ -61,6 +61,7 @@ export const RELEASE_SCHEMAS = {
   manifest: 'delorun.release-manifest/1',
   files: 'delorun.release-files/1',
   rebuild: 'delorun.release-rebuild/1',
+  packs: 'delorun.release-packs/1',
 } as const
 
 /** One signature over the RFC 8785 canonical bytes of an envelope's `signed` value. */
@@ -373,6 +374,65 @@ export interface RuntimeFileList {
   readonly files: readonly RuntimeFile[]
 }
 
+/** One file of a pack variant. */
+export type PackFile = RuntimeFile
+
+/**
+ * A dependency a pack needs but Delorun's files never carry: its package comes from the npm registry and is checked
+ * against `sha512`, which the targets key signed. It exists for packages whose licence forbids redistribution.
+ */
+export interface PackExternal {
+  /** The npm package name. */
+  readonly name: string
+  /** The exact version. */
+  readonly version: SemanticVersion
+  /** The official tarball URL on `https://registry.npmjs.org/`. */
+  readonly url: string
+  /** The tarball's standard base64 SHA-512 (the lockfile's integrity at cut time). */
+  readonly sha512: Sha512Base64
+  /** The tarball's length in bytes; the panel shows the real size before it starts. */
+  readonly length: number
+}
+
+/** One platform's variant of a pack. */
+export interface PackVariant {
+  /** The pack archive on the release channel (`.tar.gz`), by name, length and digests. */
+  readonly archive: FileRef & { readonly sha512: Sha512Base64 }
+  /** Every regular file of the archive, as a runtime file list holds them. */
+  readonly files: readonly PackFile[]
+  /** Dependencies fetched from npm instead of shipped, for this platform. */
+  readonly external: readonly PackExternal[]
+  /** Package names this platform's base runtime provides; the install links them into the pack. */
+  readonly peers: readonly string[]
+}
+
+/** One pack: a plugin package that is not in the default install. */
+export interface PackEntry {
+  /** The package name. */
+  readonly name: string
+  /** The package version. */
+  readonly version: SemanticVersion
+  /** Whether Plugins labels it experimental. */
+  readonly experimental: boolean
+  /** The variant per platform, or `any` for a pack with no native code. */
+  readonly variants: Readonly<Partial<Record<RuntimePlatform | 'any', PackVariant>>>
+}
+
+/**
+ * `delorun-<version>.packs.json`: the packs of one release, in the targets-signed envelope. It is a separate file so
+ * that readers of the manifest never meet it; it names the manifest it belongs to by SHA-256.
+ */
+export interface ReleasePacks {
+  /** Always {@link RELEASE_SCHEMAS}.packs. */
+  readonly schema: typeof RELEASE_SCHEMAS.packs
+  /** The release. */
+  readonly version: SemanticVersion
+  /** SHA-256 of the release's manifest file, which binds this file to that release. */
+  readonly manifest: Sha256Hex
+  /** The packs, by name. */
+  readonly packs: readonly PackEntry[]
+}
+
 /** `delorun-<version>.rebuild.json`: the targets-key holder's rebuild, which signing requires. */
 export interface RebuildRecord {
   /** Always {@link RELEASE_SCHEMAS}.rebuild. */
@@ -455,6 +515,12 @@ export const DESKTOP_CACHED_PREVIOUS_RELEASES = 1
 /** Per-request timeout for release metadata and release files. */
 export const METADATA_REQUEST_TIMEOUT_SECONDS = 30
 
+/** The most bytes one pack archive, or one external npm tarball, may have: the signed length is capped here. */
+export const PACK_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024
+
+/** An npm package name (lower case, optionally scoped), the only form a pack, a peer or an external may carry. */
+export const NPM_PACKAGE_NAME_PATTERN = '^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$'
+
 /** Size limits in bytes, applied before parsing. */
 export const RELEASE_FILE_SIZE_LIMITS = {
   root: 64 * 1024,
@@ -462,6 +528,7 @@ export const RELEASE_FILE_SIZE_LIMITS = {
   manifest: 1024 * 1024,
   files: 32 * 1024 * 1024,
   rebuild: 1024 * 1024,
+  packs: 8 * 1024 * 1024,
   advisories: 8 * 1024 * 1024,
   notes: 64 * 1024,
 } as const

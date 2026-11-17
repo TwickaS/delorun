@@ -53,6 +53,9 @@ import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devic
 import type { HostFetch } from './devices-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
+import { en as requirementsEn, zh as requirementsZh, type RequirementsLocaleKey } from './requirements-locales.ts'
+import { NeedsSetup, type NeedsSetupInjected } from './NeedsSetup.tsx'
+import { documentLanguage, RequirementsStore } from './requirements-store.ts'
 import { en as versionsEn, zh as versionsZh, type VersionsLocaleKey } from './versions-locales.ts'
 import { saveBrowserFile } from './save-file.ts'
 import { VersionsSection, type VersionsSectionInjected } from './VersionsSection.tsx'
@@ -190,6 +193,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunNetwork': NetworkLocaleKey
     /** The Setup versions section's copy. */
     'delorunVersions': VersionsLocaleKey
+    /** The "Needs setup" state's copy in Plugins. */
+    'delorunRequirements': RequirementsLocaleKey
   }
 }
 
@@ -293,6 +298,9 @@ export const REMOTE_NOTICE_ID = 'delorun-remote-full-access'
 
 /** The `shell.overlay` id of the remote studio's unlock dialog, banner and locked-again notice. */
 export const UNLOCK_OVERLAY_ID = 'delorun-unlock'
+
+/** Dictionary namespace of the "Needs setup" state in Plugins. */
+export const REQUIREMENTS_NS = 'delorunRequirements'
 
 /** Dictionary namespace of the trust badge and its panel. */
 export const TRUST_NS = 'delorunTrust'
@@ -544,6 +552,7 @@ export function apply(ctx: Context): void {
   // A link glyph stands in for a device glyph, which the icon library lacks; without this Settings draws the generic gear.
   ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineMedium))
   ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: PIN_MODE_SECTION_ID }, PinModeIcon))
+  applyNeedsSetup(ctx, browserFetch)
   applyRemoteNotice(ctx)
   applyTrustBadge(ctx, trustApi(browserFetch))
   applyConsents(ctx, browserFetch)
@@ -575,6 +584,28 @@ export async function switchChat(live: Pick<ISession, 'command'> | undefined, cu
   if (!result.value.matched) throw new ChatSwitchRefused('the host offers no /permission command')
   // `command` reports whether a line matched, not whether it applied: an unknown preset answers with an error the result omits.
   if (currentPreset() !== preset) throw new ChatSwitchRefused('the chat\'s permission did not change')
+}
+
+/**
+ * Register the "Needs setup" state under each row in Plugins and on a row's or bundle's own page.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the request function.
+ */
+export function applyNeedsSetup(ctx: Context, fetch: HostFetch): void {
+  ctx.effect(() => ctx.locale.register(REQUIREMENTS_NS, { en: requirementsEn, zh: requirementsZh }), 'delorun-requirements: dictionaries')
+  const store = new RequirementsStore(fetch, documentLanguage)
+  ctx.inject(['settingsShell'], (shelled) => {
+    const face = (): NeedsSetupInjected => ({
+      store,
+      openSettings: (section) => { shelled.settingsShell.openSection(section) },
+      copy: (text) => navigator.clipboard.writeText(text),
+    })
+    const register = (name: 'plugins.row.state' | 'plugins.detail.section') => shelled.slots.inject(name, () => shelled.slots.register({
+      name, id: 'delorun-requirements', order: 10, locale: REQUIREMENTS_NS, inject: face,
+    }, NeedsSetup))
+    register('plugins.row.state')
+    register('plugins.detail.section')
+  })
 }
 
 /**

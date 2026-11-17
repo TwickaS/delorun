@@ -23,6 +23,8 @@ export function storeRemedies(error: RuntimeStoreError, context: RefusalContext)
         return `Go back to the version before the last update: delorun recover rollback${profile}`
       case 'update':
         return `Update the runtime: delorun update${profile}`
+      case 'recover-packs':
+        return `Check the plugin packs and fetch again any that changed: delorun recover packs${profile}`
       case 'launcher-update':
         return 'Update the launcher to a version that reads this runtime.'
     }

@@ -25,7 +25,7 @@ import { semanticVersion } from '@delorun/release-formats/brands'
 import { comparisonReport } from './compare-rebuild.ts'
 import { compareOutputs } from './rebuild/compare.ts'
 import { readReleaseImages } from './images/build.ts'
-import { ciMarkers, commitOf, isWithin, outputRefs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs } from './rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, packOutputs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs } from './rebuild/record.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({
@@ -58,7 +58,7 @@ async function main(argv: readonly string[]): Promise<number> {
     if (isWithin(await realpath(dirname(path)), release)) throw new Error(`write the rebuild record outside the release directory ${release}`)
     const outputs = await outputRefs(rebuild)
     const names = new Set(outputs.map(output => output.name))
-    const missing = requiredOutputs(version, recipe.closure.platforms, await readReleaseImages(rebuild, version)).filter(name => !names.has(name))
+    const missing = [...requiredOutputs(version, recipe.closure.platforms, await readReleaseImages(rebuild, version)), ...await packOutputs(release, version)].filter(name => !names.has(name))
     if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every release platform's runtime, the SBOM and the images`)
     const comparison = await compareOutputs(release, rebuild, recipe, names)
     for (const line of comparisonReport(comparison)) console.log(line)

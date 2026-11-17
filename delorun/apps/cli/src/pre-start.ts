@@ -16,6 +16,7 @@ import type { ComposeKind } from './compose.ts'
 import { finishInterruptedRestore, startRegistration } from './home-exclusion.ts'
 import { recordDataFormatStep } from './data-format-record.ts'
 import { recoverInterruptedImport } from './import-home/recover.ts'
+import { profilePacksStep, type FetchProfilePacks } from './profile-packs.ts'
 import { runProfileMigrations, type ProfileMigration } from './profile-migrations.ts'
 
 /** What a pre-start step is given. */
@@ -90,6 +91,8 @@ export interface PreStartDependencies {
   readonly migrations: (context: PreStartContext) => readonly ProfileMigration[]
   /** Compares the profile's installed plugins with their install records and prints what changed; never throws. */
   readonly pluginChanges: (context: PreStartContext) => Promise<void>
+  /** Fetches the plugin packs the profile links but the home lacks; a start that has no pack to fetch needs none. */
+  readonly fetchPacks?: FetchProfilePacks
 }
 
 /**
@@ -104,6 +107,9 @@ export interface PreStartDependencies {
  * 4. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
  *    stays within the health check's time; and the `headless` profile on every `delorun headless` run, whose one-time
  *    change links Delorun's headless bundle and so creates the profile on the first run.
+ * 4. `profile-packs`: the CLI profile on a fresh start from the store; a plugin pack the profile links from the running
+ *    release's pack folder, which is missing, is fetched and verified first, and the start is refused with the remedy
+ *    when it cannot be ([profile packs](./profile-packs.ts)).
  * 4. `changes`: both starts, after the migrations so the links they add are judged too; a fresh start from the store
  *    first refuses a runtime whose files differ from the signed release, then each plugin the profile links from a
  *    folder is made to load the content Changes allows ([changes](./changes/start.ts)).
@@ -126,6 +132,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
         if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context), context.output)
       },
     },
+    { name: 'profile-packs', kinds: ['cli'], run: profilePacksStep(dependencies.fetchPacks ?? (() => Promise.resolve())) },
     { name: 'changes', kinds: ['cli', 'headless'], run: changesPreStartStep },
     { name: 'plugin-changes', kinds: ['cli', 'headless'], run: dependencies.pluginChanges },
     { name: 'update-notice', kinds: ['cli', 'headless'], run: updateNoticeStep },

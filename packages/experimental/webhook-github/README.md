@@ -74,6 +74,7 @@ Independent. Authentication and HTTP dispatch do not touch a model request; any 
 - **No TLS** — the injected development WebServer is normally loopback-only behind a TLS reverse proxy or tunnel.
 - **Generic payload validation only** — rules own validation of the GitHub event fields they consume.
 - **No provider acknowledgement of downstream work** — `202` precedes arbitrary rule calls and Session creation.
+- **One delivery id runs once per process** — a verified `X-GitHub-Delivery` id is remembered (the last 1,024) and a repeat is acknowledged with `200` without calling the rules again, so a captured request cannot start a second Session; GitHub's manual redelivery reuses the id and is therefore acknowledged and not run again until the Host restarts.
 - **No form encoding** — GitHub must send `application/json`; `application/x-www-form-urlencoded` is rejected.
 
 

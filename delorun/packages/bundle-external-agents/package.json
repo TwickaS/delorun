@@ -1,0 +1,31 @@
+{
+  "name": "@delorun/bundle-external-agents",
+  "description": "External agents as an optional bundle: lets the agent hand a task to the Codex or Claude Code program you already have installed, and runs Python code in tool programs. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-experimental-ptc-runtime-python": "workspace:*",
+    "@deepseek-ai/dsh-experimental-subagent-oar": "workspace:*",
+    "@deepseek-ai/dsh-experimental-tool-subagent-oar": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental",
+    "pack": true
+  }
+}

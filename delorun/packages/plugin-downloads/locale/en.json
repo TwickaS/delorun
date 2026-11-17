@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Downloads panel",
+    "description": "Shows the plugins being installed, with their progress and place in the queue."
+  }
+}
