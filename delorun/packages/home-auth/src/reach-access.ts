@@ -912,6 +912,29 @@ function namesProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, a
 }
 
 /**
+ * The modules whose plugin rows only the computer changes, with the reason for each: disabling one removes the unlock
+ * gate or the sandbox, so no unlock, PIN page or dangerous mode lets a device do it.
+ */
+export const COMPUTER_ONLY_ROW_MODULES = {
+  '@delorun/home-auth': 'it holds the pairing and unlock gate',
+  '@delorun/reach': 'it decides which addresses reach the studio',
+  '@deepseek-ai/dsh-sandbox-local': 'it confines the commands a chat runs',
+  '@deepseek-ai/dsh-sandbox-policy': 'it decides what the sandbox allows',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * Whether a plugin-manager call names a row of {@link COMPUTER_ONLY_ROW_MODULES}, or names its row in arguments the
+ * condition cannot read. While those rows cannot be read, every call that names a row counts.
+ * @param facts - the computer-only rows.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device in every mode.
+ */
+function namesComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.computerOnlyEntryIds()
+  return ids === undefined || typeof args.id !== 'string' || ids.has(args.id)
+}
+
+/**
  * The slash commands a device runs, by name, with what each changes; `commands/execute` of any other command, or of a
  * line that names none, is refused to a device, unlocked or not. Each listed command changes only its own chat or
  * reads it: none writes a setting, a plugin row or the profile, so a new command a plugin registers is refused until
@@ -987,7 +1010,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1029,6 +1052,8 @@ export function createCondition(
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
       }
+      // The rows that carry the unlock gate and the sandbox stay refused to every device: no unlock and no mode lifts them.
+      if (ROW_CALLS.has(action) && namesComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
       if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
@@ -1154,6 +1179,11 @@ export interface ReachAccessFacts {
    * @returns the ids, or undefined when the list cannot be read.
    */
   readonly protectedEntryIds: () => ReadonlySet<string> | undefined
+  /**
+   * The Loader entry ids of the rows whose module is in {@link COMPUTER_ONLY_ROW_MODULES}.
+   * @returns the ids, or undefined when they cannot be read.
+   */
+  readonly computerOnlyEntryIds: () => ReadonlySet<string> | undefined
   /**
    * The permission new chats start in, which a device's settings write may tighten but not loosen.
    * @returns it, or undefined while no permission presets run.

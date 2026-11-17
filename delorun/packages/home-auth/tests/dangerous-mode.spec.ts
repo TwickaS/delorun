@@ -37,6 +37,9 @@ import {
 } from '../src/reach-access.ts'
 import { HOME_AUTH_SWITCH, REACH_SWITCH } from '../src/service.ts'
 
+/** The entry id of a row that only the computer changes. */
+const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
+
 const LISTENER = 'reach-tailscale-private'
 const DEVICE = reachDevicePrincipal('device-1', LISTENER)
 const GLOBAL = { kind: 'global' } as const
@@ -66,7 +69,7 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     pageUnlockOf: () => undefined,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
-    protectedEntryIds: () => new Set([PROTECTED_ROW]),
+    protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
     pinEnabled: () => false,
     dangerousMode: () => mode,
@@ -95,6 +98,19 @@ describe('the reach policy in dangerous mode', () => {
       expect(createCondition(facts(true, false), DEVICE)(call)).toEqual({ kind: 'deny', reason: `elevation-required: ${lifted.action}` })
     })
   }
+
+  it('never lifts a computer-only plugin row: not for an unlocked device, a PIN page or the mode', () => {
+    const call = { action: 'pluginManager/setPluginEnabled' as const, resource: GLOBAL, args: { id: COMPUTER_ONLY_ROW, enabled: false } }
+    const refusal = { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+    const page = reachDevicePrincipal('device-1', LISTENER, 'page-1')
+    for (const mode of [false, true]) {
+      for (const unlocked of [false, true]) expect(createCondition(facts(mode, unlocked), DEVICE)(call), `mode ${mode} unlocked ${unlocked}`).toEqual(refusal)
+      expect(createCondition({ ...facts(mode, false), pageUnlockOf: () => UNLOCK }, page)(call), `PIN page, mode ${mode}`).toEqual(refusal)
+    }
+    // An unreadable list refuses every row, lifted or not.
+    const unreadable = { ...facts(true, true), computerOnlyEntryIds: () => undefined }
+    expect(createCondition(unreadable, DEVICE)({ ...call, args: { id: PROTECTED_ROW, enabled: false } })).toEqual(refusal)
+  })
 
   it('lifts only the computer-only switches on the allow list: the real reach and home-auth (pairing) switches stay refused in the mode', () => {
     const state = { ...facts(true, true), computerOnlySwitches: () => [CONSENT, REACH_SWITCH, HOME_AUTH_SWITCH] }
