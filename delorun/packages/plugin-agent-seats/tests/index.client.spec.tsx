@@ -11,6 +11,7 @@ interface Options {
   readonly id?: string
   readonly key?: string
   readonly select?: unknown
+  readonly priority?: number
   readonly inject?: () => Record<string, unknown>
 }
 
@@ -43,6 +44,11 @@ describe('apply', () => {
     expect(names).toContain('conversation.input.dock')
     expect(names).toContain('conversation.composer')
     expect(registered.filter(entry => entry.name === 'tool.call.toolview' && RECORD_TOOL_NAMES.includes(entry.key ?? ''))).toHaveLength(RECORD_TOOL_NAMES.length)
+  })
+
+  it('elects the approval card before upstream\'s approval panel, which has priority 1 and takes every question', () => {
+    const card = mount().registered.find(entry => entry.name === 'conversation.composer')
+    expect(card?.priority).toBeLessThan(1)
   })
 
   it('injects the studio\'s clipboard, clock and Host routes into the banner', async () => {

@@ -10,6 +10,7 @@ import type { ApprovalDecision, PendingApproval } from '@deepseek-ai/dsh-client-
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SeatReach, SeatReachSource } from './actions.ts'
 import type { SeatTranslate } from './Banner.tsx'
+import { isRecordName } from './tool-model.ts'
 import { AGENT_NAMES, type SeatAgent } from './view.ts'
 import css from './Seat.module.css'
 
@@ -36,7 +37,8 @@ export function selectSeatApproval(owner: ComposerChainProps): PendingApproval |
   const pending = owner.pendingInteraction
   if (pending === undefined || pending.kind !== 'approval') return null
   const approval = pending as PendingApproval
-  return approval.grants === 'external-agent' && owner.session?.subagent !== undefined ? approval : null
+  // The start question of the consent carries the same grant in the lead's chat; only a program's question names a recorded tool.
+  return approval.grants === 'external-agent' && isRecordName(approval.toolName) && owner.session?.subagent !== undefined ? approval : null
 }
 
 /** The program a record tool name belongs to. */

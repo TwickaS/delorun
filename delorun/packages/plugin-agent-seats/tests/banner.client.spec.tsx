@@ -208,6 +208,7 @@ describe('the approval card', () => {
     const owner = (pendingInteraction: unknown, subagent: unknown) => ({ sessionId: undefined, session: { subagent }, pendingInteraction }) as never
     expect(selectSeatApproval(owner(pending(), {}))).not.toBeNull()
     expect(selectSeatApproval(owner(pending(), undefined))).toBeNull()
+    expect(selectSeatApproval(owner({ ...(pending() as object), toolName: 'subagent_codex' }, {}))).toBeNull()
     expect(selectSeatApproval(owner({ kind: 'approval', grants: undefined }, {}))).toBeNull()
     expect(selectSeatApproval(owner(undefined, {}))).toBeNull()
   })

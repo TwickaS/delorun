@@ -37,6 +37,8 @@ export interface ScriptedProgramConfig {
   readonly account?: Omit<AccountObservation, 'provider' | 'source'>
   /** Makes `open` fail with this limit, so a start ends as a reached plan limit. */
   readonly openFailsAtLimit?: { readonly resetsAt: number }
+  /** Makes `open` fail because the configured model is not on the plan, so a start ends at the model picker. */
+  readonly openFailsModelNotOffered?: { readonly configured: string; readonly offered: readonly { readonly id: string; readonly displayName: string; readonly isDefault: boolean }[] }
 }
 
 /** The Loader row name. */
@@ -161,6 +163,9 @@ export function apply(ctx: Context, config: ScriptedProgramConfig): void {
     open: (request) => {
       if (config.openFailsAtLimit !== undefined) {
         return Promise.reject(new ProgramOpenError({ category: 'limit', resetsAt: config.openFailsAtLimit.resetsAt }))
+      }
+      if (config.openFailsModelNotOffered !== undefined) {
+        return Promise.reject(new ProgramOpenError({ category: 'model-not-offered', ...config.openFailsModelNotOffered }))
       }
       opened++
       return Promise.resolve(new ScriptedSession(request, config.turns, request.resume ?? `program-${config.provider}-${opened}`))

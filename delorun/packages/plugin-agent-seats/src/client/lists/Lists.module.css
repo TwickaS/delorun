@@ -21,7 +21,7 @@
 .ring[data-reached] .ringValue { stroke: var(--delorun-badge-red); }
 .ringText { min-width: 2.4em; text-align: end; }
 
-.outside { color: var(--dsw-alias-label-secondary); }
+.outside { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 
 /* Hand-off line in the lead chat */
 .handoff { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; }
