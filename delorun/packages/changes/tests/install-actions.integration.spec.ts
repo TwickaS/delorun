@@ -127,7 +127,7 @@ describe('applyInstallChange', () => {
     expect(result.historyVersion).toMatch(/^[0-9a-f]{40}$/)
     expect(result.entry.historyVersion).toBe(result.historyVersion)
     expect(result.folderChange).toBeUndefined()
-    expect(await history(fx)).toEqual([`Applied ${install.id}: The agent asks to install new-plugin@2.0.0`])
+    expect(await history(fx)).toEqual([`Applied: The agent asks to install new-plugin@2.0.0`])
     expect((await readChangeLog(fx.home, PROFILE)).entries).toEqual([result.entry])
 
     const update = await recordPluginRequest(context(fx), { action: 'install', spec: 'left-pad@2.0.0' })

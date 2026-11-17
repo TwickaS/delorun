@@ -425,7 +425,7 @@ export async function applyInstallChange(ctx: ChangesContext, id: ChangeId, pres
       }
     }
     await operation.after()
-    const recorded = await recordVersion(ctx, `Applied ${id}: ${entry.summary}`)
+    const recorded = await recordVersion(ctx, `Applied: ${entry.summary}`)
     const applied: ChangeEntry = { ...request, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(operation.log, applied))
     const outcome = await options.reload()
