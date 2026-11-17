@@ -28,7 +28,7 @@ interface DownloadsSource {
 
 A `DownloadItem` has `key` (the package name), `title`, `iconUrl`, `state`, `receivedBytes`, `totalBytes`, `position` and `failure`. The states are `queued`, `waiting-for-unlock`, `downloading`, `verifying`, `installing`, `ready`, `needs-reload`, `failed` and `cancelled`.
 
-`createFakeDownloadsSource(items)` holds the items in memory; its `set` and `update` drive tests and the harness page. `createRemoteDownloadsSource()` is the adapter for `@delorun/plugin-packs`' remote actions; until it is wired it reads an empty list.
+`createFakeDownloadsSource(items)` holds the items in memory; its `set` and `update` drive tests and the harness page. `createRemoteDownloadsSource(ctx)` is the adapter for `@delorun/plugin-packs`' `packs` remote: it reads the install list while a surface subscribes (on the Host's install announcements, after a connection reset, and every 1.5 seconds while something is queued or working), and sends cancel, retry, remove and dismiss. A refusal that asks for an unlock keeps the row on "Waiting for unlock". A Host without plugin packs shows an empty list.
 
 ## In the setup guide
 

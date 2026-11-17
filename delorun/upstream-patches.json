@@ -2671,6 +2671,12 @@
       "class": "delorun-feature",
       "feature": "optional-bundles",
       "reason": "Webhooks bundle: the handler remembers the last 1024 verified delivery ids and answers a repeat of one with 200 without dispatching it, so a captured delivery cannot start a second Session; an id is remembered only after its signature verified, and forgotten when dispatch failed so the sender's retry is accepted. Upstream dispatches every verified request. Nothing is added for a delivery seen once, and the signature, body and header checks are unchanged."
+    },
+    {
+      "path": "packages/subagent/subagent-claude-code/cordis.patch.yml",
+      "class": "delorun-feature",
+      "feature": "optional-bundles",
+      "reason": "The Claude Code row starts with `permissionMode: acceptEdits`, so every way of adding the plugin (the setup guide, Plugins, the command line) gets edits accepted from one place instead of each writing it. A value the person sets in the profile's own patch replaces it, because that layer is read after the bundle's, and an update or a carry leaves that layer alone. Upstream's row has no config and runs with the provider's default mode."
     }
   ],
   "retired": []
