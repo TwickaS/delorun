@@ -3,9 +3,11 @@
  * <release directory> <runtime app/node_modules> <platform>` reads `delorun-<version>.packs.json` in the release
  * directory without checking its signatures, extracts each pack's archive for the platform into a temporary directory,
  * and reports each package name a pack needs that neither the pack carries, links as a peer nor fetches, and each peer
- * the runtime does not carry. With `--link-carried` it first adds as peers the needs the runtime carries, as the cut
- * does since it links them, and reports what is left. It exits 0 when every pack loads, 1 with one line per problem, and 2 on a usage error or a
- * file it cannot read. The cut runs the same check in `buildPack`; this command checks a release already built.
+ * the runtime does not carry, and each copy of a package that must exist once nested inside another package. With
+ * `--link-carried` it first links, as peers, the needs the runtime carries at a version they accept, with the function
+ * the cut uses (`linkCarriedNeeds`), and reports what is left. It is a report on a release already built: the cut's own
+ * refusal in `buildPack` is the gate. It exits 0 when every pack loads, 1 with one line per problem, and 2 on a usage error or a
+ * file it cannot read.
  *
  * @module @delorun/release/check-pack-imports
  */
@@ -17,7 +19,8 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { RUNTIME_PLATFORMS, type PackEntry, type ReleasePacks, type RuntimePlatform } from '@delorun/contract-release-manifest'
 import { extractPack } from '@delorun/release-formats/packs/archive'
-import { describeUnresolved, packNeeds, resolvesInPack, type PackLayout } from './closure/pack-imports.ts'
+import { describeUnresolved, linkCarriedNeeds, nestedSingleCopies, unresolvedPackImports } from './closure/pack-imports.ts'
+import { keepsOneCopy } from './closure/packs.ts'
 
 /**
  * The problems of one pack variant extracted at `directory`.
@@ -32,13 +35,19 @@ export async function packProblemsAt(entry: PackEntry, platform: RuntimePlatform
   const variant = entry.variants[platform] ?? entry.variants.any
   if (variant === undefined) return []
   const paths = new Set(variant.files.map(file => file.path))
+  const read = (path: string): Promise<string> => readFile(join(directory, ...path.split('/')), 'utf8')
   const problems = variant.peers.filter(peer => !existsSync(join(runtimeNodeModules, ...peer.split('/'), 'package.json'))).map(peer => `${entry.name}: the peer ${peer} is not in the runtime`)
-  const peers = new Set(variant.peers)
-  const layout: PackLayout = { paths, read: path => readFile(join(directory, ...path.split('/')), 'utf8'), peers, external: new Set(variant.external.map(pin => pin.name)) }
-  const needs = await packNeeds(layout)
-  if (linkCarried) for (const need of needs) if (!resolvesInPack(need, layout) && existsSync(join(runtimeNodeModules, ...need.name.split('/'), 'package.json'))) peers.add(need.name)
-  const unresolved = needs.filter(need => !resolvesInPack(need, layout))
-  return [...problems, ...unresolved.map(need => `${entry.name}: ${describeUnresolved(need)}`)]
+  const rootPeers = new Set(Object.keys((JSON.parse(await read('package.json')) as { peerDependencies?: Record<string, string> }).peerDependencies ?? {}))
+  const externals = variant.external.map(pin => pin.name)
+  for (const copy of nestedSingleCopies(paths, name => keepsOneCopy(name, rootPeers, externals))) problems.push(`${entry.name}: a second copy of a package that must exist once, nested at ${copy}`)
+  const layout = { paths, read, peers: new Set(variant.peers), external: new Set(externals) }
+  const unmet = linkCarried
+    ? await linkCarriedNeeds(layout, async (name) => {
+      const manifest = join(runtimeNodeModules, ...name.split('/'), 'package.json')
+      return existsSync(manifest) ? (JSON.parse(await readFile(manifest, 'utf8')) as { version?: string }).version : undefined
+    })
+    : (await unresolvedPackImports(layout)).map(describeUnresolved)
+  return [...problems, ...unmet.map(line => `${entry.name}: ${line}`)]
 }
 
 async function main(argv: readonly string[]): Promise<number> {

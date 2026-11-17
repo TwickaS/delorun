@@ -4,8 +4,8 @@ import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PackEntry, RuntimePlatform, SemanticVersion, Sha256Hex, Sha512Base64 } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { describeUnresolved, importedSpecifiers, packageNameOf, unresolvedPackImports, type PackLayout } from '../../src/closure/pack-imports.ts'
-import { buildPack, type PackSources } from '../../src/closure/packs.ts'
+import { describeUnresolved, importedSpecifiers, linkCarriedNeeds, nestedSingleCopies, packageNameOf, rangeProblem, unresolvedPackImports, type PackLayout } from '../../src/closure/pack-imports.ts'
+import { buildPack, keepsOneCopy, type PackSources } from '../../src/closure/packs.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from '../../src/closure/plugin-set.ts'
 import { packProblemsAt } from '../../src/check-pack-imports.ts'
 
@@ -64,7 +64,7 @@ describe('checking that every package of a pack resolves its needs', () => {
       'node_modules/own-dep/package.json': json({ name: 'own-dep', dependencies: { 'left-out': '1.0.0' } }),
     })
     const unresolved = await unresolvedPackImports(missing)
-    expect(unresolved).toEqual([{ importer: 'own-dep', directory: 'node_modules/own-dep', name: 'left-out', via: 'dependencies' }])
+    expect(unresolved).toEqual([{ importer: 'own-dep', directory: 'node_modules/own-dep', name: 'left-out', via: 'dependencies', range: '1.0.0' }])
     expect(describeUnresolved(unresolved[0]!)).toBe('own-dep (node_modules/own-dep) lists left-out in dependencies')
   })
 
@@ -117,7 +117,59 @@ describe('building a pack whose packages need what the deployment leaves out', (
 
   it('refuses the cut when neither the pack nor the closure carries a need, naming it', async () => {
     await expect(buildPack('@delorun/bundle-agent-hooks', '0.1.0', true, '0.1.0', PLATFORMS, 1_800_000_000, [], sources(HOOKS_PLUGIN, ['@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm']), temp()))
-      .rejects.toThrow(/bundle-agent-hooks for linux-x64 would not load.*dsh-hooks-claude-code.*lists @deepseek-ai\/dsh-hook-protocol in peerDependencies.*list each in @delorun\/bundle-agent-hooks's dependencies/u)
+      .rejects.toThrow(/bundle-agent-hooks for linux-x64 would not load.*dsh-hooks-claude-code.*lists @deepseek-ai\/dsh-hook-protocol in peerDependencies.*List a package the closure does not carry in @delorun\/bundle-agent-hooks's dependencies/u)
+  })
+})
+
+describe('linking needs to the closure only at a version they accept, and one copy of a shared package', () => {
+  const PLATFORMS: RuntimePlatform[] = ['linux-x64']
+  const UI = {
+    'package.json': json({ name: '@delorun/bundle-ui', version: '0.1.0', dependencies: { '@deepseek-ai/dsh-ui': '0.1.0' } }),
+    'node_modules/@deepseek-ai/dsh-ui/package.json': json({ name: '@deepseek-ai/dsh-ui', version: '0.1.0', peerDependencies: { react: '^19.0.0', '@deepseek-ai/cordis': 'workspace:~' } }),
+    'node_modules/@deepseek-ai/dsh-ui/lib/index.js': 'import "react"\nimport "@deepseek-ai/cordis"\n',
+  }
+  function closureOf(versions: Readonly<Record<string, string>>): PackSources {
+    const modules = temp()
+    for (const [name, version] of Object.entries(versions)) put(modules, { [`${name}/package.json`]: json({ name, version }) })
+    return {
+      closureNodeModules: () => modules,
+      deploy: (_name, _platform, directory) => Promise.resolve(put(directory, UI)),
+      locked: () => undefined,
+      download: () => Promise.reject(new Error('no download in this test')),
+    }
+  }
+
+  it('refuses the cut when the closure carries a peer at a version outside the range the plugin declares, naming both', async () => {
+    await expect(buildPack('@delorun/bundle-ui', '0.1.0', true, '0.1.0', PLATFORMS, 1_800_000_000, [], closureOf({ react: '18.3.1', '@deepseek-ai/cordis': '4.0.0' }), temp()))
+      .rejects.toThrow(/@deepseek-ai\/dsh-ui \(node_modules\/@deepseek-ai\/dsh-ui\) lists react in peerDependencies at \^19\.0\.0, but the closure carries react@18\.3\.1/u)
+  })
+
+  it('links the peer when the closure\'s version is in range, and a workspace specifier to the closure\'s copy', async () => {
+    const built = await buildPack('@delorun/bundle-ui', '0.1.0', true, '0.1.0', PLATFORMS, 1_800_000_000, [], closureOf({ react: '19.2.0', '@deepseek-ai/cordis': '4.0.0' }), temp())
+    expect(built.entry.variants.any!.peers).toEqual(['@deepseek-ai/cordis', 'react'])
+  })
+
+  it('links an import that declares no version to whatever the closure carries', async () => {
+    const files = { 'package.json': json({ name: '@deepseek-ai/dsh-x' }), 'lib/index.js': 'import "react"\n' }
+    const peers = new Set<string>()
+    expect(await linkCarriedNeeds({ ...layout(files), peers }, () => Promise.resolve('18.3.1'))).toEqual([])
+    expect([...peers]).toEqual(['react'])
+  })
+
+  it('refuses a version specifier it cannot compare', () => {
+    const need = { importer: 'a', directory: 'node_modules/a', name: 'b', via: 'dependencies' as const }
+    expect(rangeProblem({ ...need, range: 'github:x/b' }, '1.0.0')).toMatch(/at github:x\/b, which is not a version range/u)
+    expect(rangeProblem({ ...need, range: 'npm:b@^1.0.0' }, '1.2.0')).toBeUndefined()
+    expect(rangeProblem({ ...need, name: '@deepseek-ai/b', range: '@deepseek-ai/b@file:///source/packages/b' }, '0.2.2-rc.3')).toBeUndefined()
+    expect(rangeProblem({ ...need, range: '^0.2.2-rc.1' }, '0.2.2-rc.3')).toBeUndefined()
+  })
+
+  it('refuses a nested copy of a package that must exist once, at any depth, naming its path', async () => {
+    const nested = { ...UI, 'node_modules/@deepseek-ai/dsh-ui/node_modules/zod/package.json': json({ name: 'zod', version: '4.0.0' }), 'node_modules/left/package.json': json({ name: 'left' }), 'node_modules/left/node_modules/@delorun/x/package.json': json({ name: '@delorun/x' }) }
+    expect(nestedSingleCopies(new Set(Object.keys(nested)), name => keepsOneCopy(name, new Set(), []))).toEqual(['node_modules/@deepseek-ai/dsh-ui/node_modules/zod', 'node_modules/left/node_modules/@delorun/x'])
+    const sources = { ...closureOf({ react: '19.2.0', '@deepseek-ai/cordis': '4.0.0' }), deploy: (_name: string, _platform: RuntimePlatform, directory: string) => Promise.resolve(put(directory, nested)) }
+    await expect(buildPack('@delorun/bundle-ui', '0.1.0', true, '0.1.0', PLATFORMS, 1_800_000_000, [], sources, temp()))
+      .rejects.toThrow(/second copy of a package that must exist once.*node_modules\/@deepseek-ai\/dsh-ui\/node_modules\/zod/u)
   })
 })
 
@@ -126,7 +178,7 @@ describe('checking a built release\'s pack', () => {
     const directory = temp()
     put(directory, HOOKS_PLUGIN)
     const runtime = temp()
-    put(runtime, { '@deepseek-ai/dsh-llm/package.json': json({ name: '@deepseek-ai/dsh-llm' }), '@deepseek-ai/dsh-hook-protocol/package.json': json({ name: '@deepseek-ai/dsh-hook-protocol' }) })
+    put(runtime, { '@deepseek-ai/dsh-llm/package.json': json({ name: '@deepseek-ai/dsh-llm', version: '0.2.2' }), '@deepseek-ai/dsh-hook-protocol/package.json': json({ name: '@deepseek-ai/dsh-hook-protocol', version: '0.2.2' }) })
     const sha256 = brandString<Sha256Hex>('0'.repeat(64))
     const entry: PackEntry = {
       name: '@delorun/bundle-agent-hooks', version: brandString<SemanticVersion>('0.1.0'), experimental: true,

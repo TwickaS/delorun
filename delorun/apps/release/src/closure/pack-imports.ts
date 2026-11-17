@@ -2,8 +2,9 @@
  * Whether every package in a pack can load once installed. An installed pack resolves a bare import the way Node does
  * from the file's real path: through the `node_modules` folders inside the pack, up to the pack's own `node_modules`,
  * where the install adds one link per signed peer into the runtime's `app/node_modules` and extracts each external
- * package. Nothing above the pack is searched. A package the pack neither carries, links nor fetches fails at load with
- * "Cannot find package".
+ * package. Node goes on to the folders above the pack, but the check counts nothing found there: what lies above an
+ * installed pack is not part of the release, so a package there cannot meet a need the build accepts. A package the
+ * pack neither carries, links nor fetches fails at load with "Cannot find package".
  *
  * What a package needs: its `dependencies` and required `peerDependencies`, and, for a workspace or Delorun package, each
  * bare specifier its JavaScript imports, re-exports or requires with a string literal. Third-party code is held to its
@@ -12,6 +13,7 @@
  * @module @delorun/release/closure/pack-imports
  */
 import { builtinModules } from 'node:module'
+import semver from 'semver'
 import ts from 'typescript'
 
 /** Scopes of the workspace, Delorun and rescoped vendor packages, whose imports the check reads. */
@@ -39,6 +41,8 @@ export interface UnresolvedImport {
   readonly name: string
   /** Where the need comes from: a `package.json` field, or the file that imports it. */
   readonly via: 'dependencies' | 'peerDependencies' | { readonly file: string }
+  /** The version specifier the field declares; none for an import. */
+  readonly range?: string
 }
 
 interface Manifest {
@@ -124,13 +128,13 @@ export async function packNeeds(layout: PackLayout): Promise<UnresolvedImport[]>
     const importer = manifest.name ?? directory
     const optional = new Set(Object.keys(manifest.optionalDependencies ?? {}))
     const seen = new Set<string>()
-    const need = (name: string, via: UnresolvedImport['via']): void => {
+    const need = (name: string, via: UnresolvedImport['via'], range?: string): void => {
       if (seen.has(name) || name === importer) return
       seen.add(name)
-      needs.push({ importer, directory, name, via })
+      needs.push({ importer, directory, name, via, ...range === undefined ? {} : { range } })
     }
-    for (const name of Object.keys(manifest.dependencies ?? {})) if (!optional.has(name)) need(name, 'dependencies')
-    for (const name of Object.keys(manifest.peerDependencies ?? {})) if (manifest.peerDependenciesMeta?.[name]?.optional !== true) need(name, 'peerDependencies')
+    for (const [name, range] of Object.entries(manifest.dependencies ?? {})) if (!optional.has(name)) need(name, 'dependencies', range)
+    for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) if (manifest.peerDependenciesMeta?.[name]?.optional !== true) need(name, 'peerDependencies', range)
     if (!OWN_SCOPES.some(scope => importer.startsWith(scope))) continue
     // The package's own files: those below its directory that are not inside a package nested in it.
     const own = [...layout.paths].filter(path => path.startsWith(prefix) && /\.[cm]?js$/u.test(path) && !path.slice(prefix.length).split('/').includes('node_modules')).sort()
@@ -161,4 +165,65 @@ export async function unresolvedPackImports(layout: PackLayout): Promise<Unresol
 export function describeUnresolved(need: UnresolvedImport): string {
   const where = need.directory === '' ? need.importer : `${need.importer} (${need.directory})`
   return typeof need.via === 'string' ? `${where} lists ${need.name} in ${need.via}` : `${where} imports ${need.name} in ${need.via.file}`
+}
+
+/**
+ * Whether the closure's version of a package meets the specifier a need declares.
+ * @param need - the need, with the specifier its `package.json` field declares, if any.
+ * @param version - the closure's version of the package.
+ * @returns why it does not, or `undefined` when it does or the need is an import, which declares no version. A
+ * `workspace:` specifier with no range, and a `file:` or `link:` one of a workspace or Delorun package, name the
+ * workspace's own copy, which is the closure's.
+ */
+export function rangeProblem(need: UnresolvedImport, version: string): string | undefined {
+  if (need.range === undefined) return undefined
+  let range = need.range
+  if (range.startsWith('workspace:')) range = range.slice('workspace:'.length)
+  if (['', '*', '~', '^'].includes(range)) return undefined
+  if (/(?:^|@)(?:file|link):/u.test(range) && OWN_SCOPES.some(scope => need.name.startsWith(scope))) return undefined
+  if (range.startsWith('npm:')) range = range.slice(range.lastIndexOf('@') + 1)
+  if (semver.validRange(range) === null) return `${describeUnresolved(need)} at ${need.range}, which is not a version range the build can compare with the closure's ${need.name}@${version}`
+  return semver.satisfies(version, range, { includePrerelease: true }) ? undefined : `${describeUnresolved(need)} at ${need.range}, but the closure carries ${need.name}@${version}`
+}
+
+/**
+ * Link each need the pack does not carry to the closure's copy, as the cut does: a need the closure carries becomes a
+ * peer when the closure's version meets the specifier the need declares.
+ * @param layout - the pack, with the peers to add to.
+ * @param closureVersion - the closure's version of a package, or `undefined` when the closure does not carry it.
+ * @returns one line per need that stays unmet: neither carried nor linked, or carried at a version outside its range.
+ */
+export async function linkCarriedNeeds(layout: PackLayout & { readonly peers: Set<string> }, closureVersion: (name: string) => Promise<string | undefined>): Promise<string[]> {
+  const problems: string[] = []
+  const open = (await packNeeds(layout)).filter(need => !resolvesInPack(need, layout))
+  const versions = new Map<string, string | undefined>()
+  for (const need of open) if (!versions.has(need.name)) versions.set(need.name, await closureVersion(need.name))
+  // A name is linked only when every need of it accepts the closure's version, since all of them would share the link.
+  const refused = new Set<string>()
+  for (const need of open) {
+    const version = versions.get(need.name)
+    const problem = version === undefined ? undefined : rangeProblem(need, version)
+    if (problem === undefined) continue
+    problems.push(problem)
+    refused.add(need.name)
+  }
+  for (const [name, version] of versions) if (version !== undefined && !refused.has(name)) layout.peers.add(name)
+  for (const need of open) if (!refused.has(need.name) && !resolvesInPack(need, layout)) problems.push(describeUnresolved(need))
+  return problems
+}
+
+/**
+ * The copies of a package that must exist once, nested inside another package of the pack, where they would shadow
+ * the copy every other package shares for the package that nests them.
+ * @param paths - the pack's file paths.
+ * @param once - whether a package name must exist once (`keepsOneCopy`).
+ * @returns the nested copies' directories, such as `node_modules/a/node_modules/react`.
+ */
+export function nestedSingleCopies(paths: ReadonlySet<string>, once: (name: string) => boolean): string[] {
+  return packageDirectories(paths).filter((directory) => {
+    const segments = directory.split('/')
+    if (segments.filter(segment => segment === 'node_modules').length < 2) return false
+    const at = segments.lastIndexOf('node_modules')
+    return once(segments.slice(at + 1).join('/'))
+  })
 }
