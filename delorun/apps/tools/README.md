@@ -438,7 +438,7 @@ The overlay also mounts [`@delorun/bundle-local`](../../packages/bundle-local/RE
 | `fetch_guard` | built | `@delorun/plugin-fetch-guard` `enabled` | on | on, through `@delorun/bundle-local` | off | yes |
 | `preset_inspect` | built | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | on | off: no shipped row sets it, so the Config default stands | off | yes |
 | `doctor` | built | `@deepseek-ai/dsh-doctor/app` `doctor` | on | not mounted: only upstream's `doctor` profile mounts the app | off | no |
-| `plugin_manager_read_exemption` | built | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | on | off: no shipped row sets it, so every action escalates as in stock | off | yes |
+| `plugin_manager_read_exemption` | built | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | on | on in the Standard and Creator presets' tool rows, so the listing actions run without asking and every change escalates; the top-level row stays disabled | off | yes |
 | `profile_history` | built | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | on | off: no shipped row sets it | off | yes |
 | `scheduled_task_consent` | built | `@delorun/plugin-schedule-consent` `enabled` | on | on, through `@delorun/bundle-local` | off | yes |
 | `instruction_layer_consent` | built | `@delorun/plugin-instruction-consent` `enabled` | on | on, through `@delorun/bundle-local` | off | yes |

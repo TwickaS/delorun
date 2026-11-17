@@ -444,7 +444,7 @@ fork 套件的每个阶段为每个包记住一次通过（[`src/checks/units.ts
 | `fetch_guard` | 已构建 | `@delorun/plugin-fetch-guard` `enabled` | 开 | 开，经由 `@delorun/bundle-local` | 关 | 是 |
 | `preset_inspect` | 已构建 | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | 开 | 关：没有已发布的行设置它，所以 Config 默认值生效 | 关 | 是 |
 | `doctor` | 已构建 | `@deepseek-ai/dsh-doctor/app` `doctor` | 开 | 未挂载：只有上游的 `doctor` 配置挂载该应用 | 关 | 否 |
-| `plugin_manager_read_exemption` | 已构建 | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | 开 | 关：没有已发布的行设置它，所以每个动作都像 stock 中那样升级 | 关 | 是 |
+| `plugin_manager_read_exemption` | 已构建 | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | 开 | 在标准和 Creator 预设的工具行中开启，所以列出动作无需询问即可运行，每个更改都会升级；顶层行保持禁用 | 关 | 是 |
 | `profile_history` | 已构建 | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | 开 | 关：没有已发布的行设置它 | 关 | 是 |
 | `scheduled_task_consent` | 已构建 | `@delorun/plugin-schedule-consent` `enabled` | 开 | 开，经由 `@delorun/bundle-local` | 关 | 是 |
 | `instruction_layer_consent` | 已构建 | `@delorun/plugin-instruction-consent` `enabled` | 开 | 开，经由 `@delorun/bundle-local` | 关 | 是 |
