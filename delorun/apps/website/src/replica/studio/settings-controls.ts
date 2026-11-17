@@ -4,4 +4,4 @@
  * look chooser it re-exports.
  * @module @delorun/website/replica/studio/settings-controls
  */
-export { SettingsCard } from '../../../../../packages/brand/src/settings/SettingsCard.tsx'
+export { SettingsCard } from '@brand/settings/SettingsCard.tsx'
