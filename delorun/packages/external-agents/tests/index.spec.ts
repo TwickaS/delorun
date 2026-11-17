@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -32,5 +32,7 @@ describe('the package entry', () => {
     const { accounts } = await ctx.get('agentAccounts')!.readAll()
     expect(accounts.map(account => [account.provider, account.installed])).toEqual([['claude-code', false], ['codex', false]])
     expect(routes).toEqual(['/api/delorunExternalAgents.accounts', '/api/delorunExternalAgents.refresh'])
+    // The gate's start-up reap writes the program records; the home is removed only after that write.
+    await expect.poll(() => existsSync(join(home, 'secrets', 'external-agents', 'programs.json'))).toBe(true)
   })
 })

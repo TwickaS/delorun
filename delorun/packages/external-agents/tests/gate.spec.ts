@@ -289,6 +289,16 @@ async function refusal(promise: Promise<unknown>): Promise<GateRefusedError['ref
   return error.refusal
 }
 
+/**
+ * A scratch Delorun home that the test's teardown removes.
+ * @returns its real path.
+ */
+function scratchHome(): string {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-')))
+  roots.push(home)
+  return home
+}
+
 /** Let queued promise work settle. */
 const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -639,7 +649,7 @@ describe('programs a dead Host left (T11, review D15)', () => {
     : []
 
   it('records a running process\'s identity and forgets it once the process has exited', async () => {
-    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    const path = programRecordPath(scratchHome())
     roots.push(dirname(dirname(dirname(path))))
     const w = await world({ records: { path, table: table() }, pid: identity.pid })
     await w.gate.start(start(w))
@@ -649,7 +659,7 @@ describe('programs a dead Host left (T11, review D15)', () => {
   })
 
   it('stops a recorded program whose identity still matches at the next start, and never a reused id', async () => {
-    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    const path = programRecordPath(scratchHome())
     roots.push(dirname(dirname(dirname(path))))
     const before = table()
     const left = new ProgramRecords({ path, table: before, graceMs: 5, settleMs: 5, located: () => new Set(['/opt/claude/claude']), warn: () => {} })
@@ -663,7 +673,7 @@ describe('programs a dead Host left (T11, review D15)', () => {
   })
 
   it('records nothing for a process the provider names no leader for', async () => {
-    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    const path = programRecordPath(scratchHome())
     roots.push(dirname(dirname(dirname(path))))
     const w = await world({ records: { path, table: table() } })
     await w.gate.start(start(w))
