@@ -62,6 +62,14 @@ An agent works in the chat's workspace. It can read and, where its own settings 
 
 The result comes back into the chat that handed over the task, as the agent's answer. A task that fails shows why in the same place.
 
+Three Codex failures have their own wording:
+
+- **Your configured model is not offered on your plan.** Codex stops before the task starts and names the model and the models your plan offers, for example "Codex's configured model gpt-5.5 is not offered on your plan. Choose one of: gpt-5.6-luna, gpt-5.5, in your Codex settings." Choose a model under **Advanced options**, or in your Codex settings. Delorun never picks one for you.
+- **Your plan's limit is reached.** The result says so and, when Codex reports it, when the limit resets.
+- **Codex is not signed in.** The result gives the `delorun agents login codex` command.
+
+Delorun's Codex runs never change your own Codex settings file, so a folder you hand to Codex does not become a trusted folder in your terminal Codex.
+
 ## Advanced options
 
 Each agent card has **Advanced options**, closed by default. The default path needs nothing from it. It holds two settings.
