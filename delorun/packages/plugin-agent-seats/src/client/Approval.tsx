@@ -10,7 +10,6 @@ import type { ApprovalDecision, PendingApproval } from '@deepseek-ai/dsh-client-
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SeatReach, SeatReachSource } from './actions.ts'
 import type { SeatTranslate } from './Banner.tsx'
-import { isRecordName } from './tool-model.ts'
 import { AGENT_NAMES, type SeatAgent } from './view.ts'
 import css from './Seat.module.css'
 
@@ -85,8 +84,8 @@ export function SeatApproval({ matched, t, reach, clock }: SeatApprovalProps) {
     void matched.answer(decision).catch(() => { setSent(false) })
   }
   const canGrant = standing.kind !== 'locked-phone'
-  // Every seat question carries a run scope; a tool that is not a program's record can only be allowed once.
-  const canRun = isRecordName(matched.toolName)
+  // Only a request that declared a run scope has a Host listener that can honour the answer.
+  const canRun = matched.runScope !== undefined
   return (
     <div className={css.approval} role="group" aria-label={t('approval.waiting')} aria-busy={sent} data-seat-approval="">
       <span className={css.waiting}>● {t('approval.waiting')}</span>

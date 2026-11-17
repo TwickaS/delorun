@@ -41,6 +41,18 @@ describe('the opening card', () => {
     expect(screen.getByText('This agent is Claude Code, running outside Delorun')).toBeTruthy()
   })
 
+  it('collapses to one line after the first turn and expands again on a click', () => {
+    const { container } = banner({ ...base, turns: 1 })
+    expect(container.querySelector('[data-seat-line]')).not.toBeNull()
+    expect(screen.getByText('Claude Code · outside Delorun')).toBeTruthy()
+    expect(screen.getByText('Sandbox off')).toBeTruthy()
+    expect(screen.queryByText('Own settings: accept edits')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Show what this agent is'))
+    expect(screen.getByText('Own settings: accept edits')).toBeTruthy()
+    fireEvent.click(screen.getByText('Hide the card'))
+    expect(container.querySelector('[data-seat-line]')).not.toBeNull()
+  })
+
   it('renders nothing in a chat that is not a live agent\'s', () => {
     const { container } = banner(undefined)
     expect(container.innerHTML).toBe('')
@@ -97,7 +109,7 @@ describe('states', () => {
 })
 
 describe('the approval card', () => {
-  const pending = (answer = vi.fn(() => Promise.resolve())) => ({ kind: 'approval', grants: 'external-agent', toolName: 'claude_code.Bash', reason: 'git push origin fix', answerable: true, answer }) as never
+  const pending = (answer = vi.fn(() => Promise.resolve())) => ({ kind: 'approval', grants: 'external-agent', toolName: 'claude_code.Bash', runScope: 'external-agent-run', reason: 'git push origin fix', answerable: true, answer }) as never
   const reach = (kind: 'computer' | 'locked-phone' | 'unlocked-phone') => {
     const standing = kind === 'unlocked-phone' ? { kind, until: 1402 } as const : { kind } as const
     return {
@@ -119,6 +131,12 @@ describe('the approval card', () => {
     fireEvent.click(screen.getByText('Allow for this run'))
     expect(answer).toHaveBeenCalledWith(allowedForRunDecision())
     expect(answer).toHaveBeenCalledWith('allowed-for-run')
+  })
+
+  it('hides Allow for this run when the request declared no run scope', () => {
+    render(<SeatApproval matched={{ ...(pending() as object), runScope: undefined } as never} t={t} reach={reach('computer')} clock={clock} />)
+    expect(screen.queryByText('Allow for this run')).toBeNull()
+    expect(screen.getByText('Allow once')).toBeTruthy()
   })
 
   it('answers Allow once with allowed-once', () => {

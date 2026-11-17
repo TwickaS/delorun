@@ -160,24 +160,47 @@ function StateCard({ seat, sessionId, t, client, copy, clock }: { readonly seat:
  */
 export function Banner({ sessionId, useProjection, t, client, copy, clock }: BannerProps) {
   const seat = useProjection('agentSeat')
+  // `null` follows the first turn; a person's click then keeps the card open or shut.
+  const [open, setOpen] = useState<boolean | null>(null)
   if (seat === undefined || seat === null) return null
   const agent = AGENT_NAMES[seat.agent]
+  const collapsed = (open ?? (seat.turns ?? 0) === 0) === false
   return (
     <>
       <div className={css.rule} data-agent={seat.agent} data-seat-rule="" role="presentation" />
       <div className={css.root} data-agent={seat.agent} data-seat-banner="">
-        <section className={css.card} aria-label={t('rule.label', { agent })}>
-          <span className={css.mono} aria-hidden>{monogram(seat.agent)}</span>
-          <div className={css.cardBody}>
-            <span className={css.title}>{t('card.title', { agent })}</span>
-            <p className={css.text}>{t('card.body')}</p>
-            <ul className={css.chips}>
-              {chipsOf(seat, t, clock).map(chip => (
-                <li key={chip.text} className={chip.warn ? `${css.chip} ${css.chipWarn}` : css.chip}>{chip.text}</li>
-              ))}
-            </ul>
-          </div>
-        </section>
+        {collapsed
+          ? (
+            <button type="button" className={css.line} aria-expanded={false} aria-label={t('line.expand')} data-seat-line=""
+              onClick={() => { setOpen(true) }}>
+              <span className={css.mono} aria-hidden>{monogram(seat.agent)}</span>
+              <span className={css.lineName}>{t('line.outside', { agent })}</span>
+              {seat.fiveHourPercent !== undefined && (
+                <span className={css.meter} role="img" aria-label={t('line.limit', { percent: String(seat.fiveHourPercent) })}>
+                  <span className={css.meterFill} style={{ width: `${String(Math.min(100, seat.fiveHourPercent))}%` }} />
+                </span>
+              )}
+              {seat.fiveHourPercent !== undefined && <span className={css.lineText}>{t('line.limit', { percent: String(seat.fiveHourPercent) })}</span>}
+              <span className={`${css.chip} ${css.chipWarn}`}>{t('line.sandboxOff')}</span>
+            </button>
+          )
+          : (
+            <section className={css.card} aria-label={t('rule.label', { agent })}>
+              <span className={css.mono} aria-hidden>{monogram(seat.agent)}</span>
+              <div className={css.cardBody}>
+                <span className={css.title}>{t('card.title', { agent })}</span>
+                <p className={css.text}>{t('card.body')}</p>
+                <ul className={css.chips}>
+                  {chipsOf(seat, t, clock).map(chip => (
+                    <li key={chip.text} className={chip.warn ? `${css.chip} ${css.chipWarn}` : css.chip}>{chip.text}</li>
+                  ))}
+                </ul>
+              </div>
+              {(seat.turns ?? 0) > 0 && (
+                <button type="button" className={css.toggle} aria-expanded onClick={() => { setOpen(false) }}>{t('line.collapse')}</button>
+              )}
+            </section>
+          )}
         <StateCard seat={seat} sessionId={sessionId} t={t} client={client} copy={copy} clock={clock} />
       </div>
     </>

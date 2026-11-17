@@ -2094,13 +2094,13 @@
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. Awaiting the lead's review.",
-      "sha256": "6832d14597d596551acaa3e704075126eff478ed8259f7f150ddbbbcf7a75913"
+      "sha256": "0a0ad4acdccf4ba157af22ba0643caeea3a59d8b674a38ee070d38ddbe7b09b6"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added. Forwards `escalatesTo` from the request to the card input. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "b8e079efbbd4874bd8e3ca6493a8de613042024c4f09a5655f4112c6f35887c6"
+      "sha256": "71de4da50a413342c76ce274e45db901002a7a8452ce716950c463d58f722cd5"
     },
     {
       "path": "apps/cli/src/plugin.ts",
