@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { PALETTES, PRESET_PALETTES } from '../../plugin-theme/src/config.ts'
-import { en } from '../../plugin-theme/src/client/locales.ts'
+import { en, zh } from '../../plugin-theme/src/client/locales.ts'
 import { ACCENT_IDS } from '../../plugin-theme/src/palette/soft.ts'
-import { buildLooks, buildSwatches, CONTRAST_STOPS, LOOKS, ratio, resolveLook, ROLES, selector, type RoleName } from '../scripts/looks.ts'
-import { KNOWN_LOOKS, LOOK_NAMES, lookName } from '../src/looks.ts'
+import { aaFailures, buildLooks, buildSwatches, CONTRAST_STOPS, LOOKS, ratio, resolveLook, ROLES, selector, type RoleName } from '../scripts/looks.ts'
+import { KNOWN_LOOKS, LOOK_NAMES, LOOK_NAMES_ZH, lookName } from '../src/looks.ts'
 
 const STYLESHEET = fileURLToPath(new URL('../src/looks.css', import.meta.url))
 
@@ -37,6 +37,7 @@ describe('the looks the sites offer', () => {
 
   it('names each look as the studio names its tile', () => {
     for (const id of PALETTES) expect(LOOK_NAMES[id]).toBe(en[`palette.${id}` as keyof typeof en])
+    for (const id of PALETTES) expect(LOOK_NAMES_ZH[id]).toBe(zh[`palette.${id}` as keyof typeof zh])
     expect(lookName('t3-code')).toBe('Slate')
     expect(lookName('t3-chat')).toBe('Berry')
   })
@@ -48,20 +49,24 @@ describe('text contrast in every look', () => {
     ['muted', 'surface'], ['muted', 'raised'], ['muted', 'sunken'],
     ['accent-text', 'surface'], ['accent-text', 'raised'], ['accent-text', 'sunken'],
     ['on-accent', 'accent'],
+    // The documentation paints surface-coloured text on the text-safe accent (Fumadocs' primary fill).
+    ['surface', 'accent-text'],
   ]
   for (const look of LOOKS) {
     for (const scheme of ['light', 'dark'] as const) {
       it(`reaches AA in ${selector(look)} ${scheme}`, () => {
-        const colours = resolveLook(look, scheme)
-        for (const [foreground, background] of pairs) {
-          expect(ratio(colours, foreground, background), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5)
-        }
+        expect(aaFailures(resolveLook(look, scheme), pairs)).toEqual([])
       })
     }
   }
 
   it('offers only contrast stops that move quiet text towards the text colour, since the palettes put quiet text at the AA floor', () => {
     for (const value of Object.values(CONTRAST_STOPS)) expect(value).toBeGreaterThan(0)
+  })
+
+  it('reports a pair that misses AA, so the check can fail', () => {
+    const colours = resolveLook(LOOKS[0]!, 'light')
+    expect(aaFailures({ ...colours, muted: colours.surface }, pairs)).toContain('muted on surface: 1.00')
   })
 
   it('resolves every role', () => {

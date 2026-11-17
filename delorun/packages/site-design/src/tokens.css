@@ -8,6 +8,7 @@
 @import '../../brand/src/tokens.css';
 @import '../../brand/src/fonts.css';
 @import './looks.css';
+@import './shell.css';
 
 /*
  * Fumadocs UI's roles on Delorun's brand tokens, so the docs and the website draw with the brand: the typefaces, the
@@ -40,7 +41,8 @@
   --color-fd-popover-foreground: var(--dl-text);
   --color-fd-border: var(--dl-border);
   --color-fd-primary: var(--dl-accent-text);
-  --color-fd-primary-foreground: light-dark(#FFFFFF, var(--dl-on-accent));
+  /* The primary fill is the text-safe accent, which reaches 4.5:1 against the surface, so the surface colour reads on it. */
+  --color-fd-primary-foreground: var(--dl-surface);
   --color-fd-accent: var(--dl-surface-sunken);
   --color-fd-accent-foreground: var(--dl-text);
   --color-fd-ring: var(--dl-accent);

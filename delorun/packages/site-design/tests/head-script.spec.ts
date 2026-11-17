@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -16,6 +17,8 @@ function fakeRoot(dark = false) {
 /** Runs the head script on an address; returns the root and the address the page ends on. */
 function run(address: string, deviceDark = false) {
   const root = fakeRoot()
+  const events: string[] = []
+  const window = { dispatchEvent: (event: { type: string }) => { events.push(event.type); return true } }
   let ended = address
   let writes = 0
   const store: string[] = []
@@ -23,16 +26,17 @@ function run(address: string, deviceDark = false) {
   const history = { state: null, replaceState: (_s: unknown, _t: string, path: string) => { ended = path } }
   const location = { href: address }
   const document = { documentElement: root, cookie: '' }
-  new Function('document', 'matchMedia', 'location', 'history', 'localStorage', 'sessionStorage', LOOK_SCRIPT)(
+  new Function('document', 'matchMedia', 'location', 'history', 'localStorage', 'sessionStorage', 'window', LOOK_SCRIPT)(
     document,
     () => media,
     location,
     history,
     { setItem: () => { writes++ }, getItem: () => null },
     { setItem: () => { writes++ }, getItem: () => null },
+    window,
   )
   store.push(document.cookie)
-  return { root, ended, writes, cookie: document.cookie }
+  return { root, ended, writes, cookie: document.cookie, events }
 }
 
 describe('the head script', () => {
@@ -47,7 +51,8 @@ describe('the head script', () => {
     const { root, ended } = run('https://docs.delorun.com/guide/start?search=a&look=ocean&scheme=dark&density=spacious#top')
     expect(root.dataset).toMatchObject({ look: 'ocean', density: 'spacious', contrast: 'default' })
     expect(root.classList.contains('dark')).toBe(true)
-    expect(ended).toBe('/guide/start?search=a#top')
+    expect(ended).toBe('https://docs.delorun.com/guide/start?search=a#top')
+    expect(root.dataset['scheme']).toBe('dark')
   })
 
   it('applies a custom look with its accent and contrast', () => {
@@ -59,6 +64,14 @@ describe('the head script', () => {
     const { root } = run('https://x.test/?look=%3Cscript%3E&density=wide&scheme=green')
     expect(root.dataset).toMatchObject({ look: 'soft', density: 'comfortable', contrast: 'default' })
     expect(root.classList.contains('dark')).toBe(false)
+  })
+
+  it('stays out of the way on an address that cannot be rewritten, and still paints the look', () => {
+    const root = fakeRoot()
+    const document = { documentElement: root }
+    const history = { state: null, replaceState: () => { throw new Error('SecurityError') } }
+    expect(() => new Function('document', 'matchMedia', 'location', 'history', 'window', LOOK_SCRIPT)(document, () => ({ matches: false, addEventListener: () => {} }), { href: 'https://x.test//evil.example/?look=ember' }, history, { dispatchEvent: () => true })).not.toThrow()
+    expect(root.dataset['look']).toBe('ember')
   })
 
   it('writes nothing to storage or cookies', () => {
@@ -104,12 +117,20 @@ describe('links that carry a look', () => {
 })
 
 describe('the sites\' security headers', () => {
+  const hash = `'sha256-${createHash('sha256').update(LOOK_SCRIPT).digest('base64')}'`
   for (const site of ['website', 'docs']) {
     it(`let the ${site} run its inline head script`, () => {
       const headers = readFileSync(fileURLToPath(new URL(`../../../apps/${site}/public/_headers`, import.meta.url)), 'utf8')
       const policies = headers.split('\n').filter(line => /Content-Security-Policy/i.test(line))
       expect(policies.length).toBeGreaterThan(0)
-      for (const policy of policies) expect(policy).not.toMatch(/script-src|default-src/)
+      for (const policy of policies) {
+        const restricts = /script-src|default-src/.test(policy)
+        // A policy that restricts scripts must allow this script by its hash, never by 'unsafe-inline'.
+        if (restricts) {
+          expect(policy).toContain(hash)
+          expect(policy).not.toContain("'unsafe-inline'")
+        }
+      }
     })
   }
 })

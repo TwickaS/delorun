@@ -37,7 +37,7 @@ export function OpenSearchFromLink() {
     if (query === null || query.trim() === '') return
     pendingQuery = query
     url.searchParams.delete('search')
-    history.replaceState(history.state, '', url.pathname + url.search + url.hash)
+    history.replaceState(history.state, '', url.href)
     setOpenSearch(true)
   }, [setOpenSearch])
   return null

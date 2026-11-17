@@ -36,7 +36,7 @@ export function setLook(next: Look): void {
  */
 export function resetLook(): void {
   const root = document.documentElement
-  for (const name of ['look', 'accent', 'density', 'contrast']) delete root.dataset[name]
+  for (const name of ['look', 'accent', 'density', 'contrast', 'scheme']) delete root.dataset[name]
   root.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches)
   window.dispatchEvent(new Event(EVENT))
 }

@@ -64,10 +64,12 @@ export function fontNotice(id: string, name: string, text: string): Notice {
 export function readNotices(sources: NoticeSources): Notice[] {
   const read = (...path: string[]): string => readFileSync(join(sources.packages, ...path), 'utf8')
   const sonnerText = readFileSync(sources.sonnerLicence, 'utf8').trim()
+  const sonnerCopyright = /^Copyright \(c\) .*$/m.exec(sonnerText)?.[0]
+  if (sonnerCopyright === undefined) throw new Error("Sonner's licence file no longer has a copyright line")
   return [
     t3Notice(read('plugin-theme', 'THIRD_PARTY_NOTICES.md')),
     fontNotice('schibsted-grotesk', 'Schibsted Grotesk', read('plugin-theme', 'fonts', 'SCHIBSTED-GROTESK-LICENSE.txt')),
     fontNotice('jetbrains-mono', 'JetBrains Mono', read('plugin-theme', 'fonts', 'JETBRAINS-MONO-LICENSE.txt')),
-    { id: 'sonner', name: 'Sonner', copyright: /^Copyright \(c\) .*$/m.exec(sonnerText)?.[0] ?? '', licence: 'MIT licence', text: sonnerText },
+    { id: 'sonner', name: 'Sonner', copyright: sonnerCopyright, licence: 'MIT licence', text: sonnerText },
   ]
 }

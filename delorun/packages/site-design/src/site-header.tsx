@@ -5,7 +5,7 @@
  * @module @delorun/site-design/site-header
  */
 import type { ReactNode } from 'react'
-import { Mark } from '../../brand/src/index.ts'
+import { ProductMark } from './product-mark.tsx'
 import { useLook } from './look-store.ts'
 import { withLook } from './looks.ts'
 import type { HeaderCopy, ShellLink } from './shell-copy.ts'
@@ -53,7 +53,7 @@ export function SiteHeader({ copy, home, links, leading }: { copy: HeaderCopy; h
   return (
     <header className={BAR}>
       <a href={home} className={`${BRAND} ${FOCUS}`}>
-        <Mark size={28} />
+        <ProductMark size={28} />
         <span className="text-lg">{copy.title}</span>
       </a>
       <div className={ROW}>

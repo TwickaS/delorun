@@ -4,7 +4,7 @@
  *
  * @module @delorun/docs/shell-copy
  */
-import { LOOK_NAMES } from '@design/looks.ts'
+import { LOOK_NAMES, LOOK_NAMES_ZH } from '@design/looks.ts'
 import type { FooterCopy, ShellLink, ThemeCopy } from '@design/shell-copy.ts'
 import { PRODUCT_URL } from '@/site/config.ts'
 import type { Locale } from '@/site/locale.ts'
@@ -20,7 +20,7 @@ export const THEME_COPY: Readonly<Record<Locale, ThemeCopy>> = {
   en: { open: 'Change the look of this page', title: 'Look', themes: 'Theme', scheme: 'Light or dark', light: 'Light', dark: 'Dark', back: 'Back to how it started', names: LOOK_NAMES,
     toast: { region: 'Notifications', theme: name => `The page now looks like ${name}.`, scheme: name => `The page is now ${name.toLowerCase()}.`, undo: name => `Back to ${name}`, reset: 'The page is back to how it started.' },
   },
-  zh: { open: '更改页面外观', title: '外观', themes: '主题', scheme: '浅色或深色', light: '浅色', dark: '深色', back: '恢复初始外观', names: LOOK_NAMES,
+  zh: { open: '更改页面外观', title: '外观', themes: '主题', scheme: '浅色或深色', light: '浅色', dark: '深色', back: '恢复初始外观', names: LOOK_NAMES_ZH,
     toast: { region: '通知', theme: name => `页面现在是“${name}”外观。`, scheme: name => `页面现在是${name}模式。`, undo: name => `恢复为“${name}”`, reset: '页面已恢复为初始外观。' },
   },
 }

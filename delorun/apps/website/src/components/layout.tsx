@@ -5,10 +5,12 @@
  * @module @delorun/website/layout
  */
 import type { ReactNode } from 'react'
+import { SearchForm } from '@design/search-form.tsx'
 import { SiteFooter } from '@design/site-footer.tsx'
 import { SiteHeader } from '@design/site-header.tsx'
 import { LookToaster } from '@design/look-toast.tsx'
-import { FOOTER_COPY, FOOTER_LINKS, HEADER_COPY, HEADER_LINKS, THEME_COPY } from '@/site/shell-copy.ts'
+import { FOOTER_COPY, FOOTER_LINKS, HEADER_COPY, HEADER_LINKS, SEARCH_COPY, THEME_COPY } from '@/site/shell-copy.ts'
+import { DOCS_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import { SignupForm } from '@/components/signup.tsx'
 
@@ -22,7 +24,7 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
   return (
     <>
       <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-(--dl-text) focus:px-3 focus:py-2 focus:text-(--dl-surface)">{COPY.footer.skip}</a>
-      <SiteHeader copy={HEADER_COPY} home="/" links={HEADER_LINKS} />
+      <SiteHeader copy={HEADER_COPY} home="/" links={HEADER_LINKS} leading={<SearchForm action={DOCS_URL} copy={SEARCH_COPY} className="hidden w-48 lg:block" />} />
       <div id="content" tabIndex={-1} className="flex-1 outline-none">{children}</div>
       <SiteFooter copy={FOOTER_COPY} links={FOOTER_LINKS}
         top={signup === false ? null : (

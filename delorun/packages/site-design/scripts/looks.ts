@@ -166,3 +166,17 @@ ${entries.join('\n')}
 }
 `
 }
+
+/**
+ * The text pairs of a look that miss a contrast ratio.
+ * @param colours - the look's colours in one scheme.
+ * @param pairs - the foreground and background roles to measure.
+ * @param minimum - the ratio each pair must reach; 4.5 is WCAG AA for text.
+ * @returns the pairs below the ratio, with the ratio each reaches; empty when all pass.
+ */
+export function aaFailures(colours: LookColours, pairs: ReadonlyArray<readonly [RoleName, RoleName]>, minimum = 4.5): string[] {
+  return pairs.flatMap(([foreground, background]) => {
+    const reached = ratio(colours, foreground, background)
+    return reached >= minimum ? [] : [`${foreground} on ${background}: ${reached.toFixed(2)}`]
+  })
+}

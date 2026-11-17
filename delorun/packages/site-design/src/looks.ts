@@ -36,6 +36,18 @@ export const LOOK_NAMES: Readonly<Record<LookId, string>> = {
   custom: 'Custom',
 }
 
+/** The names the studio shows on its theme tiles in Chinese; `tests/looks.spec.ts` keeps them equal to the studio's dictionary. */
+export const LOOK_NAMES_ZH: Readonly<Record<LookId, string>> = {
+  soft: '柔和',
+  't3-code': '板岩',
+  't3-chat': '浆果',
+  grove: '林地',
+  ocean: '海洋',
+  ember: '余烬',
+  iris: '鸢尾',
+  custom: '自定义',
+}
+
 /**
  * The name of a look.
  * @param id - the palette id.
@@ -145,7 +157,10 @@ export function applyLook(root: LookRoot, look: Look): void {
   else delete root.dataset['accent']
   root.dataset['density'] = look.density
   root.dataset['contrast'] = look.contrast
-  if (look.scheme !== undefined) root.classList.toggle('dark', look.scheme === 'dark')
+  if (look.scheme !== undefined) {
+    root.dataset['scheme'] = look.scheme
+    root.classList.toggle('dark', look.scheme === 'dark')
+  }
 }
 
 /**

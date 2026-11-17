@@ -5,9 +5,11 @@
  * @module @delorun/website/shell-copy
  */
 import { LOOK_NAMES } from '@design/looks.ts'
+import type { SearchCopy } from '@design/search-form.tsx'
 import type { FooterCopy, HeaderCopy, ShellLink, ThemeCopy } from '@design/shell-copy.ts'
 import { ARTICLES } from '@/site/articles.ts'
 import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL, UPSTREAM_URL } from '@/site/config.ts'
+import { NOTICES_COPY } from '@/site/notices-copy.ts'
 import { COPY } from '@/site/copy.ts'
 
 /** The theme control's text. */
@@ -58,6 +60,9 @@ export const FOOTER_LINKS: readonly ShellLink[] = [
   ...ARTICLES.length === 0 ? [] : [{ label: COPY.footer.blog, href: '/blog' }],
   { label: COPY.footer.github, href: GITHUB_URL },
   { label: COPY.footer.privacy, href: '/privacy' },
-  { label: 'Notices', href: '/notices' },
+  { label: NOTICES_COPY.footerLabel, href: '/notices' },
   { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
 ]
+
+/** The header's search field, which opens the documentation's search. */
+export const SEARCH_COPY: SearchCopy = { label: 'Search the documentation', placeholder: 'Search the docs' }
