@@ -325,6 +325,7 @@
       - '@delorun/plugin-fetch-guard'
       - '@delorun/plugin-tool-failure-guard'
       - '@delorun/plugin-delegation-consent'
+      - '@delorun/external-agents'
       - '@delorun/plugin-changes'
       - '@delorun/bundle-local/update-gate'
       - '@delorun/bundle-local/update-check'
