@@ -58,6 +58,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   ChatSwitchRefused: 'raised by the studio\'s Allow for this chat choice in the browser and shown on the card as the failure sentence',
   TrashRequestError: 'raised by the studio\'s trash client in the browser',
   ChatStateRefusedError: PLUGIN,
+  SandboxUnavailableError: PLUGIN,
   ClaudeCodeDriverError: PLUGIN,
   CodexSessionClosedError: PLUGIN,
   CodexTurnRunningError: PLUGIN,

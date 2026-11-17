@@ -61,6 +61,7 @@
     "src/client/report-api.ts",
     "src/client/versions-api.ts",
     "src/client/host-api.ts",
+    "src/client/gate.ts",
     "src/client/AgentLimits.tsx",
     "src/client/AgentLimits.module.css",
     "src/client/agent-limits.ts",
