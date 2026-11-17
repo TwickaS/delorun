@@ -2,8 +2,9 @@
  * The `delorun-real-browser` skill: how the agent works in the person's own Chrome through browse's `execute` tool. It
  * says plainly that the browser is the person's, signed in as them, and teaches reading the page before acting, one
  * short script per step, extracting results at the end and handing sign-ins, codes and payments back to the person
- * with browse's `handoff`. The skill is text; it grants nothing. The plugin waits for the browse driver's service, so
- * the skill is listed only while the driver row is on, and it goes away when the driver does.
+ * with browse's `handoff`. The skill is text; it grants nothing. The plugin itself needs only the skill registry, so it
+ * starts with the driver row off; it registers the skill while the browse driver's service is present, so the skill is
+ * listed only while the driver row is on, and it goes away when the driver does.
  *
  * The browsing practice is adapted from ego (lite)'s MIT-licensed `ego-browser` skill; the notice is in `NOTICE.md`.
  *
@@ -24,8 +25,8 @@ export const SKILL_NAME = 'delorun-real-browser'
 /** The service the browse driver (`@delorun/browser-use-browse`) provides while its row is on. */
 export const DRIVER_SERVICE = 'realBrowser'
 
-/** The skill registry the provider registers with, and the driver whose presence lists the skill. */
-export const inject = ['skills', DRIVER_SERVICE]
+/** The skill registry the provider registers with; the driver's service is waited for inside {@link apply}. */
+export const inject = ['skills']
 
 /** The provider's name on the skill candidates. */
 export const PROVIDER = 'delorun-real-browser'
@@ -46,8 +47,8 @@ export function parseSkill(raw: string, path: string): { readonly description: s
 }
 
 /**
- * Register the skill; cordis runs this only once the driver's service is present and disposes it when the service goes.
- * @param ctx - the context carrying the skill registry and the driver's service.
+ * Register the skill while the driver's service is present; cordis disposes the registration when the service goes.
+ * @param ctx - the context carrying the skill registry.
  */
 export function apply(ctx: Context): void {
   const directory = fileURLToPath(new URL(`../assets/${SKILL_NAME}/`, import.meta.url))
@@ -68,5 +69,5 @@ export function apply(ctx: Context): void {
       return Promise.resolve({ ...summary, content: parseSkill(readFileSync(locator as string, 'utf8'), locator as string).content })
     },
   }
-  ctx.skills.registerProvider(() => provider)
+  ctx.inject([DRIVER_SERVICE], (scope) => { scope.skills.registerProvider(() => provider) })
 }

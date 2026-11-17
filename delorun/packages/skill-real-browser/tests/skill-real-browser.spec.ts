@@ -36,10 +36,12 @@ async function load(provider: SkillProvider): Promise<{ readonly candidate: Skil
   return { candidate: candidate!, content: skill!.content }
 }
 
-it('lists the skill only while the browse driver\'s service is present, and withdraws it when the driver goes', async () => {
+it('starts with the driver off, lists the skill only while the driver\'s service is present, and withdraws it when the driver goes', async () => {
   const ctx = new Context()
   await ctx.plugin(SkillRegistry)
-  await ctx.plugin(plugin).await()
+  const row = ctx.plugin(plugin)
+  // The row starts with the driver off, so a profile that lists it but not the driver still starts.
+  await row.await()
   const names = async (): Promise<string[]> => (await ctx.get('skills')!.list()).map(skill => skill.name)
   expect(await names()).toEqual([])
   // A stand-in for the browse driver's row: it provides the service while it is on.
