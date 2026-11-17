@@ -3,6 +3,7 @@
  * @module @delorun/plugin-onboarding/client/locales
  */
 
+import { limitsEn, limitsZh } from '@delorun/bundle-local/agent-limits-locales'
 import { browserEn, browserZh } from './browser-locales.ts'
 import { pinEn, pinZh } from './pin-locales.ts'
 
@@ -339,6 +340,7 @@ export const en = {
   'row.show': 'Run setup again',
   ...pinEn,
   ...browserEn,
+  ...limitsEn,
 } as const satisfies Record<string, string>
 
 /** A key of the dictionary. */
@@ -677,6 +679,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'row.show': '再次运行设置',
   ...pinZh,
   ...browserZh,
+  ...limitsZh,
 }
 
 /** The dictionaries this plugin registers, by locale id. */

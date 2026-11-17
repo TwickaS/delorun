@@ -1,0 +1,36 @@
+/* The Plans pill takes the cost pill's frame and changes colour with the standing of the figures. */
+.pill[data-standing='near'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.pill[data-standing='reached'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.agents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-6);
+  margin: 0 var(--delorun-space-2);
+}
+
+.agent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px var(--delorun-space-6);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.signIn {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}

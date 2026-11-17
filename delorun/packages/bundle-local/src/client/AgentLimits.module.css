@@ -1,0 +1,127 @@
+/* The sign-in line, the limit bars and "Check now" on every agent surface. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(26rem, calc(100vw - 72px));
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.signIn {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+
+.title {
+  font-weight: 500;
+}
+
+.value {
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-label-secondary);
+}
+
+.bar[data-standing='near'] .fill {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.bar[data-standing='reached'] .fill {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.bar[data-standing='near'] .word {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.bar[data-standing='reached'] .word {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.word {
+  font-weight: 600;
+}
+
+.detail {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.seen {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.none {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.note {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.note[data-failed='true'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (pointer: coarse) {
+  .actions button {
+    min-height: 44px;
+  }
+}

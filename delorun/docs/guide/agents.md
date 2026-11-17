@@ -17,6 +17,7 @@ Claude Code and Codex are optional [external agents](../reference/glossary.md#ex
 - [How a chat uses an agent](#how-a-chat-uses-an-agent)
 - [Add an agent](#add-an-agent)
 - [Download size and sign-in](#download-size-and-sign-in)
+- [Sign-in and plan limits](#sign-in-and-plan-limits)
 - [The first time](#the-first-time)
 - [What the agent can touch](#what-the-agent-can-touch)
 - [Where the result shows](#where-the-result-shows)
@@ -39,6 +40,28 @@ When you ask, a chat hands the agent one task in the chat's workspace. The agent
 Adding an agent downloads a pinned copy of its program for your platform: about 206 MB for Claude Code and about 320 MB for Codex. Delorun checks the download before it uses it, and the copy stays in your Delorun home. It is not your own `claude` or `codex` command.
 
 The agent signs in with your own account, kept where the provider keeps it (`~/.claude` for Claude Code, `~/.codex` for Codex). The card says whether Delorun can see a sign-in. If it is missing, the card shows `delorun agents login claude-code` or `delorun agents login codex` with a Copy button. Run it at a terminal: it runs the agent's own sign-in from the copy Delorun downloaded, so you need no separately installed command. Add the agent first.
+
+## Sign-in and plan limits
+
+Once an agent is added, its card says whether it is signed in and on which plan, such as "Signed in · Max plan". Before Delorun has checked, the card shows what a saved sign-in file suggests. If the agent is not signed in, the card names `delorun agents login claude-code` or `delorun agents login codex`.
+
+Below that, two bars show how much of the agent's plan limits you have used, for example the 5-hour limit and the weekly limit, each with the time it resets on your own clock. A bar turns amber from 80% and red at the limit, and it also says "Near the limit" or "Limit reached" in words. The same bars are in Settings, Safety, External agents, under Plans and limits, and in the Plans pill beside the cost pill, which shows the highest share among your agents and opens the bars for each. The pill appears only while an agent is added.
+
+Delorun reads these figures from the agent's own program. It does not read them just because a card or the pill is on screen. It checks when you add an agent, when you finish signing in, and when you press Check now. Figures are labelled "As of" the time they were read, and "Last seen" once they are old. If a window's reset time has passed, the bar says "Reset at …, not checked since" until you check again. Press Check now to refresh them.
+
+Checking starts the agent's program on your computer, so a phone or another computer must be unlocked first. A locked device sees "Unlock to check" on the button.
+
+To see the same figures at a terminal, run `delorun agents status`. It reads what Delorun has stored and starts nothing. Add `--refresh` to check now, at the computer that runs Delorun.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the agent is not added, there is nothing to check: the card shows only the Add button.
+- If a check cannot be read, the old figures stay and the card says the check did not answer.
+- If two checks come close together, the second says the last check was a moment ago and when the next can run.
+- If a plan reports no figure for a window, the bar says "No figure" instead of a percentage.
+
+</details>
 
 ## The first time
 

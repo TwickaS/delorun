@@ -1,0 +1,42 @@
+/* The studio's own colour tokens and the spacing scale the guide and the pill read. */
+@import url('../../../../packages/client/ui-theme/src/styles/design-platform.css');
+
+:root {
+  --delorun-space-1: 2px;
+  --delorun-space-2: 4px;
+  --delorun-space-3: 6px;
+  --delorun-space-4: 8px;
+  --delorun-space-5: 12px;
+  --delorun-space-6: 16px;
+  --delorun-space-7: 20px;
+  --delorun-space-8: 24px;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.stage {
+  max-width: 760px;
+}
+
+.dock {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  position: fixed;
+  inset: auto 0 0;
+  padding: 12px 24px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+@media (max-width: 500px) {
+  body {
+    padding: 12px;
+  }
+}

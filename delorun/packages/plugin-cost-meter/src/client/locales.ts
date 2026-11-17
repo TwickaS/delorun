@@ -1,10 +1,20 @@
-/** The cost meter's copy: the pill, the breakdown dialog and its notes. */
+/** The cost meter's copy: the pill, the breakdown dialog and its notes, and the Plans pill. */
+
+import { limitsEn, limitsZh } from '@delorun/bundle-local/agent-limits-locales'
 
 /** The dictionary namespace this plugin owns. */
 export const NS = 'delorunCostMeter'
 
 /** English dictionary. */
 export const en = {
+  ...limitsEn,
+  'plans.pill': 'Plans',
+  'plans.label': 'Plan limits: {value} of the closest limit used',
+  'plans.label.none': 'Plan limits',
+  'plans.title': 'Plans',
+  'plans.agent.claude-code': 'Claude Code',
+  'plans.agent.codex': 'Codex',
+  'plans.note': 'Figures come from the agents\' own sign-ins and are read only when you press Check now.',
   'pill.label': 'Estimated chat cost {cost}',
   'pill.labelWithAgents': 'Estimated chat cost {cost}, {total} including agents',
   'pill.withAgents': '{total} with agents',
@@ -48,6 +58,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Chinese dictionary. */
 export const zh: Record<CostMeterLocaleKey, string> = {
+  ...limitsZh,
+  'plans.pill': '套餐',
+  'plans.label': '套餐额度：最接近的上限已用 {value}',
+  'plans.label.none': '套餐额度',
+  'plans.title': '套餐',
+  'plans.agent.claude-code': 'Claude Code',
+  'plans.agent.codex': 'Codex',
+  'plans.note': '数据来自各智能体自己的登录，仅在你点击“立即检查”时读取。',
   'pill.label': '估算对话费用 {cost}',
   'pill.labelWithAgents': '估算对话费用 {cost}，含智能体共 {total}',
   'pill.withAgents': '含智能体 {total}',

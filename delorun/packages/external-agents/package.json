@@ -10,7 +10,8 @@
     "./contract": "./src/contract.ts",
     "./locate": "./src/locate.ts",
     "./copy": "./src/copy.ts",
-    "./accounts": "./src/accounts/index.ts"
+    "./accounts": "./src/accounts/index.ts",
+    "./accounts/wire": "./src/accounts/wire.ts"
   },
   "dependencies": {
     "@delorun/contract-home-layout": "workspace:*",
