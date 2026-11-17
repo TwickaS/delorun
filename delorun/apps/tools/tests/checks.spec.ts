@@ -187,7 +187,7 @@ describe('selection', () => {
 
   it('runs every fork spec for a fork-wide change, such as the checks runner\'s own sources', () => {
     const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/tools/src/checks/plan.ts'] } })
-    expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--maxWorkers=12', '--passWithNoTests'])
+    expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--project', 'fork-client-website', '--maxWorkers=12', '--passWithNoTests'])
     expect(plan.find(check => check.id === 'tests:fork:integration')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork-integration', `--maxWorkers=${String(FORK_INTEGRATION_WORKERS)}`, '--passWithNoTests'])
   })
 
