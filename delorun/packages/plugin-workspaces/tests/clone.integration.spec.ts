@@ -7,6 +7,7 @@
  * git through a provider that starts each clone in its own process group.
  */
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,6 +24,9 @@ const TOKEN = 'fixture-token-for-clone-specs'
 
 /** A token the private repository refuses. */
 const WRONG_TOKEN = 'fixture-wrong-password-not-a-credential'
+
+/** A template directory for the specs that resolve a clone without running it. */
+const TEMPLATE = '/tmp/delorun-clone-template-for-specs'
 
 /** A clone URL the scripted specs never contact. */
 const UNREACHED_URL = 'https://127.0.0.1:1/owner/repo.git'
@@ -135,7 +139,7 @@ describe('the arguments and environment a clone spawns with', () => {
     expect(result).toEqual({ ok: true })
     const spec = onlySpec(specs)
     expect(spec.argv.join('\n')).not.toContain(TOKEN)
-    expect(spec.argv.slice(-5)).toEqual(['clone', '--progress', '--', UNREACHED_URL, '.'])
+    expect(spec.argv.slice(-3)).toEqual(['--', UNREACHED_URL, '.'])
     expect(spec.env).toMatchObject({ DELORUN_GIT_TOKEN: TOKEN })
   })
 
@@ -190,38 +194,50 @@ describe('resolveClone', () => {
   it('resolves a clone into its spawn without starting a process', () => {
     const { runtime, specs } = scripted({})
     const io = inputs(runtime, { url: UNREACHED_URL, token: TOKEN, extraCaFile: '/etc/delorun/private-ca.pem' })
-    const resolved = resolvedOf(resolveClone(io.options))
+    const resolved = resolvedOf(resolveClone(io.options, TEMPLATE))
     expect(specs).toHaveLength(0)
     expect(resolved.argv[0]).toBe('git')
     expect(resolved.argv).toEqual(expect.arrayContaining(['-c', 'http.sslCAInfo=/etc/delorun/private-ca.pem']))
-    expect(resolved.argv.slice(-5)).toEqual(['clone', '--progress', '--', UNREACHED_URL, '.'])
+    expect(resolved.argv.slice(-7)).toEqual(['clone', '--progress', '--no-recurse-submodules', `--template=${TEMPLATE}`, '--', UNREACHED_URL, '.'])
     expect(resolved.argv.join('\n')).not.toContain(TOKEN)
     expect(resolved.cwd).toBe(io.options.directory)
     expect(resolved.graceMs).toBe(5000)
     expect(resolved.env).toMatchObject({ DELORUN_GIT_TOKEN: TOKEN })
   })
 
+  it('puts the workspaces\' own options first and the shared hardened clone arguments after them', () => {
+    const { runtime } = scripted({})
+    const argv = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, proxy: 'http://proxy.example:3128' }).options, TEMPLATE)).argv
+    const position = (argument: string): number => argv.indexOf(argument)
+    expect(position('core.askPass=')).toBeGreaterThan(-1)
+    expect(position('core.askPass=')).toBeLessThan(position('http.proxy=http://proxy.example:3128'))
+    expect(position('http.proxy=http://proxy.example:3128')).toBeLessThan(position('filter.lfs.smudge='))
+    expect(argv.lastIndexOf('core.hooksPath=/dev/null')).toBeLessThan(position('clone'))
+    expect(argv).toEqual(expect.arrayContaining(['filter.lfs.smudge=', 'filter.lfs.process=', 'filter.lfs.required=false', '--no-recurse-submodules']))
+    expect(argv.filter((argument) => argument === 'clone')).toHaveLength(1)
+  })
+
   it('gives git the parsed URL, with a lower-case host and no default port, so the token helper sees the host it was built for', () => {
     const { runtime } = scripted({})
-    const resolved = resolvedOf(resolveClone(inputs(runtime, { url: 'https://EXAMPLE.Com:443/Owner/Repo.git', token: TOKEN }).options))
+    const resolved = resolvedOf(resolveClone(inputs(runtime, { url: 'https://EXAMPLE.Com:443/Owner/Repo.git', token: TOKEN }).options, TEMPLATE))
     expect(resolved.argv.slice(-3)).toEqual(['--', 'https://example.com/Owner/Repo.git', '.'])
     expect(resolved.env).toMatchObject({ DELORUN_GIT_HOST: 'example.com', DELORUN_GIT_PATH: 'Owner/Repo.git' })
   })
 
   it('passes the proxy as http.proxy only when one is given', () => {
     const { runtime } = scripted({})
-    expect(resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL }).options)).argv.join('\n')).not.toContain('http.proxy')
-    const proxied = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, proxy: 'http://proxy.example:3128' }).options))
+    expect(resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL }).options, TEMPLATE)).argv.join('\n')).not.toContain('http.proxy')
+    const proxied = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, proxy: 'http://proxy.example:3128' }).options, TEMPLATE))
     expect(proxied.argv).toEqual(expect.arrayContaining(['-c', 'http.proxy=http://proxy.example:3128']))
   })
 
   it('answers a refused URL or token in the failure shape, without starting a process', () => {
     const { runtime, specs } = scripted({})
-    expect(resolveClone(inputs(runtime, { url: 'http://127.0.0.1:1/owner/repo.git' }).options)).toEqual({
+    expect(resolveClone(inputs(runtime, { url: 'http://127.0.0.1:1/owner/repo.git' }).options, TEMPLATE)).toEqual({
       ok: false,
       reason: 'the repository URL must be an https URL without a user name, password, query or fragment',
     })
-    expect(resolveClone(inputs(runtime, { url: UNREACHED_URL, token: 'two words' }).options)).toEqual({
+    expect(resolveClone(inputs(runtime, { url: UNREACHED_URL, token: 'two words' }).options, TEMPLATE)).toEqual({
       ok: false,
       reason: 'the token must be one line of at most 4096 printable ASCII characters without whitespace',
     })
@@ -234,13 +250,61 @@ describe('resolveClone', () => {
     process.env.GIT_TRACE_SETUP = '1'
     try {
       const { runtime } = scripted({})
-      const resolved = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, env: { PATH: '/usr/bin' } }).options))
+      const resolved = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, env: { PATH: '/usr/bin' } }).options, TEMPLATE))
       expect(Object.values(resolved.env)).not.toContain('/tmp/process-trace')
       // GIT_ENV always removes GIT_TRACE, so only a prefix-matched name shows a process read: GIT_TRACE_SETUP.
       expect(Object.hasOwn(resolved.env, 'GIT_TRACE_SETUP'), 'GIT_TRACE_SETUP').toBe(false)
     } finally {
       restoreEnv(previous)
     }
+  })
+})
+
+describe('the clone template', () => {
+  /**
+   * A provider that reads the template the spawn names, while git would be running.
+   * @param inner - the provider that records the spawn.
+   * @param seen - receives the template's directory and the text of its attributes file.
+   * @returns the provider.
+   */
+  function watching(inner: SubprocessRuntime, seen: { directory?: string | undefined, attributes?: string | undefined }): SubprocessRuntime {
+    return {
+      spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
+        const argument = spec.argv.find((value) => value.startsWith('--template='))
+        seen.directory = argument?.slice('--template='.length)
+        if (seen.directory !== undefined) seen.attributes = readFileSync(join(seen.directory, 'info', 'attributes'), 'utf8')
+        return inner.spawn(spec)
+      },
+    } as SubprocessRuntime
+  }
+
+  it.each([['succeeds', 0], ['fails', 128]])('exists while git runs, with attributes that unset every filter, and is gone after a clone that %s', async (_label, exitCode) => {
+    const seen: { directory?: string | undefined, attributes?: string | undefined } = {}
+    await cloneRepository(inputs(watching(scripted({ exitCode }).runtime, seen), { url: UNREACHED_URL }).options)
+    expect(seen.attributes).toBe('* -filter\n')
+    expect(existsSync(seen.directory ?? scratch)).toBe(false)
+  })
+
+  it('is not made for a refused clone', async () => {
+    const seen: { directory?: string | undefined, attributes?: string | undefined } = {}
+    await cloneRepository(inputs(watching(scripted({}).runtime, seen), { url: 'http://127.0.0.1:1/owner/repo.git' }).options)
+    expect(seen.directory).toBeUndefined()
+  })
+
+  it('removes .git/info/attributes from a clone that succeeded, and leaves a failed clone for the caller to remove', async () => {
+    const plant = (runtime: SubprocessRuntime): SubprocessRuntime => ({
+      spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
+        mkdirSync(join(spec.cwd ?? scratch, '.git', 'info'), { recursive: true })
+        writeFileSync(join(spec.cwd ?? scratch, '.git', 'info', 'attributes'), '* -filter\n')
+        return runtime.spawn(spec)
+      },
+    }) as SubprocessRuntime
+    const succeeded = await emptyDirectory()
+    expect(await cloneRepository(inputs(plant(scripted({}).runtime), { url: UNREACHED_URL, directory: succeeded }).options)).toEqual({ ok: true })
+    expect(existsSync(join(succeeded, '.git', 'info', 'attributes'))).toBe(false)
+    const failed = await emptyDirectory()
+    await cloneRepository(inputs(plant(scripted({ exitCode: 128 }).runtime), { url: UNREACHED_URL, directory: failed }).options)
+    expect(existsSync(join(failed, '.git', 'info', 'attributes'))).toBe(true)
   })
 })
 
@@ -394,6 +458,37 @@ describe('git over the local HTTPS fixture', () => {
     expect(await readFile(join(directory, 'README.md'), 'utf8')).toContain('fixture')
     expect(gitOut(['-C', directory, 'remote', 'get-url', 'origin'])).toBe(`${origin}/public.git`)
     expect(io.progress.length).toBeGreaterThan(0)
+    expect(existsSync(join(directory, '.git', 'info', 'attributes'))).toBe(false)
+  })
+
+  it('runs no clean or smudge filter that a repository\'s .gitattributes names and a configuration defines', async () => {
+    const source = join(scratch, 'filtered-source')
+    const marker = join(scratch, 'filter-ran')
+    const committer = ['-c', 'user.name=Spec', '-c', 'user.email=spec@example.invalid', '-c', 'commit.gpgsign=false']
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main', source], { env: running().env })
+    await writeFile(join(source, '.gitattributes'), '* filter=probe\n')
+    await writeFile(join(source, 'file.txt'), 'content\n')
+    execFileSync('git', ['-C', source, 'add', '.'], { env: running().env })
+    execFileSync('git', ['-C', source, ...committer, 'commit', '--quiet', '-m', 'filtered'], { env: running().env })
+    // The probe filter and the redirect to the local repository come from a person's configuration, here as options placed last.
+    const configuration = ['-c', `filter.probe.smudge=sh -c 'touch "${marker}"; cat'`, '-c', 'filter.probe.clean=cat', '-c', 'filter.probe.required=false']
+    const redirected = [...configuration, '-c', 'protocol.file.allow=always', '-c', `url.${source}.insteadOf=${running().origin}/public.git`]
+    const withPersonConfig = (runtime: SubprocessRuntime): SubprocessRuntime => ({
+      spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
+        const at = spec.argv.indexOf('clone')
+        return runtime.spawn({ ...spec, argv: [...spec.argv.slice(0, at), ...redirected, ...spec.argv.slice(at)] })
+      },
+    }) as SubprocessRuntime
+    // Without the template the same configuration runs the filter, which shows the probe is able to fire.
+    const control = join(scratch, 'control')
+    execFileSync('git', [...configuration, 'clone', '--quiet', source, control], { env: running().env })
+    expect(existsSync(marker)).toBe(true)
+    await rm(marker)
+    const directory = await emptyDirectory()
+    const { origin } = running()
+    expect(await cloneRepository(inputs(withPersonConfig(nodeRuntime()), { url: `${origin}/public.git`, directory }).options)).toEqual({ ok: true })
+    expect(await readFile(join(directory, 'file.txt'), 'utf8')).toBe('content\n')
+    expect(existsSync(marker)).toBe(false)
   })
 
   it('clones a private repository with the token, and no token reaches the stored URL or the config', async () => {
@@ -795,7 +890,9 @@ function outcomeOf(script: Script, spec: SubprocessSpawnSpec): Promise<Subproces
   if (script.rejectDone !== undefined) return Promise.reject(new Error(script.rejectDone))
   if (script.hang === true) {
     return new Promise((resolve) => {
-      spec.signal?.addEventListener('abort', () => { resolve({ exitCode: null, signal: 'SIGTERM' }) }, { once: true })
+      const terminated = (): void => { resolve({ exitCode: null, signal: 'SIGTERM' }) }
+      if (spec.signal?.aborted === true) terminated()
+      else spec.signal?.addEventListener('abort', terminated, { once: true })
     })
   }
   if (script.endWithoutSignal === true) return Promise.resolve({ exitCode: null, signal: null })

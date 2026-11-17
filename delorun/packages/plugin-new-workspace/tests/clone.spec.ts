@@ -10,15 +10,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { cloneArguments, cloneEnvironment, createCloneService, createCloneTemplate, failureOf, spawnGit, type GitOutcome, type GitRunner } from '../src/clone.ts'
-import { hasUrlCredentials, isCloneAddress, isFolderName, suggestedName } from '../src/clone-address.ts'
-import { CloneStart, CloneStatus, MAX_CLONE_BODY_BYTES } from '../src/wire.ts'
+import { hasUrlCredentials, isBranchName, isCloneAddress, isFolderName, suggestedName } from '../src/clone-address.ts'
+import { CloneStart, CloneStatus, MAX_BODY_BYTES } from '../src/wire.ts'
 
 let scratch = ''
 let person = ''
 let delorunHome = ''
 
 beforeEach(async () => {
-  scratch = await mkdtemp(join(tmpdir(), 'delorun-onboarding-clone-'))
+  scratch = await mkdtemp(join(tmpdir(), 'delorun-new-workspace-clone-'))
   person = join(scratch, 'a', 'b', 'person')
   delorunHome = join(scratch, 'delorun')
   for (const directory of [join(person, 'projects'), join(person, '.dsh'), join(delorunHome, 'inside')]) await mkdir(directory, { recursive: true })
@@ -54,10 +54,11 @@ function heldGit() {
 }
 
 /** The service over a Git, a registry fake and the stubbed environment. */
-function service(git: GitRunner, options: { readonly timeoutMs?: number; readonly create?: (path: string) => Promise<{ id: string }> } = {}) {
-  const create = vi.fn(options.create ?? (async (_path: string) => ({ id: 'workspace-9' })))
+function service(git: GitRunner, options: { readonly timeoutMs?: number; readonly roots?: readonly string[]; readonly create?: (path: string) => Promise<{ id: string; path: string }> } = {}) {
+  const create = vi.fn(options.create ?? (async (path: string) => ({ id: 'workspace-9', path })))
   const warn = vi.fn()
-  const clones = createCloneService({ git, timeoutMs: options.timeoutMs ?? 60_000, registry: { create } as never, env: process.env, warn })
+  const remember = vi.fn(async (_parent: string) => undefined)
+  const clones = createCloneService({ git, timeoutMs: options.timeoutMs ?? 60_000, roots: options.roots ?? ['~'], remember, registry: { create } as never, env: process.env, warn })
   onTestFinished(() => { clones.dispose() })
   const post = (body: unknown) => new Request('http://harness.test/api', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) })
   const start = async (body: unknown) => {
@@ -80,7 +81,7 @@ function service(git: GitRunner, options: { readonly timeoutMs?: number; readonl
     if (answer.result !== 'started') throw new Error(`refused: ${answer.problem}`)
     return answer.job
   }
-  return { clones, create, warn, start, status, settled, started }
+  return { clones, create, warn, remember, start, status, settled, started }
 }
 
 const REPO = 'https://github.com/owner/site.git'
@@ -191,7 +192,7 @@ describe('starting a clone', () => {
     ['not JSON', '{'],
     ['a missing field', { url: REPO, parent: '/x' }],
     ['an extra field', { url: REPO, parent: '/x', name: 'x', depth: 1 }],
-    ['an oversized body', 'x'.repeat(MAX_CLONE_BODY_BYTES + 1)],
+    ['an oversized body', 'x'.repeat(MAX_BODY_BYTES + 1)],
   ])('answers 400 for %s', async (_, body) => {
     const { git, runs } = gitFake()
     expect((await service(git).start(body)).status).toBe(400)
@@ -248,6 +249,86 @@ describe('starting a clone', () => {
     held.finish({ kind: 'exited', code: 128, stderr: 'fatal: Repository not found.' })
     expect(await settled(job)).toEqual({ state: 'failed', failure: 'not-found' })
     expect(CloneStart.parse((await start({ url: REPO, parent: join(person, 'projects'), name: 'two' })).body).result).toBe('started')
+  })
+})
+
+describe('the branch a clone checks out', () => {
+  it.each(['main', 'feature/x', 'release-1.2'])('takes the branch %s', (branch) => { expect(isBranchName(branch)).toBe(true) })
+
+  it.each(['-x', 'a..b', 'a b', 'x.lock', '@', 'a@{b', '/a', 'a/', '.a', 'a//b', 'a~1', 'a^', 'a:b'])('refuses the branch %j', (branch) => { expect(isBranchName(branch)).toBe(false) })
+
+  it('checks out only the asked-for branch, before the separator', () => {
+    const args = cloneArguments(REPO, '/dest', '/template', 'release-1.2')
+    const separator = args.indexOf('--')
+    expect(args.slice(separator - 3, separator)).toEqual(['--branch', 'release-1.2', '--single-branch'])
+    expect(cloneArguments(REPO, '/dest', '/template')).not.toContain('--branch')
+  })
+
+  it('passes the branch on to Git when the clone starts', async () => {
+    const { git, runs } = gitFake()
+    const { started, settled } = service(git)
+    await settled(await started({ url: REPO, parent: join(person, 'projects'), name: 'site', branch: 'feature/x' }))
+    const args = runs[0]?.args ?? []
+    expect(args.slice(args.indexOf('--branch'), args.indexOf('--branch') + 3)).toEqual(['--branch', 'feature/x', '--single-branch'])
+  })
+
+  it('refuses a branch that is not a plain branch name before Git runs', async () => {
+    const { git, runs } = gitFake()
+    const { start } = service(git)
+    expect(await start({ url: REPO, parent: join(person, 'projects'), name: 'site', branch: '--upload-pack=x' })).toEqual({ status: 422, body: { result: 'refused', problem: 'branch-form' } })
+    expect(runs).toEqual([])
+  })
+})
+
+describe('where a clone may go', () => {
+  it('creates a parent folder that is missing, then clones into it', async () => {
+    const parent = join(person, 'projects', 'new', 'deeper')
+    const { git, runs } = gitFake()
+    const { started, settled } = service(git)
+    expect((await settled(await started({ url: REPO, parent, name: 'site' }))).state).toBe('done')
+    expect(runs).toHaveLength(1)
+    expect((await stat(join(parent, 'site'))).isDirectory()).toBe(true)
+  })
+
+  it('refuses a parent outside the roots, runs no Git and creates nothing', async () => {
+    const parent = join(scratch, 'elsewhere')
+    const { git, runs } = gitFake()
+    const { start } = service(git)
+    expect((await start({ url: REPO, parent, name: 'site' })).body).toEqual({ result: 'refused', problem: 'outside-roots' })
+    expect(runs).toEqual([])
+    await expect(stat(parent)).rejects.toThrow()
+  })
+
+  it('refuses a parent that is a link inside the root leading outside it, and creates nothing there', async () => {
+    const outside = join(scratch, 'outside')
+    await mkdir(outside)
+    await symlink(outside, join(person, 'projects', 'out'))
+    const { git, runs } = gitFake()
+    const { start } = service(git)
+    for (const parent of [join(person, 'projects', 'out'), join(person, 'projects', 'out', 'sub')]) {
+      expect((await start({ url: REPO, parent, name: 'site' })).body).toEqual({ result: 'refused', problem: 'outside-roots' })
+    }
+    expect(runs).toEqual([])
+    expect(await readdir(outside)).toEqual([])
+  })
+
+  it('takes a parent inside an absolute root as well as one inside the home directory', async () => {
+    const { git } = gitFake()
+    const { started, settled } = service(git, { roots: [join(scratch, 'other-root')] })
+    await mkdir(join(scratch, 'other-root'))
+    expect((await settled(await started({ url: REPO, parent: join(scratch, 'other-root', 'p'), name: 'site' }))).state).toBe('done')
+  })
+
+  it('remembers the parent of a clone that started, and of no clone that was refused', async () => {
+    const { git } = gitFake()
+    const { start, started, settled, remember } = service(git)
+    const parent = join(person, 'projects')
+    expect((await start({ url: 'file:///etc', parent, name: 'a' })).status).toBe(422)
+    expect((await start({ url: REPO, parent: join(scratch, 'elsewhere'), name: 'a' })).status).toBe(422)
+    expect((await start({ url: REPO, parent, name: 'a', branch: '-x' })).status).toBe(422)
+    expect(remember).not.toHaveBeenCalled()
+    await settled(await started({ url: REPO, parent, name: 'site' }))
+    expect(remember).toHaveBeenCalledExactlyOnceWith(parent)
   })
 })
 

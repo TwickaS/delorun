@@ -1,6 +1,6 @@
 /**
  * What both halves share: the exact Connection Fetch routes under `/api`, which the harness serves only to an
- * owner peer, and their JSON messages. The add-workspace route also answers only a request that arrived on the loopback listener (403 `LOOPBACK_ONLY` otherwise). Browser-safe, so the studio half imports it.
+ * owner peer, and their JSON messages, with the workspace routes `@delorun/plugin-new-workspace` serves. Browser-safe, so the studio half imports it.
  * @module @delorun/plugin-onboarding/wire
  */
 import { z } from 'zod'
@@ -61,54 +61,12 @@ export type SetupRecord = z.output<typeof SetupRecord>
 /** The record of a profile with no usable setup record: nothing is covered and reach is not set up, so every step shows. */
 export const NO_RECORD: SetupRecord = Object.freeze({ reachSetUp: false })
 
-/**
- * The harness's route that adds a folder as a workspace. `POST` takes {@link AddWorkspaceRequest} and answers
- * {@link AddWorkspaceAnswer}: 200 with `added`, 422 with `refused`, 400 for a request it cannot read, and 500 with
- * `failed` when the registry cannot add the folder. The studio fetches it without its leading `/`.
- */
-export const ADD_WORKSPACE_PATH = '/api/delorunOnboarding.addWorkspace'
-
-/** The longest path the route takes, in characters: the longest path Linux and macOS accept. */
-export const MAX_PATH_LENGTH = 4096
-
-/** The largest request body the route reads, in bytes: one path of {@link MAX_PATH_LENGTH} characters, JSON-escaped. */
-export const MAX_ADD_BODY_BYTES = 6 * MAX_PATH_LENGTH + 64
-
-/**
- * The codes of the folders Delorun never adds as a workspace, as `@delorun/home`'s `WorkspaceLocationProblem` names them. The
- * host half checks at compile time that the two lists hold the same codes.
- */
-export const LOCATION_PROBLEMS = [
-  'filesystem-root', 'home-directory', 'delorun-home', 'contains-delorun-home', 'stock-home', 'contains-stock-home', 'not-absolute',
-] as const
-
-/** Why a folder cannot be a workspace; see {@link LOCATION_PROBLEMS}. */
-export type LocationProblem = typeof LOCATION_PROBLEMS[number]
-
-/** The folder to add: an absolute path on the harness's computer. */
-export const AddWorkspaceRequest = z.strictObject({ path: z.string().min(1).max(MAX_PATH_LENGTH) })
-
-/** {@link AddWorkspaceRequest}'s parsed value. */
-export type AddWorkspaceRequest = z.output<typeof AddWorkspaceRequest>
-
-/**
- * What a folder holds, from its entries' names only, which picks the first chat's starting prompts: `empty` has no
- * visible entry, `code` is a Git repository or holds a project manifest, `files` is anything else.
- */
-export const FOLDER_KINDS = ['empty', 'code', 'files'] as const
-
-/** One of {@link FOLDER_KINDS}. */
-export type FolderKind = typeof FOLDER_KINDS[number]
-
-/** What adding a folder came to: the workspace's id and what the folder holds, the reason the folder is refused, or a failure of the registry. */
-export const AddWorkspaceAnswer = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal('added'), workspaceId: z.string().min(1).max(200), kind: z.enum(FOLDER_KINDS) }),
-  z.strictObject({ result: z.literal('refused'), problem: z.enum(LOCATION_PROBLEMS) }),
-  z.strictObject({ result: z.literal('failed') }),
-])
-
-/** {@link AddWorkspaceAnswer}'s parsed value. */
-export type AddWorkspaceAnswer = z.output<typeof AddWorkspaceAnswer>
+// The workspace routes and their messages are `@delorun/plugin-new-workspace`'s; the guide's Workspace step uses them.
+export {
+  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart,
+  CloneStatus, CloneStatusRequest, FOLDER_KINDS, LOCATION_PROBLEMS, MAX_NAME_LENGTH, MAX_PATH_LENGTH, MAX_URL_LENGTH,
+  type CloneFailure, type CloneProblem, type FolderKind, type LocationProblem,
+} from '@delorun/plugin-new-workspace/wire'
 
 /** The harness's route that reports this computer's readiness. `GET` answers {@link Readiness}. */
 export const READINESS_PATH = '/api/delorunOnboarding.readiness'
@@ -219,75 +177,6 @@ export const WorkspaceNoticeAnswer = z.strictObject({
 
 /** {@link WorkspaceNoticeAnswer}'s parsed value. */
 export type WorkspaceNoticeAnswer = z.output<typeof WorkspaceNoticeAnswer>
-
-/** The harness's route that starts cloning a Git repository into a new folder. `POST` takes {@link CloneRequest} and answers {@link CloneStart}. */
-export const CLONE_PATH = '/api/delorunOnboarding.clone'
-
-/** The harness's route that reports a clone. `POST` takes {@link CloneStatusRequest} and answers {@link CloneStatus}. */
-export const CLONE_STATUS_PATH = '/api/delorunOnboarding.cloneStatus'
-
-/** The longest repository address the clone route takes. */
-export const MAX_URL_LENGTH = 2048
-
-/** The longest folder name the clone route takes. */
-export const MAX_NAME_LENGTH = 255
-
-/** The largest request body the clone routes read, in bytes. */
-export const MAX_CLONE_BODY_BYTES = 6 * (MAX_PATH_LENGTH + MAX_URL_LENGTH + MAX_NAME_LENGTH) + 64
-
-/** A clone to start: the repository's address, the existing folder to clone into, and the new folder's name inside it. */
-export const CloneRequest = z.strictObject({
-  url: z.string().min(1).max(MAX_URL_LENGTH),
-  parent: z.string().min(1).max(MAX_PATH_LENGTH),
-  name: z.string().min(1).max(MAX_NAME_LENGTH),
-})
-
-/** {@link CloneRequest}'s parsed value. */
-export type CloneRequest = z.output<typeof CloneRequest>
-
-/**
- * Why a clone is refused before it starts: `url-form` is not an `https://`, `ssh://` or `user@host:path` address (a
- * local path, `file://`, `ext::` and any value led by `-` are refused); `url-credentials` an `https://` address has a user name or password in it; `name-form` is not one plain folder name;
- * `not-empty` the folder exists and holds something; `busy` another clone runs; or a {@link LocationProblem}.
- */
-export const CLONE_PROBLEMS = ['url-form', 'url-credentials', 'name-form', 'not-empty', 'busy', ...LOCATION_PROBLEMS] as const
-
-/** One of {@link CLONE_PROBLEMS}. */
-export type CloneProblem = typeof CLONE_PROBLEMS[number]
-
-/** A started clone's id, or why it did not start. */
-export const CloneStart = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal('started'), job: z.string().min(1).max(64) }),
-  z.strictObject({ result: z.literal('refused'), problem: z.enum(CLONE_PROBLEMS) }),
-])
-
-/** {@link CloneStart}'s parsed value. */
-export type CloneStart = z.output<typeof CloneStart>
-
-/** The clone to report. */
-export const CloneStatusRequest = z.strictObject({ job: z.string().min(1).max(64) })
-
-/**
- * Why a started clone failed: `sign-in` the repository needs a sign-in the studio never asks for; `host-key` SSH could not verify the host's key; `not-found` the
- * repository does not exist or is private; `network` the host could not be reached; `timeout` it took too long;
- * `no-git` Git is not installed; `failed` any other failure; `add-failed` the clone finished but the folder could not be
- * added as a workspace.
- */
-export const CLONE_FAILURES = ['sign-in', 'host-key', 'not-found', 'network', 'timeout', 'no-git', 'failed', 'add-failed'] as const
-
-/** One of {@link CLONE_FAILURES}. */
-export type CloneFailure = typeof CLONE_FAILURES[number]
-
-/** Where a clone stands: running with the percent received when Git reported one, added as a workspace with its folder, failed, or unknown to the harness. */
-export const CloneStatus = z.discriminatedUnion('state', [
-  z.strictObject({ state: z.literal('running'), percent: z.number().int().min(0).max(100).optional() }),
-  z.strictObject({ state: z.literal('done'), workspaceId: z.string().min(1).max(200), path: z.string().min(1).max(MAX_PATH_LENGTH), kind: z.enum(FOLDER_KINDS) }),
-  z.strictObject({ state: z.literal('failed'), failure: z.enum(CLONE_FAILURES) }),
-  z.strictObject({ state: z.literal('unknown') }),
-])
-
-/** {@link CloneStatus}'s parsed value. */
-export type CloneStatus = z.output<typeof CloneStatus>
 
 /** The harness's route that reads which connections each recommended plugin is for. `POST` takes {@link RecommendRequest} and answers {@link RecommendAnswer}. */
 export const RECOMMEND_PATH = '/api/delorunOnboarding.recommend'

@@ -99,11 +99,19 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'plugin-packs/src/routes.ts': {
     path: { level: 'R+U', reason: 'listing, cancelling an install and clearing a failed row change nothing installed and need no unlock; adding, retrying and removing a plugin pack write code the Host will run, so they need one' },
   },
-  'plugin-onboarding/src/index.ts': {
-    WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
+  'plugin-new-workspace/src/index.ts': {
+    PLACES_PATH: UNLOCKED('lists the computer\'s recent workspaces and folders by path'),
+    SEARCH_PATH: UNLOCKED('walks the computer\'s folders and names them by path'),
+    PREVIEW_PATH: UNLOCKED('names the entries and the Git branch of a folder on the computer'),
     ADD_WORKSPACE_PATH: UNLOCKED('a workspace is what the model may write'),
+    CREATE_PATH: UNLOCKED('makes a folder on the computer, runs Git in it and adds it as a workspace'),
     CLONE_PATH: UNLOCKED('cloning writes a repository into a folder on the computer'),
     CLONE_STATUS_PATH: UNLOCKED('reports the clone the unlocked device started'),
+    DEFAULTS_PATH: UNLOCKED('reads a workspace\'s model and browser defaults by its path'),
+    SET_DEFAULTS_PATH: UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
+  },
+  'plugin-onboarding/src/index.ts': {
+    WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },

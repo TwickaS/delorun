@@ -1,7 +1,7 @@
 /**
  * What a folder holds, read from the names of its top-level entries only: no file is opened and no name leaves the
  * harness. It picks the first chat's starting prompts.
- * @module @delorun/plugin-onboarding/folder-kind
+ * @module @delorun/plugin-new-workspace/folder-kind
  */
 import { opendir } from 'node:fs/promises'
 import type { FolderKind } from './wire.ts'

@@ -9,7 +9,6 @@
     "src/client",
     "src/config.ts",
     "src/wire.ts",
-    "src/clone-address.ts",
     "src/css-modules.d.ts"
   ],
   "references": [

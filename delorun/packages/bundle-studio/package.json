@@ -23,6 +23,7 @@
     "@delorun/plugin-chat-states": "workspace:*",
     "@delorun/plugin-cost-meter": "workspace:*",
     "@delorun/plugin-downloads": "workspace:*",
+    "@delorun/plugin-new-workspace": "workspace:*",
     "@delorun/plugin-onboarding": "workspace:*",
     "@delorun/plugin-settings-layout": "workspace:*",
     "@delorun/plugin-sidebar": "workspace:*",

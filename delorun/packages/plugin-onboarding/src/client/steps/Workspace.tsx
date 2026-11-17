@@ -6,7 +6,7 @@
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { isCloneAddress, isFolderName, suggestedName } from '../../clone-address.ts'
+import { isCloneAddress, isFolderName, suggestedName } from '@delorun/plugin-new-workspace/clone-address'
 import type { CloneProblem } from '../../wire.ts'
 import { Card } from '../ui/Card.tsx'
 import { ChipGroup } from '@delorun/brand'

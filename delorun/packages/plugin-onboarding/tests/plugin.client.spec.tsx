@@ -455,7 +455,7 @@ describe('the default workspace and the first chat', () => {
 
   describe('choosing a folder', () => {
     /** The harness's add-workspace route, answering as given, and recording what it is asked. */
-    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7', kind: 'code' }), { status: 200 })) => {
+    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7', path: '/work/folder', kind: 'code' }), { status: 200 })) => {
       const fetch = vi.fn(async (_path: string, _init?: RequestInit) => answer())
       vi.stubGlobal('fetch', fetch)
       return fetch
@@ -535,7 +535,7 @@ describe('a fresh home with no default workspace', () => {
   it('says so on the Workspace step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the prompts that fit it', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const fetch = vi.fn(async (path: string, _init?: RequestInit) => new Response(
-      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : path === ADD_WORKSPACE_PATH.slice(1) ? { result: 'added', workspaceId: 'workspace-7', kind: 'empty' } : {}),
+      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : path === ADD_WORKSPACE_PATH.slice(1) ? { result: 'added', workspaceId: 'workspace-7', path: '/work/folder', kind: 'empty' } : {}),
       { status: path === ADD_WORKSPACE_PATH.slice(1) || path === SETUP_RECORD_PATH.slice(1) ? 200 : 404 },
     ))
     vi.stubGlobal('fetch', fetch)

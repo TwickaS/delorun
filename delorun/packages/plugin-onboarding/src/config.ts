@@ -2,7 +2,7 @@
  * Onboarding's row configuration, kept by the host half and read and written by the studio half: whether the person
  * finished or skipped onboarding, the step they reached, the chat whose empty state still offers starter prompts and
  * what its folder holds, the packages and the bundled rows the recommended-plugins step offers, and the limits of the routes that reach the
- * network or run Git.
+ * network or start an agent.
  * @module @delorun/plugin-onboarding/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
@@ -62,7 +62,6 @@ export interface Config {
   keyTestTimeoutMs: number
   agentModelsTimeoutMs: number
   hiddenProviders: string[]
-  cloneTimeoutMs: number
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -88,5 +87,4 @@ export const Config = z.object({
   hiddenProviders: z.array(z.string().pattern(ROW_ID)).max(16)
     .description('Model provider routes the key test and the guide leave out, by route id, such as a route nobody can sign in to. Upstream\'s registry still lists them; they stay mounted.')
     .default([]),
-  cloneTimeoutMs: z.natural().min(10_000).max(3_600_000).description('The most time a clone from Git may take, in milliseconds.').default(600_000),
 })

@@ -2230,6 +2230,9 @@ importers:
       '@delorun/plugin-downloads':
         specifier: workspace:*
         version: link:../plugin-downloads
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       '@delorun/plugin-onboarding':
         specifier: workspace:*
         version: link:../plugin-onboarding
@@ -3270,6 +3273,49 @@ importers:
         specifier: 2.2.0
         version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
 
+  delorun/packages/plugin-new-workspace:
+    dependencies:
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      '@delorun/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
+
   delorun/packages/plugin-onboarding:
     dependencies:
       '@deepseek-ai/dsh-brand':
@@ -3302,6 +3348,9 @@ importers:
       '@delorun/plugin-downloads':
         specifier: workspace:*
         version: link:../plugin-downloads
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       '@delorun/plugin-packs':
         specifier: workspace:*
         version: link:../plugin-packs
@@ -3958,6 +4007,9 @@ importers:
       '@delorun/home':
         specifier: workspace:*
         version: link:../home
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       zod:
         specifier: 4.6.6
         version: 4.6.6

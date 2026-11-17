@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-new-workspace/README.md
+/:
+  en: 088013d548e34c69
+  zh: d237a41b2381dbc7
+/delorun-plugin-new-workspace:
+  en: 775df3b4f8ff41ea
+  zh: d870ef2770730e1d
+/delorun-plugin-new-workspace/routes:
+  en: 33b16d6e860e4edb
+  zh: 33e957ac76fab10e
+/delorun-plugin-new-workspace/where-a-workspace-may-go:
+  en: 3604cfa0b8fa3b40
+  zh: 8264e15dbb10ae17
+/delorun-plugin-new-workspace/git:
+  en: 70d4f03d04fda154
+  zh: b5d57dd69349089c
+/delorun-plugin-new-workspace/each-workspace-s-model:
+  en: 1479528ca6df4595
+  zh: a4f88d06f60a426b
+/delorun-plugin-new-workspace/configuration:
+  en: cc93c2274b4c2403
+  zh: 3560bb6bb801f1dd
+/delorun-plugin-new-workspace/tests:
+  en: 5d6296cbad453f3a
+  zh: 962a5220676b2c94
