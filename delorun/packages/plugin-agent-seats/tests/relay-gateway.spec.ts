@@ -181,5 +181,6 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     // The computer's later answer reaches a finished event and changes nothing.
     expect(await answer(computer, eventId, RUN_ANSWER)).toMatchObject(applied)
     expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'allowed-once' }])
+    expect(w.events(w.child, 'external-agent/run-allowed')).toEqual([])
   })
 })
