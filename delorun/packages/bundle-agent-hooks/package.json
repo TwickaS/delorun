@@ -22,6 +22,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-experimental-claude-code-mods": "workspace:*",
     "@deepseek-ai/dsh-experimental-client-ui-claude-code-mods": "workspace:*",
+    "@deepseek-ai/dsh-hook-protocol": "workspace:*",
     "@deepseek-ai/dsh-hooks-claude-code": "workspace:*",
     "@deepseek-ai/dsh-hooks-codex": "workspace:*"
   },

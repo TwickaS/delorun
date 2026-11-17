@@ -615,6 +615,18 @@ describe('the recommended plugins step', () => {
     expect(document.querySelectorAll('[aria-hidden="true"]:empty, li[aria-hidden="true"]').length).toBeGreaterThanOrEqual(3)
   })
 
+  it('says the computer-use driver pack is experimental and controls the desktop before it is downloaded', async () => {
+    const name = '@delorun/bundle-computer-use-driver'
+    const fake = installerFake({ [name]: { state: 'available' } })
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: [name] })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    await settle()
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en['plugins.pack.computerUseDriver.title']])
+    expect(screen.getByText(en['plugins.pack.computerUseDriver.description'])).toBeTruthy()
+    expect(en['plugins.pack.computerUseDriver.description']).toMatch(/^Experimental\..*control the windows on this computer's desktop/u)
+    expect(zh['plugins.pack.computerUseDriver.description']).toMatch(/^实验性功能。.*控制这台电脑桌面上的窗口/u)
+    expect(fake.install).not.toHaveBeenCalled()
+  })
+
   it('names a plugin whose title is not known yet in words, never by its package id', () => {
     expect(['@scope/codex-quota', '@deepseek-ai/dsh-session-search', 'plain', '@delorun/bundle-browser'].map(readableName)).toEqual(['Codex quota', 'Dsh session search', 'Plain', 'Browser'])
   })

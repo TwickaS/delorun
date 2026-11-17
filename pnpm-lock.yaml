@@ -1893,6 +1893,9 @@ importers:
       '@deepseek-ai/dsh-experimental-client-ui-claude-code-mods':
         specifier: workspace:*
         version: link:../../../packages/experimental/client-ui-claude-code-mods
+      '@deepseek-ai/dsh-hook-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/hook-protocol
       '@deepseek-ai/dsh-hooks-claude-code':
         specifier: workspace:*
         version: link:../../../packages/experimental/hooks-claude-code

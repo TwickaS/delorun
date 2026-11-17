@@ -7,6 +7,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { fits, presentConnections } from '../guide.ts'
+import type { OnboardingLocaleKey } from '../locales.ts'
 import type { StepServices } from '../types.ts'
 import { Notice } from '../ui/Notice.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
@@ -29,6 +30,14 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 }
 
 export { readableName }
+
+/**
+ * The guide's own words for an offered plugin pack that is not in the profile yet, whose package the studio cannot read
+ * before it downloads.
+ */
+const PACK_CARDS: Readonly<Record<string, { readonly title: OnboardingLocaleKey, readonly description: OnboardingLocaleKey }>> = {
+  '@delorun/bundle-computer-use-driver': { title: 'plugins.pack.computerUseDriver.title', description: 'plugins.pack.computerUseDriver.description' },
+}
 
 /** How long the plugin manager may take to answer before the step says so and offers Try again. */
 const SLOW_AFTER_MS = 8000
@@ -83,10 +92,11 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
       <ul className={css.cards}>
         {shown.map(({ name, matches }) => {
           const view = views[name]
+          const pack = Object.hasOwn(PACK_CARDS, name) ? PACK_CARDS[name] : undefined
           return (
             <BundleCard key={name} name={name} services={services}
-              title={view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
-              description={view?.description === undefined ? undefined : resolveText(view.description)}>
+              title={view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : pack === undefined ? readableName(name) : t(pack.title)}
+              description={view?.description !== undefined ? resolveText(view.description) : pack === undefined ? undefined : t(pack.description)}>
               {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
             </BundleCard>
           )
