@@ -119,6 +119,23 @@ export function isExternal(name: string, patterns: readonly string[]): boolean {
 }
 
 /**
+ * The external package a staged path lies inside when that package is nested below the top level of the pack's `node_modules`.
+ * @param path - a staged file's path relative to the pack root.
+ * @param externals - the recipe's `packExternals`.
+ * @returns the nested external package's name, or undefined when the path holds none.
+ */
+export function externalNestedIn(path: string, externals: readonly string[]): string | undefined {
+  const segments = path.split('/')
+  for (let index = 1; index < segments.length - 1; index++) {
+    if (segments[index] !== 'node_modules') continue
+    const first = segments[index + 1]!
+    const name = first.startsWith('@') && index + 2 < segments.length - 1 ? `${first}/${segments[index + 2]!}` : first
+    if (isExternal(name, externals)) return name
+  }
+  return undefined
+}
+
+/**
  * The npm tarball URL of a package version.
  * @param name - the package name.
  * @param version - its exact version.
@@ -388,6 +405,8 @@ export async function buildPack(name: string, version: string, experimental: boo
     const packPeers = await peerDependencyNames(directory)
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
+      const deeper = externalNestedIn(file.path, externals)
+      if (deeper !== undefined) throw new Error(`${name} for ${platform} carries ${deeper} nested inside another package (${file.path}); an external package is fetched from its publisher only when it is at the top level of the pack's node_modules, so a nested copy would ship its files in the pack`)
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
       if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {

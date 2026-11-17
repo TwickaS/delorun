@@ -160,6 +160,15 @@ describe('the recipe\'s pack externals', () => {
     expect(variant.external.map(pin => pin.name)).toEqual(['@vendor/native'])
     expect(variant.files.some(file => file.path.includes('@vendor/native'))).toBe(false)
   })
+
+  it('refuses a pack that carries an external package nested inside another package, at any depth', async () => {
+    const nested = { 'node_modules/own-dep/node_modules/@vendor/native/package.json': '{"name":"@vendor/native","version":"1.0.0"}' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native'], sources({ native: false, files: nested }), temp()))
+      .rejects.toThrow(/@delorun\/demo for linux-x64 carries @vendor\/native nested inside another package \(node_modules\/own-dep\/node_modules\/@vendor\/native\/package\.json\)/u)
+    const deep = { 'node_modules/own-dep/node_modules/other/node_modules/@vendor/native-linux-x64/index.js': 'x\n' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native-*'], sources({ native: false, files: deep }), temp()))
+      .rejects.toThrow(/carries @vendor\/native-linux-x64 nested inside another package/u)
+  })
 })
 
 describe('the lockfile and the pack candidates', () => {
