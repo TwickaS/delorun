@@ -34,7 +34,7 @@ const CLASSES = {
  * @returns the line.
  */
 function GuideLink({ link }: { link: { readonly text: string, readonly href: string } }) {
-  return <p className="col-span-full mt-4 lg:col-start-9 lg:col-end-13"><Link href={link.href}>{link.text}</Link></p>
+  return <p className="col-span-full mt-4"><Link href={link.href}>{link.text}</Link></p>
 }
 
 /** The space between a section's heading and its content. */
