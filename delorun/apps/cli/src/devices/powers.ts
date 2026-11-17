@@ -1,8 +1,8 @@
 /**
  * `delorun devices powers [careful | full]` (C14, "Phone powers"): show or choose how much an unlocked phone may do.
  * The choice is written to the home-auth record at this computer; a running home reads it at its next check, so no
- * restart is needed. Choosing Full needs a terminal, so a script cannot widen what a phone may do; choosing Careful
- * does not.
+ * restart is needed. Choosing Full needs a terminal, so a script cannot widen what a phone may do on a home that is set
+ * up; choosing Careful does not. A first `delorun setup` records the level too ([setup](../reach/setup-section.ts)).
  *
  * @module @delorun/cli/devices/powers
  */

@@ -22,7 +22,8 @@ import { linkDelorunBundles, type BundleLinking } from '../delorun-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delorun/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delorun/logs'
-import { PROMPTS_OPTIONS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ModelProviderAnswer, type PromptsAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
+import { PROMPTS_OPTIONS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ModelProviderAnswer, type PhonePowersAnswer, type PromptsAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
+import { isPhonePowersLevel } from '@delorun/home-auth'
 import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { currentAnswers } from './current.ts'
 import { promptsFromFlags } from './dangerous.ts'
@@ -87,6 +88,8 @@ export interface SetupRequest {
   readonly providerChoice?: ProviderChoice
   /** The prompts answer `--prompts` names for `--yes`; `--yes` keeps setup's default without it, and never selects `dangerous` on its own. */
   readonly promptsAnswer?: PromptsAnswer
+  /** The Phone powers level `--phone-powers` names for `--yes`; without it `--yes` leaves the home's level as it is. */
+  readonly phonePowersAnswer?: PhonePowersAnswer
   /** Whether a key read from the environment is checked too (`--check-key`). */
   readonly checkEnvironmentKey?: boolean
   /** Whether the release check is turned off whatever the form says (`--no-update-check`); Full asks with No preselected. */
@@ -222,7 +225,7 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry, 
   const { form, env } = request
   const flags: Partial<SetupAnswers> = request.noUpdateCheck === true ? { updateCheck: false } : {}
   if (form.kind === 'yes') {
-    const answers = { ...yesAnswers(env, request.providerChoice), ...request.promptsAnswer === undefined ? {} : { prompts: request.promptsAnswer }, ...flags, sections: unattendedRecord(registry.all()) }
+    const answers = { ...yesAnswers(env, request.providerChoice), ...request.promptsAnswer === undefined ? {} : { prompts: request.promptsAnswer }, ...request.phonePowersAnswer === undefined ? {} : { phonePowers: request.phonePowersAnswer }, ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedProvider(request, answers.modelProvider, FLAGS_FORM('delorun setup --yes'))
     return { answers, secret: undefined, keepSavedKey: false }
   }
@@ -377,7 +380,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
     if (finished) {
       request.output.stdout(RERUN_LINE(request.profile))
       // The run records the sections it asks itself.
-      before = { ...currentAnswers(profileDirectory(request.home, request.profile)), sections: [] }
+      before = { ...currentAnswers(profileDirectory(request.home, request.profile), request.home), sections: [] }
     }
     if (request.form.kind === 'interactive' && !finished) request.output.stdout(setupHeader(request.home, request.env))
     const collected = await collectAnswers(request, registry, before)
@@ -448,7 +451,7 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   if (!section.appliesTo(environment)) throw new CliError(EXIT.failed, `delorun setup: the ${id} section does not apply on this computer`)
   if (request.form.kind !== 'interactive') throw new CliError(EXIT.usage, 'delorun setup: a section asks its question in a terminal; --yes and --config do not apply to it')
   const directory = profileDirectory(request.home, request.profile)
-  const draft: Draft = { phase: 'single', answers: currentAnswers(directory), secret: undefined, keyCheckFailure: undefined }
+  const draft: Draft = { phase: 'single', answers: currentAnswers(directory, request.home), secret: undefined, keyCheckFailure: undefined }
   let given: Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
   if (request.providerChoice === undefined) {
     given = await section.ask(stepIO(prompterFor(request.form), false), draft, environment) as typeof given
@@ -499,7 +502,7 @@ export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof 
   return { id: values.provider, model: values.model, baseURL: values['base-url'], keyEnv: values['key-env'] }
 }
 
-/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`. */
+/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--phone-powers <careful|full>] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
   summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them; export and import move a setup between computers',
@@ -512,7 +515,7 @@ export const setupCommand: CliCommand = {
           'profile': { type: 'string' }, 'yes': { type: 'boolean', default: false }, 'config': { type: 'string' }, 'check-key': { type: 'boolean', default: false },
           'no-update-check': { type: 'boolean', default: false }, 'list': { type: 'boolean', default: false },
           'provider': { type: 'string' }, 'model': { type: 'string' }, 'base-url': { type: 'string' }, 'key-env': { type: 'string' },
-          'prompts': { type: 'string' }, 'accept-dangerous-mode': { type: 'boolean', default: false },
+          'prompts': { type: 'string' }, 'accept-dangerous-mode': { type: 'boolean', default: false }, 'phone-powers': { type: 'string' },
         }, strict: true, allowPositionals: true })
       } catch (error) {
         // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
@@ -530,15 +533,31 @@ export const setupCommand: CliCommand = {
     const [section] = positionals
     const providerChoice = providerChoiceFromFlags(values, section, values.yes)
     const promptsAnswer = promptsFromFlags({ prompts: values.prompts, acceptDangerousMode: values['accept-dangerous-mode'] }, values.yes, PROMPTS_OPTIONS)
+    const phonePowersAnswer = phonePowersFromFlag(values['phone-powers'], values.yes)
     const { home, profile } = await prepareHome(context, values.profile)
     const form = formFromFlags(values.yes, values.config)
     const request: SetupRequest = {
       home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'],
       ...providerChoice === undefined ? {} : { providerChoice },
       ...promptsAnswer === undefined ? {} : { promptsAnswer },
+      ...phonePowersAnswer === undefined ? {} : { phonePowersAnswer },
     }
     return section === undefined ? runSetup(request) : runSection(request, section)
   },
+}
+
+/**
+ * The Phone powers answer `--phone-powers` names.
+ * @param value - the flag's value, if given.
+ * @param yes - whether `--yes` was given.
+ * @returns the answer, or undefined without the flag.
+ * @throws {CliError} `EXIT.usage` without `--yes`, or for a value that is not a level.
+ */
+export function phonePowersFromFlag(value: string | undefined, yes: boolean): PhonePowersAnswer | undefined {
+  if (value === undefined) return undefined
+  if (!yes) throw new CliError(EXIT.usage, 'delorun setup: --phone-powers applies to --yes; a --config document names the level in phonePowers, and a terminal run asks it with remote access')
+  if (!isPhonePowersLevel(value)) throw new CliError(EXIT.usage, 'delorun setup: --phone-powers takes careful or full')
+  return value
 }
 
 /**
