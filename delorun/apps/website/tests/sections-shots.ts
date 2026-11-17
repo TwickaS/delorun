@@ -1,7 +1,7 @@
 /**
  * Takes the review pictures of the setup strip and the plugin browser from a locally served page in headless Chromium,
- * at 390, 768 and 1440 px. The strip is taken in Soft light and Berry dark, before any change and after three (Ocean,
- * Berry, Spacious); the plugin browser with scripts off, with the longest entry chosen, and with the whole list shown. It
+ * at 390, 768 and 1440 px. The strip is taken in Soft light, Berry dark and Soft light with reduced motion, before any
+ * change and after three (Ocean, Berry, Spacious), and with scripts off; the plugin browser with scripts off, with the longest entry chosen, and with the whole list shown. It
  * prints each section's height, whether anything is wider than the window, the root's look attributes and what the
  * browser stored, which must be nothing.
  *
@@ -25,8 +25,9 @@ const WIDTHS = [390, 768, 1440] as const
 
 /** A strip picture's look: the default page in light, or Berry carried in the link in dark. */
 const LOOKS = [
-  { name: 'soft-light', query: '', scheme: 'light' },
-  { name: 'berry-dark', query: '?look=t3-chat&scheme=dark', scheme: 'dark' },
+  { name: 'soft-light', query: '', scheme: 'light', reducedMotion: 'no-preference' },
+  { name: 'berry-dark', query: '?look=t3-chat&scheme=dark', scheme: 'dark', reducedMotion: 'no-preference' },
+  { name: 'soft-light-reduced', query: '', scheme: 'light', reducedMotion: 'reduce' },
 ] as const
 
 /** The plugin browser's longest real entry, by its sentence. */
@@ -71,7 +72,7 @@ async function measure(page: Page, name: string, selector: string): Promise<void
 try {
   for (const width of WIDTHS) {
     for (const look of only === 'plugins' ? [] : LOOKS) {
-      const page = await open({ viewport: { width, height: 900 }, colorScheme: look.scheme }, look.query)
+      const page = await open({ viewport: { width, height: 900 }, colorScheme: look.scheme, reducedMotion: look.reducedMotion }, look.query)
       await measure(page, `strip-${String(width)}-${look.name}-still`, '[data-setup-strip]')
       await page.locator('section[aria-labelledby="make-it-yours"]').scrollIntoViewIfNeeded()
       const strip = page.locator('[data-setup-strip="live"]')
@@ -91,6 +92,12 @@ try {
       await page.context().close()
     }
 
+    if (only !== 'plugins') {
+      const page = await open({ viewport: { width, height: 900 }, javaScriptEnabled: false })
+      await page.locator('section[aria-labelledby="make-it-yours"]').screenshot({ path: join(out, `strip-${String(width)}-scripts-off.png`) })
+      await measure(page, `strip-${String(width)}-scripts-off`, '[data-setup-strip]')
+      await page.context().close()
+    }
     if (only === 'strip') continue
     const off = await open({ viewport: { width, height: 900 }, javaScriptEnabled: false })
     await off.locator('section[aria-labelledby="parts"]').screenshot({ path: join(out, `plugins-${String(width)}-scripts-off.png`) })

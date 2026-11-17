@@ -94,9 +94,25 @@
   color: var(--dl-text);
 }
 
-/* The theme tiles: all eight at once, four to a row at every width; on a phone the tiles are smaller. */
+/*
+ * The theme tiles: all eight at once, four to a row at every width. Where a tile is too narrow for its name and the radio
+ * mark (a phone, or the wide strip in the spacious density), the mark goes and the name is centred; the chosen tile keeps
+ * its border.
+ */
 .tiles {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 639px) {
+  .tiles {
+    --delorun-tile-mark: none;
+    --delorun-tile-label-align: center;
+  }
+}
+
+:global(html[data-density='spacious']) .tiles {
+  --delorun-tile-mark: none;
+  --delorun-tile-label-align: center;
 }
 
 .swatch {
