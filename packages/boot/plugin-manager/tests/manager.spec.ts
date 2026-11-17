@@ -3101,6 +3101,33 @@ describe('a package the release publishes as a signed pack', () => {
     expect((await manager.listBundles()).find(item => item.name === name)?.installTarget).toEqual({ spec: 'link:/home/packs/current/pack/package', version: getDshRuntimeVersion() })
   })
 
+  describe('installed from the Changes copy of the pack', () => {
+    const PACK_DIR = '/home/packs/current/pack/package'
+    const reviewed = async (approvedSource: string, installedVersion = getDshRuntimeVersion()) => {
+      const { manager, dir } = await fixture('live', false, targets(true, `link:${PACK_DIR}`), {}, undefined, undefined, true)
+      const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+      const copy = join(dir, '..', '..', 'changes', 'profiles', 'test', 'active', name.replace(/[@/]/gu, '+'))
+      mkdirSync(copy, { recursive: true })
+      writeFileSync(join(copy, 'package.json'), JSON.stringify({ name, version: installedVersion }))
+      const manifest = readProfileManifest('test', dir)
+      manifest.dependencies = { ...manifest.dependencies, [name]: `link:${copy}` }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...manifest, delorun: { changes: { plugins: { [name]: { source: approvedSource } } } } }))
+      const row = (await manager.listBundles()).find(item => item.name === name)
+      return { row, copy }
+    }
+
+    it('reports the offered pack link as its source when Changes approved it from that folder', async () => {
+      const { row } = await reviewed(PACK_DIR)
+      expect(row?.source).toBe(`link:${PACK_DIR}`)
+      expect(row?.source).toBe(row?.installTarget?.spec)
+    })
+
+    it('keeps the copy as its source when Changes approved it from another folder', async () => {
+      const { row, copy } = await reviewed('/home/elsewhere/pack')
+      expect(row?.source).toBe(`link:${copy}`)
+    })
+  })
+
   it('keeps the usual target for a package the release does not publish as a pack', async () => {
     const { manager } = await fixture('live', false, targets(false), {}, undefined, undefined, true)
     const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
