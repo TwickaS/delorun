@@ -21,6 +21,7 @@
  *       approved.json               the runtime's files whose approved content differs from the signed release's
  *       copy/                       the person's writable copy of the runtime's app/ directory
  *       scan-cache.json             file digests by inode, size and times, to scan the copy quickly
+ *       pending.json                the file of each change the last read of the copy found, for one change's action
  *       run/<digest>/               the signed runtime with the approved files in place, which a start runs
  * ```
  *
@@ -49,6 +50,7 @@ export const CHANGES_ENTRIES = {
   log: 'log.json',
   workSession: 'work-session.json',
   scanCache: 'scan-cache.json',
+  harnessPending: 'pending.json',
   migration: 'migration.json',
   harness: 'harness',
   harnessRecord: 'approved.json',
@@ -232,4 +234,13 @@ export function harnessRunDirectory(home: string, runtime: string): string {
  */
 export function harnessScanCachePath(home: string, runtime: string): string {
   return join(harnessRuntimeDirectory(home, runtime), CHANGES_ENTRIES.scanCache)
+}
+
+/**
+ * @param home - the Delorun home.
+ * @param runtime - the runtime version.
+ * @returns the file naming, by change id, the file of each change the last read of the runtime's copy found.
+ */
+export function harnessPendingPath(home: string, runtime: string): string {
+  return join(harnessRuntimeDirectory(home, runtime), CHANGES_ENTRIES.harnessPending)
 }
