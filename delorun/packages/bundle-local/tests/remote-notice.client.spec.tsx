@@ -66,7 +66,7 @@ describe('the refused-answer notice', () => {
     expect(refusedActionText(t, 'workspace-management')).toBe('管理工作区及其指令')
     expect(refusedActionText(makeTranslate(en), 'workspace-management')).toBe('managing workspaces and their instructions')
     expect(refusedActionText(makeTranslate(en), 'external-agent')).toBe('starting an external agent such as Claude Code or Codex')
-    expect(refusedActionText(t, 'external-agent')).toBe('启动 Claude Code 或 Codex 等外部代理')
+    expect(refusedActionText(t, 'external-agent')).toBe('启动 Claude Code 或 Codex 等外部智能体')
     expect(refusedActionText(t, undefined)).toBe('回答这个提示')
   })
 

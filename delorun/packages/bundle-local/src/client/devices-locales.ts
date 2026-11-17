@@ -183,7 +183,7 @@ export const zh: typeof en = {
   'remote.refused': '这需要你在电脑前操作：{action}。请在主机所在电脑上的 studio 中回答这个提示',
   'remote.action.fullAccessEscalation': '授予完全访问权限',
   'remote.action.workspaceManagement': '管理工作区及其指令',
-  'remote.action.externalAgent': '启动 Claude Code 或 Codex 等外部代理',
+  'remote.action.externalAgent': '启动 Claude Code 或 Codex 等外部智能体',
   'remote.action.other': '操作“{action}”',
   'remote.action.unknown': '回答这个提示',
   'remote.dismiss': '关闭',
