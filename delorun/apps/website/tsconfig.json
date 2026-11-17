@@ -25,6 +25,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@brand/*": [
+        "../../packages/brand/src/*"
+      ],
       "@brand": [
         "../../packages/brand/src/index.ts"
       ],
