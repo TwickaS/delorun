@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, realpathSync, symlinkSync } from 'node:fs'
+import { mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { materialize, storeFolder } from '../src/store.ts'
+import { holdContent } from '../src/enforce.ts'
+import { holdsVersion, materialize, storeFolder } from '../src/store.ts'
 import { scanFolder } from '../src/tree.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -150,36 +151,60 @@ describe('a linked folder with pnpm-installed packages', () => {
 
 describe('a plugin pack whose peers link into the runtime store', () => {
   /**
-   * A home with one installed release and a pack whose own package imports a peer the pack links from the release.
-   * @returns the home and the pack folder.
+   * Install one release with its pack: the runtime's `@s/peer` answers `answer`, and the pack's own package imports it
+   * through the link the runtime store makes.
+   * @param home - the Delorun home.
+   * @param version - the release.
+   * @param answer - what its peer exports.
+   * @returns the pack folder.
    */
-  function packHome(): { readonly home: string, readonly pack: string, readonly peer: string } {
-    const home = realpathSync(temporaryDirectory('delorun-changes-home-'))
-    const peer = join(home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')
-    const pack = join(home, 'packs', '0.1.0', 'plug', 'package')
+  function release(home: string, version: string, answer: number): string {
+    const pack = join(home, 'packs', version, 'plug', 'package')
     writeFiles(home, {
-      'runtimes/current': '0.1.0\n',
-      'runtimes/keys/key': 'secret',
-      'runtimes/0.1.0/bin/delorun': 'binary',
-      'runtimes/0.0.9/app/node_modules/@s/peer/package.json': JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
-      'runtimes/0.0.9/app/node_modules/@s/peer/index.js': 'export const answer = 9\n',
-      'runtimes/0.1.0/app/node_modules/@s/peer/package.json': JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
-      'runtimes/0.1.0/app/node_modules/@s/peer/index.js': 'export const answer = 42\n',
-      'secrets/home-auth/key': 'secret',
-      'packs/0.1.0/plug/package/package.json': JSON.stringify({ name: 'plug', dependencies: { inner: '1', '@s/peer': '1', secret: '1' } }),
-      'packs/0.1.0/plug/package/node_modules/inner/package.json': JSON.stringify({ name: 'inner', type: 'module', exports: './index.js', dependencies: { '@s/peer': '1' } }),
-      'packs/0.1.0/plug/package/node_modules/inner/index.js': 'export { answer } from \'@s/peer\'\n',
+      [`runtimes/${version}/app/node_modules/@s/peer/package.json`]: JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
+      [`runtimes/${version}/app/node_modules/@s/peer/index.js`]: `export const answer = ${String(answer)}\n`,
+      [`packs/${version}/plug/package/package.json`]: JSON.stringify({ name: 'plug', dependencies: { inner: '1', '@s/peer': '1' } }),
+      [`packs/${version}/plug/package/node_modules/inner/package.json`]: JSON.stringify({ name: 'inner', type: 'module', exports: './index.js', dependencies: { '@s/peer': '1' } }),
+      [`packs/${version}/plug/package/node_modules/inner/index.js`]: 'export { answer } from \'@s/peer\'\n',
     })
     mkdirSync(join(pack, 'node_modules', '@s'), { recursive: true })
-    symlinkSync(peer, join(pack, 'node_modules', '@s', 'peer'))
-    symlinkSync(join(home, 'secrets', 'home-auth'), join(pack, 'node_modules', 'secret'))
-    return { home, pack, peer }
+    symlinkSync(join(home, 'runtimes', version, 'app', 'node_modules', '@s', 'peer'), join(pack, 'node_modules', '@s', 'peer'))
+    return pack
   }
 
-  it('keeps a peer link into the active runtime\'s installed packages as a link, and still leaves out a link to anywhere else in the home', async () => {
-    const { home, pack, peer } = packHome()
+  /**
+   * A home running release 0.1.0 with its pack, an older release 0.0.9, and other entries of the home a link may name.
+   * @returns the home and the pack folder.
+   */
+  function packHome(): { readonly home: string, readonly pack: string } {
+    const home = realpathSync(temporaryDirectory('delorun-changes-home-'))
+    release(home, '0.0.9', 9)
+    const pack = release(home, '0.1.0', 42)
+    writeFiles(home, {
+      'runtimes/current': '0.1.0\n',
+      'runtimes/store.json': '{"layout":1}\n',
+      'runtimes/keys/key': 'secret',
+      'runtimes/0.1.0/bin/delorun': 'binary',
+      'runtimes-x/node_modules/@s/peer/index.js': 'export const answer = 0\n',
+      'staging/0123456789abcdef/index.js': 'export const answer = 0\n',
+      'secrets/home-auth/key': 'secret',
+    })
+    symlinkSync(join(home, 'secrets', 'home-auth'), join(pack, 'node_modules', 'secret'))
+    return { home, pack }
+  }
+
+  /**
+   * @param copy - an active copy.
+   * @returns what its own package imports from the peer, in a separate Node process.
+   */
+  function answerOf(copy: string): string {
+    return execFileSync(process.execPath, ['--input-type=module', '-e', `const { answer } = await import(${JSON.stringify(pathToFileURL(join(copy, 'node_modules', 'inner', 'index.js')).href)}); process.stdout.write(String(answer))`], { encoding: 'utf8' })
+  }
+
+  it('records a peer link into the active runtime\'s installed packages by its path there, and still leaves out a link to anywhere else in the home', async () => {
+    const { home, pack } = packHome()
     const scanned = await scanFolder(pack, { home })
-    expect(scanned.entries).toContainEqual({ type: 'link', path: 'node_modules/@s/peer', target: peer, outside: true })
+    expect(scanned.entries).toContainEqual({ type: 'link', path: 'node_modules/@s/peer', target: '@s/peer', outside: true, runtime: true })
     expect(scanned.entries.some(entry => entry.path.startsWith('node_modules/secret'))).toBe(false)
     expect(scanned.skipped).toContain('node_modules/secret')
   })
@@ -189,6 +214,10 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     ['a path that climbs out of the active runtime\'s app folder', 'runtimes/0.1.0/app/../../keys'],
     ['the active runtime outside its app/node_modules', 'runtimes/0.1.0/bin'],
     ['the runtime store itself', 'runtimes'],
+    ['the runtime store\'s layout record', 'runtimes/store.json'],
+    ['a folder beside the runtime store whose name starts with its name', 'runtimes-x/node_modules/@s/peer'],
+    ['a staging folder', 'staging/0123456789abcdef'],
+    ['another pack', 'packs/0.0.9/plug/package'],
   ])('leaves out a link to %s', async (_what, target) => {
     const { home, pack } = packHome()
     // Written as given, so a `..` reaches the link's target unresolved.
@@ -211,7 +240,31 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     const { version } = await storeFolder(home, pack)
     const copy = join(temporaryDirectory('delorun-changes-active-'), 'plug')
     await materialize(home, version, copy)
-    const loaded = execFileSync(process.execPath, ['--input-type=module', '-e', `const { answer } = await import(${JSON.stringify(pathToFileURL(join(copy, 'node_modules', 'inner', 'index.js')).href)}); process.stdout.write(String(answer))`], { encoding: 'utf8' })
-    expect(loaded).toBe('42')
+    expect(answerOf(copy)).toBe('42')
+  })
+
+  it('after an update keeps the approved version and re-points the copy to the new release\'s peers, which outlive the old release', async () => {
+    const { home, pack } = packHome()
+    const { version } = await storeFolder(home, pack)
+    const copy = join(temporaryDirectory('delorun-changes-active-'), 'plug')
+    await materialize(home, version, copy)
+    // The update installs 0.2.0 with the same pack, switches runtimes/current, and retention removes the old release.
+    const updated = release(home, '0.2.0', 43)
+    writeFiles(home, { 'runtimes/current': '0.2.0\n' })
+    expect((await storeFolder(home, updated)).version).toBe(version)
+    expect(await holdsVersion(home, copy, version)).toBe(false)
+    await holdContent(home, copy, version)
+    expect(await holdsVersion(home, copy, version)).toBe(true)
+    rmSync(join(home, 'runtimes', '0.1.0'), { recursive: true })
+    rmSync(join(home, 'packs', '0.1.0'), { recursive: true })
+    expect(realpathSync(join(copy, 'node_modules', '@s', 'peer'))).toBe(join(home, 'runtimes', '0.2.0', 'app', 'node_modules', '@s', 'peer'))
+    expect(answerOf(copy)).toBe('43')
+  })
+
+  it('refuses to write a runtime link while the home runs no installed release', async () => {
+    const { home, pack } = packHome()
+    const { version } = await storeFolder(home, pack)
+    rmSync(join(home, 'runtimes', 'current'))
+    await expect(materialize(home, version, join(temporaryDirectory('delorun-changes-active-'), 'plug'))).rejects.toMatchObject({ code: 'RUNTIME_CHANGED' })
   })
 })

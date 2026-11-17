@@ -94,7 +94,7 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
     }
     const content = Object.hasOwn(active.plugins, link.name) ? active.plugins[link.name] : undefined
     const expected = content?.version ?? EMPTY_CONTENT_VERSION
-    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersion(directory, expected)) === false) {
+    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersion(home, directory, expected)) === false) {
       broken.push(content === undefined
         ? `The active directory of ${link.name} holds content, and active.json records none: ${directory}.`
         : `The active directory of ${link.name} does not hold version ${content.version}, which active.json records: ${directory}.`)

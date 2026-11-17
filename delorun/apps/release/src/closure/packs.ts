@@ -155,6 +155,20 @@ async function transpilePackPackages(name: string, directory: string): Promise<v
 }
 
 /**
+ * Whether a pack file is a TypeScript source, not a declaration, of a Delorun package: the pack's own package when it is
+ * one, or one in `node_modules/@delorun/` at any depth. Other packages may ship their sources beside their JavaScript.
+ * @param name - the pack's package name.
+ * @param path - the file's path in the pack.
+ * @returns true for a file the transpile step should have replaced.
+ */
+function isDelorunSource(name: string, path: string): boolean {
+  if (!/\.[cm]?tsx?$/u.test(path) || /\.d\.[cm]?ts$/u.test(path)) return false
+  const segments = path.split('/')
+  const nested = segments.lastIndexOf('node_modules')
+  return nested === -1 ? name.startsWith('@delorun/') : segments[nested + 1] === '@delorun'
+}
+
+/**
  * Build one pack's archives from a deployed package.
  * @param name - the package name.
  * @param version - the package version.
@@ -200,6 +214,8 @@ export async function buildPack(name: string, version: string, experimental: boo
       if (nested !== undefined && dropped.has(nested)) continue
       entries.push({ path: file.path, mode: file.mode, data: await readFile(file.absolute) })
     }
+    const untranspiled = entries.map(entry => entry.path).filter(path => isDelorunSource(name, path))
+    if (untranspiled.length > 0) throw new Error(`${name} for ${platform} carries TypeScript sources of a Delorun package, which Node does not run from a pack: ${untranspiled.slice(0, 3).join(', ')}`)
     const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
     built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() })
   }

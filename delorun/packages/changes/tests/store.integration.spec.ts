@@ -275,7 +275,7 @@ describe('materialize', () => {
     expect(modeOf(join(target, 'bin', 'run'))).toBe(0o700)
     expect(readFileSync(join(target, 'bin', 'run'), 'utf8')).toBe('run')
     expect(readlinkSync(join(target, 'main'))).toBe('index.js')
-    expect(await holdsVersion(target, version)).toBe(true)
+    expect(await holdsVersion(home, target, version)).toBe(true)
   })
 
   it('keeps an unchanged file\'s inode, replaces a changed one, and removes what the version lacks with its emptied directories', async () => {
@@ -306,7 +306,7 @@ describe('materialize', () => {
     expect(readFileSync(join(target, 'tofile'), 'utf8')).toBe('now a file')
     expect(existsSync(join(target, 'gone'))).toBe(false)
     expect(readdirSync(join(target, 'kept'))).toEqual(['a.js'])
-    expect(await holdsVersion(target, second.version)).toBe(true)
+    expect(await holdsVersion(home, target, second.version)).toBe(true)
   })
 
   it('with dependencies kept as links, materializes a dereferenced package whose own dependencies stay links, and the copy holds the version', async () => {
@@ -324,7 +324,7 @@ describe('materialize', () => {
     await materialize(home, version, target)
     expect(readlinkSync(join(target, 'node_modules', 'pkg', 'node_modules', 'dep'))).toBe(join(workspace, 'dep'))
     expect(realpathSync(join(target, 'node_modules', 'pkg', 'node_modules', 'plugin'))).toBe(target)
-    expect(await holdsVersion(target, version)).toBe(true)
+    expect(await holdsVersion(home, target, version)).toBe(true)
   })
 
   it('with dependencies kept as links, keeps a dependency link that leaves the folder resolving to the same directory from the copy', async () => {
@@ -341,7 +341,7 @@ describe('materialize', () => {
     await materialize(home, version, target)
     expect(realpathSync(join(target, 'node_modules', 'dep'))).toBe(dependency)
     expect(readFileSync(join(target, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('dependency')
-    expect(await holdsVersion(target, version)).toBe(true)
+    expect(await holdsVersion(home, target, version)).toBe(true)
   })
 
   it('copies an installed dependency and the dependency installed beside it into the active directory', async () => {
@@ -365,7 +365,7 @@ describe('materialize', () => {
     expect(readFileSync(join(target, 'node_modules', 'dep', 'node_modules', 'inner', 'index.js'), 'utf8')).toBe('inner')
     writeFiles(workspace, { 'node_modules/.pnpm/dep@1/node_modules/dep/index.js': 'changed outside' })
     expect(readFileSync(join(target, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('dependency')
-    expect(await holdsVersion(target, version)).toBe(true)
+    expect(await holdsVersion(home, target, version)).toBe(true)
   })
 
   it('copies a dereferenced sibling package\'s files into the active directory', async () => {
@@ -465,14 +465,14 @@ describe('holdsVersion', () => {
   it('answers false for another version and a missing directory', async () => {
     const { home, folder } = setUp({ 'a.js': 'a' })
     const { version } = await storeFolder(home, folder)
-    expect(await holdsVersion(folder, version)).toBe(true)
-    expect(await holdsVersion(home, version)).toBe(false)
-    expect(await holdsVersion(join(home, 'missing'), version)).toBe(false)
+    expect(await holdsVersion(home, folder, version)).toBe(true)
+    expect(await holdsVersion(home, home, version)).toBe(false)
+    expect(await holdsVersion(home, join(home, 'missing'), version)).toBe(false)
   })
 
   it('fails with the filesystem error for a path that is not a directory', async () => {
     const { home, folder } = setUp({ 'a.js': 'a' })
     const { version } = await storeFolder(home, folder)
-    await expect(holdsVersion(join(folder, 'a.js'), version)).rejects.toMatchObject({ code: 'ENOTDIR' })
+    await expect(holdsVersion(home, join(folder, 'a.js'), version)).rejects.toMatchObject({ code: 'ENOTDIR' })
   })
 })

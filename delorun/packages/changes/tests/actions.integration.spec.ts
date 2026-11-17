@@ -174,7 +174,7 @@ describe('applying a change', () => {
     expect(result.entry.historyVersion).toBe(result.historyVersion)
     expect(host.calls()).toBe(1)
     expect((await readApproved(fx.profileDir)).plugins.plug).toEqual({ source, version: change.to, approvedAt: NOW.toISOString() })
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), change.to)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), change.to)).toBe(true)
     expect((await readActiveRecord(fx.home, PROFILE)).plugins.plug).toEqual({ version: change.to, kind: 'approved' })
     expect((await history(fx))[0]).toBe(`Applied ${change.id}: plug: changes in ${source}`)
     expect((await listChanges(ctx)).pending).toEqual([])
@@ -191,7 +191,7 @@ describe('applying a change', () => {
     const result = await applyChange(ctx, change.id, terminal(), reloads(undefined))
     expect(result.reload).toEqual({ kind: 'not-running' })
     expect(result.entry.createdAt).toBe(NOW.toISOString())
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'other'), change.to)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'other'), change.to)).toBe(true)
   })
 
   it('refuses a change whose folder changed after it was shown, and writes nothing', async () => {
@@ -218,7 +218,7 @@ describe('applying a change', () => {
     expect(result.entry).toEqual({ id: change.id, kind: 'plugin-edit', state: 'pending', subject: { plugin: 'plug', source }, from: approved, to: change.to, summary: `plug: changes in ${source}`, createdAt: NOW.toISOString(), lastFailure: { at: NOW.toISOString(), failure: 'SyntaxError in index.js' } })
     expect(host.calls()).toBe(2)
     expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect((await readActiveRecord(fx.home, PROFILE)).plugins.plug).toEqual({ version: approved, kind: 'approved' })
     expect((await history(fx)).slice(0, 2)).toEqual([`Went back: ${change.id} failed to load`, `Applied ${change.id}: plug: changes in ${source}`])
     const listed = await onlyPending(ctx)
@@ -240,7 +240,7 @@ describe('applying a change', () => {
     const result = await applyChange(ctx, change.id, terminal(), reloads({ ok: false, error: 'boom' }, undefined))
     expect(result.reload).toEqual({ kind: 'went-back', failure: 'boom', historyVersion: expect.any(String) })
     expect((await readApproved(fx.profileDir)).plugins.other).toBeUndefined()
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'other'), EMPTY_CONTENT_VERSION)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'other'), EMPTY_CONTENT_VERSION)).toBe(true)
     expect((await readActiveRecord(fx.home, PROFILE)).plugins.other).toBeUndefined()
   })
 
@@ -315,7 +315,7 @@ describe('undoing a change', () => {
     const result = await undoChange(ctx, change.id, terminal(), reloads(OK))
     expect(result).toMatchObject({ reload: { kind: 'reloaded' }, entry: { id: change.id, state: 'undone', decidedFrom: 'terminal' } })
     expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect((await history(fx))[0]).toBe(`Undid ${change.id}: plug: changes in ${source}`)
     expect((await onlyPending(ctx)).id).toBe(change.id)
     await rejection(undoChange(ctx, change.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
@@ -327,7 +327,7 @@ describe('undoing a change', () => {
     const upgrade = (await readChangeLog(fx.home, PROFILE)).entries[0]!
     await undoChange(ctx, upgrade.id, terminal(), reloads(undefined))
     expect((await readApproved(fx.profileDir)).plugins.plug).toBeUndefined()
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), EMPTY_CONTENT_VERSION)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), EMPTY_CONTENT_VERSION)).toBe(true)
     expect(await onlyPending(ctx)).toMatchObject({ kind: 'plugin-install', plugin: 'plug', source })
   })
 
@@ -340,7 +340,7 @@ describe('undoing a change', () => {
     const result = await undoChange(ctx, change.id, terminal(), reloads({ ok: false, error: 'boom' }, OK))
     expect(result.entry).toMatchObject({ state: 'applied', lastFailure: { failure: 'boom' } })
     expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(change.to)
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), change.to)).toBe(true)
+    expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), change.to)).toBe(true)
     expect((await history(fx))[0]).toBe(`Went back: undoing ${change.id} failed to load`)
     expect((await undoChange(ctx, change.id, terminal(), reloads(OK))).entry.lastFailure).toBeUndefined()
   })

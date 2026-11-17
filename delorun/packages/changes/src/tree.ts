@@ -11,8 +11,11 @@
  * - a target the walk already included, or below one: a relative `link` entry to its path in the version (see below);
  * - a target whose real path lies in the active runtime's installed packages, `runtimes/<version runtimes/current
  *   names>/app/node_modules/` in the Delorun home, as a plugin pack links the packages the running release carries: a
- *   `link` entry marked `outside` with that real path, so the copy loads the signed release's package as the pack does;
- *   every other target in the home, another runtime version's included, stays out;
+ *   `runtime` link entry with its path below that folder, which names the same package in whichever release runs, so
+ *   the copy loads the signed release's package as the pack does; every other target in the home, another runtime
+ *   version's included, stays out. An active directory's scan given the home records its links into the active runtime
+ *   the same way, and a link into any other release as an outside link, so a copy written under an earlier release no
+ *   longer holds its version;
  * - a target the scan may follow: dereferenced, so its files are part of the content under the link's path and nothing
  *   loads from outside the approved copy. The scan follows a link only to an installed package (a real path below a
  *   `node_modules` directory, such as one in pnpm's `.pnpm` store), to a sibling workspace package (a directory holding
@@ -149,6 +152,8 @@ export interface FolderScanOptions extends ScanCacheOptions {
 /** The scan of an active directory, whose links Delorun wrote: it follows none ({@link ScanOptions}). */
 export interface ActiveScanOptions extends ScanCacheOptions {
   readonly active: true
+  /** The Delorun home, whose active runtime's installed packages a `runtime` link entry names; none when omitted. */
+  readonly runtimeHome?: string
 }
 
 /** The scan cache and clock both scans take. */
@@ -277,7 +282,7 @@ function canonicalJson(entries: readonly VersionEntry[]): string {
   const sorted = [...entries].sort((a, b) => compareCodeUnits(a.path, b.path))
   return JSON.stringify(sorted.map((entry) => entry.type === 'file'
     ? { type: entry.type, path: entry.path, digest: entry.digest, size: entry.size, executable: entry.executable }
-    : { type: entry.type, path: entry.path, target: entry.target, outside: entry.outside }))
+    : { type: entry.type, path: entry.path, target: entry.target, outside: entry.outside, ...(entry.runtime === true ? { runtime: true } : {}) }))
 }
 
 /**
@@ -550,6 +555,10 @@ async function addLink(walk: Walk, root: string, directory: string, path: string
     return
   }
   const real = await realTarget(spelledTarget(directory, target))
+  if (real !== undefined && inRuntimeStore(walk, real)) {
+    addRuntimeLink(walk, path, real)
+    return
+  }
   const known = real ?? resolve(directory, target)
   if (walk.dependencies === 'active' || (walk.dependencies === 'link' && known.split(sep).includes(DEPENDENCY_DIRECTORY))) {
     admit(walk, 0)
@@ -585,7 +594,9 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   }
   if ([...walk.included.keys()].some((directory) => contains(real, directory))) {
     walk.skipped.push(path)
-  } else if (!dereference || inRuntimeStore(walk, real)) {
+  } else if (inRuntimeStore(walk, real)) {
+    addRuntimeLink(walk, path, real)
+  } else if (!dereference) {
     admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: real, outside: true })
   } else if (!await mayFollow(walk, real, path, stats.isDirectory())) {
@@ -603,12 +614,31 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
 const RUNTIME_VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+-]*$/u
 
 /**
+ * @param home - the Delorun home, or undefined.
+ * @returns the real path of its active runtime's installed packages, or undefined without a home.
+ */
+async function runtimeModulesOf(home: string | undefined): Promise<string | undefined> {
+  return home === undefined ? undefined : await activeRuntimeModules(await realTarget(resolve(home)) ?? resolve(home))
+}
+
+/**
+ * Add a link to a package the running release carries, by its path below the active runtime's installed packages.
+ * @param walk - the scan, whose `runtimeModules` holds `real`.
+ * @param path - the link's relative path in the version.
+ * @param real - its real target.
+ */
+function addRuntimeLink(walk: Walk, path: string, real: string): void {
+  admit(walk, 0)
+  walk.entries.push({ type: 'link', path, target: relative(walk.runtimeModules!, real).split(sep).join('/'), outside: true, runtime: true })
+}
+
+/**
  * @param home - the Delorun home's real path.
  * @returns the real path of the active runtime's installed packages, `runtimes/<current>/app/node_modules`, or
  *   undefined when `runtimes/current` is missing, does not name one version, or that folder does not exist.
  * @throws the filesystem error other than a missing file.
  */
-async function activeRuntimeModules(home: string): Promise<string | undefined> {
+export async function activeRuntimeModules(home: string): Promise<string | undefined> {
   const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
   let version: string
   try {
@@ -895,7 +925,7 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     included: new Map([[root, '']]),
     dependencies: 'home' in options ? options.dependencies ?? 'include' : 'active',
     home,
-    runtimeModules: home === undefined ? undefined : await activeRuntimeModules(home),
+    runtimeModules: await runtimeModulesOf(home ?? ('active' in options ? options.runtimeHome : undefined)),
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
     pruned: new Set(),
