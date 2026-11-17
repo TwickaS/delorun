@@ -38,6 +38,8 @@ export interface ReplicaBuildOptions {
    * A development server and tests need neither.
    */
   readonly release?: string | undefined
+  /** The session modules a production build checks, as absolute paths; defaults to the site's own sessions. For tests. */
+  readonly sessionFiles?: readonly string[] | undefined
 }
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
@@ -162,7 +164,7 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
   })()
   let production = false
   let refusals: Promise<string[]> | undefined
-  const checkSessions = (policy: SessionPolicy) => refusals ??= Promise.all(SESSION_IDS.map(id => load<{ FIXTURE: ReplicaFixture }>(here(`../sessions/${id}.session.ts`))))
+  const checkSessions = (policy: SessionPolicy) => refusals ??= Promise.all((options.sessionFiles ?? SESSION_IDS.map(id => here(`../sessions/${id}.session.ts`))).map(file => load<{ FIXTURE: ReplicaFixture }>(file)))
     .then(modules => sessionRefusals(modules.map(module => module.FIXTURE), policy))
   return [{
     name: 'delorun-replica',

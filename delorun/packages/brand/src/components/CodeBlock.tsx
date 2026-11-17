@@ -1,7 +1,7 @@
 /**
  * A block of code, such as the install command, with a button that copies it. The block answers in place for
- * {@link COPY_ANSWER_MS}: the button shows a tick and the copied text, or a cross with the failed text on its own line
- * under the code, and a polite live region says the same to a screen reader, again on every press. A failed copy also
+ * {@link COPY_ANSWER_MS}: the button shows a tick and the copied text, or keeps the copy icon as a retry, in the error
+ * colour, with the failed text on its own line under the code, and a polite live region says the same to a screen reader, again on every press. A failed copy also
  * selects the code, so the visitor can copy it by hand. The button
  * appears once scripts run; without them the block is plain selectable text and keeps its size.
  * @module @delorun/brand/components/CodeBlock
@@ -68,7 +68,6 @@ export interface CodeBlockProps {
 type Answer = 'idle' | 'copied' | 'failed'
 
 const TICK = 'M20 6 9 17l-5-5'
-const CROSS = 'M18 6 6 18M6 6l12 12'
 
 /**
  * Render the code block.
@@ -101,9 +100,9 @@ export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, 
         <pre className={css.pre}><code ref={codeRef}>{code}</code></pre>
         <button type="button" className={css.copy} data-answer={answer} data-ready={ready} data-emphasis={emphasis} aria-label={copyLabel} title={copyLabel} onClick={() => { void copy() }} tabIndex={ready ? 0 : -1}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            {answer === 'idle'
-              ? <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>
-              : <path d={answer === 'copied' ? TICK : CROSS} />}
+            {answer === 'copied'
+              ? <path d={TICK} />
+              : <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>}
           </svg>
           {answer === 'copied' ? <span className={css.answer} aria-hidden="true">{said}</span> : null}
         </button>

@@ -65,13 +65,19 @@
 .label {
   font-size: var(--dsw-font-xs-13-font-size, 13px);
   font-weight: 500;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* A page that hides the radio mark can centre the label: `--delorun-tile-label-align: center`. */
+  text-align: var(--delorun-tile-label-align, start);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* A radio mark: a ring, filled with the accent when chosen. */
+/* A radio mark: a ring, filled with the accent when chosen. A page can hide it where the chosen tile is marked another way:
+   `--delorun-tile-mark: none`. */
 .radio {
+  display: var(--delorun-tile-mark, block);
   flex: none;
   width: var(--radio-size);
   height: var(--radio-size);

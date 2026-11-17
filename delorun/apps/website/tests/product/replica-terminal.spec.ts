@@ -11,11 +11,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { marketedRelease } from '../../replica-options.ts'
 import { runLogs, type LogsIo } from '../../../cli/src/logs/index.ts'
 import { Redactor, resolveSurface, SurfaceLog } from '../../../../packages/logs/src/index.ts'
 
 const COMMAND = 'delorun logs'
-const RUNTIME = '0.1.0-preview.2'
+const RUNTIME = marketedRelease(resolve(import.meta.dirname, '../../../../..'))
 /** The home process's logger name (`HOME_LOGGER` in `packages/home-process/src/log.ts`). */
 const HOME_LOGGER = 'home-process'
 /** The home starts at this moment; the fixture's clock is 2026-11-17T10:50:00Z. */

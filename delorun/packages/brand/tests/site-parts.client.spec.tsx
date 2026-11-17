@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Button } from '../src/components/Button.tsx'
 import { ButtonLink } from '../src/button-link.web.tsx'
 import { CodeBlock, COPY_ANSWER_MS, Frame, SectionHeading, TabList, TabPanel } from '../src/index.ts'
 import { Switch } from '../src/upstream.web.tsx'
@@ -139,6 +140,8 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('status').textContent).toBe('Copy failed')
     expect(screen.getByText('Copy failed', { selector: 'p' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy command' }).textContent).toBe('')
+    // The copy icon stays as a retry; no cross that reads as "clear".
+    expect(screen.getByRole('button', { name: 'Copy command' }).querySelector('rect')).not.toBeNull()
     expect(window.getSelection()?.toString()).toBe('pnpm add -g delorun')
     expect(screen.getByRole('figure').querySelector('figcaption')?.textContent).toBe('pnpm')
   })
@@ -197,5 +200,12 @@ describe('ButtonLink', () => {
     expect(link.getAttribute('aria-describedby')).toBe('why')
     const pressed = fireEvent.click(link)
     expect(pressed).toBe(false)
+  })
+})
+
+describe('Button solid', () => {
+  it('marks the solid variant, filled with the text colour', () => {
+    render(<Button variant="solid">Sign up</Button>)
+    expect(screen.getByRole('button', { name: 'Sign up' }).dataset.variant).toBe('solid')
   })
 })

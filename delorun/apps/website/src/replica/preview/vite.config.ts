@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { marketedRelease } from '../../../replica-options.ts'
 import { STUDIO_ALIASES } from '../../../studio-aliases.ts'
 import { replicaPlugins } from '../build/plugins.ts'
 
@@ -16,7 +17,7 @@ export default defineConfig({
   root: at('./'),
   // The brand's fonts sit in `delorun/packages/brand`, outside this preview's root.
   server: { host: '127.0.0.1', port: 18670, strictPort: true, fs: { allow: [at('../../../../../')] } },
-  plugins: [replicaPlugins({ aliases: STUDIO_ALIASES, release: '0.1.0-preview.2' }), tailwindcss(), react()],
+  plugins: [replicaPlugins({ aliases: STUDIO_ALIASES, release: marketedRelease(at('../../../../../../')) }), tailwindcss(), react()],
   resolve: {
     tsconfigPaths: true,
     alias: [...STUDIO_ALIASES, { find: '#upstream', replacement: at('../../../../../packages/brand/src/upstream.web.tsx') }, { find: /^sonner$/, replacement: at('../../../node_modules/sonner') }, { find: /^fumadocs-ui\/css\//, replacement: at('../../../node_modules/fumadocs-ui/css/') }],
