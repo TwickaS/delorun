@@ -1029,7 +1029,7 @@ export type Config = BrowserMcpConfig
 
 - `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `workingDirectory`
 - `refs`: `BrowserChoice` (`@deepseek-ai/dsh-native-command/chrome-channel`) · `BrowserMcpAttachConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`) · `BrowserMcpLaunchConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
-- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:99`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
+- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:102`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 
 ```ts config-catalog
 /** Chrome or Chromium launch, or existing-browser attachment settings. */
@@ -1061,11 +1061,10 @@ export interface DeniedToolsConfig {
 export interface BrowserAdditionsConfig {
   /**
    * Replace Playwright's report of a browser build that is not installed with one message that tells the model to stop
-   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}), and give
-   * {@link OUTPUT_FOLDER} a `.gitignore` of `*`. This is Delorun's C16 switch `browser_additions`, off in the parity
-   * composition. The turned-off tools ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard
-   * ({@link refuseOutsideFolder}) and the Session's folder as the server's one MCP root do not depend on it: they hold
-   * with it off. Defaults to off.
+   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}). This is
+   * Delorun's C16 switch `browser_additions`, off in the parity composition. The turned-off tools
+   * ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard ({@link refuseOutsideFolder}) and the
+   * Session's folder as the server's one MCP root do not depend on it: they hold with it off. Defaults to off.
    */
   browserAdditions: boolean
 }

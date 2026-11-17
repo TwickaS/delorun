@@ -1,9 +1,11 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
-import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { chmod, lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { pathWithin, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import Schema from '@deepseek-ai/schemastery'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
@@ -14,6 +16,7 @@ import { SessionResources } from './index.ts'
 import type {} from '@deepseek-ai/dsh-browser-use'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
 /** Browser launch settings shared by the MCP integrations. */
@@ -126,6 +129,14 @@ export interface SessionMcpOptions {
    * `.gitignore` are never changed, and a Session whose server did not start gets no folder.
    */
   outputFolder?: string
+  /**
+   * Absolute folder under which the Host creates one output folder for each Session, with mode 0700, and tells the
+   * server to save its output files there instead of in the Session's working directory (`PLAYWRIGHT_MCP_OUTPUT_DIR`).
+   * Choose a folder no sandbox grants a confined command write access to, so a sandboxed command cannot replace the
+   * Session's output folder. When set, {@link outputFolder} is ignored and the Session's own folder gets no output
+   * folder.
+   */
+  outputRoot?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -145,6 +156,25 @@ export interface SessionMcpOptions {
    * @returns the model-visible refusal, or `undefined` to let the call through.
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
+  /**
+   * Replace the arguments of a browser tool call before it reaches the server, after {@link refuseCall} let it through,
+   * such as a path the server would read replaced by a copy the Host made, so the server never opens a path a confined
+   * command can swap.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @returns the model-visible refusal; or `arguments`, whose entries replace the same-named entries of the call's
+   * arguments, and the `note` that is added to the call's result so the model and the log show what the server got; or
+   * `undefined` to send the call as it is. A throw fails the call.
+   */
+  prepareCall?: (call: BrowserToolCall) => Promise<string | { arguments: Record<string, unknown>; note?: string } | undefined>
+  /**
+   * Check what a browser tool call left behind, after the server answered, such as a file saved outside the Session's
+   * folder. A result it refuses is replaced by a failure with the returned text. It runs after failed calls too,
+   * because a call can write a file and still fail; its own failure is kept when it refuses nothing.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @param startedAt - the time, in milliseconds since the epoch, taken just before the call was sent to the server.
+   * @returns the model-visible refusal, or `undefined` to keep the result.
+   */
+  checkResult?: (call: BrowserToolCall, startedAt: number) => Promise<string | undefined>
   /**
    * `slot` (the default) registers the provider as the browser-use slot's one provider; `none` registers nothing, for a
    * second browser that sits beside the slot's provider, such as the person's own browser.
@@ -189,6 +219,42 @@ export interface BrowserToolCall {
   arguments: unknown
   /** The Session's working directory when its server started, which the server was told as its one MCP root. */
   directory: string
+  /** The Session's output folder, when the provider set {@link SessionMcpOptions.outputRoot}. */
+  outputDirectory?: string
+}
+
+/**
+ * Create a Session's output folder under the provider's output root.
+ * @param root - the provider's output root.
+ * @param sessionId - the Session's id.
+ * @returns the folder, named by a digest of the id so the name is safe on every file system, with mode 0700.
+ */
+async function sessionOutputDirectory(root: string, sessionId: string): Promise<string> {
+  const directory = join(await fixedDirectory(root), createHash('sha256').update(sessionId).digest('hex').slice(0, 32))
+  return fixedDirectory(directory)
+}
+
+/**
+ * Refuse an output folder that overlaps a folder a confined command of the Session can write: inside one, the chat could
+ * replace the output folder; around one, that folder would be inside the output folder. The writable folders are the
+ * Session's working directory and, when a sandbox policy is provided, the policy's workspace-write roots, the
+ * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now.
+ * @param ctx - the provider context, which may provide the sandbox policy.
+ * @param agent - the Agent whose Session starts.
+ * @param output - the Session's output folder.
+ * @param sessionDirectory - the Session's working directory.
+ * @throws when either folder is inside the other, or the policy's roots cannot be read.
+ */
+async function assertOutsideWritableFolders(ctx: Context, agent: Agent, output: string, sessionDirectory: string): Promise<void> {
+  const policy = ctx.get('sandboxPolicy')?.resolve({ session: agent.session, mode: 'workspace-write' })
+  const writable = [sessionDirectory, ...policy === undefined ? [] : [policy.workspaceRoot, ...writableRoots(policy)]]
+  const folder = await realpath(output)
+  for (const candidate of writable) {
+    const real = await realpath(candidate).catch(() => candidate)
+    if (pathWithin(folder, real) || pathWithin(real, folder)) {
+      throw new Error(`the output folder ${folder} overlaps ${real}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the chat's writable folders`)
+    }
+  }
 }
 
 /**
@@ -345,23 +411,63 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         try {
           signal.throwIfAborted()
           const sessionDirectory = await workingDirectory.ensure(agent, signal)
+          // The call's logged arguments stay as the model sent them; the server gets the replacement.
+          const replacements = new WeakMap<object, Record<string, unknown>>()
+          const notes = new WeakMap<object, string>()
+          // The registry rebuilds a wrapper's result from the tool body's own output, so the note joins the content
+          // the model sees at the post-execute step.
+          scope.ctx.on('tools/post-execute', async (exec, result, next) => {
+            const decision = await next()
+            const note = exec.agent === agent ? notes.get(exec) : undefined
+            if (note === undefined || decision.kind !== 'accept' || decision.content !== undefined) return decision
+            return {
+              kind: 'accept',
+              content: [...result.content, { type: 'text', text: note }],
+              ...decision.additionalContexts === undefined ? {} : { additionalContexts: decision.additionalContexts },
+            }
+          })
+          scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
+            serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
+          const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
+          if (outputDirectory !== undefined) await assertOutsideWritableFolders(ctx, agent, outputDirectory, sessionDirectory)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {
               if (ctx.tools.get(exec.name, exec.agent) !== ctx.tools.get(exec.name, agent)) return next()
               throw new Error(`${options.name}: browser tool belongs to another Session`)
             }
-            const refusal = await options.refuseCall?.({
+            const call: BrowserToolCall = {
               tool: exec.name.slice(toolPrefix.length), arguments: exec.arguments, directory: sessionDirectory,
-            })
-            return refusal === undefined ? next() : failure(refusal)
+              ...outputDirectory === undefined ? {} : { outputDirectory },
+            }
+            const refusal = await options.refuseCall?.(call)
+            if (refusal !== undefined) return failure(refusal)
+            const prepared = await options.prepareCall?.(call)
+            if (typeof prepared === 'string') return failure(prepared)
+            if (prepared !== undefined) replacements.set(exec, { ...exec.arguments as Record<string, unknown>, ...prepared.arguments })
+            if (typeof prepared === 'object' && prepared.note !== undefined) notes.set(exec, prepared.note)
+            if (options.checkResult === undefined) return next()
+            const startedAt = Date.now()
+            let result: ToolExecutionResult | undefined
+            let thrown: unknown
+            try {
+              result = await next()
+            } catch (error) {
+              thrown = error
+            }
+            const refused = await options.checkResult(call, startedAt)
+            if (refused !== undefined) return failure(refused)
+            if (result === undefined) throw thrown
+            return result
           })
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
             serverName: options.name,
             command: options.command,
             args: options.args,
-            ...options.env === undefined ? {} : { env: options.env },
+            ...options.env === undefined && outputDirectory === undefined
+              ? {}
+              : { env: { ...options.env, ...outputDirectory === undefined ? {} : { PLAYWRIGHT_MCP_OUTPUT_DIR: outputDirectory } } },
             cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
             roots: [sessionDirectory],
             ...options.deniedTools === undefined ? {} : { deniedTools: options.deniedTools },
@@ -369,7 +475,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             failOnStartupError: true,
             reconnect: { enabled: false },
           }))
-          if (options.outputFolder !== undefined) {
+          if (options.outputFolder !== undefined && outputDirectory === undefined) {
             try {
               await ignoredOutputFolder(join(sessionDirectory, options.outputFolder))
             } catch (error) {

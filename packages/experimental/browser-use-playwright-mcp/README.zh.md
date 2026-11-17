@@ -46,7 +46,7 @@ kind: "package-reference"
 | `endpoint` | attach 时必填 | 已有浏览器调试端点 |
 | `toolCallTimeoutMs` | MCP 客户端默认值 | 单次调用超时，单位为毫秒 |
 | `deniedTools` | `[]` | 除始终关闭的 `browser_run_code_unsafe` 之外，另外要关闭的服务器自有工具名称：从不提供给模型，被调用时拒绝 |
-| `browserAdditions` | `false` | Delorun 的附加功能，由 Delorun 的 Browser 套件开启：浏览器未安装时简短的 Browser 设置消息，以及 `.playwright-mcp` 的 `.gitignore`。无论取值如何，关闭的工具、文件夹防护和 MCP root 都保持不变 |
+| `browserAdditions` | `false` | Delorun 的附加功能，由 Delorun 的 Browser 套件开启：浏览器未安装时简短的 Browser 设置消息。无论取值如何，关闭的工具、文件夹防护和 MCP root 都保持不变 |
 | `serverDirectory` | `session` | MCP 服务器的运行位置：`session` 为每个 Session 的工作目录，`home` 为所有 Session 共用的 Harness 主目录中的一个文件夹（`browser-use/<服务器名称>`），因此它的命令和文件夹保持不变 |
 
 [配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-browser-use-playwright-mcp)列出接受的字段。浏览器模式由 profile 或 preset 选择。子进程会清空继承的 `PLAYWRIGHT_MCP_*` 选项，避免其替换该配置。
@@ -85,7 +85,7 @@ kind: "package-reference"
 
 #### 模型可见内容
 
-工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。`browser_run_code_unsafe` 会在服务器进程中、页面之外、智能体沙箱之外运行模型编写的代码，始终关闭：MCP 客户端从不注册它，因此模型不会得到它，对它的调用也会被拒绝。任何配置都不能重新开启它。它是固定版本服务器中唯一在那里运行此类代码的工具；`deniedTools` 可关闭更多工具。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。这些文件可能显示私密页面，而 Git 不会跳过隐藏目录，因此开启 `browserAdditions` 时，当某个 Session 的服务器启动，提供方会在该目录缺失时创建它，并在其中没有 `.gitignore` 时放入内容为 `*` 的 `.gitignore`；它从不经由 `.playwright-mcp` 或该 `.gitignore` 处的链接写入，也从不改动其中已有的 `.gitignore` 或项目自己的 `.gitignore`。Playwright 的服务器按文本把工具的 `filename` 与 `paths` 同该目录比较，因此当 `filename` 或 `paths` 的真实位置（经由链接或其他方式）在该目录之外时，提供方会在调用到达服务器之前拒绝它；模型会读到一句话，要求使用对话文件夹内的路径。当 `.playwright-mcp` 本身是指向该目录之外的链接时，所有浏览器工具调用都会被拒绝，因为服务器会在没有文件参数的情况下把默认命名的文件和下载内容保存到那里。检查会分别相对该目录和 `.playwright-mcp` 解析每个名称，不覆盖在检查与服务器使用之间发生变化的路径。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
+工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。`browser_run_code_unsafe` 会在服务器进程中、页面之外、智能体沙箱之外运行模型编写的代码，始终关闭：MCP 客户端从不注册它，因此模型不会得到它，对它的调用也会被拒绝。任何配置都不能重新开启它。它是固定版本服务器中唯一在那里运行此类代码的工具；`deniedTools` 可关闭更多工具。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件，例如截图、下载和 PDF，会放进 Delorun 为每个对话在用户缓存目录中创建的输出文件夹（`$XDG_CACHE_HOME/delorun-browser-output`，macOS 上为 `~/Library/Caches/delorun-browser-output`，Windows 上为 `%LOCALAPPDATA%\delorun-browser-output`），仅所有者可访问，工具结果会说明每个文件的位置。该文件夹位于对话文件夹之外、`/tmp` 之外，也在受保护的 Delorun 主目录之外，因此沙箱对受限命令以只读方式挂载它：对话可以读取其中保存的文件，但不能写入、删除、重命名或替换该文件夹，也不能在其中放置链接。新对话的文件夹不会有 `.playwright-mcp`；对话中已有的那个保持原样，不再有任何内容写入。服务器只在那里写入：提供方会在调用到达服务器之前，拒绝会把 `filename` 写到其他任何位置（包括对话文件夹）的调用，因此任何写入都无法经由对话预先放置的链接进行；模型会读到“Browser saves to its own folder”和该文件夹的路径。服务器要读取的路径（`browser_file_upload`、`browser_drop` 和 `browser_set_storage_state`）不会被直接传递：Host 打开该文件，从已打开的描述符取得其标识，再次解析路径，只有当解析后的路径位于对话文件夹或输出文件夹之内且指向同一个文件时才继续，然后从已打开的描述符把内容复制到输出文件夹中一个仅所有者可访问的新文件，并把副本的路径交给服务器，因此对话在检查之后换入的链接，无法让运行在沙箱之外的服务器读到对话本身读不到的文件。已在输出文件夹中的文件同样会被复制，因此服务器永远不会收到模型写出的路径。每次调用之后，提供方还会检查该调用的 `filename`，以及输出文件夹内的链接所通向的每个文件夹，在不跟随任何链接的前提下删除该调用刚在输出文件夹之外创建的普通文件，并把调用结果替换为拒绝信息，同时写一行日志。拥有完全访问权限的对话运行在沙箱之外，也可以替换输出文件夹；此时该防护是拒绝而不是屏障，与其他所有完全访问操作一样。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
 
 #### Token 影响
 
