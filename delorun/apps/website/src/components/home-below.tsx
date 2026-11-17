@@ -120,6 +120,8 @@ function Parts() {
         <NearScreen
           load={() => import('@/plugin-browser/PluginBrowser.tsx').then(module => ({ default: () => <module.PluginBrowser words={WORDS.plugins} /> }))}
           still={<PluginBrowserStill words={WORDS.plugins} />}
+          // The plugin browser's box: the still fills it, and the live browser sets the same heights.
+          className="h-[640px] min-[960px]:h-[560px]"
         />
       </div>
       <GuideLink link={copy.link} />

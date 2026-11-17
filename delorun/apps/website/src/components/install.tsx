@@ -8,11 +8,14 @@ import { CodeBlock } from '@brand'
 import { COPY, INSTALL_COMMANDS, PACKAGE_MANAGERS, type PackageManager } from '../site/copy.ts'
 import { PackageManagerPicker } from './package-manager.tsx'
 
-/** The class of the parts that need scripts; the scripts-off style in {@link ScriptsOff} hides them. */
-export const NEEDS_SCRIPT = 'needs-script'
+/** The attribute that marks a part by whether it needs scripts; the scripts-off style in {@link ScriptsOff} reads it. */
+export const SCRIPT_ATTRIBUTE = 'data-script'
 
-/** The class of the parts shown only with scripts off. */
-const WITHOUT_SCRIPT = 'without-script'
+/** The attribute's value on the parts that need scripts, which the scripts-off style hides. */
+export const NEEDS_SCRIPT = 'needs'
+
+/** The attribute's value on the parts shown only with scripts off. */
+export const WITHOUT_SCRIPT = 'without'
 
 /**
  * The style that swaps the scripted parts for their plain versions when scripts are off. A browser with scripts on
@@ -22,7 +25,7 @@ const WITHOUT_SCRIPT = 'without-script'
 export function ScriptsOff() {
   return (
     <noscript>
-      <style>{`.${NEEDS_SCRIPT}{display:none!important}.${WITHOUT_SCRIPT}{display:block!important}`}</style>
+      <style>{`[${SCRIPT_ATTRIBUTE}=${NEEDS_SCRIPT}]{display:none!important}[${SCRIPT_ATTRIBUTE}=${WITHOUT_SCRIPT}]{display:block!important}`}</style>
     </noscript>
   )
 }
@@ -59,11 +62,11 @@ export function Install({ manager, onChange }: { manager: PackageManager, onChan
   const copy = COPY.hero
   return (
     <div className="grid gap-3">
-      <div className={`${NEEDS_SCRIPT} grid gap-3`}>
+      <div data-script={NEEDS_SCRIPT} className="grid gap-3">
         <PackageManagerPicker value={manager} onChange={onChange} />
         <CommandBlock command={INSTALL_COMMANDS[manager]} main />
       </div>
-      <div className={`${WITHOUT_SCRIPT} hidden`}>
+      <div data-script={WITHOUT_SCRIPT} className="hidden">
         <p className="mb-2 text-sm text-(--dl-text-muted)">{copy.commandsLabel}</p>
         <ul className="grid gap-2">
           {PACKAGE_MANAGERS.map(each => (

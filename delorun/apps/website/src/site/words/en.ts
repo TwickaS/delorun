@@ -84,6 +84,8 @@ export const EN = {
   privacy: {
     title: 'Privacy',
   },
+  /** The link-preview image's text alternative. */
+  linkPreviewAlt: 'The Delorun mark and the words Delorun, an agent harness that runs on your own computer.',
   /** Shown in the place of the lower home page when its script fails to load. */
   partFailed: 'The rest of this page did not load. Reload the page to see it.',
   notFound: {

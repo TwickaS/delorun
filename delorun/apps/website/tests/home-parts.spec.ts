@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Install, NEEDS_SCRIPT, ScriptsOff } from '../src/components/install.tsx'
+import { Install, NEEDS_SCRIPT, ScriptsOff, WITHOUT_SCRIPT } from '../src/components/install.tsx'
 import { NearScreen } from '../src/components/near-screen.tsx'
 import { forgetPackageManager, PACKAGE_MANAGER_KEY } from '../src/components/package-manager.tsx'
 import { INSTALL_COMMANDS, PACKAGE_MANAGERS } from '../src/site/copy.ts'
@@ -15,12 +15,12 @@ describe('the install command', () => {
   it('renders the chosen command for scripts, and every command as text for a browser without them', () => {
     const html = renderToStaticMarkup(createElement('div', null, createElement(ScriptsOff), createElement(Install, { manager: 'npm', onChange: () => undefined })))
     const body = new DOMParser().parseFromString(html, 'text/html').body
-    const scripted = body.querySelector(`.${NEEDS_SCRIPT}`)!
+    const scripted = body.querySelector(`[data-script="${NEEDS_SCRIPT}"]`)!
     expect(scripted.querySelector('[role="radiogroup"]')).not.toBeNull()
     expect([...scripted.querySelectorAll('pre')].map(pre => pre.textContent)).toEqual([INSTALL_COMMANDS.npm])
-    const plain = body.querySelector('.without-script')!
+    const plain = body.querySelector(`[data-script="${WITHOUT_SCRIPT}"]`)!
     expect([...plain.querySelectorAll('pre')].map(pre => pre.textContent)).toEqual(PACKAGE_MANAGERS.map(manager => INSTALL_COMMANDS[manager]))
-    expect(html).toContain(`<noscript><style>.${NEEDS_SCRIPT}{display:none!important}.without-script{display:block!important}</style></noscript>`)
+    expect(html).toContain(`<noscript><style>[data-script=${NEEDS_SCRIPT}]{display:none!important}[data-script=${WITHOUT_SCRIPT}]{display:block!important}</style></noscript>`)
   })
 })
 
