@@ -4,9 +4,10 @@ import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramRunRule } from '@delorun/external-agents/contract'
 import type { HarnessServer } from '../src/harness-server.ts'
-import { recordAbsentNames, type AbsentNames } from '../src/leftovers.ts'
+import { RunFolders } from '../src/leftovers.ts'
+import { levelPolicy, type TurnSandbox } from '../src/levels.ts'
 import { CodexRpc } from '../src/rpc.ts'
-import { CodexSession, CodexSessionClosedError, CodexTurnRunningError, sandboxWritableRoots } from '../src/session.ts'
+import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
 import { FakeAppServer, settle, type Frame } from './fake-app-server.ts'
 import {
   COMMAND, EXEC, NEXT_TURN, TASK, THREAD, TURN, commandApproval, commandItem, itemFrame, rateLimits, tokenUsage,
@@ -22,7 +23,17 @@ interface Harness {
   answer: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
 }
 
-function harness(options: { readonly requestTimeoutMs?: number; readonly runRules?: readonly ProgramRunRule[]; readonly leftovers?: readonly AbsentNames[]; readonly harness?: HarnessServer } = {}): Harness {
+/** The Standard level's turn sandbox for the task folder. */
+const STANDARD_TURN = levelPolicy('standard', TASK, 'on-request').turn
+
+function harness(options: {
+  readonly requestTimeoutMs?: number
+  readonly runRules?: readonly ProgramRunRule[]
+  readonly cleanUp?: () => void
+  readonly harness?: HarnessServer
+  /** The turn sandbox; `null` keeps the thread's own. */
+  readonly turnSandbox?: TurnSandbox | null
+} = {}): Harness {
   const codex = new FakeAppServer()
   const questions: ProgramApprovalRequest[] = []
   const limits: AccountObservation[] = []
@@ -42,11 +53,11 @@ function harness(options: { readonly requestTimeoutMs?: number; readonly runRule
       requestTimeoutMs: options.requestTimeoutMs ?? 5_000,
       closeWaitMs: 50,
       runRules: options.runRules ?? [],
-      leftovers: options.leftovers ?? [],
+      cleanUp: options.cleanUp ?? (() => {}),
       ...options.harness === undefined ? {} : { harness: options.harness },
     }),
   }
-  h.session.attach(THREAD, TASK)
+  h.session.attach(THREAD, options.turnSandbox === null ? undefined : options.turnSandbox ?? STANDARD_TURN)
   codex.answer('turn/start', { result: { turn: { id: TURN, items: [], itemsView: 'notLoaded', status: 'inProgress', error: null } } })
   codex.answer('turn/steer', { result: { turnId: TURN } })
   codex.answer('turn/interrupt', { result: {} })
@@ -80,7 +91,7 @@ describe('turns', () => {
     expect(h.codex.requests('turn/start')).toEqual([{
       threadId: THREAD,
       input: [{ type: 'text', text: 'Run this shell command exactly: touch made-by-codex.txt. Then say done.', text_elements: [] }],
-      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: true, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
     }])
     expect(h.session.turnRunning).toBe(true)
     h.codex.notify('item/started', itemFrame(commandItem('inProgress')))
@@ -276,11 +287,12 @@ describe('interrupt (L32)', () => {
     expect(await h.session.interrupt()).toBe('closed')
   })
 
-  it('removes the sandbox folders the program left in its writable root once the process has ended (decision 5)', async () => {
+  it('removes the sandbox folders the program left in its run folder once the process has ended (decision 5)', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ea1-codex-leftovers-'))
     onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
     mkdirSync(join(root, '.git'))
-    const h = harness({ leftovers: recordAbsentNames([root]) })
+    const cleanUp = new RunFolders().hold(root)
+    const h = harness({ cleanUp: () => { cleanUp() } })
     // The stand-in program's sandbox mounts over the two names that were missing.
     mkdirSync(join(root, '.agents'))
     mkdirSync(join(root, '.codex'))
@@ -529,9 +541,16 @@ describe('questions', () => {
     })
   })
 
-  it('makes the workspace, /tmp and $TMPDIR writable, as Codex does by default, and cleans up after each', () => {
-    expect(sandboxWritableRoots(TASK, '/var/tmp/seat')).toEqual([TASK, '/tmp', '/var/tmp/seat'])
-    expect(sandboxWritableRoots(TASK, undefined)).toEqual([TASK, '/tmp'])
+  it('sets no sandbox policy on a turn when the level keeps the thread\'s own', async () => {
+    const h = harness({ turnSandbox: null })
+    await startTurn(h)
+    expect(h.codex.requests('turn/start')[0]).not.toHaveProperty('sandboxPolicy')
+  })
+
+  it('sets the unrestricted level\'s full access on each turn', async () => {
+    const h = harness({ turnSandbox: { type: 'dangerFullAccess' } })
+    await startTurn(h)
+    expect(h.codex.requests('turn/start')[0]).toMatchObject({ sandboxPolicy: { type: 'dangerFullAccess' } })
   })
 
   it('refuses a server request it does not answer', async () => {

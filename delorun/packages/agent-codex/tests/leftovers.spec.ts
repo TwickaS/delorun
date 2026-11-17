@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { mountPoints, parseMountPoints, recordAbsentNames, removeSandboxLeftovers } from '../src/leftovers.ts'
+import { RunFolders, mountPoints, parseMountPoints, recordAbsentNames, removeSandboxLeftovers } from '../src/leftovers.ts'
 
 const HAS_BWRAP = process.platform === 'linux' && spawnSync('bwrap', ['--version']).status === 0
 
@@ -94,6 +94,41 @@ async function until(condition: () => boolean): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 50))
   }
 }
+
+describe('run folders held by live programs', () => {
+  it.each([
+    ['the same folder', ''],
+    ['a nested folder', 'inner'],
+  ])('removes nothing while another program runs in %s, and cleans up after the last', (_name, nested) => {
+    const root = scratch()
+    const other = join(root, nested)
+    mkdirSync(other, { recursive: true })
+    const folders = new RunFolders()
+    const first = folders.hold(root)
+    const second = folders.hold(other)
+    mkdirSync(join(root, '.git'))
+    expect(first()).toEqual([])
+    expect(existsSync(join(root, '.git'))).toBe(true)
+    // The last program cleans up its own run folder only.
+    expect(second()).toEqual(nested === '' ? [join(root, '.git')] : [])
+  })
+
+  it('cleans a folder on its own once its program ends, leaving a sibling program\'s folder alone', () => {
+    const root = scratch()
+    const mine = join(root, 'mine')
+    const sibling = join(root, 'sibling')
+    mkdirSync(mine)
+    mkdirSync(sibling)
+    const folders = new RunFolders()
+    const cleanUp = folders.hold(mine)
+    const siblingCleanUp = folders.hold(sibling)
+    mkdirSync(join(mine, '.codex'))
+    mkdirSync(join(sibling, '.codex'))
+    expect(cleanUp()).toEqual([join(mine, '.codex')])
+    expect(existsSync(join(sibling, '.codex'))).toBe(true)
+    expect(siblingCleanUp()).toEqual([join(sibling, '.codex')])
+  })
+})
 
 describe('mount points', () => {
   it('reads the mount point field and decodes its octal escapes', () => {

@@ -32,8 +32,12 @@ export const ThreadOpenResult = z.looseObject({
   thread: Thread,
   model: z.string(),
   approvalPolicy: z.union([z.string(), z.record(z.string(), JsonSchema)]),
+  approvalsReviewer: z.string().nullable().optional(),
   sandbox: z.looseObject({ type: z.string() }),
 })
+
+/** `config/read`'s result, keeping only the effective approval policy. */
+export const ConfigReadResult = z.looseObject({ config: z.looseObject({ approval_policy: JsonSchema.nullable().optional() }) })
 
 /** The error carried by a failed turn or an `error` notification. `codexErrorInfo` is a name or a one-key object. */
 export const TurnError = z.looseObject({
@@ -98,6 +102,7 @@ export const RESULTS = {
   'model/list': ModelListResult,
   'account/read': AccountReadResult,
   'account/rateLimits/read': RateLimitsReadResult,
+  'config/read': ConfigReadResult,
 } as const
 
 /** A client request method the driver sends. */

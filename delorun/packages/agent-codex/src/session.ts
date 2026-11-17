@@ -18,7 +18,7 @@ import type {
   ProgramRunRule, ProgramSession,
 } from '@delorun/external-agents/contract'
 import type { HarnessServer } from './harness-server.ts'
-import { removeSandboxLeftovers, type AbsentNames } from './leftovers.ts'
+import type { TurnSandbox } from './levels.ts'
 import { addUsage, observationOf, toolCall, toolResult, turnFailure, usageOf } from './mapping.ts'
 import { MappedItem, TOOL_ITEM_TYPES, type CodexNotification, type CodexServerRequest, type RateLimitSnapshot, type ToolItem, type TurnError, type WireJson } from './protocol.ts'
 import { EventQueue } from './queue.ts'
@@ -71,45 +71,10 @@ export interface CodexSessionOptions {
   readonly closeWaitMs: number
   /** Rules the person allowed for this run before the process started (D4). */
   readonly runRules: readonly ProgramRunRule[]
-  /** The sandbox's protected names each writable root lacked before the process started; removed after it ends. */
-  readonly leftovers: readonly AbsentNames[]
+  /** Removes the sandbox's leftovers in the run folder; called once, after the process has ended. */
+  readonly cleanUp: () => void
   /** The thread's harness MCP server, closed when the process ends; absent when no harness tool is offered. */
   readonly harness?: HarnessServer
-}
-
-/** Codex's `workspaceWrite` sandbox policy, as `turn/start` takes it. */
-export interface WorkspaceSandbox {
-  readonly type: 'workspaceWrite'
-  readonly writableRoots: readonly string[]
-  readonly networkAccess: boolean
-  readonly excludeTmpdirEnvVar: boolean
-  readonly excludeSlashTmp: boolean
-}
-
-/**
- * The sandbox every turn runs in, Codex's own default: the workspace, `/tmp` and `$TMPDIR` are writable, with no
- * network, so builds and tests behave as in the person's terminal Codex. Every turn's policy and the clean-up's
- * writable roots come from here only.
- * @param workspace - the run folder.
- * @returns Codex's `workspaceWrite` sandbox policy.
- */
-export function workspaceSandbox(workspace: string): WorkspaceSandbox {
-  return { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
-}
-
-/**
- * The folders a turn's sandbox makes writable, where Codex mounts over its protected names.
- * @param workspace - the run folder.
- * @param tmpdir - the program's `$TMPDIR`, if set.
- * @returns the writable roots.
- */
-export function sandboxWritableRoots(workspace: string, tmpdir: string | undefined): string[] {
-  const policy = workspaceSandbox(workspace)
-  return [
-    ...policy.writableRoots,
-    ...policy.excludeSlashTmp ? [] : ['/tmp'],
-    ...policy.excludeTmpdirEnvVar || tmpdir === undefined ? [] : [tmpdir],
-  ]
 }
 
 /** The result recorded for a call still open when its turn ended. */
@@ -132,7 +97,7 @@ interface OpenCall { readonly type: ToolItem['type']; readonly item?: ToolItem }
 export class CodexSession implements ProgramSession {
   private readonly queue = new EventQueue<ProgramEvent>()
   private threadId = ''
-  private workspace = ''
+  private turnSandbox: TurnSandbox | undefined
   /** The running turn's id; undefined between turns, so items of an ended turn are ignored. */
   private currentTurn: string | undefined
   private starting = false
@@ -180,11 +145,11 @@ export class CodexSession implements ProgramSession {
   /**
    * Bind the session to the thread `thread/start` or `thread/resume` opened.
    * @param threadId - the thread id.
-   * @param workspace - the folder each turn may write in.
+   * @param turnSandbox - the sandbox policy each turn sets, from the seat's level; undefined keeps the thread's own.
    */
-  attach(threadId: string, workspace: string): void {
+  attach(threadId: string, turnSandbox: TurnSandbox | undefined): void {
     this.threadId = threadId
-    this.workspace = workspace
+    this.turnSandbox = turnSandbox
   }
 
   /**
@@ -212,7 +177,7 @@ export class CodexSession implements ProgramSession {
     if (this.turnRunning) throw new CodexTurnRunningError()
     this.beginTurn()
     try {
-      const { turn } = await this.options.rpc.request('turn/start', { threadId: this.threadId, input, sandboxPolicy: this.sandboxPolicy() }, this.timeout())
+      const { turn } = await this.options.rpc.request('turn/start', { threadId: this.threadId, input, ...this.turnSandbox === undefined ? {} : { sandboxPolicy: this.turnSandbox } }, this.timeout())
       // `turn/started` may already have named the turn, and a quick turn may even have completed before this answer.
       if (this.starting) this.currentTurn ??= turn.id
     } finally {
@@ -247,10 +212,6 @@ export class CodexSession implements ProgramSession {
 
   close(): Promise<void> {
     return this.shutDown('closed')
-  }
-
-  private sandboxPolicy(): WorkspaceSandbox {
-    return workspaceSandbox(this.workspace)
   }
 
   private assertOpen(): void {
@@ -431,7 +392,7 @@ export class CodexSession implements ProgramSession {
       } catch (_unobservable) {
         // The subprocess owner can no longer see the range; it reports that itself, and the session is closed either way.
       }
-      removeSandboxLeftovers(this.options.leftovers)
+      this.options.cleanUp()
       await this.options.harness?.close()
       this.queue.close(new CodexSessionClosedError(reason))
     })()

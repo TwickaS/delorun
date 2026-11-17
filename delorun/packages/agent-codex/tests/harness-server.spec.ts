@@ -61,7 +61,7 @@ describe('the harness MCP server (D14)', () => {
     const second = await start()
     expect(first.name).toMatch(/^delorun_[0-9a-f]{12}$/)
     expect(second.name).not.toBe(first.name)
-    expect(entry(first)).toMatchObject({ url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/), tool_timeout_sec: 900 })
+    expect(first.mcpServers[first.name]).toMatchObject({ url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/), tool_timeout_sec: 900, default_tools_approval_mode: 'approve' })
     expect(entry(first).http_headers.Authorization).not.toBe(entry(second).http_headers.Authorization)
     expect([...first.toolNames]).toEqual(['harness_echo'])
   })

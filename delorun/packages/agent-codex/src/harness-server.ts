@@ -105,6 +105,8 @@ export async function startHarnessServer(options: HarnessServerOptions): Promise
         url: `http://127.0.0.1:${String(port)}/mcp`,
         http_headers: { Authorization: `Bearer ${token}` },
         tool_timeout_sec: options.toolTimeoutSeconds,
+        // Codex runs this server's tools without an approval, so its automatic reviewer never judges Delorun's own tools.
+        default_tools_approval_mode: 'approve',
       },
     },
     close: () => {

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
-import { ProgramOpenError, type AccountObservation, type ProgramOpenRequest, type ProgramSpawnRequest } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type AccountObservation, type ProgramSpawnRequest } from '@delorun/external-agents/contract'
 import type { LocatedCodex } from '@delorun/external-agents/locate'
-import { CodexDriver } from '../src/driver.ts'
+import { CodexDriver, type CodexOpenRequest } from '../src/driver.ts'
 import { TESTED_CODEX_VERSION } from '../src/protocol.ts'
-import { FakeAppServer } from './fake-app-server.ts'
+import { FakeAppServer, type Frame } from './fake-app-server.ts'
 import {
   TASK, THREAD, accountSignedIn, accountSignedOut, initializeResult, modelList, rateLimitsRead, threadOpened,
 } from './recorded.ts'
@@ -16,7 +16,17 @@ interface Setup {
   readonly spawned: ProgramSpawnRequest[]
   readonly limits: AccountObservation[]
   readonly driver: CodexDriver
-  request(overrides?: Partial<ProgramOpenRequest>): ProgramOpenRequest
+  request(overrides?: Partial<CodexOpenRequest>): CodexOpenRequest
+}
+
+/** What Codex reports for a thread opened with these settings: their approval policy and reviewer, and their sandbox. */
+function opened(params: Frame, configuredModel: string, id?: string): Frame {
+  return {
+    ...threadOpened(typeof params.model === 'string' ? params.model : configuredModel, id),
+    approvalPolicy: params.approvalPolicy ?? 'on-request',
+    approvalsReviewer: params.approvalsReviewer ?? 'user',
+    ...params.sandbox === undefined ? {} : { sandbox: params.sandbox === 'read-only' ? { type: 'readOnly', networkAccess: false } : { type: 'workspaceWrite' } },
+  }
 }
 
 /** A driver whose spawn returns one fake app-server answering the recorded open sequence. */
@@ -24,8 +34,9 @@ function setup(program: LocatedCodex = PINNED, configuredModel = 'gpt-5.6-luna')
   const codex = new FakeAppServer()
   codex.answer('initialize', { result: initializeResult })
   codex.answer('account/read', { result: accountSignedIn })
-  codex.answer('thread/start', params => ({ result: threadOpened(typeof params.model === 'string' ? params.model : configuredModel) }))
-  codex.answer('thread/resume', params => ({ result: threadOpened(typeof params.model === 'string' ? params.model : configuredModel, String(params.threadId)) }))
+  codex.answer('thread/start', params => ({ result: opened(params, configuredModel) }))
+  codex.answer('thread/resume', params => ({ result: opened(params, configuredModel, String(params.threadId)) }))
+  codex.answer('config/read', { result: { config: { approval_policy: null }, origins: {} } })
   codex.answer('model/list', { result: modelList })
   codex.answer('account/rateLimits/read', { result: rateLimitsRead })
   const spawned: ProgramSpawnRequest[] = []
@@ -38,7 +49,7 @@ function setup(program: LocatedCodex = PINNED, configuredModel = 'gpt-5.6-luna')
     codex,
     spawned,
     limits,
-    driver: new CodexDriver({ locate: () => program, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} }),
+    driver: new CodexDriver({ locate: () => program, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' }),
     request: overrides => ({
       sessionId: SessionId('seat-child'),
       cwd: TASK,
@@ -84,18 +95,43 @@ describe('open', () => {
     }
   })
 
-  it('starts a lasting thread asking under untrusted on a read-only base, never ephemeral (L31)', async () => {
+  it('starts a lasting thread at the driver\'s level, Standard: on-request with the automatic reviewer on a read-only base (EA34)', async () => {
     const s = setup()
     await (await s.driver.open(s.request())).close()
-    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'read-only', ephemeral: false }])
+    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only', ephemeral: false }])
+    expect(s.codex.requests('config/read')).toEqual([])
+  })
+
+  it.each([
+    ['careful', { approvalPolicy: 'on-request', sandbox: 'read-only' }],
+    ['unrestricted', { approvalPolicy: 'on-request', sandbox: 'read-only' }],
+  ] as const)('starts a %s thread with its own settings and never a writable thread sandbox', async (level, thread) => {
+    const s = setup()
+    await (await s.driver.open(s.request({ level }))).close()
+    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, ...thread, ephemeral: false }])
+  })
+
+  it.each([
+    ['untrusted', 'untrusted'],
+    ['on-request', 'on-request'],
+    ['never', 'on-request'],
+    [null, 'on-request'],
+    [{ granular: { mcp_elicitations: false, rules: false, sandbox_approval: false } }, 'on-request'],
+  ] as const)('runs the own level under the person\'s approval policy %j as %s, with no sandbox of its own', async (configured, used) => {
+    const s = setup()
+    s.codex.answer('config/read', { result: { config: { approval_policy: configured }, origins: {} } })
+    await (await s.driver.open(s.request({ level: 'own' }))).close()
+    expect(s.codex.requests('config/read')).toEqual([{ cwd: TASK, includeLayers: false }])
+    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: used, ephemeral: false }])
   })
 
   it.each([
     ['another approval policy', { approvalPolicy: 'never' }],
+    ['another reviewer', { approvalsReviewer: 'user' }],
     ['a writable thread sandbox', { sandbox: { type: 'workspaceWrite', writableRoots: [], networkAccess: false } }],
   ])('refuses a thread Codex reports with %s, and ends the process', async (_name, change) => {
     const s = setup()
-    s.codex.answer('thread/start', { result: { ...threadOpened('gpt-5.6-luna'), ...change } })
+    s.codex.answer('thread/start', params => ({ result: { ...opened(params, 'gpt-5.6-luna'), ...change } }))
     expect((await failureOf(s.driver.open(s.request()))).failure).toMatchObject({ category: 'program' })
     expect(s.codex.exited).toBe(true)
   })
@@ -106,7 +142,7 @@ describe('open', () => {
     expect(start.codex.requests('thread/start')[0]).toMatchObject({ model: 'gpt-5.6-terra' })
     const resume = setup()
     const session = await resume.driver.open(resume.request({ model: 'gpt-5.6-terra', resume: THREAD }))
-    expect(resume.codex.requests('thread/resume')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'read-only', model: 'gpt-5.6-terra', threadId: THREAD }])
+    expect(resume.codex.requests('thread/resume')).toEqual([{ cwd: TASK, approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only', model: 'gpt-5.6-terra', threadId: THREAD }])
     expect(session.programSessionId).toBe(THREAD)
     await session.close()
   })
@@ -156,7 +192,7 @@ describe('open', () => {
 
   it('fails without starting anything when the Codex pack has no program', async () => {
     const s = setup()
-    const driver = new CodexDriver({ locate: () => undefined, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} })
+    const driver = new CodexDriver({ locate: () => undefined, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' })
     expect((await failureOf(driver.open(s.request()))).failure).toMatchObject({ category: 'program' })
     expect(s.spawned).toEqual([])
   })
@@ -164,7 +200,7 @@ describe('open', () => {
   it('fails with a program failure when Codex does not answer in time, and ends the process', async () => {
     const s = setup()
     s.codex.answers.delete('thread/start')
-    const driver = new CodexDriver({ locate: () => PINNED, requestTimeoutMs: 100, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} })
+    const driver = new CodexDriver({ locate: () => PINNED, requestTimeoutMs: 100, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' })
     const error = await failureOf(driver.open(s.request()))
     expect(error.failure).toEqual({ category: 'program', detail: 'Codex did not answer in time during the open.' })
     expect(s.codex.exited).toBe(true)

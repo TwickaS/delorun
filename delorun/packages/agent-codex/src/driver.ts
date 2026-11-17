@@ -1,11 +1,7 @@
 /**
  * The Codex driver: opens a thread in a fresh `codex app-server --stdio` process started through the gate's spawn,
- * and runs limits checks. Threads ask under approval policy `untrusted` and write only inside the workspace (L31, T7),
- * are never ephemeral, and use the stable protocol only.
- *
- * The workspace-write sandbox is set on each `turn/start`, over a read-only thread: a thread started with sandbox
- * `workspace-write` makes Codex add `trust_level = "trusted"` for the folder to the person's own `config.toml`, which a
- * turn's sandbox policy does not.
+ * and runs limits checks. Threads run at the seat's level ({@link levelPolicy}), are never ephemeral, and use the stable
+ * protocol only. The open fails when Codex reports the thread under other settings than the level's.
  *
  * The model rule (L33, EA22): a model the person picked is passed on `thread/start` and `thread/resume`. Without one,
  * the model the thread reports must be one `model/list` offers; otherwise the open fails `model-not-offered` before any
@@ -21,8 +17,9 @@ import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
 import { startHarnessServer } from './harness-server.ts'
-import { recordAbsentNames } from './leftovers.ts'
-import { CodexSession, sandboxWritableRoots, type CodexSessionOptions } from './session.ts'
+import { RunFolders } from './leftovers.ts'
+import { levelPolicy, ownApprovalPolicy, threadMatches, type CodexLevel, type SeatApprovalPolicy } from './levels.ts'
+import { CodexSession, type CodexSessionOptions } from './session.ts'
 
 /** The driver's settings, from its row's validated configuration. */
 export interface CodexDriverOptions {
@@ -39,6 +36,8 @@ export interface CodexDriverOptions {
    * @param tool - the tool's name.
    */
   readonly onLateHarnessResult: (tool: string) => void
+  /** The level a seat runs at when its open names none. */
+  readonly level: CodexLevel
   /** Sees every frame, for live diagnostics only. */
   readonly tap?: WireTap
 }
@@ -49,11 +48,11 @@ const MAX_MODEL_PAGES = 10
 /** The client name Codex records for threads the driver starts. */
 const CLIENT_INFO = { name: 'delorun', title: 'Delorun', version: '0.1.0' }
 
-/**
- * Thread settings every seat thread uses: Codex asks before any command it does not know to be safe (L31, T7). The
- * thread's own sandbox is read-only; each turn widens it to the workspace ({@link CodexSession}).
- */
-const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'read-only' } as const
+/** A program open, with the level the seat runs at. */
+export type CodexOpenRequest = ProgramOpenRequest & {
+  /** The seat's level; the driver's `level` option when absent. */
+  readonly level?: CodexLevel
+}
 
 /**
  * The locator for the pinned launcher in the Codex pack a profile installed. It runs on every open and limits check, so
@@ -88,27 +87,30 @@ export function appServerArgv(program: LocatedCodex): string[] {
 export class CodexDriver implements ExternalAgentDriver {
   readonly provider = 'codex'
   private readonly options: CodexDriverOptions
+  private readonly folders = new RunFolders()
 
   /** @param options - the locator, timeouts and an optional wire tap. */
   constructor(options: CodexDriverOptions) {
     this.options = options
   }
 
-  async open(request: ProgramOpenRequest): Promise<CodexSession> {
+  async open(request: CodexOpenRequest): Promise<CodexSession> {
     request.signal.throwIfAborted()
     const harness = request.harnessTools.length === 0
       ? undefined
       : await startHarnessServer({ tools: request.harnessTools, toolTimeoutSeconds: this.options.harnessToolTimeoutSeconds, onLateResult: this.options.onLateHarnessResult })
+    const cleanUp = this.folders.hold(request.cwd)
     let session: ReturnType<CodexDriver['connect']>
     try {
       session = this.connect(request.spawn, {
         onApproval: request.onApproval,
         onLimits: request.onLimits,
         runRules: request.runRules,
-        leftovers: recordAbsentNames(sandboxWritableRoots(request.cwd, process.env.TMPDIR)),
+        cleanUp: () => { cleanUp() },
         ...harness === undefined ? {} : { harness },
       })
     } catch (error: unknown) {
+      cleanUp()
       await harness?.close()
       throw error
     }
@@ -119,9 +121,11 @@ export class CodexDriver implements ExternalAgentDriver {
       await this.handshake(rpc, request.signal)
       const account = await rpc.request('account/read', { refreshToken: false }, this.timeout(request.signal))
       if (account.account === null && account.requiresOpenaiAuth) throw new ProgramOpenError({ category: 'signed-out' })
+      const level = request.level ?? this.options.level
+      const policy = levelPolicy(level, request.cwd, level === 'own' ? await this.ownApprovalPolicy(rpc, request) : 'on-request')
       const thread = {
         cwd: request.cwd,
-        ...THREAD_POLICY,
+        ...policy.thread,
         // Delorun's harness server is named in this thread's config only, never under the Codex home.
         ...harness === undefined ? {} : { config: { mcp_servers: harness.mcpServers } },
         ...request.model === undefined ? {} : { model: request.model },
@@ -138,15 +142,15 @@ export class CodexDriver implements ExternalAgentDriver {
         }
       }
       // A thread Codex reports under any other policy, from its own configuration or a resumed thread's, is not run.
-      if (opened.approvalPolicy !== THREAD_POLICY.approvalPolicy || opened.sandbox.type !== 'readOnly') {
-        throw new ProgramOpenError({ category: 'program', detail: 'Codex opened the thread without asking before commands in a read-only sandbox.' })
+      if (!threadMatches(policy, opened)) {
+        throw new ProgramOpenError({ category: 'program', detail: 'Codex opened the thread under other approval or sandbox settings than the seat\'s level.' })
       }
       const offered = await this.listModels(rpc, request.signal)
       if (request.model === undefined && !offered.some(model => model.id === opened.model)) {
         throw new ProgramOpenError({ category: 'model-not-offered', configured: opened.model, offered })
       }
       request.onLimits({ ...observationOf({ account, source: 'run' }), offeredModels: offered })
-      session.session.attach(opened.thread.id, request.cwd)
+      session.session.attach(opened.thread.id, policy.turn)
       return session.session
     } catch (error: unknown) {
       await session.session.close()
@@ -159,7 +163,7 @@ export class CodexDriver implements ExternalAgentDriver {
   async probe(request: Parameters<ExternalAgentDriver['probe']>[0]): Promise<AccountObservation> {
     request.signal.throwIfAborted()
     // A limits check opens no thread and runs no command, so it has no rules and leaves nothing to remove.
-    const session = this.connect(request.spawn, { onApproval: () => Promise.resolve('reject'), onLimits: () => {}, runRules: [], leftovers: [] })
+    const session = this.connect(request.spawn, { onApproval: () => Promise.resolve('reject'), onLimits: () => {}, runRules: [], cleanUp: () => {} })
     const close = (): void => { void session.session.close() }
     request.signal.addEventListener('abort', close, { once: true })
     try {
@@ -184,8 +188,14 @@ export class CodexDriver implements ExternalAgentDriver {
     }
   }
 
+  /** The `own` level's approval policy, from Codex's effective configuration for the run folder. */
+  private async ownApprovalPolicy(rpc: CodexRpc, request: CodexOpenRequest): Promise<SeatApprovalPolicy> {
+    const { config } = await rpc.request('config/read', { cwd: request.cwd, includeLayers: false }, this.timeout(request.signal))
+    return ownApprovalPolicy(config.approval_policy)
+  }
+
   /** Locate the program, refuse an untested version, and start the app-server through the gate. */
-  private connect(spawn: ProgramSpawn, seat: Pick<CodexSessionOptions, 'onApproval' | 'onLimits' | 'runRules' | 'leftovers' | 'harness'>): { readonly rpc: CodexRpc; readonly session: CodexSession } {
+  private connect(spawn: ProgramSpawn, seat: Pick<CodexSessionOptions, 'onApproval' | 'onLimits' | 'runRules' | 'cleanUp' | 'harness'>): { readonly rpc: CodexRpc; readonly session: CodexSession } {
     const program = this.options.locate()
     if (program === undefined) throw new ProgramOpenError({ category: 'program', detail: 'The Codex program was not found in the Codex pack.' })
     if (program.version !== TESTED_CODEX_VERSION) {

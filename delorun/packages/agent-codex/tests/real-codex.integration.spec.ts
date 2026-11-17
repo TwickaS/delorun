@@ -13,10 +13,11 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramHarnessTool, ProgramOpenRequest, ProgramSpawn } from '@delorun/external-agents/contract'
+import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramHarnessTool, ProgramSpawn } from '@delorun/external-agents/contract'
 import { ProgramOpenError } from '@delorun/external-agents/contract'
 import { locateCodex } from '@delorun/external-agents/locate'
-import { CodexDriver } from '../src/driver.ts'
+import { CodexDriver, type CodexOpenRequest } from '../src/driver.ts'
+import { CODEX_LEVELS } from '../src/levels.ts'
 import type { CodexSession } from '../src/session.ts'
 import { startResponsesFixture, type ResponsesFixture, type ResponsesStep } from './responses-fixture.ts'
 
@@ -38,7 +39,7 @@ interface Real {
   /** Every frame the driver sent, as JSON. */
   readonly sent: string[]
   answers: ProgramApprovalAnswer[]
-  request(overrides?: Partial<ProgramOpenRequest>): ProgramOpenRequest
+  request(overrides?: Partial<CodexOpenRequest>): CodexOpenRequest
 }
 
 const cleanups: (() => Promise<void> | void)[] = []
@@ -47,7 +48,10 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
 })
 
-async function real(script: readonly ResponsesStep[]): Promise<Real> {
+/** Settings in the scratch Codex home's own `config.toml`, as a person may have them. */
+interface PersonConfig { readonly approvalPolicy?: string }
+
+async function real(script: readonly ResponsesStep[], person: PersonConfig = {}): Promise<Real> {
   const root = mkdtempSync(join(tmpdir(), 'ea1-codex-real-'))
   cleanups.push(() => { rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }) })
   const workspace = join(root, 'workspace')
@@ -60,6 +64,7 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
     'model = "fixture-model"',
     'model_provider = "fixture"',
     'check_for_update_on_startup = false',
+    ...person.approvalPolicy === undefined ? [] : [`approval_policy = "${person.approvalPolicy}"`],
     '',
     '[model_providers.fixture]',
     'name = "Fixture Responses"',
@@ -106,7 +111,7 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
     lateResults,
     sent,
     driver: new CodexDriver({
-      locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000, harnessToolTimeoutSeconds: 5,
+      locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000, harnessToolTimeoutSeconds: 5, level: 'standard',
       onLateHarnessResult: (tool) => { lateResults.push(tool) },
       tap: (direction, frame) => { if (direction === '>') sent.push(JSON.stringify(frame)) },
     }),
@@ -144,6 +149,12 @@ const text = (events: readonly ProgramEvent[]): string => events.flatMap(event =
 
 /** A shell command as either of the shell tools Codex 0.153.4 may advertise. */
 const shell = (command: string): ResponsesStep => ({ kind: 'call', choices: { exec_command: { cmd: command }, shell_command: { command } } })
+
+/** A shell call that asks to run outside the sandbox, which Codex asks the person about under `on-request`. */
+const escalated = (command: string): ResponsesStep => {
+  const escalation = { sandbox_permissions: 'require_escalated', justification: 'The test needs an answer.' }
+  return { kind: 'call', choices: { exec_command: { cmd: command, ...escalation }, shell_command: { command, ...escalation } } }
+}
 
 /** Codex's own state that a first start creates in an empty home: databases, logs, caches and thread rollouts. */
 const CODEX_STATE = /^(?:[a-z_]+_\d+\.sqlite(?:-shm|-wal)?|logs_\d+\.sqlite.*|models_cache\.json|sessions|shell_snapshots|\.tmp|tmp|thread-writer-locks|version\.json|installation_id|memories|log|cache|archived_sessions|\.personality_migration|\.sandbox_migration|plugins|skills)$/
@@ -184,16 +195,17 @@ describe('the real pinned Codex app-server', () => {
     await expectNothingLeft(r)
   }, 100_000)
 
-  it('asks before an untrusted command and runs it only when allowed', async () => {
-    const r = await real([shell('touch allowed.txt'), { kind: 'text', text: 'made it' }, shell('touch declined.txt'), { kind: 'text', text: 'did not' }])
+  it('asks before a command that needs more than the sandbox, and runs it only when allowed', async () => {
+    const r = await real([escalated('touch allowed.txt'), { kind: 'text', text: 'made it' }, escalated('touch declined.txt'), { kind: 'text', text: 'did not' }])
     r.answers = ['allow-once', 'reject']
-    const session = await r.driver.open(r.request())
+    const session = await r.driver.open(r.request({ level: 'careful' }))
     await session.send('Make allowed.txt.', 'start')
     const first = await untilTurnEnd(session)
     const call = first.find(event => event.kind === 'tool-call')
     expect(call).toMatchObject({ kind: 'tool-call', name: 'shell' })
     expect(r.questions[0]?.callId).toBe(call?.kind === 'tool-call' ? call.id : undefined)
-    expect(r.questions[0]?.runRule).toMatchObject({ provider: 'codex', data: { kind: 'command' } })
+    // An escalation carries Codex's justification, so it is never offered for the whole run (D4).
+    expect(r.questions[0]?.runRule).toBeUndefined()
     expect(first.indexOf(call as ProgramEvent)).toBeLessThan(first.findIndex(event => event.kind === 'tool-result'))
     expect(existsSync(join(r.workspace, 'allowed.txt'))).toBe(true)
     await session.send('Make declined.txt.', 'start')
@@ -240,9 +252,9 @@ describe('the real pinned Codex app-server', () => {
   }, 100_000)
 
   it('closes the app-server when Stop leaves a command running, and the command dies with it (L32)', async () => {
-    const r = await real([shell('sleep 20 && touch late.txt'), { kind: 'hold' }])
+    const r = await real([escalated('sleep 20 && touch late.txt'), { kind: 'hold' }])
     r.answers = ['allow-once']
-    const session = await r.driver.open(r.request())
+    const session = await r.driver.open(r.request({ level: 'careful' }))
     await session.send('Sleep, then make late.txt.', 'start')
     let outcome: string | undefined
     const events = await untilTurnEnd(session, async (event) => {
@@ -261,35 +273,38 @@ describe('the real pinned Codex app-server', () => {
     expect(['.git', '.agents', '.codex'].filter(name => existsSync(join(r.workspace, name)))).toEqual([])
   }, 100_000)
 
-  it('answers the same command again after "Allow for this run" and asks about another (D4)', async () => {
-    const r = await real([shell('touch a.txt'), shell('touch a.txt'), shell('touch b.txt'), { kind: 'text', text: 'done' }])
-    r.answers = ['allow-run', 'reject']
-    const session = await r.driver.open(r.request())
+  it('asks about each escalated command, even the same one again, and never offers it for the whole run (D4)', async () => {
+    const r = await real([escalated('touch a.txt'), escalated('touch a.txt'), escalated('touch b.txt'), { kind: 'text', text: 'done' }])
+    r.answers = ['allow-run', 'allow-once', 'reject']
+    const session = await r.driver.open(r.request({ level: 'careful' }))
     await session.send('Touch a.txt twice, then b.txt.', 'start')
     const events = await untilTurnEnd(session)
     expect(events.filter(event => event.kind === 'tool-call')).toHaveLength(3)
-    expect(r.questions.map(question => question.reason)).toEqual([expect.stringContaining('a.txt'), expect.stringContaining('b.txt')])
+    expect(r.questions.map(question => question.reason)).toEqual([expect.stringContaining('a.txt'), expect.stringContaining('a.txt'), expect.stringContaining('b.txt')])
+    expect(r.questions.map(question => question.runRule)).toEqual([undefined, undefined, undefined])
     expect([existsSync(join(r.workspace, 'a.txt')), existsSync(join(r.workspace, 'b.txt'))]).toEqual([true, false])
     await session.close()
     await expectNothingLeft(r)
   }, 100_000)
 
-  it('leaves the Codex home\'s config.toml byte-identical through a turn, a question and a resume (decision 4)', async () => {
-    const r = await real([shell('touch made.txt'), { kind: 'text', text: 'done' }, shell('touch again.txt'), { kind: 'text', text: 'done' }])
+  it.each(CODEX_LEVELS)('leaves the Codex home\'s config.toml byte-identical at the %s level through a command, a resume and another command (decision 4)', async (level) => {
+    const r = await real([shell('touch made.txt'), { kind: 'text', text: 'done' }, shell('touch again.txt'), { kind: 'text', text: 'done' }], level === 'own' ? { approvalPolicy: 'on-request' } : {})
     r.answers = ['allow-once', 'allow-once']
     const config = join(r.codexHome, 'config.toml')
     const before = readFileSync(config)
-    const session = await r.driver.open(r.request())
+    const listing = readdirSync(r.codexHome)
+    const session = await r.driver.open(r.request({ level }))
     await session.send('Make made.txt.', 'start')
     await untilTurnEnd(session)
     await session.close()
     expect(readFileSync(config).equals(before)).toBe(true)
-    const resumed = await r.driver.open(r.request({ resume: session.programSessionId }))
+    const resumed = await r.driver.open(r.request({ level, resume: session.programSessionId }))
     await resumed.send('Make again.txt.', 'start')
     await untilTurnEnd(resumed)
     await resumed.close()
     expect(readFileSync(config).equals(before)).toBe(true)
-    expect(existsSync(join(r.workspace, 'again.txt'))).toBe(true)
+    expect(readdirSync(r.codexHome).filter(name => !listing.includes(name) && !CODEX_STATE.test(name))).toEqual([])
+    expect(r.questions).toEqual([])
     await expectNothingLeft(r)
   }, 150_000)
 
@@ -318,8 +333,9 @@ describe('the real pinned Codex app-server', () => {
     expect(events.find(event => event.kind === 'tool-call')).toMatchObject({ name: `mcp__${server ?? ''}__harness_echo` })
     expect(events.find(event => event.kind === 'tool-result')).toMatchObject({ isError: false })
     expect(received).toEqual([{ text: 'from codex' }])
-    // The program's own approval of the call was answered by the driver, never asked.
+    // Codex runs the server's tools without an approval: no question, no elicitation, and no automatic review.
     expect(r.questions).toEqual([])
+    expect(r.sent.filter(frame => frame.includes('"action"'))).toEqual([])
     await session.close()
     // A resumed thread gets a new server, name and token, again only in its thread config.
     const resumed = await r.driver.open(r.request({ harnessTools: [echo], resume: session.programSessionId }))

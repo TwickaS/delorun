@@ -4,14 +4,16 @@
  * are absent from each writable root before the program starts, and after the process ends removes only those that
  * were absent and are now empty folders: never a file, a link, a folder with anything in it, or anything recursively.
  *
- * A writable root such as `/tmp` can be shared with another sandbox that is still running. Linux lets `rmdir` remove a
- * folder that is a mount point in another mount namespace and detaches that mount, which would take the protection
- * away from the other sandbox's running command. So a folder that is a mount point in any mount namespace this user
- * can read is kept.
+ * Only the run folder is cleaned, never `/tmp` or `$TMPDIR`: empty folders left there are harmless, and a shared temporary
+ * folder is where another sandbox is most likely starting. Linux lets `rmdir` remove a folder that is a mount point in
+ * another mount namespace and detaches that mount, which would take the protection away from the other sandbox's
+ * running command, so a folder that is a mount point in any mount namespace this user can read is kept, and nothing is
+ * removed while another of the driver's programs runs in the same, an enclosing or a nested run folder. A Codex started
+ * outside Delorun in the same folder between the check and the removal is the remaining gap.
  * @module @delorun/agent-codex/leftovers
  */
 import { lstatSync, readdirSync, readFileSync, readlinkSync, rmdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 /** The names Codex's sandbox protects in each writable root. */
 export const SANDBOX_NAMES: readonly string[] = ['.git', '.agents', '.codex']
@@ -130,4 +132,31 @@ export function parseMountPoints(mountinfo: string): string[] {
     const point = line.split(' ')[4]
     return point === undefined ? [] : [point.replace(/\\([0-7]{3})/g, (_escape, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))]
   })
+}
+
+/** The run folders of the driver's live programs. */
+export class RunFolders {
+  private readonly live = new Set<{ readonly folder: string }>()
+
+  /**
+   * Record which protected names the run folder lacks now, and hold the folder until the returned clean-up runs.
+   * @param folder - the run folder.
+   * @returns the clean-up to run once the program's process has ended: it removes the leftovers unless another held run
+   * folder is the same, encloses this one or lies inside it, then releases the hold, and returns the paths removed.
+   */
+  hold(folder: string): () => string[] {
+    const entry = { folder: resolve(folder) }
+    const records = recordAbsentNames([entry.folder])
+    this.live.add(entry)
+    return () => {
+      const shared = [...this.live].some(other => other !== entry && overlaps(other.folder, entry.folder))
+      this.live.delete(entry)
+      return shared ? [] : removeSandboxLeftovers(records)
+    }
+  }
+}
+
+/** Whether two resolved folders are the same or one lies inside the other. */
+function overlaps(first: string, second: string): boolean {
+  return first === second || first.startsWith(second + sep) || second.startsWith(first + sep)
 }

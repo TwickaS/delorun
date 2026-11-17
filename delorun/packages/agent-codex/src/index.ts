@@ -13,8 +13,10 @@ import type {} from '@deepseek-ai/dsh-subagent'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@delorun/external-agents'
 import { CodexDriver, codexLocator } from './driver.ts'
+import { CODEX_LEVELS, type CodexLevel } from './levels.ts'
 
-export { CodexDriver, appServerArgv, codexLocator, type CodexDriverOptions } from './driver.ts'
+export { CodexDriver, appServerArgv, codexLocator, type CodexDriverOptions, type CodexOpenRequest } from './driver.ts'
+export { CODEX_LEVELS, type CodexLevel } from './levels.ts'
 export { CodexSession, CodexSessionClosedError, CodexTurnRunningError, type CodexClosedReason } from './session.ts'
 export { TESTED_CODEX_VERSION } from './protocol.ts'
 export type { WireTap } from './rpc.ts'
@@ -27,6 +29,8 @@ export interface Config {
   readonly closeWaitSeconds: number
   /** How long Codex waits for one harness tool call before it fails the call (`tool_timeout_sec`), in whole seconds. */
   readonly harnessToolTimeoutSeconds: number
+  /** The level a seat runs Codex at when its open names none. */
+  readonly level: CodexLevel
 }
 
 /** The configuration schema, with the shipped defaults. */
@@ -34,6 +38,7 @@ export const Config: z<Partial<Config>, Config> = z.object({
   requestTimeoutSeconds: z.natural().min(1).default(300),
   closeWaitSeconds: z.natural().min(1).default(5),
   harnessToolTimeoutSeconds: z.natural().min(1).default(900),
+  level: z.union([...CODEX_LEVELS]).default('standard'),
 })
 
 /** Services wait in {@link apply}: the plugin loads in a profile with neither the gate nor the Codex pack. */
@@ -52,6 +57,7 @@ export function apply(ctx: Context, config: Config): void {
       requestTimeoutMs: config.requestTimeoutSeconds * 1_000,
       closeWaitMs: config.closeWaitSeconds * 1_000,
       harnessToolTimeoutSeconds: config.harnessToolTimeoutSeconds,
+      level: config.level,
       onLateHarnessResult: (tool) => { scope.logger.warn('agent-codex: a harness tool result for %s arrived after Codex had failed the call; it was dropped', tool) },
     })
     let registration: (() => void) | undefined
