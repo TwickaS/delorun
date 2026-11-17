@@ -11,6 +11,7 @@
  * @module @delorun/tools/fresh-home-smoke
  */
 import { spawn, execFile } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -31,7 +32,7 @@ export const SETUP_RECORD_PATH = '/api/delorunOnboarding.setupRecord'
 const LISTEN_TIMEOUT_MS = 180_000
 
 /** Log text that means the studio did not start or stopped. */
-export const FAILURE_PATTERNS: readonly RegExp[] = [/failed to start/i, /\bstopped\b/i, /ValidationError/, /Cannot find (module|package)/, /ERR_MODULE_NOT_FOUND/]
+export const FAILURE_PATTERNS: readonly RegExp[] = [/failed to start/i, /failed to import/i, /\bstopped\b/i, /ValidationError/, /Cannot find (module|package)/, /ERR_MODULE_NOT_FOUND/]
 
 /**
  * @param log - the studio's output.
@@ -68,6 +69,22 @@ export async function pickPort(wanted?: number): Promise<number> {
   throw new Error('no free port in the range')
 }
 
+/**
+ * The Delorun packages whose manifest has a `build` script and which have no `lib/` directory: a build that failed
+ * silently, or never ran, leaves the studio importing a file that is not there.
+ * @param root - the repository root.
+ * @returns the package directory names without a `lib/`.
+ */
+export function packagesWithoutLib(root: string): readonly string[] {
+  const packages = join(root, 'delorun/packages')
+  return readdirSync(packages).filter((name) => {
+    const manifest = join(packages, name, 'package.json')
+    if (!existsSync(manifest)) return false
+    const scripts = (JSON.parse(readFileSync(manifest, 'utf8')) as { scripts?: Record<string, string> }).scripts
+    return scripts?.build !== undefined && !existsSync(join(packages, name, 'lib'))
+  })
+}
+
 /** The smoke run's outcome. */
 export interface SmokeResult {
   /** Whether every check passed. */
@@ -85,6 +102,8 @@ export interface SmokeResult {
  */
 export async function runSmoke(root: string, port: number, keep: boolean): Promise<SmokeResult> {
   const lines: string[] = []
+  const unbuilt = packagesWithoutLib(root)
+  if (unbuilt.length > 0) return { ok: false, lines: [`FAIL no lib/ in: ${unbuilt.join(', ')}; run the delorun packages build`] }
   const scratch = await mkdtemp(join(tmpdir(), 'delorun-smoke-'))
   await chmod(scratch, 0o700)
   const home = join(scratch, 'home')
