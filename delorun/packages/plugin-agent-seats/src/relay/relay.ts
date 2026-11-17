@@ -93,6 +93,10 @@ interface Pending {
 
 /** The relay for all seats of one home. */
 export class SeatRelay {
+  private readonly ctx: Context
+  private readonly options: SeatRelayOptions
+  private readonly scope: RunScope
+
   private readonly pending = new Map<SessionId, Set<Pending>>()
   /** The signal of each seat child's current turn, which Stop aborts; cleared when the turn ends. */
   private readonly turnSignals = new Map<SessionId, AbortSignal>()
@@ -105,7 +109,10 @@ export class SeatRelay {
    * @param options - what the seat lane supplies.
    * @param scope - the run-scope listener's state; a spec passes one that mounts nothing.
    */
-  constructor(private readonly ctx: Context, private readonly options: SeatRelayOptions, private readonly scope = new RunScope()) {
+  constructor(ctx: Context, options: SeatRelayOptions, scope = new RunScope()) {
+    this.ctx = ctx
+    this.options = options
+    this.scope = scope
     ctx.effect(() => this.scope.mount(ctx), 'agent seats: the relay\'s approval listener')
     // Prepended: an earlier listener that decides the step without `next()` must not hide the turn's signal from the relay.
     ctx.on('agent/pre-step', (payload, next) => {
