@@ -2,7 +2,8 @@
  * Specs of the seat relay (trust path): the lifted pin on a seat child only, the question and its marker, the wait for
  * the call's record, Full access, stop and turn end, and "Allow for this run" through the Host half. A stand-in for the
  * gateway settles the first answer that passes its guard; the guard here applies the reach rule of home-auth's
- * `checkAnswer` (see `relay-reach.spec.ts` for the same cases against the real guard).
+ * `checkAnswer`; home-auth's own `authenticator.spec.ts` pins that rule against the real guard, including that an
+ * answer outside the four outcomes counts as granting.
  */
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
