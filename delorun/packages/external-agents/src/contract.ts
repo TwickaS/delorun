@@ -211,7 +211,10 @@ export interface ProgramSession {
 
 /** One limit window as a program reports it. */
 export interface LimitWindow {
-  /** The program's name for the window, such as `five_hour` or `primary`. */
+  /**
+   * The window, normalised by the driver from the program's own name: `five-hour`, `seven-day`, `seven-day-opus`,
+   * `seven-day-sonnet`, `thirty-day` or `<n>-minute`; another program name passes through unchanged.
+   */
   readonly kind: string
   /** Share of the window used, 0 to 100, when the program says. */
   readonly usedPercent?: number
@@ -347,10 +350,10 @@ export interface ExternalAgentsGate {
   /**
    * Start a seat's program: consent, limits, capacity, then the driver's open with the gate's spawn.
    * @param request - the seat and its callbacks.
-   * @returns the open program session.
+   * @returns the open program session, with the reason it was allowed.
    * @throws {@link GateRefusedError} when the gate refuses; {@link ProgramOpenError} when the program cannot open.
    */
-  start(request: SeatStartRequest): Promise<ProgramSession>
+  start(request: SeatStartRequest): Promise<SeatSession>
   /**
    * Run a limits check through the driver's probe in a folder the gate picks, counted against `maxLivePrograms`. It
    * takes no folder, no child and no input.
@@ -403,8 +406,14 @@ export interface AccountRecord {
   readonly windows: readonly RecordedLimitWindow[]
   /** The models the program offers, when known. */
   readonly offeredModels?: readonly OfferedModel[]
+  /** Whether a driver for the agent is registered, that is whether its pack is added. */
+  readonly installed: boolean
   /** When a limits check last answered, in milliseconds since the epoch. */
   readonly checkedAt?: number
+  /** When a limits check last failed, in milliseconds since the epoch; a failure counts towards the interval between checks. */
+  readonly checkFailedAt?: number
+  /** When `delorun agents login` finished with no Host running and left a check for the Host's next start, in milliseconds since the epoch. */
+  readonly checkRequestedAt?: number
 }
 
 /** A limit that refuses a start now. */
@@ -418,7 +427,19 @@ export interface ReachedLimit {
 }
 
 /** How a refresh ended. */
-export type AccountRefreshOutcome = 'checked' | 'throttled' | 'not-installed' | 'failed'
+export type AccountRefreshOutcome =
+  /** The check answered and the record holds its figures. */
+  | { readonly kind: 'checked' }
+  /** A check ran too recently; the next may run at `nextAt`, in milliseconds since the epoch. */
+  | { readonly kind: 'throttled'; readonly nextAt: number }
+  /** No driver for the agent is registered. */
+  | { readonly kind: 'not-installed' }
+  /** The check ran and failed, with the reason the person reads. */
+  | { readonly kind: 'failed'; readonly problem: string }
+  /** The gate refused the check, for example at its cap, with the refusal the person reads. */
+  | { readonly kind: 'refused'; readonly problem: string }
+  /** The reason is not in the gate row's `probeTriggers` list, so no check runs. */
+  | { readonly kind: 'turned-off' }
 
 /** The explicit act about one agent that asked for a check; nothing else starts one. */
 export type AccountRefreshReason = 'pack-added' | 'signed-in' | 'check-now'
@@ -432,6 +453,11 @@ export interface AgentAccounts {
    */
   read(provider: ExternalAgentName): Promise<AccountRecord>
   /**
+   * Read what the store knows about every agent.
+   * @returns one record per agent, and the time they were read at, in milliseconds since the epoch.
+   */
+  readAll(): Promise<{ readonly accounts: readonly AccountRecord[]; readonly now: number }>
+  /**
    * Merge figures from a run or a check into the store: windows by kind, the newer `seenAt` wins.
    * @param observation - the figures.
    */
@@ -440,9 +466,9 @@ export interface AgentAccounts {
    * Check one agent's account through the gate's `probe`, at most once per `probeMinIntervalMinutes` and one at a time.
    * @param provider - the agent.
    * @param reason - why the check is asked for.
-   * @returns how the check ended and the record afterwards.
+   * @returns how the check ended, the record afterwards, and the time it ended at, in milliseconds since the epoch.
    */
-  refresh(provider: ExternalAgentName, reason: AccountRefreshReason): Promise<{ readonly outcome: AccountRefreshOutcome; readonly record: AccountRecord }>
+  refresh(provider: ExternalAgentName, reason: AccountRefreshReason): Promise<{ readonly outcome: AccountRefreshOutcome; readonly record: AccountRecord; readonly now: number }>
   /**
    * The limit that refuses a start at `now`, if any. Pure: stale figures (a reset time not after `now`) never refuse.
    * @param record - the agent's record.
@@ -481,9 +507,21 @@ export interface SeatReview {
   readonly signal: AbortSignal
 }
 
-/** A seat review's answer; `timeoutMs` bounds one seat turn. */
+/**
+ * Why a seat review allowed the seat: a lease that still holds, a workspace grant, the person's answer to the card,
+ * or the root chat's Full access (approval policy `never`), which starts a seat with no card and no grant.
+ */
+export type SeatAllowReason = 'lease' | 'granted' | 'asked' | 'full-access'
+
+/** A seat's program session as the gate hands it out. */
+export interface SeatSession extends ProgramSession {
+  /** Why the start was allowed, which the hand-off line shows; `consent-off` when the consent row's saved `enabled` is false. */
+  readonly allowedBy: SeatAllowReason | 'consent-off'
+}
+
+/** A seat review's answer; `timeoutMs` bounds one seat turn, and `why` names the reason the hand-off line shows. */
 export type SeatVerdict =
-  | { readonly kind: 'allow'; readonly timeoutMs: number }
+  | { readonly kind: 'allow'; readonly timeoutMs: number; readonly why: SeatAllowReason }
   | { readonly kind: 'refuse'; readonly reason: string }
 
 /** One approval of a seat, kept in memory only until an end event (T4, review D11). */

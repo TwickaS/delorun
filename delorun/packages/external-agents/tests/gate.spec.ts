@@ -131,7 +131,7 @@ class ScriptedDriver implements ExternalAgentDriver {
 /** A scripted seat consent. */
 class ScriptedConsent implements SeatConsent {
   readonly reviews: SeatReview[] = []
-  verdict: (review: SeatReview) => SeatVerdict = () => ({ kind: 'allow', timeoutMs: 60_000 })
+  verdict: (review: SeatReview) => SeatVerdict = () => ({ kind: 'allow', timeoutMs: 60_000, why: 'asked' })
   readonly leases = new Map<SessionId, SeatLease>()
   readonly rules = new Map<SessionId, ProgramRunRule[]>()
   private readonly listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
@@ -289,7 +289,14 @@ describe('the consent a seat start needs (review D6)', () => {
     expect(w.consent.reviews.map(review => [review.phase, review.root.id, review.creator.id, review.child.id])).toEqual([['hand-off', 'root', 'root', 'seat']])
     expect(w.driver.opens).toHaveLength(1)
     expect(session.programSessionId).toBe('program-1')
+    expect(session.allowedBy).toBe('asked')
     expect(w.gate.seat(w.seat.id)).toEqual({ child: 'seat', root: 'root', provider: 'claude-code' })
+  })
+
+  it('hands out the reason the consent allowed the seat, such as Full access', async () => {
+    const w = await world()
+    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 60_000, why: 'full-access' })
+    await expect(w.gate.start(start(w))).resolves.toMatchObject({ allowedBy: 'full-access', programSessionId: 'program-1' })
   })
 
   it('reviews a start that resumes a program as a resume', async () => {
@@ -332,7 +339,8 @@ describe('the consent a seat start needs (review D6)', () => {
 
   it('starts unreviewed only when the row\'s saved enabled is false', async () => {
     const w = await world({ row: { enabled: false }, consent: 'none' })
-    await w.gate.start(start(w))
+    const session = await w.gate.start(start(w))
+    expect(session.allowedBy).toBe('consent-off')
     expect(w.driver.opens).toHaveLength(1)
     expect(w.driver.opens[0]?.runRules).toEqual([])
   })
@@ -444,7 +452,7 @@ describe('each seat turn', () => {
     const w = await world()
     const session = await w.gate.start(start(w))
     await session.send('first', 'start')
-    w.consent.verdict = review => (review.phase === 'turn' ? { kind: 'refuse', reason: 'approval ended' } : { kind: 'allow', timeoutMs: 60_000 })
+    w.consent.verdict = review => (review.phase === 'turn' ? { kind: 'refuse', reason: 'approval ended' } : { kind: 'allow', timeoutMs: 60_000, why: 'lease' })
     await expect(refusal(session.send('second', 'start'))).resolves.toEqual({ category: 'consent', reason: 'approval ended' })
     expect(w.consent.reviews.map(review => review.phase)).toEqual(['hand-off', 'turn', 'turn'])
     expect(w.driver.sessions[0]?.sent).toEqual([['first', 'start']])
@@ -461,7 +469,7 @@ describe('each seat turn', () => {
 
   it('ends at the time limit with the interrupted turn reported as the limit, keeping the program', async () => {
     const w = await world()
-    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20 })
+    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20, why: 'asked' })
     const session = await w.gate.start(start(w))
     await session.send('work', 'start')
     const event = await session.next(new AbortController().signal)
@@ -472,7 +480,7 @@ describe('each seat turn', () => {
 
   it('ends the program after the grace period when the interrupt does not end the turn', async () => {
     const w = await world()
-    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20 })
+    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20, why: 'asked' })
     const session = await w.gate.start(start(w))
     const program = w.driver.sessions[0]
     if (program === undefined) throw new Error('no program')
@@ -532,14 +540,14 @@ describe('the limits check (review D8)', () => {
 describe('a reached limit (T12)', () => {
   const now = Date.UTC(2026, 10, 17, 12, 5)
   const reached = (resetsAt: number): AccountRecord => ({
-    provider: 'claude-code', signedIn: 'yes', windows: [{ kind: 'five_hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
+    provider: 'claude-code', signedIn: 'yes', installed: true, windows: [{ kind: 'five-hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
   })
 
   it('refuses a seat start with the window and reset time while the switch is on', async () => {
     const w = await world({ limitRefusal: true, accounts: reached(now + 7_500_000), now })
-    await expect(refusal(w.gate.start(start(w)))).resolves.toEqual({ category: 'limit', window: 'five_hour', resetsAt: now + 7_500_000 })
+    await expect(refusal(w.gate.start(start(w)))).resolves.toEqual({ category: 'limit', window: 'five-hour', resetsAt: now + 7_500_000 })
     expect(w.driver.opens).toEqual([])
-    await expect(w.gate.limitRefusal('claude-code')).resolves.toBe(limitRefusal({ provider: 'claude-code', window: 'five_hour', resetsAt: now + 7_500_000, now }))
+    await expect(w.gate.limitRefusal('claude-code')).resolves.toBe(limitRefusal({ provider: 'claude-code', window: 'five-hour', resetsAt: now + 7_500_000, now }))
   })
 
   it('never refuses on stale figures whose reset time has passed', async () => {
@@ -557,13 +565,15 @@ describe('a reached limit (T12)', () => {
   })
 
   it('words the refusal with the plan, the window, the local reset time and the time left', () => {
-    expect(limitRefusal({ provider: 'claude-code', window: 'five_hour', resetsAt: now + 7_500_000, now, timeZone: 'UTC' })).toBe(
+    expect(limitRefusal({ provider: 'claude-code', window: 'five-hour', resetsAt: now + 7_500_000, now, timeZone: 'UTC' })).toBe(
       'Claude Code was not started: your Claude plan\'s 5-hour limit is reached until 14:10 (in 2 h 5 min). '
       + 'Do not hand work to Claude Code before then; do the task yourself or tell the person.',
     )
-    expect(limitRefusal({ provider: 'codex', window: 'secondary', resetsAt: now + 3 * 86_400_000, now, timeZone: 'UTC' })).toBe(
+    expect(limitRefusal({ provider: 'codex', window: 'seven-day', resetsAt: now + 3 * 86_400_000, now, timeZone: 'UTC' })).toBe(
       'Codex was not started: your ChatGPT plan\'s weekly limit is reached until Friday 20 November at 12:05 (in 72 h). '
       + 'Do not hand work to Codex before then; do the task yourself or tell the person.',
     )
+    const named = (window: string): string => limitRefusal({ provider: 'codex', window, resetsAt: now + 60_000, now, timeZone: 'UTC' }).split(' limit is')[0]!.split('plan\'s ')[1]!
+    expect(['seven-day-opus', 'thirty-day', '90-minute', 'primary'].map(named)).toEqual(['weekly Opus', '30-day', '90-minute', '"primary"'])
   })
 })

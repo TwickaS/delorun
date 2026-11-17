@@ -2817,6 +2817,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-policy
       '@deepseek-ai/dsh-scope':
         specifier: workspace:*
         version: link:../../../packages/core/scope
@@ -2850,6 +2853,9 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+      '@delorun/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)

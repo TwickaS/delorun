@@ -35,7 +35,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'plugin-manager',
     kind: 'changed',
-    reason: 'Plugin management protects Delorun\'s consent and guard rows, the plugin changes held for review, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELORUN_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
+    reason: 'Plugin management protects Delorun\'s consent and guard rows, the start gate of live external agents, the plugin changes held for review, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELORUN_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
   },
   {

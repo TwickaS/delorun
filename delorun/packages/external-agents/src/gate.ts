@@ -16,7 +16,7 @@ import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import {
   DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
   type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent,
-  type ProgramInterruptOutcome, type ProgramSession, type ProgramSpawn, type ProgramSpawnRequest, type SeatConsent,
+  type ProgramInterruptOutcome, type ProgramSession, type ProgramSpawn, type ProgramSpawnRequest, type SeatConsent, type SeatSession,
   type SeatRecord, type SeatReviewPhase, type SeatStartRequest,
 } from './contract.ts'
 import { consentMissingRefusal, consentRowDisabledRefusal, limitRefusal, noRootRefusal } from './copy.ts'
@@ -124,7 +124,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     return lease === undefined ? undefined : { child: lease.child, root: lease.root, provider: lease.provider }
   }
 
-  async start(request: SeatStartRequest): Promise<ProgramSession> {
+  async start(request: SeatStartRequest): Promise<SeatSession> {
     request.signal.throwIfAborted()
     const driver = this.drivers.get(request.provider)
     if (driver === undefined) throw new GateRefusedError({ category: 'not-installed' })
@@ -133,12 +133,14 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     const phase: SeatReviewPhase = request.resume === undefined ? 'hand-off' : 'resume'
     const mode = await this.consentMode(request.provider)
     let timeoutMs: number | undefined
+    let allowedBy: SeatSession['allowedBy'] = 'consent-off'
     if (mode.kind === 'reviewed') {
       const verdict = await mode.consent.reviewSeat({
         provider: request.provider, ...agents, cwd: request.cwd, phase, signal: request.signal,
       })
       if (verdict.kind === 'refuse') throw new GateRefusedError({ category: 'consent', reason: verdict.reason })
       timeoutMs = verdict.timeoutMs
+      allowedBy = verdict.why
     }
     await this.refuseReachedLimit(request.provider)
     // A second start for the child may have passed its own review while this one waited.
@@ -166,6 +168,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       if (live.controller.signal.aborted) throw new GateRefusedError({ category: 'seat-running' })
       return new GateSession(session, {
         provider: request.provider,
+        allowedBy,
         timeoutMs,
         graceMs: this.options.graceMs,
         reviewTurn: consent === undefined ? undefined : () => this.reviewTurn(request, consent),
@@ -417,6 +420,8 @@ function isSeatConsent(consent: unknown): consent is SeatConsent {
 interface GateSessionOptions {
   /** The agent. */
   readonly provider: ExternalAgentName
+  /** Why the start was allowed. */
+  readonly allowedBy: SeatSession['allowedBy']
   /** The consent's time limit for one turn; none when the consent is off. */
   readonly timeoutMs: number | undefined
   /** How long an interrupted turn gets to end before the program is ended. */
@@ -431,7 +436,7 @@ interface GateSessionOptions {
  * A driver session as the seat sees it: every turn is reviewed before it starts and bounded by the time limit, and
  * after the limit the turn ends as failed, naming it.
  */
-class GateSession implements ProgramSession {
+class GateSession implements SeatSession {
   private readonly inner: ProgramSession
   private readonly options: GateSessionOptions
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -444,6 +449,10 @@ class GateSession implements ProgramSession {
   constructor(inner: ProgramSession, options: GateSessionOptions) {
     this.inner = inner
     this.options = options
+  }
+
+  get allowedBy(): SeatSession['allowedBy'] {
+    return this.options.allowedBy
   }
 
   get programSessionId(): string {

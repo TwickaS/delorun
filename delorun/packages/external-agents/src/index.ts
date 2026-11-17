@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import z from '@deepseek-ai/schemastery'
+import type { AccountRefreshReason } from './contract.ts'
 import { ExternalAgentsService } from './gate.ts'
 
 export * from './contract.ts'
@@ -25,6 +26,8 @@ export interface Config {
   readonly graceMs: number
   /** The shortest time between two limits checks of one agent, in whole minutes; at least 1. */
   readonly probeMinIntervalMinutes: number
+  /** The explicit acts that run a limits check with no card: a pack just added, a finished sign-in, "Check now". */
+  readonly probeTriggers: AccountRefreshReason[]
   /**
    * The C16 switch `external_agent_limit_refusal`: on, a reached plan limit with a reset time in the future refuses a
    * live agent's start and a one-shot external run with a fixed sentence to the model. Off, the parity value, nothing
@@ -38,6 +41,7 @@ export const Config: z<Config> = z.object({
   maxLivePrograms: z.natural().min(1).default(4),
   graceMs: z.natural().min(100).default(3_000),
   probeMinIntervalMinutes: z.natural().min(1).default(30),
+  probeTriggers: z.array(z.union(['pack-added', 'signed-in', 'check-now'] as const)).default(['pack-added', 'signed-in', 'check-now']),
   limitRefusal: z.boolean().default(false),
 })
 

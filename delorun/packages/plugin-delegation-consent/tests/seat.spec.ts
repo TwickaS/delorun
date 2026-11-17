@@ -13,7 +13,7 @@ import type { SeatLease, SeatLeaseEnd, SeatReview, SeatReviewPhase } from '@delo
 import { DELEGATION_CONSENT_ROW_ID } from '@delorun/external-agents/contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DelorunDelegationConsent } from '../src/index.ts'
-import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal, notApprovedRefusal } from '../src/copy.ts'
+import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal } from '../src/copy.ts'
 import { changeGrantStore, grantStorePath } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROW } from '../src/wire.ts'
 
@@ -126,7 +126,7 @@ async function grant(home: string, workspace: string, provider = 'claude-code'):
 describe('a seat review at hand-off', () => {
   it('asks once on the root\'s open turn with the external-agent marker and records a lease', async () => {
     const w = await world()
-    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: 1_800_000 })
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: 1_800_000, why: 'asked' })
     expect(w.asks).toHaveLength(1)
     expect(w.asks[0]).toMatchObject({ toolName: 'claude-code', grants: 'external-agent' })
     expect(w.asks[0]?.agent.id).toBe('root')
@@ -139,7 +139,7 @@ describe('a seat review at hand-off', () => {
     const w = await world()
     await grant(w.home, w.workspace)
     w.openTurns.clear()
-    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow' })
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'granted' })
     expect(w.asks).toEqual([])
     expect(w.consent.leaseOf(SessionId('seat'))).toBeDefined()
   })
@@ -161,14 +161,25 @@ describe('a seat review at hand-off', () => {
     expect(w.asks).toEqual([])
   })
 
-  it('refuses a root whose policy is never without a card, unless a grant exists', async () => {
+  it('allows a Full access root without a card or a grant, says so, and records a lease', async () => {
     const w = await world()
     w.policies.set('root', 'never')
-    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', w.workspace) })
-    await expect(w.consent.reviewSeat(seat(w, 'resume'))).resolves.toMatchObject({ kind: 'refuse' })
+    w.openTurns.clear()
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: expect.any(Number), why: 'full-access' })
     expect(w.asks).toEqual([])
-    await grant(w.home, w.workspace)
-    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow' })
+    expect(w.consent.leaseOf(SessionId('seat'))).toMatchObject({ root: 'root', workspace: w.workspace, provider: 'claude-code' })
+    await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
+  })
+
+  it('still refuses a read-only Full access root, and a run folder outside its workspace', async () => {
+    const w = await world()
+    w.policies.set('root', 'never')
+    w.readOnly.add('root')
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('this chat runs read-only') })
+    w.readOnly.clear()
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off', { cwd: w.other }))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('is outside it') })
+    expect(w.consent.leaseOf(SessionId('seat'))).toBeUndefined()
+    expect(w.asks).toEqual([])
   })
 
   it('refuses at hand-off when the root has no open turn, naming the fixed way forward', async () => {
