@@ -4,6 +4,8 @@ description: "Runs the hooks from your Claude Code settings and your Codex hooks
 
 # @delorun/bundle-agent-hooks
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Switch on **Claude Code and Codex hooks** in Plugins to run the hooks you already wrote for those tools. The Claude Code bridge reads `~/.claude/settings.json`, the Codex bridge reads `~/.codex/hooks.json`, and the mods bridge with its band above the prompt loads Claude Code mods.

@@ -4,6 +4,8 @@ description: "Lets the agent hand a task to the Codex or Claude Code program you
 
 # @delorun/bundle-external-agents
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Switch on **External agents** in Plugins to let the agent hand a self-contained task to the Codex or Claude Code program already installed on this computer, through the `subagent_oar` tool. Each runs under your own sign-in (`~/.codex`, `~/.claude`), not Delorun's, with the permission settings fixed in the bundle's rows.
