@@ -1,0 +1,21 @@
+/*
+ * The theme control's menu. It is a native popover; the control positions it beside its button when it opens and sets
+ * the transform origin there, so the menu grows from the button. Only opacity and transform move, on the brand's tokens.
+ */
+.look-menu {
+  opacity: 0;
+  transform: scale(var(--dl-scale-enter));
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+
+.look-menu:popover-open {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .look-menu:popover-open {
+    opacity: 0;
+    transform: scale(var(--dl-scale-enter));
+  }
+}

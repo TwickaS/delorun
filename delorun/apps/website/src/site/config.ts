@@ -30,7 +30,7 @@ export const OG_IMAGE_PATH = '/og.png'
 export const HERO_IMAGE_PATH = '/hero-studio.webp'
 
 /** The pages the sitemap lists besides the blog index, which it lists once an article is published. */
-export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy']
+export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy', '/notices']
 
 /** The sender of the sign-up confirmation message: an address on the domain that Cloudflare Email Service sends for. */
 export const UPDATES_EMAIL = 'updates@delorun.com'

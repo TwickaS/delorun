@@ -10,6 +10,4 @@
 
 body { background: var(--color-fd-background); color: var(--color-fd-foreground); font-family: var(--dl-font-sans); -webkit-font-smoothing: antialiased; }
 
-@media (prefers-reduced-motion: no-preference) {
-  a { transition: color 0.15s ease, text-decoration-color 0.15s ease; }
-}
+a { transition: color var(--dl-duration-quick) var(--dl-ease), text-decoration-color var(--dl-duration-quick) var(--dl-ease); }

@@ -12,12 +12,15 @@
     "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json"
   },
   "dependencies": {
+    "@delorun/site-design": "link:../../packages/site-design",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
+    "clsx": "2.1.1",
     "fumadocs-core": "16.17.8",
     "fumadocs-ui": "16.17.8",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "sonner": "2.0.8"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "2.0.0-beta.84",

@@ -24,12 +24,12 @@ export function Home({ locale }: { locale: Locale }) {
     <HomeLayout {...baseOptions(locale)}>
       <main className="mx-auto w-full max-w-3xl px-4 py-16">
         <h1 className="text-3xl font-semibold">{copy.siteTitle}</h1>
-        <p className="mt-4 text-fd-muted-foreground">{copy.homeIntro}</p>
+        <p className="mt-4 text-(--dl-text-muted)">{copy.homeIntro}</p>
         <ul className="mt-8 space-y-4">
           {copy.entries.map(entry => (
             <li key={entry.title}>
               <Link href={routeOf(entry.section, entry.slugs, locale === 'zh')} className="font-medium">{entry.title}</Link>
-              <p className="text-fd-muted-foreground">{entry.text}</p>
+              <p className="text-(--dl-text-muted)">{entry.text}</p>
             </li>
           ))}
         </ul>
@@ -51,7 +51,7 @@ export function NotFound() {
       {(['en', 'zh'] as const).map(locale => (
         <section key={locale} lang={htmlLangOf(locale)} className="mb-12">
           <h1 className="text-3xl font-semibold">{COPY[locale].notFoundTitle}</h1>
-          <p className="mt-4 text-fd-muted-foreground">{COPY[locale].notFoundText}</p>
+          <p className="mt-4 text-(--dl-text-muted)">{COPY[locale].notFoundText}</p>
           <p className="mt-4"><Link href={prefixOf(locale) || '/'}>{COPY[locale].siteTitle}</Link></p>
         </section>
       ))}

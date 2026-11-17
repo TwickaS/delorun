@@ -33,3 +33,17 @@ export const BRAND_RADII = { xs: 4, sm: 8, md: 12, lg: 16 } as const
 
 /** The spacing steps, in pixels, `--dl-space-1` to `--dl-space-6`. */
 export const BRAND_SPACE = [4, 8, 12, 16, 24, 32] as const
+
+/**
+ * The motion tokens: one easing family and the durations, in milliseconds. `--dl-duration-*` in `tokens.css` time
+ * colour and opacity changes; `--dl-motion-*` time transform and clip-path changes and become 0ms under reduced motion.
+ * `leave` is shorter than every arrival, and nothing but `explain` (the theme change) runs over 300 ms.
+ */
+export const BRAND_MOTION = {
+  /** The easing curves: `out` for arrivals, `inOut` for movement across the screen, `plain` for colour. There is no ease-in. */
+  easing: { out: 'cubic-bezier(0.23, 1, 0.32, 1)', inOut: 'cubic-bezier(0.77, 0, 0.175, 1)', plain: 'ease' },
+  /** The durations: a press, a tab or tile change, a movement across the screen, the one explanatory movement, and leaving. */
+  durations: { press: 120, quick: 180, move: 260, explain: 360, leave: 100 },
+  /** The scale of a pressed control, and the scale things arrive from. */
+  scale: { pressed: 0.97, enter: 0.95 },
+} as const
