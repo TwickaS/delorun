@@ -20,7 +20,7 @@ import { packNotLoading, packToAdd, PackAddAction, PackNotLoadingAction } from '
 import { DownloadsSurface } from './Surface.tsx'
 import { createPacksClient } from '@delorun/plugin-packs/client'
 import { createRemoteDownloadsSource as createPacksSource } from './remote.ts'
-import { provideDownloadsSource, provideTranslate, type DownloadsSource } from './source.ts'
+import { provideDownloadsSource, provideTranslate, provideUninstall, type DownloadsSource } from './source.ts'
 
 export { createFakeDownloadsSource, type DownloadItem, type DownloadState, type DownloadsSource, type FakeDownloadsSource } from './source.ts'
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
@@ -77,6 +77,12 @@ export function applyStudio(ctx: Context, source: DownloadsSource): void {
   ctx.effect(() => provideDownloadsSource(source), 'delorun-downloads: the source')
   const bound: Translate = (key: DownloadsLocaleKey, params) => ctx.locale.bind(NS)(key, params)
   ctx.effect(() => provideTranslate(bound), 'delorun-downloads: the standalone row\'s copy')
+  ctx.effect(() => provideUninstall(async (name) => {
+    const manager = ctx.get('remote.pluginManager')
+    if (manager === undefined) throw new Error('no plugin manager is mounted')
+    const removed = await manager.removeBundle(name)
+    if (!removed.ok || removed.value.application === 'failed' || removed.value.application === 'cancelled') throw new Error(`${name} was not removed`)
+  }), 'delorun-downloads: the uninstall of a pack that does not load')
   ctx.effect(() => ctx.slots.inject('plugins.bundle.action', () => ctx.slots.register({
     name: 'plugins.bundle.action', select: owner => packToAdd(owner.subject), locale: NS,
   }, PackAddAction)), 'delorun-downloads: the Add action of a pack on the Plugins page')

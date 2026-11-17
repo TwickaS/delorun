@@ -395,6 +395,30 @@ describe('a pack the Host downloads', () => {
     })
   }
 
+  it('stops following a pack when the plugin is disposed', async () => {
+    vi.useFakeTimers()
+    try {
+      let lists = 0
+      vi.stubGlobal('fetch', (url: string) => {
+        if (String(url).endsWith('enqueue')) return Promise.resolve(Response.json({ ok: true, value: { supported: true, release: '0.1.0', packs: [pack], queue: [] } }))
+        lists += 1
+        return Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [pack], queue: lists > 1 ? [item('downloading')] : [] }))
+      })
+      const { ctx, installer, state } = bench([])
+      installer.refresh(['p'])
+      await vi.advanceTimersByTimeAsync(0)
+      await installer.install('p')
+      await vi.advanceTimersByTimeAsync(1000)
+      const before = lists
+      await ctx.fiber.dispose()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(lists).toBe(before)
+      expect(state('p')?.state).toBe('installing')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('still ends a pack the card was re-read in the middle of, and one it finds already working', async () => {
     vi.useFakeTimers()
     try {

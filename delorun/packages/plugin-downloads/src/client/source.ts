@@ -135,6 +135,8 @@ export function createFakeDownloadsSource(initial: readonly DownloadItem[] = [])
 interface Hub {
   source: DownloadsSource
   translate: Translate | undefined
+  /** Uninstalls a pack through the plugin manager, as the Plugins page does. */
+  uninstall?: (name: string) => Promise<void>
   rows: number
   readonly listeners: Set<() => void>
 }
@@ -228,4 +230,23 @@ export function provideTranslate(t: Translate): () => void {
  */
 export function providedTranslate(): Translate | undefined {
   return hub().translate
+}
+
+/**
+ * Give the pack surfaces the way to uninstall a pack: the plugin manager's own removal, the one the Plugins page calls,
+ * so the same permission rules and unlock prompts apply.
+ * @param uninstall - removes the named bundle; rejects when the removal did not happen.
+ * @returns the function that takes it back.
+ */
+export function provideUninstall(uninstall: (name: string) => Promise<void>): () => void {
+  hub().uninstall = uninstall
+  return () => { if (hub().uninstall === uninstall) delete hub().uninstall }
+}
+
+/**
+ * The uninstall the plugin provided.
+ * @returns it, or undefined before the plugin applies or where no plugin manager is mounted.
+ */
+export function providedUninstall(): ((name: string) => Promise<void>) | undefined {
+  return hub().uninstall
 }

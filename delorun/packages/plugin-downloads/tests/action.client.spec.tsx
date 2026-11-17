@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { PluginsSubject } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { PackAddAction, PackNotLoadingAction, packNotLoading, packToAdd } from '../src/client/Action.tsx'
 import { fallbackTranslate as t } from '../src/client/locales.ts'
-import { createFakeDownloadsSource, provideDownloadsSource } from '../src/client/source.ts'
+import { createFakeDownloadsSource, provideDownloadsSource, provideUninstall } from '../src/client/source.ts'
 
 const bundle = (name: string, patch: Partial<Extract<PluginsSubject, { kind: 'bundle' }>['pkg']> = {}): PluginsSubject => ({
   kind: 'bundle', pkg: { name, installed: false, availability: 'missing', official: true, enabled: false, rows: [], ...patch },
@@ -78,20 +78,42 @@ describe('an installed pack whose last install failed', () => {
     release()
   })
 
-  it('says it is installed but not loading, with the reason, and offers Try again and Dismiss', () => {
+  it('says it is installed but not loading, with the reason, and Try again starts it again', () => {
     const source = createFakeDownloadsSource([failed])
     const release = provideDownloadsSource(source)
     render(<PackNotLoadingAction matched={BROWSER} t={t} />)
     expect(screen.getByRole('status').textContent).toContain('Installed, but not loading: The plugin manager could not load')
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the failure of Browser' }))
-    expect(source.calls).toEqual([`remove:${BROWSER}`])
-    cleanup()
-    source.set([failed])
-    render(<PackNotLoadingAction matched={BROWSER} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: 'Try Browser again' }))
-    expect(source.calls).toEqual([`remove:${BROWSER}`, `retry:${BROWSER}`])
+    expect(source.calls).toEqual([`retry:${BROWSER}`])
     // Until the page draws again the action shows where the retry stands, never a blank.
     expect(screen.getByRole('status').textContent).toBe('Waiting')
+    release()
+  })
+
+  it('removes the pack through the plugin manager first, and only then clears the failed record', async () => {
+    const source = createFakeDownloadsSource([failed])
+    const release = provideDownloadsSource(source)
+    const uninstalled: string[] = []
+    const unprovide = provideUninstall((name) => { uninstalled.push(name); return Promise.resolve() })
+    render(<PackNotLoadingAction matched={BROWSER} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Browser' }))
+    await act(async () => { await Promise.resolve() })
+    expect(uninstalled).toEqual([BROWSER])
+    expect(source.calls).toEqual([`remove:${BROWSER}`])
+    unprovide()
+    release()
+  })
+
+  it('keeps the failed record and says so when the removal does not happen, as when it is refused', async () => {
+    const source = createFakeDownloadsSource([failed])
+    const release = provideDownloadsSource(source)
+    const unprovide = provideUninstall(() => Promise.reject(new Error('refused')))
+    render(<PackNotLoadingAction matched={BROWSER} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Browser' }))
+    await act(async () => { await Promise.resolve() })
+    expect(source.calls).toEqual([])
+    expect(screen.getByRole('status').textContent).toContain('It could not be removed.')
+    unprovide()
     release()
   })
 })
