@@ -1,5 +1,5 @@
 ---
-area: Phone
+area: Studio
 section: Changed
 ---
 
