@@ -261,7 +261,7 @@ export function Closing({ command }: { command: string }) {
 export function Home() {
   const [manager, setManager] = usePackageManager()
   return (
-    <Frame signup={false}>
+    <Frame signup={false} closing={<Closing command={INSTALL_COMMANDS[manager]} />}>
       <ScriptsOff />
       <main>
         <Hero install={<Install manager={manager} onChange={setManager} />} />
@@ -273,9 +273,6 @@ export function Home() {
         <WhatsNew />
         <Next />
         <SignupSection />
-        <div className={`${GRID} ${SPACE.far}`}>
-          <div className="col-span-full lg:col-span-8"><Closing command={INSTALL_COMMANDS[manager]} /></div>
-        </div>
       </main>
     </Frame>
   )

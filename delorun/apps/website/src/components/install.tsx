@@ -39,11 +39,11 @@ interface CommandBlockProps {
  * @param props.command - the command.
  * @param props.size - `lg` at headline size, as the closing footer sets it.
  * @param props.className - extra classes.
- * @returns the block.
+ * @returns the block, whose copy button is the page's main button and so carries the accent.
  */
 export function CommandBlock({ command, size = 'md', className }: CommandBlockProps) {
   const copy = COPY.hero
-  return <CodeBlock code={command} copyLabel={copy.copyLabel} copiedLabel={copy.copiedLabel} failedLabel={copy.copyFailedLabel} size={size} className={className} />
+  return <CodeBlock code={command} copyLabel={copy.copyLabel} copiedLabel={copy.copiedLabel} failedLabel={copy.copyFailedLabel} size={size} emphasis="primary" className={className} />
 }
 
 /**
