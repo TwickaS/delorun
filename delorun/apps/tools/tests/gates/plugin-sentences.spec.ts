@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { unwordedPackages } from '../../src/checks/gates/plugin-sentences.ts'
+import { unexportedPackages, unwordedPackages } from '../../src/checks/gates/plugin-sentences.ts'
 
 function tree(files: Record<string, string>, test: { onTestFinished: (fn: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), 'delorun-sentences-'))
@@ -14,7 +14,7 @@ function tree(files: Record<string, string>, test: { onTestFinished: (fn: () => 
   return root
 }
 
-const manifest = (name: string, extra: object = {}): string => JSON.stringify({ name, delorun: { state: 'shipped', ...extra } })
+const manifest = (name: string, extra: object = {}, exports: object = { './locale/*.json': './locale/*.json' }): string => JSON.stringify({ name, exports, delorun: { state: 'shipped', ...extra } })
 const patch = (...names: string[]): string => `- insert:\n${names.map((name) => `    - id: row-${name}\n      name: '@delorun/${name}'\n`).join('')}`
 const words = JSON.stringify({ meta: { title: 'A title', description: 'A sentence.' } })
 
@@ -44,6 +44,12 @@ describe('gates:plugin-sentences', () => {
 
   it('leaves out a package no patch row and no pack names', (test) => {
     const root = tree({ ...BASE, 'delorun/packages/plugin-a/locale/en.json': words, 'delorun/packages/library/package.json': manifest('@delorun/library') }, test)
+    expect(unwordedPackages(root)).toEqual([])
+  })
+
+  it('names a listed package whose exports do not reach its locale files', (test) => {
+    const root = tree({ ...BASE, 'delorun/packages/plugin-a/package.json': manifest('@delorun/plugin-a', {}, { '.': './src/index.ts' }), 'delorun/packages/plugin-a/locale/en.json': words }, test)
+    expect(unexportedPackages(root)).toEqual(['@delorun/plugin-a'])
     expect(unwordedPackages(root)).toEqual([])
   })
 })

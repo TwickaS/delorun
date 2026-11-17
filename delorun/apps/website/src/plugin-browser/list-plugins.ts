@@ -124,6 +124,7 @@ export function needPhrase(need: Need): string {
 
 interface Manifest {
   readonly name: string
+  readonly exports?: Readonly<Record<string, unknown>>
   readonly delorun?: { readonly state?: string; readonly pack?: boolean; readonly requires?: Record<string, { readonly needs?: readonly Need[] }> }
 }
 
@@ -172,10 +173,10 @@ function standingOrder(standing: Standing): number {
  * off, headless only, then packs.
  * @param root - the repository root.
  * @param sources - how files are counted.
- * @returns the entries, and the packages named without a title or a sentence.
+ * @returns the entries, the packages named without a title or a sentence, and those whose `exports` do not reach their locale files.
  * @throws when a patch row names a package that is not in `delorun/packages`.
  */
-export function readPluginList(root: string, sources: PluginSources): { plugins: PluginEntry[]; unworded: string[] } {
+export function readPluginList(root: string, sources: PluginSources): { plugins: PluginEntry[]; unworded: string[]; unexported: string[] } {
   const packages = manifestsByName(root)
   const standings = new Map<string, Standing>()
   for (const { dir, headless } of PATCH_PACKAGES) {
@@ -190,6 +191,7 @@ export function readPluginList(root: string, sources: PluginSources): { plugins:
   for (const [name, { manifest }] of packages) if (manifest.delorun?.pack === true) standings.set(name, 'pack')
   const plugins: PluginEntry[] = []
   const unworded: string[] = []
+  const unexported: string[] = []
   for (const [name, standing] of standings) {
     const { manifest, folder } = packages.get(name)!
     const state = manifest.delorun?.state
@@ -199,10 +201,12 @@ export function readPluginList(root: string, sources: PluginSources): { plugins:
     const title = meta?.title ?? ''
     const sentence = meta?.description ?? ''
     if (title === '' || sentence === '') unworded.push(name)
+    // The plugin manager resolves the locale file through `exports`.
+    if (manifest.exports?.['./locale/*.json'] === undefined && manifest.exports?.['./locale/en.json'] === undefined) unexported.push(name)
     const needs = Object.values(manifest.delorun?.requires ?? {}).flatMap((row) => row.needs ?? [])
     const requires = [...new Set(shownNeeds(needs).map(needPhrase))]
     plugins.push({ name, title, sentence, state, standing, requires: standing === 'pack' ? requires : [], files: sources.countFiles(folder), folder })
   }
   plugins.sort((a, b) => standingOrder(a.standing) - standingOrder(b.standing))
-  return { plugins, unworded }
+  return { plugins, unworded, unexported }
 }

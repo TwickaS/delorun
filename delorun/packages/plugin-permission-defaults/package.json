@@ -10,7 +10,8 @@
     "./store": "./src/store.ts",
     "./workspace": "./src/workspace.ts",
     "./review": "./src/review.ts",
-    "./wire": "./src/wire.ts"
+    "./wire": "./src/wire.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
     "@delorun/contract-home-layout": "workspace:*",

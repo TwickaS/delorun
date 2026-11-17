@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src",
