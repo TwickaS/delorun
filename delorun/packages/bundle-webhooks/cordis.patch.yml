@@ -1,5 +1,5 @@
 # The webhook runtime always mounts. The GitHub endpoint is a second web server on loopback only (port 3081 unless
-# DELORUN_GITHUB_WEBHOOK_PORT says otherwise) and mounts only once DELORUN_GITHUB_WEBHOOK_SECRET is set, so a turned-on
+# DELORUN_GITHUB_WEBHOOK_PORT says otherwise; a value that is not a port number stops the profile from loading) and mounts only once DELORUN_GITHUB_WEBHOOK_SECRET is set, so a turned-on
 # bundle without a secret listens on nothing. The bundle ships no rule: without one a delivery creates no chat.
 - insert:
     - id: webhook-runtime
@@ -15,7 +15,7 @@
           name: '@deepseek-ai/dsh-host-webserver'
           config:
             host: '127.0.0.1'
-            port: !!js "Number(process.env.DELORUN_GITHUB_WEBHOOK_PORT ?? 3081)"
+            port: !!js "(() => { const port = Number(process.env.DELORUN_GITHUB_WEBHOOK_PORT ?? 3081); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DELORUN_GITHUB_WEBHOOK_PORT must be a whole number from 1 to 65535'); return port })()"
         - id: github-webhook-adapter
           name: '@deepseek-ai/dsh-webhook-github'
           config:

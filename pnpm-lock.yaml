@@ -2155,6 +2155,9 @@ importers:
       '@deepseek-ai/dsh-session-log-deepseek':
         specifier: workspace:*
         version: link:../../../packages/session/session-log-deepseek
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:*
+        version: link:../../../packages/subprocess/subprocess
       '@deepseek-ai/dsh-subprocess-local':
         specifier: workspace:*
         version: link:../../../packages/subprocess/subprocess-local
