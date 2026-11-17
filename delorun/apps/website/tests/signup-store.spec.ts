@@ -28,12 +28,23 @@ describe('validation', () => {
   })
 
   it('needs the consent box and keeps only known pages', () => {
-    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page' }
+    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page', consentVersion: 'consent_version' }
+    const V = '3'
     const form = (entries: Record<string, string>): FormData => Object.entries(entries).reduce((data, [key, value]) => (data.set(key, value), data), new FormData())
-    expect(parseSignup(form({ email: 'ada@example.com' }), fields)).toEqual({ ok: false, problem: 'consent' })
-    expect(parseSignup(form({ email: 'nope', consent: 'yes' }), fields)).toEqual({ ok: false, problem: 'email' })
-    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/evil' }), fields)).toEqual({ ok: true, value: { email: 'ada@example.com', firstName: null, page: 'unknown' } })
-    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/privacy', first_name: 'Ada' }), fields)).toMatchObject({ ok: true, value: { firstName: 'Ada', page: '/privacy' } })
+    expect(parseSignup(form({ email: 'ada@example.com', consent_version: V }), fields, V)).toEqual({ ok: false, problem: 'consent' })
+    expect(parseSignup(form({ email: 'nope', consent: 'yes', consent_version: V }), fields, V)).toEqual({ ok: false, problem: 'email' })
+    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/evil', consent_version: V }), fields, V)).toEqual({ ok: true, value: { email: 'ada@example.com', firstName: null, page: 'unknown' } })
+    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/privacy', first_name: 'Ada', consent_version: V }), fields, V)).toMatchObject({ ok: true, value: { firstName: 'Ada', page: '/privacy' } })
+  })
+
+  it('refuses a missing, stale or malformed consent version, whatever else is right', () => {
+    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page', consentVersion: 'consent_version' }
+    const base = { email: 'ada@example.com', consent: 'yes' }
+    const form = (entries: Record<string, string>): FormData => Object.entries(entries).reduce((data, [key, value]) => (data.set(key, value), data), new FormData())
+    for (const version of [undefined, '', '2', '3 ', '03', '3\u0000', 'x'.repeat(500)]) {
+      expect(parseSignup(form(version === undefined ? base : { ...base, consent_version: version }), fields, '3')).toEqual({ ok: false, problem: 'version' })
+    }
+    expect(parseSignup(form({ ...base, consent_version: '3' }), fields, '3').ok).toBe(true)
   })
 })
 

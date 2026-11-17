@@ -30,6 +30,7 @@ export const FIELDS = {
   email: 'email',
   consent: 'consent',
   page: 'page',
+  consentVersion: 'consent_version',
   turnstile: 'cf-turnstile-response',
 } as const
 
