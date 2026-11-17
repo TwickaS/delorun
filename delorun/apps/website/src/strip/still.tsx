@@ -89,7 +89,7 @@ export function SetupStripStill() {
             <div className={css.entry}>
               <figure className={css.code}>
                 <figcaption className={css.codeCaption}>{copy.entryFile}</figcaption>
-                <pre className={css.codePre} tabIndex={0}>{STILL_ENTRY}</pre>
+                <pre className={css.codePre} tabIndex={0} role="region" aria-label={copy.entry}>{STILL_ENTRY}</pre>
               </figure>
               <p className={css.entryLine}>{copy.additionsNote}</p>
             </div>

@@ -49,7 +49,7 @@ function Entry({ entry, changes }: { readonly entry: EntryConfig | undefined; re
   return (
     <>
       {/* A new key per change seats the new entry. */}
-      <CodeBlock key={changes} className={css.seat} code={entryYaml(held.config)} caption={held.bundle ? copy.bundleFile : copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
+      <CodeBlock key={changes} scroll codeLabel={copy.entry} className={css.seat} code={entryYaml(held.config)} caption={held.bundle ? copy.bundleFile : copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
       {line === undefined ? null : <p className={css.entryLine} data-strip-entry-line="">{line}</p>}
       <p className={css.entryLine}>{copy.additionsNote}</p>
     </>
