@@ -155,12 +155,22 @@ describe('the pack transport', () => {
     expect(wrote).toBeLessThan(40)
   })
 
-  it('shows an address without its user name and password in a refusal', async () => {
-    const fetcher: typeof fetch = vi.fn(() => Promise.reject(new Error('refused')))
-    const files = createPackFiles({ channel: 'https://person:secret@releases.example/x/', stallSeconds: 30, fetch: fetcher })
-    const failure = await files.fetchRelease('a.tar.gz', { exact: 3 }).then(() => undefined, (error: unknown) => error)
-    expect((failure as Error).message).toContain('https://releases.example/x/a.tar.gz')
+  it('refuses a channel address with a user name or password before any request, without repeating it', () => {
+    const fetcher: typeof fetch = vi.fn(() => Promise.reject(new Error('Request cannot be constructed from a URL that includes credentials: https://person:secret@releases.example/x/a.tar.gz')))
+    let failure: unknown
+    try {
+      createPackFiles({ channel: 'https://person:secret@releases.example/x/', stallSeconds: 30, fetch: fetcher })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toMatchObject({ code: 'FETCH_REFUSED' })
     expect((failure as Error).message).not.toMatch(/person|secret/u)
+    expect(fetcher).not.toHaveBeenCalled()
+    // An address that is neither https nor loopback is refused for the credentials first, never printed with them.
+    for (const channel of ['http://person:secret@releases.example/x/', 'ftp://person:secret@releases.example/x/']) {
+      expect(() => createPackFiles({ channel, stallSeconds: 30 })).toThrow(/user name or password/u)
+      expect(() => createPackFiles({ channel, stallSeconds: 30 })).not.toThrow(/person|secret/u)
+    }
   })
 
   it('cuts a metadata file at the release files\' 30 seconds in total, however steadily its pieces arrive', async () => {
