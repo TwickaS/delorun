@@ -102,7 +102,7 @@ describe('ReplicaFrame', () => {
   it('draws the studio inert and announces the chapter the visitor picks on the rail', async () => {
     const file = CHAPTER_FILES['changes-and-versions']
     const { container } = mount(<ReplicaFrame session="changes-and-versions" width="desktop" />)
-    await until(() => { expect(container.querySelector('.studio-replica[inert]')).not.toBeNull() }, 15_000)
+    await until(() => { expect(container.querySelector('[data-studio-replica][inert]')).not.toBeNull() }, 15_000)
     const tabs = tabsIn(container)
     expect(tabs.map(tab => tab.textContent)).toEqual(file.chapters.map(chapter => chapter.title))
     act(() => { tabs[2]!.click() })
@@ -115,7 +115,7 @@ describe('ReplicaFrame', () => {
     reduced = true
     const file = CHAPTER_FILES['ordinary-work']
     const { container } = mount(<ReplicaFrame session="ordinary-work" width="desktop" />)
-    await until(() => { expect(container.querySelector('.studio-replica[inert]')).not.toBeNull() }, 15_000)
+    await until(() => { expect(container.querySelector('[data-studio-replica][inert]')).not.toBeNull() }, 15_000)
     expect(buttonsNamed(container, 'Pause')).toHaveLength(0)
     act(() => { tabsIn(container).at(-1)!.click() })
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(file.chapters.at(-1)!.caption)

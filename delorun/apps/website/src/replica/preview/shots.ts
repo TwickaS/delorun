@@ -54,7 +54,7 @@ async function open(browser: Browser, { query, width, height, reduced }: { query
   page.on('pageerror', (error) => { errors.push(`${query} ${String(width)}: ${error.message}`) })
   page.on('console', (message) => { if (message.type() === 'error') errors.push(`${query} ${String(width)}: ${message.text()}`) })
   await page.goto(`${base}?${query}`)
-  await page.locator('.studio-replica[inert]').first().waitFor({ state: 'attached', timeout: 60_000 })
+  await page.locator('[data-studio-replica][inert]').first().waitFor({ state: 'attached', timeout: 60_000 })
   return page
 }
 
@@ -68,7 +68,7 @@ async function open(browser: Browser, { query, width, height, reduced }: { query
 async function shoot(page: Page, chapter: number, wait: number | string, file: string): Promise<void> {
   await page.getByRole('tab').nth(chapter).click()
   if (typeof wait === 'number') await page.waitForTimeout(wait)
-  else await page.locator(`.studio-replica ${wait}`).first().waitFor({ state: 'visible', timeout: 30_000 })
+  else await page.locator(`[data-studio-replica] ${wait}`).first().waitFor({ state: 'visible', timeout: 30_000 })
   const pause = page.getByRole('button', { name: 'Pause' })
   if (await pause.count() > 0) await pause.click()
   await page.mouse.move(0, 0)

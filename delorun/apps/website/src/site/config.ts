@@ -62,10 +62,3 @@ export const DESKTOP_DOWNLOAD_PLACES = [
 export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {
   'index.html': ['home-below'],
 }
-
-/**
- * Class names that only scope rules loaded later, so a prerendered page may use them with no rule of their own in its
- * stylesheets: `studio-replica` scopes the replica's token block, which loads with the replica. With scripts off the
- * still draws in the page's own look. `scripts/check-styles.ts` skips these names.
- */
-export const SCOPE_CLASSES: readonly string[] = ['studio-replica']
