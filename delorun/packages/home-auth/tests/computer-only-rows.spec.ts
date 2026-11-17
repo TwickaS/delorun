@@ -92,3 +92,28 @@ describe('the approval grace while PIN mode is on', () => {
     expect(condition({ action: 'commands/execute', resource: GLOBAL, args: { line: '/config set x' } }).kind).toBe('deny')
   })
 })
+
+describe('the bundles that carry a computer-only row', () => {
+  it('are all listed: a bundle patch that names one of the modules and is missing from COMPUTER_ONLY_BUNDLES fails', async () => {
+    const { readdirSync, readFileSync, existsSync } = await import('node:fs')
+    const { join, dirname } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const { COMPUTER_ONLY_BUNDLES, COMPUTER_ONLY_ROW_MODULES } = await import('../src/reach-access.ts')
+    const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
+    const roots = [join(repo, 'packages', 'bundle'), join(repo, 'delorun', 'packages')]
+    const missing: string[] = []
+    for (const root of roots) {
+      for (const entry of readdirSync(root)) {
+        const patch = join(root, entry, 'cordis.patch.yml')
+        const manifest = join(root, entry, 'package.json')
+        if (!existsSync(patch) || !existsSync(manifest)) continue
+        const text = readFileSync(patch, 'utf8')
+        if (!Object.keys(COMPUTER_ONLY_ROW_MODULES).some(module => text.includes(module))) continue
+        const name = (JSON.parse(readFileSync(manifest, 'utf8')) as { name: string }).name
+        // Pins the list: a bundle that mounts the gate, reach or the sandbox must be refused to a device.
+        if (!COMPUTER_ONLY_BUNDLES.includes(name)) missing.push(name)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})

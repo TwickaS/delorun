@@ -942,7 +942,10 @@ const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabl
  * The bundles whose rows include a {@link COMPUTER_ONLY_ROW_MODULES} module, besides the packages that provide those
  * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it.
  */
-export const COMPUTER_ONLY_BUNDLES: readonly string[] = ['@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio']
+export const COMPUTER_ONLY_BUNDLES: readonly string[] = [
+  '@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio',
+  '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-minimal', '@deepseek-ai/dsh-headless',
+]
 
 /**
  * Whether a bundle call names a package that provides a computer-only module or holds its rows, or names its package in
