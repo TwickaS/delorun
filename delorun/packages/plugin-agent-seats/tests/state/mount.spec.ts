@@ -290,7 +290,7 @@ describe('parting on resume', () => {
     w.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     await until(() => w.mount.store.stateOf(w.child).logged.programMessageId === 'program-message-7', 'the recorded message')
     expect(records(w, SEAT_STATE_RECORD).at(-1)).toMatchObject({ programSessionId: 'program-1', programMessageId: 'program-message-7' })
-    w.session.append('turn/end', { turn: 2, reason: { kind: 'aborted' } })
+    w.session.append('turn/end', { turn: 2, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     await until(() => w.mount.store.stateOf(w.child).logged.programMessageId === null || w.warnings.length > 0, 'the forgotten message')
     expect(w.warnings).toEqual([])
     // A stopped turn that had none recorded records nothing more.
