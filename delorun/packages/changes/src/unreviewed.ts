@@ -157,6 +157,29 @@ export async function unreviewedFolders(ctx: Pick<ChangesContext, 'home' | 'prof
   })
 }
 
+/** What the records say about loading a plugin's folder: its folder and the records the decision reads, or why nothing loads. */
+type LoadTarget =
+  | { readonly kind: 'load', readonly source: string, readonly directory: string, readonly approved: ApprovedRecord, readonly log: ChangeLog }
+  | Extract<UnreviewedSync, { readonly kind: 'protected' | 'skipped' }>
+
+/**
+ * Read what decides whether a plugin's folder loads without review.
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @returns the folder with the approved record and the change log, or `protected` or `skipped`.
+ * @throws {ChangesError} when a record of Changes or the profile's manifest is not one Delorun wrote.
+ */
+async function loadTarget(ctx: ChangesContext, plugin: string): Promise<LoadTarget> {
+  if (await readProtection(ctx.home) === 'on') return { kind: 'protected', plugin }
+  const directory = activeDirectory(ctx.home, ctx.profile, plugin)
+  const linked = (await readLinks(ctx.profileDir)).some(link => link.name === plugin && resolve(link.target) === resolve(directory))
+  const approved = await readApproved(ctx.profileDir)
+  const log = await readChangeLog(ctx.home, ctx.profile)
+  const source = approvedOf(approved, plugin)?.source ?? log.entries.findLast(entry => entry.kind === 'plugin-install' && entry.subject.plugin === plugin && entry.subject.source !== undefined)?.subject.source
+  if (!linked || source === undefined || (await readWorkSession(ctx.home, ctx.profile))?.plugin === plugin || !await namesDirectory(source)) return { kind: 'skipped', plugin }
+  return { kind: 'load', source, directory, approved, log }
+}
+
 /**
  * Load a linked plugin's folder content in the running Host while protection is off: when the folder holds content new
  * to the plugin, it becomes the approved content, the active directory holds it, one profile history version and an
@@ -164,6 +187,13 @@ export async function unreviewedFolders(ctx: Pick<ChangesContext, 'home' | 'prof
  * the active directory and `active.json` hold what they held, a second history version records it, and the change is
  * pending with `lastFailure`, which keeps the same content from being tried again. The Host's watcher calls it for each
  * settled change of the folder.
+ *
+ * The folder is read into the store before the profile write lock is taken, because reading a large folder takes
+ * seconds and every plugin install and Changes action waits for that lock. Under the lock the records are read again
+ * and decide alone: a change another writer made after the read, such as protection turned on or the same content
+ * approved by an install, is what the load acts on. When the records name another folder by then, the new folder is
+ * read, again outside the lock. What loads is the content read, copied from the store; an edit of the folder after the
+ * read is the watcher's next load.
  * @param ctx - the profile.
  * @param plugin - the package name.
  * @param reload - reloads the running Host.
@@ -171,44 +201,60 @@ export async function unreviewedFolders(ctx: Pick<ChangesContext, 'home' | 'prof
  * @throws {ChangesError} when a record of Changes or the profile's manifest is not one Delorun wrote.
  */
 export async function loadUnreviewed(ctx: ChangesContext, plugin: string, reload: ReloadHost): Promise<UnreviewedSync> {
-  return locked(ctx, async () => {
-    if (await readProtection(ctx.home) === 'on') return { kind: 'protected', plugin }
-    const directory = activeDirectory(ctx.home, ctx.profile, plugin)
-    const linked = (await readLinks(ctx.profileDir)).some(link => link.name === plugin && resolve(link.target) === resolve(directory))
-    const approved = await readApproved(ctx.profileDir)
-    const log = await readChangeLog(ctx.home, ctx.profile)
-    const approval = approvedOf(approved, plugin)
-    const source = approval?.source ?? log.entries.findLast(entry => entry.kind === 'plugin-install' && entry.subject.plugin === plugin && entry.subject.source !== undefined)?.subject.source
-    if (!linked || source === undefined || (await readWorkSession(ctx.home, ctx.profile))?.plugin === plugin || !await namesDirectory(source)) return { kind: 'skipped', plugin }
-    const content = await storeFolderContent(ctx.home, source, join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache), 'off')
+  const scanCache = join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache)
+  let read = await loadTarget(ctx, plugin)
+  for (;;) {
+    if (read.kind !== 'load') return read
+    const { source } = read
+    const content = await storeFolderContent(ctx.home, source, scanCache, 'off')
     if (content.kind === 'unreadable') return { kind: 'unreadable', plugin, detail: content.detail }
-    const { version } = content
-    const left = leftOutOf(log, approved, plugin)
-    const at = timeOf(ctx)
-    const entry = unreviewedEntry(log, { plugin, source, ...approval === undefined ? {} : { from: approval.version }, to: version }, at)
-    const tried = findEntry(log, entry.id)
-    if (version === approval?.version || declinedByPerson(log, plugin, version) || (left !== undefined && (left.kind === 'plugin-on' || left.to === version)) || (tried?.state === 'pending' && tried.lastFailure !== undefined)) {
-      return { kind: 'unchanged', plugin }
-    }
-    const activeBefore = await readActiveRecord(ctx.home, ctx.profile)
-    const activeVersion = Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin]!.version : undefined
-    await writeApproved(ctx.profileDir, approvedWith(approved, plugin, source, version, at))
-    await holdContent(ctx.home, directory, version, await referenceRelease(ctx.home, ctx.runningRelease))
-    await writeActiveRecord(ctx.home, ctx.profile, activeWith(activeBefore, plugin, version))
-    const applied: ChangeEntry = { ...entry, ...await recordVersion(ctx, entry.summary) }
-    await writeChangeLog(ctx.home, ctx.profile, withEntry(log, applied))
-    const outcome = await reload()
-    if (outcome === undefined) return { kind: 'not-running', plugin, entry: applied }
-    if (outcome.ok) return { kind: 'loaded', plugin, entry: applied }
-    await writeApproved(ctx.profileDir, approved)
-    await holdContent(ctx.home, directory, activeVersion, await referenceRelease(ctx.home, ctx.runningRelease))
-    await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
-    await recordVersion(ctx, `Went back: ${entry.id} failed to load`)
-    const lastFailure: LeftOut = { at: timeOf(ctx), failure: outcome.error }
-    const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, historyVersion: _historyVersion, ...undecided } = applied
-    const failed: ChangeEntry = { ...undecided, state: 'pending', lastFailure }
-    await writeChangeLog(ctx.home, ctx.profile, withEntry(log, failed))
-    const again = await reload()
-    return { kind: 'went-back', plugin, entry: failed, failure: outcome.error, ...again === undefined ? {} : { again } }
-  })
+    const decided = await locked(ctx, async (): Promise<UnreviewedSync | LoadTarget> => {
+      const target = await loadTarget(ctx, plugin)
+      if (target.kind !== 'load' || target.source !== source) return target
+      return commitUnreviewed(ctx, plugin, reload, target, content.version)
+    })
+    if (decided.kind !== 'load') return decided
+    read = decided
+  }
+}
+
+/**
+ * Decide and commit one read of a plugin's folder; the caller holds the profile write lock.
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @param reload - reloads the running Host.
+ * @param target - the records, read under the lock.
+ * @param version - the folder's content, already in the store.
+ * @returns what it did.
+ */
+async function commitUnreviewed(ctx: ChangesContext, plugin: string, reload: ReloadHost, target: Extract<LoadTarget, { readonly kind: 'load' }>, version: ContentVersion): Promise<UnreviewedSync> {
+  const { source, directory, approved, log } = target
+  const approval = approvedOf(approved, plugin)
+  const left = leftOutOf(log, approved, plugin)
+  const at = timeOf(ctx)
+  const entry = unreviewedEntry(log, { plugin, source, ...approval === undefined ? {} : { from: approval.version }, to: version }, at)
+  const tried = findEntry(log, entry.id)
+  if (version === approval?.version || declinedByPerson(log, plugin, version) || (left !== undefined && (left.kind === 'plugin-on' || left.to === version)) || (tried?.state === 'pending' && tried.lastFailure !== undefined)) {
+    return { kind: 'unchanged', plugin }
+  }
+  const activeBefore = await readActiveRecord(ctx.home, ctx.profile)
+  const activeVersion = Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin]!.version : undefined
+  await writeApproved(ctx.profileDir, approvedWith(approved, plugin, source, version, at))
+  await holdContent(ctx.home, directory, version, await referenceRelease(ctx.home, ctx.runningRelease))
+  await writeActiveRecord(ctx.home, ctx.profile, activeWith(activeBefore, plugin, version))
+  const applied: ChangeEntry = { ...entry, ...await recordVersion(ctx, entry.summary) }
+  await writeChangeLog(ctx.home, ctx.profile, withEntry(log, applied))
+  const outcome = await reload()
+  if (outcome === undefined) return { kind: 'not-running', plugin, entry: applied }
+  if (outcome.ok) return { kind: 'loaded', plugin, entry: applied }
+  await writeApproved(ctx.profileDir, approved)
+  await holdContent(ctx.home, directory, activeVersion, await referenceRelease(ctx.home, ctx.runningRelease))
+  await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
+  await recordVersion(ctx, `Went back: ${entry.id} failed to load`)
+  const lastFailure: LeftOut = { at: timeOf(ctx), failure: outcome.error }
+  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, historyVersion: _historyVersion, ...undecided } = applied
+  const failed: ChangeEntry = { ...undecided, state: 'pending', lastFailure }
+  await writeChangeLog(ctx.home, ctx.profile, withEntry(log, failed))
+  const again = await reload()
+  return { kind: 'went-back', plugin, entry: failed, failure: outcome.error, ...again === undefined ? {} : { again } }
 }

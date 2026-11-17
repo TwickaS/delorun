@@ -1,11 +1,12 @@
-import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { listChanges, showChange, undoChange, type ChangesContext, type ReloadHost, type ReloadOutcome } from '../src/actions.ts'
 import { openWorkSession, readActiveRecord, readChangeLog, setProtection, writeChangeLog } from '../src/records.ts'
-import { activeDirectory } from '../src/paths.ts'
+import { activeDirectory, versionsDirectory } from '../src/paths.ts'
 import { holdsVersion } from '../src/store.ts'
-import { declinedByPerson, loadUnreviewed, unreviewedFolders, unreviewedWords } from '../src/unreviewed.ts'
+import { declinedByPerson, loadUnreviewed, unreviewedFolders, unreviewedWords, type UnreviewedSync } from '../src/unreviewed.ts'
 import type { ChangeEntry, ContentVersion } from '../src/types.ts'
 import { approvedVersion, folder, history, linkAs, migrated, NOW, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
 import { lockOut } from './support.ts'
@@ -94,6 +95,64 @@ describe('a live reload with protection off', () => {
 
     writeFileSync(join(source, 'index.js'), 'export default "fixed"\n')
     expect((await loadUnreviewed(ctx, 'plug', reloads({ ok: true }).reload)).kind).toBe('loaded')
+  })
+
+  /**
+   * Start a load while another writer holds the profile write lock, wait until the folder's content is in the store, run
+   * `meanwhile` still under that lock, then release it.
+   * @param fx - the fixture.
+   * @param reload - the Host's reload.
+   * @param meanwhile - what the other writer does after the read.
+   * @returns what the load did.
+   */
+  async function loadWhileLocked(fx: Fixture, reload: ReloadHost, meanwhile: () => Promise<void>): Promise<UnreviewedSync> {
+    const versions = versionsDirectory(fx.home)
+    const stored = readdirSync(versions).length
+    // The load is returned wrapped: it waits for this lock, so the operation must not wait for it.
+    const { sync } = await withFileLock(join(fx.profileDir, 'package.json'), async () => {
+      const started = loadUnreviewed(contextOf(fx), 'plug', reload)
+      await vi.waitFor(() => { expect(readdirSync(versions)).toHaveLength(stored + 1) }, { timeout: 4_000 })
+      await meanwhile()
+      return { sync: started }
+    })
+    return sync
+  }
+
+  it('reads the folder without the profile write lock and commits once the lock is free', async () => {
+    const { fx, source } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => {
+      // Nothing is committed while the other writer holds the lock.
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(host.calls()).toBe(0)
+    })
+    expect(sync.kind).toBe('loaded')
+    expect(host.calls()).toBe(1)
+    expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "saved"\n')
+  })
+
+  it('decides with the records as they are under the lock, so protection turned on after the read loads nothing', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => { await setProtection(fx.home, 'on', terminal()) })
+    expect(sync).toEqual({ kind: 'protected', plugin: 'plug' })
+    expect(host.calls()).toBe(0)
+    expect(await approvedVersion(fx, 'plug')).toBe(approved)
+    expect((await readChangeLog(fx.home, PROFILE)).entries.some(entry => entry.decidedFrom === 'unreviewed')).toBe(false)
+  })
+
+  it('leaves a plugin alone when a work session opened on it after the read', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => {
+      await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
+    })
+    expect(sync).toEqual({ kind: 'skipped', plugin: 'plug' })
+    expect(host.calls()).toBe(0)
+    expect(await approvedVersion(fx, 'plug')).toBe(approved)
   })
 
   it('keeps the approved content and logs it when Delorun is not running', async () => {
