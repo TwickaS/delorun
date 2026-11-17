@@ -19,7 +19,7 @@ describe('launching a runtime that has packs', () => {
   })
 
   it('names the flag nowhere in the launcher, the supervisor or the Host\'s source', () => {
-    const grep = spawnSync('git', ['grep', '-il', '-e', 'preserve-symlinks', '-e', 'PRESERVE_SYMLINKS', '--', 'delorun/packages/*/src', 'delorun/apps/*/src', 'packages/*/*/src'], { cwd: REPOSITORY, encoding: 'utf8' })
+    const grep = spawnSync('git', ['grep', '-il', '-e', 'preserve-symlinks', '-e', 'PRESERVE_SYMLINKS', '--', 'delorun/packages/*/src', 'delorun/apps/*/src', 'packages/*/*/src'], { cwd: REPOSITORY, encoding: 'utf8', timeout: 30_000 })
     // git grep exits 1 when nothing matches.
     expect({ status: grep.status, found: grep.stdout.trim() }).toEqual({ status: 1, found: '' })
   })
