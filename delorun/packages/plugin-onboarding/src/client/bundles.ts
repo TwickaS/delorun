@@ -236,21 +236,26 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     }
   }
   const read = async (names: readonly string[]): Promise<void> => {
-    await readPacks(names)
+    // The packs read runs beside the plugin manager's, so a slow packs answer holds back only the cards that need it.
+    const packsRead = readPacks(names)
     const remote = pluginManager(ctx)
     if (remote === undefined) {
+      await packsRead
       setAll(names, 'failed')
       return
     }
     const listed = await remote.listBundles()
     if (!listed.ok) {
+      await packsRead
       setAll(names, 'failed')
       return
     }
-    for (const name of names) {
+    const show = (name: string, packsKnown: boolean): void => {
       const bundle = listed.value.find(each => each.name === name)
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
+      // A bundle the profile does not hold may be a pack the release publishes, which only the packs answer settles.
+      if (!packsKnown && (bundle === undefined || (bundle.availability === 'missing' && !bundle.installed))) return
       const pack = packViews.get(name)
       const state = stateOf(bundle, pack)
       const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
@@ -264,6 +269,9 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},
       })
     }
+    for (const name of names) show(name, false)
+    await packsRead
+    for (const name of names) show(name, true)
   }
   return {
     views,

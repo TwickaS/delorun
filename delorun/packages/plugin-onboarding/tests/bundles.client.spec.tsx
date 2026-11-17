@@ -120,6 +120,19 @@ describe('the agent bundles the installation ships switched off', () => {
 })
 
 describe('reading the bundles', () => {
+  it('shows the bundles the profile holds while the packs answer is slow, and settles the others when it arrives', async () => {
+    let answer: (response: Response) => void = () => {}
+    vi.stubGlobal('fetch', () => new Promise<Response>(resolve => { answer = resolve }))
+    const { installer, state } = bench([row({ name: 'a', enabled: true, meta: { title: { en: 'A' } } }), row({ name: 'b', availability: 'missing', installTarget: { spec: 'b@1', version: '1' }, meta: { title: { en: 'B' } } })])
+    installer.refresh(['a', 'b'])
+    await flush()
+    expect(state('a')).toEqual({ state: 'installed', title: { en: 'A' } })
+    expect(state('b')).toEqual({ state: 'checking' })
+    answer(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))
+    await flush()
+    expect(state('b')).toEqual({ state: 'available', title: { en: 'B' } })
+  })
+
   it('marks the names as being checked, then gives each its state, title and description, and changes nothing', async () => {
     const { installer, pluginManager, state } = bench([
       row({ name: 'a', meta: { title: { en: 'A' }, description: 'About a.' } }),
