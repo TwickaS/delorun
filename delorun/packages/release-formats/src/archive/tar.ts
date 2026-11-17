@@ -166,7 +166,7 @@ function writerNumber(block: Buffer, offset: number, length: number, name: strin
 function ignoredNumber(block: Buffer, offset: number, length: number): number {
   try {
     return writerNumber(block, offset, length, 'field', true)
-  } catch {
+  } catch (_error) {
     // A field nothing here uses, in a form this reader does not know: it reads as 0 and no file attribute follows from it.
     return 0
   }
