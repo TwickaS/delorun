@@ -218,6 +218,7 @@ export async function packProblems(paths: StorePaths, release: RuntimeVersion, e
   const peerLinks = new Map(variant.peers.map(peer => [`node_modules/${peer}`, join(paths.runtimeNodeModules(release), ...peer.split('/'))]))
   for (const link of links) {
     const wanted = peerLinks.get(link)
+    // TODO: on Windows a junction's readlink may differ from `wanted` (a `\\?\` prefix or a trailing separator) and fail a good pack; untested there.
     if (wanted === undefined || await readlink(join(directory, ...link.split('/'))) !== wanted) problems.push(`${link} is a link the install did not make`)
   }
   for (const peer of peerLinks.keys()) if (!links.includes(peer)) problems.push(`${peer} link is missing`)
