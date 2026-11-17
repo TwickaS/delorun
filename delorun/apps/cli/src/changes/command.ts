@@ -79,6 +79,7 @@ import { upgradeLine } from '../verify/changes.ts'
 import { upstreamPluginOperation } from './plugin-operation.ts'
 import { applyHarness, diffLines, discardHarness, findHarnessTarget, harnessListLines, isHarnessSubcommand, readHarnessListing, runHarnessCommand, showHarness, undoHarness, type HarnessTarget } from './harness-command.ts'
 import { harnessContextOf, outputLogger } from './harness-start.ts'
+import { readableTime } from '../output.ts'
 import { isWorkSubcommand, runWorkCommand } from './work-command.ts'
 
 /** The usage line. */
@@ -373,7 +374,7 @@ async function list(ctx: ChangesContext, json: boolean, context: CommandContext,
   lines.push(...harnessLines.others)
   for (const { plugin, source } of listing.missing) lines.push('', `The folder of ${plugin}, ${source}, is gone; its approved copy still runs.`)
   lines.push('', `Protection: ${listing.protection}: ${PROTECTION_MEANING[listing.protection]}.`)
-  if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${listing.workSession.startedAt}, until ${listing.workSession.endsAt} at the latest: edits in its folder load live.`)
+  if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${readableTime(listing.workSession.startedAt)}, until ${readableTime(listing.workSession.endsAt)} at the latest: edits in its folder load live.`)
   print(context.stdout, lines)
   if (unshown.length > 0 && dependencies.streams.stdout.isTTY === true) await markShown(ctx, unshown)
   return EXIT.ok

@@ -25,6 +25,7 @@ import { profileDirectory, selectProfile } from './profile.ts'
 import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
 import { notRunningText } from './messages.ts'
+import { readableTime } from './output.ts'
 import { printable } from './terminal-text.ts'
 import { changesNotice } from './verify/changes.ts'
 
@@ -37,7 +38,7 @@ import { changesNotice } from './verify/changes.ts'
 async function workSessionLine(home: string, profile: string): Promise<string> {
   try {
     const session = await workSessionFact(home, profile)
-    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${session.startedAt}, ends at ${session.endsAt}\n`
+    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${readableTime(session.startedAt)}, ends at ${readableTime(session.endsAt)}\n`
   } catch (error) {
     // workSessionFact refuses a record Delorun did not write with a ChangesError, whose message is its detail.
     return `work session: unreadable: ${printable((error as Error).message)}\n`
@@ -82,7 +83,7 @@ function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorR
     ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
     ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
     ...studio === undefined ? [] : [OPEN_HINT],
-    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${inspector.openedAt}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delorun restarts without --inspect`],
+    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${readableTime(inspector.openedAt)}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delorun restarts without --inspect`],
     '',
   ].join('\n')
 }

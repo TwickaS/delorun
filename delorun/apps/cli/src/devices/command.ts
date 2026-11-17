@@ -34,6 +34,7 @@ import { homeRuns } from '../reach/command.ts'
 import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { requireTerminal } from '../needs-terminal.ts'
 import { notRunningText, REMOTE_ACCESS_OFF } from '../messages.ts'
+import { readableTime } from '../output.ts'
 import { printable } from '../terminal-text.ts'
 import { runPin, type PinDependencies } from './pin.ts'
 
@@ -187,8 +188,8 @@ function records(home: string): HomeAuth {
  */
 function deviceLine(device: DeviceSummary): string {
   const approved = device.approvedBy === 'local' ? 'approved at this computer' : device.approvedBy === null ? 'claimed this home' : `approved by ${printable(device.approvedBy)}`
-  const signIn = device.lastSignInAt === null ? 'never signed in' : `last signed in ${new Date(device.lastSignInAt).toISOString()}`
-  return `${printable(device.id)}  ${deviceName(device)}\n    ${printable(device.address)}, ${approved} ${new Date(device.approvedAt).toISOString()}, ${signIn}`
+  const signIn = device.lastSignInAt === null ? 'never signed in' : `last signed in ${readableTime(device.lastSignInAt)}`
+  return `${printable(device.id)}  ${deviceName(device)}\n    ${printable(device.address)}, ${approved} ${readableTime(device.approvedAt)}, ${signIn}`
 }
 
 /**
@@ -287,7 +288,7 @@ function openLine(row: TailscalePrivateRow): string {
 function pendingLine(request: PendingRequest): string {
   const who = request.identity === undefined ? '' : `, from Tailscale user ${printable(request.identity)}`
   const how = request.windowless ? ', asked without an approval window' : ''
-  return `${deviceName(request)}${who}, asked at ${new Date(request.createdAt).toISOString()}${how}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
+  return `${deviceName(request)}${who}, asked at ${readableTime(request.createdAt)}${how}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
 }
 
 /**
@@ -462,7 +463,7 @@ async function elevate(where: Where): Promise<ExitCode> {
  * @returns the device's name and when it asked, or until when its unlock runs.
  */
 function unlockLine(unlock: Unlock): string {
-  const at = new Date(unlock.at).toISOString()
+  const at = readableTime(unlock.at)
   return unlock.kind === 'request'
     ? `${deviceName(unlock)} asks to unlock, asked at ${at}, request ${printable(unlock.id.slice(0, SHORT_REQUEST_ID))}`
     : `${deviceName(unlock)} is unlocked until ${at}`
@@ -523,7 +524,7 @@ function unlockRound(unlock: Unlock): CodeRound {
     request: typedCode => ({ op: 'devices.elevate', args: { requestId: unlock.id, typedCode } }),
     accepted: (answer) => {
       const endsAt: unknown = typeof answer.elevation === 'object' && answer.elevation !== null ? Reflect.get(answer.elevation, 'endsAt') : undefined
-      const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${new Date(endsAt).toISOString()}` : ''
+      const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${readableTime(endsAt)}` : ''
       return `Unlocked sensitive actions on ${printable(unlock.label)}${until}. End it sooner with delorun devices elevate.\n`
     },
     unchanged: 'nothing was unlocked',

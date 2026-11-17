@@ -1,5 +1,5 @@
 ---
-area: Terminal
+area: Commands
 section: Changed
 ---
 

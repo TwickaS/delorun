@@ -16,6 +16,7 @@
  * @module @delorun/cli/doctor/last-start
  */
 import { readLines, resolveSurface } from '@delorun/logs'
+import { readableTime } from '../output.ts'
 import type { CheckResult } from './checks.ts'
 
 /** One row the startup audit reported. */
@@ -99,11 +100,11 @@ export function readLastStart(home: string, profile: string): LastStart | undefi
 export function checkLastStart(home: string, profile: string): CheckResult[] {
   const start = readLastStart(home, profile)
   if (start === undefined) return [{ name: 'plugins', status: 'pass', message: `no start of the profile ${profile} is logged, so no plugin is known to have failed to load.` }]
-  if (start.inactive.length === 0) return [{ name: 'plugins', status: 'pass', message: `the last start of the profile ${profile}, at ${start.at}, logged no plugin row that did not activate.` }]
+  if (start.inactive.length === 0) return [{ name: 'plugins', status: 'pass', message: `the last start of the profile ${profile}, at ${readableTime(start.at)}, logged no plugin row that did not activate.` }]
   return start.inactive.map(row => ({
     name: 'plugin',
     subject: row.name,
     status: 'fail',
-    message: `did not activate at the last start: ${row.detail} (row ${row.id}, start at ${start.at})`,
+    message: `did not activate at the last start: ${row.detail} (row ${row.id}, start at ${readableTime(start.at)})`,
   }))
 }

@@ -182,7 +182,7 @@ describe('an exported archive', () => {
 
     const run = await importing(home, file, ['y'])
 
-    expect(run.out.startsWith(`Signed by this home's key ${keyFingerprint(key.publicKey)}, which this home trusts.\nWhat the archive states about itself:\n`)).toBe(true)
+    expect(run.out.startsWith(`Signed by this home's key ${keyFingerprint(key.publicKey).match(/.{1,4}/gu)!.join(' ')}, which this home trusts.\nWhat the archive states about itself:\n`)).toBe(true)
     expect(run.out).toContain('"chat-a": 1 chat, 0 attachments')
     expect(run.out).toContain('Imported "chat-a" to archive/imported/chat-a.\n')
     expect(run.out).toContain('opening imported chats in the studio is not available yet')
@@ -205,10 +205,10 @@ describe('an exported archive', () => {
     expect(written(other)).toEqual({ imported: [], staging: [] })
 
     const run = await importing(other, file, [fingerprint, 'y'])
-    expect(run.out.startsWith(`Signed by a key this home does not know, fingerprint ${fingerprint}.`)).toBe(true)
+    expect(run.out.startsWith(`! Unverified signer · ${fingerprint.match(/.{1,4}/gu)!.join(' ')}\n  Compare it with the fingerprint the other computer printed`)).toBe(true)
     expect(written(other).imported).toEqual(['chat-a'])
 
-    const again = await importing(other, file, [fingerprint, 'yes'])
+    const again = await importing(other, file, [fingerprint.match(/.{1,4}/gu)!.join(' '), 'yes'])
     expect(again.out).toMatch(/Imported "chat-a" to archive\/imported\/[0-9a-f-]{36}; the archive's identifier "chat-a" was taken\./)
   })
 
@@ -457,7 +457,7 @@ describe('the preview an import shows', () => {
       totalBytes: 1,
     })
 
-    expect(lines.split('\n')[0]).toBe('Signed by a key this home does not know, fingerprint f. Compare it with the fingerprint the sending home shows before you trust it.')
+    expect(lines.split('\n')[0]).toBe('! Unverified signer · f')
     expect(lines).toContain('File "a\\u009b.delorun", written by "v\\u2066" at "t\\u202e".')
     expect(lines).toContain('"A\\u0085": 1 chat, 0 attachments')
     expect(lines).toContain('theme "dusk\\u2028\\u061c"')

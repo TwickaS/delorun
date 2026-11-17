@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closestMatch, groupsOfFour, readableTime, withReadableTimes } from '../src/output.ts'
+import { closestMatch, environmentLocale, groupsOfFour, readableTime, withReadableTimes } from '../src/output.ts'
 
 describe('output helpers', () => {
   it('writes a time as day, month, year and minutes in the computer\'s zone', () => {
@@ -10,6 +10,14 @@ describe('output helpers', () => {
 
   it('replaces only the ISO timestamps in a line', () => {
     expect(withReadableTimes('written 2026-11-17T01:07:39.000Z by 2026', { locale: 'en-GB', timeZone: 'UTC' })).toBe('written 17 Nov 2026, 01:07 by 2026')
+  })
+
+  it('reads the locale from the environment, and falls back to British English', () => {
+    expect(environmentLocale({ LANG: 'de_DE.UTF-8' })).toBe('de-DE')
+    expect(environmentLocale({ LC_ALL: 'fr_FR', LANG: 'de_DE' })).toBe('fr-FR')
+    expect(environmentLocale({ LANG: 'C' })).toBe('en-GB')
+    expect(environmentLocale({ LANG: 'C.UTF-8' })).toBe('en-GB')
+    expect(environmentLocale({})).toBe('en-GB')
   })
 
   it('groups text in fours', () => {

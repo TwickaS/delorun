@@ -7,10 +7,21 @@
 
 /** The options {@link readableTime} formats with. */
 export interface TimeOptions {
-  /** A BCP 47 locale; the process's locale by default. */
+  /** A BCP 47 locale; the one `LC_ALL`, `LC_MESSAGES` or `LANG` names, or British English when none does. */
   readonly locale?: string
   /** An IANA time zone; the computer's by default. */
   readonly timeZone?: string
+}
+
+/**
+ * The locale the environment names.
+ * @param env - the environment.
+ * @returns a BCP 47 tag from `LC_ALL`, `LC_MESSAGES` or `LANG`, or `en-GB` when none names one.
+ */
+export function environmentLocale(env: Readonly<Record<string, string | undefined>> = process.env): string {
+  const named = [env.LC_ALL, env.LC_MESSAGES, env.LANG].find(value => value !== undefined && value !== '' && value !== 'C' && value !== 'POSIX' && !value.startsWith('C.'))
+  const tag = named?.split(/[.@]/u)[0]?.replace('_', '-')
+  return tag !== undefined && Intl.DateTimeFormat.supportedLocalesOf(tag).length > 0 ? tag : 'en-GB'
 }
 
 /**
@@ -22,7 +33,7 @@ export interface TimeOptions {
 export function readableTime(time: string | number | Date, options: TimeOptions = {}): string {
   const date = new Date(time)
   if (Number.isNaN(date.getTime())) return String(time)
-  return new Intl.DateTimeFormat(options.locale, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...options.timeZone === undefined ? {} : { timeZone: options.timeZone } }).format(date)
+  return new Intl.DateTimeFormat(options.locale ?? environmentLocale(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...options.timeZone === undefined ? {} : { timeZone: options.timeZone } }).format(date)
 }
 
 /** An ISO 8601 UTC timestamp with milliseconds, as the records write them. */

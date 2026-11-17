@@ -11,7 +11,7 @@
  */
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
+import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, keyFingerprint, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
 import { attestTerminal, isChangesError, readProtection, type ChangesContext, type AtComputer } from '@delorun/changes'
 import { applySetupImport, collectSetup, planSetupImport, type CollectOptions, type ImportOptions, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { printable, quoted } from '../terminal-text.ts'
@@ -22,14 +22,28 @@ import { CliError, EXIT } from '../exit.ts'
 import { writeNewFile } from '../export/index.ts'
 import { IMPORT_LIMITS, readArchiveFile } from '../import/index.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
+import { groupsOfFour } from '../output.ts'
 import { isYes } from '../trash/terminal.ts'
 import { delorunVersion } from '../version.ts'
 
 /** The usage lines. */
 export const SETUP_TRANSFER_USAGE = [
-  'Usage: delorun setup export --out <file> [--no-settings] [--plugin <name>]... [--no-local-code] [--note <text>] [--profile <name>]',
-  '       delorun setup import <file> [--dry-run] [--no-settings] [--remove-others] [--profile <name>]',
+  'Usage: delorun setup export --out <file> [--no-settings] [--plugin <name>]... [--no-local-code] [--note <text>] [--verbose] [--profile <name>]',
+  '       delorun setup import <file> [--dry-run] [--no-settings] [--remove-others] [--verbose] [--profile <name>]',
 ].join('\n')
+
+/**
+ * What a setup leaves out, as a count unless the person asked for the list or it is short.
+ * @param items - the lines naming what is left out.
+ * @param lead - the words before the list.
+ * @param verbose - whether to list every item.
+ * @returns the lines; none when nothing is left out.
+ */
+function leftOutLines(items: readonly string[], lead: string, verbose: boolean): string[] {
+  if (items.length === 0) return []
+  if (verbose || items.length <= 3) return [`${lead}:`, ...items.map(line => `  ${printable(line)}`)]
+  return [`${lead}: ${plural(items.length, 'item')} that belong to this computer (--verbose lists them)`]
+}
 
 /**
  * A count with its noun.
@@ -54,7 +68,7 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   let parsed
   try {
     parsed = parseArgs({ args: rest, options: {
-      'profile': { type: 'string' }, 'out': { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, 'no-settings': { type: 'boolean', default: false },
+      'profile': { type: 'string' }, 'out': { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, 'verbose': { type: 'boolean', default: false }, 'no-settings': { type: 'boolean', default: false },
       'plugin': { type: 'string', multiple: true }, 'no-local-code': { type: 'boolean', default: false }, 'note': { type: 'string' }, 'remove-others': { type: 'boolean', default: false },
     }, strict: true, allowPositionals: true })
   } catch (error: unknown) {
@@ -71,11 +85,11 @@ export async function runSetupTransfer(args: readonly string[], context: Command
     return runExport(ctx, out, {
       settings: !parsed.values['no-settings'], localCode: !parsed.values['no-local-code'],
       ...chosen === undefined || chosen.length === 0 ? {} : { plugins: chosen }, ...parsed.values.note === undefined ? {} : { note: parsed.values.note },
-    }, context, dependencies)
+    }, context, dependencies, parsed.values.verbose)
   }
   const [file, ...extra] = parsed.positionals
   if (file === undefined || extra.length > 0 || parsed.values.out !== undefined || parsed.values.plugin !== undefined || parsed.values['no-local-code'] || parsed.values.note !== undefined) throw new CliError(EXIT.usage, SETUP_TRANSFER_USAGE)
-  return runImport(ctx, file, { settings: !parsed.values['no-settings'], removeOthers: parsed.values['remove-others'] }, parsed.values['dry-run'], context, dependencies)
+  return runImport(ctx, file, { settings: !parsed.values['no-settings'], removeOthers: parsed.values['remove-others'] }, parsed.values['dry-run'], context, dependencies, parsed.values.verbose)
 }
 
 /**
@@ -88,7 +102,7 @@ export async function runSetupTransfer(args: readonly string[], context: Command
  * @returns the exit code.
  * @throws {CliError} when the setup holds a key, the file exists or a plugin is too large to carry.
  */
-async function runExport(ctx: ChangesContext, out: string, choices: CollectOptions, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+async function runExport(ctx: ChangesContext, out: string, choices: CollectOptions, context: CommandContext, dependencies: ChangesCommandDependencies, verbose: boolean): Promise<CommandResult> {
   try {
     const collected = await dependencies.withHost(ctx.home, ctx.profile, async () => collectSetup(ctx, choices))
     const key = (await loadHomeKey(ctx.home, { create: true }))!
@@ -102,10 +116,11 @@ async function runExport(ctx: ChangesContext, out: string, choices: CollectOptio
     await writeNewFile(out, bytes, 'delorun setup export')
     const local = collected.document.plugins.filter(plugin => plugin.source === 'local').length
     const withoutCode = collected.document.plugins.filter(plugin => plugin.source === 'local' && plugin.files.length === 0).map(plugin => plugin.name)
-    context.stdout(`Wrote ${quoted(out)}: ${plural(collected.document.plugins.length, 'plugin')} (${String(local)} made on this computer${withoutCode.length === 0 ? ', carried with their files' : ''}), ${String(collected.document.models.length)} model ${collected.document.models.length === 1 ? 'entry' : 'entries'}${collected.document.includesSettings ? ` and ${String(collected.document.settings.length)} other settings` : ', no other settings'}, signed by this home's key ${key.keyId}.\n`)
-    if (collected.leftOut.length > 0) context.stdout(`Left out of the file:\n${collected.leftOut.map(line => `  ${printable(line)}`).join('\n')}\n`)
+    context.stdout(`Wrote ${quoted(out)}: ${plural(collected.document.plugins.length, 'plugin')} (${String(local)} made on this computer${withoutCode.length === 0 ? ', carried with their files' : ''}), ${String(collected.document.models.length)} model ${collected.document.models.length === 1 ? 'entry' : 'entries'}${collected.document.includesSettings ? ` and ${String(collected.document.settings.length)} other settings` : ', no other settings'}.\n`)
+    context.stdout(`Signed by this home's key, fingerprint ${groupsOfFour(keyFingerprint(key.publicKey))}\n  The other computer asks you to compare it.\n`)
+    for (const line of leftOutLines(collected.leftOut, 'Left out of the file', verbose)) context.stdout(`${line}\n`)
     if (withoutCode.length > 0) context.stdout(`Named without their code, to copy yourself: ${withoutCode.join(', ')}\n`)
-    context.stdout('The file holds no key, chat, device or answer of setup. Import it on the other computer with: delorun setup import <file>\n')
+    context.stdout('The file holds no key, chat, device or setup answer. Import it on the other computer with: delorun setup import <file>\n')
     return EXIT.ok
   } catch (error: unknown) {
     if (isChangesError(error)) throw new CliError(EXIT.failed, `delorun setup export: ${error.detail}`)
@@ -125,13 +140,13 @@ async function runExport(ctx: ChangesContext, out: string, choices: CollectOptio
  * @returns the exit code.
  * @throws {CliError} for a refused archive, a refused setup, a declined question or a failed step.
  */
-async function runImport(ctx: ChangesContext, file: string, choices: ImportOptions, dryRun: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
+async function runImport(ctx: ChangesContext, file: string, choices: ImportOptions, dryRun: boolean, context: CommandContext, dependencies: ChangesCommandDependencies, verbose: boolean): Promise<CommandResult> {
   const presence = dryRun ? undefined : attestAtTerminal(dependencies)
   const bytes = await readArchiveFile(file, 'delorun setup import')
   try {
     const opened = await openArchive(ctx.home, bytes, file)
     const { plan } = await planSetupImport(ctx, opened.document, choices)
-    context.stdout(importLines(opened, plan, ctx.profile, await readProtection(ctx.home)))
+    context.stdout(importLines(opened, plan, ctx.profile, await readProtection(ctx.home), verbose))
     if (dryRun) {
       context.stdout('Dry run: nothing was changed.\n')
       return EXIT.ok
@@ -203,21 +218,22 @@ async function openArchive(home: string, bytes: Uint8Array, source: string): Pro
  * @param plan - the plan.
  * @param profile - the profile it would replace the setup of.
  * @param protection - the Changes protection setting.
+ * @param verbose - whether to list every setting a setup does not carry instead of counting them.
  * @returns the text.
  */
-export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: string, protection: 'on' | 'off'): string {
+export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: string, protection: 'on' | 'off', verbose = false): string {
   const signer = opened.state === 'verified'
-    ? `Signed by this home's key ${opened.signer.fingerprint}, which this home trusts.`
+    ? `Signed by this home's key ${groupsOfFour(opened.signer.fingerprint)}, which this home trusts.`
     : opened.reason === 'absent'
-      ? 'UNVERIFIED: this file is not signed, so nothing shows who made it or that it is unchanged.'
-      : `UNVERIFIED: signed by a key this home does not know, fingerprint ${opened.signer.fingerprint}. Compare it with the fingerprint the sending computer shows.`
+      ? '! Unsigned: this file is not signed, so nothing shows who made it or that it is unchanged.'
+      : `! Unverified signer · ${groupsOfFour(opened.signer.fingerprint)}\n  Compare it with the fingerprint the other computer printed.`
   const lines = [
     signer,
     'What the archive states about itself:',
     `  File ${quoted(opened.source)}, written by ${quoted(opened.createdBy)} at ${quoted(opened.exportedAt)} from the profile ${quoted(opened.document.profile)}.`,
     ...opened.document.note === undefined ? [] : [`  Note from the sender: ${quoted(opened.document.note)}`],
     '',
-    `Importing it replaces these parts of your profile ${profile}: ${plan.replaces.join('; ')}. Your keys, chats, devices, exemptions and answers of setup are not touched.`,
+    `Importing it replaces these parts of your profile ${profile}: ${plan.replaces.join('; ')}. Your keys, chats, devices, exemptions and setup answers are not touched.`,
   ]
   const adds = plan.install.map((item) => {
     const where = item.plugin.source === 'local' ? 'made on another computer; its code waits for your review' : 'from the registry'
@@ -231,7 +247,7 @@ export function importLines(opened: OpenedSetup, plan: SetupPlan, profile: strin
   lines.push('Model choices and settings:', ...plan.settings.length === 0 ? ['    no change'] : plan.settings.map(line => `    ${printable(line)}`))
   if (plan.endpoints.length > 0) lines.push('  Endpoints these settings send requests to:', ...plan.endpoints.map(line => `    ${printable(line)}`))
   if (plan.endpointNotices.length > 0) lines.push('  Requests and keys go to endpoints that are not the provider\'s default; you are asked about each before anything changes:', ...plan.endpointNotices.map(({ provider, host }) => `    Requests and your ${printable(provider)} key will go to ${printable(host)}`))
-  if (plan.leftOut.length > 0) lines.push('Not applied, because a setup does not carry them:', ...plan.leftOut.map(line => `    ${printable(line)}`))
+  lines.push(...leftOutLines(plan.leftOut, 'Not applied, because a setup does not carry them', verbose))
   lines.push(protection === 'on'
     ? 'Protection is on: the code of a plugin from this file waits in delorun changes list until you review it.'
     : 'Protection is off: the code of a plugin from this file loads at the next start without review. delorun changes protection on makes it wait for you first.')
