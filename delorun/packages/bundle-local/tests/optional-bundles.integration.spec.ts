@@ -32,6 +32,7 @@ interface Row { readonly id?: string; readonly name?: string; readonly disabled?
 /** Each bundle, the row ids its patch inserts at the top level, and the rows that mount unconditionally. */
 const BUNDLES = [
   { dir: 'bundle-browser', rows: ['browser-use', 'browser-use-playwright-mcp', 'browser-use-chrome-devtools-mcp', 'browser-use-stagehand-native'], on: ['browser-use', 'browser-use-playwright-mcp'] },
+  { dir: 'bundle-code-intelligence', rows: ['lsp', 'lsp-stdio', 'tool-lsp'], on: ['lsp'] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
@@ -105,9 +106,36 @@ describe.each(BUNDLES)('$dir', ({ dir, rows, on }) => {
   })
 })
 
+describe('what needs setup', () => {
+  function withEnv<T>(path: string, secret: string | undefined, run: () => T): T {
+    const saved = { PATH: process.env.PATH, secret: process.env.DELORUN_GITHUB_WEBHOOK_SECRET }
+    process.env.PATH = path
+    if (secret === undefined) delete process.env.DELORUN_GITHUB_WEBHOOK_SECRET
+    else process.env.DELORUN_GITHUB_WEBHOOK_SECRET = secret
+    try { return run() } finally {
+      process.env.PATH = saved.PATH
+      if (saved.secret === undefined) delete process.env.DELORUN_GITHUB_WEBHOOK_SECRET
+      else process.env.DELORUN_GITHUB_WEBHOOK_SECRET = saved.secret
+    }
+  }
+  /** A directory on PATH holding the named executables. */
+  function binDir(...names: string[]): string {
+    const dir = mkdtempSync(join(scratch, 'bin-'))
+    for (const name of names) { writeFileSync(join(dir, name), '#!/bin/sh\n'); chmodSync(join(dir, name), 0o755) }
+    return dir
+  }
+  const ids = (dir: string, path: string, secret?: string) => withEnv(path, secret, () => patchRows(dir).filter(row => !isDisabled(row)).map(row => row.id))
+
+  it('mounts the language server only when typescript-language-server is on PATH', () => {
+    expect(ids('bundle-code-intelligence', binDir())).toEqual(['lsp'])
+    expect(ids('bundle-code-intelligence', binDir('typescript-language-server'))).toEqual(['lsp', 'lsp-stdio', 'tool-lsp'])
+  })
+})
+
 describe('default configuration', () => {
   const CHECKED = [
     ['bundle-browser', 'browser-use-playwright-mcp', 'experimental/browser-use-playwright-mcp'],
+    ['bundle-code-intelligence', 'lsp-stdio', 'lsp/lsp-stdio'],
   ] as const
 
   it.each(CHECKED)('%s: row %s passes its plugin schema', async (dir, id, plugin) => {
