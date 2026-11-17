@@ -164,6 +164,12 @@ describe('the Browser choices', () => {
     expect(onOpenSettings).toHaveBeenCalledExactlyOnceWith('models')
   })
 
+  it('offers no control for the own-browser pairing fix, which belongs to the Plugins panel', () => {
+    show({ readiness: { kind: 'needs-setup', reason: 'Needs the extension paired', fix: { kind: 'browse-pair', extension: 'browse-extension' } } })
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByRole('button', { name: en['browser.fix.settings'] })).toBeNull()
+  })
+
   it.each<readonly [string, BrowserReadiness, string]>([
     ['is being checked', { kind: 'checking' }, en['browser.checking']],
     ['could not be read', { kind: 'problem', message: 'bad needs' }, 'Delorun could not read what Browser needs: bad needs'],
