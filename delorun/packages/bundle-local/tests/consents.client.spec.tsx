@@ -1517,7 +1517,8 @@ describe('a refusal that needs the device unlocked', () => {
   function unlockStore() {
     const view: UnlockView = { place: 'device', state: { kind: 'none', unlockMinutes: 15 }, dialog: null, ended: 0, lockFailed: false }
     const open = vi.fn()
-    const source = { hooks: { unlock: { getSnapshot: () => view, subscribe: () => () => {} } }, open } as unknown as UnlockSource
+    const noop = async (): Promise<void> => {}
+    const source: UnlockSource = { hooks: { unlock: { getSnapshot: () => view, subscribe: () => () => {} } }, refresh: noop, refused: () => {}, open, request: noop, cancel: noop, lock: noop, dismissEnded: () => {}, dispose: () => {} }
     return { source, open }
   }
 

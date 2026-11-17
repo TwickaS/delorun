@@ -96,7 +96,6 @@ describe('the packs file', () => {
     const keys = throwawayKeys()
     const root = trustRootChain([rootFile(keys).bytes], Date.parse('2026-11-06T12:00:00Z') / 1000).at(-1)!
     const manifestBytes = envelope(manifestContent('0.1.0', Buffer.from('a')), [keys.targets])
-    const manifest = verifySignedManifest(root.metadata, manifestBytes)
     const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifestBytes).digest('hex'), packs: [] }
     const bytes = envelope(signed, [keys.targets])
     expect(verifyPacks(root.metadata, manifestBytes, bytes).packs).toEqual([])
@@ -124,7 +123,6 @@ describe('signing the packs file', () => {
     const outputs = await signPacks(dir, '0.1.0', manifestBytes, keys.targets)
     expect(outputs.map(([name]) => name)).toEqual(['delorun-0.1.0.packs.json', 'delorun-0.1.0.packs.entry.json'])
     const root = trustRootChain([rootFile(keys).bytes], Date.parse('2026-11-06T12:00:00Z') / 1000).at(-1)!
-    const manifest = verifySignedManifest(root.metadata, manifestBytes)
     expect(verifyPacks(root.metadata, manifestBytes, outputs[0]![1] as Buffer).packs.map(pack => pack.name)).toEqual(['demo'])
   })
 

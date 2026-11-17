@@ -4,8 +4,8 @@
  *
  * @module @delorun/plugin-packs/hub
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { InstallQueue, type InstallItem } from '@delorun/install-queue'
 import { checkInstalledPack, isRunningRelease, packDownloadSize, packVariantFor, type InstalledRelease } from '@delorun/runtime-store'
 import type { PacksEnvironment } from './environment.ts'

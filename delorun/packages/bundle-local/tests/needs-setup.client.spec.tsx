@@ -32,8 +32,7 @@ function host(...answers: Array<RequirementsAnswer | 'down'>): { fetch: HostFetc
 
 function show(fetch: HostFetch, subject: NeedsSetupProps['subject'], extra: { openSettings?: (s: string) => void, copy?: (t: string) => Promise<void> } = {}) {
   const store = new RequirementsStore(fetch, () => 'en')
-  const props = { t: makeTranslate(en), subject, store, openSettings: extra.openSettings ?? vi.fn(), copy: extra.copy ?? (async () => {}) } as unknown as NeedsSetupProps
-  return { store, ...render(<NeedsSetup {...props} />) }
+  return { store, ...render(<NeedsSetup t={makeTranslate(en)} subject={subject} store={store} openSettings={extra.openSettings ?? vi.fn()} copy={extra.copy ?? (async () => {})} />) }
 }
 
 const row = { kind: 'row', pkg: PKG, row: ROW } as const
