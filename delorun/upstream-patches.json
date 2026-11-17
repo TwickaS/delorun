@@ -2707,6 +2707,24 @@
       "class": "delorun-feature",
       "feature": "agents-setup",
       "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
+    },
+    {
+      "path": "apps/web/public/favicon.ico",
+      "class": "delorun-feature",
+      "feature": "TODO",
+      "reason": "TODO"
+    },
+    {
+      "path": "packages/client/tsdown.client.ts",
+      "class": "delorun-feature",
+      "feature": "client-style-collisions",
+      "reason": "Keys injected style tags by repository-relative path and fails the build when two stylesheets in one bundle share an id, so same-named stylesheets both apply."
+    },
+    {
+      "path": "scripts/client-style-tags.ts",
+      "class": "delorun-feature",
+      "feature": "client-style-collisions",
+      "reason": "Style tag id and collision check used by the client bundle config."
     }
   ],
   "retired": []
