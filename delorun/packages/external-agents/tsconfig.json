@@ -11,6 +11,7 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/schemastery" },
+    { "path": "../../../packages/core/agent" },
     { "path": "../../../packages/core/session" },
     { "path": "../../../packages/llm/llm" },
     { "path": "../../../packages/subprocess/subprocess" },

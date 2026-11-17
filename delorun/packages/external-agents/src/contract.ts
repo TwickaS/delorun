@@ -1,18 +1,19 @@
 /**
  * The driver contract between Delorun's start gate and the program drivers for Claude Code and Codex, and the service
  * interfaces of the gate (`ctx.externalAgents`) and the account and limits store (`ctx.agentAccounts`). Its imports are
- * type-only, so every driver, the limits service and the CLI import it without loading another package.
+ * type-only, so every driver, the limits service, the consent and the CLI import it without loading another package.
  *
  * A driver turns one pinned program into an ordered {@link ProgramEvent} stream. It never starts a process itself: the
  * gate hands it {@link ProgramSpawn}, the only way to get one (T1).
  * @module @delorun/external-agents/contract
  */
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle, SubprocessStdio } from '@deepseek-ai/dsh-subprocess'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
-export type { JsonValue, SessionId, SubprocessHandle, TokenUsage }
+export type { Agent, JsonValue, SessionId, SubprocessHandle, TokenUsage }
 
 /** An external agent by upstream's provider name. */
 export type ExternalAgentName = 'claude-code' | 'codex'
@@ -436,4 +437,113 @@ export interface AgentAccounts {
    * @returns the reached window with the latest reset time, or undefined.
    */
   reachedLimit(record: AccountRecord, now: number): ReachedLimit | undefined
+}
+
+/** The consent row the gate reads to tell "consent switched off" from "consent missing" (review D6). */
+export const DELEGATION_CONSENT_ROW_ID = 'delorun-delegation-consent'
+
+/**
+ * When a seat review runs: at hand-off (the first program for a new seat), at resume (a program for a seat whose
+ * earlier program ended), or at the start of each seat turn. A turn review never asks anyone.
+ */
+export type SeatReviewPhase = 'hand-off' | 'resume' | 'turn'
+
+/** The facts of one seat review. */
+export interface SeatReview {
+  /** The agent the seat runs. */
+  readonly provider: ExternalAgentName
+  /** The Agent that created the seat. */
+  readonly creator: Agent
+  /** The chat at the top of the seat's tree, whose workspace the lease and grant are keyed to. */
+  readonly root: Agent
+  /** The seat child. */
+  readonly child: Agent
+  /** The run folder. */
+  readonly cwd: string
+  /** The seat's label, named on the card. */
+  readonly label?: string
+  /** When the review runs. */
+  readonly phase: SeatReviewPhase
+  /** Aborts a pending card. */
+  readonly signal: AbortSignal
+}
+
+/** A seat review's answer; `timeoutMs` bounds one seat turn. */
+export type SeatVerdict =
+  | { readonly kind: 'allow'; readonly timeoutMs: number }
+  | { readonly kind: 'refuse'; readonly reason: string }
+
+/** One approval of a seat, kept in memory only until an end event (T4, review D11). */
+export interface SeatLease {
+  /** The seat child. */
+  readonly child: SessionId
+  /** The root chat when the seat was allowed. */
+  readonly root: SessionId
+  /** The workspace key when the seat was allowed. */
+  readonly workspace: string
+  /** The run folder when the seat was allowed. */
+  readonly cwd: string
+  /** The agent allowed. */
+  readonly provider: ExternalAgentName
+  /** Whether the workspace was in Delorun's workspace list when allowed; the lease ends once such a workspace is removed. */
+  readonly workspaceListed: boolean
+  /** When the person or a grant allowed it, in milliseconds since the epoch. */
+  readonly grantedAt: number
+}
+
+/** Why a lease ended. */
+export type SeatLeaseEnd =
+  /** The child, the root or an ancestor of the child was archived. */
+  | 'archived'
+  /** The person revoked the lease. */
+  | 'revoked'
+  /** The workspace grant for the agent was revoked. */
+  | 'grant-revoked'
+  /** The consent switch turned off or the consent's service stopped. */
+  | 'consent-off'
+  /** A review refused, or the root, workspace, run folder or agent no longer match the lease, or its workspace was removed. */
+  | 'refused'
+
+/**
+ * The seat side of Delorun's consent service (`ctx.delegationConsent`): the gate finds it by the presence of
+ * `reviewSeat` and refuses every seat start without it (T3).
+ */
+export interface SeatConsent {
+  /**
+   * Review one seat: the shared ordered rules, then the lease, the grant, and at hand-off or resume a card.
+   * @param review - the facts of the review.
+   * @returns the verdict; a refusal ends the child's lease.
+   */
+  reviewSeat(review: SeatReview): Promise<SeatVerdict>
+  /**
+   * The child's lease.
+   * @param child - the seat child.
+   * @returns the lease, or undefined.
+   */
+  leaseOf(child: SessionId): SeatLease | undefined
+  /**
+   * End the child's lease and its run rules.
+   * @param child - the seat child.
+   * @param reason - why.
+   */
+  endLease(child: SessionId, reason: SeatLeaseEnd): void
+  /**
+   * Hear every lease end, so the gate stops that child's program; a registration effect.
+   * @param listener - called with the ended lease and why.
+   * @returns the disposer.
+   */
+  onLeaseEnded(listener: (lease: SeatLease, reason: SeatLeaseEnd) => void): () => void
+  /**
+   * The rules the person allowed "for this run" for the child.
+   * @param child - the seat child.
+   * @returns the rules, oldest first; none without a lease.
+   */
+  runRules(child: SessionId): readonly ProgramRunRule[]
+  /**
+   * Keep one "for this run" rule beside the child's lease, until the lease ends (review D12).
+   * @param child - the seat child.
+   * @param rule - the rule.
+   * @returns false, keeping nothing, when the child has no lease.
+   */
+  addRunRule(child: SessionId, rule: ProgramRunRule): boolean
 }
