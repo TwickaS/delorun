@@ -11,9 +11,28 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@delorun/contract-update-report": "workspace:*"
+    "@delorun/contract-home-process": "workspace:*",
+    "@delorun/contract-update-report": "workspace:*",
+    "@delorun/home-process": "workspace:*",
+    "@delorun/plugin-changes": "workspace:*",
+    "@delorun/update": "workspace:*",
+    "semver": "^7.8.5"
   },
   "delorun": {
     "state": "shipped"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@delorun/bundle-local": "workspace:*",
+    "@types/semver": "^7.8.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.host.json"
   }
 }

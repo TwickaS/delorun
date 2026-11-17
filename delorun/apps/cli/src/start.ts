@@ -48,7 +48,7 @@ import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delorun/home-process'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateChannelAccess, type UpdateSupport } from '@delorun/home-process'
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
@@ -58,6 +58,7 @@ import { runningComposition, type HarnessContext, type RunningComposition } from
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
 import { provideChangesHarness } from './changes/harness-service.ts'
 import { provideChangesRestart, restartSupport, type RunningHolder } from './changes/restart-service.ts'
+import { provideUpdateChannel } from './update/channel-service.ts'
 import { relaunchForeground, retryDetached, retryForeground, retryHandOff, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -627,9 +628,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       running,
       startId,
       host: {
-        boot: async (_access, controls) => {
+        boot: async (access, controls) => {
           if (handover !== undefined) await repointForSuccessor(request)
-          return bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted })
+          return bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })
         },
       },
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
@@ -716,17 +717,21 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  * @param harness - the running runtime's harness, which the studio's Changes routes decide changes to Delorun itself
  *   against; undefined outside the runtime store.
  * @param restart - the home process's restart and what this Host boots with, which the studio's Restart route uses;
- *   undefined, or a control of undefined, outside the runtime store.
+ *   undefined, or a control of undefined, outside the runtime store; `channel` is the home process's update channel,
+ *   which the studio's update routes use.
  * @returns the booted profile.
  */
-export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext, restart?: { readonly control: RestartControl | undefined, readonly running: RunningComposition }): Promise<BootedProfile> {
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext, restart?: { readonly control: RestartControl | undefined, readonly running: RunningComposition, readonly channel?: UpdateChannelAccess }): Promise<BootedProfile> {
   const environment = dependencies.loadEnvironment()
   // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
   registerEnvironment(process.env, homeLog.redactor)
   return dependencies.runProfile({ ...options, environment, prepare: (root) => {
     attachHomeLogs(root, homeLog)
     provideChangesHarness(root, harness)
-    if (restart !== undefined) provideChangesRestart(root, restart.control, restart.running)
+    if (restart !== undefined) {
+      provideChangesRestart(root, restart.control, restart.running)
+      provideUpdateChannel(root, restart.control === undefined ? undefined : restart.channel)
+    }
   } })
 }
 
@@ -751,7 +756,7 @@ export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' 
  *   values for secret-role fields its patch files hold are moved into the credentials store ({@link settleSecrets}).
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
-async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry, restart: { readonly control: RestartControl, readonly running: RunningHolder }): Promise<RunningHost> {
+async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry, restart: { readonly control: RestartControl, readonly running: RunningHolder, readonly channel: UpdateChannelAccess }): Promise<RunningHost> {
   const logger = homeLog.logger
   // What this process runs, read before its first Host boots: its tree never changes, so a Host it boots again after a
   // failed restart runs the same files. A record that cannot be read leaves it unknown, so every change waits for a restart.
@@ -788,7 +793,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
-    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger), stored === undefined ? undefined : { control: restart.control, running: restart.running.current })
+    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger), stored === undefined ? undefined : { control: restart.control, running: restart.running.current, channel: restart.channel })
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)

@@ -179,6 +179,31 @@ export class UpdateCheckService extends Service {
   }
 
   /**
+   * What the home holds now: the last check's time and failure, and the notice.
+   * @returns the state, or `undefined` when no check is attached.
+   */
+  async state(): Promise<UpdateCheckState | undefined> {
+    return this.source?.read()
+  }
+
+  /**
+   * Run one check now, for the studio's Check now, within the configured deadline. The schedule's next wake still
+   * decides from its own clock; the record the check writes is what the next Host start reads.
+   * @returns the state after the check, or `undefined` when no check is attached.
+   */
+  async checkNow(): Promise<UpdateCheckState | undefined> {
+    const source = this.source
+    if (source === undefined) return undefined
+    const stop = new AbortController()
+    const dispose = this.ctx.effect(() => () => { stop.abort() }, `${name}: a check run from the studio`)
+    try {
+      return await source.check(this.config.timeoutSeconds * 1000, stop.signal)
+    } finally {
+      dispose()
+    }
+  }
+
+  /**
    * The verified release notes for the notice's release.
    * @returns the notes with their release, or `undefined` when no check is attached or no verified notes are stored.
    */
