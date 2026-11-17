@@ -67,8 +67,7 @@ export const Config: z<Partial<DelegationConsentSettings>, Config> = z.object({
 export const providesDelegationConsent = true
 
 /**
- * The consent's `enabled` field as a switch only the home's own computer turns off. While the plugin is mounted
- * it registers the switch with `@delorun/home-auth`, whose reach policy then refuses a device's settings write that could
+ * The consent's `enabled` field as a switch only the home's own computer turns off. The plugin registers the switch with `@delorun/home-auth`, whose reach policy then refuses a device's settings write that could
  * turn it off, unlocked or not; the run time limit and turning it on stay ordinary settings writes.
  */
 export const EXTERNAL_AGENT_CONSENT_SWITCH: ComputerOnlySwitch = Object.freeze({
@@ -101,7 +100,7 @@ export const FULL_ACCESS_STARTS_AGENTS_SWITCH: ComputerOnlySwitch = Object.freez
 })
 
 /**
- * Mount the consent's service, routes, tool guard and computer-only switch in a scope of their own.
+ * Mount the consent's service, routes and tool guard in a scope of their own.
  * @param ctx - the scope, disposed when the switch turns off.
  * @param config - the row's live configuration.
  */
@@ -129,6 +128,15 @@ function mountConsent(ctx: Context, config: Config): void {
     // The refusing service, mounted when the real one failed, has no grants to list.
     if (scope.delegationConsent instanceof DelorunDelegationConsent) registerDelegationRoutes(scope, scope.delegationConsent)
   })
+}
+
+/**
+ * Register the plugin's fields as computer-only switches with `@delorun/home-auth`. The plugin's scope holds them
+ * whatever `enabled` is: a device's write while the consent is off takes effect when the computer turns it on.
+ * @param ctx - the plugin's scope, which removes the registrations when it is disposed.
+ * @param config - the row's live configuration, which the level switches read at each settings write.
+ */
+function registerSwitches(ctx: Context, config: Config): void {
   ctx.inject(['homeAuth'], (scope) => {
     scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(EXTERNAL_AGENT_CONSENT_SWITCH), 'delegation consent: computer-only switch')
     scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(FULL_ACCESS_STARTS_AGENTS_SWITCH), 'delegation consent: computer-only full-access switch')
@@ -139,11 +147,12 @@ function mountConsent(ctx: Context, config: Config): void {
 
 /**
  * Mount the plugin in the scope that loads it: the consent while `enabled` is on, mounted and disposed as a saved
- * setting turns it on and off.
+ * setting turns it on and off. The computer-only switches stay registered while it is off.
  * @param ctx - the scope.
  * @param config - the row's validated configuration.
  */
 export function apply(ctx: Context, config: Config): void {
+  registerSwitches(ctx, config)
   let mounted: Fiber | undefined
   const follow = (): void => {
     if (config.enabled.get() === (mounted !== undefined)) return

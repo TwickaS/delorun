@@ -104,8 +104,14 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     return describeAgent(provider)
   }
 
-  permissionLevel(provider: string): SubagentSafetyLevel | undefined {
-    return provider in AGENT_LEVEL_FIELDS ? this.options.levelOf(provider as keyof typeof AGENT_LEVEL_FIELDS) : undefined
+  /**
+   * The level a provider runs at: the saved level of Claude Code or Codex, and `careful`, the strictest, for a provider
+   * registered under any other name, which has no level setting of its own.
+   * @param provider - the provider's registered name.
+   * @returns the level.
+   */
+  permissionLevel(provider: string): SubagentSafetyLevel {
+    return Object.hasOwn(AGENT_LEVEL_FIELDS, provider) ? this.options.levelOf(provider as keyof typeof AGENT_LEVEL_FIELDS) : 'careful'
   }
 
   /**

@@ -355,9 +355,9 @@ describe('the workspace grant', () => {
 })
 
 describe('the safety levels', () => {
-  it('names the saved level of Claude Code and Codex at each start, and none for another provider', async () => {
+  it('names the saved level of Claude Code and Codex at each start, and Careful for a provider under another name', async () => {
     const { consent } = await mounted()
-    expect([consent.permissionLevel('claude-code'), consent.permissionLevel('codex'), consent.permissionLevel('other')]).toEqual(['standard', 'standard', undefined])
+    expect([consent.permissionLevel('claude-code'), consent.permissionLevel('codex'), consent.permissionLevel('claude-code-2'), consent.permissionLevel('toString')]).toEqual(['standard', 'standard', 'careful', 'careful'])
   })
 
   it('lists both levels and says what Claude Code\'s sandbox lacks only where its level needs it', async () => {
@@ -626,6 +626,69 @@ describe('mounting', () => {
     saved.codexLevel = 'careful'
     expect([claude?.ranked.current(), codex?.ranked.current()]).toEqual(['standard', 'careful'])
     await ctx.fiber.dispose()
+  })
+
+  describe('with the consent off', () => {
+    const ns = 'delorun-delegation-consent'
+    const saved = { claudeCodeLevel: 'standard', codexLevel: 'careful' }
+
+    /**
+     * Mount the plugin with `enabled` as given and put a reach device and the computer in front of the registered switches.
+     * @param enabled - the consent's saved switch.
+     * @returns what the plugin registered, the device's and the computer's verdict on a settings patch, and the context.
+     */
+    async function offered(enabled: boolean) {
+      const ctx = new Context()
+      const registered: ComputerOnlySwitch[] = []
+      ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: ComputerOnlySwitch) => { registered.push(target); return () => undefined } } as never)
+      apply(ctx, { ...configOf({ enabled }), claudeCodeLevel: { get: () => saved.claudeCodeLevel }, codexLevel: { get: () => saved.codexLevel } } as never)
+      await vi.waitFor(() => { expect(registered).toHaveLength(4) })
+      const facts = {
+        workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => ({ id: 'elevation-1' }), pageUnlockOf: () => undefined,
+        pinEnabled: () => false, keyRefs: () => new Set(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+        computerOnlySwitches: () => registered, protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
+        defaultPermission: () => undefined, phonePowers: () => 'full', dangerousMode: () => false, touchUnlock: () => {},
+      }
+      const asDevice = createCondition(facts as never, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } as never)
+      const write = (who: typeof asDevice) => (patch: object) => who({ action: 'settings/update', resource: { kind: 'global' }, args: { ns, patch } } as never)
+      return { ctx, registered, device: write(asDevice) }
+    }
+
+    it('refuses a reach device\'s write that turns the full-access start on, and takes one that turns it off', async () => {
+      const { ctx, device } = await offered(false)
+      expect(device({ fullAccessStartsAgents: true })).toEqual({ kind: 'deny', reason: 'loopback-required: turning external agents starting without asking in Full access chats on' })
+      expect(device({ fullAccessStartsAgents: false })).toEqual({ kind: 'allow' })
+      await ctx.fiber.dispose()
+    })
+
+    it('refuses a reach device\'s write that raises a level, and takes one that lowers it', async () => {
+      const { ctx, device } = await offered(false)
+      expect(device({ claudeCodeLevel: 'unrestricted' })).toEqual({ kind: 'deny', reason: 'loopback-required: loosening the Claude Code level' })
+      expect(device({ codexLevel: 'standard' })).toEqual({ kind: 'deny', reason: 'loopback-required: loosening the Codex level' })
+      expect(device({ claudeCodeLevel: 'careful' })).toEqual({ kind: 'allow' })
+      expect(device({ claudeCodeLevel: 'standard' })).toEqual({ kind: 'allow' })
+      expect(device({ codexLevel: 'careful' })).toEqual({ kind: 'allow' })
+      await ctx.fiber.dispose()
+    })
+
+    it('refuses a reach device\'s write that turns the consent off, and the computer\'s settings take every value', async () => {
+      const { ctx, device } = await offered(false)
+      expect(device({ enabled: false })).toMatchObject({ kind: 'deny' })
+      expect(device({ enabled: true })).toEqual({ kind: 'allow' })
+      // The computer's own writes are loopback requests, which the reach policy never sees; its settings validate and apply.
+      const written = configOf({ enabled: false, fullAccessStartsAgents: true, claudeCodeLevel: 'unrestricted', codexLevel: 'unrestricted' })
+      expect([written.fullAccessStartsAgents.get(), written.claudeCodeLevel.get(), written.codexLevel.get()]).toEqual([true, 'unrestricted', 'unrestricted'])
+      await ctx.fiber.dispose()
+    })
+
+    it('registers each switch once whatever the consent is, and removes them with the plugin', async () => {
+      for (const enabled of [false, true]) {
+        const { ctx, registered } = await offered(enabled)
+        await new Promise(resolve => setTimeout(resolve, 20))
+        expect(registered.map(target => target.field)).toEqual(['enabled', 'fullAccessStartsAgents', 'claudeCodeLevel', 'codexLevel'])
+        await ctx.fiber.dispose()
+      }
+    })
   })
 
   it('defaults both levels to Standard and refuses an unknown level', () => {
