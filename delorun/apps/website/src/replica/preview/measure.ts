@@ -12,6 +12,8 @@ import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { build } from 'vite'
 
+// The sessions are stand-ins; this measures a review build, never one that is deployed.
+process.env['SITE_ALLOW_STANDINS'] = '1'
 const outDir = join(tmpdir(), 'delorun-replica-measure')
 rmSync(outDir, { recursive: true, force: true })
 await build({
