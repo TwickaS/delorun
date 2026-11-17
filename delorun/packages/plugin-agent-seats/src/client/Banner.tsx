@@ -54,7 +54,7 @@ export function chipsOf(seat: AgentSeatView, t: SeatTranslate, clock: (epochMs: 
   const name = AGENT_NAMES[seat.agent]
   const chips: { text: string; warn: boolean }[] = []
   if (seat.version !== undefined) chips.push({ text: t('chip.version', { agent: name, version: seat.version }), warn: false })
-  chips.push({ text: t('chip.settings', { settings: seat.ownSettings }), warn: false })
+  chips.push({ text: seat.ownSettings === '' ? t('chip.settingsUnknown') : t('chip.settings', { settings: seat.ownSettings }), warn: false })
   chips.push({ text: t('chip.sandbox'), warn: true })
   if (seat.sandboxUnavailable === true) chips.push({ text: t('chip.noSandbox'), warn: true })
   if (seat.plan !== undefined) chips.push({ text: t('chip.plan', { plan: seat.plan }), warn: false })

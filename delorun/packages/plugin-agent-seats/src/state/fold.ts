@@ -13,8 +13,8 @@ import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from '.
 /** The fold's own version; bump it when the state fields or the fold change. */
 export const SEAT_FOLD_VERSION = 5
 
-/** The shortest `ownSettings` the view shows before the program's settings are known. */
-export const DEFAULT_OWN_SETTINGS = 'its own settings'
+/** The `ownSettings` the view carries before the program's settings are known; the chat then names no setting. */
+export const DEFAULT_OWN_SETTINGS = ''
 
 /** The longest final answer the view keeps, in characters. */
 export const LAST_ANSWER_LIMIT = 4000

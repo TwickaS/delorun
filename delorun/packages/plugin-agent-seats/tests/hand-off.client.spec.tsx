@@ -39,9 +39,10 @@ describe('the hand-off line', () => {
     expect(screen.getByText('Handed to Claude Code · Fix export date')).toBeTruthy()
     expect(screen.getByText('Finished in 2m 14s')).toBeTruthy()
     expect(container.querySelector('[data-handoff-answer]')?.textContent).toContain('The date now uses local time.')
-    fireEvent.click(screen.getByRole('button', { name: 'Open Fix export date, Claude Code' }))
+    // The quoted answer carries the one "Open its chat"; the row keeps no second button.
+    expect(screen.queryByRole('button', { name: 'Open Fix export date, Claude Code' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Open its chat' }))
-    expect(openChild).toHaveBeenCalledTimes(2)
+    expect(openChild).toHaveBeenCalledTimes(1)
     expect(openChild).toHaveBeenCalledWith('lead', 'c1')
   })
 

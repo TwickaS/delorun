@@ -35,7 +35,7 @@ function banner(seat: AgentSeatView | undefined, ...given: [] | [SeatClient | un
 describe('the opening card', () => {
   it('shows the facts as chips, with the rule, in the agent\'s chat', () => {
     const { container } = banner(base)
-    for (const text of ['Claude Code 2.3.14', 'Own settings: accept edits', 'Delorun sandbox: off', 'Plan: Max', '5-hour limit 82% · resets T1410', 'Weekly 46%']) {
+    for (const text of ['Claude Code 2.3.14', 'Your own settings: accept edits', 'Delorun sandbox: off', 'Plan: Max', '5-hour limit 82% · resets T1410', 'Weekly 46%']) {
       expect(screen.getByText(text)).toBeTruthy()
     }
     expect(container.querySelector('[data-seat-rule]')).not.toBeNull()
@@ -55,9 +55,9 @@ describe('the opening card', () => {
     expect(container.querySelector('[data-seat-line]')).not.toBeNull()
     expect(screen.getByText('Claude Code · outside Delorun')).toBeTruthy()
     expect(screen.getByText('Sandbox off')).toBeTruthy()
-    expect(screen.queryByText('Own settings: accept edits')).toBeNull()
+    expect(screen.queryByText('Your own settings: accept edits')).toBeNull()
     fireEvent.click(screen.getByLabelText('Show what this agent is'))
-    expect(screen.getByText('Own settings: accept edits')).toBeTruthy()
+    expect(screen.getByText('Your own settings: accept edits')).toBeTruthy()
     fireEvent.click(screen.getByText('Hide the card'))
     expect(container.querySelector('[data-seat-line]')).not.toBeNull()
   })
@@ -125,7 +125,12 @@ describe('the opening card chips', () => {
     expect(screen.queryByText(/5-hour/)).toBeNull()
     expect(screen.queryByText(/Weekly/)).toBeNull()
     expect(screen.queryByText(/Codex 1/)).toBeNull()
-    expect(screen.getByText('Own settings: default')).toBeTruthy()
+    expect(screen.getByText('Your own settings: default')).toBeTruthy()
+  })
+
+  it('names no setting while the program\'s settings are unknown', () => {
+    banner({ agent: 'codex', ownSettings: '', sandbox: 'off', state: 'working' })
+    expect(screen.getByText('Your own settings')).toBeTruthy()
   })
 
   it('says the 5-hour figure without a reset time and warns at 80 percent and above', () => {

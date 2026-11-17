@@ -55,6 +55,8 @@ export function HandOffLine(props: HandOffProps) {
   const title = input.task === '' ? t('handoff.lineNoTask', { agent: program }) : t('handoff.line', { agent: program, task: input.task })
   const open = childId === undefined ? undefined : () => { openChild(sessionId, childId) }
   const answer = running || failed ? undefined : seat?.lastAnswer
+  // The quoted answer carries its own "Open its chat", so the row's button would offer it twice.
+  const answered = answer !== undefined && answer !== ''
   return (
     <div className={css.handoff} data-handoff={agent} data-state={failed ? 'failed' : running ? 'running' : 'finished'}>
       <div className={css.handoffRow}>
@@ -64,14 +66,14 @@ export function HandOffLine(props: HandOffProps) {
         <span className={css.handoffTitle} title={title}>{title}</span>
         <span className={css.spacer} />
         <span className={css.state}>{stateText}</span>
-        {open !== undefined && (
+        {open !== undefined && !answered && (
           <button type="button" className={css.open} aria-label={t('handoff.open.aria', { task: input.task, agent: program })} onClick={open}>
             {t('handoff.open')}
           </button>
         )}
       </div>
       {result?.withoutAsking === true && <span className={css.noAsk}>{t('handoff.fullAccess')}</span>}
-      {answer !== undefined && answer !== '' && (
+      {answered && (
         <blockquote className={css.quote} data-colour={colour} data-handoff-answer>
           <span className={css.quoteTitle}>{t('handoff.answer.title', { agent: program })}</span>
           <p className={css.quoteText}>{answer}</p>
