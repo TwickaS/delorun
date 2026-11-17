@@ -42,7 +42,7 @@ A flag is declared in two places, which a spec holds equal.
    "delorun": { "previewFlags": { "delorun-onboarding": ["onboarding.previewSteps"] } }
    ```
 
-The list exists because two readers cannot run plugins: `delorun preview`, which also works while Delorun is stopped, and the Host for a row that is off. The Host refuses a declaration whose id no bundle lists, and `assertFlagsIndexed` (`./manifest`) lets the plugin's spec fail when the list and the declarations differ.
+The list exists because two readers cannot run plugins: `delorun preview`, which also works while Delorun is stopped, and the Host for a row that is off. The Host refuses a declaration whose id no bundle lists, after reading the lists again for a bundle added while Delorun runs, and `assertFlagsIndexed` (`./manifest`) lets the plugin's spec fail when the list and the declarations differ.
 
 ## Turn a flag on
 

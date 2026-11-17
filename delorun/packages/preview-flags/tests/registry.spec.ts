@@ -5,7 +5,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { previewFlagId, type PreviewFlagDeclaration } from '../src/flags.ts'
 import { assertFlagsIndexed, listedFlags, readFlagIndex, type FlagBundle, type FlagIndex } from '../src/manifest.ts'
 import { createPreviewFlags } from '../src/registry.ts'
@@ -146,6 +146,21 @@ describe('the Host\'s flags', () => {
     expect(() => flags.declare(flag(BROWSER))).toThrow('@test/plugin-onboarding declares "browser.ownChrome", which no bundle of this profile lists under delorun.previewFlags in its package.json. Listed flags: onboarding.previewSteps')
     flags.declare(flag())
     expect(() => flags.declare(flag(STEPS, '@test/other'))).toThrow('@test/other declares "onboarding.previewSteps", which @test/plugin-onboarding already declared')
+  })
+
+  it('read the index again for a flag it does not list, so a bundle added while Delorun runs can declare its flags', () => {
+    // Pins the re-read: without it a plugin pack added after the row loaded is refused until Delorun restarts.
+    const reindex = vi.fn(() => index({ 'onboarding.previewSteps': 'delorun-onboarding', 'browser.ownChrome': 'delorun-browser' }))
+    const { flags } = createPreviewFlags({ configured: {}, index: ONE, rowOff: rowsOn, reindex })
+    flags.declare(flag())
+    expect(reindex).not.toHaveBeenCalled()
+    expect(flags.isOn(BROWSER)).toBe(false)
+    flags.declare(flag(BROWSER, '@test/plugin-browser'))
+    expect(reindex).toHaveBeenCalledTimes(1)
+    // A flag the fresh index still does not list is refused, with the fresh list.
+    const other = previewFlagId('other.flag')
+    expect(() => flags.declare(flag(other))).toThrow('Listed flags: browser.ownChrome, onboarding.previewSteps')
+    expect(() => flags.isOn(other)).toThrow('is not a declared preview flag')
   })
 
   it('take any declaration in a tree without a profile, where no index exists', () => {

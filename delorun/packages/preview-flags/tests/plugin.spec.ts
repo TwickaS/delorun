@@ -89,6 +89,22 @@ describe('the row', () => {
     expect(ctx.previewFlags.isOn(STEPS)).toBe(true)
   })
 
+  it('takes the declaration of a bundle the profile\'s manifest gained after the row loaded', async () => {
+    const { ctx } = await tree()
+    const fiber = ctx.plugin({ name, inject: [...inject], Config, apply })
+    await fiber.await()
+    const added = previewFlagId('browser.ownChrome')
+    const flag: PreviewFlagDeclaration = { ...FLAG, id: added, owner: '@test/plugin-browser' }
+    expect(() => ctx.previewFlags.declare(flag)).toThrow('which no bundle of this profile lists')
+    // The plugin manager adds a bundle: it writes the profile's manifest, and the bundle lists its flag.
+    const { dir } = ctx.get('profileContext') as { readonly dir: string }
+    await mkdir(join(dir, 'node_modules', '@test', 'bundle-browser'), { recursive: true })
+    await writeFile(join(dir, 'node_modules', '@test', 'bundle-browser', 'package.json'), JSON.stringify({ name: '@test/bundle-browser', delorun: { previewFlags: { 'delorun-browser': ['browser.ownChrome'] } } }))
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'profile', private: true, dsh: { profile: { bundles: ['@test/bundle-studio', '@test/bundle-browser'] } } }))
+    ctx.previewFlags.declare(flag)
+    expect(ctx.previewFlags.list().map(each => each.id)).toEqual(['browser.ownChrome'])
+  })
+
   it('reads a flag\'s row as off in a tree without a Loader', async () => {
     const ctx = new Context()
     onTestFinished(async () => { await ctx.fiber.dispose() })

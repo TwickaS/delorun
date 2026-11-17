@@ -1,7 +1,7 @@
 /**
  * The Host's preview flags: the flags the running plugins declare, checked against the profile row's `flags` and the
  * bundles' static index. Creation fails on a configured flag no bundle lists; a declaration fails when the index does
- * not list it or another plugin already declared it.
+ * not list it, read again for a bundle added since, or another plugin already declared it.
  * @module @delorun/preview-flags/registry
  */
 import { knownList, type PreviewFlagDeclaration, type PreviewFlagId } from './flags.ts'
@@ -38,6 +38,12 @@ export interface PreviewFlagsSource {
   /** The bundles' index; undefined in a tree without a profile, where nothing is configured and declarations are not checked against it. */
   readonly index: FlagIndex | undefined
   /**
+   * Read the index again, for a flag the index does not list: a bundle added while Delorun runs, such as a plugin
+   * pack, lists its flags only after the row has loaded. Absent where the index cannot change.
+   * @returns the index as the profile's bundles list it now.
+   */
+  readonly reindex?: () => FlagIndex
+  /**
    * Whether a row is absent or disabled.
    * @param rowId - the row's id.
    * @returns true when no plugin of the row runs.
@@ -62,10 +68,15 @@ const ROW = 'delorun-preview-flags'
  * @throws {Error} when flags are configured without an index to check them against, or a configured flag is in no bundle's list; the message names the flag and the known flags.
  */
 export function createPreviewFlags(source: PreviewFlagsSource): CreatedPreviewFlags {
-  const { configured, index, rowOff } = source
+  const { configured, index, rowOff, reindex } = source
   const ids = Object.keys(configured)
   if (index === undefined && ids.length > 0) throw new Error(`${ROW}: flags are set (${knownList(ids)}), but there is no profile whose bundles could be read to check them against`)
-  const listed = index?.owners ?? new Map<PreviewFlagId, never>()
+  let listed: FlagIndex['owners'] = index?.owners ?? new Map()
+  /** Whether the index lists a flag, reading it again once on a miss. */
+  const isListed = (id: PreviewFlagId): boolean => {
+    if (!listed.has(id) && reindex !== undefined) listed = reindex().owners
+    return listed.has(id)
+  }
   const unknown = ids.filter(id => !listed.has(id as PreviewFlagId))
   if (unknown.length > 0) {
     throw new Error(`${ROW}: ${unknown.map(id => `"${id}"`).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} set, but no plugin of this profile declares ${unknown.length === 1 ? 'it' : 'them'}. `
@@ -80,8 +91,8 @@ export function createPreviewFlags(source: PreviewFlagsSource): CreatedPreviewFl
   const declared = new Map<PreviewFlagId, PreviewFlagDeclaration>()
   const flags: PreviewFlags = {
     declare(flag) {
-      if (index !== undefined && !index.owners.has(flag.id)) {
-        throw new Error(`${ROW}: ${flag.owner} declares "${flag.id}", which no bundle of this profile lists under delorun.previewFlags in its package.json. Listed flags: ${knownList(index.owners.keys())}`)
+      if (index !== undefined && !isListed(flag.id)) {
+        throw new Error(`${ROW}: ${flag.owner} declares "${flag.id}", which no bundle of this profile lists under delorun.previewFlags in its package.json. Listed flags: ${knownList(listed.keys())}`)
       }
       const first = declared.get(flag.id)
       if (first !== undefined) throw new Error(`${ROW}: ${flag.owner} declares "${flag.id}", which ${first.owner} already declared`)
@@ -90,7 +101,7 @@ export function createPreviewFlags(source: PreviewFlagsSource): CreatedPreviewFl
     },
     isOn(id) {
       if (declared.has(id)) return configured[id] === true
-      if (listed.has(id)) return false
+      if (isListed(id)) return false
       throw new Error(`${ROW}: "${id}" is not a declared preview flag. Known flags: ${knownList(new Set([...declared.keys(), ...listed.keys()]))}`)
     },
     list: () => [...declared.values()].sort((a, b) => a.id.localeCompare(b.id)).map(flag => ({

@@ -45,7 +45,7 @@ kind: "package-library"
    "delorun": { "previewFlags": { "delorun-onboarding": ["onboarding.previewSteps"] } }
    ```
 
-需要这份列表，是因为有两个读取者无法运行插件：`delorun preview`（Delorun 停止时也能使用），以及面对已关闭的行的 Host。Host 拒绝任何 bundle 都未列出其 id 的声明；`assertFlagsIndexed`（`./manifest`）让插件的测试在列表与声明不一致时失败。
+需要这份列表，是因为有两个读取者无法运行插件：`delorun preview`（Delorun 停止时也能使用），以及面对已关闭的行的 Host。Host 会为 Delorun 运行期间新增的 bundle 重新读取这些列表，然后拒绝任何 bundle 都未列出其 id 的声明；`assertFlagsIndexed`（`./manifest`）让插件的测试在列表与声明不一致时失败。
 
 <a id="turn-a-flag-on"></a>
 ## 打开开关

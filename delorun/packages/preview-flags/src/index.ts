@@ -11,7 +11,7 @@
  * @module @delorun/preview-flags
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveBundleDir, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import { readProfileManifest, resolveBundleDir, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
@@ -63,13 +63,16 @@ interface RowStates {
 }
 
 /**
- * The bundles the profile started with, as the index reads them.
+ * The profile's bundles, as the index reads them: the ones it started with and the ones its manifest lists now, which
+ * include a bundle the plugin manager added while Delorun runs.
  * @param profile - the profile.
  * @param warn - reports a bundle whose directory cannot be resolved; the plugin manager reports that bundle's own error.
  * @returns each resolvable bundle's name and directory.
+ * @throws {Error} when the profile's manifest cannot be read.
  */
 function profileBundles(profile: ProfileContext, warn: (message: string) => void): FlagBundle[] {
-  return profile.startedBundles.flatMap((bundle) => {
+  const current = readProfileManifest('delorun', profile.dir).dsh?.profile?.bundles ?? []
+  return [...new Set([...profile.startedBundles, ...current])].flatMap((bundle) => {
     try {
       return [{ name: bundle, dir: resolveBundleDir('delorun', bundle, profile.installAnchor, profile.dir) }]
     } catch (error) {
@@ -83,17 +86,22 @@ function profileBundles(profile: ProfileContext, warn: (message: string) => void
  * Check the row's flags, provide `ctx.previewFlags` and serve the read route.
  * @param ctx - the plugin context with the Connection.
  * @param config - the row's configuration.
- * @throws {Error} when a configured flag is in no bundle's list, or flags are configured in a tree without a profile.
+ * @throws {Error} when a configured flag is in no bundle's list, flags are configured in a tree without a profile, or the profile's manifest cannot be read.
  */
 export function apply(ctx: Context, config: Config): void {
   const warn = (message: string): void => { ctx.logger.warn(`${name}: ${message}`) }
   const profile: ProfileContext | undefined = ctx.get('profileContext')
-  const index: FlagIndex | undefined = profile === undefined ? undefined : readFlagIndex(profileBundles(profile, warn))
-  for (const problem of index?.problems ?? []) ctx.logger.error(`${name}: the preview flags of ${problem.bundle} were not read: ${problem.message}`)
+  const read = (from: ProfileContext): FlagIndex => {
+    const index = readFlagIndex(profileBundles(from, warn))
+    for (const problem of index.problems) ctx.logger.error(`${name}: the preview flags of ${problem.bundle} were not read: ${problem.message}`)
+    return index
+  }
+  const index: FlagIndex | undefined = profile === undefined ? undefined : read(profile)
   const loader: RowStates | undefined = ctx.get('loader')
   const { flags, notices } = createPreviewFlags({
     configured: config.flags,
     index,
+    ...profile === undefined ? {} : { reindex: () => read(profile) },
     rowOff: rowId => ![...loader?.entries() ?? []].some(entry => entry.options.id === rowId && !entry.disabled),
   })
   for (const notice of notices) ctx.logger.warn(notice)
