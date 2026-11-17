@@ -74,6 +74,7 @@ kind: "package-reference"
 - **无 TLS**：注入的开发 WebServer 通常只监听 loopback，并位于 TLS 反向代理或 tunnel 后。
 - **仅通用 payload 验证**：规则负责验证自己消费的 GitHub 事件字段。
 - **不向提供方确认下游工作**：`202` 先于任意规则调用与会话创建。
+- **每个投递 id 在每个进程中只运行一次**：通过验证的 `X-GitHub-Delivery` id 会被记住（最近 1,024 个），重复的请求会返回 `200` 确认，而不再调用规则，因此被截获的请求无法启动第二个会话；GitHub 的手动重新投递会复用该 id，因此在 Host 重启之前会被确认而不会再次运行。
 - **不支持表单编码**：GitHub 必须发送 `application/json`；`application/x-www-form-urlencoded` 会被拒绝。
 
 

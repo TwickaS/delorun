@@ -41,8 +41,8 @@ kind: "package-reference"
 | 字段 | 值 | 默认值 | 作用 |
 | --- | --- | --- | --- |
 | `studioAdditions` | 布尔值 | `false` | C16 开关 `studio_additions`：开启时是 Delorun 的外观和每个 Delorun studio 插件；关闭时是上游的 stock 外观。 |
-| `palette` | `soft`、`t3-code`、`t3-chat`、`grove`、`ocean`、`ember`、`iris` | `soft` | 调色板。Soft 以外的主题带有自己的强调色：Slate（`t3-code`）、Berry（`t3-chat`）、Grove、Ocean、Ember 或 Iris。这两个 id 保留已保存选择所用的名称。 |
-| `accent` | `peach`、`cobalt`、`moss`、`mono`、`custom` | `peach` | 在 Soft 调色板上，主要按钮、链接、开关和焦点的强调色。 |
+| `palette` | `soft`、`t3-code`、`t3-chat`、`grove`、`ocean`、`ember`、`iris`、`custom` | `soft` | 调色板。前七个是预设，各自固定自己的颜色和强调色：Soft、Slate（`t3-code`）、Berry（`t3-chat`）、Grove、Ocean、Ember 和 Iris。`custom` 使用 Soft 的界面色，外加下面的强调色和对比度。这两个 id 保留已保存选择所用的名称。保存的设置里若预设旁边带有被更改的强调色或对比度，会被读作 `custom`（[`lookOf`](src/palette/migrate.ts)）：Soft 保留它的强调色和对比度，而对比度被更改的 T3 Code 预设只保留它的强调色。 |
+| `accent` | `peach`、`cobalt`、`moss`、`mono`、`custom` | `peach` | 主要按钮、链接、开关和焦点的强调色，只在 `custom` 调色板下读取。 |
 | `customAccent` | `#RRGGBB` | `#E5734A` | `accent` 为 `custom` 时使用的颜色。 |
 | `typeface` | `delorun`、`system` | `delorun` | Schibsted Grotesk 和 JetBrains Mono，或上游的字体栈。 |
 | `density` | `compact`、`comfortable`、`spacious` | `comfortable` | `--dsh-density`，间距规则所乘的比例：0.8、1 和 1.2。 |
@@ -59,7 +59,7 @@ kind: "package-reference"
 
 - **令牌层**，通过 `ctx.theme.overrideTokens`，每层一个来源：调色板、强调色、字体、密度和对比度（[`LAYERS`](src/client/controller.ts)）。颜色是 OKLCH 种子，从上游的令牌表生成两种配色方案；强调色是单独的一层，每个文字角色得到一个在其表面上达到 4.5:1 的文字安全色度。调色板还会加深或提亮次要和第三级标签角色，直到在默认强调色和对比度下、两种配色方案中，每个都在每个不透明背景角色（[`TEXT_SURFACES`](src/palette/soft.ts)）上达到 4.5:1。密度层还定义间距令牌 `--delorun-space-1` 到 `--delorun-space-9`（2、4、6、8、12、16、20、24 和 32 px），每个都乘以 `var(--dsh-density, 1)`，它们只在外观开启期间存在。浅色、深色和跟随系统仍是上游的偏好设置。
 - **字体和强度条**，作为一个 `<style data-plugin="@delorun/plugin-theme">` 元素：构建时 `scripts/copy-brand-fonts.ts` 从 `@delorun/brand` 复制到 `src/client/assets/fonts` 的两个拉丁字体文件，以及在 `effort` 为 `bars` 期间，把模型选择器的 `data-effort-level` 说明文字绘制成条形的规则。
-- **设置部分。** 每个部分绘制自己的 `<h3>` 卡片标题，由设置面板的 `--dsh-settings-card-heading-*` 变量设定样式，所以无论是否使用分组的设置布局，显示效果都相同。`delorun-appearance`（顺序 1）是两张卡片：「Colours」（配色方案、调色板、强调色和对比度）和「Branding」（`BrandingSection`，由该部分用它自己的字典 `settings.delorunBranding` 渲染）。`delorun-conversation`（顺序 2）在两张卡片中编辑上游 `ui-chat` 的显示设置：「Detail」（带实时预览的显示预设、作为选择框的思考、步骤分组、实时详情和终端输出）和「Folding」（折叠已完成的轮次、何时折叠以及哪些回复保持展开）。它只在 Host 提供该命名空间时出现。
+- **设置部分。** 每个部分绘制自己的 `<h3>` 卡片标题，由设置面板的 `--dsh-settings-card-heading-*` 变量设定样式，所以无论是否使用分组的设置布局，显示效果都相同。`delorun-appearance`（顺序 1）是两张卡片：「Colours」（配色方案为一行分段控件，主题为以“自定义”结尾的方块网格，外加一个紧凑的实时示例；只有选择“自定义”时，强调色和对比度才会内联显示）和「Branding」（`BrandingSection`，由该部分用它自己的字典 `settings.delorunBranding` 渲染）。`delorun-conversation`（顺序 2）在两张卡片中编辑上游 `ui-chat` 的显示设置：「Detail」（带实时预览的显示预设、作为选择框的思考、步骤分组、实时详情和终端输出）和「Folding」（折叠已完成的轮次、何时折叠以及哪些回复保持展开）。它只在 Host 提供该命名空间时出现。
 - **「通用」行**（`settings.general.item`，使用「外观」字典），每一行写入此插件设置的一个字段（[`STUDIO_ROWS`](src/client/index.ts)）：
 
   | Id | 顺序 | 标题 | 控件 | 写入 |
