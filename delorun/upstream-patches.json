@@ -150,7 +150,7 @@
       "path": "apps/web/tests/delorun-reach.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): Chromium on a reach listener for Web e2e scenarios, with a stand-in authenticator provider, Delorun's test authority and a recorder of policy violations. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "33c2a137ce82e69511bca5fb6bc8ede6bbad98f044e68a9521100c0a7058204f"
+      "sha256": "1d7384f8ce93d5f050309b03d37cb4b623dd2defa03afe97c71431a11ddc634c"
     },
     {
       "path": "apps/web/vite.config.ts",
@@ -360,7 +360,7 @@
       "path": "packages/boot/plugin-manager/src/index.ts",
       "class": "security",
       "reason": "Profile history and safe mode: every change saves a version of the profile's managed files in a git history, and the manager gains `undo`, `restore` and `history` Remotes, the in-process `listHistory`, `previewUndo` and `previewRestore` reads that save no version, the `config-editor/edited` version, and the optional `pluginAudit` service asked at every installation and before a bundle is enabled. `undo` and `restore` audit every package they bring back before any of its scripts or code run: an unchanged lockfile is audited before any file is written; otherwise the version is installed with `--ignore-scripts`, audited, and only then built with `pnpm rebuild --pending`, and a refusal puts the files back. The lockedIncludes wiring (C1) is left out. Lead verdict: kept; undo and restore escalate through the tool like the other writes, are person-only as Remotes and owner-only under LiveShare, and they add the plugin audit over what they bring back; the audit refusals are stricter than stock, and leaving out the lockedIncludes wiring returns stock's reasons. Protected plugins: the validated `protectedPlugins` setting adds module names to PROTECTED_PLUGINS (never removes one); `@delorun/bundle-local` sets Delorun's consent and guard plugins, the update gate, dsh-sandbox-local and dsh-sandbox-policy. Before and after every change the manager composes the profile's rows (home patch and overlays included) and refuses with `management-required` a change that drops, replaces, reconfigures, disables, enables or duplicates a protected row, gives another row its id, or adds a row of a protected module, and refuses to install, select, deselect, remove, undo to or restore a package or version that does so or that provides a protected module; with no protected name configured, behaviour and text are upstream's. A revocation, undo or restore that would take away a version exemption of a package that provides a protected module or is a management bundle is refused with `management-required`. Lead verdict on the protected-plugin checks: approved, after two independent reviews and their fixes (2026-11-10). Secret-field admission (C1): the manager's profile history asks `plugin-manager/before-record` about the text of every file a version would hold before saving it. Lead verdict on the secret-field admission (C1): approved (2026-11-11). With no listener the check returns nothing and every version holds the same files with the same text as before. Each file is read once and saved as a regular file, so a managed file that is a symlink or has the executable bit is saved as a regular file. A listener can only refuse a version; it cannot add, change or remove a file, so the history saves the same versions or fewer. A refused version stages nothing and leaves the profile's files, its installed packages and every earlier version unchanged. A plugin change still applies and carries the reason as a warning. `history` lists the versions with the reason as `unsaved`. `undo` takes back an unsaved edit by restoring the latest version, which the undo preview shows first, and no version can bring that edit back. A history git cannot keep is still reported as unavailable. The protected-plugin checks, the plugin audit and who may undo or restore are unchanged. Supply chain (2026-11-13): with a `pluginAudit` provider composed, an install resolves with `--lockfile-only --ignore-scripts`, is audited with `pending: 'install'` and the registries this install names, then runs `install --frozen-lockfile` with the same registries; a restore audits before and after `rebuild --pending`; an enablement returns the audit's findings. Without a provider the install stays upstream's single `pnpm add`. Lead verdict (2026-11-13): approved; refusals move earlier and nothing is loosened. Exports `specPackageName` unchanged, for the device rule that refuses plugin changes touching protected rows. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Exports `recordPendingBuilds` from the package entry (2026-11-13), so `@delorun/changes` imports it without reaching into `src/`; the function is unchanged and the manager does not call it differently; this is the only change in this entry since the last verdict, and it is an export only. Lead verdict (2026-11-13): approved; an export only. Unversioned entries (2026-11-15): the validated `unversionedEntries` setting names entry ids whose `config-editor/edited` saves no version; `@delorun/bundle-local` sets `delorun-onboarding`, whose progress fields change on every step. The edit still applies and the next version holds it; protected-plugin checks, secret-field admission, the plugin audit and undo/restore are unchanged, and with no name configured every edit saves a version as before. Lead verdict (2026-11-15): approved; it only skips recording a version for named entries. Plugin packs (2026-11-17): the optional `packInstallTargets` service, provided by `@delorun/plugin-packs`, is asked in two places. `listBundles` takes an installed, sealed pack's `link:` target from it instead of the registry target, and gives a package the release's signed packs file lists no registry target at all (`error.code` `operation-error`, with a diagnostic saying it is a signed plugin pack), installed or not. `installBundle` refuses with the same error, before pnpm runs, a package that file lists unless the spec is exactly the pack's `link:` spec through `packs/current`, so a pack cannot be installed from npm, a Git host or another folder. `installBundle` reads the package's name from a resolution that runs no script (`--lockfile-only --ignore-scripts`, as the audit path already does, now also without an audit when the service is composed) and refuses a listed pack whose spec is not its pack folder before anything is fetched or any script runs, whatever the source (registry, tarball, Git, npm alias, other folder); `undo` and `restore`, and their previews, refuse a version that holds a listed pack as anything but its pack folder, before any file is written. A pack's own folder is also refused (\"Restart Delorun to finish the update\") once an update has switched `runtimes/current` away from the release this Host runs. With no `packInstallTargets` service composed, all of these paths are upstream's. Lead verdict (2026-11-17): approved; it only refuses installs, adds no new install source, and with no packInstallTargets service both paths are upstream's. Fresh pack check (2026-11-17): before installing a pack from its folder, `installBundle` asks the optional `packInstallTargets.intact(name)`, which hashes the pack's files against the release's signed list at that moment, ignoring any stored check, and refuses a pack whose files are missing or differ (`operation-error`, a sentence saying to add it again); with no `intact` provided the path is unchanged. Lead verdict (2026-11-17): approved; it only adds a refusal.",
-      "sha256": "924e3bd4aee77942f0d539791fbe1ee78ea1bb8c2982e4a50a517449f16b5b2d"
+      "sha256": "4756bed9e33ec730486829a7cc0d4f63eb198a69bdb1e32958a985059492af98"
     },
     {
       "path": "packages/boot/plugin-manager/src/tools.ts",
@@ -426,7 +426,7 @@
       "path": "packages/client/connection/src/index.ts",
       "class": "security",
       "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. One-time launch tokens (C4): the Config fields `oneTimeLaunchTokens` (C16 switch `one_time_launch_tokens`, default false) and `reopenHint` (default upstream's text) reach `BrowserAuth`, and with one-time tokens on, a `webserver/request` listener consumes the tokens of loopback requests outside the exchanges. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; re-exports without the removed trust options.",
-      "sha256": "f926175669cf07e3288d8b24c34c06fa2bef268a5a77feea9477be7a6aecff93"
+      "sha256": "40f7ca358af4b902f4a9432284a49a27597e8cd2e0616c25c70f67156eb859b6"
     },
     {
       "path": "packages/client/connection/src/reach.ts",
@@ -456,7 +456,7 @@
       "path": "packages/client/connection/tests/reach.host.spec.ts",
       "class": "security",
       "reason": "Admission seam (C4): proves the reach dispatcher's refusals and their order over a real web server, that every route, upgrade, `/api` and the fallback answer 401 before sign-in, that pre-login requests reach only their listed route, that a listener opens only with a provider serving a valid reach policy and closes and stays closed when its provider is removed or replaced, and that loopback admission keeps the fence before a loaded provider. It also proves identity-header removal from every view on requests and upgrades, the refusal of non-origin-form targets and duplicate `Host` lines, that a policy withdrawn while binding opens no listener, that `closeReachConnections` ends exactly the matching streams and upgraded sockets, and that loopback index and `/connect` requests consult a loaded provider and receive its `setCookie`. Covers the reach response headers, the full policy text and a fresh nonce per response, on admitted, pre-login and refused responses and refused upgrades. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): proves that a one-time token presented on a reach listener is refused there and no longer signs in on the loopback listener. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; expects 400 for a repeated Host line ahead of the reach gate's own check. Covers the sign-in redirect: 303 for GET and HEAD to a same-origin path, the JSON refusal for upgrades, other methods and scheme-relative, backslash or control-character locations. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "95f77945f3a02100792c7cff334477ba67c0fa94dfc4adcd0fbea5c291581bb8"
+      "sha256": "025750a5f6bb9f207e184d55f2f537c9bef27fc40057416d6f189cf7eaf0c2ba"
     },
     {
       "path": "packages/client/locale/src/client/index.ts",
@@ -1146,7 +1146,7 @@
       "path": "packages/fs/tool-fs/src/index.ts",
       "class": "security",
       "reason": "Instruction-layer consent seam (WP2.15): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` and `protectedReadCheck` so `dsh-tool-str-replace-editor` applies the same check. Lead verdict (2026-11-11): kept; adds the protectedReadCheck export. Also exports the type `WriteConsentArgs` from the package entry (2026-11-13), so `plugin-instruction-consent` names the arguments of a consented write; a type-only export, no runtime change. Lead verdict (2026-11-13): approved; a type-only export.",
-      "sha256": "9c7201698a025cf887c69c301fadb618b74e8d8a261799bc9e559aab5020089a"
+      "sha256": "4b8367160dafb66a11079f7e25647357eba7898370e85e8934de8e972a85c525"
     },
     {
       "path": "packages/fs/tool-fs/src/patch/plan.ts",
@@ -1170,7 +1170,7 @@
       "path": "packages/fs/tool-str-replace-editor/src/index.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`. A directory listing leaves out each child whose resolved target the check refuses, with everything below it. Lead verdict (2026-11-11): kept; a listing leaves out each child whose resolved target is under the protected home and does not descend into it.",
-      "sha256": "44643b092c61961fb37dc0905b61558743a467324783e86f5979fa07f1098049"
+      "sha256": "3d744b4c2765b65830d62cdaadb5659fb194acf4db99ad10ada26cf89baee770"
     },
     {
       "path": "packages/host/open-in-app/src/resolver.ts",
@@ -1224,7 +1224,7 @@
       "path": "packages/mcp/mcp-client/src/index.ts",
       "class": "security",
       "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it. With a consent provider, the start is resolved (`resolveServerStart`), reviewed with its resolved paths and spawned with exactly those paths, reconnects included. Lead verdict (2026-11-11): kept; with a consent provider the server is spawned, reconnects included, with exactly the reviewed executable path and working directory. `apply` drops any configured `argv0`; a reviewed start spawns the decision's `spawnCommand` or the resolved path with the configured `command` as `argv0` (not for a Windows batch shim), and `beforeReconnect` looks the consent up and reviews the start again before each respawn, refusing when the consent is no longer mounted. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Template rules (2026-11-14): with `expandTemplates`, a template in `command`, `cwd` or the value of a run-affecting environment variable (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH`, `DYLD_*`) is refused at load, naming the server and field, before any review or spawn, so the person never approves template text that a stored credential later turns into code. After the security sweep, an allowed start also carries `spawnArgs` (pinned-file arguments written by canonical path) and `verify` (pins the files again), and the connection awaits `verify` immediately before every spawn through `ConnectionOptions.beforeSpawn`; a changed file fails the attempt. Adds the optional `roots` config (absolute folders only), which DSH browser providers set to the Session's working directory (L38 addendum, 2026-11-17); omitted or empty, the client advertises no roots, as upstream. Denied tools: the optional `deniedTools` config field (stdio and Streamable HTTP) lists the server's own tool names the client never registers; unset, nothing is denied.",
-      "sha256": "dd5458d59bc9dd0784771f4cf11169cea888c96e3d1757ca97a5166537b3f758"
+      "sha256": "3f03818a590c1f65b967606b292440037b315b663d3059952d987512a78ce3d8"
     },
     {
       "path": "packages/mcp/mcp-client/src/transport.ts",
@@ -1266,7 +1266,7 @@
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict: approved, after two independent reviews and their fixes (2026-11-10): stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced. Overrides `protectedReads` with the home, its aliases and the readable entries under each. Adds and validates the `deniedSocketDirectories` Config field (absolute, not the filesystem root). Adds the validated `escapeSocketDirectories` Config field (absolute, not the filesystem root): each entry is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner whose `RUNNER_PROTECTION` cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY`; Delorun's start names WSL's interop directory `/run/WSL` there, so no confined command starts a Windows program through the interop sockets. The bwrap invocation is started through `withSeccompFilter` (seccomp.ts) while an escape directory exists or `vsockOffered()` finds `AF_VSOCK` in `/proc/net/protocols` (or cannot read it), with the `vsockOffered` test hook, so confined commands create no vsock socket and no io_uring instance; Landlock applies no filter, and abstract Unix sockets stay open to confined commands. Lead verdict: approved, after an independent review and its fixes (2026-11-10). Adds `protectedHomeToolReadable` (relative entries inside the home, refused without `protectedHome`), reported as `protectedReads.toolReadable` under each root and passed to no runner's profile. Lead verdict (2026-11-11): kept; tool-readable entries admit only the caller's grants and reach no confined command's profile. Refusal advice: only the Landlock escape-directory refusal carries advice. It names installing bubblewrap when no executable `bwrap` is on `PATH`, a probe that did not finish within `probeTimeoutMs` as not finished, and otherwise letting bwrap create user namespaces (Ubuntu's AppArmor restriction). Adds the `bwrapInstalled` internals hook and widens `probeBwrap` to `boolean | 'timed-out'`; which wraps are refused is unchanged. Network (C1 rule 19): a policy's `network` (`off` or `proxy`) is applied through `network.ts`; a runner that cannot express it (Landlock, Seatbelt, windows-acl) refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than run with the host network. Under `off` and `proxy` the sockets of systemd-resolved, nscd, avahi, the system D-Bus, tailscaled, snapd and CUPS are hidden, so a restricted command cannot reach those daemons; other pathname sockets stay reachable, such as an ssh ControlMaster socket or gpg's `S.dirmngr` under the home. Docker Desktop's WSL sockets, `~/.docker/desktop`, `/run/docker-cli.sock` and tailscaled's sockets are hidden in every policy on machines with a user id. Lead verdict (2026-11-13): approved; stricter only, and the host network is unchanged while no resolver is mounted. Abstract sockets: a wrap that shares the host's network (no `network`, or the new `host` form) on bwrap, Landlock or a Linux `runnerCommand` reads `/proc/net/unix` through `abstract-sockets.ts` and refuses with `SANDBOX_UNSUPPORTED_POLICY` while any abstract name listens or is a bound datagram socket, or the table cannot be read; the `host` form, which only a person's setting produces, runs the wrap with `partial` enforcement and a logged warning. Adds the `readUnixSockets` internals hook. Stricter only for the default, and the `host` form changes nothing a policy without a network did before. The package root also re-exports the pure abstract-socket check (`checkAbstractSockets`, `refuseAbstractSockets`, `AbstractSocketCheck`) so Delorun's in-chat consent (A390) uses the runners' own refusal verdict.",
-      "sha256": "92a086512d562d0883a4e4282b6f9c2cec65654edbe75769ff58c9bab77272cf"
+      "sha256": "478010687dcb9fd5f71df030dcae658c4dbf5bdc52da5ee1a2372c4797fff156"
     },
     {
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",
@@ -1476,7 +1476,7 @@
       "path": "packages/spill/spill-local/src/index.ts",
       "class": "security",
       "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`. `sessionDirectory` reports `<canonical root>/session-<hash>`. Lead verdict (2026-11-11): kept; sessionDirectory returns the hashed session directory under the canonical root.",
-      "sha256": "1fa20aec7a6b4de79a9db2665fd54c01212ff9a5bfd80b290abad76e64005e7c"
+      "sha256": "3d30878b10c157f7b1583920d9d40908b7404d0b51b65519e5715ca2b1fac9ed"
     },
     {
       "path": "packages/spill/spill-local/src/store.ts",
@@ -1488,7 +1488,7 @@
       "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
       "class": "security",
       "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home. Also checks `sessionDirectory`. Lead verdict (2026-11-11): kept; checks sessionDirectory against the canonical root.",
-      "sha256": "68110e1b6a1ab3e0bd946b872e7d333c5c8f9cd917da2e922d58ebf8c53b9497"
+      "sha256": "af1fa648d4e0208fb718c920c0c00a57689a92e58bc3ebe993a0e79a987b0b2d"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
@@ -1746,13 +1746,13 @@
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
       "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delorun/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
-      "sha256": "993bdb8b1111dacbbcb258eec41cfd8b042f28206229c598e4b285cd8a60c5b4"
+      "sha256": "66689443fe2bca52c001d45b0782b90891572161e877b2950549cf0d69a707df"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
       "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. `/recovery` renders the index for a signed-in browser only while an index row names the recovery routes, is a 404 otherwise, and is refused without the credential. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict on the `/recovery` specs: pending; no lead review of this change is recorded yet.",
-      "sha256": "bcfe78a945fad7c5af3fb23503d9a8c03b3b667e3fcdbe588521987b7e7a0896"
+      "sha256": "9887bc5dea72b56fcbf71369c40483a9bf67dc449bff96e68b8e246f6c23be9b"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
@@ -1777,12 +1777,6 @@
       "class": "delorun-feature",
       "feature": "instruction-consent",
       "reason": "Instruction-layer consent: the loader exports its own default instruction file names (`AGENTS.md`, `CLAUDE.md` and their `.local.md` overlays) instead of keeping them module-private, so the consent over instruction writes reads that list rather than restating a name; a default the loader adds is then a name the consent reviews. The loader reads the same constants, so behaviour is unchanged."
-    },
-    {
-      "path": "packages/context/agent-instructions/src/index.ts",
-      "class": "delorun-feature",
-      "feature": "instruction-consent",
-      "reason": "Instruction-layer consent: the package re-exports the default instruction file name lists from `config.ts` so a consumer outside the package can read them. Re-export only; no behaviour changes."
     },
     {
       "path": "packages/skill/skill/src/index.ts",
@@ -2160,7 +2154,7 @@
       "path": "packages/subagent/subagent/src/index.ts",
       "class": "security",
       "reason": "`startExternal` finds the consent, has it review the start (provider, parent, cwd, label, signal) before `provider.start`, and bounds the run with the consent's time limit; exports the consent names. Local providers are never checked. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "7fb4914fdafa491509142e749537cf6522fee81e8354fb6017fce52817d5617a"
+      "sha256": "bcf05128d6b43b03b7fb7704fa6a4e483fa9029f9637b97b5e3128e174a4f7a1"
     },
     {
       "path": "packages/subagent/tool-subagent/src/index.ts",
@@ -2281,12 +2275,6 @@
       "class": "generic-fix",
       "feature": "workspace-store-recovery",
       "reason": "An open domain reports `quarantined` locations and `setAside(document)`, so its consumer can keep what it removes from a damaged store. Offer upstream."
-    },
-    {
-      "path": "packages/storage/storage-json/src/index.ts",
-      "class": "generic-fix",
-      "feature": "workspace-store-recovery",
-      "reason": "Exports the file helpers that name and write set-aside files and the rolling backup, so the `delorun` recovery commands share them. Offer upstream."
     },
     {
       "path": "packages/storage/storage-json/src/set-aside.ts",
@@ -2793,12 +2781,6 @@
       "reason": "Picks the singular or plural form of the turns and steps counts, so one turn and one step read correctly."
     },
     {
-      "path": "packages/llm/llm-pi-ai/src/index.ts",
-      "class": "delorun-feature",
-      "feature": "setup-transfer",
-      "reason": "Exports `PROVIDER_DATA` from the package entry, so the setup transfer policy reads provider environment names without importing upstream source."
-    },
-    {
       "path": "packages/experimental/browser-use-runtime/src/mcp.ts",
       "class": "delorun-feature",
       "feature": "mcp-add-consent",
@@ -2899,6 +2881,90 @@
       "class": "delorun-feature",
       "feature": "external-agents",
       "reason": "The safety level names an external agent may run at, and the check for the Linux tools Claude Code's command sandbox needs."
+    },
+    {
+      "path": "docs/persistence-changes/2026-11-17-main-chat-events.schema.json",
+      "class": "delorun-feature",
+      "feature": "main-chat",
+      "reason": "The machine record of the persistence acknowledgement for the main chat's read and handoff Session events, written by `persistence-changes --record` beside its bilingual prose."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/package-name.ts",
+      "class": "security",
+      "reason": "Install-spec parsing for profile history and audits (`specPackageName`, `packageName`, `parsedForRegistry`): it names the package an install, undo or restore audits. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "35177da979c0bfe0252dbd4d2f443cadf851cd7e3f94f2ed4c7e9b58459cf40d"
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/admission.ts",
+      "class": "security",
+      "reason": "Session MCP admission for Browser (`providedAdmission`), read from the admission service before the server starts. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "0fd15864fc5e4bf1e3b8b2b4b258cde5fdbf2e3c07ab7c518aac8c7540058762"
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/denied-tools.ts",
+      "class": "security",
+      "reason": "The Browser tools refused before a call reaches the server (`browser_run_code_unsafe` and configured denials) and their refusal message. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "e1da0bb33df7b7b909c638ef65d88c3c0fb03a7f3d52661fb298ba8d82902ec2"
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/launch.ts",
+      "class": "delorun-feature",
+      "feature": "optional-bundles",
+      "reason": "Chrome first (L39): chooses `chrome` or `chromium` for the launch config. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged."
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/missing-browser.ts",
+      "class": "delorun-feature",
+      "feature": "optional-bundles",
+      "reason": "The short messages for a missing Chrome or Chromium download that tell the model to send the person to finish Browser setup in Plugins. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged."
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/output-folder.ts",
+      "class": "security",
+      "reason": "Browser output folder (L67, L68): the folder name, the refusal when it is a link that leads outside the chat folder, and the check after each call that refuses files written outside it. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "f801d31aa255e4f104c5abbf3a98abbc2e0a62a13ab86040d04823aa9a0d77e9"
+    },
+    {
+      "path": "packages/host/frontend-static/src/recovery.ts",
+      "class": "delorun-feature",
+      "feature": "changes",
+      "reason": "The name of the index injection global (`dshRecoveryRoutes`) that `@delorun/plugin-changes` sets so `/recovery` renders the recovery screen (C21). Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged."
+    },
+    {
+      "path": "packages/sandbox/sandbox-local/src/network-defaults.ts",
+      "class": "security",
+      "reason": "The host sockets and socket directories denied to confined commands by default (system D-Bus, tailscaled, snapd, resolver, nscd, avahi and print sockets). Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "f103156fd9c26438442bb83866f608c4c6fac601af93cf9b28204eb7dadc03ca"
+    },
+    {
+      "path": "packages/sandbox/sandbox-local/src/path-alias.ts",
+      "class": "security",
+      "reason": "`pathAliasCoverage`: whether a protected path is also reachable through a known alias, so a protection covers both names. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
+      "sha256": "6ec5bccb48fdaa5b4ae895ca7cf1590244c1e3c7809e1a96c35166b5afa817b0"
+    },
+    {
+      "path": "packages/skill/skill-filesystem/src/skill-dirs.ts",
+      "class": "delorun-feature",
+      "feature": "instruction-consent",
+      "reason": "The project skill directories and the home skill store as constants that discovery and `configuredRoots()` share, so a configured root and a reviewed root cannot drift. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged."
+    },
+    {
+      "path": "scripts/persistence-catalog-source.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Also scans delorun/packages/*/src, so Session events and message sources that Delorun plugins declare enter the persistence inventory."
+    },
+    {
+      "path": "scripts/persistence-schema.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Also reads Host source files under delorun/packages/*/src, so the persistence schema covers Session events that Delorun plugins declare."
+    },
+    {
+      "path": "scripts/verify-plugin-record-callers.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Treats Delorun package and app tests as test files."
     }
   ],
   "retired": []
