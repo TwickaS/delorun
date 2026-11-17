@@ -431,7 +431,7 @@ describe('task admission and package contracts', () => {
 
     const parsed = yaml.load(readFileSync(resolve(root, manifest.dsh!.bundle!.patch!), 'utf8'))
     expect(parsed).toEqual([{ insert: [
-      { id: 'subagent-claude-code', name: '@deepseek-ai/dsh-subagent-claude-code' },
+      { id: 'subagent-claude-code', name: '@deepseek-ai/dsh-subagent-claude-code', config: { permissionMode: 'acceptEdits' } },
       { id: 'tool-subagent-claude-code', name: '@deepseek-ai/dsh-tool-subagent', config: {
         provider: 'claude-code', toolName: 'subagent_claude_code', maxDepth: 'provider-managed',
       } },

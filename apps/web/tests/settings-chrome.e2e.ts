@@ -518,7 +518,8 @@ describe('web e2e: settings modal and General preferences', () => {
     const readState = async (target: Page = page): Promise<ThemeState> => await target.evaluate(() => {
       const metas = document.head.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
       const computed = getComputedStyle(document.body)
-      const icons = [...document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')]
+      // Only the scheme-specific icons: the media-free SVG and favicon.ico links are fallbacks for pages without a scheme match.
+      const icons = [...document.querySelectorAll<HTMLLinkElement>('link[rel="icon"][media]')]
       return {
         faviconPaths: icons.filter(icon => matchMedia(icon.media).matches).map(icon => new URL(icon.href).pathname),
         attr: document.body.hasAttribute('data-ds-dark-theme'),
