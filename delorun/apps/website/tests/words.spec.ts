@@ -5,9 +5,11 @@ import { CONSENT_TEXT, CONSENT_TEXT_VERSION, HOME_SIGNUP_PAGE, SIGNUP_PAGES } fr
 import { COPY } from '../src/site/copy.ts'
 import { EN } from '../src/site/words/en.ts'
 import { PRIVACY_EN } from '../src/site/words/privacy-en.ts'
+import { SECTIONS_EN } from '../src/site/words/sections-en.ts'
+import { SIGNUP_EN } from '../src/site/words/signup-en.ts'
 
 /** Every dictionary the site has. */
-const ALL = [EN, PRIVACY_EN]
+const ALL = [EN, PRIVACY_EN, SECTIONS_EN, SIGNUP_EN]
 
 /** The guide pages the documentation site builds from. */
 const GUIDE = new URL('../../../docs/guide/', import.meta.url)
@@ -35,7 +37,7 @@ function slug(heading: string): string {
 }
 
 /** The parts of the dictionary the home page shows (the desktop button appears twice by design). */
-const HOME = { hero: EN.hero, claims: EN.claims, sections: EN.sections, whatsNew: EN.whatsNew, next: EN.next, closing: EN.closing, signup: { heading: EN.signup.heading, text: EN.signup.text, consent: EN.signup.consent.text, submit: EN.signup.submit } }
+const HOME = { hero: EN.hero, closing: EN.closing, below: SECTIONS_EN, consent: EN.signup.consent.text, submit: SIGNUP_EN.submit }
 
 describe('the page’s words', () => {
   it('link only guide pages and headings that exist', () => {
@@ -52,8 +54,8 @@ describe('the page’s words', () => {
   })
 
   it('carry five numbered claims, one sentence each, each with its guide page', () => {
-    expect(COPY.claims.items).toHaveLength(5)
-    for (const claim of COPY.claims.items) {
+    expect(SECTIONS_EN.claims.items).toHaveLength(5)
+    for (const claim of SECTIONS_EN.claims.items) {
       expect(claim.text.match(/[.!?](\s|$)/g), claim.text).toHaveLength(1)
       expect(claim.href.startsWith(`${DOCS_URL}/guide/`)).toBe(true)
     }
@@ -75,7 +77,7 @@ describe('the page’s words', () => {
   })
 
   it('keep the limits beside the promises', () => {
-    const claims = COPY.claims.items.map(claim => claim.text)
+    const claims = SECTIONS_EN.claims.items.map(claim => claim.text)
     expect(claims[1]).toMatch(/not the files an agent changed/)
     expect(claims[2]).toMatch(/your own Tailscale network/)
     expect(`${COPY.hero.platform.before}${COPY.hero.platform.linkText}`).toBe('Runs on Linux and on Windows through WSL2')
