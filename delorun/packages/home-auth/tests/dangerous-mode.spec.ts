@@ -85,8 +85,6 @@ const LIFTED: readonly { readonly name: string; readonly action: string; readonl
   { name: 'loosening the permission new chats start in', action: 'settings/update', args: { ns: 'permission', patch: { defaultPreset: 'danger-full-access' } }, reason: DEFAULT_PERMISSION_REFUSAL },
   { name: 'changing a protected plugin row', action: 'pluginManager/setPluginEnabled', args: { id: PROTECTED_ROW, enabled: false }, reason: PROTECTED_ROW_REFUSAL },
   { name: 'a slash command a device does not run', action: 'commands/execute', args: { line: '/config set enabled false' }, reason: UNLISTED_COMMAND_REFUSAL },
-  { name: 'opening a chat\'s folder in an application', action: 'session/openWorkspacePath', args: { sessionId: 's-1' }, reason: 'loopback-required: session/openWorkspacePath' },
-  { name: 'listing the applications that open a chat\'s folder', action: 'session/workspacePathApplications', args: { sessionId: 's-1' }, reason: 'loopback-required: session/workspacePathApplications' },
 ]
 
 describe('the reach policy in dangerous mode', () => {

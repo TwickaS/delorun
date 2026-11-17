@@ -150,7 +150,10 @@ export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): 
         const unlocks = auth.elevationsAtComputer().running
           .filter(record => record.page !== true)
           .map(({ deviceId, endsAt, grace }) => ({ deviceId, endsAt, ...grace === true ? { reason: 'approval-grace' as const } : {} }))
-        sendJson(response, 200, { ...await auth.devices(), current: device.session.deviceId, unlocks })
+        const listing = await auth.devices()
+        // Another device's address and approver are the computer's to read.
+        const devices = listing.devices.map(({ address: _address, approvedBy: _approvedBy, ...rest }) => rest)
+        sendJson(response, 200, { owner: { claimedAt: listing.owner.claimedAt }, devices, current: device.session.deviceId, unlocks })
       } catch (error) {
         sendThrown(response, error)
       }

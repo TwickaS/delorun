@@ -10,6 +10,8 @@
  * @module @delorun/home-auth/route-access
  */
 
+import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
+
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
@@ -121,10 +123,11 @@ const AUTH = (id: string, reason: string): ComputerOnlyRow => ({ kind: 'auth-rou
  * rows from `COMPUTER_ONLY_ROW_MODULES`, which carry the same reasons in code.
  */
 export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
+  ...Object.entries(COMPUTER_ONLY_ROW_MODULES).map(([module, reason]): ComputerOnlyRow => ({ kind: 'settings-write', id: `settings of ${module}`, reason: `a write there replaces the row in effect, and ${reason}` })),
   { kind: 'action', id: 'account/*', reason: 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer' },
   { kind: 'action', id: 'settings/openSettingsDocument', reason: 'opens the settings document in an editor on the computer\'s own screen' },
-  { kind: 'action', id: 'session/openWorkspacePath', reason: 'opens an application on the computer\'s own screen; only dangerous mode with an unlock lifts it' },
-  { kind: 'action', id: 'session/workspacePathApplications', reason: 'lists the applications on the computer\'s own screen; only dangerous mode with an unlock lifts it' },
+  { kind: 'action', id: 'session/openWorkspacePath', reason: 'opens an application on the computer\'s own screen, in every mode' },
+  { kind: 'action', id: 'session/workspacePathApplications', reason: 'lists the applications on the computer\'s own screen, in every mode' },
   { kind: 'settings-write', id: 'delorun-home-auth', reason: 'pairing and secrets decide who is admitted, so a device never changes them' },
   { kind: 'settings-write', id: 'delorun-reach', reason: 'turning remote access on or off, or changing what it exposes, decides who can reach the home' },
   { kind: 'settings-write', id: 'delorun-update-check enabled: false', reason: 'a stolen unlocked phone could silence security fixes; turning checks on is allowed anywhere' },

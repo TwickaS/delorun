@@ -98,7 +98,6 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
   'session/modelCatalog': 'read the models a chat can run',
-  'mcpManager/watch': 'follow whether each MCP server runs, by name and status, the waiting-for-consent notice reads',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
   'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
   'session/fork': 'start a chat from a point of another',
@@ -234,14 +233,13 @@ export const REACH_DENIED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
- * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
+ * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock. None: opening a
+ * chat's folder in an application acts on the computer's own screen, so both such actions stay at the computer. The role
  * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
  * `elevation-required: <action>` to a locked device while it holds. Each other action of the never table stays at the
  * computer in every mode.
  */
 export const REACH_DANGEROUS_ACTIONS = {
-  'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
-  'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
 } as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
 
@@ -478,6 +476,7 @@ export const REACH_ELEVATED_ACTIONS = {
   'terminal/watch': TERMINAL,
   'mcpManager/probe': MCP_MANAGEMENT,
   'mcpManager/restart': MCP_MANAGEMENT,
+  'mcpManager/watch': MCP_MANAGEMENT,
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
@@ -922,6 +921,20 @@ export const COMPUTER_ONLY_ROW_MODULES = {
   '@deepseek-ai/dsh-sandbox-policy': 'it decides what the sandbox allows',
 } as const satisfies Readonly<Record<string, string>>
 
+/**
+ * Whether a settings write names the namespace of a row of {@link COMPUTER_ONLY_ROW_MODULES} (a namespace is the row's
+ * Loader entry id, with or without its `include:` prefix), or names its namespace in a form the condition cannot read, or
+ * while those rows cannot be read.
+ * @param facts - the computer-only rows.
+ * @param args - the call's arguments.
+ * @returns whether the write is refused to a device in every mode.
+ */
+function settingsOfComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.computerOnlyEntryIds()
+  if (ids === undefined || typeof args.ns !== 'string') return ids === undefined
+  return ids.has(args.ns) || ids.has(`include:${args.ns}`)
+}
+
 /** The plugin-manager calls that enable, disable, remove or update one bundle (package) by `name`. */
 const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'])
 
@@ -1070,6 +1083,8 @@ export function createCondition(
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
+        if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
