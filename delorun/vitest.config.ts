@@ -98,7 +98,7 @@ export const forkClientProject = {
  * unit project has, and `#upstream`, `@design` and `@brand` as the site does.
  */
 export const forkClientWebsiteProject = {
-  plugins: [replicaPlugins(replicaOptions(process.env)), tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
+  plugins: [replicaPlugins(replicaOptions()), tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
   resolve: {
     alias: [
       ...STUDIO_ALIASES,

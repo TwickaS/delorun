@@ -85,7 +85,7 @@ export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
-    ...replicaPlugins(replicaOptions(process.env)),
+    ...replicaPlugins(replicaOptions()),
     changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
