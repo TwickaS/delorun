@@ -164,12 +164,18 @@ describe('what needs setup', () => {
     },
   )
 
-  it('mounts each external agent that is installed and lists only those in the tool', () => {
-    expect(ids('bundle-external-agents', binDir())).toEqual([])
-    const some = withEnv(binDir('claude'), undefined, () => patchRows('bundle-external-agents').find(row => row.id === 'tool-subagent-oar'))
-    expect(ids('bundle-external-agents', binDir('claude'))).toEqual(['experimental-subagent-oar-claude', 'tool-subagent-oar'])
-    expect(withEnv(binDir('claude'), undefined, () => interpolate({ process }, (some!.config as { providers: unknown }).providers))).toEqual({ claude: 'oar-claude' })
-    expect(ids('bundle-external-agents', binDir('codex', 'claude', 'python3'))).toContain('tool-subagent-oar')
+  it('ships every external-agent row off, and says Needs setup until its program is on PATH', () => {
+    const dir = 'bundle-external-agents'
+    expect(ids(dir, binDir('codex', 'claude', 'python3'))).toEqual([])
+    const none = { 'experimental-subagent-oar-codex': 'needs-setup', 'experimental-subagent-oar-claude': 'needs-setup', 'tool-subagent-oar': 'needs-setup', 'ptc-runtime-python': 'needs-setup' }
+    expect(states(dir, binDir())).toEqual(none)
+    expect(states(dir, binDir('claude'))).toEqual({ ...none, 'experimental-subagent-oar-claude': 'ready', 'tool-subagent-oar': 'ready' })
+    expect(states(dir, binDir('codex', 'claude', 'python3'))).toEqual({ ...none, 'experimental-subagent-oar-codex': 'ready', 'experimental-subagent-oar-claude': 'ready', 'tool-subagent-oar': 'ready', 'ptc-runtime-python': 'ready' })
+  })
+
+  it('lists only the installed programs in the delegation tool once its row is turned on', () => {
+    const row = withEnv(binDir('claude'), undefined, () => patchRows('bundle-external-agents').find(each => each.id === 'tool-subagent-oar'))
+    expect(withEnv(binDir('claude'), undefined, () => interpolate({ process }, (row!.config as { providers: unknown }).providers))).toEqual({ claude: 'oar-claude' })
   })
 
   it('is unavailable on a platform the bundle does not support, with the reason', () => {
