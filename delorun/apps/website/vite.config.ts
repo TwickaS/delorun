@@ -6,7 +6,8 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { STUDIO_ALIASES } from './studio-aliases.ts'
-import { SITEMAP_PATHS } from './src/site/config.ts'
+import { linkChunkStyles } from './scripts/styles.ts'
+import { RENDERED_CHUNK_STYLES, SITEMAP_PATHS } from './src/site/config.ts'
 import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
 import { readNotices, type Notice } from '../../packages/site-design/scripts/notices.ts'
 import { headlinesOnly, loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
@@ -74,6 +75,19 @@ function sitemapFile(): Plugin {
   }
 }
 
+/**
+ * Links the stylesheets of the chunks the prerender renders but the browser loads later (`RENDERED_CHUNK_STYLES`), once
+ * the pages are prerendered.
+ * @returns the plugin.
+ */
+function chunkStyles(): Plugin {
+  return {
+    name: 'delorun-chunk-styles',
+    apply: 'build',
+    closeBundle: { order: 'post', sequential: true, handler() { if (existsSync(OUT_DIR)) linkChunkStyles(OUT_DIR, RENDERED_CHUNK_STYLES) } },
+  }
+}
+
 // With no assembled version there is no record: the What's new section is left out.
 const changelog = loadView(resolve(process.cwd(), '../../..'))
 
@@ -86,6 +100,7 @@ export default defineConfig({
     changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
+    chunkStyles(),
     tailwindcss(),
     tanstackStart({
       router: { generatedRouteTree: '../routeTree.gen.ts' },
