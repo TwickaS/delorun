@@ -7,9 +7,27 @@
  */
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Button, Link, TextField } from '@brand'
-import { SUPPORT_EMAIL } from '@/site/config.ts'
-import { SIGNUP_EN } from '@/site/words/signup-en.ts'
-import { CONSENT_TEXT, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
+import { SUPPORT_EMAIL } from '../site/config.ts'
+import { SIGNUP_EN } from '../site/words/signup-en.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT, CONSENT_TEXT_VERSION, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '../site/signup.ts'
+
+/** The Worker's JSON answer to a sign-up. */
+export interface SignupAnswer {
+  ok: boolean
+  message: string
+  /** `out_of_date` when the page posted an older consent version than the Worker accepts. */
+  code?: 'out_of_date'
+}
+
+/**
+ * The text the form shows for the Worker's answer: the dictionary's own reload message for an out-of-date page, which
+ * names why, and the Worker's message otherwise.
+ * @param answer - the Worker's answer.
+ * @returns the text.
+ */
+export function answerText(answer: SignupAnswer): string {
+  return answer.code === 'out_of_date' ? CONSENT_OUT_OF_DATE : answer.message
+}
 
 /** The part of Turnstile's script API the form calls. */
 interface TurnstileApi {
@@ -71,8 +89,8 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
     setStatus({ kind: 'working', text: copy.sending })
     try {
       const response = await fetch(SUBSCRIBE_PATH, { method: 'POST', body, headers: { Accept: 'application/json' } })
-      const result: { ok: boolean; message: string } = await response.json()
-      setStatus({ kind: result.ok ? 'done' : 'error', text: result.message })
+      const result: SignupAnswer = await response.json()
+      setStatus({ kind: result.ok ? 'done' : 'error', text: answerText(result) })
       if (result.ok) form.reset()
     } catch {
       setStatus({ kind: 'error', text: copy.networkError })
@@ -124,6 +142,7 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
   return (
     <form ref={formRef} method="post" action={SUBSCRIBE_PATH} onSubmit={onSubmit} className="flex flex-col gap-4">
       <input type="hidden" name={FIELDS.page} value={page} />
+      <input type="hidden" name={FIELDS.consentVersion} value={CONSENT_TEXT_VERSION} />
       <div className={compact ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4 sm:grid-cols-[1fr_1.4fr]'}>
         <TextField label={`${copy.nameLabel} ${copy.optional}`} name={FIELDS.firstName} type="text" autoComplete="given-name" maxLength={MAX_NAME_LENGTH} />
         <TextField label={copy.emailLabel} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} />

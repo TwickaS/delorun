@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { DesktopButton, desktopOffer, detectPlatform } from '../src/components/desktop-button.tsx'
+import { DesktopButton, desktopOffer, detectPlatform, isAllowedDownload } from '../src/components/desktop-button.tsx'
 import { DESKTOP_DOWNLOADS, DESKTOP_PLATFORMS } from '../src/site/config.ts'
 import { COPY } from '../src/site/copy.ts'
 import { ROADMAP_DESKTOP_HREF } from '../src/site/words/en.ts'
@@ -30,7 +30,7 @@ describe('the desktop download button', () => {
     const button = body.querySelector('button')!
     const configured = DESKTOP_PLATFORMS.some(platform => DESKTOP_DOWNLOADS[platform].trim() !== '')
     expect(button.getAttribute('aria-disabled')).toBe(configured ? null : 'true')
-    if (!configured) expect(body.querySelector('form')).toBeNull()
+    if (!configured) expect([...body.querySelectorAll('a')].map(link => link.getAttribute('href'))).toEqual([ROADMAP_DESKTOP_HREF])
   })
 
   it('stays a focusable button described by its note, which links the roadmap entry', () => {
@@ -39,23 +39,49 @@ describe('the desktop download button', () => {
     expect(button.hasAttribute('disabled')).toBe(false)
     expect(button.getAttribute('aria-disabled')).toBe('true')
     expect(button.textContent).toBe(COPY.desktop.label)
+    expect(button.getAttribute('type')).toBe('button')
+    expect(button.closest('form, a')).toBeNull()
     const note = body.ownerDocument.getElementById(button.getAttribute('aria-describedby')!)!
     expect(note.textContent).toBe(`${COPY.desktop.note.before}${COPY.desktop.note.linkText}${COPY.desktop.note.after}`)
     expect(note.querySelector('a')!.getAttribute('href')).toBe(ROADMAP_DESKTOP_HREF)
   })
 
-  it('turns on for a platform once its address is filled in, as a form that fetches the download', () => {
-    const downloads = { macos: '', windows: 'https://example.com/Delorun.msi' }
+  it('turns on for a platform once its address is filled in, as a link to the whole address', () => {
+    const downloads = { macos: '', windows: 'https://releases.delorun.com/desktop/0.1.0/Delorun.msi?v=1#sha' }
     expect(desktopOffer(downloads, 'macos')).toEqual({ available: true, platform: 'windows', href: downloads.windows })
     const body = parse(renderToStaticMarkup(createElement(DesktopButton, { downloads })))
-    expect(body.querySelector('form')!.getAttribute('action')).toBe(downloads.windows)
-    const button = body.querySelector('button')!
-    expect(button.getAttribute('aria-disabled')).toBeNull()
-    expect(button.textContent).toBe(COPY.desktop.labelFor.windows)
+    expect(body.querySelector('form, button')).toBeNull()
+    const link = body.querySelector('a')!
+    expect(link.getAttribute('href')).toBe(downloads.windows)
+    expect(link.textContent).toBe(COPY.desktop.labelFor.windows)
+  })
+
+  it('offers only https addresses on the release host or the project’s GitHub releases', () => {
+    for (const platform of DESKTOP_PLATFORMS) {
+      const href = DESKTOP_DOWNLOADS[platform].trim()
+      if (href !== '') expect(isAllowedDownload(href), `${platform}: ${href}`).toBe(true)
+    }
+    expect(isAllowedDownload('https://releases.delorun.com/desktop/Delorun.dmg')).toBe(true)
+    expect(isAllowedDownload('https://github.com/Delo-Run/delorun/releases/download/v0.1.0/Delorun.msi')).toBe(true)
+    for (const refused of [
+      'http://releases.delorun.com/desktop/Delorun.dmg',
+      'ftp://releases.delorun.com/Delorun.dmg',
+      'javascript:alert(1)',
+      'https://releases.delorun.com.example.com/Delorun.dmg',
+      'https://example.com/Delorun.msi',
+      'https://user@releases.delorun.com/Delorun.dmg',
+      'https://releases.delorun.com:8443/Delorun.dmg',
+      'https://github.com/someone-else/delorun/releases/download/v0.1.0/Delorun.msi',
+      'https://github.com/Delo-Run/delorun/archive/main.zip',
+      '/Delorun.dmg',
+    ]) {
+      expect(isAllowedDownload(refused), refused).toBe(false)
+      expect(desktopOffer({ macos: refused, windows: '' }, 'macos')).toEqual({ available: false })
+    }
   })
 
   it('prefers the visitor’s platform when it has a download', () => {
-    const both = { macos: 'https://example.com/Delorun.dmg', windows: 'https://example.com/Delorun.msi' }
+    const both = { macos: 'https://releases.delorun.com/Delorun.dmg', windows: 'https://releases.delorun.com/Delorun.msi' }
     expect(desktopOffer(both, 'windows')).toMatchObject({ platform: 'windows' })
     expect(desktopOffer(both, undefined)).toMatchObject({ platform: 'macos' })
     expect(desktopOffer({ macos: '  ', windows: '' }, 'macos')).toEqual({ available: false })

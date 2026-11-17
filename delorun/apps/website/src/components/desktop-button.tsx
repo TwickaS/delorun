@@ -1,13 +1,14 @@
 /**
  * The desktop app's download button, the hero's quiet second action. While no platform has a download address it is a
  * real button marked unavailable: reachable by keyboard, described by a note that links the roadmap, and the same with
- * scripts off. Filling in an address in `config.ts` turns it on for that platform, in the same place.
+ * scripts off. Filling in an address in `config.ts` turns it on for that platform, in the same place, as a plain link
+ * to the address, which works with scripts off. An address that is not `https` on an allowed place is never offered.
  *
  * @module @delorun/website/desktop-button
  */
 import { useEffect, useId, useState } from 'react'
 import { Button, Link } from '@brand'
-import { DESKTOP_DOWNLOADS, DESKTOP_PLATFORMS, type DesktopPlatform } from '../site/config.ts'
+import { DESKTOP_DOWNLOAD_PLACES, DESKTOP_DOWNLOADS, DESKTOP_PLATFORMS, type DesktopPlatform } from '../site/config.ts'
 import { COPY } from '../site/copy.ts'
 
 /** What the button offers: nothing yet, or one platform's download. */
@@ -16,8 +17,21 @@ export type DesktopOffer =
   | { readonly available: true, readonly platform: DesktopPlatform, readonly href: string }
 
 /**
+ * Whether an address may be offered as the desktop download: `https`, with no credentials, under one of
+ * {@link DESKTOP_DOWNLOAD_PLACES}.
+ * @param href - the address.
+ * @returns true when it may be offered.
+ */
+export function isAllowedDownload(href: string): boolean {
+  if (!URL.canParse(href)) return false
+  const url = new URL(href)
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.port !== '') return false
+  return DESKTOP_DOWNLOAD_PLACES.some(place => url.hostname === place.host && url.pathname.startsWith(place.path))
+}
+
+/**
  * The download to offer: the visitor's platform when it has an address, else the first platform that has one.
- * @param downloads - the address for each platform; an empty address means no download.
+ * @param downloads - the address for each platform; an empty address, or one {@link isAllowedDownload} refuses, means no download.
  * @param platform - the visitor's platform, when known.
  * @returns the offer, unavailable while every address is empty.
  */
@@ -25,7 +39,7 @@ export function desktopOffer(downloads: Readonly<Record<DesktopPlatform, string>
   const order = platform === undefined ? DESKTOP_PLATFORMS : [platform, ...DESKTOP_PLATFORMS.filter(other => other !== platform)]
   for (const candidate of order) {
     const href = downloads[candidate].trim()
-    if (href !== '') return { available: true, platform: candidate, href }
+    if (href !== '' && isAllowedDownload(href)) return { available: true, platform: candidate, href }
   }
   return { available: false }
 }
@@ -54,7 +68,7 @@ const ICON = (
  * The button and its note.
  * @param props.downloads - the address for each platform; the site's configuration unless a test passes its own.
  * @param props.className - extra classes for the wrapper.
- * @returns the button, unavailable with its note while there is no download, else a form that fetches the download.
+ * @returns the button, unavailable with its note while there is no download, else a link to the download.
  */
 export function DesktopButton({ downloads = DESKTOP_DOWNLOADS, className }: { downloads?: Readonly<Record<DesktopPlatform, string>>, className?: string }) {
   const noteId = useId()
@@ -66,10 +80,8 @@ export function DesktopButton({ downloads = DESKTOP_DOWNLOADS, className }: { do
     <div className={`flex flex-col items-start gap-2 ${className ?? ''}`.trim()}>
       {offer.available
         ? (
-            // A GET form fetches the download with scripts off as well as on.
-            <form method="get" action={offer.href}>
-              <Button type="submit" variant="secondary" icon={ICON}>{copy.labelFor[offer.platform]}</Button>
-            </form>
+            // TODO: draw it as the brand's button once the library has a link that looks like one.
+            <Link href={offer.href} className="inline-flex items-center gap-2">{ICON}{copy.labelFor[offer.platform]}</Link>
           )
         : <Button type="button" variant="secondary" unavailable aria-describedby={noteId} icon={ICON}>{copy.label}</Button>}
       <p id={noteId} className="min-h-5 text-sm text-(--dl-text-muted)">

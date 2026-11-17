@@ -16,7 +16,7 @@ export const SECTIONS_EN = {
         href: `${DOCS_URL}/guide/customise`,
       },
       {
-        text: 'Save your setup before a change and switch back later; going back covers Delorun and your chats, not the files an agent changed.',
+        text: 'Save your setup before a change and switch back later at your computer; going back covers Delorun and your chats, not the files an agent changed.',
         href: `${DOCS_URL}/guide/updates#going-back`,
       },
       {
@@ -24,7 +24,7 @@ export const SECTIONS_EN = {
         href: `${DOCS_URL}/guide/reach`,
       },
       {
-        text: 'It needs no account, runs commands in a sandbox and asks before risky steps.',
+        text: 'Commands run in a sandbox unless you grant full access, and risky changes ask for your consent first.',
         href: `${DOCS_URL}/guide/safety`,
       },
       {
@@ -54,7 +54,7 @@ export const SECTIONS_EN = {
     },
     phone: {
       heading: 'From your phone',
-      lead: 'The same studio on your computer and in your pocket, with the same chats.',
+      lead: 'Your chats from your computer, on your phone. A few sensitive steps need your approval at the computer.',
       wideLabel: 'The studio at desktop width',
       narrowLabel: 'The studio at phone width',
       link: { text: 'Reach the studio from your phone', href: `${DOCS_URL}/guide/reach#start-from-nothing` },

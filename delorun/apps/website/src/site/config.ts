@@ -48,8 +48,15 @@ export type DesktopPlatform = typeof DESKTOP_PLATFORMS[number]
 /**
  * The desktop app's download address for each platform. Every address is empty while the app is not released, which
  * keeps the download button unavailable; filling one in turns the button on for that platform, with the same layout.
+ * An address must be `https` under one of {@link DESKTOP_DOWNLOAD_PLACES}; the button offers no other.
  */
 export const DESKTOP_DOWNLOADS: Readonly<Record<DesktopPlatform, string>> = {
   macos: '',
   windows: '',
 }
+
+/** Where a desktop download may be served from: the release host, and the project's own releases on GitHub. */
+export const DESKTOP_DOWNLOAD_PLACES = [
+  { host: 'releases.delorun.com', path: '/' },
+  { host: 'github.com', path: `${new URL(GITHUB_URL).pathname}/releases/download/` },
+] as const

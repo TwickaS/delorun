@@ -19,7 +19,7 @@ export const PRIVACY_EN = {
   /** What the browser keeps, with the button that clears it. */
   stored: 'When you pick a package manager above the install command, your browser keeps that choice in this site’s local storage on your device, so the page shows the same command next time. It is not sent anywhere, and nothing is kept until you pick one.',
   forget: 'Forget my package manager choice',
-  forgotten: 'Forgotten. The page shows pnpm again.',
+  forgotten: 'Forgotten. The page shows the default command again.',
   hostHeading: 'What the host logs',
   host: 'The site is served by Cloudflare. As any web host does, Cloudflare receives each request your browser makes, which includes your IP address, the address you asked for and your browser’s request headers, and it keeps request logs and traffic figures under its own policies. Apart from the sign-up routes below, the site serves files, and Delo Run may see the request counts that Cloudflare shows the account owner but has no way to tell visitors apart.',
   updatesHeading: 'Release news by email',

@@ -26,7 +26,7 @@ const CLASSES = {
   sentence: 'col-span-3 max-w-[34ch] text-[clamp(20px,0.95rem_+_1.1vw,32px)] font-medium leading-[1.2] tracking-[-0.02em] text-pretty underline decoration-transparent decoration-1 underline-offset-[0.18em] transition-[text-decoration-color] duration-(--dl-duration-quick) ease-(--dl-ease) group-focus-visible:decoration-current pointer-fine:group-hover:decoration-current lg:col-span-8',
   headline: 'text-[clamp(22px,1rem_+_1.2vw,36px)] font-medium leading-[1.15] tracking-[-0.02em] text-balance',
   // On a phone the desktop-width studio sits in a frame that scrolls sideways and snaps to its edges.
-  sideways: 'overflow-x-auto overscroll-x-contain snap-x snap-mandatory [scrollbar-width:thin] *:snap-start lg:overflow-visible',
+  sideways: 'focus-visible:rounded-(--dl-radius-xs) focus-visible:[outline:var(--dl-focus-ring)] focus-visible:[outline-offset:var(--dl-focus-ring-offset)] overflow-x-auto overscroll-x-contain snap-x snap-mandatory [scrollbar-width:thin] *:snap-start lg:overflow-visible',
 } as const
 
 /**
@@ -73,7 +73,7 @@ function Claims() {
   return (
     <section aria-labelledby="claims" className={`${GRID} ${SPACE.normal}`}>
       <h2 id="claims" className="sr-only">{copy.heading}</h2>
-      <ol className={CLASSES.claims}>
+      <ol role="list" className={CLASSES.claims}>
         {copy.items.map((claim, index) => (
           <li key={claim.href}>
             <a href={claim.href} className={CLASSES.claim}>
@@ -154,7 +154,8 @@ function Phone() {
         <div className="col-span-full lg:order-2 lg:col-start-10 lg:col-end-13 lg:mt-32">
           <Picture width={330} height={660} label={copy.narrowLabel} still={<StudioStill alt="" />} />
         </div>
-        <div className={`col-span-full lg:order-1 lg:col-start-1 lg:col-end-9 ${CLASSES.sideways}`}>
+        {/* Focusable so a keyboard can scroll it sideways on a phone; it names the studio it holds. */}
+        <div role="region" aria-label={copy.wideLabel} tabIndex={0} className={`col-span-full lg:order-1 lg:col-start-1 lg:col-end-9 ${CLASSES.sideways}`}>
           <div className="w-[920px] max-w-none lg:w-auto">
             <Picture width={920} height={575} label={copy.wideLabel} still={<StudioStill alt="" />} />
           </div>

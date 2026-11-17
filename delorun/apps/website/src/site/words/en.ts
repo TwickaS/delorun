@@ -1,6 +1,6 @@
 /**
  * The site's English text. Every claim here is stated on the documentation page its link names, which holds the detail
- * and the limits; `tests/claims.spec.ts` checks that each linked page and heading exists.
+ * and the limits; `tests/words.spec.ts` checks that each linked page and heading exists.
  *
  * @module @delorun/website/words/en
  */
@@ -62,8 +62,6 @@ export const EN = {
     published: (date: string) => `Published ${date}`,
   },
   signup: {
-    /** The sentence beside the tick box, and the version the Worker stores with each sign-up; raise the version whenever the sentence or the page around it changes. */
-    consent: { text: 'Email me Delorun release news and major articles. One click unsubscribes.', version: '2' },
     footerHeading: 'Release news by email',
   },
   nav: { docs: 'Docs', blog: 'Blog', github: 'GitHub', privacy: 'Privacy', changelog: 'Changelog', roadmap: 'Roadmap' },

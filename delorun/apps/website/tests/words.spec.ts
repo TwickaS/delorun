@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { DOCS_URL } from '../src/site/config.ts'
-import { CONSENT_TEXT, CONSENT_TEXT_VERSION, HOME_SIGNUP_PAGE, SIGNUP_PAGES } from '../src/site/signup.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT, HOME_SIGNUP_PAGE, SIGNUP_PAGES } from '../src/site/signup.ts'
 import { COPY } from '../src/site/copy.ts'
 import { EN } from '../src/site/words/en.ts'
 import { PRIVACY_EN } from '../src/site/words/privacy-en.ts'
@@ -9,7 +9,7 @@ import { SECTIONS_EN } from '../src/site/words/sections-en.ts'
 import { SIGNUP_EN } from '../src/site/words/signup-en.ts'
 
 /** Every dictionary the site has. */
-const ALL = [EN, PRIVACY_EN, SECTIONS_EN, SIGNUP_EN]
+const ALL = [EN, PRIVACY_EN, SECTIONS_EN, SIGNUP_EN, CONSENT_TEXT, CONSENT_OUT_OF_DATE]
 
 /** The guide pages the documentation site builds from. */
 const GUIDE = new URL('../../../docs/guide/', import.meta.url)
@@ -37,7 +37,7 @@ function slug(heading: string): string {
 }
 
 /** The parts of the dictionary the home page shows (the desktop button appears twice by design). */
-const HOME = { hero: EN.hero, closing: EN.closing, below: SECTIONS_EN, consent: EN.signup.consent.text, submit: SIGNUP_EN.submit }
+const HOME = { hero: EN.hero, closing: EN.closing, below: SECTIONS_EN, consent: CONSENT_TEXT, submit: SIGNUP_EN.submit }
 
 describe('the page’s words', () => {
   it('link only guide pages and headings that exist', () => {
@@ -85,12 +85,7 @@ describe('the page’s words', () => {
   })
 })
 
-describe('the sign-up consent', () => {
-  it('comes from the dictionary with its raised version', () => {
-    expect(CONSENT_TEXT).toBe(EN.signup.consent.text)
-    expect(CONSENT_TEXT_VERSION).toBe('2')
-  })
-
+describe('the sign-up pages', () => {
   it('records the home page as a page the Worker accepts', () => {
     expect(SIGNUP_PAGES).toContain(HOME_SIGNUP_PAGE)
     expect(HOME_SIGNUP_PAGE).toBe('/')

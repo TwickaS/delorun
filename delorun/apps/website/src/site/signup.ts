@@ -4,13 +4,9 @@
  *
  * @module @delorun/website/signup
  */
-import { EN } from './words/en.ts'
 
-/** The sentence beside the tick box, from the dictionary of the page's language. The Worker stores {@link CONSENT_TEXT_VERSION} with each sign-up. */
-export const CONSENT_TEXT = EN.signup.consent.text
-
-/** Names the wording of {@link CONSENT_TEXT}; the dictionary raises it whenever the sentence or the page around it changes, so each stored consent names the words that were agreed to. */
-export const CONSENT_TEXT_VERSION = EN.signup.consent.version
+/** The consent sentence, its version, and the answer to a page that shows an older one; see `words/consent-en.ts`. */
+export { CONSENT_OUT_OF_DATE, CONSENT_TEXT, CONSENT_TEXT_VERSION } from './words/consent-en.ts'
 
 /** The longest first name the form accepts, in characters. */
 export const MAX_NAME_LENGTH = 80
