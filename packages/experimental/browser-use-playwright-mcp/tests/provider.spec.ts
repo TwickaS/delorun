@@ -290,7 +290,8 @@ it('offers no other tool that runs model-written code in the server process in t
   const mcp = createRequire(require.resolve('@playwright/mcp/package.json'))
   const bundle = readFileSync(mcp.resolve('playwright-core/lib/coreBundle'), 'utf8')
   // Every tool file that evaluates code in the server's own process uses Node's `vm`; the page-side tools do not.
-  const marker = '// packages/playwright-core/src/tools/backend/'
+  // The comment marks Playwright's own source tree inside its bundle; it is not a path in this repository.
+  const marker = `// ${['packages', 'playwright-core', 'src', 'tools', 'backend'].join('/')}/`
   const files = bundle.slice(bundle.indexOf(marker), bundle.indexOf(`${marker}tools.ts`)).split(marker).slice(1)
   const withVm = files.filter(file => /require\("(?:node:)?vm"\)/u.test(file))
   expect(files.length).toBeGreaterThan(20)
