@@ -117,6 +117,25 @@ describe('a reached plan limit', () => {
     expect(view(w)).toMatchObject({ state: 'ended', endedReason: 'The chat was archived.' })
   })
 
+  it.each([
+    ['a limit with its reset time', 'limit', { resetAt: 9000 }],
+    ['a model pick that is still needed', 'model-needed', { modelPicker: { offered: [{ id: 'm', label: 'M' }], planDefault: 'm' } }],
+  ] as const)('puts back %s when a start ends without a program', async (_name, state, change) => {
+    const w = await stateWorld()
+    w.mount.store.setStatus(w.child, state, change)
+    w.gate.failure = new GateRefusedError({ category: 'consent', reason: 'The person declined.' })
+    await collect(w.adapter.stream(w.request([w.say('task')])))
+    expect(view(w)).toMatchObject({ state, ...change })
+  })
+
+  it('falls back to idle when the start ended from a chat that already showed Starting', async () => {
+    const w = await stateWorld()
+    w.mount.store.setStatus(w.child, 'starting')
+    w.gate.failure = new GateRefusedError({ category: 'consent', reason: 'The person declined.' })
+    await collect(w.adapter.stream(w.request([w.say('task')])))
+    expect(view(w)?.state).toBe('idle')
+  })
+
   it('ends the turn with the reset time and starts nothing until the person asks', async () => {
     let clock = 1000
     const w = await stateWorld({ now: () => clock })
