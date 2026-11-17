@@ -5,7 +5,7 @@ import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { linuxScopeUnit, linuxStartTime, programRecordPath, ProgramRecords, systemProcessTable, type ProcessIdentity, type ProcessTable } from '../src/reap.ts'
+import { isNodeExecutable, linuxScopeUnit, linuxStartTime, nodeScript, programRecordPath, ProgramRecords, systemProcessTable, type ProcessIdentity, type ProcessTable } from '../src/reap.ts'
 
 /** A fake process table: live processes by id, and every signal and unit stop it was asked for. */
 class FakeTable implements ProcessTable {
@@ -70,6 +70,77 @@ async function userSystemd(): Promise<boolean> {
 }
 
 const hasUserSystemd = await userSystemd()
+
+/**
+ * Write a record file naming one Codex program, as a forged or older record would read.
+ * @param path - the record file.
+ * @param identity - the identity it names.
+ */
+function writeRecord(path: string, identity: ProcessIdentity): void {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  writeFileSync(path, JSON.stringify({ v: 1, programs: [{ provider: 'codex', identity }] }), { mode: 0o600 })
+}
+
+describe('a Node leader is told apart by the script it runs (review P2)', () => {
+  const node = { pid: 5151, startTime: '777', bootId: 'b-1', exe: '/usr/bin/node', script: '/profile/node_modules/@openai/codex/bin/codex.js' }
+
+  it('reads the script past Node options and their values', () => {
+    expect(nodeScript(['/usr/bin/node', '/a/codex.js', 'exec'])).toBe('/a/codex.js')
+    expect(nodeScript(['node', '--import', 'file:///tsx/esm.mjs', '--no-warnings', '/r/bin.ts', '--', 'x'])).toBe('/r/bin.ts')
+    expect(nodeScript(['node', '-r', 'hook.cjs', '--', '/w/watcher.mjs'])).toBe('/w/watcher.mjs')
+    expect(nodeScript(['node', '-e', 'setTimeout(() => {}, 1e6)'])).toBeUndefined()
+    expect(nodeScript(['node'])).toBeUndefined()
+    expect([isNodeExecutable('/opt/node/bin/node'), isNodeExecutable('C:\\node\\node.exe'), isNodeExecutable('/usr/bin/nodemon')]).toEqual([true, true, false])
+  })
+
+  it.for([
+    ['another script', { script: '/home/someone/server.js' }],
+    ['no script', { script: undefined }],
+  ] as const)('never stops a Node process whose record names %s', async ([, change], test) => {
+    const table = new FakeTable()
+    table.processes.set(node.pid, node)
+    const { path } = records(test, table)
+    writeRecord(path, { ...node, ...change })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['not-the-program'])
+    expect(table.calls).toEqual([])
+  })
+
+  it('stops a Node program whose script still matches', async (test) => {
+    const table = new FakeTable()
+    table.processes.set(node.pid, node)
+    const { path } = records(test, table)
+    writeRecord(path, node)
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
+  })
+
+  it('records a scoped Node program once the subprocess runner has handed over to it', async (test) => {
+    const table = new FakeTable()
+    const unit = 'dsh-subprocess-cd34.scope'
+    table.starting.set(node.pid, [
+      { ...node, exe: '/usr/bin/systemd-run', script: undefined },
+      { ...node, unit, script: '/repo/node_modules/@deepseek-ai/dsh-subprocess-local/lib/runner.js' },
+    ])
+    table.processes.set(node.pid, { ...node, unit })
+    const { records: one } = records(test, table)
+    expect(await one.started('codex', node.pid, unit)).toEqual({ ...node, unit })
+  })
+
+  it.skipIf(process.platform !== 'linux')('reads a real Node process\'s script from its command line', async (test) => {
+    const folder = realpathSync(mkdtempSync(join(tmpdir(), 'ea1-gate-node-')))
+    const script = join(folder, 'wait.mjs')
+    writeFileSync(script, 'setTimeout(() => {}, 30_000)\n')
+    const child = spawn(process.execPath, ['--no-warnings', script], { stdio: 'ignore' })
+    test.onTestFinished(() => {
+      child.kill('SIGKILL')
+      rmSync(folder, { recursive: true, force: true })
+    })
+    const table = systemProcessTable('linux', async argv => (await run(argv[0]!, argv.slice(1))).stdout)
+    await expect.poll(async () => (await table.identify(child.pid!))?.script).toBe(script)
+    expect((await table.identify(child.pid!))?.exe).toBe(realpathSync(process.execPath))
+  })
+})
 
 describe('reaping only located programs (review P3)', () => {
   it('never stops a matching record whose executable is not a located agent program', async (test) => {

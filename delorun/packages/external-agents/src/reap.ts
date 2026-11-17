@@ -4,7 +4,8 @@
  * each recorded program whose identity still matches in full, and drops the record. A process id alone never
  * identifies a program: on Linux the record holds the kernel start time (`/proc/<pid>/stat` field 22), the boot id
  * and the executable path, and the systemd unit when the subprocess owner placed the program in a user scope, which
- * is then stopped instead of the process group; on macOS the kernel start time and the executable path. Windows
+ * is then stopped instead of the process group; on macOS the kernel start time and the executable path; for a Node
+ * executable on either, the script its command line runs. Windows
  * records nothing and reaps nothing, because the subprocess owner's kill-on-close Job ends the programs with the Host.
  * @module @delorun/external-agents/reap
  */
@@ -37,6 +38,8 @@ export interface ProcessIdentity {
   readonly exe: string
   /** The systemd unit the process runs in, when it is a scope of the subprocess owner. */
   readonly unit?: string | undefined
+  /** For a Node executable, the script it runs: the first argument of its command line that is no Node option. */
+  readonly script?: string | undefined
 }
 
 /** One recorded program. */
@@ -76,6 +79,7 @@ const IdentitySchema = z.object({
   bootId: z.string().min(1).optional(),
   exe: z.string().min(1),
   unit: z.string().regex(/^[\w@.-]+\.scope$/u).optional(),
+  script: z.string().min(1).optional(),
 }).strict()
 
 const RecordFileSchema = z.object({
@@ -104,6 +108,35 @@ export function sameProcess(recorded: ProcessIdentity, current: ProcessIdentity)
     && recorded.bootId === current.bootId
     && recorded.exe === current.exe
     && recorded.unit === current.unit
+    && recorded.script === current.script
+}
+
+/** Node options whose value is the next argument. */
+const NODE_VALUE_OPTIONS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file', '--input-type', '--title'])
+
+/**
+ * Whether an executable is Node.
+ * @param exe - the executable path.
+ * @returns true for `node`, `nodejs` and `node.exe`.
+ */
+export function isNodeExecutable(exe: string): boolean {
+  return /^(?:node|nodejs)(?:\.exe)?$/iu.test(exe.split(/[\\/]/u).at(-1) ?? '')
+}
+
+/**
+ * The script a Node command line runs: the first argument after the executable that is no Node option or option value.
+ * @param argv - the command line, the executable first.
+ * @returns the script, or undefined when the command line runs none (`node -e …`, a REPL).
+ */
+export function nodeScript(argv: readonly string[]): string | undefined {
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index]!
+    if (arg === '--') return argv[index + 1]
+    if (arg === '-e' || arg === '--eval' || arg === '-p' || arg === '--print') return undefined
+    if (!arg.startsWith('-')) return arg
+    if (NODE_VALUE_OPTIONS.has(arg)) index += 1
+  }
+  return undefined
 }
 
 /** What a reap did with one record. */
@@ -158,7 +191,8 @@ export class ProgramRecords {
   /**
    * The identity of a process the subprocess owner starts in a systemd scope. The handle's process id first runs
    * `systemd-run`, which places itself in the scope and then runs the subprocess runner and the program in the same
-   * process; the identity is read again until the process sits in the handle's unit and no longer runs `systemd-run`.
+   * process; the identity is read again until the process sits in the handle's unit and runs neither `systemd-run`
+   * nor the runner.
    * @param pid - the process id the handle names.
    * @param unit - the scope unit the handle names.
    * @returns the identity, or undefined when the process ended or did not settle within `settleMs`.
@@ -168,7 +202,7 @@ export class ProgramRecords {
     for (;;) {
       const identity = await this.options.table.identify(pid)
       if (identity === undefined) return undefined
-      if (identity.unit === unit && basename(identity.exe) !== 'systemd-run') return identity
+      if (identity.unit === unit && basename(identity.exe) !== 'systemd-run' && !runnerScript(identity.script)) return identity
       if (Date.now() >= deadline) return undefined
       await new Promise(resolve => setTimeout(resolve, SCOPE_SETTLE_POLL_MS))
     }
@@ -314,7 +348,10 @@ async function linuxIdentity(pid: number): Promise<ProcessIdentity | undefined> 
     ])
     const startTime = linuxStartTime(stat)
     if (startTime === undefined) return undefined
-    return { pid, startTime, bootId: bootId.trim(), exe, unit: linuxScopeUnit(cgroup) }
+    const script = isNodeExecutable(exe)
+      ? nodeScript((await readFile(`/proc/${String(pid)}/cmdline`, 'utf8')).split('\0').filter(arg => arg.length > 0))
+      : undefined
+    return { pid, startTime, bootId: bootId.trim(), exe, unit: linuxScopeUnit(cgroup), script }
   } catch {
     // ENOENT for a process that is gone, EACCES for one of another user: neither is a program this home recorded.
     return undefined
@@ -330,14 +367,26 @@ async function linuxIdentity(pid: number): Promise<ProcessIdentity | undefined> 
 async function macIdentity(run: RunCommand, pid: number): Promise<ProcessIdentity | undefined> {
   let startTime: string
   let exe: string
+  let args: string[]
   try {
     startTime = (await run(['/bin/ps', '-o', 'lstart=', '-p', String(pid)])).trim()
     exe = (await run(['/bin/ps', '-o', 'comm=', '-p', String(pid)])).trim()
+    // `ps` joins the arguments with spaces, so a path with a space reads the same way at the start and at the reap.
+    args = isNodeExecutable(exe) ? (await run(['/bin/ps', '-ww', '-o', 'args=', '-p', String(pid)])).trim().split(/\s+/u) : []
   } catch {
     // ps exits 1 when no process has the id.
     return undefined
   }
-  return startTime.length > 0 && exe.startsWith('/') ? { pid, startTime, exe } : undefined
+  return startTime.length > 0 && exe.startsWith('/') ? { pid, startTime, exe, script: nodeScript(args) } : undefined
+}
+
+/**
+ * Whether a Node script is the subprocess owner's runner, which runs before the program in a scope's process.
+ * @param script - the script, when the process runs Node.
+ * @returns true for a script inside the `dsh-subprocess-local` package.
+ */
+function runnerScript(script: string | undefined): boolean {
+  return script !== undefined && /[\\/](?:dsh-)?subprocess-local[\\/]/u.test(script)
 }
 
 /**
