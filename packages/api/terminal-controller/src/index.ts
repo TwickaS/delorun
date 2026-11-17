@@ -348,6 +348,20 @@ export class TerminalController extends TypertRemoteService {
   }
 
   /**
+   * Call each {@link onTyped} listener; one that throws is logged and never breaks the person's input.
+   * @param peer - the Peer whose attachment received the input.
+   */
+  private announceTyped(peer: PeerScope): void {
+    for (const listener of this.typedListeners) {
+      try {
+        listener(peer)
+      } catch (error) {
+        this.ctx.logger.warn(`terminal typed listener failed: ${String(error)}`)
+      }
+    }
+  }
+
+  /**
    * Pass an attachment's input through and announce each typed write, so a listener can tell the person is working.
    * @param input - the attachment's uplink.
    * @param peer - the Peer the attachment speaks for.
@@ -360,7 +374,7 @@ export class TerminalController extends TypertRemoteService {
         return {
           next: async () => {
             const next = await source.next()
-            if (next.done !== true && next.value.type === 'write' && next.value.typed === true) for (const listener of this.typedListeners) listener(peer)
+            if (next.done !== true && next.value.type === 'write' && next.value.typed === true) this.announceTyped(peer)
             return next
           },
           // The attachment's cleanup returns the iterator to interrupt a pending read.

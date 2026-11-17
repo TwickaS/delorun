@@ -381,6 +381,23 @@ describe('TerminalController', () => {
     } finally { await stream.return?.() }
   })
 
+  it('keeps the input stream intact when a typed listener throws', async () => {
+    const { controller, agent, handle } = fixture()
+    await controller.create(agent, request, signal())
+    const warn = vi.spyOn(agent.ctx.logger, 'warn').mockImplementation(() => {})
+    controller.onTyped(() => { throw new Error('touch failed') })
+    const input = inputChannel<TerminalInput>()
+    const stream = attachController(agent, id, signal(), input.source)[Symbol.asyncIterator]()
+    await stream.next()
+    try {
+      input.push({ type: 'write', sequence: 1, data: 'x', typed: true })
+      // Pins the catch: a failing listener must not reject the person's input.
+      expect((await stream.next()).value).toMatchObject({ type: 'ack', sequence: 1 })
+      expect(handle.write).toHaveBeenCalledWith('x')
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('touch failed'))
+    } finally { await stream.return?.() }
+  })
+
   it('ends an attachment whose uplink has no return and ends at once', async () => {
     const { controller, agent } = fixture()
     await controller.create(agent, request, signal())

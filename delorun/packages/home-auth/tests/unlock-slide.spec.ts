@@ -53,6 +53,14 @@ describe('a sliding unlock', () => {
     expect(served.auth.elevationOf(deviceId, LISTENER)).toBeUndefined()
   })
 
+  it('is not revived by a renewal after its end has passed', async () => {
+    const { home: served, deviceId, record } = await unlocked(480)
+    served.clock.advance(15 * MINUTE)
+    // Pins the end check: a touch in the gap before the timer reaps the unlock must not extend it.
+    served.auth.touchUnlock(record.id)
+    expect(served.auth.elevationOf(deviceId, LISTENER)).toBeUndefined()
+  })
+
   it('ends after the minutes without an action that needed it', async () => {
     const { home: served, deviceId } = await unlocked(480)
     served.clock.advance(15 * MINUTE)
