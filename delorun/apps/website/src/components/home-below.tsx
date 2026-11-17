@@ -100,7 +100,7 @@ function MakeItYours() {
       <SectionHeading id="make-it-yours" title={copy.heading} className="col-span-full lg:col-span-6" />
       <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
       <div className="col-span-full mt-10 lg:mt-14">
-        <SectionStill caption={copy.still} className="h-[1040px] lg:h-[640px]" />
+        <SectionStill caption={copy.still} className="h-[1280px] lg:h-[640px]" />
       </div>
       <GuideLink link={copy.link} />
     </Section>
