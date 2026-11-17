@@ -16,7 +16,7 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url))
 const BUNDLE_LOCAL = join(REPO, 'delorun/packages/bundle-local')
 const BUNDLE_STUDIO = join(REPO, 'delorun/packages/bundle-studio')
 /** The packages whose built browser halves the profile serves: the two bundles' own and the studio plugins they mount. */
-const BUILT = ['@delorun/bundle-local', '@delorun/plugin-theme', '@delorun/plugin-settings-layout', '@delorun/plugin-chat-states', '@delorun/plugin-sidebar', '@delorun/plugin-onboarding', '@delorun/plugin-update']
+const BUILT = ['@delorun/bundle-local', '@delorun/plugin-theme', '@delorun/plugin-settings-layout', '@delorun/plugin-chat-states', '@delorun/plugin-sidebar', '@delorun/plugin-new-workspace', '@delorun/plugin-onboarding', '@delorun/plugin-update', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-trash', '@delorun/plugin-downloads']
 /** The attached check's notice: a security fix on the same DeepSeek Harness that keeps every plugin. */
 const NOTICE = {
   running: { delorun: '0.1.2', dsh: '0.2.2' },
@@ -66,8 +66,11 @@ async function openStudio(browser: Browser, url: string, remote: boolean): Promi
 
 it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in the sidebar, hides it for its release when closed, and offers no control on a remote session', async () => {
   // The root build leaves Delorun's packages out; the profile serves their built browser halves.
-  const build = spawnSync('pnpm', [...BUILT.flatMap(name => ['--filter', name]), 'run', 'build'], { cwd: REPO, encoding: 'utf8' })
-  expect(build.status, build.stderr).toBe(0)
+  // One call per package: bundle-local and plugin-update reference each other, which one `--filter` run refuses as a task cycle.
+  for (const name of BUILT) {
+    const build = spawnSync('pnpm', ['--filter', name, 'run', 'build'], { cwd: REPO, encoding: 'utf8' })
+    expect(build.status, `${name}: ${build.stdout}${build.stderr}`).toBe(0)
+  }
   const scaffold = await launchWebScaffold({
     profile: { packages: [{ dir: BUNDLE_LOCAL, enabled: true }, { dir: BUNDLE_STUDIO, enabled: true }] },
   })

@@ -12,12 +12,12 @@ import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { expect, it, onTestFailed, onTestFinished } from 'vitest'
 import { launchWebScaffold, webSnapshotMode } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, revealNavigationDrawer, saveFailureShot } from './support.ts'
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url))
 const BUNDLE_LOCAL = join(REPO, 'delorun/packages/bundle-local')
 const BUNDLE_STUDIO = join(REPO, 'delorun/packages/bundle-studio')
-const BUILT = ['@delorun/bundle-local', '@delorun/plugin-theme', '@delorun/plugin-settings-layout', '@delorun/plugin-chat-states', '@delorun/plugin-sidebar', '@delorun/plugin-onboarding', '@delorun/plugin-update']
+const BUILT = ['@delorun/bundle-local', '@delorun/plugin-theme', '@delorun/plugin-settings-layout', '@delorun/plugin-chat-states', '@delorun/plugin-sidebar', '@delorun/plugin-new-workspace', '@delorun/plugin-onboarding', '@delorun/plugin-update', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-trash', '@delorun/plugin-downloads']
 const NOTICE = {
   running: { delorun: '0.1.2', dsh: '0.2.2' },
   release: { delorun: '0.1.3', dsh: '0.2.2', channel: 'stable', security: false, summary: 'Faster start and two fixes' },
@@ -29,6 +29,8 @@ const TO = { delorun: '0.1.3', dsh: '0.2.2', channel: 'stable' }
 const OK = { ok: true }
 const CONTROLS = ['update-check', 'update-begin', 'update-cancel', 'update-rollback', 'update-dismiss', 'stop']
 const SHOTS = process.env.DELORUN_UPDATE_SHOTS
+/** `DELORUN_UPDATE_SHOTS_VIEW=phone-dark` takes the pictures at 390 wide in the dark scheme. */
+const PHONE_DARK = process.env.DELORUN_UPDATE_SHOTS_VIEW === 'phone-dark'
 
 /** The Host's answers the interception gives; `scenario` moves as the page acts. */
 interface Script {
@@ -91,11 +93,12 @@ async function serveUpdateRoutes(page: Page, script: Script, onApply: (script: S
 async function shoot(page: Page, name: string): Promise<void> {
   if (SHOTS === undefined) return
   mkdirSync(SHOTS, { recursive: true })
-  await page.screenshot({ path: join(SHOTS, `${name}.png`) })
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: join(SHOTS, `${name}${PHONE_DARK ? '-phone-dark' : ''}.png`) })
 }
 
 /**
- * Open the studio past onboarding, with the notice shown.
+ * Open the studio past its onboarding.
  * @param browser - the browser.
  * @param url - the studio's authenticated address.
  * @param script - the Host's state.
@@ -104,18 +107,25 @@ async function shoot(page: Page, name: string): Promise<void> {
  */
 async function openStudio(browser: Browser, url: string, script: Script, onApply: (script: Script) => void): Promise<Page> {
   const page = await newEnglishPage(browser)
+  if (PHONE_DARK) {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.emulateMedia({ colorScheme: 'dark' })
+  }
   await serveUpdateRoutes(page, script, onApply)
   await page.goto(url)
+  // A fresh profile opens Delorun's onboarding, whose dialog covers the sidebar until it is put off.
   const onboarding = page.getByRole('dialog')
-  await onboarding.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 30_000 })
-  await onboarding.getByRole('button', { name: 'Skip for now', exact: true }).click()
+  await onboarding.getByRole('button', { name: 'Complete setup later', exact: true }).click({ timeout: 30_000 })
   await onboarding.waitFor({ state: 'detached' })
   return page
 }
 
 it.skipIf(webSnapshotMode() === 'record')('updates from the sidebar notice through the report dialog, reloads once, and words the outcomes', async () => {
-  const build = spawnSync('pnpm', [...BUILT.flatMap(name => ['--filter', name]), 'run', 'build'], { cwd: REPO, encoding: 'utf8' })
-  expect(build.status, build.stderr).toBe(0)
+  // One call per package: bundle-local and plugin-update reference each other, which one `--filter` run refuses as a task cycle.
+  for (const name of BUILT) {
+    const build = spawnSync('pnpm', ['--filter', name, 'run', 'build'], { cwd: REPO, encoding: 'utf8' })
+    expect(build.status, `${name}: ${build.stdout}${build.stderr}`).toBe(0)
+  }
   const scaffold = await launchWebScaffold({
     profile: { packages: [{ dir: BUNDLE_LOCAL, enabled: true }, { dir: BUNDLE_STUDIO, enabled: true }] },
   })
@@ -135,6 +145,7 @@ it.skipIf(webSnapshotMode() === 'record')('updates from the sidebar notice throu
   page.on('load', () => { loads += 1 })
 
   const notice = page.locator('[data-update-notice="0.1.3"]')
+  if (PHONE_DARK) await revealNavigationDrawer(page, 'en')
   await notice.waitFor()
   await shoot(page, 'notice')
   await notice.getByRole('button', { name: 'Update now…', exact: true }).click()
