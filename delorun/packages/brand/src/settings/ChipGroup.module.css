@@ -122,6 +122,7 @@
 
 /* Segmented: one joined row of equal options. */
 .segmented {
+  grid-template-columns: none;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   gap: 0;
