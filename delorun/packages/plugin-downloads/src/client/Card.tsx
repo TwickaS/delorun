@@ -6,7 +6,7 @@ import { ItemList } from './Items.tsx'
 import { Live } from './Live.tsx'
 import { pluralKey, type Translate } from './locales.ts'
 import type { PanelModel } from './model.ts'
-import type { DownloadsSource } from './source.ts'
+import { isActive, type DownloadsSource } from './source.ts'
 
 /**
  * The header's words for the model's phase.
@@ -15,7 +15,10 @@ import type { DownloadsSource } from './source.ts'
  * @returns the sentence.
  */
 export function headerText(model: PanelModel, t: Translate): string {
-  if (model.phase === 'working') return t('header', { done: model.done, total: model.total })
+  if (model.phase === 'working') {
+    const waiting = model.items.filter(item => isActive(item))
+    return waiting.length > 0 && waiting.every(item => item.state === 'waiting-for-unlock') ? t('header.waitingUnlock') : t('header', { left: model.active })
+  }
   if (model.phase === 'attention') return t(pluralKey('header.attention', model.failed), { n: model.failed })
   return t(pluralKey('summary', model.added), { n: model.added })
 }

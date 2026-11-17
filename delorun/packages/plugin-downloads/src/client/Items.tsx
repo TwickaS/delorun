@@ -30,7 +30,7 @@ export interface ItemListProps {
 export function statusText(item: DownloadItem, t: Translate): string {
   switch (item.state) {
     case 'downloading': return `${String(Math.floor(itemFraction(item) * 100))}%`
-    case 'queued': return item.position === undefined ? t('state.queuedNoPosition') : t('state.queued', { n: item.position })
+    case 'queued': return item.position === undefined ? t('state.queuedNoPosition') : item.position <= 1 ? t('state.queuedNext') : t('state.queued', { ahead: item.position - 1 })
     case 'waiting-for-unlock': return t('state.waitingForUnlock')
     case 'verifying': return t('state.verifying')
     case 'installing': return t('state.installing')

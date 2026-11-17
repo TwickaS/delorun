@@ -39,9 +39,9 @@ describe('the desktop card', () => {
 
   it('reads "Installing n of total" and shows each state', () => {
     render(<Card source={createFakeDownloadsSource(mixed())} />)
-    expect(screen.getByRole('button', { name: /Installing 2 of 5/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /4 left to install/ })).toBeTruthy()
     expect(screen.getByRole('progressbar', { name: 'alpha' }).getAttribute('aria-valuenow')).toBe('40')
-    expect(screen.getByText('Waiting, number 1')).toBeTruthy()
+    expect(screen.getByText('Waiting · next')).toBeTruthy()
     expect(screen.getByText('Waiting for unlock')).toBeTruthy()
     expect(screen.getByText('Checking')).toBeTruthy()
     expect(screen.getByText('Added')).toBeTruthy()
@@ -56,7 +56,7 @@ describe('the desktop card', () => {
 
   it('collapses to one line and expands again', () => {
     render(<Card source={createFakeDownloadsSource(mixed())} />)
-    const toggle = screen.getByRole('button', { name: /Installing 2 of 5/ })
+    const toggle = screen.getByRole('button', { name: /4 left to install/ })
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -70,7 +70,7 @@ describe('the desktop card', () => {
     render(<Card source={source} />)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel beta' }))
     expect(source.calls).toEqual(['cancel:beta'])
-    expect(screen.queryByText('Waiting, number 1')).toBeNull()
+    expect(screen.queryByText('Waiting · next')).toBeNull()
   })
 
   it('shows the summary when everything is added, then hides', () => {
@@ -122,7 +122,7 @@ describe('the desktop card', () => {
     render(<Card source={source} />)
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'queued', position: 1 })]) })
-    expect(screen.getByRole('button', { name: /Installing 1 of 1/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /1 left to install/ })).toBeTruthy()
   })
 
   it('moves focus along the buttons in order', () => {
@@ -130,7 +130,7 @@ describe('the desktop card', () => {
     const buttons = screen.getAllByRole('button')
     buttons[0]?.focus()
     expect(document.activeElement).toBe(buttons[0])
-    expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([expect.stringContaining('Installing 1 of 1'), 'Cancel a'])
+    expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([expect.stringContaining('1 left to install'), 'Cancel a'])
   })
 })
 
@@ -142,7 +142,7 @@ describe('the phone row in the setup guide', () => {
 
   it('is a single muted line with no accent', () => {
     const { container } = render(<OnboardingDownloadsRow source={createFakeDownloadsSource(mixed())} t={t} />)
-    expect(screen.getByRole('button', { name: /Installing 2 of 5 · \d+%/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /4 left to install · \d+%/ })).toBeTruthy()
     expect(container.querySelector('[data-tone="quiet"]')).not.toBeNull()
     expect(container.querySelector('[class*="accent"]')).toBeNull()
     expect(container.querySelector('ul')).toBeNull()
@@ -150,7 +150,7 @@ describe('the phone row in the setup guide', () => {
 
   it('expands the list in place, still without accent', () => {
     const { container } = render(<OnboardingDownloadsRow source={createFakeDownloadsSource(mixed())} t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: /Installing 2 of 5/ }))
+    fireEvent.click(screen.getByRole('button', { name: /4 left to install/ }))
     expect(within(container).getAllByRole('listitem').length).toBe(5)
     expect(container.querySelector('[class*="accent"]')).toBeNull()
     expect(container.querySelector('[data-tone="card"]')).toBeNull()
@@ -160,6 +160,32 @@ describe('the phone row in the setup guide', () => {
     const { container } = render(<OnboardingDownloadsRow source={createFakeDownloadsSource([item('a', { state: 'failed' }), item('b', { state: 'queued' })])} t={t} />)
     expect(screen.getByRole('img', { name: 'Something could not be installed' })).toBeTruthy()
     expect(container.querySelector('[class*="accent"], [class*="error"], [class*="warn"]')).toBeNull()
+  })
+})
+
+describe('the header words and the queue wording', () => {
+  it('says "Waiting for unlock" when every unfinished item waits for the unlock', () => {
+    render(<Card source={createFakeDownloadsSource([item('a', { state: 'waiting-for-unlock' }), item('b', { state: 'waiting-for-unlock' }), item('c', { state: 'ready' })])} />)
+    expect(screen.getByRole('button', { name: /Waiting for unlock/ })).toBeTruthy()
+    cleanup()
+    render(<Card source={createFakeDownloadsSource([item('a', { state: 'waiting-for-unlock' }), item('b', { state: 'downloading' })])} />)
+    expect(screen.getByRole('button', { name: /2 left to install/ })).toBeTruthy()
+  })
+
+  it('names the place in the queue as next, or by how many are ahead', () => {
+    render(<Card source={createFakeDownloadsSource([item('a', { state: 'queued', position: 1 }), item('b', { state: 'queued', position: 2 }), item('c', { state: 'queued', position: 3 })])} />)
+    expect(screen.getByText('Waiting · next')).toBeTruthy()
+    expect(screen.getByText('Waiting · 1 ahead')).toBeTruthy()
+    expect(screen.getByText('Waiting · 2 ahead')).toBeTruthy()
+  })
+
+  it('counts the badge and the header from the same number', () => {
+    const source = createFakeDownloadsSource(mixed())
+    const { unmount } = render(<Card source={source} />)
+    const header = screen.getByRole('button', { name: /left to install/ }).getAttribute('aria-label') ?? ''
+    unmount()
+    render(<Sheet source={source} />)
+    expect(header).toContain(screen.getByRole('button', { name: /Downloads, \d+ in progress/ }).textContent ?? 'none')
   })
 })
 
