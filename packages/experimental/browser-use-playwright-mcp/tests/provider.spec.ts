@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { join, win32 } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -242,6 +242,182 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
   }
 })
 
+it('catches a file the server wrote through a nested link, removes it without following links, and refuses the call', async () => {
+  const { chat, outside } = await chatFolder()
+  const output = join(chat, Provider.OUTPUT_FOLDER)
+  await mkdir(join(output, 'sub'), { recursive: true })
+  await writeFile(join(outside, 'older.txt'), 'the person\'s own file')
+  await new Promise(done => setTimeout(done, 1100))
+  await symlink(outside, join(output, 'sub', 'out'))
+  const lines: string[] = []
+  const check = (args: unknown, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_take_screenshot', arguments: args, directory: chat }, startedAt, line => lines.push(line))
+  const before = Date.now()
+  expect(await check({}, before)).toBeUndefined()
+  await writeFile(join(outside, 'download.pdf'), 'landed')
+  expect(await check({}, before)).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(outside, 'download.pdf'))).toBe(false)
+  expect(readFileSync(join(outside, 'older.txt'), 'utf8')).toBe('the person\'s own file')
+  expect(lines).toHaveLength(1)
+  expect(lines[0]).toContain('outside the chat')
+  expect(lines[0]).toContain(join(outside, 'download.pdf'))
+  // The link itself stays: removal never follows or changes it.
+  expect(await realpath(join(output, 'sub', 'out'))).toBe(outside)
+})
+
+it('catches a file written to a filename that leads outside, and leaves a file the call did not create', async () => {
+  const { chat, outside } = await chatFolder()
+  await mkdir(join(chat, Provider.OUTPUT_FOLDER))
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER, 'out'))
+  const check = (filename: string, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_pdf_save', arguments: { filename }, directory: chat }, startedAt, () => {})
+  await writeFile(join(outside, 'old.pdf'), 'old')
+  expect(await check('out/old.pdf', Date.now() + 60_000)).toBeUndefined()
+  expect(existsSync(join(outside, 'old.pdf'))).toBe(true)
+  const startedAt = Date.now()
+  await writeFile(join(outside, 'new.pdf'), 'new')
+  expect(await check('out/new.pdf', startedAt)).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(outside, 'new.pdf'))).toBe(false)
+})
+
+it('reports a file it cannot remove, and accepts a screenshot and a download that stay inside the folder', async () => {
+  const { chat, outside } = await chatFolder()
+  await mkdir(join(chat, Provider.OUTPUT_FOLDER))
+  const check = (args: unknown, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_take_screenshot', arguments: args, directory: chat }, startedAt, () => {})
+  const startedAt = Date.now()
+  await writeFile(join(chat, Provider.OUTPUT_FOLDER, 'page.png'), 'png')
+  await writeFile(join(chat, 'download.zip'), 'zip')
+  expect(await check({ filename: 'page.png' }, startedAt)).toBeUndefined()
+  expect(await check({ filename: 'download.zip' }, startedAt)).toBeUndefined()
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER, 'out'))
+  await mkdir(join(outside, 'folder-made-by-call'))
+  expect(await check({}, startedAt)).toBeUndefined()
+  await symlink(join(outside, 'elsewhere'), join(outside, 'link-made-by-call'))
+  expect(await check({}, startedAt)).toBeUndefined()
+  expect(existsSync(join(chat, Provider.OUTPUT_FOLDER, 'page.png'))).toBe(true)
+  expect(existsSync(join(chat, 'download.zip'))).toBe(true)
+})
+
+it('gives mountSessionMcp the read copy and the after-call check', () => {
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].checkResult).toBeTypeOf('function')
+  expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].prepareCall).toBe(Provider.copyReadArguments)
+})
+
+it('puts the output folders in the per-user cache folder, outside the chat\'s folder and the Delorun home', () => {
+  expect(Provider.outputRoot('linux', { XDG_CACHE_HOME: '/cache' }, '/home/p')).toBe('/cache/delorun-browser-output')
+  expect(Provider.outputRoot('linux', { XDG_CACHE_HOME: 'relative' }, '/home/p')).toBe('/home/p/.cache/delorun-browser-output')
+  expect(Provider.outputRoot('linux', {}, '/home/p')).toBe('/home/p/.cache/delorun-browser-output')
+  expect(Provider.outputRoot('darwin', {}, '/Users/p')).toBe('/Users/p/Library/Caches/delorun-browser-output')
+  expect(Provider.outputRoot('win32', { LOCALAPPDATA: 'C:\\L' }, 'C:\\Users\\p')).toContain('delorun-browser-output')
+  expect(Provider.outputRoot('win32', {}, '/home/p')).toContain('AppData')
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const root = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].outputRoot!
+  expect(root).toBe(Provider.outputRoot(process.platform, process.env, homedir()))
+})
+
+it('with an output folder, writes only inside it: a path into the chat\'s folder or elsewhere is refused before the call', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await symlink(outside, join(chat, 'link'))
+  const refuse = (filename: string, tool = 'browser_take_screenshot') =>
+    Provider.refuseOutsideFolder({ tool, arguments: { filename }, directory: chat, outputDirectory })
+  expect(await refuse('page.png')).toBeUndefined()
+  expect(await refuse(join(outputDirectory, 'page.png'))).toBeUndefined()
+  expect(await refuse('sub/page.png')).toBeUndefined()
+  for (const filename of [join(chat, 'page.png'), join(chat, 'link', 'x.png'), join(outside, 'page.png'), '../../escape.png']) {
+    expect(await refuse(filename)).toBe(Provider.writeOutsideOutputMessage(outputDirectory))
+  }
+  expect(Provider.writeOutsideOutputMessage(outputDirectory)).toContain(`Browser saves to its own folder: ${outputDirectory}`)
+  // A tool that reads its filename is not a write.
+  expect(await refuse(join(chat, 'state.json'), 'browser_set_storage_state')).toBeUndefined()
+})
+
+it('copies a file the server would read from the chat\'s folder into the output folder, and the server never gets the chat\'s path', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await writeFile(join(chat, 'photo.png'), 'photo')
+  await writeFile(join(outputDirectory, 'earlier.png'), 'earlier')
+  const prepare = (tool: string, args: unknown) => Provider.copyReadArguments({ tool, arguments: args, directory: chat, outputDirectory })
+  const prepared = await prepare('browser_file_upload', { paths: ['photo.png', join(chat, 'photo.png'), join(outputDirectory, 'earlier.png')] })
+  const { arguments: { paths }, note } = prepared as { arguments: { paths: string[] }; note: string }
+  expect(note).toContain('Delorun uploaded a copy of "photo.png" as')
+  expect(note).toContain('earlier.png')
+  expect(paths).toHaveLength(3)
+  for (const copy of paths.slice(0, 2)) {
+    expect(copy.startsWith(outputDirectory)).toBe(true)
+    expect(readFileSync(copy, 'utf8')).toBe('photo')
+    expect(statSync(copy).mode & 0o777).toBe(0o600)
+  }
+  expect(paths[0]).not.toBe(paths[1])
+  expect(readFileSync(paths[2]!, 'utf8')).toBe('earlier')
+  expect(paths[2]).not.toBe(join(outputDirectory, 'earlier.png'))
+  // A link swapped in after the copy changes nothing the server reads.
+  await rm(join(chat, 'photo.png'))
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(join(outside, 'secret.txt'), join(chat, 'photo.png'))
+  expect(readFileSync(paths[0]!, 'utf8')).toBe('photo')
+  const state = await prepare('browser_set_storage_state', { filename: 'state.json' })
+  expect(state).toBe(Provider.unreadableMessage('state.json'))
+  expect(await prepare('browser_navigate', { url: 'https://example.com' })).toBeUndefined()
+  expect(await prepare('browser_take_screenshot', { filename: 'x.png' })).toBeUndefined()
+})
+
+it('copies a file in the output folder too, so a link the chat swaps in after the check changes nothing the server reads', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  const home = join(outside, 'home')
+  await Promise.all([mkdir(outputDirectory), mkdir(home)])
+  await writeFile(join(outputDirectory, 'credentials.json'), 'in the output folder')
+  await writeFile(join(home, 'credentials.json'), 'home secret')
+  await symlink(outputDirectory, join(chat, 'x'))
+  const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: ['x/credentials.json', join(outputDirectory, 'credentials.json')] }, directory: chat, outputDirectory })
+  const { paths } = (prepared as { arguments: { paths: string[] } }).arguments
+  for (const path of paths) {
+    expect(path).not.toContain(join(chat, 'x'))
+    expect(path.startsWith(join(outputDirectory, 'upload-'))).toBe(true)
+    expect(readFileSync(path, 'utf8')).toBe('in the output folder')
+  }
+  await rm(join(chat, 'x'))
+  await symlink(home, join(chat, 'x'))
+  expect(readFileSync(paths[0]!, 'utf8')).toBe('in the output folder')
+})
+
+it('refuses a read through a link that leads outside the chat\'s folder, a missing file, a folder, and reads nothing outside', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(join(outside, 'secret.txt'), join(chat, 'notes.txt'))
+  await symlink(outside, join(chat, 'link'))
+  await mkdir(join(chat, 'folder'))
+  for (const name of ['notes.txt', 'link/secret.txt', join(outside, 'secret.txt'), 'missing.txt', 'folder', '../outside/secret.txt']) {
+    const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: [name] }, directory: chat, outputDirectory })
+    expect(prepared).toBe(Provider.unreadableMessage(name))
+  }
+  expect(await readdir(outputDirectory)).toEqual([])
+})
+
+it('with an output folder, still catches a file that landed through a link inside it', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  const elsewhere = join(outside, 'elsewhere')
+  await Promise.all([mkdir(outputDirectory), mkdir(elsewhere)])
+  await symlink(elsewhere, join(outputDirectory, 'out'))
+  const startedAt = Date.now()
+  await writeFile(join(outputDirectory, 'fine.png'), 'png')
+  await writeFile(join(elsewhere, 'landed.pdf'), 'pdf')
+  const lines: string[] = []
+  const call = { tool: 'browser_pdf_save', arguments: { filename: 'out/landed.pdf' }, directory: chat, outputDirectory }
+  expect(await Provider.refuseWrittenOutside(call, startedAt, line => lines.push(line))).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(elsewhere, 'landed.pdf'))).toBe(false)
+  expect(existsSync(join(outputDirectory, 'fine.png'))).toBe(true)
+  expect(lines).toHaveLength(1)
+})
+
 it('keeps the tool denial, the folder guard and the MCP root with browser_additions off', async () => {
   // C16's parity composition turns browser_additions off; the denial and the guard are security invariants that hold
   // with every switch off. The runtime tells the Session's folder as the one MCP root whatever options the provider
@@ -263,7 +439,8 @@ it('keeps the tool denial, the folder guard and the MCP root with browser_additi
   for (const config of [{ mode: 'launch', browserAdditions: true }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222', browserAdditions: true }] as const) {
     Provider.apply(new Context(), Provider.Config(config))
     const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
-    expect(options).toMatchObject({ outputFolder: Provider.OUTPUT_FOLDER, explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(options).toMatchObject({ explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(options.outputFolder).toBeUndefined()
     expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
       .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
   }
