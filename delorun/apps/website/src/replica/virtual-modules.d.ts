@@ -17,3 +17,13 @@ declare module 'virtual:replica-icons' {
 }
 
 declare module 'virtual:replica-tokens.css'
+
+declare module 'virtual:replica-island' {
+  /**
+   * The live replica's first render as static markup with its styles. On the server it renders `ReplicaLive`; in the
+   * browser it is empty.
+   * @param props - the session and the width.
+   * @returns the markup; empty in the browser.
+   */
+  export function island(props: Pick<import('./ReplicaLive.tsx').ReplicaLiveProps, 'session' | 'width'>): string
+}

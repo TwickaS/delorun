@@ -94,22 +94,6 @@
 
 .composerSlot { padding: 0 var(--dl-space-4) var(--dl-space-4); }
 
-.terminal {
-  box-sizing: border-box;
-  height: 100%;
-  margin: 0;
-  padding: var(--dl-space-4);
-  overflow: auto;
-  background: var(--dl-surface-sunken);
-  color: var(--dl-text);
-  font-family: var(--dl-font-mono);
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.line[data-kind='output'] { color: var(--dl-text-muted); }
-
 /* A press the chapter script plays: the control shrinks as a pressed button does and carries the focus ring's colour. */
 .layout :global([data-replica-press]) {
   outline: 2px solid var(--dl-accent);

@@ -30,38 +30,32 @@ describe('Transcript', () => {
 })
 
 describe('ToolCard', () => {
-  const base = { title: 'Run a command', command: 'ls -la', statusLabel: 'Running', outputLabel: 'Output' } as const
+  const base = { title: 'Bash', command: 'ls -la' } as const
 
-  it('shows the title, the command and the status, and has no folded output without any', () => {
-    const { container } = render(<ToolCard {...base} status="running" />)
-    expect(screen.getByText('Run a command')).toBeTruthy()
-    expect(screen.getByText('ls -la')).toBeTruthy()
-    expect(screen.getByText('Running')).toBeTruthy()
-    expect((container.firstElementChild as HTMLElement).dataset.status).toBe('running')
+  it('shows the title and the command on one row, and no status word for a finished call', () => {
+    const { container } = render(<ToolCard {...base} status="done" />)
+    expect(container.textContent).toBe('Bash·ls -la')
+    expect((container.firstElementChild as HTMLElement).dataset.status).toBe('done')
     expect(container.querySelector('details')).toBeNull()
   })
 
-  it('records each status', () => {
-    const { container, rerender } = render(<ToolCard {...base} status="done" statusLabel="Done" />)
-    expect((container.firstElementChild as HTMLElement).dataset.status).toBe('done')
+  it('gives a running or failed call its status as hidden text, and a dot only while running', () => {
+    const { container, rerender } = render(<ToolCard {...base} status="running" statusLabel="Running" />)
+    expect(screen.getByText('Running')).toBeTruthy()
+    expect(container.querySelector('[data-dot]')).toBeTruthy()
     rerender(<ToolCard {...base} status="failed" statusLabel="Failed" />)
-    expect((container.firstElementChild as HTMLElement).dataset.status).toBe('failed')
+    expect(screen.getByText('Failed')).toBeTruthy()
     expect(container.querySelector('[data-dot]')).toBeNull()
   })
 
-  it('folds the output under a summary named by its label and unfolds it when open', () => {
-    const { container, rerender } = render(<ToolCard {...base} status="done" statusLabel="Done" output="total 0" />)
+  it('folds the output open from the row itself', () => {
+    const { container, rerender } = render(<ToolCard {...base} status="done" output="total 0" />)
     const details = container.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelector('summary')?.textContent).toBe('Output')
+    expect(details.querySelector('summary')?.textContent).toBe('Bash·ls -la')
     expect(details.querySelector('pre')?.textContent).toBe('total 0')
-    rerender(<ToolCard {...base} status="done" statusLabel="Done" output="total 0" open />)
+    rerender(<ToolCard {...base} status="done" output="total 0" open />)
     expect((container.querySelector('details') as HTMLDetailsElement).open).toBe(true)
-  })
-
-  it('shows a dot beside the label only while running', () => {
-    const { container } = render(<ToolCard {...base} status="running" />)
-    expect(container.querySelector('[data-dot]')).toBeTruthy()
   })
 })
 

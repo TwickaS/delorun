@@ -1,5 +1,5 @@
 /** The replica's timeline and its two stand-in sessions: what each chapter shows when, and that every step names data that exists. */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { chapterLength, chapterStart, nextChange, shiftClock, stateAt, type ChapterFile } from '../src/replica/model.ts'
 import { CHAPTER_FILES, loadFixture } from '../src/replica/sessions/index.ts'
 import { SESSION_IDS } from '../src/replica/model.ts'
@@ -48,13 +48,37 @@ describe('nextChange and chapterLength', () => {
 })
 
 describe('shiftClock', () => {
-  it('moves ISO times and the numbers under `at`, and nothing else', () => {
-    const moved = shiftClock({ createdAt: '2026-11-17T10:00:00Z', at: 1000, count: 3, note: '2026' }, 60_000)
-    expect(moved).toEqual({ createdAt: '2026-11-17T10:01:00.000Z', at: 61_000, count: 3, note: '2026' })
+  const zone = process.env['TZ']
+  afterEach(() => { if (zone === undefined) delete process.env['TZ']; else process.env['TZ'] = zone })
+
+  it('moves the ISO times and leaves other values alone', () => {
+    const moved = shiftClock({ createdAt: '2026-11-17T10:00:00Z', count: 3, note: '2026' }, 60_000)
+    expect(moved).toEqual({ createdAt: '2026-11-17T10:01:00.000Z', count: 3, note: '2026' })
+  })
+
+  it('keeps the recording\'s date and time under `at` in any time zone, whatever the visit\'s clock', () => {
+    const recorded = Date.UTC(2026, 10, 17, 10, 50)
+    for (const timeZone of ['Asia/Tokyo', 'America/New_York', 'UTC']) {
+      process.env['TZ'] = timeZone
+      const { at } = shiftClock({ at: recorded }, 3 * 86_400_000)
+      expect(new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(at)), timeZone).toBe('17 Nov 2026, 10:50')
+    }
   })
 })
 
 describe('the sessions', () => {
+  it('words "Allow for this chat" by the mode the fixture\'s approval asks for', async () => {
+    for (const id of SESSION_IDS) {
+      const fixture = await loadFixture(id)
+      const asked = fixture.events.flatMap(event => event.type === 'approval/asked' ? [event.data] : [])
+      for (const chapter of CHAPTER_FILES[id].chapters.filter(each => each.caption.includes('Allow for this chat'))) {
+        const fullAccess = asked.some(data => data.escalatesTo === 'danger-full-access')
+        expect(/full access/.test(chapter.caption), chapter.id).toBe(fullAccess)
+        expect(/confirm/.test(chapter.caption), chapter.id).toBe(fullAccess)
+      }
+    }
+  })
+
   for (const id of SESSION_IDS) {
     it(`${id}: is a marked stand-in whose every step names data the fixture has`, async () => {
       const file = CHAPTER_FILES[id]

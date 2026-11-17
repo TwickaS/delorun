@@ -20,7 +20,7 @@ export const CHAPTER_FILES: Readonly<Record<SessionId, ChapterFile>> = {
  */
 export async function loadFixture(id: SessionId): Promise<ReplicaFixture> {
   switch (id) {
-    case 'ordinary-work': return (await import('./ordinary-work.fixture.ts')).FIXTURE
-    case 'changes-and-versions': return (await import('./changes-and-versions.fixture.ts')).FIXTURE
+    case 'ordinary-work': return (await import('./ordinary-work.session.ts')).FIXTURE
+    case 'changes-and-versions': return (await import('./changes-and-versions.session.ts')).FIXTURE
   }
 }

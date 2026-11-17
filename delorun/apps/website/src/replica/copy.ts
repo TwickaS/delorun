@@ -16,6 +16,5 @@ export const REPLICA_COPY = {
   pause: 'Pause',
   play: 'Play',
   replay: 'Replay',
-  terminal: 'Terminal',
   transcript: 'Chat',
 } as const

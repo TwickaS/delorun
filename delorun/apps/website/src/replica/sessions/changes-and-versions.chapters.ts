@@ -1,6 +1,6 @@
 /**
  * The chapters of "every change is one step": what each shows, its caption and its pacing. State names point into
- * `changes-and-versions.fixture.ts`.
+ * `changes-and-versions.session.ts`.
  * @module @delorun/website/replica/sessions/changes-and-versions.chapters
  */
 import type { ChapterFile } from '../model.ts'
@@ -35,15 +35,6 @@ export const CHAPTERS: ChapterFile = {
       caption: 'Setup versions lists every setup Delorun saved. Switch to this version restores a whole setup after a restart, and saves the current one first.',
       steps: [
         { kind: 'screen', screen: 'versions', hold: 5200 },
-      ],
-    },
-    {
-      id: 'logs',
-      title: 'The log',
-      caption: 'delorun logs shows the running Delorun’s log, with secrets left out.',
-      steps: [
-        { kind: 'screen', screen: 'terminal', hold: 400 },
-        { kind: 'command', command: 'delorun logs', output: ['10:42:03 plugin delorun-theme: settings changed, reloaded', '10:50:11 change chg-2 undone: delorun-theme back to its earlier settings', '10:50:12 plugin delorun-theme reloaded'], hold: 4600 },
       ],
     },
   ],

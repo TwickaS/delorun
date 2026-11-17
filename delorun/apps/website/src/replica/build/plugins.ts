@@ -6,27 +6,37 @@
  * - `virtual:replica-icons`: the sprite symbols and sizes of the icons in `studio/icons.tsx`, from upstream's artwork.
  * - `virtual:replica-tokens.css`: the scoped token block (`tokens.ts`).
  * - `virtual:replica-studio`: the real components in `studio/components.ts`.
+ * - `virtual:replica-island`: the live replica's first render as static markup on the server, its styles in the browser.
  *
  * The real sections' `@deepseek-ai/dsh-client-ui-primitives` and `@delorun/settings-controls` imports resolve to
- * `studio/primitives.ts` and `studio/settings-controls.ts`; inside upstream's primitives, `./icons/index.tsx`,
+ * `studio/primitives.ts` and `studio/settings-controls.ts`, and their `react-dom` portals render in place; inside upstream's primitives, `./icons/index.tsx`,
  * `./useModalLayer.ts` and `react-dom` resolve to `studio/icons.tsx`, `studio/modal-layer.ts` and
  * `studio/inline-portal.ts`. Upstream's primitive sources are reached only through the `#studio/` alias, so only the
  * replica's modules are affected. The dictionaries and the artwork are TypeScript, so they are loaded through Vite with
  * the site's aliases, once per build.
  * @module @delorun/website/replica/build/plugins
  */
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runnerImport, type Alias, type Plugin } from 'vite'
 import { VOCABULARY } from '../../../../../packages/plugin-theme/src/client/vocabulary.ts'
 import { REPLICA_ICONS } from '../studio/icon-list.ts'
 import { STUDIO_COMPONENTS } from '../studio/components.ts'
+import { SESSION_IDS, type ReplicaFixture } from '../model.ts'
 import { pickStrings, STRING_SOURCES, type DictionaryModule, type StringSource } from '../strings.ts'
+import { sessionRefusals, type SessionPolicy } from './release.ts'
 import { buildTokens, tokenInputs } from './tokens.ts'
 
 /** The plugins' options. */
 export interface ReplicaBuildOptions {
   /** The site's aliases, `#studio/` among them. */
   readonly aliases: readonly Alias[]
+  /**
+   * What a production build accepts as sessions (`release.ts`). A production build without it, or with a session it
+   * does not accept, fails; a development server and tests need none.
+   */
+  readonly sessions?: SessionPolicy | undefined
 }
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
@@ -36,7 +46,7 @@ const ROOT = here('../../../../../../')
 const STUDIO = here('../studio/')
 
 /** The ids of the virtual modules. */
-const MODULES = ['virtual:replica-strings', 'virtual:replica-icons', 'virtual:replica-tokens.css', 'virtual:replica-studio'] as const
+const MODULES = ['virtual:replica-strings', 'virtual:replica-icons', 'virtual:replica-tokens.css', 'virtual:replica-studio', 'virtual:replica-island'] as const
 
 /** The real sections whose package imports resolve to the replica's shims. */
 const SECTIONS = /\/(?:delorun\/packages\/(?:plugin-changes|bundle-local)|packages\/client\/ui-approval)\/src\//
@@ -46,6 +56,7 @@ const PRIMITIVES = /\/packages\/client\/ui-primitives\/src\//
 const SECTION_SHIMS: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-client-ui-primitives': `${STUDIO}primitives.ts`,
   '@delorun/settings-controls': `${STUDIO}settings-controls.ts`,
+  'react-dom': `${STUDIO}inline-portal.ts`,
 }
 const PRIMITIVE_SHIMS: Readonly<Record<string, string>> = {
   './icons/index.tsx': `${STUDIO}icons.tsx`,
@@ -78,6 +89,37 @@ function specifierOf(file: string): string {
   return file.startsWith('#') ? file : `${ROOT}${file}`
 }
 
+/** The brand components the replica's still draws outside `packages/brand/src/replica/`. */
+const BRAND_STILL_COMPONENTS = ['Frame', 'TabList', 'Button', 'Pill'] as const
+
+/**
+ * Every CSS module of a directory and its subdirectories, but a `preview/` one.
+ * @param dir - the directory.
+ * @returns absolute paths.
+ */
+function cssModules(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
+    ? entry.name === 'preview' ? [] : cssModules(join(dir, entry.name))
+    : entry.name.endsWith('.module.css') ? [join(dir, entry.name)] : [])
+}
+
+/**
+ * The `virtual:replica-island` module. On the server it renders `ReplicaLive` to static markup, led by a `<style>` with
+ * every style the markup uses (the replica's CSS modules and the brand components' it draws, compiled with the same
+ * class names), so the markup is styled before any script runs. In the browser it is empty: the live replica's chunk
+ * brings its own styles before it replaces the markup.
+ * @param server - whether the module is for the server's render.
+ * @returns the module's source.
+ */
+function island(server: boolean): string {
+  if (!server) return "export function island() { return '' }\n"
+  const styles = [...cssModules(here('../')), ...cssModules(`${ROOT}delorun/packages/brand/src/replica`), ...BRAND_STILL_COMPONENTS.map(name => `${ROOT}delorun/packages/brand/src/components/${name}.module.css`)]
+  return `import { createElement } from 'react'\nimport { renderToStaticMarkup } from 'react-dom/server'\nimport { ReplicaLive } from ${JSON.stringify(here('../ReplicaLive.tsx'))}\n`
+    + styles.map((file, index) => `import style${String(index)} from ${JSON.stringify(`${file}?inline`)}\n`).join('')
+    + `const STYLE = [${styles.map((_, index) => `style${String(index)}`).join(', ')}].join('')\n`
+    + 'export function island(props) { return `<style>${STYLE}</style>` + renderToStaticMarkup(createElement(ReplicaLive, props)) }\n'
+}
+
 /**
  * The plugins.
  * @param options - the site's aliases.
@@ -106,19 +148,35 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
       icons: `export const SYMBOLS = ${JSON.stringify(symbols)}\nexport const SIZES = ${JSON.stringify(sizes)}\n`,
     }
   })()
+  let production = false
+  let refusals: Promise<string[]> | undefined
+  const checkSessions = (policy: SessionPolicy) => refusals ??= Promise.all(SESSION_IDS.map(id => load<{ FIXTURE: ReplicaFixture }>(here(`../sessions/${id}.session.ts`))))
+    .then(modules => sessionRefusals(modules.map(module => module.FIXTURE), policy))
   return [{
     name: 'delorun-replica',
     enforce: 'pre',
+    configResolved(config) {
+      production = config.command === 'build' && config.isProduction
+    },
+    async buildStart() {
+      if (!production) return
+      const policy = options.sessions
+      if (policy === undefined) this.error('replica: a production build needs `sessions` in `replicaPlugins`: the release the site markets, and whether the build is a preview.')
+      const refused = await checkSessions(policy)
+      if (refused.length > 0) this.error(`replica: a production build carries only sessions recorded on ${policy.release}. ${refused.join(' ')} Set \`sessions.preview\` only for a build that is not published as the site.`)
+    },
     resolveId(source, importer) {
       if ((MODULES as readonly string[]).includes(source)) return `\0${source}`
       if (importer === undefined) return undefined
-      if (SECTIONS.test(importer)) return SECTION_SHIMS[source]
       // A config that aliases React to one copy hands this hook `react-dom` as a path; the portal shim takes it too.
-      if (PRIMITIVES.test(importer)) return PRIMITIVE_SHIMS[/(?:^|\/)react-dom(?:\/index\.js)?$/.test(source) ? 'react-dom' : source]
+      const name = /(?:^|\/)react-dom(?:\/index\.js)?$/.test(source) ? 'react-dom' : source
+      if (SECTIONS.test(importer)) return SECTION_SHIMS[name]
+      if (PRIMITIVES.test(importer)) return PRIMITIVE_SHIMS[name]
       return undefined
     },
-    async load(id) {
+    async load(id, options) {
       switch (id) {
+        case '\0virtual:replica-island': return island(options?.ssr === true || this.environment.config.consumer === 'server')
         case '\0virtual:replica-strings': return (await productModules()).strings
         case '\0virtual:replica-icons': return (await productModules()).icons
         case '\0virtual:replica-tokens.css': return buildTokens(tokenInputs(ROOT, here('../')))

@@ -28,7 +28,9 @@ export type ReplicaEvent =
   | { readonly type: 'user/message', readonly data: { readonly id: string, readonly role: 'user', readonly content: readonly TextPart[], readonly source: { readonly kind: 'user' } } }
   | { readonly type: 'assistant/message', readonly data: { readonly turn: number, readonly step: number, readonly message: { readonly id: string, readonly role: 'assistant', readonly content: readonly TextPart[] } } }
   | { readonly type: 'tool/call', readonly data: { readonly turn: number, readonly step: number, readonly callId: string, readonly name: 'bash', readonly arguments: string } }
-  | { readonly type: 'approval/asked', readonly data: { readonly id: string, readonly toolName: string, readonly callId: string, readonly reason: string } }
+  // `escalatesTo` is the request's presentation field (`ApprovalEscalation`), not logged: the sandbox mode the card's
+  // "Allow for this chat" switches the chat to.
+  | { readonly type: 'approval/asked', readonly data: { readonly id: string, readonly toolName: string, readonly callId: string, readonly reason: string, readonly escalatesTo: 'workspace-write' | 'danger-full-access' } }
   | { readonly type: 'approval/decided', readonly data: { readonly id: string, readonly outcome: 'allowed-once' | 'rejected' } }
   | { readonly type: 'tool/result', readonly data: { readonly turn: number, readonly step: number, readonly message: { readonly id: string, readonly role: 'tool', readonly toolCallId: string, readonly content: readonly TextPart[], readonly isError: boolean } } }
 
@@ -57,7 +59,7 @@ export interface ReplicaFixture {
 }
 
 /** The screens the drawn studio shows. */
-export type Screen = 'chat' | 'changes' | 'versions' | 'terminal'
+export type Screen = 'chat' | 'changes' | 'versions'
 
 /**
  * A group of the real Changes section, by the key of its heading in the section's dictionary. A chapter shows only the
@@ -95,7 +97,6 @@ export type Step =
   | { readonly kind: 'press', readonly target: PressTarget, readonly hold: number }
   | { readonly kind: 'changes', readonly state: string, readonly groups: readonly ChangesGroup[], readonly hold: number }
   | { readonly kind: 'versions', readonly state: string, readonly hold: number }
-  | { readonly kind: 'command', readonly command: string, readonly output: readonly string[], readonly hold: number }
   | { readonly kind: 'wait', readonly hold: number }
 
 /** One chapter: a tab on the rail, the caption that is its text alternative, and its steps. */
@@ -120,12 +121,6 @@ export interface ChapterFile {
   readonly chapters: readonly Chapter[]
 }
 
-/** One line of the terminal block: a command or a line of its output. */
-export interface TerminalLine {
-  readonly kind: 'command' | 'output'
-  readonly text: string
-}
-
 /** What the drawn studio shows at one moment. */
 export interface StudioState {
   readonly screen: Screen
@@ -140,7 +135,6 @@ export interface StudioState {
   readonly groups: readonly ChangesGroup[]
   /** The Setup versions list's name. */
   readonly versions: string
-  readonly terminal: readonly TerminalLine[]
 }
 
 /** A press the timeline reached: which step and what it presses. */
@@ -205,7 +199,6 @@ function apply(state: StudioState, step: Step, into = Number.POSITIVE_INFINITY):
     case 'show': return { ...state, shown: step.through + 1 }
     case 'changes': return { ...state, changes: step.state, groups: step.groups }
     case 'versions': return { ...state, versions: step.state }
-    case 'command': return { ...state, terminal: [...state.terminal, { kind: 'command', text: step.command }, ...step.output.map(text => ({ kind: 'output' as const, text }))] }
     case 'press':
     case 'wait': return state
   }
@@ -218,7 +211,7 @@ function apply(state: StudioState, step: Step, into = Number.POSITIVE_INFINITY):
  * @returns the state.
  */
 export function chapterStart(file: ChapterFile, chapter: number): StudioState {
-  let state: StudioState = { ...file.start, draft: '', typing: false, terminal: [] }
+  let state: StudioState = { ...file.start, draft: '', typing: false }
   for (const earlier of file.chapters.slice(0, chapter)) for (const step of earlier.steps) state = apply(state, step)
   return state
 }
@@ -248,17 +241,19 @@ export function stateAt(file: ChapterFile, chapter: number, at: number): { reado
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/
 
 /**
- * A fixture's data with every time moved by the same amount, so the times read against the visit as they read against
- * the recording: "2 h ago" stays "2 h ago". ISO time strings move, and so does every number under a key named `at`
- * (the Setup versions list's times).
+ * A fixture's data with its times placed for the visit. The ISO time strings, which the Changes section reads as
+ * relative times, move by the same amount, so "8 min ago" stays "8 min ago". The numbers under a key named `at`, which
+ * Setup versions writes as a date and time in the visitor's time zone, keep the recording's own UTC date and time
+ * instead, so every visitor, in any zone and on any day, reads the same "17 Nov 2026, 10:50".
  * @param value - the data.
- * @param by - the milliseconds to move every time by.
- * @returns a copy with the times moved.
+ * @param by - the milliseconds to move the relative times by.
+ * @returns a copy with the times placed.
  */
 export function shiftClock<T>(value: T, by: number): T {
   const walk = (item: unknown, key?: string): unknown => {
     if (typeof item === 'string') return ISO_TIME.test(item) ? new Date(Date.parse(item) + by).toISOString() : item
-    if (typeof item === 'number') return key === 'at' ? item + by : item
+    // `getTimezoneOffset` is UTC minus local time, so adding it makes the local reading equal the UTC one.
+    if (typeof item === 'number') return key === 'at' ? item + new Date(item).getTimezoneOffset() * 60_000 : item
     if (Array.isArray(item)) return item.map(entry => walk(entry))
     if (item !== null && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([name, entry]) => [name, walk(entry, name)]))
     return item

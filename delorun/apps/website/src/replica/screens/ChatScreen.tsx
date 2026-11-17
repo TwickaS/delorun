@@ -75,9 +75,9 @@ export function ChatScreen({ events, shown, draft, typing, strings, approval }: 
         const result = visible.find(row => row.type === 'tool/result' && row.data.message.toolCallId === event.data.callId)
         const done = result?.type === 'tool/result' ? result.data.message : undefined
         const status = done === undefined ? 'running' : done.isError ? 'failed' : 'done'
-        return <ToolCard key={index} title={strings.chat['command.title']} command={commandOf(event)} status={status}
-          statusLabel={strings.chat[status === 'running' ? 'command.running' : status === 'failed' ? 'command.failed' : 'command.done']}
-          output={done === undefined ? undefined : text(done.content)} outputLabel={strings.chat['message.stepProcess.done.commands']} />
+        return <ToolCard key={index} title={strings.conversation['tool.title.bash']} command={commandOf(event)} status={status}
+          statusLabel={status === 'running' ? strings.conversation['bash.running'] : status === 'failed' ? strings.conversation['bash.failed'] : undefined}
+          output={done === undefined ? undefined : text(done.content)} />
       }
       case 'turn/start':
       case 'turn/end':
@@ -94,7 +94,7 @@ export function ChatScreen({ events, shown, draft, typing, strings, approval }: 
     <div className={css.composerSlot}>
       {pending !== undefined && approval !== undefined
         ? approval(pending)
-        : <Composer label={strings.conversation['input.send']} placeholder={strings.conversation['placeholder.default']} value={draft} typing={typing} sendLabel={strings.conversation['input.send']} />}
+        : <Composer label={strings.conversation['placeholder.default']} placeholder={strings.conversation['placeholder.default']} value={draft} typing={typing} sendLabel={strings.conversation['input.send']} />}
     </div>
   </div>
 }

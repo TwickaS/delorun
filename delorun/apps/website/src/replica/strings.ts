@@ -9,7 +9,6 @@
 /** Where each dictionary lives, as an alias the site resolves, and the vocabulary namespace laid over it. */
 export const STRING_SOURCES = {
   conversation: { module: '#studio/ui-conversation/src/client/locales.ts', vocabulary: 'conversation' },
-  chat: { module: '#studio/ui-chat/src/client/locale.ts', vocabulary: 'chat' },
   sidebar: { module: '#studio/ui-sidebar/src/client/locales.ts', vocabulary: 'sidebar' },
   settings: { module: '#studio/ui-settings-general/src/client/locales.ts', vocabulary: undefined },
   layout: { module: '../../../../packages/plugin-settings-layout/src/client/locales.ts', vocabulary: undefined },
@@ -17,8 +16,7 @@ export const STRING_SOURCES = {
 
 /** The keys the drawn studio reads, by dictionary. */
 export const STRING_KEYS = {
-  conversation: ['placeholder.default', 'input.send'],
-  chat: ['command.title', 'command.running', 'command.done', 'command.failed', 'message.stepProcess.done.commands'],
+  conversation: ['placeholder.default', 'input.send', 'tool.title.bash', 'bash.running', 'bash.failed'],
   sidebar: ['session.new.label', 'navigation.label'],
   settings: ['title'],
   layout: ['page.changes', 'page.setupVersions'],
@@ -55,7 +53,7 @@ export function pickStrings(modules: { readonly [D in StringSource]: DictionaryM
       return [key, text]
     })) as ReplicaStrings[D]
   }
-  return { conversation: pick('conversation'), chat: pick('chat'), sidebar: pick('sidebar'), settings: pick('settings'), layout: pick('layout') }
+  return { conversation: pick('conversation'), sidebar: pick('sidebar'), settings: pick('settings'), layout: pick('layout') }
 }
 
 /**

@@ -134,7 +134,7 @@ export function RealApproval({ pending }: { readonly pending: PendingApproval })
     title={pending.reason}
     toolName={pending.toolName}
     callId={pending.callId as CardCallId}
-    escalatesTo="workspace-write"
+    escalatesTo={pending.escalatesTo}
     t={approvalT}
     canAnswer={() => true}
     onAllow={settle}

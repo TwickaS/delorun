@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_IDS, stateAt, stepLength, type ChapterFile } from '../src/replica/model.ts'
 import { ReplicaFrame } from '../src/replica/ReplicaFrame.tsx'
 import { CHAPTER_FILES } from '../src/replica/sessions/index.ts'
-import Studio, { type StudioHandle } from '../src/replica/Studio.tsx'
+import { ReplicaLive } from '../src/replica/ReplicaLive.tsx'
+import Studio, { type StudioHandle } from '../src/replica/ReplicaStudio.tsx'
 
 // The site renders with React 19; this spec mounts through `react-dom/client` itself so no other React copy renders.
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -89,7 +90,8 @@ afterEach(() => {
 
 describe('ReplicaFrame', () => {
   it('sends the still, the rail, the first caption and every caption for scripts off, and no live studio', () => {
-    const html = renderToString(<ReplicaFrame session="ordinary-work" width="responsive" />)
+    // The server's `ReplicaFrame` writes exactly this render as its markup (`virtual:replica-island`).
+    const html = renderToString(<ReplicaLive session="ordinary-work" width="responsive" />)
     const file = CHAPTER_FILES['ordinary-work']
     expect(html).toContain('role="tablist"')
     for (const chapter of file.chapters) expect(html).toContain(chapter.title)

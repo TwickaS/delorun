@@ -35,7 +35,6 @@ function heading(screen: Screen, file: ChapterFile, strings: ReplicaStrings): st
     case 'chat': return file.chats[0] ?? ''
     case 'changes': return `${strings.settings.title} › ${strings.layout['page.changes']}`
     case 'versions': return `${strings.settings.title} › ${strings.layout['page.setupVersions']}`
-    case 'terminal': return REPLICA_COPY.terminal
   }
 }
 

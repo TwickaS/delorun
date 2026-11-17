@@ -1,9 +1,9 @@
 /**
  * The live drawn studio: the session's fixture played through the simplified chat and Delorun's real sections, in the
  * wrapper that carries the scoped studio tokens. It is inert: it takes no focus and no press, and assistive technology
- * reads the chapter's caption instead (`ReplicaFrame.tsx`). It loads in the browser only, as a chunk of its own, with
- * the session's fixture as another; the player in `ReplicaFrame.tsx` tells it what to show and which control to press.
- * @module @delorun/website/replica/Studio
+ * reads the chapter's caption instead (`ReplicaLive.tsx`). It loads in the browser only, as a chunk of its own, with
+ * the session's fixture as another; the player in `ReplicaLive.tsx` tells it what to show and which control to press.
+ * @module @delorun/website/replica/ReplicaStudio
  */
 import 'virtual:replica-tokens.css'
 import strings from 'virtual:replica-strings'
@@ -12,7 +12,6 @@ import { shiftClock, type ChapterFile, type PressTarget, type ReplicaFixture, ty
 import { ChatScreen } from './screens/ChatScreen.tsx'
 import { RealApproval, RealChanges, RealVersions, SECTION_DICTIONARIES } from './screens/real.tsx'
 import { StudioLayout, type ReplicaWidth } from './screens/StudioLayout.tsx'
-import { Terminal } from './screens/Terminal.tsx'
 import { loadFixture } from './sessions/index.ts'
 import { IconSprite } from './studio/icons.tsx'
 import css from './screens/studio.module.css'
@@ -100,7 +99,6 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
         approval={pending => <RealApproval key={`${String(epoch)} ${pending.id}`} pending={pending} />} />,
       changes: changes === undefined ? null : <RealChanges key={epoch} state={changes} groups={state.groups} />,
       versions: versions === undefined ? null : <RealVersions key={epoch} versions={versions} changes={fixture.versionChanges} />,
-      terminal: <Terminal lines={state.terminal} />,
     }} />
   </div>
 }

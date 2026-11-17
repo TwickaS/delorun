@@ -1,15 +1,13 @@
 /**
- * A tool call in the chat: its title, a status capsule, the command and, once there is output, a folded view of it.
+ * A tool call in the chat, drawn as the studio's tool row: the tool's name and its command on one line, as in
+ * "Bash · pnpm test". Like the studio it shows no status word: a running call carries a dot and a failed one the error
+ * tone, each with its status as hidden text. Once there is output, the row itself folds it open.
  * @module @delorun/brand/replica/ToolCard
  */
-import { Pill } from '../components/Pill.tsx'
 import css from './ToolCard.module.css'
 
 /** Where a tool call stands. */
 export type ToolCardStatus = 'running' | 'done' | 'failed'
-
-/** The capsule tone of each status. */
-const TONES = { running: 'neutral', done: 'success', failed: 'error' } as const
 
 /** The props of {@link ToolCard}. */
 export interface ToolCardProps {
@@ -18,36 +16,33 @@ export interface ToolCardProps {
   /** The command the tool runs, shown in the monospace face. */
   readonly command: string
   readonly status: ToolCardStatus
-  /** The localised text of the status capsule. */
-  readonly statusLabel: string
-  /** The tool's output; without it the card has no folded section. */
+  /** The localised status, read by assistive technology only; the studio shows none for a finished call. */
+  readonly statusLabel?: string | undefined
+  /** The tool's output; without it the row does not fold open. */
   readonly output?: string | undefined
-  /** The localised summary of the folded output. */
-  readonly outputLabel: string
   /** Show the output unfolded. */
   readonly open?: boolean | undefined
   readonly className?: string | undefined
 }
 
 /**
- * Render a tool card.
+ * Render a tool row.
  * @param props - see {@link ToolCardProps}.
- * @returns the card, with `data-status` set to the status.
+ * @returns the row, with `data-status` set to the status.
  */
-export function ToolCard({ title, command, status, statusLabel, output, outputLabel, open = false, className }: ToolCardProps) {
+export function ToolCard({ title, command, status, statusLabel, output, open = false, className }: ToolCardProps) {
+  const row = <>
+    <span className={css.title}>{title}</span>
+    <span className={css.separator} aria-hidden="true">·</span>
+    <code className={css.command}>{command}</code>
+    {status === 'running' ? <span className={css.dot} aria-hidden="true" data-dot /> : null}
+    {statusLabel === undefined ? null : <span className={css.hidden}>{statusLabel}</span>}
+  </>
   return (
     <div className={`${css.card} ${className ?? ''}`.trim()} data-status={status}>
-      <div className={css.header}>
-        <span className={css.title}>{title}</span>
-        <Pill tone={TONES[status]} className={css.status}>
-          {status === 'running' ? <span className={css.dot} aria-hidden="true" data-dot /> : null}
-          {statusLabel}
-        </Pill>
-      </div>
-      <code className={css.command}>{command}</code>
-      {output === undefined ? null : (
+      {output === undefined ? <div className={css.row}>{row}</div> : (
         <details className={css.output} open={open}>
-          <summary className={css.summary}>{outputLabel}</summary>
+          <summary className={`${css.row} ${css.summary}`}>{row}</summary>
           <pre className={css.pre}>{output}</pre>
         </details>
       )}

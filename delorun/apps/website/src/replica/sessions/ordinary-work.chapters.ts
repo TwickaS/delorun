@@ -1,6 +1,6 @@
 /**
  * The chapters of "a piece of ordinary work": what each shows, its caption and its pacing. The event indexes point into
- * `ordinary-work.fixture.ts`.
+ * `ordinary-work.session.ts`.
  * @module @delorun/website/replica/sessions/ordinary-work.chapters
  */
 import type { ChapterFile } from '../model.ts'
@@ -27,7 +27,7 @@ export const CHAPTERS: ChapterFile = {
     {
       id: 'asks-first',
       title: 'It asks first',
-      caption: 'Before the agent runs a command, it asks. Allow once lets this one command run; Allow for this chat switches the chat to full access, after you confirm.',
+      caption: 'Before the agent runs a command, it asks. Allow once lets this one command run; Allow for this chat lets the agent edit files and run commands in this project for the rest of the chat.',
       steps: [
         { kind: 'show', through: 5, hold: 4200 },
         { kind: 'press', target: { dictionary: 'approval', key: 'allowOnce' }, hold: 900 },

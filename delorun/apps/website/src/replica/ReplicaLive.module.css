@@ -42,7 +42,7 @@
   .replica[data-width='pair'] [data-slot='desktop'] > * { min-width: 600px; scroll-snap-align: start; }
 }
 
-/* Responsive: the desktop width when the replica's column is 700 px or wider, the phone width below; `WIDE` in ReplicaFrame.tsx is the same width. */
+/* Responsive: the desktop width when the replica's column is 700 px or wider, the phone width below; `WIDE` in ReplicaLive.tsx is the same width. */
 .replica[data-width='responsive'] { container: replica / inline-size; }
 .frames[data-width='responsive'] > [data-slot='phone'] { display: none; }
 @container replica (max-width: 699.98px) {

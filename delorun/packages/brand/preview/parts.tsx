@@ -52,8 +52,8 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
         <Transcript label="Conversation">
           <MessageBubble from="person">Make the page header blue.</MessageBubble>
           <MessageBubble from="agent"><p>I will change the header colour.</p><p>One moment.</p></MessageBubble>
-          <ToolCard title="Run a command" command="npm run build" status="running" statusLabel="Running" outputLabel="Output" />
-          <ToolCard title="Run a command" command="git diff --stat" status="done" statusLabel="Done" outputLabel="Output" output={' header.css | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)'} />
+          <ToolCard title="Bash" command="npm run build" status="running" statusLabel="Running" />
+          <ToolCard title="Bash" command="git diff --stat" status="done" output={' header.css | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)'} />
         </Transcript>
         <Composer label="Message" placeholder="Ask for a change" value="Now make the footer" sendLabel="Send" typing />
       </div>
