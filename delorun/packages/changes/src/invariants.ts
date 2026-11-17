@@ -6,7 +6,8 @@
  *    running installation carries for the name) names anything other than its plugin's active directory, a missing
  *    folder or a file included, and the profile's `node_modules/<name>` for a plugin under Changes resolves to that
  *    active directory when it exists;
- * 3. each active directory holds what `active.json` records for it, or nothing when it records none, and outside a work
+ * 3. each active directory holds what `active.json` records for it, or nothing when it records none (a copy whose links
+ *    name packages an earlier release carries, which the next start re-points to the running one, holds it), and outside a work
  *    session for the plugin under protection `on` that is the approved version, or, for `left-out` content, nothing or the
  *    content from before the plugin's change left out at start that stays out ([left out](./left-out.ts));
  * 4. every approved version's manifest and objects read back intact from the store.
@@ -26,7 +27,7 @@ import { readLinks, type ProfileLink } from './link.ts'
 import { activeDirectory } from './paths.ts'
 import { leftOutContent, leftOutOf } from './left-out.ts'
 import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession } from './records.ts'
-import { holdsVersion, readObject, readVersion } from './store.ts'
+import { holdsVersionInAnyRelease, readObject, readVersion } from './store.ts'
 import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, CHANGE_LOG_SCHEMA, type ActiveRecord, type ApprovedRecord, type ChangeLog } from './types.ts'
 
 /** The profile whose invariants are checked, and the harness's own links ({@link EnforceRequest.harnessLink}). */
@@ -94,7 +95,7 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
     }
     const content = Object.hasOwn(active.plugins, link.name) ? active.plugins[link.name] : undefined
     const expected = content?.version ?? EMPTY_CONTENT_VERSION
-    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersion(home, directory, expected)) === false) {
+    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersionInAnyRelease(home, directory, expected)) === false) {
       broken.push(content === undefined
         ? `The active directory of ${link.name} holds content, and active.json records none: ${directory}.`
         : `The active directory of ${link.name} does not hold version ${content.version}, which active.json records: ${directory}.`)

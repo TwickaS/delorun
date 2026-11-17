@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { checkChangesInvariants } from '../src/invariants.ts'
@@ -7,6 +7,7 @@ import { openWorkSession, writeActiveRecord } from '../src/records.ts'
 import { materialize, storeFolder } from '../src/store.ts'
 import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { fixture, folder, linkAs, migrated, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
+import { writeFiles } from './support.ts'
 
 // Each case writes real git histories and scans folders; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 30_000 })
@@ -19,7 +20,44 @@ function check(fx: Fixture): Promise<readonly string[]> {
   return checkChangesInvariants({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })
 }
 
+/**
+ * Install one release with a pack whose peer links into it, as the runtime store does, and name it current.
+ * @param fx - the fixture.
+ * @param version - the release.
+ */
+function installRelease(fx: Fixture, version: string): void {
+  const pack = join(fx.home, 'packs', version, 'plug', 'package')
+  writeFiles(fx.home, {
+    [`runtimes/${version}/app/node_modules/@s/peer/package.json`]: JSON.stringify({ name: '@s/peer', version }),
+    [`runtimes/${version}/app/node_modules/@s/other/package.json`]: JSON.stringify({ name: '@s/other', version }),
+    [`packs/${version}/plug/package/package.json`]: JSON.stringify({ name: 'plug', dependencies: { '@s/peer': '1' } }),
+    'runtimes/current': `${version}\n`,
+  })
+  mkdirSync(join(pack, 'node_modules', '@s'), { recursive: true })
+  symlinkSync(join(fx.home, 'runtimes', version, 'app', 'node_modules', '@s', 'peer'), join(pack, 'node_modules', '@s', 'peer'))
+  rmSync(join(fx.home, 'packs', 'current'), { force: true })
+  symlinkSync(version, join(fx.home, 'packs', 'current'))
+}
+
 describe('checkChangesInvariants', () => {
+  it('finds nothing broken in a pack copy between an update and the next start, which re-points it', async () => {
+    const fx = fixture()
+    installRelease(fx, '0.1.0')
+    linkAs(fx, 'plug', join(fx.home, 'packs', 'current', 'plug', 'package'))
+    await start(fx)
+    expect(await check(fx)).toEqual([])
+    const peer = join(activeDirectory(fx.home, PROFILE, 'plug'), 'node_modules', '@s', 'peer')
+    installRelease(fx, '0.2.0')
+    expect(await check(fx)).toEqual([])
+    await start(fx)
+    expect(await check(fx)).toEqual([])
+    expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.2.0', 'app', 'node_modules', '@s', 'peer')))
+    // A copy whose link names another package than the approved one is not merely waiting to be re-pointed.
+    rmSync(peer)
+    symlinkSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'other'), peer)
+    expect(await check(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+  })
+
   it('finds nothing broken after a start, links into the runtime store and to non-directories included', async () => {
     const { fx } = await migrated()
     const carried = join(fx.home, 'runtimes', '1.2.3', 'bundle')

@@ -620,14 +620,21 @@ async function runtimeModulesOf(home: string | undefined): Promise<string | unde
 }
 
 /**
- * Add a link to a package the running release carries, by its path below the active runtime's installed packages.
+ * Add a link to a package the running release carries, by its path below the active runtime's installed packages; a
+ * link to that folder itself is left out.
  * @param walk - the scan, whose `runtimeModules` holds `real`.
  * @param path - the link's relative path in the version.
  * @param real - its real target.
  */
 function addRuntimeLink(walk: Walk, path: string, real: string): void {
+  const target = relative(walk.runtimeModules!, real).split(sep).join('/')
+  // A link to the installed packages folder itself names no one package the release carries.
+  if (target === '') {
+    walk.skipped.push(path)
+    return
+  }
   admit(walk, 0)
-  walk.entries.push({ type: 'link', path, target: relative(walk.runtimeModules!, real).split(sep).join('/'), outside: true, runtime: true })
+  walk.entries.push({ type: 'link', path, target, outside: true, runtime: true })
 }
 
 /**
