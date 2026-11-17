@@ -92,6 +92,14 @@ describe('while a turn runs', () => {
 })
 
 describe('a reached plan limit', () => {
+  it('puts back the state the chat had when a start ends without a program, so an ended chat stays ended', async () => {
+    const w = await stateWorld()
+    w.mount.store.setStatus(w.child, 'ended', { endedReason: 'The chat was archived.' })
+    w.gate.failure = new GateRefusedError({ category: 'consent', reason: 'The person declined.' })
+    await collect(w.adapter.stream(w.request([w.say('task')])))
+    expect(view(w)).toMatchObject({ state: 'ended', endedReason: 'The chat was archived.' })
+  })
+
   it('ends the turn with the reset time and starts nothing until the person asks', async () => {
     let clock = 1000
     const w = await stateWorld({ now: () => clock })

@@ -16,9 +16,9 @@ import { loadModelChoices, MODEL_CHOICES_FILE } from './choices.ts'
 import { partingNotice, unresumableNotice, type ProgramTailReader } from './parting.ts'
 import { agentSeatProjection } from './projection.ts'
 import { chooseModelRoute, resumeRoute, type SeatRoute } from './routes.ts'
-import { SeatRecords, type SeatSessions } from './store.ts'
+import { SeatRecords, type SeatSessions, type StatusChange } from './store.ts'
 import { seatPrograms } from './programs.ts'
-import type { SeatAgent } from './view.ts'
+import type { SeatAgent, SeatViewState } from './view.ts'
 
 const NAMES: Readonly<Record<SeatAgent, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' }
 
@@ -109,6 +109,8 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
   const now = options.now ?? Date.now
   // Children whose program is being resumed, not started, so the parting check runs once the program answers.
   const resuming = new Set<SessionId>()
+  // The state each child showed when its start began, put back when the start ends without a program.
+  const before = new Map<SessionId, { readonly state: SeatViewState, readonly change: StatusChange }>()
   const nameOf = (child: SessionId): string => NAMES[store.viewOf(child)?.agent ?? 'claude-code']
 
   const check = async (child: SessionId, agent: SeatAgent, programSessionId: string, stored: string | undefined): Promise<void> => {
@@ -119,10 +121,22 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
 
   const events: SeatAdapterEvents = {
     onStarting: (child, provider) => {
+      const view = store.viewOf(child)
+      if (view !== null && view.state !== 'starting') {
+        before.set(child, {
+          state: view.state,
+          change: {
+            ...view.resetAt === undefined ? {} : { resetAt: view.resetAt },
+            ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
+            ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
+          },
+        })
+      }
       if (store.read(child)?.programSessionId !== undefined) resuming.add(child)
       store.setStatus(child, 'starting', options.info?.(provider) ?? {})
     },
     onStarted: (child) => {
+      before.delete(child)
       store.setStatus(child, 'working')
       if (!resuming.delete(child)) return
       const view = store.viewOf(child)
@@ -134,8 +148,10 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
     },
     onStartFailed: (child) => {
       resuming.delete(child)
+      const previous = before.get(child)
+      before.delete(child)
       // A failure the chat shows, such as a plan limit, sets its own state next.
-      if (store.viewOf(child)?.state === 'starting') store.setStatus(child, 'idle')
+      if (store.viewOf(child)?.state === 'starting') store.setStatus(child, previous?.state ?? 'idle', previous?.change)
     },
     onModelNotOffered: ({ child, configured, offered }) => {
       resuming.delete(child)
