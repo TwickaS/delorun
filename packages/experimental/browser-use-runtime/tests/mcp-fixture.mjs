@@ -7,6 +7,7 @@ const [root, mode] = process.argv.slice(2)
 const record = (event, values = {}) => appendFileSync(join(root, 'events.ndjson'), JSON.stringify({ event, pid: process.pid, ...values }) + '\n')
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 let counter = 0
+let rootsAdvertised = false
 record('start', { cwd: process.cwd() })
 process.once('exit', () => record('exit'))
 const lines = createInterface({ input: process.stdin })
@@ -14,6 +15,10 @@ lines.once('close', () => process.exit(0))
 lines.on('line', line => {
   const request = JSON.parse(line)
   if (request.id === undefined) return
+  if (request.method === undefined) {
+    if (request.id === 'roots') record('roots', { roots: request.result?.roots ?? null, error: request.error?.message ?? null })
+    return
+  }
   switch (request.method) {
     case 'server/discover':
       record('probe')
@@ -32,7 +37,8 @@ lines.on('line', line => {
       }
       break
     case 'initialize':
-      record('initialize')
+      rootsAdvertised = request.params.capabilities?.roots !== undefined
+      record('initialize', { rootsAdvertised })
       if (mode === 'fail') process.exit(1)
       if (mode === 'hold') return
       reply(request.id, {
@@ -41,6 +47,7 @@ lines.on('line', line => {
       })
       break
     case 'tools/list':
+      if (rootsAdvertised) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: 'roots', method: 'roots/list' }) + '\n')
       reply(request.id, { tools: [
         { name: 'visit', description: 'Visit the fixture page.', inputSchema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false } },
         { name: 'disconnect', description: 'Disconnect the fixture.', inputSchema: { type: 'object', properties: {} } },
@@ -50,6 +57,10 @@ lines.on('line', line => {
       record('call', { name: request.params.name, cwd: process.cwd() })
       if (request.params.name === 'disconnect') process.exit(0)
       counter += 1
+      if (request.params.arguments.label === 'missing-browser') {
+        reply(request.id, { isError: true, content: [{ type: 'text', text: 'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1/chrome. Run `npx @playwright/mcp install-browser chromium` to install' }] })
+        break
+      }
       reply(request.id, { content: [{ type: 'text', text: `Visit ${counter}: ${request.params.arguments.label}` }], structuredContent: { counter, pid: process.pid } })
       break
     case 'resources/list':

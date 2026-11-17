@@ -15,6 +15,8 @@
  * @module
  */
 
+import { basename } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { Client } from '@modelcontextprotocol/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { assertNever, deepEqualJson, type JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -346,10 +348,14 @@ export function startConnection(
 
   async function connectGeneration(): Promise<void> {
     if (isStopped()) return
+    const roots = config.roots ?? []
     const client = new Client({ name: 'dsh-mcp-client', version: '0.0.1' }, {
-      capabilities: {}, versionNegotiation: { mode: 'auto' },
+      capabilities: roots.length === 0 ? {} : { roots: {} }, versionNegotiation: { mode: 'auto' },
       listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => { void refreshTools() } } },
     })
+    if (roots.length > 0) {
+      client.setRequestHandler('roots/list', () => ({ roots: roots.map(root => ({ uri: pathToFileURL(root).href, name: basename(root) })) }))
+    }
     const record: Generation = { wire: new McpGeneration(client, config.closeTimeoutMs, error => diagnostic(error, 'cleanup')) }
     current = record
     status.opened()

@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。浏览器安装遵循上游运行时；使用 `executablePath` 选择已有 Chromium 安装。
+在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。浏览器安装遵循上游运行时；使用 `executablePath` 选择已有 Chromium 安装。固定的 Playwright 所需的 Chromium 版本未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -44,6 +44,7 @@ kind: "package-reference"
 | `executablePath` | 上游发现 | 启动使用的 Chromium 可执行文件 |
 | `endpoint` | attach 时必填 | 已有浏览器调试端点 |
 | `toolCallTimeoutMs` | MCP 客户端默认值 | 单次调用超时，单位为毫秒 |
+| `serverDirectory` | `session` | MCP 服务器的运行位置：`session` 为每个 Session 的工作目录，`home` 为所有 Session 共用的 Harness 主目录中的一个文件夹（`browser-use/<服务器名称>`），因此它的命令和文件夹保持不变 |
 
 [配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-browser-use-playwright-mcp)列出接受的字段。浏览器模式由 profile 或 preset 选择。子进程会清空继承的 `PLAYWRIGHT_MCP_*` 选项，避免其替换该配置。
 
@@ -81,7 +82,7 @@ kind: "package-reference"
 
 #### 模型可见内容
 
-工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
+工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
 
 #### Token 影响
 

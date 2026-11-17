@@ -14,10 +14,10 @@ description: "让智能体通过 Playwright，在这台电脑上的 Chromium 浏
 
 同一时间只能开启一个浏览器提供方。若要改用 Chrome DevTools，请关闭 `browser-use-playwright-mcp` 行，并在你 profile 的 `cordis.patch.yml` 中开启 `browser-use-chrome-devtools-mcp` 行。Stagehand 需要它自己的模型（`model.modelName` 和 `model.apiKey`），所以在你配置之前它的行保持关闭。
 
-需要提供方能启动的 Chromium 浏览器。它是实验性的。
+需要它的 Playwright 所需的 Chromium 版本，由 Playwright 下载到它自己的缓存中。它是实验性的。
 
 ## 需要设置
 
-- Stagehand 在你给它一个模型之前保持关闭；Playwright 提供方需要这台电脑上有 Chromium 浏览器。
+- Stagehand 在你给它一个模型之前保持关闭；Playwright 提供方需要它的 Playwright 所需的 Chromium 版本。下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上为该版本运行 Playwright 自带安装程序的命令；浏览器步骤会让智能体停下，请你完成设置。
 
 此 bundle 在新 profile 中是关闭的。[`@delorun/bundle-local`](../bundle-local/README.zh.md) 没有列出它；用户在“插件”中开启它，发行版把它作为可选包提供，而不是放进默认安装。

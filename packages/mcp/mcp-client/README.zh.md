@@ -63,6 +63,7 @@ kind: "package-reference"
 | `closeTimeoutMs` | `5,000` | 传输关闭与待处理本地工作完全结算的预算 |
 | `expandTemplates` | `false` | 在运行时解析传输字符串中的 `${credential:REF}`，并在诊断中替换已解析的值 |
 | `maxInstructionBytes` | `32,768` | 包括服务器归属信息在内的服务器指令 UTF-8 字节上限；超出时连接失败 |
+| `roots` | 未设置 | 作为客户端 MCP roots 公布并由 `roots/list` 返回的绝对目录；它们告诉服务器会话在哪里工作，不授予任何访问权限；未设置或为空时不公布 roots |
 | `failOnStartupError` | `false` | 初始连接或工具同步失败时拒绝插件激活 |
 | `reconnect.enabled` | `true` | 连接丢失后自动重新连接 |
 | `reconnect.initialDelayMs` | `500` | 首次重连延迟；每次连续失败尝试翻倍 |

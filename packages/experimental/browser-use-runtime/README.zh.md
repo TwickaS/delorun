@@ -29,9 +29,9 @@ kind: "package-library"
 
 原生提供方从包根入口构造 `SessionResources`，提供资源获取与清理回调。调用向 `run()` 传递确切的实时 Agent；失效的所有者与独占附加的第二个所有者在获取资源前失败。取消资源获取等待不会终止初始化，同一 Session 的其他调用方仍可继续等待；释放 Session 会中止并等待该初始化结束。提供方将注册保留到 `dispose()` 完成。
 
-MCP 提供方使用 `@deepseek-ai/dsh-experimental-browser-use-runtime/mcp` 中的 `mountSessionMcp`，提供固定服务器名称、可执行文件、参数与所有权策略。挂载上下文必须提供 `workingDirectory`。获取连接时通过[工作目录服务](../../session/working-directory/README.zh.md)验证或恢复当前目录，并将其设为 MCP 服务器进程的初始目录。Session 后续选择其他目录时，保留的服务器继续使用该目录。辅助库在每个后续 Agent 的 `agent/created` 事件中等待一次有作用域的客户端启动与发现尝试。Agent 创建或恢复在发现完成后结束，随后才运行排队输入；成功的客户端跨轮次归该 Session 所有。
+MCP 提供方使用 `@deepseek-ai/dsh-experimental-browser-use-runtime/mcp` 中的 `mountSessionMcp`，提供固定服务器名称、可执行文件、参数与所有权策略，并可选提供 `explainFailure`：它替换只有用户才能解决的浏览器工具失败文本，例如浏览器版本未安装。挂载上下文必须提供 `workingDirectory`。获取连接时通过[工作目录服务](../../session/working-directory/README.zh.md)验证或恢复当前目录，并将其设为 MCP 服务器进程的初始目录；若提供方给出固定的 `directory`，则每个 Session 的服务器都在该目录中运行，目录缺失时以 0700 权限创建。`browserServerDirectory` 把提供方的 `serverDirectory: home` 映射为 Harness 主目录中的 `browser-use/<服务器名称>`。无论哪种方式，服务器都会收到该 Session 的工作目录作为唯一的 MCP root，因此 Playwright 等服务器把输出文件保存在那里，并以相对于它的路径报告。Session 后续选择其他目录时，保留的服务器继续使用该目录。辅助库在每个后续 Agent 的 `agent/created` 事件中等待一次有作用域的客户端启动与发现尝试。Agent 创建或恢复在发现完成后结束，随后才运行排队输入；成功的客户端跨轮次归该 Session 所有。
 
-附加连接被占用时，本次激活永久跳过启动，但其他工作继续运行。连接释放不会触发被跳过激活的重试；新创建或恢复的 Agent 可以获取连接。启动失败或取消会拒绝 Agent 创建或恢复，并触发包含客户端清理的创建回滚。重连已禁用。加载或重新加载提供方只作用于后续的 Agent 激活。
+附加连接被占用时，本次激活永久跳过启动，但其他工作继续运行。连接释放不会触发被跳过激活的重试；新创建或恢复的 Agent 可以获取连接。已挂载的 MCP 添加时同意拒绝启动，或声明的同意提供方未能启动时，本次激活同样没有该服务器的工具和说明；辅助函数记录一条警告，写明服务器名和同意提供方给出的原因，Agent 创建或恢复照常完成，下一次激活会重新审核启动。其他启动失败或取消会拒绝 Agent 创建或恢复，并触发包含客户端清理的创建回滚。重连已禁用。加载或重新加载提供方只作用于后续的 Agent 激活。
 
 调用方在等待 Agent 创建或恢复完成后，即可检查提示词组装和作用域工具定义。
 

@@ -25,7 +25,7 @@ Use Playwright MCP to inspect pages and operate Chromium through its upstream to
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount both entries before creating or resuming a Session, in a profile composition that supplies Agents, tools, system prompts, and the working-directory service. Loading or reloading this provider does not adopt Sessions that are already active. Browser installation follows the upstream runtime; select an existing Chromium installation with `executablePath`.
+Mount both entries before creating or resuming a Session, in a profile composition that supplies Agents, tools, system prompts, and the working-directory service. Loading or reloading this provider does not adopt Sessions that are already active. Browser installation follows the upstream runtime; select an existing Chromium installation with `executablePath`. When the Chromium build the pinned Playwright expects is not installed, a browser tool call fails with one short message that tells the model to stop and send the person to finish Browser setup.
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -44,6 +44,7 @@ Use `mode: attach` and set `endpoint` to an HTTP(S) debugging URL or WS(S) brows
 | `executablePath` | upstream discovery | Chromium executable for launch |
 | `endpoint` | required for attach | Existing browser debugging endpoint |
 | `toolCallTimeoutMs` | MCP client default | Per-call timeout in milliseconds |
+| `serverDirectory` | `session` | Where the MCP server runs: `session` in each Session's working directory, `home` in one folder of the Harness home (`browser-use/<server name>`) for every Session, so its command and folder stay the same |
 
 The [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-browser-use-playwright-mcp) lists accepted fields. The profile or preset selects the browser mode. The child process clears inherited `PLAYWRIGHT_MCP_*` options so they cannot replace that configuration.
 
@@ -81,7 +82,7 @@ Browser state survives turns while its live Session remains attached. The MCP se
 
 #### What the model sees
 
-Tools retain upstream descriptions and JSON schemas under `mcp__playwright-mcp__<tool>` names. Text and screenshots use the normal tool-result pipeline and Session log. Screenshots require an attachment store and an image-capable model route; other routes receive the MCP image diagnostic. The MCP client also exposes resource helpers and attributed server instructions. Browser instructions are shown only after this Session owns a connection; targeted resource requests enforce the same ownership.
+Tools retain upstream descriptions and JSON schemas under `mcp__playwright-mcp__<tool>` names. Text and screenshots use the normal tool-result pipeline and Session log. Files the server saves, such as screenshots and PDFs, go to `.playwright-mcp` in the Session's working directory, its MCP root, and the tool result links each one relative to that directory. Screenshots require an attachment store and an image-capable model route; other routes receive the MCP image diagnostic. The MCP client also exposes resource helpers and attributed server instructions. Browser instructions are shown only after this Session owns a connection; targeted resource requests enforce the same ownership.
 
 #### Token effect
 

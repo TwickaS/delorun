@@ -37,3 +37,26 @@ it('rejects malformed endpoints before mounting any browser resources', () => {
   expect(() => { Provider.apply(new Context(), Provider.Config({ mode: 'attach', endpoint: 'http://localhost:bad/path' })) }).toThrow('browser endpoint')
   expect(mountSessionMcp).not.toHaveBeenCalled()
 })
+
+it('replaces only Playwright\'s missing-browser failure with the final setup message', () => {
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const explain = vi.mocked(mountSessionMcp).mock.calls[0]![1].explainFailure!
+  for (const message of [
+    'Browser "chromium" is not installed; expected executable at /home/user/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
+    'browserType.launch: Executable doesn\'t exist at /home/user/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome',
+  ]) {
+    expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
+  }
+  expect(explain('page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/')).toBeUndefined()
+  expect(Provider.MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
+})
+
+it('runs the server in one folder of the Harness home for every Session when serverDirectory is home', () => {
+  vi.stubEnv('DSH_HOME', '/home/person/.delorun')
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', serverDirectory: 'home' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', serverDirectory: 'session' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const directories = vi.mocked(mountSessionMcp).mock.calls.map(([, options]) => options.directory)
+  expect(directories).toEqual(['/home/person/.delorun/browser-use/playwright-mcp', undefined, undefined])
+  expect(() => Provider.Config({ mode: 'launch', serverDirectory: 'workspace' } as never)).toThrow()
+})

@@ -11,9 +11,16 @@
  * ```
  *
  * The sentence a person reads is derived from the first unmet need and this module's dictionary, in the studio's
- * language: "Needs <label or names> installed", "Needs <name> set" or "Not available on this kind of computer". A need is
- * a `program` that exists and is executable on `PATH` or at one of its listed absolute `paths` (it is never run), with an
- * optional friendly `label`; an `env` variable that is set and not empty; or a `platform` the row runs on.
+ * language: "Needs <label or names> installed", "Needs <name> set", "Not available on this kind of computer" or
+ * "<Browser> download". A need is a `program` that exists and is executable on `PATH` or at one of its listed absolute
+ * `paths` (it is never run), with an optional friendly `label`; an `env` variable that is set and not empty; a `platform`
+ * the row runs on; or a `playwright-browser`, the exact browser build a Playwright MCP package expects, downloaded into
+ * Playwright's browser cache. That need names the packages that lead from the bundle to the Playwright MCP package
+ * (`via`, the last is the MCP package) and the browser; the check reads the revision from the `browsers.json` of the
+ * `playwright-core` that package resolves, and the build counts as downloaded when its folder holds Playwright's
+ * `INSTALLATION_COMPLETE` marker, for the browser and its headless shell where Playwright lists one. Its fix,
+ * `playwright-install`, answers as the command that runs that exact MCP package version's own installer:
+ * `npx -y <package>@<version> install-browser <browser>`.
  *
  * A check never stops a row and never throws across bundles: a bundle whose declaration cannot be read, names a row its
  * patch does not declare, or lacks the reason in English is reported as a problem of that bundle, and every other bundle
@@ -22,7 +29,9 @@
  * @module @delorun/bundle-local/requirements
  */
 import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
-import { delimiter, join, posix, win32 } from 'node:path'
+import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
+import { delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveBundleDir } from '@deepseek-ai/dsh-app-boot'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
@@ -30,7 +39,7 @@ import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import { admitApprovedDevice } from '@delorun/home-auth'
 import { z } from 'zod'
-import { REQUIREMENT_ROUTES, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
+import { REQUIREMENT_ROUTES, type RequirementFix, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'delorun-requirements'
@@ -43,9 +52,15 @@ const Program = z.strictObject({
 })
 const Env = z.strictObject({ kind: z.literal('env'), name: z.string().min(1) })
 const Platform = z.strictObject({ kind: z.literal('platform'), os: z.array(z.string().min(1)).min(1) })
-const Need = z.discriminatedUnion('kind', [Program, Env, Platform])
+const PlaywrightBrowser = z.strictObject({
+  kind: z.literal('playwright-browser'),
+  via: z.array(z.string().min(1)).min(1),
+  browser: z.enum(['chromium', 'firefox', 'webkit']),
+})
+const Need = z.discriminatedUnion('kind', [Program, Env, Platform, PlaywrightBrowser])
 const Fix = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('command'), command: z.string().min(1) }),
+  z.strictObject({ kind: z.literal('playwright-install') }),
   z.strictObject({ kind: z.literal('settings'), section: z.string().min(1) }),
   z.strictObject({ kind: z.literal('docs'), url: z.url().refine(url => url.startsWith('https://'), 'a docs link must be https') }),
 ])
@@ -65,6 +80,29 @@ export interface CheckEnvironment {
   readonly platform: NodeJS.Platform
   /** The environment variables. */
   readonly env: Readonly<Record<string, string | undefined>>
+  /** The user's home directory. */
+  readonly home: string
+  /**
+   * Whether a file or folder exists.
+   * @param path - an absolute path.
+   * @returns true when it exists.
+   */
+  exists(path: string): boolean
+  /**
+   * Read a JSON file.
+   * @param path - an absolute path.
+   * @returns the parsed value.
+   * @throws when the file cannot be read or parsed.
+   */
+  readJson(path: string): unknown
+  /**
+   * Resolve a package's `package.json` as the package whose `package.json` is given would import it.
+   * @param from - the importing package's `package.json`.
+   * @param name - the package to resolve.
+   * @returns the absolute path of the resolved `package.json`.
+   * @throws when the package cannot be resolved.
+   */
+  resolvePackage(from: string, name: string): string
   /**
    * Whether an executable regular file exists; nothing is run.
    * @param path - an absolute path.
@@ -81,6 +119,10 @@ export function hostEnvironment(): CheckEnvironment {
   return {
     platform: process.platform,
     env: process.env,
+    home: homedir(),
+    exists: existsSync,
+    readJson: path => JSON.parse(readFileSync(path, 'utf8')) as unknown,
+    resolvePackage: (from, name) => createRequire(from).resolve(`${name}/package.json`),
     isExecutable: (path) => {
       if (!existsSync(path) || !statSync(path).isFile()) return false
       if (process.platform === 'win32') return true
@@ -111,17 +153,70 @@ function hasProgram(need: Extract<Need, { kind: 'program' }>, host: CheckEnviron
   return onPath || (need.paths ?? []).some(path => host.isExecutable(path))
 }
 
+const PackageManifest = z.object({ name: z.string().min(1), version: z.string().min(1) })
+const BrowsersManifest = z.object({ browsers: z.array(z.object({ name: z.string().min(1), revision: z.string().regex(/^\d+$/u) })) })
+
+/** The browser build a Playwright MCP package expects. */
+export interface PlaywrightBuild {
+  /** The Playwright MCP package's name and exact version, whose installer downloads the build. */
+  readonly installer: string
+  /** The folders, in Playwright's browser cache, the build's browser and headless shell are downloaded to. */
+  readonly folders: readonly string[]
+}
+
+/**
+ * Playwright's browser cache: `PLAYWRIGHT_BROWSERS_PATH`, `0` for the `playwright-core` package's own folder, or the
+ * operating system's cache folder.
+ * @param host - the computer.
+ * @param core - the `playwright-core` package folder.
+ * @returns the absolute folder.
+ */
+function playwrightCache(host: CheckEnvironment, core: string): string {
+  const set = host.env.PLAYWRIGHT_BROWSERS_PATH ?? ''
+  if (set === '0') return join(core, '.local-browsers')
+  if (set !== '') return isAbsolute(set) ? set : resolve(set)
+  switch (host.platform) {
+    case 'darwin': return join(host.home, 'Library', 'Caches', 'ms-playwright')
+    case 'win32': return join(host.env.LOCALAPPDATA ?? join(host.home, 'AppData', 'Local'), 'ms-playwright')
+    default: return join(host.env.XDG_CACHE_HOME ?? join(host.home, '.cache'), 'ms-playwright')
+  }
+}
+
+/**
+ * The build a `playwright-browser` need names, read from the packages its bundle resolves.
+ * @param need - the need.
+ * @param bundleDir - the bundle's folder, from which `via` is resolved.
+ * @param host - the computer.
+ * @returns the installer and the folders.
+ * @throws when a package cannot be resolved or read, or its `playwright-core` lists no such browser.
+ */
+export function playwrightBuild(need: Extract<Need, { kind: 'playwright-browser' }>, bundleDir: string, host: CheckEnvironment): PlaywrightBuild {
+  let manifest = join(bundleDir, 'package.json')
+  for (const name of need.via) manifest = host.resolvePackage(manifest, name)
+  const mcp = PackageManifest.parse(host.readJson(manifest))
+  const core = dirname(host.resolvePackage(manifest, 'playwright-core'))
+  const { browsers } = BrowsersManifest.parse(host.readJson(join(core, 'browsers.json')))
+  const builds = browsers.filter(entry => entry.name === need.browser || entry.name === `${need.browser}-headless-shell`)
+  if (!builds.some(entry => entry.name === need.browser)) throw new Error(`the playwright-core of ${mcp.name} lists no browser "${need.browser}"`)
+  const cache = playwrightCache(host, core)
+  return { installer: `${mcp.name}@${mcp.version}`, folders: builds.map(entry => join(cache, `${entry.name.replaceAll('-', '_')}-${entry.revision}`)) }
+}
+
 /**
  * Whether one need is met.
  * @param need - the need.
  * @param host - the computer.
+ * @param bundleDir - the declaring bundle's folder, which a `playwright-browser` need resolves its packages from.
  * @returns true when met.
+ * @throws when a `playwright-browser` need's packages cannot be read.
  */
-export function isMet(need: Need, host: CheckEnvironment): boolean {
+export function isMet(need: Need, host: CheckEnvironment, bundleDir: string): boolean {
   switch (need.kind) {
     case 'program': return hasProgram(need, host)
     case 'env': return (host.env[need.name] ?? '') !== ''
     case 'platform': return need.os.includes(host.platform)
+    case 'playwright-browser':
+      return playwrightBuild(need, bundleDir, host).folders.every(folder => host.exists(join(folder, 'INSTALLATION_COMPLETE')))
   }
 }
 
@@ -139,12 +234,14 @@ const REASONS = {
     or: ' or ',
     env: (name: string) => `Needs ${name} set`,
     platform: 'Not available on this kind of computer',
+    download: (browser: string) => `${browser} download`,
   },
   zh: {
     program: (names: string) => `需要安装 ${names}`,
     or: ' 或 ',
     env: (name: string) => `需要设置 ${name}`,
     platform: '此类电脑不支持',
+    download: (browser: string) => `需要下载 ${browser}`,
   },
 } as const
 
@@ -160,7 +257,27 @@ function reasonOf(need: Need, language: string): string {
     case 'program': return words.program(need.label ?? need.names.join(words.or))
     case 'env': return words.env(need.name)
     case 'platform': return words.platform
+    case 'playwright-browser': return words.download(BROWSER_NAMES[need.browser])
   }
+}
+
+/** The browsers' names in a reason. */
+const BROWSER_NAMES = { chromium: 'Chromium', firefox: 'Firefox', webkit: 'WebKit' } as const
+
+/**
+ * The fix as Plugins shows it: a `playwright-install` fix becomes the command that runs the installer of the exact
+ * Playwright MCP version the row's `playwright-browser` need resolves.
+ * @param requirement - the row's declaration.
+ * @param bundle - the bundle.
+ * @param host - the computer.
+ * @returns the fix to show.
+ * @throws when a `playwright-install` fix has no `playwright-browser` need beside it.
+ */
+function shownFix(requirement: RowRequirement, bundle: BundleToCheck, host: CheckEnvironment): RequirementFix {
+  if (requirement.fix.kind !== 'playwright-install') return requirement.fix
+  const need = requirement.needs.find(entry => entry.kind === 'playwright-browser')
+  if (need === undefined) throw new Error('a "playwright-install" fix needs a "playwright-browser" need in the same row')
+  return { kind: 'command', command: `npx -y ${playwrightBuild(need, bundle.dir, host).installer} install-browser ${need.browser}` }
 }
 
 /**
@@ -179,9 +296,10 @@ function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnviron
   const declared = Declaration.parse(raw)
   return Object.entries(declared).map(([rowId, requirement]) => {
     if (!bundle.rowIds.includes(rowId)) throw new Error(`"requires" names the row "${rowId}", which the patch does not declare`)
-    const unmet = requirement.needs.find(need => !isMet(need, host))
+    const fix = shownFix(requirement, bundle, host)
+    const unmet = requirement.needs.find(need => !isMet(need, host, bundle.dir))
     if (unmet === undefined) return { packageName: bundle.name, rowId, state: 'ready' as const }
-    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language), fix: requirement.fix }
+    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language), fix }
   })
 }
 

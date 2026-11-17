@@ -1,6 +1,8 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
+import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import Schema from '@deepseek-ai/schemastery'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
@@ -9,7 +11,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { SessionResources } from './index.ts'
 import type {} from '@deepseek-ai/dsh-browser-use'
-import type {} from '@deepseek-ai/dsh-tools'
+import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
@@ -23,6 +25,8 @@ export interface BrowserMcpLaunchConfig {
   executablePath?: string
   /** Per-call timeout override in milliseconds; omission uses the MCP client default. */
   toolCallTimeoutMs?: number
+  /** Where the MCP server process runs; see {@link BrowserServerDirectory}. Omission is `session`. */
+  serverDirectory?: BrowserServerDirectory
 }
 
 /** Attachment to an externally owned Chromium browser. */
@@ -33,7 +37,16 @@ export interface BrowserMcpAttachConfig {
   endpoint: string
   /** Per-call timeout override in milliseconds; omission uses the MCP client default. */
   toolCallTimeoutMs?: number
+  /** Where the MCP server process runs; see {@link BrowserServerDirectory}. Omission is `session`. */
+  serverDirectory?: BrowserServerDirectory
 }
+
+/**
+ * Where a browser MCP server process runs: `session` starts each Session's server in that Session's working directory;
+ * `home` starts every Session's server in one folder of the Harness home, `browser-use/<server name>`, so the server's
+ * command, arguments and working directory are the same for every Session.
+ */
+export type BrowserServerDirectory = 'session' | 'home'
 
 /** Fixed launch or attachment choice for one MCP browser provider. */
 export type BrowserMcpConfig = BrowserMcpLaunchConfig | BrowserMcpAttachConfig
@@ -45,11 +58,13 @@ export const BrowserMcpConfig: Schema<BrowserMcpAttachConfig | (Omit<BrowserMcpL
     headless: Schema.boolean().default(true),
     executablePath: Schema.string().pattern(/\S/u),
     toolCallTimeoutMs: Schema.number().min(1),
+    serverDirectory: Schema.union(['session', 'home']),
   }),
   Schema.object({
     mode: Schema.const('attach').required(),
     endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
     toolCallTimeoutMs: Schema.number().min(1),
+    serverDirectory: Schema.union(['session', 'home']),
   }),
 ])
 
@@ -70,6 +85,16 @@ export function validateBrowserMcpConfig(config: BrowserMcpConfig): void {
   }
 }
 
+/**
+ * The folder a provider's server runs in for every Session.
+ * @param config - the provider's browser configuration.
+ * @param name - the provider's server name.
+ * @returns `browser-use/<name>` in the Harness home for `home`, or `undefined` for each Session's working directory.
+ */
+export function browserServerDirectory(config: BrowserMcpConfig, name: string): string | undefined {
+  return config.serverDirectory === 'home' ? dshHomePath('browser-use', name) : undefined
+}
+
 /** Provider-owned connection options for one live Session. */
 export interface SessionMcpOptions {
   /** Provider identity and MCP tool namespace. */
@@ -80,20 +105,70 @@ export interface SessionMcpOptions {
   command: string
   /** Arguments passed directly without a shell. */
   args: string[]
+  /**
+   * Absolute folder every Session's server runs in, created with mode 0700 before a start when it is missing.
+   * Omission starts each Session's server in that Session's working directory. Either way the server is told the
+   * Session's working directory as its one MCP root, where a server such as Playwright's saves its output files.
+   */
+  directory?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
   toolCallTimeoutMs?: number
+  /**
+   * The model-visible text that replaces a browser tool failure the person, not the model, must resolve, such as a
+   * browser build that is not installed.
+   * @param message - the failed call's error message.
+   * @returns the replacement, or `undefined` to keep the failure as the server reported it.
+   */
+  explainFailure?: (message: string) => string | undefined
+}
+
+/**
+ * A browser tool failure with the provider's replacement text.
+ * @param result - the failed call's result.
+ * @param explain - the provider's replacement, when it has one.
+ * @returns the failure whose content and message are the replacement, or the result unchanged.
+ */
+function explained(result: ToolExecutionResult, explain: SessionMcpOptions['explainFailure']): ToolExecutionResult {
+  if (!result.isError || explain === undefined) return result
+  const message = explain(result.error.message)
+  if (message === undefined) return result
+  return { isError: true, error: { message }, content: [{ type: 'text', text: `Error: ${message}` }] }
+}
+
+/**
+ * A fixed server folder, created when missing.
+ * @param directory - the absolute folder.
+ * @returns the folder.
+ */
+async function fixedDirectory(directory: string): Promise<string> {
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  return directory
 }
 
 interface ClientState {
-  status: 'ready' | 'blocked'
+  /** `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did not allow. */
+  status: 'ready' | 'blocked' | 'refused'
   mask?: Scope
 }
 
 /**
+ * Whether a failed acquisition is the add-time consent keeping the server stopped, which leaves one Session without
+ * browser tools rather than failing its creation.
+ * @param error - the acquisition's failure.
+ * @returns true for a refused start or a declared consent that did not start.
+ */
+function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedError | McpClient.McpConsentUnavailableError {
+  return error instanceof McpClient.McpConsentRefusedError || error instanceof McpClient.McpConsentUnavailableError
+}
+
+/**
  * Await one MCP client during each future Agent's creation.
- * A busy attachment leaves that activation without browser tools; its other turns continue.
+ * A busy attachment leaves that activation without browser tools; its other turns continue. A start the mounted
+ * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
+ * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
+ * activation reviews the start again. Every other startup failure fails the Agent's creation.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.
  * @param options - provider identity, attachment exclusivity, and executable configuration.
@@ -114,7 +189,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     refreshingMasks = true
     try {
       for (const [agent, state] of clients) {
-        if (state.status !== 'blocked') continue
+        if (state.status === 'ready') continue
         const inherited = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith(toolPrefix))
         if (inherited.length === 0) continue
         state.mask ??= createScope(ctx, agent)
@@ -145,13 +220,15 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             }
             return next()
           })
+          const sessionDirectory = await workingDirectory.ensure(agent, signal)
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
             serverName: options.name,
             command: options.command,
             args: options.args,
             ...options.env === undefined ? {} : { env: options.env },
-            cwd: await workingDirectory.ensure(agent, signal),
+            cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
+            roots: [sessionDirectory],
             ...options.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: options.toolCallTimeoutMs },
             failOnStartupError: true,
             reconnect: { enabled: false },
@@ -189,7 +266,17 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       refreshBlockedMasks()
       return
     }
-    await resources.get(agent, signal)
+    try {
+      await resources.get(agent, signal)
+    } catch (error) {
+      if (!isConsentStop(error)) throw error
+      // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
+      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id} until the server's start is allowed: ${error.message}`)
+      state.status = 'refused'
+      clients.set(agent, state)
+      refreshBlockedMasks()
+      return
+    }
     clients.set(agent, state)
   }, { prepend: true })
   ctx.on('tools/change', refreshBlockedMasks)
@@ -202,7 +289,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     if (agent === undefined || clients.get(agent)?.status !== 'ready') {
       throw new Error(`${options.name}: browser tool belongs to another Session`)
     }
-    return resources.run(agent, exec.signal, async (_scope, combined) => {
+    const result = await resources.run(agent, exec.signal, async (_scope, combined) => {
       const original = exec.signal
       exec.signal = combined
       try {
@@ -211,6 +298,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         exec.signal = original
       }
     })
+    return explained(result, options.explainFailure)
   })
   ctx.on('system-prompt/assemble', async (_assembly, { agent }, next) => {
     const assembly = await next()

@@ -1,12 +1,13 @@
 /** Real SDK negotiation, subscription, and cancellation through the connection supervisor. */
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { pathToFileURL } from 'node:url'
 import { z } from 'zod'
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { InMemoryTransport, type Transport } from '@modelcontextprotocol/client'
-import { McpServer } from '@modelcontextprotocol/server'
+import { McpServer, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -45,6 +46,55 @@ async function connect(server: McpServer, options?: { resources: true }): Promis
   }
   return ctx
 }
+
+/**
+ * Connect a 2025-era server, the protocol era Playwright's MCP server speaks, where the client
+ * announces its capabilities in `initialize` and roots are a server-to-client request.
+ */
+async function connectLegacy(options: { roots?: string[] }): Promise<McpServer> {
+  const ctx = new Context()
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
+  const server = new McpServer({ name: 'roots', version: '1' }, {
+    supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS.filter(version => version.startsWith('2025-')),
+  })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await server.connect(serverTransport)
+  mockTransport.mockReturnValue(clientTransport)
+  const connected = options.roots === undefined ? config : { ...config, roots: options.roots }
+  const connection = startConnection(ctx, connected, resolveReconnectPolicy({ enabled: false }, 'fixture'), new McpStatusCell(() => {}))
+  onTestFinished(async () => {
+    await connection.dispose()
+    await server.close()
+    await ctx.fiber.dispose()
+  })
+  expect(await connection.ready).toEqual({})
+  return server
+}
+
+describe('MCP roots on 2025-era connections', () => {
+  it('answers roots/list with the configured roots as file URLs', async () => {
+    const root = process.platform === 'win32' ? 'C:\\work\\project' : '/work/project'
+    const server = await connectLegacy({ roots: [root] })
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(server.server.getClientCapabilities()?.roots).toEqual({})
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(await server.server.listRoots()).toEqual({ roots: [{ uri: pathToFileURL(root).href, name: 'project' }] })
+  })
+
+  it('advertises no roots capability when none are configured', async () => {
+    const server = await connectLegacy({})
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(server.server.getClientCapabilities()).toBeDefined()
+    // oxlint-disable-next-line typescript/no-deprecated -- 2025-era roots, as Playwright's server speaks.
+    expect(server.server.getClientCapabilities()?.roots).toBeUndefined()
+  })
+
+  it('rejects a relative root in the config', () => {
+    expect(() => Config({ transport: 'stdio', serverName: 'fixture', command: 'fixture', roots: ['project'] })).toThrow()
+  })
+})
 
 describe('modern MCP connections', () => {
   it('keeps a resource-only server connected without requesting tools', async () => {

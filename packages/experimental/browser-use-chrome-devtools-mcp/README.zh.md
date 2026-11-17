@@ -44,6 +44,7 @@ kind: "package-reference"
 | `executablePath` | 上游发现 | 启动使用的 Chromium 可执行文件 |
 | `endpoint` | attach 时必填 | 已有浏览器调试端点 |
 | `toolCallTimeoutMs` | MCP 客户端默认值 | 单次调用超时，单位为毫秒 |
+| `serverDirectory` | `session` | MCP 服务器的运行位置：`session` 为每个 Session 的工作目录，`home` 为所有 Session 共用的 Harness 主目录中的一个文件夹（`browser-use/<服务器名称>`），因此它的命令和文件夹保持不变 |
 
 [配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-browser-use-chrome-devtools-mcp)列出接受的字段。浏览器模式由 profile 或 preset 选择。
 

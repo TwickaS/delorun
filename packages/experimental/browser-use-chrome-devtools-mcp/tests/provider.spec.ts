@@ -35,3 +35,12 @@ it('rejects trailing endpoint garbage before mounting any browser resources', ()
   expect(() => { Provider.apply(new Context(), Provider.Config({ mode: 'attach', endpoint: 'http://localhost trailing-junk' })) }).toThrow('browser endpoint')
   expect(mountSessionMcp).not.toHaveBeenCalled()
 })
+
+it('runs the server in one folder of the Harness home for every Session when serverDirectory is home', () => {
+  vi.stubEnv('DSH_HOME', '/home/person/.delorun')
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', serverDirectory: 'home' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const directories = vi.mocked(mountSessionMcp).mock.calls.map(([, options]) => options.directory)
+  expect(directories).toEqual(['/home/person/.delorun/browser-use/chrome-devtools-mcp', undefined])
+  vi.unstubAllEnvs()
+})
