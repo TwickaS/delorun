@@ -1111,6 +1111,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'review', description: 'the facts of the start.' }],
         returns: 'the verdict.',
       },
+      {
+        signature: 'permissionLevel?(provider: string): SubagentSafetyLevel | undefined',
+        description: 'The safety level for the next run of one external provider, read at every start so a changed level applies to the next run. A provider with no answer uses its own configured permission mode.',
+        parameters: [{ name: 'provider', description: 'the registered provider name.' }],
+        returns: 'the level, or undefined to keep the provider\'s configured mode.',
+      },
     ],
   },
   {
@@ -10190,6 +10196,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubagentRuntime',
     declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    rootOf(caller: Agent): Agent;\n    namesOf(agent: Agent): SubagentMemberNames;\n    async resolveName(caller: Agent, name: string, signal: AbortSignal): Promise<SessionId>;\n    async waitForTreeWork(root: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote({ name: \'prompt\', resources: { session: request => request.childSessionId } })\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote({ name: \'interruptByUser\', resources: { session: childSessionId => childSessionId } })\n    interruptByUser(childSessionId: SessionId): SubagentInterruptReceipt;\n  /* …truncated — full shape in source */',
+  },
+  {
+    name: 'SubagentSafetyLevel',
+    declaration: 'export type SubagentSafetyLevel = \'careful\' | \'standard\' | \'own\' | \'unrestricted\';',
   },
   {
     name: 'SubagentSendMessageOptions',
