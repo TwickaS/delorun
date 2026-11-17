@@ -28,6 +28,8 @@ export interface HubDeps {
   readonly concurrency: number
   /** The least time between two published progress reports of one download, in milliseconds. */
   readonly progressIntervalMs: number
+  /** How long a pack's file check stands before the snapshot checks the pack's files again, in milliseconds. */
+  readonly verifyCacheMs: number
   /** Report a failed install to the Host's log; the install queue's item carries the failure to the person. */
   readonly logFailure: (key: string, error: unknown) => void
   /** Makes a request id the plugin manager announces an install under. */
@@ -54,6 +56,22 @@ function saveItems(file: string, items: readonly InstallItem[]): void {
   renameSync(temporary, file)
 }
 
+/**
+ * A runner that forgets a pack's file check when its install ends, so the next snapshot reads what the install left.
+ * @param run - the queue's runner.
+ * @param ended - called with the item's key when its install ends, however it ends.
+ * @returns the runner.
+ */
+function packRunner(run: ReturnType<typeof createPackRunner>, ended: (key: string) => void): ReturnType<typeof createPackRunner> {
+  return async (key, signal, progress) => {
+    try {
+      return await run(key, signal, progress)
+    } finally {
+      ended(key)
+    }
+  }
+}
+
 /** The pack hub. */
 export class PacksHub {
   private readonly queue: InstallQueue
@@ -64,6 +82,10 @@ export class PacksHub {
   private names: ReadonlySet<string> | undefined
   /** The packs whose files matched their signed list at the last snapshot. */
   private sealed: ReadonlySet<string> = new Set()
+  /** Each pack's last file check against its signed list. A snapshot is built at every queue change, and each check reads and hashes every file of the pack. */
+  private readonly checks = new Map<string, { readonly at: number, readonly installed: boolean }>()
+  /** The file checks running now, so concurrent snapshots share one. */
+  private readonly checking = new Map<string, Promise<boolean>>()
 
   /**
    * @param deps - the collaborators.
@@ -77,7 +99,7 @@ export class PacksHub {
       progressIntervalMs: deps.progressIntervalMs,
       run: 'unsupported' in environment
         ? () => Promise.reject(new Error(environment.unsupported))
-        : createPackRunner({ environment, installBundle: deps.installBundle, requestId: deps.requestId, logFailure: deps.logFailure }),
+        : packRunner(createPackRunner({ environment, installBundle: deps.installBundle, requestId: deps.requestId, logFailure: deps.logFailure }), key => { this.checks.delete(key) }),
       reload: deps.reload,
       runningChats: deps.runningChats,
       load: () => loadItems(deps.file),
@@ -124,7 +146,7 @@ export class PacksHub {
         const base = { name: entry.name, version: entry.version, experimental: entry.experimental }
         try {
           packVariantFor(entry, release.paths.platform)
-          const installed = await checkInstalledPack(release.paths, release.version, entry, release.paths.platform).then(() => true, () => false)
+          const installed = await this.intact(release, entry)
           if (installed) sealed.add(entry.name)
           infos.push({ ...base, downloadBytes: packDownloadSize(entry, release.paths.platform), availability: installed ? 'installed' : 'available' })
         } catch (error) {
@@ -137,6 +159,25 @@ export class PacksHub {
     } catch (error) {
       return { supported: false, reason: error instanceof Error ? error.message : String(error), packs: [], queue }
     }
+  }
+
+  /**
+   * Whether a pack's files match its signed list: the last check while it is younger than `verifyCacheMs`, else a new one.
+   * @param release - the installed release.
+   * @param entry - the pack's verified entry.
+   * @returns true when every file matches.
+   */
+  private intact(release: InstalledRelease, entry: Parameters<typeof checkInstalledPack>[2]): Promise<boolean> {
+    const known = this.checks.get(entry.name)
+    if (known !== undefined && Date.now() - known.at < this.deps.verifyCacheMs) return Promise.resolve(known.installed)
+    const running = this.checking.get(entry.name)
+    if (running !== undefined) return running
+    const check = checkInstalledPack(release.paths, release.version, entry, release.paths.platform).then(() => true, () => false).then((installed) => {
+      this.checks.set(entry.name, { at: Date.now(), installed })
+      return installed
+    }).finally(() => { this.checking.delete(entry.name) })
+    this.checking.set(entry.name, check)
+    return check
   }
 
   /**
