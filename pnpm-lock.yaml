@@ -1837,6 +1837,9 @@ importers:
       '@delorun/external-agents':
         specifier: workspace:*
         version: link:../external-agents
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.263

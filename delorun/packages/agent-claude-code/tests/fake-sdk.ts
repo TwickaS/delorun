@@ -4,8 +4,8 @@
  * @module @delorun/agent-claude-code/tests/fake-sdk
  */
 import type {
-  AccountInfo, ModelInfo, Options, PermissionUpdate, SDKAssistantMessage, SDKControlGetUsageResponse, SDKMessage,
-  SDKRateLimitInfo, SDKRateLimitEvent, SDKResultMessage, SDKUserMessage,
+  AccountInfo, McpSdkServerConfigWithInstance, ModelInfo, Options, PermissionUpdate, SDKAssistantMessage, SDKControlGetUsageResponse, SDKMessage,
+  SdkMcpToolDefinition, SDKRateLimitInfo, SDKRateLimitEvent, SDKResultMessage, SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import { Queue } from '../src/queue.ts'
 import type { ClaudeQuery, ClaudeSdk } from '../src/sdk.ts'
@@ -93,11 +93,25 @@ export class FakeSdk implements ClaudeSdk {
   /** Every query, in order. */
   readonly queries: FakeQuery[] = []
 
-  readonly #configure: (query: FakeQuery) => void
+  /** The tools of every MCP server the driver made, by server name. */
+  readonly servers = new Map<string, SdkMcpToolDefinition[]>()
 
-  /** @param configure - prepares each query's answers before the driver can call it. */
-  constructor(configure: (query: FakeQuery) => void = () => {}) {
+  readonly #configure: (query: FakeQuery) => void
+  readonly #mcp: ClaudeSdk['createSdkMcpServer'] | undefined
+
+  /**
+   * @param configure - prepares each query's answers before the driver can call it.
+   * @param mcp - the real SDK's in-process server maker, for specs that offer harness tools; it starts no process.
+   */
+  constructor(configure: (query: FakeQuery) => void = () => {}, mcp?: ClaudeSdk['createSdkMcpServer']) {
     this.#configure = configure
+    this.#mcp = mcp
+  }
+
+  createSdkMcpServer(options: { name: string; tools: SdkMcpToolDefinition[] }): McpSdkServerConfigWithInstance {
+    if (this.#mcp === undefined) throw new Error('this fake SDK makes no MCP server')
+    this.servers.set(options.name, options.tools)
+    return this.#mcp(options)
   }
 
   query(params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }): FakeQuery {

@@ -3,7 +3,7 @@ import type { SpawnedProcess } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCodeDriver } from '../src/driver.ts'
 import { ClaudeCodeDriverError } from '../src/errors.ts'
 import { GateProcess } from '../src/process.ts'
-import type { AccountObservation, ProgramEvent, ProgramOpenRequest, ProgramSession, SessionId } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type AccountObservation, type ProgramEvent, type ProgramOpenRequest, type ProgramSession, type SessionId } from '@delorun/external-agents/contract'
 import { assistant, FakeSdk, init, rateLimit, result, toolResults } from './fake-sdk.ts'
 
 const signal = AbortSignal.timeout(5_000)
@@ -256,9 +256,14 @@ describe('a Claude Code session', () => {
     await session.close()
   })
 
-  it('refuses harness tools until they are offered over MCP', async () => {
-    const tool = { name: 't', description: 'd', inputSchema: {}, call: () => Promise.resolve({ output: '', isError: false }) }
-    await expect(driver(new FakeSdk()).open(request({ harnessTools: [tool] }))).rejects.toMatchObject({ code: 'harness-tools' })
+  it('fails to open with the contract\'s typed failure, in words for the person, when the SDK cannot be used', async () => {
+    const refusing = new ClaudeCodeDriver({
+      sdk: () => Promise.reject(new ClaudeCodeDriverError('sdk-version', 'Update Delorun or the Claude Code pack.')),
+      harnessToolTimeoutMs: () => 1,
+    })
+    const opening = refusing.open(request())
+    await expect(opening).rejects.toBeInstanceOf(ProgramOpenError)
+    await expect(opening).rejects.toMatchObject({ failure: { category: 'program', detail: 'Update Delorun or the Claude Code pack.' } })
   })
 
   it('starts the program only through the spawn the gate hands it', async () => {

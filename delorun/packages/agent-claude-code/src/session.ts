@@ -113,6 +113,7 @@ export interface ClaudeCodeSessionOptions {
 export class ClaudeCodeSession implements ProgramSession {
   readonly #events = new Queue<ProgramEvent>()
   readonly #input = new Queue<SDKUserMessage>()
+  readonly #closing = new AbortController()
   readonly #options: ClaudeCodeSessionOptions
   #query: ClaudeQuery | undefined
   #pump: Promise<void> = Promise.resolve()
@@ -348,6 +349,11 @@ export class ClaudeCodeSession implements ProgramSession {
     return Promise.resolve()
   }
 
+  /** Aborts when the session closes; running harness tool calls end with it. */
+  get ended(): AbortSignal {
+    return this.#closing.signal
+  }
+
   /** Record that the person's answer to a question stopped the running turn, which then ends `interrupted`. */
   stopping(): void {
     if (this.#running) this.#interruptRequested = true
@@ -378,6 +384,7 @@ export class ClaudeCodeSession implements ProgramSession {
   async close(): Promise<void> {
     if (this.#closed) return
     this.#closed = true
+    this.#closing.abort(new ClaudeCodeDriverError('closed', 'This Claude Code session is closed.'))
     this.#input.end(new ClaudeCodeDriverError('closed', 'This Claude Code session is closed.'))
     this.#query?.close()
     await this.#pump

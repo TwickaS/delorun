@@ -8,14 +8,30 @@ import type { Options, SDKControlGetUsageResponse, SDKUserMessage, SpawnedProces
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { allowedToolsFor, canUseTool } from './approvals.ts'
 import { ClaudeCodeDriverError } from './errors.ts'
+import { harnessToolServer } from './harness-tools.ts'
 import { probeObservation } from './limits.ts'
-import type { AccountObservation, ExternalAgentDriver, ProgramOpenRequest, ProgramSession, ProgramSpawn } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type AccountObservation, type ExternalAgentDriver, type ProgramOpenRequest, type ProgramSession, type ProgramSpawn } from '@delorun/external-agents/contract'
 import { spawnThroughGate } from './process.ts'
 import type { ClaudeSdk } from './sdk.ts'
 import { ClaudeCodeSession } from './session.ts'
 
 /** The dialogs Claude Code may raise in a run nobody watches at a terminal; the driver cancels each one. */
 const SUPPORTED_DIALOG_KINDS = ['refusal_fallback_prompt']
+
+/**
+ * Turn the driver's own failure to open into the contract's typed open failure, with its sentence for the person.
+ * @param work - the step that may fail.
+ * @returns the step's result.
+ * @throws ProgramOpenError `program` for a {@link ClaudeCodeDriverError}; any other failure as it is.
+ */
+async function opening<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work
+  } catch (error: unknown) {
+    if (error instanceof ClaudeCodeDriverError) throw new ProgramOpenError({ category: 'program', detail: error.message }, { cause: error })
+    throw error
+  }
+}
 
 /** What the driver needs. */
 export interface ClaudeCodeDriverOptions {
@@ -56,12 +72,11 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
    * rules the person allowed earlier hold again from the first turn.
    * @param request - the seat's request.
    * @returns the live session; the program process starts with the first input.
-   * @throws ClaudeCodeDriverError `sdk-version` or `sdk-missing` when the SDK cannot be used, `harness-tools` when harness tools are asked for.
+   * @throws ProgramOpenError `program` when the SDK cannot be used or a harness tool cannot be offered.
    */
   async open(request: ProgramOpenRequest): Promise<ProgramSession> {
-    if (request.harnessTools.length > 0) throw new ClaudeCodeDriverError('harness-tools', 'Claude Code cannot be offered harness tools yet.')
     request.signal.throwIfAborted()
-    const sdk = await this.#options.sdk()
+    const sdk = await opening(this.#options.sdk())
     request.signal.throwIfAborted()
     const programSessionId = request.resume ?? randomUUID()
     const session = new ClaudeCodeSession({
@@ -70,6 +85,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
       ...request.model === undefined ? {} : { model: request.model },
       onLimits: request.onLimits,
     })
+    const server = await opening(Promise.resolve().then(() => harnessToolServer(sdk, request.harnessTools, session.ended)))
     const allowedTools = allowedToolsFor(request.runRules)
     const options: Options = {
       cwd: request.cwd,
@@ -77,8 +93,13 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
       ...request.resume === undefined ? { sessionId: programSessionId } : { resume: request.resume },
       ...request.model === undefined ? {} : { model: request.model },
       ...allowedTools.length === 0 ? {} : { allowedTools },
+      ...server === undefined ? {} : { mcpServers: { [server.name]: server.config } },
       disallowedTools: ['AskUserQuestion'],
-      canUseTool: canUseTool(question => request.onApproval(question), { beforeAsk: () => { session.endMessage() }, onCancel: () => { session.stopping() } }),
+      canUseTool: canUseTool(
+        question => request.onApproval(question),
+        { beforeAsk: () => { session.endMessage() }, onCancel: () => { session.stopping() } },
+        server?.toolNames ?? new Set(),
+      ),
       onElicitation: () => Promise.resolve({ action: 'decline' }),
       onUserDialog: () => Promise.resolve({ behavior: 'cancelled' }),
       supportedDialogKinds: SUPPORTED_DIALOG_KINDS,
@@ -94,11 +115,11 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
    * process lives only for the check.
    * @param request - the gate's spawn, an empty folder and the check's abort signal.
    * @returns the observation, with no personal field.
-   * @throws ClaudeCodeDriverError when the SDK cannot be used; the signal's reason when aborted; the program's failure when it cannot report its account.
+   * @throws ProgramOpenError `program` when the SDK cannot be used; the signal's reason when aborted; the program's failure when it cannot report its account.
    */
   async probe(request: { readonly spawn: ProgramSpawn; readonly cwd: string; readonly signal: AbortSignal }): Promise<AccountObservation> {
     request.signal.throwIfAborted()
-    const sdk = await this.#options.sdk()
+    const sdk = await opening(this.#options.sdk())
     const stop = new AbortController()
     const idle = (async function * (): AsyncGenerator<SDKUserMessage> {
       // A prompt that never yields keeps the program idle while it answers the control requests.

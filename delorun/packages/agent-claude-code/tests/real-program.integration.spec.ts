@@ -1,27 +1,17 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, relative } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { ClaudeCodeDriver } from '../src/driver.ts'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSession, ProgramSpawn, SessionId } from '@delorun/external-agents/contract'
+import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramHarnessTool, ProgramOpenRequest, ProgramSession, ProgramSpawn, SessionId } from '@delorun/external-agents/contract'
 import { loadClaudeSdk, TESTED_SDK_VERSION } from '../src/sdk.ts'
+import { locateSdk } from './locate-sdk.ts'
 import { startMessagesFixture, type MessagesFixture, type MessagesStep } from './messages-fixture.ts'
-
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
-
-/** The SDK as upstream's Claude Code package brings it; its `package.json` is not exported, so the folder is found from the entry. */
-function locateSdk(): { entry: string, version: string } {
-  const entry = realpathSync(createRequire(join(REPO, 'packages/subagent/subagent-claude-code/package.json')).resolve('@anthropic-ai/claude-agent-sdk'))
-  const manifest = JSON.parse(readFileSync(join(dirname(entry), 'package.json'), 'utf8')) as { version: string }
-  return { entry, version: manifest.version }
-}
 
 const roots: string[] = []
 const contexts: Context[] = []
@@ -57,7 +47,7 @@ interface Harness {
 }
 
 /** A scratch Claude Code home and task folder, a Messages fixture, and the gate's spawn over the harness's subprocess owner. */
-async function harness(script: readonly MessagesStep[], signedIn = true): Promise<Harness> {
+async function harness(script: readonly MessagesStep[], signedIn = true, toolWaitMs = 900_000): Promise<Harness> {
   const root = mkdtempSync(join(tmpdir(), 'ea1-claude-real-'))
   roots.push(root)
   const task = join(root, 'task')
@@ -81,7 +71,7 @@ async function harness(script: readonly MessagesStep[], signedIn = true): Promis
   }
   const driver = new ClaudeCodeDriver({
     sdk: () => loadClaudeSdk(locateSdk()),
-    harnessToolTimeoutMs: () => 900_000,
+    harnessToolTimeoutMs: () => toolWaitMs,
     env: {
       ...signedIn ? { ANTHROPIC_API_KEY: 'ea1-fake-key' } : {},
       ANTHROPIC_BASE_URL: fixture.baseUrl,
@@ -293,5 +283,43 @@ describe(`the real Claude Agent SDK ${TESTED_SDK_VERSION} and its pinned Claude 
     const config = JSON.parse(readFileSync(global, 'utf8')) as { projects?: Record<string, unknown> }
     expect(config.projects).toEqual({ '/elsewhere': elsewhere })
     expect(existsSync(join(h.task, '.claude'))).toBe(false)
+  })
+
+  it('offers harness tools over its own MCP server, runs a call without asking the seat, and returns the output', async () => {
+    const h = await harness([{ toolEndingWith: '__echo', input: { text: 'hello' } }, { text: 'echoed' }])
+    const asked: ProgramApprovalRequest[] = []
+    const inputs: JsonValue[] = []
+    const echo: ProgramHarnessTool = {
+      name: 'echo', description: 'Echo the text back.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      call: (input) => { inputs.push(input); return Promise.resolve({ output: 'ECHO_RESULT', isError: false }) },
+    }
+    const session = await h.driver.open(openRequest(h, { harnessTools: [echo], onApproval: answering([], asked) }))
+    await session.send('Echo hello.', 'start')
+    const events = await turn(session)
+    expect(events.find(event => event.kind === 'tool-call')).toMatchObject({ name: expect.stringMatching(/^mcp__delorun_[0-9a-f]{12}__echo$/) })
+    expect(events.find(event => event.kind === 'tool-result')).toMatchObject({ output: 'ECHO_RESULT', isError: false })
+    expect(inputs).toEqual([{ text: 'hello' }])
+    expect(asked).toEqual([])
+    await session.close()
+    await quiescent(h)
+  })
+
+  it('aborts a harness tool call when Claude Code\'s wait limit passes, and the program sees an error', async () => {
+    const h = await harness([{ toolEndingWith: '__wait', input: {} }, { text: 'gave up' }], true, 1500)
+    let aborted = false
+    const wait: ProgramHarnessTool = {
+      name: 'wait', description: 'Wait.', inputSchema: { type: 'object', properties: {} },
+      call: (_input, signal) => new Promise((resolve) => {
+        signal.addEventListener('abort', () => { aborted = true; resolve({ output: 'late', isError: false }) }, { once: true })
+      }),
+    }
+    const session = await h.driver.open(openRequest(h, { harnessTools: [wait] }))
+    await session.send('Wait.', 'start')
+    const events = await turn(session)
+    expect(events.find(event => event.kind === 'tool-result')).toMatchObject({ isError: true })
+    expect(aborted).toBe(true)
+    await session.close()
+    await quiescent(h)
   })
 })

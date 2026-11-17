@@ -153,13 +153,17 @@ export interface QuestionHooks {
 }
 
 /**
- * The SDK's `canUseTool` over the seat's question handler.
+ * The SDK's `canUseTool` over the seat's question handler. A question about one of the session's own harness tools,
+ * matched by its full name on the session's own server, is allowed here: the harness tool's own approval applies when
+ * it runs. Every other question goes to the seat.
  * @param ask - the seat's handler.
  * @param hooks - the session's hooks around each question.
+ * @param ownTools - the full names of the harness tools this session offered, `mcp__<server>__<tool>`.
  * @returns the SDK callback.
  */
-export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, hooks: QuestionHooks): CanUseTool {
+export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, hooks: QuestionHooks, ownTools: ReadonlySet<string>): CanUseTool {
   return async (toolName, input, options) => {
+    if (ownTools.has(toolName)) return { behavior: 'allow', updatedInput: input }
     hooks.beforeAsk()
     const rules = exactRunRules(toolName, input, options.suggestions)
     const runRule = runRuleFor(rules)

@@ -6,7 +6,7 @@
  */
 import { pathToFileURL } from 'node:url'
 import type {
-  AccountInfo, ModelInfo, Options, SDKControlGetUsageResponse, SDKMessage, SDKUserMessage,
+  AccountInfo, McpSdkServerConfigWithInstance, ModelInfo, Options, SDKControlGetUsageResponse, SDKMessage, SdkMcpToolDefinition, SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCodeDriverError } from './errors.ts'
 import type { LocatedClaudeSdk } from '@delorun/external-agents/locate'
@@ -36,6 +36,12 @@ export interface ClaudeSdk {
    * @returns the query.
    */
   query(params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }): ClaudeQuery
+  /**
+   * Make an in-process MCP server whose tools run in this process.
+   * @param options - the server's name and tools.
+   * @returns the server entry for `mcpServers`.
+   */
+  createSdkMcpServer(options: { name: string; tools: SdkMcpToolDefinition[] }): McpSdkServerConfigWithInstance
 }
 
 /**

@@ -10,6 +10,8 @@ import { createServer, type ServerResponse } from 'node:http'
 export type MessagesStep =
   | { readonly text: string }
   | { readonly tool: string; readonly input: Record<string, unknown> }
+  /** Call the one offered tool whose name ends with `suffix`, such as a harness tool on a randomly named server. */
+  | { readonly toolEndingWith: string; readonly input: Record<string, unknown> }
   /** Keep the request open until the client gives up. */
   | { readonly hold: true }
 
@@ -85,6 +87,11 @@ export async function startMessagesFixture(script: readonly MessagesStep[]): Pro
       for (const resolve of ready) resolve()
       const step = steps.shift() ?? { text: 'fixture script ended' }
       if ('hold' in step) return
+      if ('toolEndingWith' in step) {
+        const names = body.tools.flatMap((tool: { name?: unknown }) => typeof tool.name === 'string' && tool.name.endsWith(step.toolEndingWith) ? [tool.name] : [])
+        answer(response, model, names.length === 1 ? { tool: String(names[0]), input: step.input } : { text: `no single tool ends with ${step.toolEndingWith}` })
+        return
+      }
       answer(response, model, step)
     })
   })
