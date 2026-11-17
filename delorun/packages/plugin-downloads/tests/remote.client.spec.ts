@@ -158,7 +158,8 @@ describe('adding a pack', () => {
       f.set([queued('a')])
       return Promise.resolve(ok([queued('a')]))
     }
-    const source = createRemoteDownloadsSource(f.remote, { follow: () => () => {}, pollMs: 1000 })
+    const asked: string[] = []
+    const source = createRemoteDownloadsSource(f.remote, { follow: () => () => {}, pollMs: 1000, unlockNeeded: (action, reason) => { asked.push(`${action}|${reason}`) } })
     source.subscribe(() => {})
     await vi.advanceTimersByTimeAsync(0)
     source.enqueue('a')
@@ -171,5 +172,6 @@ describe('adding a pack', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(source.snapshot().map(item => [item.key, item.state])).toEqual([['a', 'queued']])
     expect(calls).toEqual(['a', 'a'])
+    expect(asked).toEqual(['enqueue|elevation-required: packs/enqueue'])
   })
 })

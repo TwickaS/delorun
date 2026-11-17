@@ -2910,6 +2910,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
@@ -3390,6 +3393,9 @@ importers:
       '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/home-process':
         specifier: workspace:*
         version: link:../home-process
@@ -3415,6 +3421,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager

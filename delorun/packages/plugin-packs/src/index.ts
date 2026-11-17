@@ -21,6 +21,7 @@ import { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 import { PacksHub } from './hub.ts'
 import type { PluginInstallRequestId } from '@deepseek-ai/dsh-plugin-manager/types'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
+import { registerPackRoutes } from './routes.ts'
 import { PacksService } from './service.ts'
 
 export type * from './wire.ts'
@@ -29,6 +30,7 @@ export { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 export { PacksHub } from './hub.ts'
 export { createPackRunner, failureOf } from './runner.ts'
 export { PacksService } from './service.ts'
+export { admitUnlockedPackDevice, registerPackRoutes } from './routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -149,7 +151,7 @@ class ChatGateService extends Service implements ChatGateSlot {
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.plugin(ChatGateService)
-  ctx.inject(['pluginManager', 'profileContext'], (scope) => {
+  ctx.inject(['pluginManager', 'profileContext', 'connection'], (scope) => {
     const profile: ProfileContext = scope.profileContext
     const manager = scope.pluginManager
     const slot = scope.delorunChatGate
@@ -170,6 +172,7 @@ export function apply(ctx: Context, config: Config): void {
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))
       scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName), runsCurrentRelease: () => hub.runsCurrentRelease() })
       scope.plugin(PacksService, hub)
+      registerPackRoutes(scope, hub)
     })()
   })
 }

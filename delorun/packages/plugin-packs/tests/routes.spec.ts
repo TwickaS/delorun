@@ -1,0 +1,91 @@
+/** The packs routes: which Peers each admits (a locked phone cannot add, retry or remove) and what a body may hold. */
+import { describe, expect, it, vi } from 'vitest'
+import type { Context } from '@deepseek-ai/cordis'
+import { REACH_DEVICE } from '@delorun/home-auth'
+import { registerPackRoutes } from '../src/routes.ts'
+import { PACK_ELEVATED_ROUTES, PACK_ROUTES } from '../src/wire.ts'
+
+interface Registered {
+  readonly path: string
+  readonly admitPeer: (request: Request, peer: { principal: { kind: string } }) => boolean
+  readonly fetch: (request: Request) => Promise<Response>
+}
+
+function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}) {
+  const routes = new Map<string, Registered>()
+  const result = { ok: true as const, value: { supported: true, packs: [], queue: [] } }
+  const hub = {
+    snapshot: vi.fn(() => Promise.resolve(result.value)),
+    enqueue: vi.fn(() => Promise.resolve(result)), cancel: vi.fn(() => Promise.resolve(result)), dismiss: vi.fn(() => Promise.resolve(result)),
+    retry: vi.fn(() => Promise.resolve(result)), remove: vi.fn(() => Promise.resolve(result)),
+  }
+  const ctx = {
+    effect: (register: () => unknown) => { register() },
+    get: (name: string) => (name === 'homeAuth' ? {
+      elevationOf: () => (home.elevated === true ? { id: 'e1' } : undefined),
+      pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),
+      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, pinEnabled: () => false,
+    } : undefined),
+    connection: { fetch: { register: (route: Registered) => { routes.set(route.path, route); return () => Promise.resolve() } } },
+  } as unknown as Context
+  registerPackRoutes(ctx, hub as never)
+  return { routes, hub }
+}
+
+const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
+const post = (body: unknown, raw?: string) => new Request('http://x/api/delorunPacks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: raw ?? JSON.stringify(body) })
+
+describe('who may reach each route', () => {
+  it('lets a locked phone read, cancel and dismiss, and refuses it the routes that add, retry or remove', () => {
+    const { routes } = setup()
+    for (const path of Object.values(PACK_ROUTES)) {
+      const admitted = routes.get(path)!.admitPeer(post({}), device())
+      expect(admitted, path).toBe(!PACK_ELEVATED_ROUTES.includes(path))
+    }
+  })
+
+  it('admits an unlocked phone to every route, and a page only while its own unlock runs', () => {
+    const unlocked = setup({ elevated: true })
+    for (const path of Object.values(PACK_ROUTES)) expect(unlocked.routes.get(path)!.admitPeer(post({}), device()), path).toBe(true)
+    const paged = setup({ page: { live: true, ended: false } })
+    for (const path of PACK_ELEVATED_ROUTES) {
+      expect(paged.routes.get(path)!.admitPeer(post({}), device({ unlockId: 'live' })), path).toBe(true)
+      expect(paged.routes.get(path)!.admitPeer(post({}), device({ unlockId: 'ended' })), path).toBe(false)
+    }
+  })
+
+  it('refuses any Peer that is not a reach device, on every route', () => {
+    const { routes } = setup({ elevated: true })
+    for (const path of Object.values(PACK_ROUTES)) expect(routes.get(path)!.admitPeer(post({}), { principal: { kind: 'guest' } }), path).toBe(false)
+  })
+})
+
+describe('what a request may hold', () => {
+  it('passes a name or names to the hub and answers its result', async () => {
+    const { routes, hub } = setup()
+    expect((await routes.get(PACK_ROUTES.cancel)!.fetch(post({ name: 'a' }))).status).toBe(200)
+    expect(hub.cancel).toHaveBeenCalledWith('a')
+    expect((await routes.get(PACK_ROUTES.enqueue)!.fetch(post({ names: ['a', 'b'] }))).status).toBe(200)
+    expect(hub.enqueue).toHaveBeenCalledWith(['a', 'b'])
+    expect((await routes.get(PACK_ROUTES.list)!.fetch(post({}))).status).toBe(200)
+  })
+
+  it('refuses a body that is not the small JSON object the route reads, before the hub is asked', async () => {
+    const { routes, hub } = setup()
+    const bad: Array<[string, Request]> = [
+      ['not JSON', post(undefined, 'nope')],
+      ['an array', post(['a'])],
+      ['no name', post({})],
+      ['an empty name', post({ name: '' })],
+      ['a long name', post({ name: 'x'.repeat(215) })],
+      ['a number name', post({ name: 3 })],
+      ['too many bytes', post({ name: 'a', pad: 'x'.repeat(9000) })],
+    ]
+    for (const [label, request] of bad) expect((await routes.get(PACK_ROUTES.cancel)!.fetch(request)).status, label).toBe(400)
+    for (const names of [[], ['a', 1], Array.from({ length: 33 }, () => 'a'), 'a']) {
+      expect((await routes.get(PACK_ROUTES.enqueue)!.fetch(post({ names }))).status, JSON.stringify(names).slice(0, 20)).toBe(400)
+    }
+    expect(hub.cancel).not.toHaveBeenCalled()
+    expect(hub.enqueue).not.toHaveBeenCalled()
+  })
+})

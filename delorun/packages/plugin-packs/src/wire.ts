@@ -62,6 +62,29 @@ export interface PacksNameRequest {
   readonly name: string
 }
 
+/**
+ * The Host's routes for the packs, each `POST` with a JSON body, answering a {@link PacksResult} (`packs/list` answers a
+ * {@link PacksSnapshot}). The studio fetches each without its leading `/`, relative to the document. A device without an
+ * unlock is answered `403` on the routes that need one.
+ */
+export const PACK_ROUTES = {
+  /** `{}` → {@link PacksSnapshot}. Any approved device. */
+  list: '/api/delorunPacks.list',
+  /** `{ names }` → {@link PacksResult}. Needs the computer, or a device's unlock. */
+  enqueue: '/api/delorunPacks.enqueue',
+  /** `{ name }` → {@link PacksResult}: stops a queued or working install. Any approved device. */
+  cancel: '/api/delorunPacks.cancel',
+  /** `{ name }` → {@link PacksResult}: clears a failed or cancelled row. Any approved device. */
+  dismiss: '/api/delorunPacks.dismiss',
+  /** `{ name }` → {@link PacksResult}. Needs the computer, or a device's unlock. */
+  retry: '/api/delorunPacks.retry',
+  /** `{ name }` → {@link PacksResult}. Needs the computer, or a device's unlock. */
+  remove: '/api/delorunPacks.remove',
+} as const
+
+/** The routes a device reaches only while it holds an unlock. */
+export const PACK_ELEVATED_ROUTES: readonly string[] = [PACK_ROUTES.enqueue, PACK_ROUTES.retry, PACK_ROUTES.remove]
+
 /** The error codes of the `packs` remote. */
 export type PacksErrorCode = 'unsupported' | 'unknown-pack' | 'unavailable-pack'
 
