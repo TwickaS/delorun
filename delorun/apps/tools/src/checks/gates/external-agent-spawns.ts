@@ -15,11 +15,16 @@
  *   (`=== undefined`, `!== undefined` and the `null` forms), which upstream's tool path owns;
  * - `program`: `claude`, `codex`, `claude.exe`, `codex.exe` or a path ending in one of them as a literal the process
  *   runs or passes on: the first argument of `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork`, any element
- *   of an argv array given to those calls or as an `argv` property (so `env claude` is caught), and the first command
- *   word of a shell command line: the command of `exec` or `execSync`, and the element after a `-c` option (as in
- *   `sh -c` or `bash -lc`), skipping leading `exec`, `env`, `nohup` and `NAME=value` words.
+ *   of an argv array given to those calls or as an `argv` property (so `env claude` is caught), and the command word
+ *   of every part of a shell command line, parts being split on `&&`, `||`, `;`, `|`, `&` and newlines, with leading
+ *   `exec`, `env`, `nohup` and `NAME=value` words skipped in each part. A shell command line is the command of `exec`
+ *   or `execSync`, the element after a `-c` option (as in `sh -c` or `bash -lc`), and the first argument of
+ *   `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork` when it is a literal containing a space or when an
+ *   options literal sets `shell` to anything but `false`.
  *
- * An argv held in a variable, or built from non-literal parts, is out of scope: the gate reads literals only.
+ * Out of scope: an argv or command line held in a variable or built from non-literal parts (the gate reads literals
+ * only), command substitution and subshell bodies, and wrappers other than the four skipped words (`sudo`, `time`,
+ * `xargs`, `env` with options).
  *
  * A name built at run time escapes the `sdk`, `codex` and `provider` rules; the `locate` rule covers how a Delorun
  * module finds the pinned programs. Run from anywhere inside the repository:
@@ -62,6 +67,7 @@ const PROVIDERS = new Set(['claude-code', 'codex'])
 const SPAWNERS = new Set(['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'])
 const SHELL_SPAWNERS = new Set(['exec', 'execSync'])
 const SHELL_COMMAND_OPTION = /^-[a-z]*c$/u
+const COMMAND_SEPARATOR = /&&|\|\||[;|&\n]/u
 const COMMAND_PREFIX = /^(?:exec|env|nohup|[A-Za-z_][\w]*=.*)$/u
 const PROGRAM_NAME = /(?:^|[\\/])(?:claude|codex)(?:\.exe)?$/iu
 const EQUALITY = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken])
@@ -129,17 +135,48 @@ function literalEnding(node: ts.Node | undefined): string | undefined {
 }
 
 /**
+ * Whether a text names Claude Code or Codex as a program.
+ * @param text - a program name or path, or undefined.
+ * @returns the text when it does.
+ */
+function programText(text: string | undefined): string | undefined {
+  // A package name such as `@openai/codex` is the `sdk` or `codex` rule's, not a program path.
+  return text !== undefined && !text.startsWith('@') && PROGRAM_NAME.test(text) ? text : undefined
+}
+
+/**
+ * The command word of every part of a shell command line.
+ * @param line - the command line.
+ * @returns each part's first word that is not `exec`, `env`, `nohup` or `NAME=value`, without surrounding brackets and quotes.
+ */
+function commandWords(line: string): string[] {
+  return line.split(COMMAND_SEPARATOR).flatMap((part) => {
+    const word = part.trim().split(/\s+/u).find(candidate => !COMMAND_PREFIX.test(candidate))
+    return word === undefined ? [] : [word.replace(/^[({"']+|["')}]+$/gu, '')]
+  })
+}
+
+/**
  * Whether a program position names Claude Code or Codex.
  * @param node - the expression in the position.
- * @param shell - whether it is a shell command line, whose first command word is the program.
+ * @param shell - whether it is a shell command line, whose command words are the programs.
  * @returns the literal found, or undefined.
  */
 function namesAgentProgram(node: ts.Node | undefined, shell = false): string | undefined {
-  const text = shell && node !== undefined && ts.isStringLiteralLike(node)
-    ? node.text.trim().split(/\s+/u).find(word => !COMMAND_PREFIX.test(word))
-    : literalEnding(node)
-  // A package name such as `@openai/codex` is the `sdk` or `codex` rule's, not a program path.
-  return text !== undefined && !text.startsWith('@') && PROGRAM_NAME.test(text) ? text : undefined
+  if (shell && node !== undefined && ts.isStringLiteralLike(node)) return commandWords(node.text).map(programText).find(found => found !== undefined)
+  return programText(literalEnding(node))
+}
+
+/**
+ * Whether an options literal makes a spawn run its command through a shell.
+ * @param node - an argument of the call.
+ * @returns true for an object literal whose `shell` property is not the literal `false`.
+ */
+function setsShell(node: ts.Node): boolean {
+  if (!ts.isObjectLiteralExpression(node)) return false
+  return node.properties.some(property => (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property))
+    && ts.isIdentifier(property.name) && property.name.text === 'shell'
+    && !(ts.isPropertyAssignment(property) && property.initializer.kind === ts.SyntaxKind.FalseKeyword))
 }
 
 /**
@@ -192,7 +229,8 @@ export function sourceViolations(path: string, text: string): SpawnViolation[] {
       const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : ts.isIdentifier(callee) ? callee.text : undefined
       const first = node.arguments[0]
       if (name !== undefined && first !== undefined && SPAWNERS.has(name)) {
-        const found = namesAgentProgram(first)
+        const shell = node.arguments.some(setsShell) || (ts.isStringLiteralLike(first) && /\s/u.test(first.text.trim()))
+        const found = namesAgentProgram(first) ?? (shell ? namesAgentProgram(first, true) : undefined)
         if (found !== undefined) report(first, 'program', found)
         for (const argv of node.arguments.slice(0, 2)) for (const { at, found: named } of argvPrograms(argv)) report(at, 'program', named)
       }
