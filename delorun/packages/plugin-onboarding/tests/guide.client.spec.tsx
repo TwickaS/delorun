@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CLONE_POLL_MS, createGuide, fits, folderOf, presentConnections, type Loadable } from '../src/client/guide.ts'
+import { createGuide, fits, folderOf, presentConnections, type Loadable } from '../src/client/guide.ts'
 import { hostApi, readReach, REACH_STATUS_PATH } from '../src/client/host-api.ts'
-import { CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, type KeyTestAnswer, type Readiness, type RecommendAnswer } from '../src/wire.ts'
+import { KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, type KeyTestAnswer, type Readiness, type RecommendAnswer } from '../src/wire.ts'
 import { hostFake, KEYS, READY } from './fixtures.client.ts'
 
 afterEach(() => {
@@ -26,7 +26,6 @@ describe('the guide\'s shared state', () => {
     guide.testKeys()
     expect(guide.keys.getSnapshot()).toEqual({ status: 'loading' })
     expect(fake.keyTest).toHaveBeenCalledTimes(2)
-    expect(CLONE_POLL_MS).toBe(1000)
   })
 
   it('marks a read the harness could not answer as failed', async () => {
@@ -39,73 +38,8 @@ describe('the guide\'s shared state', () => {
   it('keeps the workspace mode and choice for a step shown again', () => {
     const guide = createGuide(hostFake().host)
     expect(guide.mode.getSnapshot()).toBe('default')
-    guide.setMode('clone')
-    expect(guide.mode.getSnapshot()).toBe('clone')
-  })
-
-  it('starts one clone at a time, and stops asking about it once disposed', async () => {
-    vi.useFakeTimers()
-    const fake = hostFake({ cloneStatus: [{ state: 'running', percent: 5 }] })
-    const guide = createGuide(fake.host, 100)
-    const request = { url: 'https://example.com/a.git', parent: '/home/person', name: 'a' }
-    guide.startClone(request)
-    guide.startClone(request)
-    expect(guide.clone.getSnapshot()).toEqual({ state: 'starting' })
-    await flush()
-    guide.startClone(request)
-    expect(fake.cloneStart).toHaveBeenCalledOnce()
-    expect(guide.clone.getSnapshot()).toEqual({ state: 'running' })
-    await vi.advanceTimersByTimeAsync(100)
-    expect(guide.clone.getSnapshot()).toEqual({ state: 'running', percent: 5 })
-    guide.dispose()
-    await vi.advanceTimersByTimeAsync(500)
-    expect(fake.cloneStatus).toHaveBeenCalledOnce()
-  })
-
-  it('drops an answer that arrives after it was disposed', async () => {
-    vi.useFakeTimers()
-    const fake = hostFake({ cloneStatus: [{ state: 'failed', failure: 'network' }] })
-    const guide = createGuide(fake.host, 10)
-    guide.startClone({ url: 'https://example.com/a.git', parent: '/p', name: 'a' })
-    guide.dispose()
-    await flush()
-    expect(guide.clone.getSnapshot()).toEqual({ state: 'starting' })
-    const next = createGuide(fake.host, 10)
-    next.startClone({ url: 'https://example.com/a.git', parent: '/p', name: 'a' })
-    await flush()
-    await vi.advanceTimersByTimeAsync(5)
-    next.dispose()
-    await vi.advanceTimersByTimeAsync(10)
-    expect(next.clone.getSnapshot()).toEqual({ state: 'running' })
-  })
-
-  it('drops a status that arrives after it was disposed', async () => {
-    vi.useFakeTimers()
-    const fake = hostFake()
-    let answer: (status: { readonly state: 'failed'; readonly failure: 'network' }) => void = () => {}
-    fake.cloneStatus.mockImplementation(() => new Promise((resolve) => { answer = resolve }))
-    const guide = createGuide(fake.host, 10)
-    guide.startClone({ url: 'https://example.com/a.git', parent: '/p', name: 'a' })
-    await flush()
-    await vi.advanceTimersByTimeAsync(10)
-    expect(fake.cloneStatus).toHaveBeenCalledOnce()
-    guide.dispose()
-    answer({ state: 'failed', failure: 'network' })
-    await flush()
-    expect(guide.clone.getSnapshot()).toEqual({ state: 'running' })
-  })
-
-  it.each<readonly [string, Parameters<typeof hostFake>[0], unknown]>([
-    ['the harness could not be asked to start it', { cloneStart: { kind: 'failed' } }, { state: 'failed', failure: 'failed' }],
-    ['the harness no longer knows it', { cloneStatus: [{ state: 'unknown' }] }, { state: 'failed', failure: 'failed' }],
-    ['the running clone loses its connection', { cloneStatus: [{ state: 'running' }, { state: 'failed', failure: 'network' }] }, { state: 'failed', failure: 'network' }],
-  ])('marks a clone failed when %s', async (_, change, expected) => {
-    vi.useFakeTimers()
-    const guide = createGuide(hostFake(change).host, 10)
-    guide.startClone({ url: 'https://example.com/a.git', parent: '/p', name: 'a' })
-    await flush()
-    await vi.advanceTimersByTimeAsync(30)
-    expect(guide.clone.getSnapshot()).toEqual(expected)
+    guide.setMode('another')
+    expect(guide.mode.getSnapshot()).toBe('another')
   })
 })
 
@@ -168,8 +102,7 @@ describe('the guide\'s requests', () => {
       if (path === READINESS_PATH.slice(1)) return json(READY)
       if (path === KEY_TEST_PATH.slice(1)) return json(KEYS)
       if (path === RECOMMEND_PATH.slice(1)) return json({ plugins: [], registry: 'reached' })
-      if (path === CLONE_PATH.slice(1)) return json({ result: 'started', job: 'job-1' })
-      return json({ state: 'running', percent: 3 })
+      return json({})
     })
     expect(await hostApi.readiness()).toEqual(READY)
     expect(fetch).toHaveBeenLastCalledWith(READINESS_PATH.slice(1), { headers: { accept: 'application/json' } })
@@ -177,14 +110,6 @@ describe('the guide\'s requests', () => {
     expect(fetch.mock.lastCall?.[1]).toMatchObject({ method: 'POST', body: '{}' })
     expect(await hostApi.recommend(true)).toEqual({ plugins: [], registry: 'reached' })
     expect(fetch.mock.lastCall?.[1]).toMatchObject({ body: '{"registry":true}' })
-    expect(await hostApi.cloneStart({ url: 'u', parent: '/p', name: 'n' })).toEqual({ kind: 'started', job: 'job-1' })
-    expect(await hostApi.cloneStatus('job-1')).toEqual({ state: 'running', percent: 3 })
-    expect(fetch).toHaveBeenLastCalledWith(CLONE_STATUS_PATH.slice(1), expect.objectContaining({ body: '{"job":"job-1"}' }))
-  })
-
-  it('reads a clone refusal, which answers 422', async () => {
-    stub(() => json({ result: 'refused', problem: 'not-empty' }, 422))
-    expect(await hostApi.cloneStart({ url: 'u', parent: '/p', name: 'n' })).toEqual({ kind: 'refused', problem: 'not-empty' })
   })
 
   it.each<readonly [string, () => Response | Promise<Response>]>([
@@ -194,8 +119,7 @@ describe('the guide\'s requests', () => {
   ])('says it could not ask on %s, and never rejects', async (_, answer) => {
     stub(answer)
     expect(await hostApi.readiness()).toBeUndefined()
-    expect(await hostApi.cloneStart({ url: 'u', parent: '/p', name: 'n' })).toEqual({ kind: 'failed' })
-    expect(await hostApi.cloneStatus('job-1')).toEqual({ state: 'unknown' })
+    expect(await hostApi.keyTest()).toBeUndefined()
   })
 
   it.each<readonly [string, () => Response | Promise<Response>, string]>([

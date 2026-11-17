@@ -11,7 +11,7 @@ kind: "package-library"
 
 ## 摘要
 
-studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置语言并显示预览版提示。「Models」连接模型提供方：勾选的卡片、逐个走完每个已勾选的提供方，以及一份摘要。「Look」在一个以该外观呈现的小 chat 旁设置配色方案、主题和强调色。「Agents」提供 Claude Code 和 Codex 及其在这台电脑上的登录状态，并请本人确认添加其中一个意味着什么。「Recommended plugins」提供已配置的插件，与本人的连接相符的排在前面。「Phone access」在远程访问关闭期间，显示 Tailscale 距离能提供 studio 服务还差多少。「Workspace」选择默认工作区，即这台电脑上的一个文件夹，或从 Git 克隆的一个仓库。「Ready」列出引导设置的内容并打开第一个 chat；「Ready」本身提供三个值得一试的想法，每个都带一个「Copy」按钮。每一步都位于同一个框架中：步骤名称和「Step n of N」连同进度条位于顶部，其中 N 只统计该本人会看到的步骤（手机上以及设置完成后会省略「Phone access」，终端设置已涵盖的步骤也会省略），正文可滚动，「Skip」「Back」和「Continue」位于底部，在任何宽度下都相同；最后一步没有「Skip」。卡片（图标位、标题、带「More」「Add」或「✓ Added」的一行摘要）和其下的整行状态，由「Models」「Agents」和「Recommended plugins」共用。引导会省略终端设置已涵盖的内容，可从设置 → 通用 → 入门再次显示，并且只在 Delorun 外观开启时加载。
+studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置语言并显示预览版提示。「Models」连接模型提供方：勾选的卡片、逐个走完每个已勾选的提供方，以及一份摘要。「Look」在一个以该外观呈现的小 chat 旁设置配色方案、主题和强调色。「Agents」提供 Claude Code 和 Codex 及其在这台电脑上的登录状态，并请本人确认添加其中一个意味着什么。「Recommended plugins」提供已配置的插件，与本人的连接相符的排在前面。「Phone access」在远程访问关闭期间，显示 Tailscale 距离能提供 studio 服务还差多少。「Workspace」选择默认工作区，或打开新建工作区对话框，该对话框可添加这台电脑上的文件夹、新建文件夹，或从 Git 克隆仓库。「Ready」列出引导设置的内容并打开第一个 chat；「Ready」本身提供三个值得一试的想法，每个都带一个「Copy」按钮。每一步都位于同一个框架中：步骤名称和「Step n of N」连同进度条位于顶部，其中 N 只统计该本人会看到的步骤（手机上以及设置完成后会省略「Phone access」，终端设置已涵盖的步骤也会省略），正文可滚动，「Skip」「Back」和「Continue」位于底部，在任何宽度下都相同；最后一步没有「Skip」。卡片（图标位、标题、带「More」「Add」或「✓ Added」的一行摘要）和其下的整行状态，由「Models」「Agents」和「Recommended plugins」共用。引导会省略终端设置已涵盖的内容，可从设置 → 通用 → 入门再次显示，并且只在 Delorun 外观开启时加载。
 
 ## 目录
 
@@ -36,12 +36,10 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 | Browser | `plugins` 列出 `@delorun/bundle-browser` 且设置记录不涵盖 `plugins` 时，或该插件包已在配置档中时 | 共用的“浏览器”选项（[`@delorun/browser-setup`](../browser-setup/README.zh.md)）：“独立浏览器”或“不使用浏览器”。对整个主目录而言，该选项就是“浏览器”插件包：选择独立浏览器会通过向导的安装器添加它，选择“不使用浏览器”会通过插件管理器关闭它。选项下方显示“浏览器”是否已就绪，读取自 Host 的需求检查（“插件”页面的“需要设置”状态也读取它），包括 Host 给出的原因及其解决办法，窗口重新获得焦点时会再次读取；或者显示添加插件包的进度。三张卡片说明会发生什么：第一个使用“浏览器”的对话只询问一次是否允许它的浏览器工具 playwright-mcp，之后不再询问。预览开关 `onboarding.previewSteps`（[`@delorun/preview-flags`](../preview-flags/README.zh.md)）打开时，会显示计划中的第三个选项“使用我的浏览器”，它处于禁用状态并带有“预览”标签。 |
 | Phone access | 远程访问状态路由应答没有任何远程访问方式就绪，且设置记录没有说明远程访问已设置时 | 按本人修复的顺序排列的四项检查：已安装 Tailscale、这台电脑已登录、tailnet 已开启 HTTPS 证书，以及本人的账户被允许配置 `tailscale serve`。每项显示完成，第一项缺失的显示其修复方法（一个链接、带复制按钮的命令，或管理控制台设置），其余的等待。然后是 `delorun reach on tailscale` 和 `delorun devices approve`，各带一个复制按钮，以及 Tailscale 给出这台电脑的名称之后手机要打开的地址。它说明手机会话无法授予完全访问权限或批准设备，并且 Delorun 在没有远程访问时也可在这台电脑上工作。 |
 | PIN | 手机访问已开启后，在 home 所在电脑上；在手机上，则是在 PIN 模式关闭且该步骤尚未被推迟时 | 在电脑上：选择一个 PIN 或口令，输入两次，已配对的手机之后就用它解锁。在手机上：单独一栏，说明设置 PIN 要在电脑上完成及其原因，并提供 **Do it on my computer**（把该步骤记为已推迟并继续）和 Skip。 |
-| Workspace | 始终 | 默认工作区（当能解析出一个时）、「Another folder」或「Clone from Git」。文件夹来自 host 的原生选择器；host 没有时，则来自该步骤自己的选择器。克隆需要一个地址、要克隆到的文件夹（用该步骤的选择器选取）和新文件夹的名称，该名称跟随地址，直到本人输入一个名称；克隆运行期间显示 Git 的百分比，失败时显示原因。所选文件夹与它包含的内容一起显示：代码项目、文件夹或空文件夹。 |
+| Workspace | 始终 | 默认工作区（当能解析出一个时）或「Another workspace」。「Another workspace」是一个按钮「Choose or make a workspace…」，它在引导之上打开新建工作区对话框（`ctx.delorunNewWorkspace`，以 `from: 'onboarding'` 打开）；对话框打开期间该按钮处于忙碌状态。对话框创建的工作区成为所选工作区，并显示为一张文件夹卡片，连同它包含的内容：代码项目、文件夹或空文件夹；「Choose another」再次打开对话框，取消对话框不会改变任何内容。当配置中没有新建工作区插件时，该步骤会说明之后可以通过侧边栏的「Add workspace」添加文件夹，并且在有默认工作区时仍可用它继续。 |
 | Ready | 始终，最后一步 | 每项一行，分别为：模型（密钥有效的提供方，或没有一个有效）、外观、已添加的 agent 和插件、home 有远程访问时的手机访问，以及工作区，然后是「Ideas to try」：三个与文件夹内容（通用、空、代码或文件）相符的想法，每个都带一个「Copy」按钮，把它的文字放进剪贴板。「Start a chat」记录引导已完成，并在所选工作区中打开一个新 chat。没有选择工作区且没有能解析出的工作区时，「Start a chat」返回到「Workspace」。 |
 
 其他插件通过 `ctx.delorunOnboarding` 添加的步骤，位于「Phone access」和「Workspace」之间。「Back」「Continue」和「Skip for now」位于每一步之下；「Skip」记录引导已完成，不打开任何 chat，并把焦点移到页面的消息框。设置 → 通用 → 入门中有一行 `delorun-onboarding`，其「Run setup again」按钮从「Welcome」重新打开流程并保留所有其他设置；每一步都从它实时读取的值开始（设置中保存的语言、模式、主题和强调色，路由报告的密钥、agent 和 Tailscale），手机上的「Phone access」步骤是远程说明；重新打开的流程算作未完成，所以重新加载会再次显示它，直到它被完成或跳过。
-
-该步骤自己的选择器在一个带标签的列表中一次列出一个文件夹的子文件夹，从 home 目录开始，隐藏文件夹被省略。它打开时或移动之后都没有选中任何内容，所以其按钮要等到本人选中一个文件夹或创建一个文件夹才可用。点击或方向键选中文件夹；双击、Enter、右方向键或「Open folder」进入该文件夹；「Up one folder」和左方向键向上；「New folder」在所显示的文件夹中创建一个文件夹并选中它。被拒绝的文件夹就地显示其原因，无法列出或创建的文件夹会说明这一点并给出后续办法。
 
 「Ready」上的想法跟随文件夹包含的内容，其文字位于字典中，所以每种语言各有自己的文字。复制一个想法不会向消息框写入任何内容，也不会发送任何内容；第一个 chat 打开时是空的。
 
@@ -124,8 +122,6 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 - **委派同意。** 添加 Claude Code 或 Codex 需要在其卡片上按两次。之后，从 chat 中启动的 agent 受 Delorun 自己的委派同意约束，「Agents」步骤对此有描述：Delorun 先在这台电脑上询问，除非本人已为该工作区允许它，手机无法应答，只读 chat 从不启动 agent，运行停留在 chat 的工作区内并在 30 分钟后停止。此插件不实现该同意；该步骤的文案必须跟随它。
 - **密钥结果。** 上游的 pi-ai 发现对被拒绝的密钥和无法访问的端点报告相同的错误码，所以这样的路线在两种情形下都显示「Could not test this key」，而官方 DeepSeek 路线能区分「The provider rejected this key」和「Could not reach the provider」。
 - **连接。** 没有随附的插件声明连接，所以每个预置的插件都适合任何设置。没有找到可推荐的 Codex 配额或 Command Code 插件。
-- **文件夹选择器。** 引导的拒绝只涵盖它所添加或克隆到的文件夹。上游自己的添加工作区流程和 `workspace.create` 会注册任何已存在的目录；在 Delorun 之下，在属于、位于或包含 Delorun home 的工作区中具有写权限的每条 shell 命令，随后都会以 `HOME_IN_WRITABLE_ROOT` 失败。选择器没有路径输入框，也无法显示隐藏文件夹。
-- **克隆。** 克隆需要 harness 的 `PATH` 上有 Git。克隆运行时关闭钩子和每个 `filter` 属性，所以本人的 Git 配置中的钩子、smudge 或 process 过滤器在检出期间都不会运行；过滤器和钩子在之后本人于该文件夹中使用 Git 时运行。带有本人名或密码的 `https://` 地址以 `url-credentials` 拒绝。在 POSIX 上，Git 自成一个进程组，所以未停止插件就退出的 harness 会留下一个运行中的克隆自行完成。需要本人尚未保存的登录信息的仓库，应在终端中克隆，然后选为文件夹；引导从不询问密码或口令。
 
 <a id="tests"></a>
 
@@ -135,7 +131,7 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 
 - [`tests/host.spec.ts`](tests/host.spec.ts) 检查配置、面对缺失、格式错误、过大、以目录命名和恶意文件的记录读取器，以及 harness 挂载的路由。
 - [`tests/readiness.spec.ts`](tests/readiness.spec.ts)、[`tests/key-test.spec.ts`](tests/key-test.spec.ts) 和 [`tests/recommend.spec.ts`](tests/recommend.spec.ts) 检查登录和 Tailscale 检查、文件夹类型、针对本地列表服务器的每种密钥结果，以及来自磁盘和注册表的已声明连接。
-- [`tests/steps.client.spec.tsx`](tests/steps.client.spec.tsx)、[`tests/workspace.client.spec.tsx`](tests/workspace.client.spec.tsx)、[`tests/bundles.client.spec.tsx`](tests/bundles.client.spec.tsx)、[`tests/guide.client.spec.tsx`](tests/guide.client.spec.tsx) 和 [`tests/dialog.client.spec.tsx`](tests/dialog.client.spec.tsx) 检查每一步、单选组的 Tab 停靠点和按键、agent 确认、bundle 仅在按下按钮时安装、克隆表单及其状态、引导的共享状态、提示的确认、恢复、跳过、被省略的步骤，以及焦点的落点。
-- [`tests/chooser.client.spec.tsx`](tests/chooser.client.spec.tsx) 和 [`tests/focus.client.spec.tsx`](tests/focus.client.spec.tsx) 检查该步骤自己的选择器和焦点；[`tests/plugin.client.spec.tsx`](tests/plugin.client.spec.tsx) 检查各项注册、「Run setup again」、记录加载器、默认工作区查找和第一个 chat；[`tests/starters.client.spec.tsx`](tests/starters.client.spec.tsx) 检查起始提示词；[`tests/key-banner.client.spec.tsx`](tests/key-banner.client.spec.tsx) 检查无密钥横幅；[`tests/set-aside-banner.client.spec.tsx`](tests/set-aside-banner.client.spec.tsx) 检查搁置提示；[`tests/rename-row.client.spec.tsx`](tests/rename-row.client.spec.tsx) 检查重命名行；[`tests/previews.spec.ts`](tests/previews.spec.ts) 检查预览颜色；[`tests/locales.spec.ts`](tests/locales.spec.ts) 检查英文和中文文案。
+- [`tests/steps.client.spec.tsx`](tests/steps.client.spec.tsx)、[`tests/workspace.client.spec.tsx`](tests/workspace.client.spec.tsx)、[`tests/bundles.client.spec.tsx`](tests/bundles.client.spec.tsx)、[`tests/guide.client.spec.tsx`](tests/guide.client.spec.tsx) 和 [`tests/dialog.client.spec.tsx`](tests/dialog.client.spec.tsx) 检查每一步、单选组的 Tab 停靠点和按键、agent 确认、bundle 仅在按下按钮时安装、「Workspace」步骤的对话框按钮及其状态、引导的共享状态、提示的确认、恢复、跳过、被省略的步骤，以及焦点的落点。
+- [`tests/focus.client.spec.tsx`](tests/focus.client.spec.tsx) 检查焦点；[`tests/plugin.client.spec.tsx`](tests/plugin.client.spec.tsx) 检查各项注册、「Run setup again」、记录加载器、默认工作区查找、新建工作区服务和第一个 chat；[`tests/starters.client.spec.tsx`](tests/starters.client.spec.tsx) 检查起始提示词；[`tests/key-banner.client.spec.tsx`](tests/key-banner.client.spec.tsx) 检查无密钥横幅；[`tests/set-aside-banner.client.spec.tsx`](tests/set-aside-banner.client.spec.tsx) 检查搁置提示；[`tests/rename-row.client.spec.tsx`](tests/rename-row.client.spec.tsx) 检查重命名行；[`tests/previews.spec.ts`](tests/previews.spec.ts) 检查预览颜色；[`tests/locales.spec.ts`](tests/locales.spec.ts) 检查英文和中文文案。
 - [`tests/browser.client.spec.tsx`](tests/browser.client.spec.tsx) 检查“浏览器”步骤：选项随插件包而定，选择独立浏览器会添加它、选择“不使用浏览器”会关闭它，添加过程的每种状态，获得焦点时的重新读取，该步骤在向导中的位置，以及计划中的第三个选项只在预览开关打开时显示且永远无法被选中。
 - [`tests/preview-flags.spec.ts`](tests/preview-flags.spec.ts) 检查 Host 部分声明的开关与本包清单在 `delorun.previewFlags` 下列出的开关一致。

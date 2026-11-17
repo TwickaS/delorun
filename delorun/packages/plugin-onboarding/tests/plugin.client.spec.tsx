@@ -6,11 +6,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { ADD_WORKSPACE_PATH, NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
+import { NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../src/config.ts'
 import { liveForm, settings, t, THEME } from './fixtures.client.ts'
 
@@ -346,26 +346,26 @@ describe('the default workspace and the first chat', () => {
     readonly workspaces?: unknown
     readonly uiWorkspace?: unknown | null
     readonly items?: readonly unknown[]
+    /** The new-workspace service, when the profile has the plugin. */
+    readonly newWorkspace?: unknown
   }
 
   async function chat(options: ChatOptions = {}) {
     const openWorkspace = vi.fn(async (_id: string) => {})
     const startSession = vi.fn()
-    const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
-    const listDirectory = vi.fn(async (_path?: string, _signal?: AbortSignal) => ({ path: '/home/person' }))
-    const createDirectory = vi.fn(async (path: string, name: string) => `${path}/${name}`)
     const initializeDefault = vi.fn(async () => ({ workspaceId: WORKSPACE }))
     const provide: Record<string, unknown> = {}
     if (options.uiWorkspace !== null) {
-      provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory, listDirectory, createDirectory, holdDefaultWorkspaceNotice: () => () => {} }
+      provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, holdDefaultWorkspaceNotice: () => () => {} }
     }
     const list = { getSnapshot: () => ({ items: options.items ?? [] }) }
     if (options.workspaces === undefined) provide.workspaces = { initializeDefault, list }
     else if (options.workspaces !== 'absent') provide.workspaces = { list, ...options.workspaces as object }
+    if (options.newWorkspace !== undefined) provide.delorunNewWorkspace = options.newWorkspace
     const made = await harness({ provide })
     made.served.on()
     const injected = face<OnboardingInjected>(made.entries, STEP_KEY)
-    return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, pickDirectory, listDirectory, createDirectory, initializeDefault }
+    return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, initializeDefault }
   }
 
   it('opens a new chat in the default workspace', async () => {
@@ -453,102 +453,44 @@ describe('the default workspace and the first chat', () => {
     expect(warn).toHaveBeenCalledOnce()
   })
 
-  describe('choosing a folder', () => {
-    /** The harness's add-workspace route, answering as given, and recording what it is asked. */
-    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7', path: '/work/folder', kind: 'code' }), { status: 200 })) => {
-      const fetch = vi.fn(async (_path: string, _init?: RequestInit) => answer())
-      vi.stubGlobal('fetch', fetch)
-      return fetch
-    }
-
-    it('adds the folder the host\'s chooser returns through the harness\'s route, relative to the document', async () => {
-      const fetch = route()
-      const { start, pickDirectory } = await chat()
-      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7', path: '/work/folder', folder: 'code' })
-      expect(pickDirectory).toHaveBeenCalledOnce()
-      expect(fetch).toHaveBeenCalledExactlyOnceWith(ADD_WORKSPACE_PATH.slice(1), {
-        method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' }, body: JSON.stringify({ path: '/work/folder' }),
-      })
+  describe('the new-workspace dialog', () => {
+    it('opens over the guide from onboarding and passes on how it ended', async () => {
+      const created = { kind: 'created', workspaceId: 'workspace-7', path: '/work/folder', folder: 'code' }
+      const open = vi.fn(async (_request?: { readonly from: string }): Promise<object> => created)
+      const { start } = await chat({ newWorkspace: { open } })
+      expect(await start.openNewWorkspace?.()).toEqual(created)
+      expect(open).toHaveBeenCalledExactlyOnceWith({ from: 'onboarding' })
+      open.mockResolvedValueOnce({ kind: 'cancelled' })
+      expect(await start.openNewWorkspace?.()).toEqual({ kind: 'cancelled' })
     })
 
-    it('changes nothing when the chooser is closed', async () => {
-      const fetch = route()
-      const { start, pickDirectory } = await chat()
-      pickDirectory.mockResolvedValueOnce(null)
-      expect(await start.chooseFolder()).toEqual({ kind: 'cancelled' })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it('asks the Start step for its own chooser, with a warning, where the host has no native chooser', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const fetch = route()
-      const made = await chat()
-      made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))
-      expect(await made.start.chooseFolder()).toEqual({ kind: 'in-step' })
-      expect(warn).toHaveBeenCalledOnce()
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it('is unavailable without workspace navigation', async () => {
-      const { start } = await chat({ uiWorkspace: null })
-      expect(await start.chooseFolder()).toEqual({ kind: 'unavailable' })
-    })
-
-    it.each<readonly [string, () => Response, unknown]>([
-      ['refuses the folder', () => new Response(JSON.stringify({ result: 'refused', problem: 'home-directory' }), { status: 422 }), { kind: 'refused', problem: 'home-directory' }],
-      ['cannot add it', () => new Response(JSON.stringify({ result: 'failed' }), { status: 500 }), { kind: 'failed' }],
-    ])('passes on that the harness %s', async (_, answer, outcome) => {
-      route(answer)
-      const { start } = await chat()
-      expect(await start.addFolder('/home/person')).toEqual(outcome)
-    })
-
-    it.each<readonly [string, () => Response | Promise<Response>]>([
-      ['an answer that is not JSON', () => new Response('<html>', { status: 404 })],
-      ['an answer it does not know', () => new Response(JSON.stringify({ result: 'added' }), { status: 200 })],
-      ['no answer', () => Promise.reject(new Error('offline'))],
-    ])('reports a failure, with a warning, after %s', async (_, answer) => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      route(answer)
-      expect(await addWorkspaceFolder('/home/person/projects')).toEqual({ kind: 'failed' })
-      expect(warn).toHaveBeenCalledOnce()
-    })
-
-    it('lists and creates folders through the workspace navigation for the Start step\'s own chooser', async () => {
-      const { start, listDirectory, createDirectory } = await chat()
-      const signal = new AbortController().signal
-      expect(await start.browse.list('/home', signal)).toEqual({ path: '/home/person' })
-      expect(listDirectory).toHaveBeenCalledExactlyOnceWith('/home', signal)
-      expect(await start.browse.create('/home/person', 'work')).toBe('/home/person/work')
-      expect(createDirectory).toHaveBeenCalledExactlyOnceWith('/home/person', 'work')
-    })
-
-    it('fails to list or create folders where the studio has no workspace navigation', async () => {
-      const { start } = await chat({ uiWorkspace: null })
-      await expect(start.browse.list()).rejects.toThrow(/no workspace navigation/)
-      await expect(start.browse.create('/home/person', 'work')).rejects.toThrow(/no workspace navigation/)
+    it('is absent in a profile without the plugin, and appears when the plugin loads later', async () => {
+      const { start, ctx } = await chat()
+      expect(start.openNewWorkspace).toBeUndefined()
+      ctx.provide('delorunNewWorkspace' as never, { open: vi.fn() } as never)
+      expect(start.openNewWorkspace).toBeTypeOf('function')
     })
   })
 })
 
 describe('a fresh home with no default workspace', () => {
-  it('says so on the Workspace step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the prompts that fit it', async () => {
+  it('says so on the Workspace step instead of the workspace UI\'s notice, lets the person make a workspace in the new-workspace dialog, and then opens a chat there that offers the prompts that fit it', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const fetch = vi.fn(async (path: string, _init?: RequestInit) => new Response(
-      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : path === ADD_WORKSPACE_PATH.slice(1) ? { result: 'added', workspaceId: 'workspace-7', path: '/work/folder', kind: 'empty' } : {}),
-      { status: path === ADD_WORKSPACE_PATH.slice(1) || path === SETUP_RECORD_PATH.slice(1) ? 200 : 404 },
+      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : {}),
+      { status: path === SETUP_RECORD_PATH.slice(1) ? 200 : 404 },
     ))
     vi.stubGlobal('fetch', fetch)
     const openWorkspace = vi.fn(async (_id: string) => {})
-    const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
+    const open = vi.fn(async (_request?: { readonly from: string }) => ({ kind: 'created', workspaceId: 'workspace-7', path: '/work/folder', folder: 'empty' }))
     const workspaces = {
       initializeDefault: async () => { throw new Error('system Documents directory is unavailable') },
       list: { getSnapshot: () => ({ items: [] }) },
     }
     const release = vi.fn()
     const holdDefaultWorkspaceNotice = vi.fn(() => release)
-    const uiWorkspace = { openWorkspace, startSession: vi.fn(), pickDirectory, holdDefaultWorkspaceNotice }
-    const made = await harness({ provide: { workspaces, uiWorkspace } })
+    const uiWorkspace = { openWorkspace, startSession: vi.fn(), holdDefaultWorkspaceNotice }
+    const made = await harness({ provide: { workspaces, uiWorkspace, delorunNewWorkspace: { open } } })
     made.served.on()
     const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
     const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} completeStep={vi.fn()} renderSection={() => null} />)
@@ -562,10 +504,9 @@ describe('a fresh home with no default workspace', () => {
       await act(async () => { fireEvent.click(screen.queryByRole('button', { name: en.continue }) ?? screen.getByRole('button', { name: en['providers.continueNoKey'] })) })
     }
     expect(document.body.textContent).toContain(en['start.lead.none'])
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['workspace.folder.choose'] })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['workspace.new'] })) })
     await act(async () => { await flush() })
-    expect(pickDirectory).toHaveBeenCalledOnce()
-    expect(fetch).toHaveBeenCalledWith(ADD_WORKSPACE_PATH.slice(1), expect.objectContaining({ method: 'POST', body: JSON.stringify({ path: '/work/folder' }) }))
+    expect(open).toHaveBeenCalledExactlyOnceWith({ from: 'onboarding' })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.start })) })
     await act(async () => { await flush() })

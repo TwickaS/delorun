@@ -1,6 +1,6 @@
 /**
  * What both halves share: the exact Connection Fetch routes under `/api`, which the harness serves only to an
- * owner peer, and their JSON messages, with the workspace routes `@delorun/plugin-new-workspace` serves. Browser-safe, so the studio half imports it.
+ * owner peer, and their JSON messages. Browser-safe, so the studio half imports it.
  * @module @delorun/plugin-onboarding/wire
  */
 import { z } from 'zod'
@@ -61,12 +61,8 @@ export type SetupRecord = z.output<typeof SetupRecord>
 /** The record of a profile with no usable setup record: nothing is covered and reach is not set up, so every step shows. */
 export const NO_RECORD: SetupRecord = Object.freeze({ reachSetUp: false })
 
-// The workspace routes and their messages are `@delorun/plugin-new-workspace`'s; the guide's Workspace step uses them.
-export {
-  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart,
-  CloneStatus, CloneStatusRequest, FOLDER_KINDS, LOCATION_PROBLEMS, MAX_NAME_LENGTH, MAX_PATH_LENGTH, MAX_URL_LENGTH,
-  type CloneFailure, type CloneProblem, type FolderKind, type LocationProblem,
-} from '@delorun/plugin-new-workspace/wire'
+// The folder kinds are `@delorun/plugin-new-workspace`'s; the Workspace step names what a chosen folder holds.
+export { FOLDER_KINDS, type FolderKind } from '@delorun/plugin-new-workspace/wire'
 
 /** The harness's route that reports this computer's readiness. `GET` answers {@link Readiness}. */
 export const READINESS_PATH = '/api/delorunOnboarding.readiness'

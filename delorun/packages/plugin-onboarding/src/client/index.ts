@@ -4,8 +4,7 @@
  * show. The steps are Welcome (language, the preview notice and the model providers with their key test), Look, Agents,
  * Recommended plugins, Browser while its plugin pack is offered or added, Phone access while reach is not set up, Workspace and Ready; Ready's button opens a new chat in
  * the chosen workspace, whose empty state offers starter prompts that fit the folder and write into the message box.
- * A folder is added through the harness's route ({@link addWorkspaceFolder}), which refuses the folders Delorun never adds,
- * or cloned from Git through the harness's clone route.
+ * The Workspace step makes a workspace by opening the new-workspace dialog (`ctx.delorunNewWorkspace`) over the guide.
  * It loads only while the Delorun look is on (the `delorunStudio` service exists), so the stock look keeps the preview
  * notice's own step. `ctx.delorunOnboarding` lets other Delorun plugins add steps.
  * @module @delorun/plugin-onboarding/client
@@ -42,12 +41,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 // Type-only: the ctx.delorunNotice merge and the 'delorunPrivacy' dictionary.
 import type {} from '@delorun/bundle-local/client'
+// Type-only: the ctx.delorunNewWorkspace merge.
+import type {} from '@delorun/plugin-new-workspace/client'
 // Type-only: the ctx.delorunStudio merge and the 'settings.delorunAppearance' dictionary.
 import type {} from '@delorun/plugin-theme/client'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
-import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
+import { NO_RECORD, SETUP_RECORD_PATH, SetupRecord } from '../wire.ts'
 import { createPreviewFlagsStore } from '@delorun/preview-flags/client'
 import { createBrowserSetup } from '@delorun/browser-setup'
 import { turnBrowserOff } from './browser-pack.ts'
@@ -64,7 +65,7 @@ import { RenameRow } from './RenameRow.tsx'
 import { DeferredSetupEntry, type DeferredSetupInjected } from './DeferredSetupEntry.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import type {
-  AddOutcome, AgentRowSettings, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
+  AgentRowSettings, DelorunOnboarding, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
 } from './types.ts'
 import { AGENT_ROWS } from './steps/agent-rows.ts'
@@ -80,7 +81,7 @@ export { renameModel } from './RenameRow.tsx'
 export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
 export { hostApi, readReach, readStartId, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
-  AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DelorunOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
+  AddedFolder, AppearanceTranslate, DelorunOnboarding, HostFace, LanguageFace, LookFace, NewWorkspaceOutcome, NoticeFace, OnboardingInjected, OnboardingStep,
   OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
 } from './types.ts'
 
@@ -124,10 +125,6 @@ const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
 const CHECKING: StartTarget = { kind: 'checking' }
 const OTHER: StartTarget = { kind: 'other' }
 const NONE: StartTarget = { kind: 'none' }
-const CANCELLED: FolderChoice = { kind: 'cancelled' }
-const IN_STEP: FolderChoice = { kind: 'in-step' }
-const UNAVAILABLE: FolderChoice = { kind: 'unavailable' }
-const FAILED: AddOutcome = { kind: 'failed' }
 
 /**
  * Services every registration needs. `delorunStudio`, which `@delorun/plugin-theme` provides only while the Delorun look is on,
@@ -150,46 +147,6 @@ export async function loadSetupRecord(): Promise<SetupRecord> {
     console.warn('delorun onboarding: the setup record was not read; every step shows', error)
     return NO_RECORD
   }
-}
-
-/**
- * Ask the harness to add a folder as a workspace. The harness refuses the folders Delorun never adds and registers nothing
- * for them.
- * @param path - the folder's absolute path.
- * @returns what adding it came to; `failed`, with a warning, when the harness cannot be asked or answers something else.
- */
-export async function addWorkspaceFolder(path: string): Promise<AddOutcome> {
-  let answer: AddWorkspaceAnswer
-  try {
-    const response = await fetch(ADD_WORKSPACE_PATH.slice(1), {
-      method: 'POST',
-      headers: { 'accept': 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({ path } satisfies AddWorkspaceRequest),
-    })
-    answer = AddWorkspaceAnswer.parse(await response.json())
-  } catch (error) {
-    console.warn('delorun onboarding: the folder was not added', error)
-    return FAILED
-  }
-  switch (answer.result) {
-    // The route's JSON validation is where the id is trusted; the brand names it.
-    case 'added': return { kind: 'chosen', workspaceId: answer.workspaceId as WorkspaceId, path, folder: answer.kind }
-    case 'refused': return { kind: 'refused', problem: answer.problem }
-    case 'failed': return FAILED
-    /* v8 ignore next 2 -- closed-union default only defends a future widening of AddWorkspaceAnswer */
-    default: return assertNever(answer)
-  }
-}
-
-/**
- * Close a union the compiler has narrowed to nothing.
- * @param value - the value that cannot occur.
- * @returns never.
- * @throws always.
- */
-/* v8 ignore next 3 -- reached only when AddWorkspaceAnswer widens without this switch */
-function assertNever(value: never): never {
-  throw new Error(`unhandled add-workspace answer ${JSON.stringify(value)}`)
 }
 
 /**
@@ -319,35 +276,23 @@ export function applyStudio(ctx: Context): void {
     void run.then((target) => { if (resolution === run) startTarget.set(target) })
     return run
   }
-  const uiWorkspace = (): Context['uiWorkspace'] => {
-    const service = ctx.get('uiWorkspace')
-    if (service === undefined) throw new Error('delorun onboarding: the studio has no workspace navigation')
-    return service
-  }
-  const chooseFolder = async (): Promise<FolderChoice> => {
-    const workspace = ctx.get('uiWorkspace')
-    if (workspace === undefined) return UNAVAILABLE
-    let path: string | null
-    try {
-      path = await workspace.pickDirectory()
-    } catch (error) {
-      // A host that picks folders in a page dialog has no native chooser; the Workspace step shows its own.
-      console.warn('delorun onboarding: the native folder chooser did not open', error)
-      return IN_STEP
-    }
-    if (path === null) return CANCELLED
-    return await addWorkspaceFolder(path)
-  }
-  const browse: FolderBrowse = {
-    list: async (path, signal) => uiWorkspace().listDirectory(path, signal),
-    create: async (path, folder) => uiWorkspace().createDirectory(path, folder),
-  }
   const holdNotice = (): ((told: boolean) => void) => {
     const release = ctx.get('uiWorkspace')?.holdDefaultWorkspaceNotice()
     return (told) => { release?.({ told }) }
   }
   const hasWorkspace = (): boolean => (ctx.get('workspaces')?.list.getSnapshot().items.length ?? 0) > 0
-  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice, hasWorkspace }
+  const start: StartFace = {
+    target: startTarget,
+    resolve: () => { void resolve() },
+    // Read when the Workspace step renders: `delorunNewWorkspace` is not in this plugin's `inject`, so a profile without it
+    // still loads onboarding, and the face keeps one identity for the dialog's notice hold.
+    get openNewWorkspace() {
+      const service = ctx.get('delorunNewWorkspace')
+      return service === undefined ? undefined : () => service.open({ from: 'onboarding' })
+    },
+    holdNotice,
+    hasWorkspace,
+  }
 
   /**
    * Open a new chat. Without a workspace the person chose or a default one, the workspace UI's own New Session
