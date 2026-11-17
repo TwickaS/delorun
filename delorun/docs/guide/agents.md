@@ -56,7 +56,7 @@ The first time a chat hands an agent a task in a workspace, Delorun asks at the 
 
 ## What the agent can touch
 
-An agent works in the chat's workspace. It can read and, where its own settings allow, change files there, and it can reach anywhere else its own settings allow, your Delorun home included. It runs outside Delorun's sandbox and permission prompts. What it may do inside the workspace follows its own settings. When Delorun adds Claude Code it sets Claude Code to accept file edits, so a task can change files in the chat's workspace without asking, while commands are still refused because nobody is there to approve them. Codex keeps its own defaults. If you change Claude Code's permission mode afterwards, Delorun keeps your value.
+An agent works in the chat's workspace. It can read and, where its own settings allow, change files there, and it can reach anywhere else its own settings allow, your Delorun home included. It runs outside Delorun's sandbox and permission prompts. What it may do inside the workspace follows its own settings. When Delorun adds Claude Code it sets Claude Code to accept file edits, so a task can change files in the chat's workspace, and run simple file and read-only commands there, without asking. Anything else, including anything outside the workspace, is refused, because the agent cannot stop to ask you during a task. Codex keeps its own defaults. If you change Claude Code's permission mode afterwards, Delorun keeps your value.
 
 ## Where the result shows
 
