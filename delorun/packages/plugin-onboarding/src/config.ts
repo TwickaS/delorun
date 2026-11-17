@@ -21,8 +21,8 @@ export const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*
 /** A Loader row id as a bundle's patch declares it: lower-case letters, digits, dots, underscores and hyphens. */
 export const ROW_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-/** The most packages the recommended-plugins step offers: more would not fit one screen. */
-export const RECOMMENDED_LIMIT = 8
+/** The most packages the recommended-plugins step offers: the curated plugins and the optional bundles. */
+export const RECOMMENDED_LIMIT = 12
 
 /** The id of a step, which `step` keeps: lower-case letters, digits, dots and hyphens. */
 export const STEP_ID = /^[a-z0-9.-]{0,64}$/
