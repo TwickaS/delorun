@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { activeDirectory, attestTerminal, ChangesError, readChangeLog, setProtection } from '@delorun/changes'
 import { RuntimeStoreError } from '@delorun/runtime-store'
-import { changesApprovedContent, isCarriedPackage, startChanges } from '../src/changes/start.ts'
+import { changesApprovedContent, isCarriedPackage, repointForSuccessor, startChanges } from '../src/changes/start.ts'
 import { carriedPackageDirectory } from '../src/delorun-bundles.ts'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
@@ -311,6 +311,26 @@ describe('the approved plugin content step', () => {
     const refusal = changesApprovedContent(draft('default'))
     await expect(refusal).rejects.toBeInstanceOf(CliError)
     await expect(refusal).rejects.toThrow(/^delorun: the profile default was not started, because what it would load is not what Changes keeps for it:\n {2}.*plug/)
+  })
+})
+
+describe('repointForSuccessor', () => {
+  it('leaves a home without the profile, and a profile whose copies already hold their versions, alone', async () => {
+    await prepareHome(context, undefined)
+    await expect(repointForSuccessor({ home, profile: 'other' })).resolves.toBeUndefined()
+    profileLinkingPlug('default')
+    await startChanges({ home, profile: 'default' }, () => {})
+    await expect(repointForSuccessor({ home, profile: 'default' })).resolves.toBeUndefined()
+  })
+
+  it('refuses the successor\'s boot, naming the profile, when a record of Changes cannot be read', async () => {
+    await prepareHome(context, undefined)
+    profileLinkingPlug('default')
+    await startChanges({ home, profile: 'default' }, () => {})
+    writeFileSync(join(home, 'changes', 'profiles', 'default', 'active.json'), 'not json')
+    const refusal = repointForSuccessor({ home, profile: 'default' })
+    await expect(refusal).rejects.toBeInstanceOf(CliError)
+    await expect(refusal).rejects.toThrow(/^delorun: the profile default was not started, because its plugin copies could not be pointed at this release: /)
   })
 })
 
