@@ -18,8 +18,8 @@
   en: d12cbc7eb3f6e865
   zh: a45e701f55e97403
 /c2-release-manifest-and-signature/release-files:
-  en: 7f693b8e0d65ee31
-  zh: a24594c13b8db29c
+  en: 967d5cd9c026de03
+  zh: f4162b8437b91fee
 /c2-release-manifest-and-signature/signature-envelope:
   en: 20517546844abf71
   zh: e050b8cf1d35e68d
@@ -37,7 +37,10 @@
   zh: bf02128db8020264
 /c2-release-manifest-and-signature/runtime-file-list:
   en: 865ccdd3be486a45
-  zh: 7637ce72dc06658f
+  zh: e4ac0e934f67ef7b
+/c2-release-manifest-and-signature/packs:
+  en: 0dc58201aca2fd41
+  zh: d839a718c6391087
 /c2-release-manifest-and-signature/client-verification:
   en: a3e22bfae07bf619
   zh: f7875b61863cd776

@@ -59,6 +59,9 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 | `delorun-<version>-<platform>.tar.gz` | Linux 或 macOS 平台的运行时发行包（runtime closure）。 |
 | `delorun-<version>-win32-x64.zip` | Windows 的运行时发行包。 |
 | `delorun-<version>-<platform>.files.json` | 该平台归档的运行时文件列表。 |
+| `delorun-<version>.packs.json` | 该发行版的插件包（[插件包](#packs)），在签名信封中；没有插件包的发行版没有此文件。 |
+| `delorun-<version>.packs.log.json` | 该 packs 文件的发布日志包（[C18](c18-release-log.zh.md)）。 |
+| `delorun-<version>-pack-<name>.<platform or any>.tar.gz` | 一个插件包的归档。 |
 | `delorun-<version>.spdx.json` | 覆盖该发布中每个归档、安装程序与镜像，以及编译这些归档原生代码的构建镜像中固定软件包的 SPDX 2.3 JSON SBOM。 |
 | `delorun-<version>.rebuild.json` | targets 密钥持有者所做重建的重建记录。 |
 | `delorun-<version>.advisories.json` | 依赖安全公告检查的结果。 |
@@ -179,6 +182,14 @@ manifest 不带过期时间：新鲜度由时间戳负责，因此只要其签�
 | `files` | `{ "path", "length", "sha256", "mode" }` 的列表 | 解压后归档中的每个常规文件；`path` 为相对路径、以 `/` 分隔且已规范化，`mode` 为 `0644` 或 `0755`。 |
 
 归档中不包含符号链接、硬链接、设备文件或位于其根之外的路径，其条目与列表中的文件完全一致。已安装的列表位于安装旁边、[C1](c01-home-layout.zh.md) 指明的路径下。
+
+<a id="packs"></a>
+
+## 插件包
+
+`delorun-<version>.packs.json`，schema 为 `delorun.release-packs/1`，由 targets 密钥签名，并有它自己的发布日志记录，列出安装本身不携带的插件包。它是一个单独的文件，这样 `delorun.release-manifest/1` 的读取方永远不会遇到它。字段：`version`；`manifest`，即该发行版 manifest 文件的 SHA-256，它把此文件绑定到该发行版；以及 `packs`，一个由 `{ name, version, experimental, variants }` 组成的列表。`variants` 把一个平台（或 `any`）映射到 `{ archive, files, external, peers }`：`peers` 列出该平台的运行时所提供、安装时会链接进插件包的包；归档是带 `sha512` 的 `FileRef`，`files` 像运行时文件列表那样列出每个普通文件，`external` 列出插件包因许可证禁止再分发而不携带的包，每个都带有确切的 `version`、位于 `https://registry.npmjs.org/` 的 tarball `url`、它的 `sha512` 和它的 `length`。插件包、peer 和外部包的名称都是小写的 npm 名称；归档和外部包的 `length` 至多为 512 MiB。客户端只按已签名的名称从发行渠道获取归档，只按已签名的 URL 获取外部包，不跟随任何重定向，并在读到已签名的长度时停止。插件包归档命名为 `delorun-<version>-pack-<name>.<platform or any>.tar.gz`，因此它永远不会被当作运行时归档。安装会封存插件包的目录树（文件为 0444，可执行文件为 0555；目录为 0555），把外部文件的摘要记录在 `trust/runtime-files/packs/<version>/` 之下，启动检查和 `delorun verify` 会对照已签名的列表和该记录，对每个已安装文件计算哈希。
+
+开启一个插件包时，会用已安装发行版的根验证 packs 文件，检查它所指的 SHA-256 是否为已安装 manifest 的，并检查它的日志记录是否通过验证，然后下载其中所列的归档和每个外部包，并拒绝任何长度或摘要不符的文件。在每项检查都通过之前，`packs/<version>/` 之下不会出现任何内容。插件包只为一个发行版安装；更新会在切换之前，为新发行版获取并验证用户已添加的插件包。
 
 <a id="client-verification"></a>
 
