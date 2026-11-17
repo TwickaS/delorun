@@ -60,7 +60,7 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    set, unset: () => Promise.resolve(true),
+    set, unset,
     mutate: (ops) => {
       if (options.result === 'reject') return Promise.reject(new Error('transport'))
       if (options.result === false) return Promise.resolve(false)

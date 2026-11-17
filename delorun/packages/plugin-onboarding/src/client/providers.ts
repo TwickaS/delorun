@@ -3,7 +3,7 @@
  * typed key is judged, and the credential reference a key is saved under.
  * @module @delorun/plugin-onboarding/client/providers
  */
-import { DEEPSEEK_ROUTE, type KeyResult, type KeyTestAnswer } from '../wire.ts'
+import { DEEPSEEK_ROUTE, type KeyResult, type KeySource, type KeyTestAnswer } from '../wire.ts'
 
 /** One configurable provider route, as the harness's directory describes it. */
 export interface DirectoryEntry {
@@ -37,6 +37,8 @@ export interface ProviderCard {
   readonly found: boolean
   /** What the key test answered for the route. */
   readonly result: KeyResult
+  /** Where the found key came from, when the host said; never the key. */
+  readonly source?: KeySource
   /** The provider's official API-key page, when {@link KEY_PAGES} has one. */
   readonly keyPage: string | undefined
   /** True when the route needs a base URL because a person declared it. */
@@ -199,7 +201,7 @@ export function cardsOf(answer: KeyTestAnswer, directory: readonly DirectoryEntr
   for (const each of answer.providers) {
     const entry = directory.find(candidate => candidate.provider === each.provider)
     if (entry === undefined || !connectsWithKey(entry)) continue
-    cards.push({ provider: each.provider, name: nameOf(each.provider, each.name), entry, found: HELD.has(each.result), result: each.result, keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
+    cards.push({ provider: each.provider, name: nameOf(each.provider, each.name), entry, found: HELD.has(each.result), result: each.result, ...(each.source === undefined ? {} : { source: each.source }), keyPage: KEY_PAGES[each.provider], needsBaseURL: entry.declared === true })
   }
   for (const entry of directory) {
     if (listed.has(entry.provider) || (answer.hidden ?? []).includes(entry.provider) || !connectsWithKey(entry)) continue
