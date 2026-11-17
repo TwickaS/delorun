@@ -1,8 +1,8 @@
 /**
  * The studio half of `@delorun/plugin-new-workspace`: one guided dialog to start a workspace from a new folder, a folder on
  * this computer or a Git clone. It loads only while the Delorun look is on (the `delorunStudio` service exists), so the
- * stock look keeps upstream's flow. `ctx.delorunNewWorkspace` opens the dialog for the sidebar, the new-chat picker, the
- * hero and onboarding.
+ * stock look keeps upstream's flow. It occupies upstream's three directory-flow holes, so the sidebar's Add workspace, the
+ * new-chat workspace picker and the hero open the dialog, and `ctx.delorunNewWorkspace` opens it for onboarding.
  * @module @delorun/plugin-new-workspace/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,6 +21,7 @@ import { createApi } from './api.ts'
 import { en, NS, zh, type NewWorkspaceLocaleKey } from './locales.ts'
 import { Overlay, type OpenFlow, type OverlayInjected } from './Overlay.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
+import { DelorunDirectoryFlow, type DirectoryFlowInjected, type DirectoryFlowSource } from './DirectoryFlow.tsx'
 
 export { createApi, type ApiFailure, type ApiOptions, type ApiResult, type NewWorkspaceApi } from './api.ts'
 export { en, NS, zh, type NewWorkspaceLocaleKey } from './locales.ts'
@@ -58,6 +59,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunNewWorkspace': NewWorkspaceLocaleKey
   }
 }
+
+/** The directory-flow holes' rank for the Delorun occupant: below upstream's pickers, which register at 0, so it renders. */
+export const DIRECTORY_FLOW_PRIORITY = -1
+
+/** Upstream's directory-flow holes the dialog occupies, each with the surface it reports as `from`. */
+export const DIRECTORY_FLOW_HOLES = [
+  ['sidebar.workspaces.directoryFlow', 'sidebar'],
+  ['workspace.picker.directoryFlow', 'picker'],
+  ['conversation.hero.workspace.directoryFlow', 'hero'],
+] as const satisfies readonly (readonly [string, DirectoryFlowSource])[]
 
 /** The `shell.overlay` id of the dialog. */
 export const OVERLAY_ID = 'delorun-new-workspace'
@@ -128,4 +139,15 @@ function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: OVERLAY_ID, locale: NS, inject: () => injected,
   }, Overlay)), 'delorun-new-workspace: the dialog')
+  const openFlow = async (from: DirectoryFlowSource): Promise<string | undefined> => {
+    const outcome = await service.open({ from })
+    return outcome.kind === 'created' ? outcome.path : undefined
+  }
+  const flow = (from: DirectoryFlowSource) => (): DirectoryFlowInjected => ({ from, openFlow })
+  // Below upstream's pickers (priority 0), so under the Delorun look each hole shows this dialog instead.
+  for (const [hole, from] of DIRECTORY_FLOW_HOLES) {
+    ctx.effect(() => ctx.slots.inject(hole, () => ctx.slots.register({
+      name: hole, priority: DIRECTORY_FLOW_PRIORITY, inject: flow(from),
+    }, DelorunDirectoryFlow)), `delorun-new-workspace: the ${from} way in`)
+  }
 }

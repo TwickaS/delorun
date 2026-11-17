@@ -4,7 +4,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, inject, NS, OVERLAY_ID, type DelorunNewWorkspace } from '../src/client/index.ts'
+import { apply, DIRECTORY_FLOW_HOLES, inject, NS, OVERLAY_ID, type DelorunNewWorkspace } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { OpenFlow, OverlayInjected } from '../src/client/Overlay.tsx'
 import { ADD_WORKSPACE_PATH, PLACES_PATH } from '../src/wire.ts'
@@ -88,7 +88,7 @@ describe('the stock look', () => {
     const studio = ctx.plugin({ apply: (scope: Context) => { scope.provide('delorunStudio', {}) } })
     await studio.await()
     expect(dictionaries.get(NS)).toEqual({ en, zh })
-    expect([...entries.keys()]).toEqual([`shell.overlay#${OVERLAY_ID}`])
+    expect([...entries.keys()].sort()).toEqual([`shell.overlay#${OVERLAY_ID}`, ...DIRECTORY_FLOW_HOLES.map(([hole]) => `${hole}#`)].sort())
     expect(ctx.get('delorunNewWorkspace')).toBeDefined()
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('delorunNewWorkspace')]).toEqual([0, 0, undefined])
