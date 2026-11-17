@@ -158,7 +158,7 @@ export function hostFake(change: {
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
   const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
   const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
-  const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const }))
+  const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const, reason: 'not-running' as const }))
   const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
   return { host, agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
 }

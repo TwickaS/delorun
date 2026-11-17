@@ -15,7 +15,7 @@ const SCHEMES: readonly SchemePreference[] = ['light', 'dark', 'system']
 
 /** The sample's copy. */
 function sampleCopy(t: StepServices['t']): LookSampleCopy {
-  return { label: t('look.preview'), ask: t('look.preview.ask'), tool: t('look.preview.tool'), answer: t('look.preview.answer'), box: t('look.preview.box') }
+  return { label: t('look.preview'), ask: t('look.preview.ask'), answer: t('look.preview.answer'), box: t('look.preview.box') }
 }
 
 /** A custom colour as the CSS colour its swatch is drawn in. */

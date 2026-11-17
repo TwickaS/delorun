@@ -39,15 +39,16 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
   const signIn = readiness.status === 'ready' ? readiness.value.agents[agent.agent] : undefined
   const loading = readiness.status === 'loading'
   const bundleState = useBundle(services, agent.name)?.state
-  // One state line at a time: the sign-in shows only once the package's own state (checking, adding, failed, not included) is settled.
-  const showSignIn = bundleState === 'available' || bundleState === 'installed' || bundleState === 'restart'
+  const added = bundleState === 'installed' || bundleState === 'restart'
+  // The sign-in stays visible while the package is added; it hides while the package's own state is checking, failed or not available.
+  const showSignIn = bundleState === 'available' || bundleState === 'installing' || bundleState === 'slow' || added
   return (
     <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services}>
       <p className={css.how}>
         {t(`agents.${agent.key}.how`)}{' '}
         <a href={AGENTS_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('agents.guide')}</a>
       </p>
-      {bundleState === 'available' && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
+      {bundleState !== undefined && bundleState !== 'checking' && bundleState !== 'unavailable' && !added && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
       <StateLine tone="warning">{t(`agents.${agent.key}.risk`)}</StateLine>
       {showSignIn && (
         <StateLine tone={loading ? 'loading' : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
@@ -55,7 +56,7 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
         </StateLine>
       )}
       {showSignIn && !loading && signIn === 'missing' && <CommandRow command={`delorun agents login ${agent.agent}`} t={t} />}
-      <AgentAdvanced agent={agent.agent} title={title} services={services} />
+      <AgentAdvanced agent={agent.agent} title={title} services={services} added={added} />
     </BundleCard>
   )
 }

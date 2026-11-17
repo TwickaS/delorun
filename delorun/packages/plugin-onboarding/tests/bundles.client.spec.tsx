@@ -20,7 +20,7 @@ const row = (change: Partial<Row> & { name: string }): Row => ({ availability: '
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }
 
 /** A context with a scripted plugin manager. */
-function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', options: { readonly change?: unknown } = {}) {
+function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', options: { readonly change?: unknown; readonly addWaitMs?: number } = {}) {
   const ctx = new Context()
   const pluginManager = {
     listBundles: vi.fn(async () => {
@@ -33,8 +33,9 @@ function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', optio
   if (rows !== 'no-remote') ctx.provide('remote.pluginManager', pluginManager as never)
   const openList = vi.fn()
   ctx.provide('pluginNavigation', { openList } as never)
-  const installer = createBundleInstaller(ctx)
-  return { ctx, installer, pluginManager, openList, state: (name: string) => installer.views.getSnapshot()[name] }
+  const afterAdd = vi.fn(() => Promise.resolve())
+  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000, afterAdd })
+  return { ctx, installer, pluginManager, openList, afterAdd, state: (name: string) => installer.views.getSnapshot()[name] }
 }
 
 describe('the plugin manager', () => {
@@ -156,14 +157,45 @@ describe('adding a bundle', () => {
   it('shows a refused call as failed, and a call that throws as failed with a warning', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { installer, pluginManager, state } = bench([row({ name: 'a' }), row({ name: 'b' })])
-    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'x', message: 'no' } } as never)
+    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'x', diagnostic: 'no room left' } } as never)
     pluginManager.setBundleEnabled.mockRejectedValueOnce(new Error('transport'))
     installer.refresh(['a', 'b'])
     await flush()
     await installer.install('a')
     await installer.install('b')
     expect([state('a')?.state, state('b')?.state]).toEqual(['failed', 'failed'])
+    expect(state('a')?.reason).toBe('no room left')
+    expect(state('b')?.reason).toBeUndefined()
     expect(warn).toHaveBeenCalledOnce()
+  })
+
+  it('says a long add is still working, reads its state, and ends when the plugin manager reports it added', async () => {
+    vi.useFakeTimers()
+    try {
+      const { installer, pluginManager, afterAdd, state } = bench([row({ name: 'a' })], { addWaitMs: 5000 })
+      pluginManager.setBundleEnabled.mockImplementationOnce(() => new Promise(() => {}))
+      installer.refresh(['a'])
+      await vi.advanceTimersByTimeAsync(0)
+      void installer.install('a')
+      expect(state('a')?.state).toBe('installing')
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(state('a')?.state).toBe('slow')
+      pluginManager.listBundles.mockResolvedValue({ ok: true, value: [row({ name: 'a', enabled: true })] } as never)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(state('a')?.state).toBe('installed')
+      expect(afterAdd).toHaveBeenCalledExactlyOnceWith('a')
+    } finally { vi.useRealTimers() }
+  })
+
+  it('runs the after-add hook once for an add that applied and not for one that failed', async () => {
+    const { installer, pluginManager, afterAdd } = bench([row({ name: 'a' }), row({ name: 'b' })])
+    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: true, value: { application: 'failed', changed: false, stage: 'enable', target: 'b', error: { code: 'operation-error', diagnostic: 'boom' } } } as never)
+    installer.refresh(['a', 'b'])
+    await flush()
+    await installer.install('b')
+    expect(afterAdd).not.toHaveBeenCalled()
+    await installer.install('a')
+    expect(afterAdd).toHaveBeenCalledExactlyOnceWith('a')
   })
 
   it('adds nothing for a bundle that is not available, is unknown, or has no plugin manager to ask', async () => {
@@ -212,7 +244,7 @@ describe('opening Plugins', () => {
     const { installer, openList } = bench([])
     installer.openPlugins()
     expect(openList).toHaveBeenCalledOnce()
-    const bare = createBundleInstaller(new Context())
+    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000, afterAdd: () => Promise.resolve() })
     expect(() => { bare.openPlugins() }).not.toThrow()
   })
 })

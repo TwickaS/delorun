@@ -151,6 +151,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     setOrder(pending.map(card => card.provider))
     guide.setProvidersPhase('walk')
   }
+  // Every ticked provider already has a key that passed: there is nothing to walk through, so the primary goes straight on.
+  const keysAllFound = walk.length > 0 && walk.every(card => card.found && !didNotPass(card.result))
   const present = (card: ProviderCard): ReactNode => (
     <li key={card.provider}>
       <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
@@ -198,7 +200,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       <p className={shared.hint}>{t('welcome.model.hint')}</p>
       <FooterPortal>
         <StepFooter back={{ label: t('back'), onClick: back }}
-          next={walk.length === 0 ? { label: t('providers.continueNoKey'), onClick: next } : { label: t('providers.connect'), onClick: connect }} />
+          next={walk.length === 0 ? { label: t('providers.continueNoKey'), onClick: next }
+            : keysAllFound ? { label: t('continue'), onClick: next } : { label: t('providers.connect'), onClick: connect }} />
       </FooterPortal>
     </div>
   )

@@ -140,7 +140,7 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
           modes={SCHEMES.map(value => ({ value, label: t(`mode.${value}`) }))} mode={preference} onMode={(value) => { scheme.set(value) }}
           themes={PALETTES.map(value => ({ value, label: t(`palette.${value}`), light: colours[value].light, dark: colours[value].dark }))}
           theme={current.palette} onTheme={choosePalette} customTheme="custom"
-          sample={{ label: t('preview'), ask: t('preview.ask'), tool: t('preview.tool'), answer: t('preview.answer'), box: t('preview.box') }}
+          sample={{ label: t('preview'), ask: t('preview.ask'), answer: t('preview.answer'), box: t('preview.box') }}
           custom={{
             accentLabel: t('accent'), accent: current.accent, onAccent: (value) => { writeCustom({ accent: value }) },
             accents: ACCENT_CHOICES.map(choice => ({

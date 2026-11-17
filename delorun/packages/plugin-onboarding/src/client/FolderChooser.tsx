@@ -1,7 +1,7 @@
 /**
  * The Workspace step's own folder chooser, for a host without a native one, and for picking where a clone goes. It lists the folders of one folder at a time,
  * starting at the home directory, lets the person enter a folder, go up and create a folder, and adds only the folder
- * the person selected: nothing is selected when it opens or after a move, so its button waits for a choice. The
+ * the person selected, or the folder shown when none is selected and it is not the home directory: nothing is selected when it opens or after a move. The
  * harness's route refuses the folders Delorun never adds, and the chooser says why in place.
  */
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
@@ -71,6 +71,8 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
   const [name, setName] = useState('')
   const [createFailed, setCreateFailed] = useState(false)
   const [requested, setRequested] = useState<string | undefined>()
+  /** The home directory's own path, once a listing of it has shown. */
+  const [home, setHome] = useState<string | undefined>()
   const list = useRef<HTMLUListElement>(null)
   /** Whether the list takes focus once the next level shows. */
   const refocus = useRef(false)
@@ -93,6 +95,7 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
     void start.browse.list(path, controller.signal).then((next) => {
       if (controller.signal.aborted) return
       setListing(next)
+      if (path === undefined) setHome(next.path)
       setSelected(options.select)
       setProblem(undefined)
     }, (error: unknown) => {
@@ -122,6 +125,8 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
   const folders = listing?.entries.filter(entry => !entry.hidden) ?? []
   const parent = listing?.crumbs.at(-2)?.path
   const here = listing?.crumbs.at(-1)?.name ?? listing?.path ?? ''
+  // With nothing selected the button adds the folder shown, named on it; never the home directory itself.
+  const addPath = selected ?? (listing !== undefined && listing.path !== home ? listing.path : undefined)
   const stop = folders.find(entry => entry.path === selected) ?? folders[0]
 
   const select = (entry: DirectoryEntry): void => {
@@ -234,8 +239,8 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
         <Button variant="outline" size="sm" disabled={selected === undefined} onClick={() => { open(selected, { focusList: true }) }}>{t('chooser.open')}</Button>
         {pick === undefined
           ? (
-            <Button variant="outline" disabled={selected === undefined || adding} onClick={selected === undefined ? undefined : () => { void add(selected) }}>
-              {t('chooser.add')}
+            <Button variant="outline" disabled={addPath === undefined || adding} onClick={addPath === undefined ? undefined : () => { void add(addPath) }}>
+              {selected === undefined && addPath !== undefined ? t('chooser.addNamed', { name: here }) : t('chooser.add')}
             </Button>
           )
           : (

@@ -1,10 +1,8 @@
-/* The Look chooser: choices beside a content-sized sample; above it as a short strip in a narrow container. */
+/* The Look chooser: one column. The sample is a slim strip at the top, the choices under it. */
 .root {
-  container-type: inline-size;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--look-sample-width, 220px);
-  align-items: start;
-  gap: var(--delorun-space-7, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-5, 12px);
 }
 
 .choices {
@@ -12,19 +10,6 @@
   flex-direction: column;
   gap: var(--delorun-space-5, 12px);
   min-width: 0;
-}
-
-@container (max-width: 560px) {
-  .root {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .sample {
-    order: -1;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
 }
 
 /* The custom panel, inline under the tiles. */
@@ -127,15 +112,16 @@
   background: var(--half-accent);
 }
 
-/* The sample sizes to its content; it draws the scheme the page is in. */
+/* The strip draws the scheme the page is in; it sits above the choices. */
 .sample {
   --s-page: var(--l-page);
   --s-text: var(--l-text);
   --s-accent: var(--l-accent);
+  order: -1;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--delorun-space-3, 6px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-3, 6px) var(--delorun-space-4, 8px);
   padding: var(--delorun-space-4, 8px);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
@@ -152,25 +138,20 @@
 }
 
 .mine {
-  align-self: flex-end;
+  align-self: center;
   padding: var(--delorun-space-2, 4px) var(--delorun-space-4, 8px);
   border-radius: var(--dsw-radius-lg);
   background: color-mix(in srgb, var(--s-text) 10%, var(--s-page));
 }
 
-.toolChip {
-  align-self: flex-start;
-  padding: 0 var(--delorun-space-4, 8px);
-  border: 0.5px solid color-mix(in srgb, var(--s-text) 25%, transparent);
-  border-radius: var(--dsw-radius-sm);
-  opacity: 0.75;
-}
-
 .answer {
   min-width: 0;
+  flex: 1 1 8rem;
 }
 
 .input {
+  flex: 1 1 10rem;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

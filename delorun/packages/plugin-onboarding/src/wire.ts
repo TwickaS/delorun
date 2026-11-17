@@ -340,12 +340,13 @@ export const AgentModelOption = z.strictObject({
 export type AgentModelOption = z.output<typeof AgentModelOption>
 
 /**
- * What the route answers: the agent's models, or `unavailable` when the agent is not installed and running, did not
- * answer in time or failed. `unavailable` carries no reason; the person sees only that the list is not there.
+ * What the route answers: the agent's models, or `unavailable` with why: `not-running` when the agent's package is not
+ * installed and running (also the moment after it is added, before its provider registers), `timeout` when it did not
+ * answer in time, `failed` when it answered with an error.
  */
 export const AgentModelsAnswer = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('listed'), models: z.array(AgentModelOption) }),
-  z.strictObject({ state: z.literal('unavailable') }),
+  z.strictObject({ state: z.literal('unavailable'), reason: z.enum(['not-running', 'timeout', 'failed']) }),
 ])
 
 /** {@link AgentModelsAnswer}'s parsed value. */

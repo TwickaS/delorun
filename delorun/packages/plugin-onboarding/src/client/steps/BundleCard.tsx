@@ -29,6 +29,8 @@ interface AddableProps {
   readonly services: StepServices
   /** Where the package stands. */
   readonly state: BundleState
+  /** Why the plugin manager reports `failed`, in its own words. */
+  readonly reason?: string | undefined
   /** The title. */
   readonly title: string
   /** The icon's address, if the package has artwork. */
@@ -46,7 +48,7 @@ interface AddableProps {
  * @param props - the package's state, text and Add handler.
  * @returns the card.
  */
-export function AddableCard({ services, state, title, icon, description, onAdd, children }: AddableProps): ReactNode {
+export function AddableCard({ services, state, reason, title, icon, description, onAdd, children }: AddableProps): ReactNode {
   const { t } = services
   let action: ReactNode
   let line: ReactNode
@@ -60,6 +62,9 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
     case 'installing':
       line = <StateLine tone="loading">{t('bundle.adding')}</StateLine>
       break
+    case 'slow':
+      line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>
+      break
     case 'installed':
       action = <span className={css.added}><span aria-hidden="true">✓</span> {t('bundle.added')}</span>
       break
@@ -71,7 +76,7 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
       line = <StateLine tone="warning">{t('bundle.unavailable')}</StateLine>
       break
     case 'failed':
-      line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{t('bundle.failed')}</StateLine>
+      line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{reason === undefined ? t('bundle.failed') : t('bundle.failedWhy', { reason })}</StateLine>
       break
     /* v8 ignore next 2 -- closed-union default only defends future widening of BundleState */
     default:
@@ -117,7 +122,7 @@ export function BundleCard({ name, title, description, services, onAdd, children
   const view = useBundle(services, name)
   if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} title={title ?? ''} description={description}
+    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} title={title ?? ''} description={description}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>
