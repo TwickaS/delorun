@@ -47,6 +47,8 @@
           - '@delorun/bundle-agent-hooks'
           - '@delorun/bundle-webhooks'
           - '@delorun/bundle-external-agents'
+          # Experimental desktop control; its card says so (plugin-onboarding's PACK_CARDS), and it asks for desktop permissions itself.
+          - '@delorun/bundle-computer-use-driver'
         # Rows of this bundle that are inserted disabled (below). The guide offers to turn each on through the plugin
         # manager; each must be a row of the profile, or onboarding does not load.
         optionalRows:

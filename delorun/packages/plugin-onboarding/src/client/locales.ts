@@ -172,6 +172,8 @@ export const en = {
   'plugins.registry.unreachable': 'Delorun could not reach the plugin registry, so plugins that are not installed show no match. Check your connection and try again.',
   'plugins.none': 'None of these plugins fits this setup yet.',
   'plugins.later': 'Find more in Plugins',
+  'plugins.pack.computerUseDriver.title': 'Computer use (Cua Driver)',
+  'plugins.pack.computerUseDriver.description': 'Experimental. Lets an agent see and control the windows on this computer\'s desktop, on Linux and Windows. It asks for the desktop permissions it needs.',
 
   'bundle.checking': 'Checking…',
   'bundle.add': 'Add',
@@ -529,6 +531,8 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'plugins.registry.unreachable': 'Delorun 无法连接插件仓库，因此未安装的插件不显示匹配信息。请检查网络后重试。',
   'plugins.none': '这些插件暂时都不适合当前设置。',
   'plugins.later': '在“插件”中查看更多',
+  'plugins.pack.computerUseDriver.title': '计算机使用（Cua Driver）',
+  'plugins.pack.computerUseDriver.description': '实验性功能。让智能体在 Linux 和 Windows 上查看并控制这台电脑桌面上的窗口。它会请求所需的桌面权限。',
 
   'bundle.checking': '正在检查…',
   'bundle.add': '添加',

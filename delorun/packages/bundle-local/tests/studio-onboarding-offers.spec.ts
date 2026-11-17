@@ -25,7 +25,7 @@ describe('the studio bundle keeps the DeepSeek account route out of the guide', 
   })
 })
 
-const OPTIONAL_BUNDLES = ['browser', 'code-intelligence', 'agent-hooks', 'webhooks', 'external-agents'].map(name => `@delorun/bundle-${name}`)
+const OPTIONAL_BUNDLES = ['browser', 'code-intelligence', 'agent-hooks', 'webhooks', 'external-agents', 'computer-use-driver'].map(name => `@delorun/bundle-${name}`)
 
 describe('the studio bundle offers the optional bundles as packs (A405)', () => {
   it('names each bundle on the onboarding row, so the guide offers it and the install queue downloads it', () => {
