@@ -7,6 +7,7 @@
  * gate hands it {@link ProgramSpawn}, the only way to get one (T1).
  * @module @delorun/external-agents/contract
  */
+import type {} from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -57,6 +58,8 @@ export type ProgramFailure =
   | { readonly category: 'model-not-offered'; readonly configured: string; readonly offered: readonly OfferedModel[] }
   /** The program's own session or thread named by `resume` is gone. */
   | { readonly category: 'resume-failed' }
+  /** The gate ended the turn at the consent's time limit, `limitMs`; only the gate reports it, never a driver. */
+  | { readonly category: 'time-limit'; readonly limitMs: number }
   /** Anything else; `detail` is for the person's view only. */
   | { readonly category: 'program'; readonly detail: string }
 
@@ -317,6 +320,8 @@ export type GateRefusal =
   | { readonly category: 'limit'; readonly window: string; readonly resetsAt: number }
   /** `maxLivePrograms` programs already run; `busy` names the agents running them. */
   | { readonly category: 'capacity'; readonly busy: readonly ExternalAgentName[] }
+  /** The gate already holds a program for this seat child. */
+  | { readonly category: 'seat-running' }
 
 /** The gate's typed refusal of a start. */
 export class GateRefusedError extends Error {
@@ -355,6 +360,14 @@ export interface ExternalAgentsGate {
    * @throws {@link GateRefusedError} when the gate refuses.
    */
   probe(provider: ExternalAgentName, signal: AbortSignal): Promise<AccountObservation>
+  /**
+   * The fixed refusal of a start while the agent's plan limit is reached with a reset time in the future, when the
+   * C16 switch `external_agent_limit_refusal` is on; stale figures never refuse. The consent's one-shot review asks it
+   * too.
+   * @param provider - the agent.
+   * @returns the sentence for the model, or undefined when nothing refuses.
+   */
+  limitRefusal(provider: ExternalAgentName): Promise<string | undefined>
   /**
    * Hear each driver registration, for the limits check that follows adding a pack; a registration effect.
    * @param listener - called with the agent whose driver registered.
@@ -546,4 +559,13 @@ export interface SeatConsent {
    * @returns false, keeping nothing, when the child has no lease.
    */
   addRunRule(child: SessionId, rule: ProgramRunRule): boolean
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The start gate for external agents' programs, provided by `@delorun/external-agents`. */
+    externalAgents: ExternalAgentsGate
+    /** The account and limits store of external agents, provided by `@delorun/external-agents`. */
+    agentAccounts: AgentAccounts
+  }
 }
