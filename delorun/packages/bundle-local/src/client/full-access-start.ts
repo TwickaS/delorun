@@ -1,9 +1,10 @@
 /**
  * The Conversation Definitions of the "Started without asking" line: one Chat node under an external agent's start in a
- * chat whose last recorded approval policy is `never`, the Full access preset's. Both are folded from recorded events
- * (`approval/policy` and the parent's `subagent/catalog` entry for an external execution), so the line shows again when
- * the chat is reopened and adds no Session event. A policy the configuration sets without a recorded
- * `approval/policy`, or one recorded before the loaded window, shows no line.
+ * chat whose last recorded approval policy is `never` and last recorded sandbox mode is `danger-full-access`, the Full
+ * access preset's two values together. Both are folded from recorded events (`approval/policy`, `sandbox/mode` and the
+ * parent's `subagent/catalog` entry for an external execution), so the line shows again when the chat is reopened and
+ * adds no Session event. A value the configuration sets without a recorded event, or one recorded before the loaded
+ * window, shows no line.
  *
  * @module @delorun/bundle-local/client/full-access-start
  */
@@ -15,6 +16,9 @@ export const FULL_ACCESS_START_KIND = 'delorun-full-access-start'
 
 /** The kind of the state-only Definition that holds each recorded approval policy. */
 export const APPROVAL_POLICY_KIND = 'delorun-approval-policy'
+
+/** The kind of the state-only Definition that holds each recorded sandbox mode. */
+export const SANDBOX_MODE_KIND = 'delorun-sandbox-mode'
 
 /** What the line shows: when the external agent started. */
 export interface FullAccessStartData {
@@ -34,10 +38,16 @@ interface PolicyState {
   readonly policy: string
 }
 
+/** The state of one recorded sandbox mode switch. */
+interface ModeState {
+  readonly mode: string
+}
+
 /** The state of one start: the log position, the time and the policy in force. */
 interface StartState extends FullAccessStartData {
   readonly seq: number
   readonly policy: string | undefined
+  readonly mode: string | undefined
 }
 
 /**
@@ -66,6 +76,18 @@ export const approvalPolicyDefinition: ConversationNodeDefinition<PolicyState> =
   update: context => context.state,
 }
 
+/** Each recorded `sandbox/mode` event, which the start Definition reads strictly backwards. */
+export const sandboxModeDefinition: ConversationNodeDefinition<ModeState> = {
+  kind: SANDBOX_MODE_KIND,
+  match: event => payloadOf(event, 'sandbox/mode') === undefined ? null : { id: String(event.seq), role: 'start' },
+  start: (_context, match) => {
+    const mode = payloadOf(match.event, 'sandbox/mode')?.mode
+    if (typeof mode !== 'string') throw new Error('delorun-sandbox-mode start requires a sandbox/mode event')
+    return { mode }
+  },
+  update: context => context.state,
+}
+
 /** The line, placed where the parent recorded the external execution. */
 export const fullAccessStartDefinition: ConversationNodeDefinition<StartState> = {
   kind: 'delorun-full-access-start-notice',
@@ -78,10 +100,11 @@ export const fullAccessStartDefinition: ConversationNodeDefinition<StartState> =
     seq: match.event.seq,
     time: match.event.time,
     policy: reader.previous<PolicyState>(APPROVAL_POLICY_KIND)?.state.policy,
+    mode: reader.previous<ModeState>(SANDBOX_MODE_KIND)?.state.mode,
   }),
   update: context => context.state,
   buildViewNode: (context) => {
-    if (context.state?.policy !== 'never') return null
+    if (context.state?.policy !== 'never' || context.state.mode !== 'danger-full-access') return null
     return {
       key: context.key,
       kind: FULL_ACCESS_START_KIND,

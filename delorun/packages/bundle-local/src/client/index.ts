@@ -114,7 +114,7 @@ import { HOME_AUTH_ROW } from '@delorun/home-auth/wire'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
-import { approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition } from './full-access-start.ts'
+import { approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, sandboxModeDefinition } from './full-access-start.ts'
 import { FullAccessStartNotice } from './FullAccessStartNotice.tsx'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
@@ -769,6 +769,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
   // The line under an external agent's start in a Full access chat; a studio without the conversation shows none.
   ctx.inject(['uiConversation'], (conversation) => {
     conversation.effect(() => conversation.uiConversation.events.register(approvalPolicyDefinition), 'delorun-consents: approval policy record')
+    conversation.effect(() => conversation.uiConversation.events.register(sandboxModeDefinition), 'delorun-consents: sandbox mode record')
     conversation.effect(() => conversation.uiConversation.events.register(fullAccessStartDefinition), 'delorun-consents: full-access start line')
     conversation.effect(() => conversation.slots.inject('conversation.chat.node', () => conversation.slots.register({
       name: 'conversation.chat.node', key: FULL_ACCESS_START_KIND, locale: CONSENTS_NS,

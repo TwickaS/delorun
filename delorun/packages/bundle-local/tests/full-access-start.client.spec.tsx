@@ -8,7 +8,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { en, zh } from '../src/client/consents-locales.ts'
 import { FullAccessStartNotice, type FullAccessStartNoticeProps } from '../src/client/FullAccessStartNotice.tsx'
 import {
-  APPROVAL_POLICY_KIND, approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition,
+  APPROVAL_POLICY_KIND, approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, SANDBOX_MODE_KIND, sandboxModeDefinition,
 } from '../src/client/full-access-start.ts'
 import { applyConsents } from '../src/client/index.ts'
 
@@ -24,15 +24,26 @@ function policy(value: string): SessionEvent {
   return { type: 'approval/policy', seq: 4, time: 1, data: { policy: value } } as never
 }
 
-/** The reader a start sees, holding the nearest recorded policy, or none. */
-function readerOf(value: string | undefined): ConversationContextReader {
-  return { previous: (kind: string) => kind === APPROVAL_POLICY_KIND && value !== undefined ? { state: { policy: value } } as never : undefined }
+/** A `sandbox/mode` event. */
+function mode(value: string): SessionEvent {
+  return { type: 'sandbox/mode', seq: 3, time: 1, data: { mode: value } } as never
 }
 
-/** The line's node for an external start under a recorded policy, or null. */
-function nodeFor(value: string | undefined) {
+/** The reader a start sees, holding the nearest recorded policy and sandbox mode, or none. */
+function readerOf(value: string | undefined, sandbox?: string): ConversationContextReader {
+  return {
+    previous: (kind: string) => {
+      if (kind === APPROVAL_POLICY_KIND && value !== undefined) return { state: { policy: value } } as never
+      if (kind === SANDBOX_MODE_KIND && sandbox !== undefined) return { state: { mode: sandbox } } as never
+      return undefined
+    },
+  }
+}
+
+/** The line's node for an external start under a recorded policy and sandbox mode, or null. */
+function nodeFor(value: string | undefined, sandbox: string | null = 'danger-full-access') {
   const match = { event: catalog('external'), location: { kind: 'unresolved' }, role: 'start' } as ConversationStartMatch
-  const state = fullAccessStartDefinition.start({} as never, match, readerOf(value))
+  const state = fullAccessStartDefinition.start({} as never, match, readerOf(value, sandbox ?? undefined))
   const base = { key: 'k', kind: fullAccessStartDefinition.kind, id: 'child-1', matches: [match], start: match }
   return fullAccessStartDefinition.buildViewNode?.({ ...base, state } as never)
 }
@@ -52,6 +63,18 @@ describe('which starts get the line', () => {
     expect(() => approvalPolicyDefinition.start({} as never, { ...match, event: catalog('external') } as never, readerOf(undefined))).toThrow('approval/policy')
   })
 
+  it('records each sandbox mode for the start to read', () => {
+    expect(sandboxModeDefinition.match(mode('danger-full-access'))).toEqual({ id: '3', role: 'start' })
+    expect(sandboxModeDefinition.match(policy('never'))).toBeNull()
+    const match = { event: mode('workspace-write'), location: { kind: 'unresolved' }, role: 'start' } as ConversationStartMatch
+    expect(sandboxModeDefinition.start({} as never, match, readerOf(undefined))).toEqual({ mode: 'workspace-write' })
+    expect(() => sandboxModeDefinition.start({} as never, { ...match, event: policy('never') } as never, readerOf(undefined))).toThrow('sandbox/mode')
+  })
+
+  it.each([['workspace-write'], ['read-only'], [null]])('shows nothing for a never policy on the sandbox mode %s', (sandbox) => {
+    expect(nodeFor('never', sandbox)).toBeNull()
+  })
+
   it('shows one node at the start when the recorded policy is never', () => {
     expect(nodeFor('never')).toMatchObject({ kind: FULL_ACCESS_START_KIND, target: 'chat', anchorSeq: 30, visibility: 'visible', groupTree: 'process', data: { time: 1_700_000_000_000 } })
   })
@@ -61,9 +84,10 @@ describe('which starts get the line', () => {
   })
 
   it('keeps its state when a later event arrives', () => {
-    const state = { seq: 30, time: 1, policy: 'never' }
+    const state = { seq: 30, time: 1, policy: 'never', mode: 'danger-full-access' }
     expect(fullAccessStartDefinition.update({ state } as never, {} as never)).toBe(state)
     expect(approvalPolicyDefinition.update({ state: { policy: 'never' } } as never, {} as never)).toEqual({ policy: 'never' })
+    expect(sandboxModeDefinition.update({ state: { mode: 'read-only' } } as never, {} as never)).toEqual({ mode: 'read-only' })
   })
 })
 
@@ -91,7 +115,7 @@ describe('registration', () => {
     ctx.provide('sessions', {} as never)
     const fiber = ctx.plugin({ name: 'consents', inject: ['slots', 'locale', 'configForms', 'sessions'], apply: scope => { applyConsents(scope, (() => Promise.reject(new Error('unused'))) as never) } })
     await fiber
-    expect([...definitions]).toEqual([approvalPolicyDefinition, fullAccessStartDefinition])
+    expect([...definitions]).toEqual([approvalPolicyDefinition, sandboxModeDefinition, fullAccessStartDefinition])
     expect(rows.get(`conversation.chat.node#${FULL_ACCESS_START_KIND}`)).toBe(FullAccessStartNotice)
     await fiber.dispose()
     expect(definitions.size).toBe(0)
