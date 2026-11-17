@@ -166,6 +166,11 @@ describe('the pack transport', () => {
     expect(failure).toMatchObject({ code: 'FETCH_REFUSED' })
     expect((failure as Error).message).not.toMatch(/person|secret/u)
     expect(fetcher).not.toHaveBeenCalled()
+    // An address that is neither https nor loopback is refused for the credentials first, never printed with them.
+    for (const channel of ['http://person:secret@releases.example/x/', 'ftp://person:secret@releases.example/x/']) {
+      expect(() => createPackFiles({ channel, stallSeconds: 30 })).toThrow(/user name or password/u)
+      expect(() => createPackFiles({ channel, stallSeconds: 30 })).not.toThrow(/person|secret/u)
+    }
   })
 
   it('cuts a metadata file at the release files\' 30 seconds in total, however steadily its pieces arrive', async () => {
