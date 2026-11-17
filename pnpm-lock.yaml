@@ -1397,6 +1397,9 @@ importers:
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../../packages/plugin-update
       '@delorun/preview-flags':
         specifier: workspace:*
         version: link:../../packages/preview-flags
@@ -2159,6 +2162,9 @@ importers:
       '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
@@ -4268,12 +4274,30 @@ importers:
 
   delorun/packages/plugin-update:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-process':
+        specifier: workspace:*
+        version: link:../contract-home-process
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
+      '@delorun/plugin-changes':
+        specifier: workspace:*
+        version: link:../plugin-changes
       '@delorun/update':
         specifier: workspace:*
         version: link:../update
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -4314,6 +4338,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@delorun/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
       '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
@@ -4323,6 +4353,9 @@ importers:
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       react:
         specifier: ^18.2.0
         version: 18.3.1

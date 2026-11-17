@@ -20,6 +20,7 @@ export { HANDOVER_LINE_MAX_BYTES, openHandoverPipe, startSuccessor, successorEnv
 export { UpdateHandshake, type HandshakeResult, type HandshakeSubject, type Progress, type UpdateState, type UpdateSupport } from './handshake.ts'
 export { HomeProcess, type HomeProcessOptions } from './home-process.ts'
 export { HostNotStoppedError, hostStopFailure, refuseBootedHost, REFUSED_HOST_STOP_S, stopHostWithin, type HostStopOutcome } from './host-stop.ts'
+export { readUpdateResult, removeUpdateResult, updateResultPath, writeUpdateResult, type UpdateResultRecord } from './update-result.ts'
 export { endUpdateRecord, hasStash, journalledUpdate, journalPath, journalRecord, markCommitted, markJournal, readJournal, removeJournal, removeStash, stashCommitted, stashPath, writeJournal, type JournalledUpdate } from './journal.ts'
 export { captureHomeOutput, HOME_LOGGER, openedHomeLog, openHomeLog, type HomeLog, type HomeLogOptions, type OpenedHomeLog } from './log.ts'
 export { checkUpdateRequest, REPORT_ID_PATTERN } from './schema.ts'

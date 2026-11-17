@@ -13,6 +13,28 @@
  */
 import type { UpdateReport } from '@delorun/contract-update-report'
 
+/** What a person has to accept in a report before it applies: the indexes of the items, and the release-log check. */
+export interface ConfirmationNeeds {
+  /** Indexes into `report.items` of each item that disables or removes something, merges a harness file or rests on unverified metadata. */
+  readonly items: readonly number[]
+  /** Whether the release-log check did not pass (`unchecked` or `failed`). */
+  readonly log: boolean
+}
+
+/**
+ * What the report needs the person to accept, by the rule above. The terminal asks about these and the studio asks for a
+ * tick for each, so the two cannot diverge.
+ * @param report - the report.
+ * @returns the items and the log check.
+ */
+export function confirmationNeeds(report: UpdateReport): ConfirmationNeeds {
+  const items: number[] = []
+  report.items.forEach((item, index) => {
+    if (item.effect === 'disabled' || item.effect === 'removed' || item.reason === 'harness-change-merged' || item.verification === 'unverified') items.push(index)
+  })
+  return { items, log: report.release.log !== 'passed' }
+}
+
 /**
  * Whether the report can be confirmed without asking the person.
  * @param report - the report `delorun update --yes` would confirm.
@@ -20,5 +42,6 @@ import type { UpdateReport } from '@delorun/contract-update-report'
  *   and its log check passed.
  */
 export function confirmsWithoutAsking(report: UpdateReport): boolean {
-  return report.release.log === 'passed' && !report.items.some(item => item.effect === 'disabled' || item.effect === 'removed' || item.reason === 'harness-change-merged' || item.verification === 'unverified')
+  const needs = confirmationNeeds(report)
+  return needs.items.length === 0 && !needs.log
 }

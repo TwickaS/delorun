@@ -65,7 +65,7 @@ import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/pl
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
 import { LiveAssets, harnessEffectOf } from './live-apply.ts'
 import { restartRoutes, restartStateOf } from './restart-route.ts'
-import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
+import { CHANGES_ROUTE_PREFIX, changesGate, changesRoutes, type ChangesGate, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -73,6 +73,8 @@ declare module '@deepseek-ai/cordis' {
     changesHarness?: ChangesHarnessHost
     /** The home process's restart and what this Host booted with, which `delorun start`'s home process provides for the Restart route. */
     changesRestart?: ChangesRestartHost
+    /** The Changes routes' fence and access table for another plugin's routes, which this plugin provides once the web server and Connection are present. */
+    changesGate?: ChangesGate
   }
 }
 
@@ -284,6 +286,7 @@ export function apply(ctx: Context, config: Config): void {
       restartState: () => restartStateOf(restart(), harness()),
       clearRestartFailure: () => { restart()?.clearFailure() },
     } satisfies Parameters<typeof changesRoutes>[0]
+    scope.effect(() => scope.provide('changesGate', changesGate(dependencies)), 'plugin-changes: gate for other plugins\' routes')
     const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, { restart, waitSeconds: config.restartWaitSeconds })]
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
@@ -481,3 +484,4 @@ function realTarget(path: string): string | undefined {
 }
 
 export { discardImportReviews } from '@delorun/changes/setup-transfer'
+export { changesGate, flag, onlyFields, RouteRefusal, type ChangesGate, type ChangesRoute, type RouteHandler } from './routes.ts'
