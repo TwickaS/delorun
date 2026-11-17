@@ -4,6 +4,10 @@ import { DOCS_URL } from '../src/site/config.ts'
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION, HOME_SIGNUP_PAGE, SIGNUP_PAGES } from '../src/site/signup.ts'
 import { COPY } from '../src/site/copy.ts'
 import { EN } from '../src/site/words/en.ts'
+import { PRIVACY_EN } from '../src/site/words/privacy-en.ts'
+
+/** Every dictionary the site has. */
+const ALL = [EN, PRIVACY_EN]
 
 /** The guide pages the documentation site builds from. */
 const GUIDE = new URL('../../../docs/guide/', import.meta.url)
@@ -35,7 +39,7 @@ const HOME = { hero: EN.hero, claims: EN.claims, sections: EN.sections, whatsNew
 
 describe('the page’s words', () => {
   it('link only guide pages and headings that exist', () => {
-    const links = strings(EN).filter(text => text.startsWith(`${DOCS_URL}/guide/`))
+    const links = strings(ALL).filter(text => text.startsWith(`${DOCS_URL}/guide/`))
     expect(links.length).toBeGreaterThan(10)
     for (const link of links) {
       const url = new URL(link)
@@ -56,7 +60,7 @@ describe('the page’s words', () => {
   })
 
   it('use no dash in visible text', () => {
-    for (const text of strings(EN).filter(each => !/^(https?:|mailto:)/.test(each))) {
+    for (const text of strings(ALL).filter(each => !/^(https?:|mailto:)/.test(each))) {
       expect(text, text).not.toMatch(/[–—]| - /)
     }
   })

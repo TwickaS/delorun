@@ -146,7 +146,7 @@ function Parts() {
     <Section id="parts" space="normal">
       <SectionHeading id="parts" title={copy.heading} lead={copy.lead} className="col-span-full lg:col-start-5 lg:col-end-12" />
       <div className="col-span-full mt-10 lg:mt-14">
-        <SectionStill caption={copy.still} className="h-[720px] lg:h-[640px]" />
+        <SectionStill caption={copy.still} className="h-[640px] lg:h-[560px]" />
       </div>
       <GuideLink link={copy.link} />
     </Section>

@@ -5,6 +5,7 @@
  */
 import { useState } from 'react'
 import { COPY } from '@/site/copy.ts'
+import { PRIVACY_EN } from '@/site/words/privacy-en.ts'
 import { Button, Link } from '@brand'
 import { Frame } from '@/components/layout.tsx'
 import { forgetPackageManager } from '@/components/package-manager.tsx'
@@ -21,8 +22,8 @@ function ForgetChoice() {
   if (!mounted) return null
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3">
-      <Button variant="secondary" size="sm" onClick={() => { forgetPackageManager(); setForgotten(true) }}>{COPY.privacy.forget}</Button>
-      <p role="status" aria-live="polite" className="text-sm text-(--dl-text-muted)">{forgotten ? COPY.privacy.forgotten : ''}</p>
+      <Button variant="secondary" size="sm" onClick={() => { forgetPackageManager(); setForgotten(true) }}>{PRIVACY_EN.forget}</Button>
+      <p role="status" aria-live="polite" className="text-sm text-(--dl-text-muted)">{forgotten ? PRIVACY_EN.forgotten : ''}</p>
     </div>
   )
 }
@@ -32,7 +33,7 @@ function ForgetChoice() {
  * @returns the page.
  */
 export function Privacy() {
-  const copy = COPY.privacy
+  const copy = { ...PRIVACY_EN, title: COPY.privacy.title }
   return (
     <Frame>
       <main className="mx-auto w-full max-w-2xl px-5 pt-10 sm:px-8 sm:pt-16">
