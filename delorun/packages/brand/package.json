@@ -44,5 +44,9 @@
   },
   "imports": {
     "#upstream": "./src/upstream.ts"
-  }
+  },
+  "sideEffects": [
+    "*.css",
+    "./src/tokens.css"
+  ]
 }

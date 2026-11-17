@@ -9,7 +9,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Button, Link, TextField } from '@brand'
 import { SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
-import { CONSENT_TEXT, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
+import { CONSENT_TEXT, CONSENT_TEXT_VERSION, FIELDS, MAX_EMAIL_LENGTH, MAX_NAME_LENGTH, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH } from '@/site/signup.ts'
 
 /** The part of Turnstile's script API the form calls. */
 interface TurnstileApi {
@@ -124,6 +124,7 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
   return (
     <form ref={formRef} method="post" action={SUBSCRIBE_PATH} onSubmit={onSubmit} className="flex flex-col gap-4">
       <input type="hidden" name={FIELDS.page} value={page} />
+      <input type="hidden" name={FIELDS.consentVersion} value={CONSENT_TEXT_VERSION} />
       <div className={compact ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4 sm:grid-cols-[1fr_1.4fr]'}>
         <TextField label={`${copy.nameLabel} ${copy.optional}`} name={FIELDS.firstName} type="text" autoComplete="given-name" maxLength={MAX_NAME_LENGTH} />
         <TextField label={copy.emailLabel} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} />
