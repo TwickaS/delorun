@@ -1,6 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { execFile, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { linuxScopeUnit, linuxStartTime, programRecordPath, ProgramRecords, systemProcessTable, type ProcessIdentity, type ProcessTable } from '../src/reap.ts'
 
@@ -16,8 +19,11 @@ class FakeTable implements ProcessTable {
     this.platform = platform
   }
 
+  /** Identities a process shows before its table entry, read one per call: how a scope start looks. */
+  readonly starting = new Map<number, ProcessIdentity[]>()
+
   async identify(pid: number): Promise<ProcessIdentity | undefined> {
-    return this.processes.get(pid)
+    return this.starting.get(pid)?.shift() ?? this.processes.get(pid)
   }
 
   killGroup(pgid: number, signal: NodeJS.Signals): void {
@@ -37,13 +43,74 @@ const claude: ProcessIdentity = { pid: 4242, startTime: '81234', bootId: 'b-1', 
  * @param table - the process table.
  * @returns the records, the warnings and the record file's path.
  */
-function records(test: { onTestFinished: (fn: () => void) => void }, table: ProcessTable): { readonly records: ProgramRecords, readonly warnings: string[], readonly path: string } {
+function records(test: { onTestFinished: (fn: () => void) => void }, table: ProcessTable, settleMs = 2_000): { readonly records: ProgramRecords, readonly warnings: string[], readonly path: string } {
   const home = mkdtempSync(join(tmpdir(), 'ea1-gate-reap-'))
   test.onTestFinished(() => rmSync(home, { recursive: true, force: true }))
   const warnings: string[] = []
   const path = programRecordPath(home)
-  return { records: new ProgramRecords({ path, table, graceMs: 5, warn: message => warnings.push(message) }), warnings, path }
+  return { records: new ProgramRecords({ path, table, graceMs: 5, settleMs, warn: message => warnings.push(message) }), warnings, path }
 }
+
+const run = promisify(execFile)
+
+/**
+ * Whether this machine has a user systemd that can start a scope.
+ * @returns true when `systemctl --user` answers running or degraded.
+ */
+async function userSystemd(): Promise<boolean> {
+  if (process.platform !== 'linux') return false
+  try {
+    const { stdout } = await run('systemctl', ['--user', 'is-system-running'])
+    return /^(?:running|degraded)/u.test(stdout)
+  } catch (error) {
+    // `is-system-running` exits non-zero when degraded; its output still names the state.
+    const stdout: unknown = Reflect.get(Object(error), 'stdout')
+    return typeof stdout === 'string' && /^degraded/u.test(stdout)
+  }
+}
+
+const hasUserSystemd = await userSystemd()
+
+describe('a program the subprocess owner starts in a systemd scope (review P2)', () => {
+  const scoped = { ...claude, unit: 'dsh-subprocess-ab12.scope' }
+
+  it('records the program once it has left systemd-run and entered the handle\'s unit, never systemd-run itself', async (test) => {
+    const table = new FakeTable()
+    table.starting.set(claude.pid, [
+      { ...claude, exe: '/usr/bin/systemd-run', unit: undefined },
+      { ...claude, exe: '/usr/bin/systemd-run', unit: 'dsh-subprocess-ab12.scope' },
+    ])
+    table.processes.set(claude.pid, scoped)
+    const { records: one } = records(test, table)
+    expect(await one.started('claude-code', claude.pid, 'dsh-subprocess-ab12.scope')).toEqual(scoped)
+  })
+
+  it('records nothing for a process that never enters the handle\'s unit in time', async (test) => {
+    const table = new FakeTable()
+    table.processes.set(claude.pid, { ...claude, exe: '/usr/bin/systemd-run', unit: undefined })
+    const { records: one, warnings, path } = records(test, table, 50)
+    expect(await one.started('claude-code', claude.pid, 'dsh-subprocess-ab12.scope')).toBeUndefined()
+    expect(warnings).toHaveLength(1)
+    expect(() => readFileSync(path)).toThrow()
+  })
+
+  it.skipIf(!hasUserSystemd)('records a real scoped process as the program in its unit, and stops that unit at the next start', async (test) => {
+    const unit = `dsh-subprocess-ea1gate${randomUUID().slice(0, 8)}.scope`
+    const child = spawn('systemd-run', ['--user', '--scope', '--quiet', '--collect', `--unit=${unit}`, '--', 'sleep', '30'], { stdio: 'ignore', detached: true })
+    test.onTestFinished(async () => {
+      await run('systemctl', ['--user', 'stop', unit]).catch(() => undefined)
+      child.kill('SIGKILL')
+    })
+    const table = systemProcessTable('linux', async argv => (await run(argv[0]!, argv.slice(1))).stdout)
+    const { records: one, path } = records(test, table)
+    const identity = await one.started('claude-code', child.pid!, unit)
+    const sleep = realpathSync((await run('sh', ['-c', 'command -v sleep'])).stdout.trim())
+    expect(identity).toMatchObject({ pid: child.pid, unit, exe: sleep })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-unit'])
+    await expect.poll(async () => (await table.identify(child.pid!)) === undefined, { timeout: 5_000 }).toBe(true)
+  })
+})
 
 describe('reaping programs a dead Host left behind', () => {
   it('stops a recorded program whose identity still matches, SIGTERM then SIGKILL, and clears the record', async (test) => {
@@ -54,7 +121,7 @@ describe('reaping programs a dead Host left behind', () => {
     expect((readFileSync(path).length)).toBeGreaterThan(0)
 
     table.honoursTerm = false
-    const after = new ProgramRecords({ path, table, graceMs: 5, warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
     expect(table.calls).toEqual(['kill -4242 SIGTERM', 'kill -4242 SIGKILL'])
     expect(await after.reap()).toEqual([])

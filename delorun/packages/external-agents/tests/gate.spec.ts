@@ -651,7 +651,7 @@ describe('programs a dead Host left (T11, review D15)', () => {
     const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
     roots.push(dirname(dirname(dirname(path))))
     const before = table()
-    const left = new ProgramRecords({ path, table: before, graceMs: 5, warn: () => {} })
+    const left = new ProgramRecords({ path, table: before, graceMs: 5, settleMs: 5, warn: () => {} })
     await left.started('claude-code', identity.pid)
     await left.started('codex', 77)
     const after = table()

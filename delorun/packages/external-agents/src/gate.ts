@@ -148,6 +148,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       path,
       table: this.options.processTable ?? systemProcessTable(process.platform, argv => this.runCommand(argv)),
       graceMs: this.options.graceMs,
+      settleMs: this.options.graceMs,
       warn: message => this.ctx.logger.warn(message),
     })
     const reaped = await records.reap()
@@ -181,10 +182,10 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
    * @param handle - the process.
    */
   private track(provider: ExternalAgentName, handle: SubprocessHandle): void {
-    const pid = handle.pid
+    const { pid, unit } = handle
     if (pid === undefined) return
     const recorded = this.records.then(async (records) => {
-      const identity = await records?.started(provider, pid)
+      const identity = await records?.started(provider, pid, unit)
       return records === undefined || identity === undefined ? undefined : { records, identity }
     })
     // A range the provider can no longer observe keeps its record, so the next start checks it.

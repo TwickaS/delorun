@@ -9,12 +9,15 @@
  * @module @delorun/external-agents/reap
  */
 import { mkdir, readFile, readlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { z } from 'zod'
 import { EXTERNAL_AGENTS } from './locate.ts'
 import type { ExternalAgentName } from './contract.ts'
+
+/** How often the identity of a process starting in a systemd scope is read again, in milliseconds. */
+const SCOPE_SETTLE_POLL_MS = 20
 
 /** The record file's format version. */
 export const PROGRAM_RECORD_VERSION = 1 as const
@@ -114,6 +117,8 @@ export interface ProgramRecordsOptions {
   readonly table: ProcessTable
   /** How long a stopped group has after SIGTERM before SIGKILL, in milliseconds. */
   readonly graceMs: number
+  /** How long a process started in a systemd scope has to enter it before it goes unrecorded, in milliseconds. */
+  readonly settleMs: number
   /** Report a problem the reaper contained. */
   readonly warn: (message: string) => void
 }
@@ -129,21 +134,42 @@ export class ProgramRecords {
   }
 
   /**
-   * Record a started program. On Windows nothing is recorded; a program whose identity cannot be read is not recorded
-   * and a warning names it, because a guessed identity could later stop another process.
+   * Record a started program. On Windows nothing is recorded; a program whose identity cannot be read, or that has not
+   * entered its scope within `settleMs`, is not recorded and a warning names it, because a guessed identity
+   * could later stop another process.
    * @param provider - the agent.
-   * @param pid - the program's process id.
+   * @param pid - the process id of the managed range's leader.
+   * @param unit - the systemd scope the subprocess owner started it in, from the handle.
    * @returns the identity recorded, or undefined when none was.
    */
-  async started(provider: ExternalAgentName, pid: number): Promise<ProcessIdentity | undefined> {
+  async started(provider: ExternalAgentName, pid: number, unit?: string): Promise<ProcessIdentity | undefined> {
     if (this.options.table.platform === 'win32') return undefined
-    const identity = await this.options.table.identify(pid)
+    const identity = unit === undefined ? await this.options.table.identify(pid) : await this.inScope(pid, unit)
     if (identity === undefined) {
       this.options.warn(`external agents: the identity of ${provider}'s process ${String(pid)} could not be read, so it is not recorded for reaping`)
       return undefined
     }
     await this.change(programs => [...programs.filter(record => record.identity.pid !== pid), { provider, identity }])
     return identity
+  }
+
+  /**
+   * The identity of a process the subprocess owner starts in a systemd scope. The handle's process id first runs
+   * `systemd-run`, which places itself in the scope and then runs the subprocess runner and the program in the same
+   * process; the identity is read again until the process sits in the handle's unit and no longer runs `systemd-run`.
+   * @param pid - the process id the handle names.
+   * @param unit - the scope unit the handle names.
+   * @returns the identity, or undefined when the process ended or did not settle within `settleMs`.
+   */
+  private async inScope(pid: number, unit: string): Promise<ProcessIdentity | undefined> {
+    const deadline = Date.now() + this.options.settleMs
+    for (;;) {
+      const identity = await this.options.table.identify(pid)
+      if (identity === undefined) return undefined
+      if (identity.unit === unit && basename(identity.exe) !== 'systemd-run') return identity
+      if (Date.now() >= deadline) return undefined
+      await new Promise(resolve => setTimeout(resolve, SCOPE_SETTLE_POLL_MS))
+    }
   }
 
   /**
