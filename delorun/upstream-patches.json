@@ -2857,6 +2857,24 @@
       "class": "delorun-feature",
       "feature": "real-browser",
       "reason": "Declares, types only, the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events of a chat's grant to use the person's own browser (lead decision L45: upstream's catalog scans only `packages/`). `@delorun/browser-use-browse` appends and folds them; no runtime code."
+    },
+    {
+      "path": "packages/subagent/subagent/src/activation.ts",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "Adds `turnStart` to the external Activation: the creator's open turn when the run started, so a stopped turn can end the runs it started."
+    },
+    {
+      "path": "packages/subagent/subagent/src/archive-admission.ts",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "Lists external runs beneath an archived Session as subagent activity and stops them with it; local-child handling is unchanged."
+    },
+    {
+      "path": "packages/subagent/subagent/src/manager.ts",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "Ends an external run when the creator's turn is cancelled by a user, hook or ancestor (not disposal), and exposes a Session's live external runs to archive admission. Local children are untouched."
     }
   ],
   "retired": []
