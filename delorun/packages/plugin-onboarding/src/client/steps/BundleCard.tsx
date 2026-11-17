@@ -47,7 +47,7 @@ interface AddableProps {
  * @returns the card.
  */
 export function AddableCard({ services, state, title, icon, description, onAdd, children }: AddableProps): ReactNode {
-  const { t, bundles, remote } = services
+  const { t } = services
   let action: ReactNode
   let line: ReactNode
   switch (state) {
@@ -55,7 +55,6 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
       line = <StateLine tone="loading">{t('bundle.checking')}</StateLine>
       break
     case 'available':
-      if (remote) { line = <StateLine tone="info">{t('bundle.atComputer')}</StateLine>; break }
       action = <Button variant="outline" size="sm" aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
       break
     case 'installing':
@@ -69,10 +68,9 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
       line = <StateLine tone="info">{t('bundle.restart')}</StateLine>
       break
     case 'unavailable':
-      line = <StateLine tone="warning" action={{ label: t('bundle.open'), onClick: () => { bundles.openPlugins() } }}>{t('bundle.unavailable')}</StateLine>
+      line = <StateLine tone="warning">{t('bundle.unavailable')}</StateLine>
       break
     case 'failed':
-      if (remote) { line = <StateLine tone="info">{t('bundle.atComputer')}</StateLine>; break }
       line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{t('bundle.failed')}</StateLine>
       break
     /* v8 ignore next 2 -- closed-union default only defends future widening of BundleState */

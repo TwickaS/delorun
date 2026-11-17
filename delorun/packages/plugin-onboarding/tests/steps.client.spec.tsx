@@ -284,7 +284,7 @@ describe('the agents step', () => {
     expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
     expect(within(codexCard).getByText(en['agents.codex.risk'])).toBeTruthy()
     // Only Claude Code recommends a home connection.
-    expect(en['agents.claude.risk']).toContain('home internet connection, not a VPN, proxy or cloud server')
+    expect(en['agents.claude.risk']).toContain('A home internet connection works best; avoid VPNs, proxies and cloud servers.')
     expect(within(codexCard).queryByText(/home internet/)).toBeNull()
     for (const card of [claudeCard, codexCard]) {
       expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.advanced']])
@@ -404,7 +404,7 @@ describe('the agents step', () => {
     ['is being added', 'installing', en['bundle.adding']],
     ['is added', 'installed', en['bundle.added']],
     ['is added but waits for a restart', 'restart', en['bundle.restart']],
-    ['is not included in the installation', 'unavailable', en['bundle.unavailable']],
+    ['cannot run on this kind of computer', 'unavailable', en['bundle.unavailable']],
     ['could not be added', 'failed', en['bundle.failed']],
   ])('shows the state of a bundle that %s and no Add button', (_, state, text) => {
     const [claude] = AGENT_BUNDLES
@@ -414,7 +414,7 @@ describe('the agents step', () => {
     expect(screen.queryByRole('button', { name: /^Add/ })).toBeNull()
   })
 
-  it('shows a bundle the installation does not include as a normal state with a way to Plugins, never as an error', async () => {
+  it('shows a bundle this kind of computer cannot run as a normal state, never as an error or a missing download', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
@@ -424,10 +424,8 @@ describe('the agents step', () => {
     expect(screen.queryByText(en['agents.claude.signIn.found'])).toBeNull()
     expect(screen.queryByText(en['agents.signIn.checking'])).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
-    const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
-    expect(opens).toHaveLength(2)
-    await click(opens[0] as HTMLElement)
-    expect(fake.openPlugins).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Open Plugins' })).toBeNull()
+    expect(fake.openPlugins).not.toHaveBeenCalled()
   })
 
   it('shows a bundle that failed to be added as an error under the card with a retry', async () => {

@@ -350,10 +350,9 @@ describe('local model servers', () => {
     expect(screen.getByText(en['local.failed'])).toBeTruthy()
   })
 
-  it('leaves the write to the computer on a phone', async () => {
+  it('offers Add on a phone too; the studio asks for the unlock', async () => {
     await mountLocal([OLLAMA], true)
-    expect(screen.getByText(en['bundle.atComputer'])).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add Ollama' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add Ollama' })).toBeTruthy()
   })
 
   it('offers nothing when no server answered', async () => {

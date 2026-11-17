@@ -101,10 +101,10 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
   }
 
   return (
-    <div className={css.stack}>
+    <div className={`${css.stack} ${pinCss.root}`}>
       <p className={css.lead}>{t('pin.lead')}</p>
-      <p className={css.hint}>{t('pin.here')}</p>
-      <div aria-live="polite">
+      <p className={`${css.hint} ${pinCss.note}`}>{t('pin.here')}</p>
+      <div className={pinCss.live} aria-live="polite">
         {reading.kind === 'loading' && <p className={css.status}>{t('pin.reading')}</p>}
         {reading.kind === 'failed' && <StateLine tone="error" action={{ label: t('pin.retry'), onClick: () => { setReading({ kind: 'loading' }); void read() } }}>{reading.text}</StateLine>}
         {reading.kind === 'ready' && mode === undefined && <p className={css.status} data-tone="attention">{t('pin.unavailable')}</p>}
@@ -119,10 +119,7 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
         <form className={pinCss.form} onSubmit={onSubmit} noValidate>
           <SecretPair label={t('pin.label')} confirmLabel={t('pin.confirm')} help={t('pin.help')} error={problem}
             secret={secret} again={again} disabled={busy} onSecret={setSecret} onAgain={setAgain} />
-          <div className={pinCss.actions}>
-            <Button type="submit" variant="primary" size="sm" disabled={busy || secret === '' || again === ''}>{busy ? t('pin.setting') : t('pin.set')}</Button>
-            <span className={css.hint}>{t('pin.skipNote')}</span>
-          </div>
+          <p className={`${css.hint} ${pinCss.note}`}>{t('pin.skipNote')}</p>
         </form>
       )}
     </div>

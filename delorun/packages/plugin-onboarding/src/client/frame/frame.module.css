@@ -100,6 +100,7 @@
 }
 
 .skip {
+  padding-left: 0;
   color: var(--dsw-alias-label-secondary);
 }
 

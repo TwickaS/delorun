@@ -16,7 +16,7 @@ export interface FooterAction {
   /** Whether it cannot be pressed now. */
   readonly disabled?: boolean
   /** A token that moves focus to the button each time it changes to a value; the button persists between screens, so mounting alone is not a signal. */
-  readonly focus?: string
+  readonly focus?: string | undefined
 }
 
 /** The props of the footer. */

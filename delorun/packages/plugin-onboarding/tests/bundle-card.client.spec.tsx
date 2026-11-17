@@ -15,18 +15,11 @@ const draw = (state: BundleState, remote: boolean) => {
 }
 
 describe('an addable card on a phone', () => {
-  it.each(['available', 'failed'] as const)('says to add it at the computer instead of offering %s', (state) => {
-    draw(state, true)
-    expect(screen.getByText(en['bundle.atComputer'])).toBeTruthy()
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-
-  it('offers Add and Retry on the computer', () => {
-    draw('available', false)
+  it('offers Add and Retry as on the computer, with no add-at-the-computer line', () => {
+    draw('available', true)
     expect(screen.getByRole('button', { name: /Pi/ })).toBeTruthy()
-    expect(screen.queryByText(en['bundle.atComputer'])).toBeNull()
     cleanup()
-    draw('failed', false)
+    draw('failed', true)
     expect(screen.getByRole('button', { name: en['bundle.retry'] })).toBeTruthy()
   })
 

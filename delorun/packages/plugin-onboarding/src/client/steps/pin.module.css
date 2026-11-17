@@ -7,15 +7,16 @@
   min-width: 0;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--onb-gap-2);
+.root {
+  gap: var(--onb-gap-1);
 }
 
-.actions button {
-  min-height: var(--onb-target);
+.note {
+  margin: 0;
+}
+
+.live:empty {
+  display: none;
 }
 
 .on {

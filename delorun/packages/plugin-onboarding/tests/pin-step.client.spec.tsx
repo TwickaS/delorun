@@ -29,7 +29,8 @@ function home(mode: unknown, set: () => Response = () => json({ enabled: true })
 
 const settle = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }) }
 const type = (label: string, value: string) => { fireEvent.change(screen.getByLabelText(label), { target: { value } }) }
-const submit = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['pin.set'] })) }); await settle() }
+// There is no Set PIN button: Enter in a field submits, and Continue runs the same step through the guide's gate.
+const submit = async () => { await act(async () => { fireEvent.submit(screen.getByLabelText(en['pin.label']).closest('form') as HTMLFormElement) }); await settle() }
 const mount = async (h: ReturnType<typeof home>) => {
   const guide = createGuide(hostFake().host)
   render(<PinStep services={h.services} guide={guide} />)
@@ -132,6 +133,13 @@ describe('the PIN step', () => {
     await act(async () => { open = await guide.passGates() })
     expect(open).toBe(true)
     expect(h.calls.filter(call => call.path.endsWith('/auth/pin/set'))).toHaveLength(1)
+  })
+
+  it('has no separate Set PIN button, and the note says Continue sets it', async () => {
+    await mount(home(OFF))
+    expect(screen.queryByRole('button', { name: /set pin/i })).toBeNull()
+    expect(screen.getByText(en['pin.skipNote'])).toBeTruthy()
+    expect(en['pin.skipNote']).toContain('Continue sets the PIN')
   })
 
   it('reads a failed read as an in-place error with a retry', async () => {

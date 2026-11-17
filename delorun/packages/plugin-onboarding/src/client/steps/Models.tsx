@@ -214,7 +214,7 @@ const LOCAL_NAMES: Readonly<Record<LocalServer['kind'], string>> = { 'ollama': '
  * @returns the offers, or nothing when no server was found.
  */
 function LocalServers({ services, taken }: { readonly services: StepServices; readonly taken: ReadonlySet<string> }): ReactNode {
-  const { t, host, providers, remote } = services
+  const { t, host, providers } = services
   const [servers, setServers] = useState<readonly LocalServer[]>([])
   const [asking, setAsking] = useState<string | undefined>()
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
@@ -238,10 +238,9 @@ function LocalServers({ services, taken }: { readonly services: StepServices; re
         <li key={server.kind}>
           <Card title={LOCAL_NAMES[server.kind]} labels={{ more: t('more'), less: t('less') }}
             action={added.has(server.kind) ? <span className={shared.added}><span aria-hidden="true">✓ </span>{t('bundle.added')}</span>
-              : remote || asking === server.kind ? undefined
+              : asking === server.kind ? undefined
                 : <Button variant="outline" size="sm" aria-label={t('local.addNamed', { name: LOCAL_NAMES[server.kind] })} onClick={() => { setAsking(server.kind) }}>{t('bundle.add')}</Button>}>
             <StateLine tone="success">{t('local.found', { n: String(server.models.length), address: server.baseURL })}</StateLine>
-            {remote && !added.has(server.kind) && <StateLine tone="info">{t('bundle.atComputer')}</StateLine>}
             {asking === server.kind && (
               <div className={shared.stack}>
                 <p className={shared.hint}>{t('local.confirm', { name: LOCAL_NAMES[server.kind], address: server.baseURL })}</p>
