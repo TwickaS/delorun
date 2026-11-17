@@ -455,7 +455,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('starts the browser server in a Session its refusal left without tools only once the consent accepts it', async () => {
-    const { ctx, root } = await load(false, undefined, undefined, undefined, true)
+    const { ctx, root } = await load({ consent: true })
     const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
     const created = await ctx.agents.create({ sessionId: SessionId('refused-then-accepted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
     await warm(ctx, created.agent)
