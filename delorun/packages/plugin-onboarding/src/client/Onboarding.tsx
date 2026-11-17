@@ -1,8 +1,8 @@
 /**
  * The onboarding dialog in upstream's `settings.onboarding` seat: a modal over the studio with the step's name and
- * progress pinned at its top, the current step scrolling beneath with Finish later beside it, and Skip, Back and Continue pinned under it. It shows on a
+ * progress pinned at its top, the current step scrolling beneath with Complete setup later beside it, and Skip step, Back and Continue pinned under it. It shows on a
  * profile that has not finished onboarding, or whenever Settings opens it explicitly, and finishing is kept
- * on the profile. Skip leaves one step and goes on; Finish later, which Escape also does, closes the guide and keeps the place, and the Finish setup chip near the message box brings it back for the rest of the visit. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
+ * on the profile. Skip step leaves one step and goes on; Complete setup later, which Escape also does, closes the guide and keeps the place, and the Finish setup chip near the message box brings it back for the rest of the visit. Starting the first chat from Ready also completes upstream's DeepSeek key step, since Welcome offered
  * the Models section; skipping leaves that step to show. The dialog owns the page's inert root while it shows, as
  * upstream's steps do.
  */
@@ -41,7 +41,7 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   const decided = snapshot.status !== 'loading'
   // A finished profile, or one whose progress cannot be read, lets upstream's flow go on at once.
   useEffect(() => { if (decided && !show) complete() }, [decided, show, complete])
-  // "Finish later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
+  // "Complete setup later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
   const later = useSyncExternalStore(aside.subscribe, aside.getSnapshot)
   const leave = useCallback((): void => { aside.set(true); deferredOnly.set(false); complete() }, [aside, deferredOnly, complete])
   return show && !later ? <Dialog {...props} settings={settings} explicit={explicit} later={leave} /> : null

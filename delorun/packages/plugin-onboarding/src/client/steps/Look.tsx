@@ -61,7 +61,7 @@ export function LookStep({ services, guide, next }: StepProps & { readonly next:
     dark: { ...PALETTE_PREVIEWS.soft.dark, accent: view.accent === 'custom' ? customColour : ACCENT_PREVIEWS[view.accent].dark },
   }
   return (
-    <div className={css.stack}>
+    <div className={`${css.stack} ${css.lookFill}`}>
       <p className={css.lead}>{t('look.lead')}</p>
       <LookChooser
         modeLabel={appearance('mode')} themeLabel={appearance('palette')} disabled={disabled}
@@ -84,7 +84,7 @@ export function LookStep({ services, guide, next }: StepProps & { readonly next:
           isColour: text => HEX.test(text),
         }} />
       {failed && <p className={css.failure} role="alert">{t('saveFailed')}</p>}
-      <StockLookLink services={services} guide={guide} disabled={false} />
+      <div className={css.closing}><StockLookLink services={services} guide={guide} disabled={false} /></div>
     </div>
   )
 }

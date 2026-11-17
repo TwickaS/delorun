@@ -178,7 +178,7 @@ export function apply(ctx: Context, config: Config): void {
     admitPeer: admitApprovedDevice(),
     fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale()))),
   })
-  // Named once per start, so "Finish later" holds until Delorun next starts and not longer.
+  // Named once per start, so "Complete setup later" holds until Delorun next starts and not longer.
   const startId = randomUUID()
   ctx.connection.fetch.register({
     path: START_PATH,

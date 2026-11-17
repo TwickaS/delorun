@@ -536,3 +536,17 @@
 .stockLink {
   padding-inline: 0;
 }
+
+/* A closing line that sits at the bottom of a step that has room to spare. */
+.closing {
+  margin-top: auto;
+}
+
+/* The Look step: the eight themes as two full rows of four, with their pictures drawn larger. */
+.lookFill {
+  --delorun-tile-min: 136px;
+}
+
+.lookFill [role='radio']:has(> [aria-hidden='true']) > [aria-hidden='true'] {
+  zoom: 1.3;
+}

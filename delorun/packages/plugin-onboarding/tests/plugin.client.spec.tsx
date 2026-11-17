@@ -146,7 +146,7 @@ describe('the registrations', () => {
     expect([...entries.keys()]).toEqual([RENAME_KEY])
   })
 
-  describe('Finish later is kept in the home until Delorun next starts', () => {
+  describe('Complete setup later is kept in the home until Delorun next starts', () => {
     const answerStart = (startId: string): void => {
       vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ startId }), { status: 200 })))
     }
@@ -627,7 +627,7 @@ describe('Show again', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
     expect(progress.value()).toMatchObject({ done: false, step: 'providers' })
     expect(complete).not.toHaveBeenCalled()
-    // Finish later closes the guide and keeps the place.
+    // Complete setup later closes the guide and keeps the place.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.later })) })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(progress.value()).toMatchObject({ done: false, step: 'providers' })

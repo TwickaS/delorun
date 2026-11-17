@@ -11,6 +11,7 @@ import type { CloneProblem } from '../../wire.ts'
 import { Card } from '../ui/Card.tsx'
 import { ChipGroup } from '@delorun/brand'
 import { StateLine } from '../ui/StateLine.tsx'
+import { Explain } from '../ui/Explain.tsx'
 import { FolderChooser, problemText, type FolderProblem } from '../FolderChooser.tsx'
 import type { CloneView, Store, WorkspaceMode } from '../guide.ts'
 import type { StepProps } from './shared.ts'
@@ -24,6 +25,9 @@ import css from './steps.module.css'
 function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(useCallback(listener => store.subscribe(listener), [store]), () => store.getSnapshot())
 }
+
+/** The kinds of folder the default workspace's explanation gives as examples. */
+const WORKSPACE_KINDS = ['code', 'files', 'empty'] as const
 
 /** The location problems a clone shares with adding a folder; the rest have their own copy. */
 const CLONE_ONLY: ReadonlySet<CloneProblem> = new Set(['url-form', 'url-credentials', 'name-form', 'not-empty', 'busy'])
@@ -260,6 +264,7 @@ export function WorkspaceStep({ services, guide, target, keepCurrent }: StepProp
       {shown === 'default' && target.kind === 'default' && (
         <>
           <FolderCard path={target.path} name={t('workspace.default')} note={t('workspace.default.note')} t={t} />
+          <Explain heading={t('workspace.about')} cards={WORKSPACE_KINDS.map(kind => ({ key: kind, title: t(`workspace.about.${kind}.title`), text: t(`workspace.about.${kind}.text`), sample: t(`workspace.about.${kind}.sample`) }))} />
           {keepCurrent && workspace === undefined && (
             <>
               <p className={css.hint}>{t('workspace.keep')}</p>

@@ -187,7 +187,7 @@ describe('the first run', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('treats Escape as Finish later: the place is kept and the guide sets aside for this visit', async () => {
+  it('treats Escape as Complete setup later: the place is kept and the guide sets aside for this visit', async () => {
     const { progress, complete } = await mountEntry({ notice: noticeFace() })
     await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -195,7 +195,7 @@ describe('the first run', () => {
     expect(complete).toHaveBeenCalled()
   })
 
-  it('acknowledges the owed preview notice on Finish later, so the separate notice step does not show it again', async () => {
+  it('acknowledges the owed preview notice on Complete setup later, so the separate notice step does not show it again', async () => {
     const notice = noticeFace()
     await mountEntry({ notice })
     await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
@@ -259,7 +259,7 @@ describe('the first run', () => {
       expect(useStockLook).toHaveBeenCalledOnce()
     })
 
-    it('does not apply it on Finish later, and says nothing about it on Ready when it was not chosen', async () => {
+    it('does not apply it on Complete setup later, and says nothing about it on Ready when it was not chosen', async () => {
       const useStockLook = vi.fn(() => Promise.resolve(true))
       await mountEntry({ useStockLook })
       await openScreen()
@@ -477,7 +477,7 @@ describe('closing the dialog', () => {
     return box
   }
 
-  it('puts focus in the message box after Finish later, instead of leaving it on the page body', async () => {
+  it('puts focus in the message box after Complete setup later, instead of leaving it on the page body', async () => {
     const box = composer()
     await mountEntry()
     expect((document.getElementById('root') as HTMLElement).inert).toBe(true)
@@ -520,7 +520,7 @@ describe('Skip', () => {
 })
 
 describe('finishing later and the last step', () => {
-  it('sets the guide aside for the visit on Finish later, for the Finish setup chip to bring back', async () => {
+  it('sets the guide aside for the visit on Complete setup later, for the Finish setup chip to bring back', async () => {
     const { aside, progress } = await mountEntry()
     expect(aside.getSnapshot()).toBe(false)
     await click(button(en.later))
@@ -531,7 +531,7 @@ describe('finishing later and the last step', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('offers no Finish later on Ready', async () => {
+  it('offers no Complete setup later on Ready', async () => {
     await mountEntry({ start: startFace({ kind: 'other' }) })
     expect(screen.getByRole('button', { name: en.later })).toBeTruthy()
     await forward(5)
@@ -641,7 +641,7 @@ describe('at the computer, opened from the Finish setup entry', () => {
     expect(titles()).toEqual([en['step.pin']])
   })
 
-  it('offers Finish later on its only step, since Skip has nothing after it', async () => {
+  it('offers Complete setup later on its only step, since Skip has nothing after it', async () => {
     const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
     await click(button(en.later))
     expect(view.aside.getSnapshot()).toBe(true)

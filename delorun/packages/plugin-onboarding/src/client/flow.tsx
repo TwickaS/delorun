@@ -32,7 +32,7 @@ export interface FlowStep {
    * @returns the body.
    */
   readonly render: (next: () => void, back: () => void) => ReactNode
-  /** Skip's label where "Skip" does not say what happens; absent means "Skip". */
+  /** Skip's label where "Skip step" does not say what happens; absent means "Skip step". */
   readonly skipLabel?: () => string
   /** Continue's label where "Continue" does not say what happens; absent means "Continue". */
   readonly continueLabel?: () => string

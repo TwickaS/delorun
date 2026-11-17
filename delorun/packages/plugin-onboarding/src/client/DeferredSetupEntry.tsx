@@ -1,5 +1,6 @@
 /**
- * The quiet "Finish setup" entry at the sidebar's foot on the computer, the way back into the guide. While the guide is
+ * The "Finish setup" entry at the sidebar's foot on the computer, the way back into the guide. Wide, it is a labelled
+ * line of its own above the foot's icon buttons; on the rail it is an icon with a count and a tooltip. While the guide is
  * unfinished it reads "Finish setup" and reopens it at the saved step. Once the guide is finished it counts the steps a
  * phone deferred to this computer ("Finish setup · N left"), opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
  * done (phone access is on, a PIN is set) is cleared when the entry reads, so it never counts a finished step.
@@ -88,7 +89,7 @@ export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atCompute
   }, [deferredOnly, open, unfinished])
   if (!computer || (!unfinished && waiting.length === 0)) return null
   const label = waiting.length === 0 ? t('finishSetup') : t('deferred.entry', { n: String(waiting.length) })
-  const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} onClick={start}>
+  const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} data-sidebar-foot-line={wide ? '' : undefined} onClick={start}>
     <IconChecklistOutlineRegular aria-hidden="true" />
     {wide ? <span className={css.text}>{label}</span> : <span className={css.count}>{waiting.length}</span>}
   </button>

@@ -965,18 +965,25 @@
   flex: none;
 }
 
-/* A foot too narrow for one row (a phone drawer with 44px buttons) wraps the actions onto a second row that they end. */
+/* The inline actions are items of the row itself: the spacer pushes the icon buttons to its end, a labelled entry
+ * (`data-sidebar-foot-line`) takes its own line above the icons, and a foot too narrow for one row (a phone drawer with
+ * 44px buttons) wraps the icons onto another line. */
 .footRow:has(> .footerActionsInline) {
   flex-wrap: wrap;
 }
 
 .footerActionsInline {
-  display: flex;
-  flex: 1 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
+  display: contents;
+}
+
+.footSpacer {
+  flex: 1 1 0;
   min-width: 0;
+}
+
+.footRow [data-sidebar-foot-line] {
+  flex: 1 0 100%;
+  order: -1;
 }
 
 .footPanels {

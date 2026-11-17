@@ -88,9 +88,18 @@ describe('the Finish setup entry', () => {
     expect(face.open).toHaveBeenCalledOnce()
   })
 
+  it('is a labelled line of its own above the foot\'s icon buttons when the sidebar is wide', async () => {
+    await mount(services({ done: false }))
+    const entry = screen.getByRole('button', { name: en.finishSetup })
+    expect(entry.textContent).toBe(en.finishSetup)
+    expect(entry.hasAttribute('data-sidebar-foot-line')).toBe(true)
+  })
+
   it('is a counted dot in the narrow rail', async () => {
     await mount(services({ deferred: ['pin'] }), false)
-    expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') }).textContent).toBe('1')
+    const entry = screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })
+    expect(entry.textContent).toBe('1')
+    expect(entry.hasAttribute('data-sidebar-foot-line')).toBe(false)
   })
 
   it('is absent at zero, once the work is done and away from the computer', async () => {

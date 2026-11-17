@@ -359,7 +359,7 @@ export function applyStudio(ctx: Context): void {
     }
   }
 
-  // "Finish later" is kept in the home as the id of the start it was pressed in, so a reload or another tab keeps the
+  // "Complete setup later" is kept in the home as the id of the start it was pressed in, so a reload or another tab keeps the
   // guide closed and the next start of Delorun shows it again. Where the start id cannot be read, as on a phone, the
   // flag lasts only until the page reloads.
   const laterBase = createSnapshotStore(false)

@@ -194,14 +194,24 @@ describe('the look step', () => {
 })
 
 describe('the welcome step', () => {
-  it('lists the languages as chips and switches the interface language when one is chosen', async () => {
+  it('lists the languages as large tiles, each named in its own language, and switches the interface language when one is chosen', async () => {
     const { face, setLocale } = languageFace()
     render(<WelcomeStep services={stepServices({ language: face })} guide={guideOf()} notice={undefined} />)
     const group = screen.getByRole('radiogroup', { name: en['welcome.language'] })
-    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['English', 'true'], ['中文', 'false']])
-    await click(radio('中文'))
+    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([
+      [`English${en['welcome.language.own']}`, 'true'], [`中文${zh['welcome.language.own']}`, 'false'],
+    ])
+    await click(radio(zh['welcome.language.own']))
     expect(setLocale).toHaveBeenCalledWith('zh')
-    expect(radio('中文').getAttribute('aria-checked')).toBe('true')
+    expect(radio(zh['welcome.language.own']).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('draws the studio in miniature in the active language', () => {
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
+    const picture = screen.getByRole('img', { name: en['welcome.preview'] })
+    for (const key of ['welcome.preview.newChat', 'welcome.preview.today', 'welcome.preview.chat.1', 'look.preview.answer', 'look.preview.box'] as const) {
+      expect(within(picture).getByText(en[key])).toBeTruthy()
+    }
   })
 
   it('shows the preview notice\'s title and paragraphs while it is owed, and nothing of it otherwise', () => {
@@ -634,7 +644,17 @@ describe('the recommended plugins step', () => {
 
 describe('the phone access step', () => {
   const reachWith = (tailscale: TailscaleReadiness | undefined) => hostFake({ readiness: tailscale === undefined ? undefined : { ...READY, tailscale } }).host
-  const states = () => screen.getAllByRole('listitem').map(each => each.getAttribute('data-state'))
+  const checks = () => screen.queryAllByRole('listitem').filter(each => each.hasAttribute('data-state'))
+  const states = () => checks().map(each => each.getAttribute('data-state'))
+
+  it('says how phone access is set up, in three numbered steps, and what a phone can do once it is in', () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith(undefined))} />)
+    const how = screen.getByRole('region', { name: en['reach.how'] })
+    expect(within(how).getByRole('list').tagName).toBe('OL')
+    expect(within(how).getAllByRole('listitem').map(each => each.textContent)).toEqual([1, 2, 3].map(n => `${String(n)}${en[`reach.how.${String(n)}.title` as 'reach.how.1.title']}${en[`reach.how.${String(n)}.text` as 'reach.how.1.text']}`))
+    const uses = screen.getByRole('region', { name: en['reach.uses'] })
+    expect(within(uses).getAllByRole('listitem').map(each => each.textContent)).toEqual([1, 2, 3].map(n => `${en[`reach.uses.${String(n)}.title` as 'reach.uses.1.title']}${en[`reach.uses.${String(n)}.text` as 'reach.uses.1.text']}`))
+  })
 
   it.each<readonly [TailscaleReadiness['state'], readonly string[], string | undefined]>([
     ['not-installed', ['todo', 'waiting', 'waiting', 'waiting'], undefined],
@@ -682,7 +702,7 @@ describe('the phone access step', () => {
     render(<ReachStep services={stepServices()} guide={guideOf(reachWith(tailscale))} />)
     await settle()
     expect(screen.getByText(en['reach.unread'])).toBeTruthy()
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    expect(checks()).toHaveLength(0)
     expect(screen.getByText(REACH_COMMAND).tagName).toBe('CODE')
     expect(screen.getByText(APPROVE_COMMAND).tagName).toBe('CODE')
   })
@@ -855,7 +875,7 @@ describe('what the guide shows after the audit', () => {
     const store = createSnapshotStore(locales)
     const face = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, setLocale: vi.fn() }
     render(<WelcomeStep services={stepServices({ language: face })} guide={guideOf()} notice={undefined} />)
-    expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual(['English', '中文'])
+    expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual([`English${en['welcome.language.own']}`, `中文${zh['welcome.language.own']}`])
   })
 
   it('shortens a long path in the middle and keeps its start and end', () => {

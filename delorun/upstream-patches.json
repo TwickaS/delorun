@@ -942,19 +942,19 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off. The peek draws its edge with the level-two shadow only, without a separate border. On the rail the footer actions stack in one column of 36px icon buttons, and the foot panel icons are 44px on phone widths and coarse pointers. A foot too narrow for one row wraps its actions onto a second row."
+      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off. The peek draws its edge with the level-two shadow only, without a separate border. On the rail the footer actions stack in one column of 36px icon buttons, and the foot panel icons are 44px on phone widths and coarse pointers. A foot too narrow for one row wraps its actions onto a second row. In the one-row foot the footer actions are items of the row itself: a spacer pushes the icon buttons to its end, and an entry marked `data-sidebar-foot-line` takes its own full-width line above them."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot, the backdrop slot and the brand badge slot under the logo row. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state. The dwell and whether the peek opens at all come from the hoverPeek hook, so the Collapsed sidebar settings (sidebar-peek-setting) apply live."
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot, the backdrop slot and the brand badge slot under the logo row. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state. The dwell and whether the peek opens at all come from the hoverPeek hook, so the Collapsed sidebar settings (sidebar-peek-setting) apply live. The one-row foot puts a spacer before the footer actions."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the sidebar.backdrop and sidebar.brand.badge slots and the sidebarLayout placement, lead panel, New Session button, foot row and hover peek hooks."
+      "reason": "Declares the sidebar.backdrop and sidebar.brand.badge slots and the sidebarLayout placement, lead panel, New Session button, foot row and hover peek hooks. Documents the `data-sidebar-foot-line` attribute an inline footer action sets to take its own line."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/index.ts",

@@ -239,6 +239,8 @@ describe('sidebar global panels', () => {
     const row = layout.setFootRow(true)
     await waitFor(() => { expect(probe().dataset.inline).toBe('true') })
     expect(probe().closest('[class*="footRow"]')).not.toBeNull()
+    // A spacer before the actions pushes the icon buttons to the row's end.
+    expect(probe().closest('[class*="footerActionsInline"]')?.previousElementSibling?.className).toMatch(/footSpacer/u)
     row()
     row()
     await waitFor(() => { expect(probe().dataset.inline).toBe('false') })

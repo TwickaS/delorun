@@ -116,7 +116,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
         </div>
       )}
       {stock && <p className={css.hint} role="status">{t('ready.stock')}</p>}
-      <p className={css.hint}>{t('start.later')}</p>
+      <p className={`${css.hint} ${css.closing}`}>{t('start.later')}</p>
     </div>
   )
 }
