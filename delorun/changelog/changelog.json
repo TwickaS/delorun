@@ -182,8 +182,23 @@
     },
     {
       "area": "Install and update",
+      "section": "Added",
+      "text": "The first-run guide has an optional PIN step after Phone access. At your computer, once phone access is on, choose a PIN or passcode so a paired phone unlocks sensitive actions, such as adding plugins or approving full access, by typing it instead of a code from your computer. Skip leaves PIN mode off, and Settings keeps every control."
+    },
+    {
+      "area": "Install and update",
       "section": "Changed",
       "text": "`delorun update --report` and `delorun update` show, under a plugin the update turns off because its DeepSeek Harness version range excludes the new release, the command that accepts the risk for that exact version and say that the health check after the switch rolls the update back if the plugin then fails to load. A new guide page, \"Update Delorun with many plugins\", walks through saving, checking, updating and going back."
+    },
+    {
+      "area": "Install and update",
+      "section": "Changed",
+      "text": "The launcher names the version it is installing when it refuses native Windows or macOS, and the install guide's sample output shows a preview version."
+    },
+    {
+      "area": "Install and update",
+      "section": "Fixed",
+      "text": "`delorun recover restore` and `rollback` no longer say \"Your rows and settings are unchanged\" when the restore changed your profile's `cordis.patch.yml`. They say whether your rows and settings now match that version or already did, and say nothing when the file could not be read."
     },
     {
       "area": "Install and update",
@@ -479,6 +494,106 @@
       "area": "Setup",
       "section": "Changed",
       "text": "An answers document may carry `\"useCase\": \"local\" | \"remote\" | \"automation\"`; without it, `local` is used."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Each agent on the setup step (Claude Code and Codex) now says how a chat uses it, carries a use-at-your-own-risk warning, and adds with one press and no second confirmation. Claude Code also recommends running it from your home internet connection, not a VPN, proxy or cloud server. Delorun still asks at your computer the first time a chat hands an agent a task in a workspace."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Each agent card now has Advanced options, closed by default, with the model and the time limit per task. A new guide page, [Hand work to Claude Code or Codex](https://docs.delorun.com/guide/agents), explains how a chat uses an agent."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Each card shows how much adding the agent downloads. When the agent is not signed in, the card shows `delorun agents login claude-code` or `delorun agents login codex` with a Copy button; the command runs the agent's own sign-in, so you need no separately installed command."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The model choice lists the models an added agent reports, with the agent's own default first. Before the agent is added, only the default shows."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "When setup finds a key you already have for a model provider, it now says where the key came from (for example the name of the environment variable), explains how Delorun knows, and shows no key box. Next uses the key; Replace key opens a box for a different one. The key itself is never shown."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "With a model key found, the Models step is one screen: the provider shows \"Connected · from <source>\" with Replace, other providers sit below, and Continue goes on."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The first chat opens with an empty message box. The starting prompts moved to the last setup step as \"Ideas to try\", each with a Copy button."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Provider and plugin lists are compact rows in one bordered list: a tick, the mark, the name and a two-line description."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Agents, plugins and providers without artwork show a tinted square with the first letter of their name, in a colour that stays the same for that name."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "\"Finish later\" keeps the setup guide closed until Delorun next starts, in every tab and after a reload; the Finish setup entry in the sidebar footer opens it again whenever you like."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The Claude Code explainer now says exactly what it may do: create, change, move and delete files in the workspace without asking; other commands and anything outside the workspace are refused. The PIN step says a paired phone asks for the PIN only before actions that need an unlock."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The guide's \"More\" and \"How does Delorun know?\" lists use the studio's chevron instead of the browser's triangle."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The Preview notice says \"Delorun has no DeepSeek account sign-in and no telemetry of its own\", without the phrase about a first release."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The end of `delorun setup` on Linux runs the sandbox check that `delorun doctor` has and prints the fix when the sandbox cannot run, such as `sudo apt install bubblewrap` on Debian or Ubuntu. The line that installs the `delorun` command also says what to do when npm refuses for lack of permission."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "The Preview notice and cards in the Welcome step now carry their styling. Two packages shipped a stylesheet with the same file name, and the second one was never applied."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "On a narrow screen, the sign-in command under an agent in the guide wraps onto a second line instead of being cut off at the card's edge."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "On a build run from source, the plugins step no longer says a plugin is \"Not available on this kind of computer\". It gives the Host's own reason, such as that Delorun is not running from an installed release, and keeps the computer wording for real platform limits."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "The recommended plugins step shows the plugins your profile already holds without waiting for the plugin packs list, which only the plugins you could download need."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "The Phone access step no longer says \"Phone access is ready\" when Tailscale is set up but remote access is still off. It says remote access is off and keeps the command that turns it on, and the final step says the same."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "Commands that ask a question, such as `delorun devices approve`, now stop with \"this needs you at a terminal to answer; run it in one\" when they run where nobody can answer (a script, or a tool's one-shot shell), instead of ending with a Node warning about an unsettled top-level await."
     },
     {
       "area": "Setup",
@@ -842,6 +957,11 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "A downloads panel shows the plugins being installed with their progress and place in the queue. On a computer it is a small card at the bottom right that stays visible over the setup guide, folds down to one line, and says \"5 plugins added\" for a few seconds when everything is in. On a phone the setup guide shows one quiet line above Back and Continue, and elsewhere a download icon with a count opens the list. A plugin that could not be installed stays listed until you try again or remove it."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
     },
@@ -967,8 +1087,78 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The Look step and Settings → Appearance share one smaller chooser: light, dark or system in a single row, themes as a compact grid of tiles that show their colours, and a short sample chat that follows the tile you point at. A theme brings its own accent, so the accent picker only appears when you choose Custom, where you set your own accent colour and contrast. Settings you saved with a theme and a changed accent open as Custom."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The Look step has one quiet link to a screen about the original DeepSeek Harness look. It lists what you would give up and what stays, and if you confirm, the guide carries on in Delorun's look and the switch happens when you finish. The last step says so."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "A paired phone or other device now sees and does what the computer's studio does. Settings that used to say \"do this at your computer\" now show their content, and an action that needs the unlock says so, states how many minutes the unlock lasts and has an Unlock button: saving or switching a setup version, allowing full access, allowing an external agent, and answering an MCP server. What stays on the computer says why: PIN mode, moving a setup file, and applying or undoing a change."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Setting up Delorun from a phone now says plainly which step only your computer can do and why. For a PIN, \"Do it on my computer\" keeps the step for you, and the studio on your computer shows a quiet \"Finish setup · N left\" in its sidebar that opens just those steps and goes away when none are left. That sidebar entry is the one way back into an unfinished guide; the chip above the message box is gone."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "With PIN mode on, a paired phone opens the studio without the PIN. The PIN is asked only when an action needs an unlock, and the question has Not now."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "On a phone the studio draws under the notch and home bar with safe margins, the browser bar takes the studio's colour in light and dark, and taps no longer flash a grey box."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Buttons inside Settings cards are 32 pixels tall on a computer, closer to the footer buttons, and filled and outlined buttons sink slightly while pressed."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "In Settings, the \"Other workspaces\" and details lists use the studio's chevron instead of the browser's triangle, and Create a plugin uses the studio's selector buttons and a section title that no longer outranks the page title."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "On a phone, Settings is a grouped list of sections. Tapping a section opens it full screen under a back arrow and its title."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The Settings pages \"Conversation\" and \"Chat\" are now \"Replies\" and \"Message box\"."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Settings → Network explains its risk once at the top and lists the workspaces as compact rows. Each change saves at once; a change that opens more of the network still asks first."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Settings → Devices shows its choices in one row on a phone; a long label wraps inside its segment."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The sidebar shows quiet placeholder rows while your chats load, instead of flashing \"No chats yet\"."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The studio's tab icon is Delorun's on every page, including the sign-in page over Tailscale, and a plain icon file and `favicon.ico` replace a stale icon a browser kept from another app on the same address. The installed web app is named Delorun."
     },
     {
       "area": "Studio",
@@ -1061,6 +1251,16 @@
       "text": "The agent now knows that a file it writes to `/tmp` while a command runs in the sandbox does not persist: each sandboxed command can have its own `/tmp`, discarded when the command ends. Before, it could report a file in `/tmp` as saved when no later command could see it. The agent is told to keep files it needs under the workspace."
     },
     {
+      "area": "Chats and workspaces",
+      "section": "Fixed",
+      "text": "The chat's activity reading says \"1 turn 1 step\", not \"1 turns 1 steps\", in every language, and Settings calls the external agent limit \"Time limit per task, in minutes\", as the guide does."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Fixed",
+      "text": "On a phone, the workspace and mode chips under \"What are we working on?\" wrap onto a second line instead of clipping the mode chip, and a long workspace name ends in an ellipsis."
+    },
+    {
       "area": "Safety and privacy",
       "section": "Added",
       "text": "On Linux, a sandboxed command on a workspace with the Open network is now refused while a program on your computer listens on an abstract socket, such as the display server or the session bus. The sandbox cannot hide those sockets, so a command could have used them to act outside it. The refusal names the sockets and the fixes: set the workspace's network to Allowlist or Off, or switch on \"Run commands even when desktop sockets are reachable\" beside Open in Settings, Safety, Network. With that switch on the command runs, and the sandbox reports that it confines only in part. The check runs when a command starts, so a socket that starts listening later is not caught."
@@ -1114,6 +1314,11 @@
       "area": "Safety and privacy",
       "section": "Added",
       "text": "A Privacy page in Settings states that Delorun has no telemetry of its own and turns DeepSeek's session-log upload and desktop analytics on, after showing what each sends and where, or off again."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "When a command in a workspace with the Open network would be refused because a program on the computer listens on a shared socket, such as a running `docker` command, the chat asks you once whether to let commands run anyway in that workspace. Allowing records the same choice as the switch in Settings, Network; declining keeps the refusal and the chat does not ask again."
     },
     {
       "area": "Safety and privacy",
@@ -1567,6 +1772,36 @@
     },
     {
       "area": "Reach",
+      "section": "Changed",
+      "text": "A paired phone now does what the computer's studio does. Reading and tightening work without an unlock; changes that widen access (accepting an MCP server, allowing an agent into a workspace, a workspace's full access or network, saving or switching a setup version, deleting from the trash for good) work after an unlock, with a code from the computer or your PIN, whether or not dangerous mode is on. A locked phone is told to unlock first. Approving devices, setting the PIN, turning remote access on or off, and turning update checks off stay at the computer."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "A newly approved phone starts unlocked at its first sign-in, so setup runs without prompts. The unlock ends when setup finishes or after the unlock minutes (`approvalGraceMinutes` in the `delorun-home-auth` row; 15 by default, 0 turns it off), and never covers what stays at the computer."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "A phone lists the paired devices and can remove itself; removing another device stays at the computer."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "`delorun reach on tailscale` says what a phone can do without an unlock and what an unlocked phone adds (settings, plugins, terminals), and says that five wrong PIN tries remove the device and sign it out."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "The studio's unlock dialog says how many minutes an unlock lasts (the `elevationMinutes` setting, 15 by default) before you start one, and shows the end time once your computer approves it."
+    },
+    {
+      "area": "Reach",
+      "section": "Fixed",
+      "text": "A paired phone can no longer turn off the plugins that hold the unlock gate, remote access and the sandbox (`@delorun/home-auth`, `@delorun/reach`, `dsh-sandbox-local`, `dsh-sandbox-policy`). A PIN unlock and dangerous mode lifted that refusal before; now only the computer changes those rows."
+    },
+    {
+      "area": "Reach",
       "section": "Security",
       "text": "A device reads only the files whose real location lies inside its chat's workspace: a link inside the workspace that leads elsewhere, and Delorun's own folder, are refused."
     },
@@ -1604,6 +1839,71 @@
       "area": "Plugins",
       "section": "Added",
       "text": "The review of a plugin change warns when the plugin answers approval prompts itself, which can give grants you keep to your computer, and when it installs, removes, updates or loads plugins itself, outside the install check. Both are warnings to read, not blocks."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "Six optional features are plugins you can switch on in Plugins, all off until you do: Browser, Code intelligence, Claude Code and Codex hooks, Webhooks, External agents, and Computer use for Linux and Windows. Each says what it needs from you first, such as a language server, your own hook files or a webhook secret, and stays quietly off instead of failing when that is missing."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "Plugins that are not part of the default install, such as Claude Code, Codex and the six optional features, are signed packs you add when you want them. Turning one on downloads it once, checks it against the release's signed list and keeps it, so it works offline afterwards and updates together with Delorun. Several can download at once; a phone can look at the list and cancel an install, and adds a plugin after an unlock. An update carries the packs you added, and `delorun recover packs` checks them and fetches again any that changed."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "A plugin that needs something from your computer says so in Plugins. Its row reads \"Needs setup\" with the reason, such as \"Needs Chrome installed\", and the fix beside it: a command with a copy button, a link to the right setting, or a guide. It never blocks other plugins, and it clears by itself when you next open Plugins or return to the window after meeting the need."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "The Agents step now says \"A saved sign-in was found on this computer. If it has expired, the first task tells you how to sign in again.\" for Claude Code and Codex, because a sign-in file on disk cannot prove the sign-in still works."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "When Claude Code or Codex fails because it is not signed in or its sign-in has expired, the chat says so and names the command to run (`delorun agents login codex` or `delorun agents login claude-code`). The model is told not to retry until you have signed in again, so you are no longer asked to consent a second time."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "Undoing a plugin's install with `delorun changes undo` now says the plugin is stopped, not removed, and prints `delorun plugin remove <name>` to remove it fully."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "The External agents pack now starts with every row off. Plugins shows \"Needs setup\" with the reason, such as \"Needs codex installed\", while a row's program is missing, and the Codex, Claude Code, delegation and Python rows each name the program they need."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "A profile that adds an optional pack with rows that start off (code intelligence, webhooks, external agents) now starts; Delorun used to refuse it because those rows were disabled. A row a pack lists under Needs setup may start off."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "A plugin pack can now carry its own version of a third-party library when Delorun carries another. Delorun's own packages, the libraries that must exist once (React, Zod and the MCP SDK) and anything a pack names as a peer still have to match, so a pack built against a different copy is refused when the release is built."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "When a plugin folder you link holds more files than Delorun copies (50,000), the refusal now says what to do: remove its development packages with `npm prune --omit=dev` in that folder, or link a folder that holds only the built plugin, then start again."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "On a build run from source, which has no plugin packs, the Agents step shows Claude Code and Codex as not available here with the reason, instead of an Add button that stays on \"Adding…\"."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "A plugin folder you link, installed with npm, now starts when its development packages would have put the copy over the limit: Delorun copies only the installed packages the plugin loads when it runs (those its `package.json` lists under `dependencies`, `optionalDependencies` and `peerDependencies`, and theirs in turn). An installed development package the plugin does not need shows in the review as not included."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "`delorun plugin remove <name>` works again: it failed with \"Unknown option: 'ignore-scripts'\" because pnpm's `remove` does not take that option. The removal still resolves the lockfile with scripts switched off."
     },
     {
       "area": "Plugins",
@@ -1772,6 +2072,16 @@
     },
     {
       "area": "Commands",
+      "section": "Added",
+      "text": "`delorun setup export --out <file>` writes the plugins you added, your model choices and your settings as one signed file, with the files of the plugins you made yourself. It carries no key, chat, device or answer of setup. `delorun setup import <file>` shows who signed the file (or that nobody can be shown to have), lists everything it would add, replace, remove or take back to its default, asks, and then replaces your profile's model choices, your other settings and the plugins the file lists through the same plugin checks and code review as installing the plugins by hand. It saves your setup first, so one restore from Settings → Setup versions or `delorun recover restore` undoes the import. Settings → Setup versions has an Export setup and an Import setup button that do the same at your computer. An import asks you separately before requests and a provider's key go to an address that is not the provider's own."
+    },
+    {
+      "area": "Commands",
+      "section": "Added",
+      "text": "You choose what goes in and what comes out: `--no-settings` leaves your settings out of the file or alone on import, `--plugin <name>` puts in only the plugins you name, `--no-local-code` names your own plugins without their code, `--note` adds a note the importer reads, and `--remove-others` also removes the plugins the file does not list (by default an import touches only the plugins the file lists). The studio dialogs have the same choices as switches and a checklist."
+    },
+    {
+      "area": "Commands",
       "section": "Changed",
       "text": "The messages `delorun setup` prints, the studio's starter prompts and the chat refusals use British English, such as \"catalogue\", \"summarise\" and \"organise\", and a check keeps American spellings out of Delorun's own text."
     },
@@ -1852,6 +2162,26 @@
     },
     {
       "area": "Commands",
+      "section": "Changed",
+      "text": "The terminal output reads plainly. One sentence says Delorun isn't running, an unknown command gets a single line with the closest match, a source build says it doesn't update itself, `delorun devices approve` stops at once when remote access is off, and `delorun recover status` offers only the actions that can run."
+    },
+    {
+      "area": "Commands",
+      "section": "Changed",
+      "text": "Setup checks that the studio port is free and uses the next free one, saying which. Times read as `17 Nov 2026, 01:07`, and `delorun status` shows `source build` as the version of a source copy."
+    },
+    {
+      "area": "Commands",
+      "section": "Changed",
+      "text": "`delorun start`, `status`, `doctor` and `update --check` mark each line (✓ done, ! needs a look, ✗ failed, ● for information), show the commands you can type next, and ring the start with a spinner on a terminal. Colour follows `NO_COLOR` and `FORCE_COLOR` and is off when the output goes to a file. `delorun doctor` ends with a count of passed, warned and failed checks."
+    },
+    {
+      "area": "Commands",
+      "section": "Changed",
+      "text": "`delorun --help` groups the commands (Everyday, Setup, Phone, Safety, Data, Advanced) and wraps to the width of the terminal. The first setup question shows one short line per choice, and \"What does each one mean?\" opens the longer text."
+    },
+    {
+      "area": "Commands",
       "section": "Security",
       "text": "The release an update starts does not inherit variables that load code into Node, its loader or OpenSSL, such as `NODE_OPTIONS` or `LD_PRELOAD`, even when a `.env` file set them for the running release; the launcher already dropped them from every start."
     },
@@ -1907,6 +2237,322 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.2",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The first-run guide has an optional PIN step after Phone access. At your computer, once phone access is on, choose a PIN or passcode so a paired phone unlocks sensitive actions, such as adding plugins or approving full access, by typing it instead of a code from your computer. Skip leaves PIN mode off, and Settings keeps every control."
+            },
+            {
+              "section": "Changed",
+              "text": "The launcher names the version it is installing when it refuses native Windows or macOS, and the install guide's sample output shows a preview version."
+            },
+            {
+              "section": "Fixed",
+              "text": "`delorun recover restore` and `rollback` no longer say \"Your rows and settings are unchanged\" when the restore changed your profile's `cordis.patch.yml`. They say whether your rows and settings now match that version or already did, and say nothing when the file could not be read."
+            }
+          ]
+        },
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "Each agent on the setup step (Claude Code and Codex) now says how a chat uses it, carries a use-at-your-own-risk warning, and adds with one press and no second confirmation. Claude Code also recommends running it from your home internet connection, not a VPN, proxy or cloud server. Delorun still asks at your computer the first time a chat hands an agent a task in a workspace."
+            },
+            {
+              "section": "Changed",
+              "text": "Each agent card now has Advanced options, closed by default, with the model and the time limit per task. A new guide page, [Hand work to Claude Code or Codex](https://docs.delorun.com/guide/agents), explains how a chat uses an agent."
+            },
+            {
+              "section": "Changed",
+              "text": "Each card shows how much adding the agent downloads. When the agent is not signed in, the card shows `delorun agents login claude-code` or `delorun agents login codex` with a Copy button; the command runs the agent's own sign-in, so you need no separately installed command."
+            },
+            {
+              "section": "Changed",
+              "text": "The model choice lists the models an added agent reports, with the agent's own default first. Before the agent is added, only the default shows."
+            },
+            {
+              "section": "Changed",
+              "text": "When setup finds a key you already have for a model provider, it now says where the key came from (for example the name of the environment variable), explains how Delorun knows, and shows no key box. Next uses the key; Replace key opens a box for a different one. The key itself is never shown."
+            },
+            {
+              "section": "Changed",
+              "text": "With a model key found, the Models step is one screen: the provider shows \"Connected · from <source>\" with Replace, other providers sit below, and Continue goes on."
+            },
+            {
+              "section": "Changed",
+              "text": "The first chat opens with an empty message box. The starting prompts moved to the last setup step as \"Ideas to try\", each with a Copy button."
+            },
+            {
+              "section": "Changed",
+              "text": "Provider and plugin lists are compact rows in one bordered list: a tick, the mark, the name and a two-line description."
+            },
+            {
+              "section": "Changed",
+              "text": "Agents, plugins and providers without artwork show a tinted square with the first letter of their name, in a colour that stays the same for that name."
+            },
+            {
+              "section": "Changed",
+              "text": "\"Finish later\" keeps the setup guide closed until Delorun next starts, in every tab and after a reload; the Finish setup entry in the sidebar footer opens it again whenever you like."
+            },
+            {
+              "section": "Changed",
+              "text": "The Claude Code explainer now says exactly what it may do: create, change, move and delete files in the workspace without asking; other commands and anything outside the workspace are refused. The PIN step says a paired phone asks for the PIN only before actions that need an unlock."
+            },
+            {
+              "section": "Changed",
+              "text": "The guide's \"More\" and \"How does Delorun know?\" lists use the studio's chevron instead of the browser's triangle."
+            },
+            {
+              "section": "Changed",
+              "text": "The Preview notice says \"Delorun has no DeepSeek account sign-in and no telemetry of its own\", without the phrase about a first release."
+            },
+            {
+              "section": "Changed",
+              "text": "The end of `delorun setup` on Linux runs the sandbox check that `delorun doctor` has and prints the fix when the sandbox cannot run, such as `sudo apt install bubblewrap` on Debian or Ubuntu. The line that installs the `delorun` command also says what to do when npm refuses for lack of permission."
+            },
+            {
+              "section": "Fixed",
+              "text": "The Preview notice and cards in the Welcome step now carry their styling. Two packages shipped a stylesheet with the same file name, and the second one was never applied."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a narrow screen, the sign-in command under an agent in the guide wraps onto a second line instead of being cut off at the card's edge."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a build run from source, the plugins step no longer says a plugin is \"Not available on this kind of computer\". It gives the Host's own reason, such as that Delorun is not running from an installed release, and keeps the computer wording for real platform limits."
+            },
+            {
+              "section": "Fixed",
+              "text": "The recommended plugins step shows the plugins your profile already holds without waiting for the plugin packs list, which only the plugins you could download need."
+            },
+            {
+              "section": "Fixed",
+              "text": "The Phone access step no longer says \"Phone access is ready\" when Tailscale is set up but remote access is still off. It says remote access is off and keeps the command that turns it on, and the final step says the same."
+            },
+            {
+              "section": "Fixed",
+              "text": "Commands that ask a question, such as `delorun devices approve`, now stop with \"this needs you at a terminal to answer; run it in one\" when they run where nobody can answer (a script, or a tool's one-shot shell), instead of ending with a Node warning about an unsettled top-level await."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "A downloads panel shows the plugins being installed with their progress and place in the queue. On a computer it is a small card at the bottom right that stays visible over the setup guide, folds down to one line, and says \"5 plugins added\" for a few seconds when everything is in. On a phone the setup guide shows one quiet line above Back and Continue, and elsewhere a download icon with a count opens the list. A plugin that could not be installed stays listed until you try again or remove it."
+            },
+            {
+              "section": "Changed",
+              "text": "The Look step and Settings → Appearance share one smaller chooser: light, dark or system in a single row, themes as a compact grid of tiles that show their colours, and a short sample chat that follows the tile you point at. A theme brings its own accent, so the accent picker only appears when you choose Custom, where you set your own accent colour and contrast. Settings you saved with a theme and a changed accent open as Custom."
+            },
+            {
+              "section": "Changed",
+              "text": "The Look step has one quiet link to a screen about the original DeepSeek Harness look. It lists what you would give up and what stays, and if you confirm, the guide carries on in Delorun's look and the switch happens when you finish. The last step says so."
+            },
+            {
+              "section": "Changed",
+              "text": "A paired phone or other device now sees and does what the computer's studio does. Settings that used to say \"do this at your computer\" now show their content, and an action that needs the unlock says so, states how many minutes the unlock lasts and has an Unlock button: saving or switching a setup version, allowing full access, allowing an external agent, and answering an MCP server. What stays on the computer says why: PIN mode, moving a setup file, and applying or undoing a change."
+            },
+            {
+              "section": "Changed",
+              "text": "Setting up Delorun from a phone now says plainly which step only your computer can do and why. For a PIN, \"Do it on my computer\" keeps the step for you, and the studio on your computer shows a quiet \"Finish setup · N left\" in its sidebar that opens just those steps and goes away when none are left. That sidebar entry is the one way back into an unfinished guide; the chip above the message box is gone."
+            },
+            {
+              "section": "Changed",
+              "text": "With PIN mode on, a paired phone opens the studio without the PIN. The PIN is asked only when an action needs an unlock, and the question has Not now."
+            },
+            {
+              "section": "Changed",
+              "text": "On a phone the studio draws under the notch and home bar with safe margins, the browser bar takes the studio's colour in light and dark, and taps no longer flash a grey box."
+            },
+            {
+              "section": "Changed",
+              "text": "Buttons inside Settings cards are 32 pixels tall on a computer, closer to the footer buttons, and filled and outlined buttons sink slightly while pressed."
+            },
+            {
+              "section": "Changed",
+              "text": "In Settings, the \"Other workspaces\" and details lists use the studio's chevron instead of the browser's triangle, and Create a plugin uses the studio's selector buttons and a section title that no longer outranks the page title."
+            },
+            {
+              "section": "Changed",
+              "text": "On a phone, Settings is a grouped list of sections. Tapping a section opens it full screen under a back arrow and its title."
+            },
+            {
+              "section": "Changed",
+              "text": "The Settings pages \"Conversation\" and \"Chat\" are now \"Replies\" and \"Message box\"."
+            },
+            {
+              "section": "Changed",
+              "text": "Settings → Network explains its risk once at the top and lists the workspaces as compact rows. Each change saves at once; a change that opens more of the network still asks first."
+            },
+            {
+              "section": "Changed",
+              "text": "Settings → Devices shows its choices in one row on a phone; a long label wraps inside its segment."
+            },
+            {
+              "section": "Fixed",
+              "text": "The sidebar shows quiet placeholder rows while your chats load, instead of flashing \"No chats yet\"."
+            },
+            {
+              "section": "Fixed",
+              "text": "The studio's tab icon is Delorun's on every page, including the sign-in page over Tailscale, and a plain icon file and `favicon.ico` replace a stale icon a browser kept from another app on the same address. The installed web app is named Delorun."
+            }
+          ]
+        },
+        {
+          "area": "Chats and workspaces",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The chat's activity reading says \"1 turn 1 step\", not \"1 turns 1 steps\", in every language, and Settings calls the external agent limit \"Time limit per task, in minutes\", as the guide does."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a phone, the workspace and mode chips under \"What are we working on?\" wrap onto a second line instead of clipping the mode chip, and a long workspace name ends in an ellipsis."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Added",
+              "text": "When a command in a workspace with the Open network would be refused because a program on the computer listens on a shared socket, such as a running `docker` command, the chat asks you once whether to let commands run anyway in that workspace. Allowing records the same choice as the switch in Settings, Network; declining keeps the refusal and the chat does not ask again."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "A paired phone now does what the computer's studio does. Reading and tightening work without an unlock; changes that widen access (accepting an MCP server, allowing an agent into a workspace, a workspace's full access or network, saving or switching a setup version, deleting from the trash for good) work after an unlock, with a code from the computer or your PIN, whether or not dangerous mode is on. A locked phone is told to unlock first. Approving devices, setting the PIN, turning remote access on or off, and turning update checks off stay at the computer."
+            },
+            {
+              "section": "Changed",
+              "text": "A newly approved phone starts unlocked at its first sign-in, so setup runs without prompts. The unlock ends when setup finishes or after the unlock minutes (`approvalGraceMinutes` in the `delorun-home-auth` row; 15 by default, 0 turns it off), and never covers what stays at the computer."
+            },
+            {
+              "section": "Changed",
+              "text": "A phone lists the paired devices and can remove itself; removing another device stays at the computer."
+            },
+            {
+              "section": "Changed",
+              "text": "`delorun reach on tailscale` says what a phone can do without an unlock and what an unlocked phone adds (settings, plugins, terminals), and says that five wrong PIN tries remove the device and sign it out."
+            },
+            {
+              "section": "Changed",
+              "text": "The studio's unlock dialog says how many minutes an unlock lasts (the `elevationMinutes` setting, 15 by default) before you start one, and shows the end time once your computer approves it."
+            },
+            {
+              "section": "Fixed",
+              "text": "A paired phone can no longer turn off the plugins that hold the unlock gate, remote access and the sandbox (`@delorun/home-auth`, `@delorun/reach`, `dsh-sandbox-local`, `dsh-sandbox-policy`). A PIN unlock and dangerous mode lifted that refusal before; now only the computer changes those rows."
+            }
+          ]
+        },
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Added",
+              "text": "Six optional features are plugins you can switch on in Plugins, all off until you do: Browser, Code intelligence, Claude Code and Codex hooks, Webhooks, External agents, and Computer use for Linux and Windows. Each says what it needs from you first, such as a language server, your own hook files or a webhook secret, and stays quietly off instead of failing when that is missing."
+            },
+            {
+              "section": "Added",
+              "text": "Plugins that are not part of the default install, such as Claude Code, Codex and the six optional features, are signed packs you add when you want them. Turning one on downloads it once, checks it against the release's signed list and keeps it, so it works offline afterwards and updates together with Delorun. Several can download at once; a phone can look at the list and cancel an install, and adds a plugin after an unlock. An update carries the packs you added, and `delorun recover packs` checks them and fetches again any that changed."
+            },
+            {
+              "section": "Added",
+              "text": "A plugin that needs something from your computer says so in Plugins. Its row reads \"Needs setup\" with the reason, such as \"Needs Chrome installed\", and the fix beside it: a command with a copy button, a link to the right setting, or a guide. It never blocks other plugins, and it clears by itself when you next open Plugins or return to the window after meeting the need."
+            },
+            {
+              "section": "Changed",
+              "text": "The Agents step now says \"A saved sign-in was found on this computer. If it has expired, the first task tells you how to sign in again.\" for Claude Code and Codex, because a sign-in file on disk cannot prove the sign-in still works."
+            },
+            {
+              "section": "Changed",
+              "text": "When Claude Code or Codex fails because it is not signed in or its sign-in has expired, the chat says so and names the command to run (`delorun agents login codex` or `delorun agents login claude-code`). The model is told not to retry until you have signed in again, so you are no longer asked to consent a second time."
+            },
+            {
+              "section": "Changed",
+              "text": "Undoing a plugin's install with `delorun changes undo` now says the plugin is stopped, not removed, and prints `delorun plugin remove <name>` to remove it fully."
+            },
+            {
+              "section": "Changed",
+              "text": "The External agents pack now starts with every row off. Plugins shows \"Needs setup\" with the reason, such as \"Needs codex installed\", while a row's program is missing, and the Codex, Claude Code, delegation and Python rows each name the program they need."
+            },
+            {
+              "section": "Changed",
+              "text": "A profile that adds an optional pack with rows that start off (code intelligence, webhooks, external agents) now starts; Delorun used to refuse it because those rows were disabled. A row a pack lists under Needs setup may start off."
+            },
+            {
+              "section": "Changed",
+              "text": "A plugin pack can now carry its own version of a third-party library when Delorun carries another. Delorun's own packages, the libraries that must exist once (React, Zod and the MCP SDK) and anything a pack names as a peer still have to match, so a pack built against a different copy is refused when the release is built."
+            },
+            {
+              "section": "Changed",
+              "text": "When a plugin folder you link holds more files than Delorun copies (50,000), the refusal now says what to do: remove its development packages with `npm prune --omit=dev` in that folder, or link a folder that holds only the built plugin, then start again."
+            },
+            {
+              "section": "Fixed",
+              "text": "On a build run from source, which has no plugin packs, the Agents step shows Claude Code and Codex as not available here with the reason, instead of an Add button that stays on \"Adding…\"."
+            },
+            {
+              "section": "Fixed",
+              "text": "A plugin folder you link, installed with npm, now starts when its development packages would have put the copy over the limit: Delorun copies only the installed packages the plugin loads when it runs (those its `package.json` lists under `dependencies`, `optionalDependencies` and `peerDependencies`, and theirs in turn). An installed development package the plugin does not need shows in the review as not included."
+            },
+            {
+              "section": "Fixed",
+              "text": "`delorun plugin remove <name>` works again: it failed with \"Unknown option: 'ignore-scripts'\" because pnpm's `remove` does not take that option. The removal still resolves the lockfile with scripts switched off."
+            }
+          ]
+        },
+        {
+          "area": "Commands",
+          "items": [
+            {
+              "section": "Added",
+              "text": "`delorun setup export --out <file>` writes the plugins you added, your model choices and your settings as one signed file, with the files of the plugins you made yourself. It carries no key, chat, device or answer of setup. `delorun setup import <file>` shows who signed the file (or that nobody can be shown to have), lists everything it would add, replace, remove or take back to its default, asks, and then replaces your profile's model choices, your other settings and the plugins the file lists through the same plugin checks and code review as installing the plugins by hand. It saves your setup first, so one restore from Settings → Setup versions or `delorun recover restore` undoes the import. Settings → Setup versions has an Export setup and an Import setup button that do the same at your computer. An import asks you separately before requests and a provider's key go to an address that is not the provider's own."
+            },
+            {
+              "section": "Added",
+              "text": "You choose what goes in and what comes out: `--no-settings` leaves your settings out of the file or alone on import, `--plugin <name>` puts in only the plugins you name, `--no-local-code` names your own plugins without their code, `--note` adds a note the importer reads, and `--remove-others` also removes the plugins the file does not list (by default an import touches only the plugins the file lists). The studio dialogs have the same choices as switches and a checklist."
+            },
+            {
+              "section": "Changed",
+              "text": "The terminal output reads plainly. One sentence says Delorun isn't running, an unknown command gets a single line with the closest match, a source build says it doesn't update itself, `delorun devices approve` stops at once when remote access is off, and `delorun recover status` offers only the actions that can run."
+            },
+            {
+              "section": "Changed",
+              "text": "Setup checks that the studio port is free and uses the next free one, saying which. Times read as `17 Nov 2026, 01:07`, and `delorun status` shows `source build` as the version of a source copy."
+            },
+            {
+              "section": "Changed",
+              "text": "`delorun start`, `status`, `doctor` and `update --check` mark each line (✓ done, ! needs a look, ✗ failed, ● for information), show the commands you can type next, and ring the start with a spinner on a terminal. Colour follows `NO_COLOR` and `FORCE_COLOR` and is off when the output goes to a file. `delorun doctor` ends with a count of passed, warned and failed checks."
+            },
+            {
+              "section": "Changed",
+              "text": "`delorun --help` groups the commands (Everyday, Setup, Phone, Safety, Data, Advanced) and wraps to the width of the terminal. The first setup question shows one short line per choice, and \"What does each one mean?\" opens the longer text."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1",
       "date": "2026-11-16",
