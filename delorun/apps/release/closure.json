@@ -21,7 +21,8 @@
   ],
   "packExternals": [
     "@anthropic-ai/claude-agent-sdk-*",
-    "@openai/codex-*"
+    "@openai/codex-*",
+    "@anthropic-ai/sdk"
   ],
   "anchor": {
     "package": "@deepseek-ai/dsh",
