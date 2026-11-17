@@ -24,7 +24,7 @@ An item is `queued`, `downloading` (with bytes and total), `verifying`, `install
 
 ## Use this package
 
-Create an `InstallQueue` with the runner, `reload`, `runningChats`, `load` and `save`, call `restore()` once at start, `subscribe` to send every change to the studio, and call `chatsChanged()` when a chat ends so a reload that waited for the chats can run. `concurrency` is a validated `Config` field of the caller; a value below 1 or not an integer is refused at construction. After a restart `restore()` fails an item that was working as `interrupted` and starts the queued ones again.
+Create an `InstallQueue` with the runner, `reload`, `runningChats`, `load` and `save`, call `restore()` once at start, `subscribe` to send every change to the studio, and call `chatsChanged()` when a chat ends so a reload that waited for the chats can run. `concurrency` is a validated `Config` field of the caller; a value below 1 or not an integer is refused at construction. `progressIntervalMs`, also a `Config` field of the caller, is the least time between two published byte reports of one item; the report that completes the download is always published. After a restart `restore()` fails an item that was working as `interrupted` and starts the queued ones again.
 
 ## Tests
 

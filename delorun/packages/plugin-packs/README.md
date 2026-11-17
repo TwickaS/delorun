@@ -51,7 +51,7 @@ The plugin announces every item of the list on the plugin manager's `plugin-mana
 
 ## Configuration
 
-`concurrency` (default 2, at least 1) is how many installs run at once. The queue is saved in `run/<profile>/installs.json` at mode 0600 in the Delorun home, so a page reload or a Host restart finds it; a restart fails a working item as `interrupted` and starts the queued ones again.
+`concurrency` (default 2, at least 1) is how many installs run at once. `stallSeconds` (default 60, from 1 to 3600) is how many seconds a pack download may receive no data, counted from the request and then from each piece, before it fails; a slow download that keeps receiving is never cut off, while the packs file and its log bundle keep one 30 second limit in total. `progressIntervalMs` (default 500, from 0 to 10000) is the least time between two progress reports of one download, so a large download does not rewrite the install list and every device's view at each piece. A failed install is written to the home log with its cause and address. The queue is saved in `run/<profile>/installs.json` at mode 0600 in the Delorun home, so a page reload or a Host restart finds it; a restart fails a working item as `interrupted` and starts the queued ones again.
 
 ## Phones
 
