@@ -50,6 +50,7 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer, 
     },
     locked: (name, _platform) => (name.startsWith('@vendor/native-') ? { version: '9.9.9', integrity: integrity(NATIVE) } : undefined),
     download: () => Promise.resolve(options.served ?? NATIVE),
+    declaredPeers: () => Promise.resolve({}),
   }
 }
 

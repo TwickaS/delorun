@@ -33,7 +33,9 @@
   "devDependencies": {
     "@deepseek-ai/dsh-llm-mock-server": "workspace:*",
     "@delorun/bundle-local": "workspace:*",
+    "@delorun/changes": "workspace:*",
     "@delorun/release-verify": "workspace:*",
+    "@delorun/runtime-store": "workspace:*",
     "@types/semver": "^7.8.0"
   },
   "delorun": {
