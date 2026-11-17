@@ -3939,7 +3939,7 @@ export type PermissionPolicy = 'allow' | 'reject'
 ## `@deepseek-ai/dsh-subagent-claude-code`
 
 - `inject`: `subagents` · `subprocess`
-- `source`: [`packages/subagent/subagent-claude-code/src/index.ts:38`](../packages/subagent/subagent-claude-code/src/index.ts)
+- `source`: [`packages/subagent/subagent-claude-code/src/index.ts:39`](../packages/subagent/subagent-claude-code/src/index.ts)
 
 ```ts config-catalog
 /** Deployment-owned model, permission, environment, and process-release settings. */
@@ -3975,7 +3975,7 @@ export type ClaudeCodePermissionMode = typeof CLAUDE_CODE_PERMISSION_MODES[numbe
 ## `@deepseek-ai/dsh-subagent-codex`
 
 - `inject`: `subagents` · `subprocess`
-- `source`: [`packages/subagent/subagent-codex/src/index.ts:36`](../packages/subagent/subagent-codex/src/index.ts)
+- `source`: [`packages/subagent/subagent-codex/src/index.ts:37`](../packages/subagent/subagent-codex/src/index.ts)
 
 ```ts config-catalog
 /** Deployment-owned model, permission, environment, and process-release settings. */

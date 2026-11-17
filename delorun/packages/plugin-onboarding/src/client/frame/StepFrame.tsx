@@ -44,6 +44,8 @@ export interface StepFrameProps {
   readonly later?: { readonly label: string; readonly onClick: () => void }
   /** The dialog's footer; a step that draws its own passes nothing. */
   readonly footer?: ReactNode
+  /** A row drawn in the footer above the buttons, such as the plugin downloads line on a phone. */
+  readonly above?: ReactNode
   /** The step's body. */
   readonly children: ReactNode
 }
@@ -53,7 +55,7 @@ export interface StepFrameProps {
  * @param props - the step's name, place, body and footer.
  * @returns the frame.
  */
-export function StepFrame({ title, headingRef, count, place, total, steps, stepsLabel, stepKey, later, footer, children }: StepFrameProps): ReactNode {
+export function StepFrame({ title, headingRef, count, place, total, steps, stepsLabel, stepKey, later, footer, above, children }: StepFrameProps): ReactNode {
   const [own, setOwn] = useState<ReactNode>(null)
   return (
     <FooterSlot.Provider value={setOwn}>
@@ -66,7 +68,7 @@ export function StepFrame({ title, headingRef, count, place, total, steps, steps
           <div className={css.progress}>
             <span className={css.count}>{count}</span>
             <span className={css.bar} role="progressbar" aria-label={count} aria-valuemin={1} aria-valuemax={total} aria-valuenow={place}>
-              <span style={{ width: `${String((place / total) * 100)}%` }} />
+              <span style={{ transform: `scaleX(${String(place / total)})` }} />
             </span>
           </div>
           <nav className={css.visuallyHidden} aria-label={stepsLabel}>
@@ -77,10 +79,10 @@ export function StepFrame({ title, headingRef, count, place, total, steps, steps
             </ol>
           </nav>
         </header>
-        <div className={css.scroll}>
-          <div className={css.body} key={stepKey}>{children}</div>
+        <div className={css.scroll} key={stepKey}>
+          <div className={css.body}>{children}</div>
         </div>
-        <footer className={css.footer}>{footer ?? own}</footer>
+        <footer className={css.footer}>{above}{footer ?? own}</footer>
       </div>
     </FooterSlot.Provider>
   )

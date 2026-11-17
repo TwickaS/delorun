@@ -1,0 +1,42 @@
+{
+  "name": "@delorun/plugin-packs",
+  "description": "Delorun's plugin packs: the Host's install queue for plugins that are not in the default install, downloaded from the release channel, verified against the signed packs file and loaded through the plugin manager, with typed remote actions for the downloads panel",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wire": "./src/wire.ts",
+    "./environment": "./src/environment.ts"
+  },
+  "dependencies": {
+    "@delorun/changes": "workspace:*",
+    "@delorun/contract-home-layout": "workspace:*",
+    "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/home-process": "workspace:*",
+    "@delorun/install": "workspace:*",
+    "@delorun/install-queue": "workspace:*",
+    "@delorun/release-formats": "workspace:*",
+    "@delorun/release-verify": "workspace:*",
+    "@delorun/runtime-store": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-hmr": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

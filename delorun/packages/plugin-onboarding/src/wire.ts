@@ -17,13 +17,42 @@ export const MAX_SECTIONS = 32
 /** The section names a record lists. */
 export const SectionNames = z.array(z.string().regex(SECTION_NAME)).max(MAX_SECTIONS)
 
+/** The route that records or clears a deferred step. `POST` takes {@link DeferStepRequest} and answers {@link DeferStepAnswer}. The studio fetches it without its leading `/`. */
+export const DEFER_STEP_PATH = '/api/delorunOnboarding.deferStep'
+
+/**
+ * The onboarding steps only the home's own computer can do, which a phone defers: turning phone access on, setting the PIN,
+ * and approving a device. The list is closed; the route refuses any other id.
+ */
+export const DEFERRABLE_STEPS = ['reach', 'pin', 'approve'] as const
+
+/** One deferrable step's id. */
+export const DeferrableStep = z.enum(DEFERRABLE_STEPS)
+
+/** One deferrable step's id. */
+export type DeferrableStep = z.output<typeof DeferrableStep>
+
+/** The body of {@link DEFER_STEP_PATH}: the step, and whether it is deferred (true) or done (false). */
+export const DeferStepRequest = z.strictObject({ id: DeferrableStep, deferred: z.boolean() })
+
+/** The body of {@link DEFER_STEP_PATH}. */
+export type DeferStepRequest = z.output<typeof DeferStepRequest>
+
+/** The answer of {@link DEFER_STEP_PATH}: every step deferred now, in the order of {@link DEFERRABLE_STEPS}. */
+export const DeferStepAnswer = z.strictObject({ deferred: z.array(DeferrableStep).max(DEFERRABLE_STEPS.length) })
+
+/** The answer of {@link DEFER_STEP_PATH}. */
+export type DeferStepAnswer = z.output<typeof DeferStepAnswer>
+
 /**
  * What the terminal setup recorded, reduced to what onboarding uses: the ids of the sections the terminal showed or
- * asked when the record lists them, and whether reach is set up.
+ * asked when the record lists them, and whether reach is set up. `deferred` is not from the terminal: it lists the steps
+ * a phone deferred to the computer, kept in the home; absent means none.
  */
 export const SetupRecord = z.strictObject({
   sections: SectionNames.optional(),
   reachSetUp: z.boolean(),
+  deferred: z.array(DeferrableStep).max(DEFERRABLE_STEPS.length).optional(),
 })
 
 /** What the terminal setup recorded, as {@link SetupRecord} parses it. */
@@ -125,6 +154,25 @@ export const KEY_RESULTS = ['works', 'rejected', 'unreachable', 'failed', 'no-ke
 /** One of {@link KEY_RESULTS}. */
 export type KeyResult = typeof KEY_RESULTS[number]
 
+/**
+ * Where a provider's key came from: `saved` the key file in Delorun's home, `environment` the environment Delorun started
+ * with, `project-file` a `.env` in the folder Delorun started in, `home-file` the `.env` in Delorun's home, `unknown` a layer
+ * this list does not name.
+ */
+export const KEY_SOURCE_KINDS = ['saved', 'environment', 'project-file', 'home-file', 'unknown'] as const
+
+/** One of {@link KEY_SOURCE_KINDS}. */
+export type KeySourceKind = typeof KEY_SOURCE_KINDS[number]
+
+/** A variable name: letters, digits and underscores only, so a value pasted in its place is refused. */
+export const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
+
+/** Where one provider's key came from: the kind and the NAME of the variable that holds it, never its value. */
+export const KeySource = z.strictObject({ kind: z.enum(KEY_SOURCE_KINDS), variable: z.string().regex(VARIABLE_NAME).optional() })
+
+/** {@link KeySource}'s parsed value. */
+export type KeySource = z.output<typeof KeySource>
+
 /** The most providers one test reports. */
 export const MAX_PROVIDERS = 32
 
@@ -134,7 +182,7 @@ export const MAX_PROVIDERS = 32
  */
 export const KeyTestAnswer = z.strictObject({
   hidden: z.array(z.string().min(1).max(200)).max(MAX_PROVIDERS).optional(),
-  providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS) })).max(MAX_PROVIDERS),
+  providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS), source: KeySource.optional() })).max(MAX_PROVIDERS),
 })
 
 /** {@link KeyTestAnswer}'s parsed value. */
@@ -296,3 +344,39 @@ export function isLoopbackBaseURL(baseURL: string): boolean {
   return url.protocol === 'http:' && url.username === '' && url.password === ''
     && (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]')
 }
+
+/** The harness's route that asks an installed agent which models it offers. `POST` takes {@link AgentModelsRequest} and answers {@link AgentModelsAnswer}. */
+export const AGENT_MODELS_PATH = '/api/delorunOnboarding.agentModels'
+
+/** The agents whose models the route lists. */
+export const AGENT_IDS = ['claude-code', 'codex'] as const
+
+/** Which agent's models to list. */
+export const AgentModelsRequest = z.strictObject({ agent: z.enum(AGENT_IDS) })
+
+/** {@link AgentModelsRequest}'s parsed value. */
+export type AgentModelsRequest = z.output<typeof AgentModelsRequest>
+
+/** One model an agent reports. */
+export const AgentModelOption = z.strictObject({
+  /** The name to configure as the agent's `model`. */
+  model: z.string().min(1),
+  /** The name a person knows it by. */
+  displayName: z.string().min(1),
+})
+
+/** {@link AgentModelOption}'s parsed value. */
+export type AgentModelOption = z.output<typeof AgentModelOption>
+
+/**
+ * What the route answers: the agent's models, or `unavailable` with why: `not-running` when the agent's package is not
+ * installed and running (also the moment after it is added, before its provider registers), `timeout` when it did not
+ * answer in time, `failed` when it answered with an error.
+ */
+export const AgentModelsAnswer = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('listed'), models: z.array(AgentModelOption) }),
+  z.strictObject({ state: z.literal('unavailable'), reason: z.enum(['not-running', 'timeout', 'failed']) }),
+])
+
+/** {@link AgentModelsAnswer}'s parsed value. */
+export type AgentModelsAnswer = z.output<typeof AgentModelsAnswer>

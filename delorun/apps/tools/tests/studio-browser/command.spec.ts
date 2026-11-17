@@ -18,7 +18,8 @@ interface Run {
  * @param respond - answers for browse calls.
  * @returns the exit code, printed text and process calls.
  */
-function drive(argv: string[], env: Record<string, string> = {}, respond: (args: readonly string[]) => ProcessResult = () => OK): Run {
+function drive(argv: string[], extraEnv: Record<string, string> = {}, respond: (args: readonly string[]) => ProcessResult = () => OK): Run {
+  const env = { DELORUN_STUDIO_BROWSER: 'browse', ...extraEnv }
   const calls: string[][] = []
   const out: string[] = []
   const err: string[] = []
@@ -36,6 +37,9 @@ function drive(argv: string[], env: Record<string, string> = {}, respond: (args:
     env, cwd: '/work', deps,
     readScript: path => {
       if (path === '/work/missing.js') throw new Error('ENOENT')
+      if (path === '/work/steps-bad.json') return 'not json'
+      if (path === '/work/steps-unknown.json') return '[{"hover":"a"}]'
+      if (path === '/work/steps.json') return '[{"click":"button"},{"screenshot":"out/a.png"}]'
       return `// ${path}\nreturn 1`
     },
     out: text => out.push(text),
@@ -112,7 +116,13 @@ describe('studio-browser usage errors exit 2 without touching the browser', () =
     ['extra argument', ['check', 'extra']],
     ['unknown flag', ['check', '--wat']],
     ['missing --url', ['run', '--code', 'x']],
-    ['neither --file nor --code', ['run', ...url]],
+    ['nothing to run', ['run', ...url]],
+    ['bad viewport', ['run', ...url, '--screenshot', 'a.png', '--viewport', '1440']],
+    ['zero viewport side', ['run', ...url, '--screenshot', 'a.png', '--viewport', '0x900']],
+    ['unknown scheme', ['run', ...url, '--screenshot', 'a.png', '--scheme', 'sepia']],
+    ['screenshot without .png', ['run', ...url, '--screenshot', 'a.jpg']],
+    ['steps that are not JSON', ['run', ...url, '--steps', 'steps-bad.json']],
+    ['steps with an unknown action', ['run', ...url, '--steps', 'steps-unknown.json']],
     ['both --file and --code', ['run', ...url, '--file', 'a.js', '--code', 'x']],
     ['non-loopback URL', ['run', '--url', 'https://example.com/', '--code', 'x']],
     ['credentials trick', ['run', '--url', 'http://localhost@evil.example/', '--code', 'x']],
@@ -135,11 +145,34 @@ describe('studio-browser usage errors exit 2 without touching the browser', () =
 })
 
 describe('resolve', () => {
+  const read = (path: string): string => (path === '/w/steps.json' ? '[{"click":"button"},{"screenshot":"out/a.png"}]' : '')
+
   it('applies the default adapter and timeout', () => {
     const request: Request = { command: 'run', url: 'http://[::1]:5/', code: 'x' }
     expect(resolve(request, { DELORUN_STUDIO_BROWSER: '' }, '/w', () => '')).toEqual({
-      command: 'run', adapter: 'browse', run: { origin: 'http://[::1]:5', code: 'x', timeoutMs: 60_000 },
+      command: 'run', adapter: 'playwright', run: { origin: 'http://[::1]:5', startUrl: 'http://[::1]:5/', code: 'x', timeoutMs: 60_000 },
     })
+  })
+
+  it('reads viewport, scheme, steps and screenshot for a run with no script', () => {
+    const request: Request = {
+      command: 'run', url: 'http://127.0.0.1:9/?token=t', viewport: '390x844', scheme: 'dark', steps: 'steps.json', screenshot: 'shots/a.png',
+    }
+    expect(resolve(request, {}, '/w', read)).toEqual({
+      command: 'run',
+      adapter: 'playwright',
+      run: {
+        origin: 'http://127.0.0.1:9', startUrl: 'http://127.0.0.1:9/?token=t', timeoutMs: 60_000,
+        viewport: { width: 390, height: 844 }, scheme: 'dark',
+        steps: [{ click: 'button' }, { screenshot: '/w/out/a.png' }], screenshotTo: '/w/shots/a.png',
+      },
+    })
+  })
+
+  it('rejects the browse adapter for options only Playwright honours', () => {
+    const run = drive(['run', '--url', 'http://127.0.0.1:1', '--screenshot', 'a.png'], {})
+    expect(run.code).toBe(1)
+    expect(run.err[0]).toContain('need --adapter playwright')
   })
 })
 

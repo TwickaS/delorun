@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for agents.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/agents.md
+/:
+  en: 214e51d97da00c4e
+  zh: 6e20ec721666f46c
+/hand-work-to-claude-code-or-codex:
+  en: b4a5c9b66ba75004
+  zh: 1d8b8a361068d579
+/hand-work-to-claude-code-or-codex/summary:
+  en: 790c7006b81e2df1
+  zh: 9b9736e5a3cc3638
+/hand-work-to-claude-code-or-codex/contents:
+  en: 2f8335ec22b54129
+  zh: 02edfe47e048341b
+/hand-work-to-claude-code-or-codex/how-a-chat-uses-an-agent:
+  en: f1e8a2628b943398
+  zh: d8d041956b1e720e
+/hand-work-to-claude-code-or-codex/add-an-agent:
+  en: fb16e9c77aebff72
+  zh: 30ebbae73ccecfbb
+/hand-work-to-claude-code-or-codex/download-size-and-sign-in:
+  en: 876e5294231917e1
+  zh: adb2a02bc7a1d130
+/hand-work-to-claude-code-or-codex/the-first-time:
+  en: e0817f5116857613
+  zh: 2316f743cbb21e6a
+/hand-work-to-claude-code-or-codex/what-the-agent-can-touch:
+  en: 448a345a1a6bece2
+  zh: 036385e0cf47490d
+/hand-work-to-claude-code-or-codex/where-the-result-shows:
+  en: 7b70cad3d3a5147d
+  zh: 3c314adca309cd9a
+/hand-work-to-claude-code-or-codex/advanced-options:
+  en: a2534cc853a5755a
+  zh: 72a23c9a3170715f
+/hand-work-to-claude-code-or-codex/use-at-your-own-risk:
+  en: 0361b583dc5288a4
+  zh: d4fe407f1408f917
+/hand-work-to-claude-code-or-codex/next:
+  en: 284153f8d29bf28a
+  zh: 0707048bed94a22e

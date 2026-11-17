@@ -34,6 +34,10 @@ export interface ChipGroupProps<Value extends string> {
   readonly manual?: boolean
   /** Whether the heading is hidden visually but still names the group. */
   readonly hideLabel?: boolean
+  /** `chips` wrap in a grid, `segmented` is one joined row, `tiles` stack a picture above the text in a compact grid. */
+  readonly variant?: 'chips' | 'segmented' | 'tiles'
+  /** Called with the value under the pointer or focus, and with `null` when neither is on a chip; for previews. */
+  readonly onPeek?: (peeked: Value | null) => void
 }
 
 /** How each key moves within the group: a step, wrapping, or to the first or last chip. */
@@ -46,7 +50,7 @@ const MOVES: Readonly<Record<string, -1 | 1 | 'first' | 'last'>> = {
  * @param props - see {@link ChipGroupProps}.
  * @returns the labelled radio group.
  */
-export function ChipGroup<Value extends string>({ label, value, options, onChange, disabled = false, manual = false, hideLabel = false }: ChipGroupProps<Value>) {
+export function ChipGroup<Value extends string>({ label, value, options, onChange, disabled = false, manual = false, hideLabel = false, variant = 'chips', onPeek }: ChipGroupProps<Value>) {
   const id = useId()
   const stop = options.find(option => option.value === value) ?? options[0]
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -64,13 +68,15 @@ export function ChipGroup<Value extends string>({ label, value, options, onChang
   return (
     <div className={css.field}>
       <span id={id} className={hideLabel ? css.srOnly : css.label}>{label}</span>
-      <div className={css.chips} role="radiogroup" aria-labelledby={id} onKeyDown={onKeyDown}>
+      <div className={css[variant]} role="radiogroup" aria-labelledby={id} onKeyDown={onKeyDown}
+        onPointerLeave={() => { onPeek?.(null) }}
+        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onPeek?.(null) }}>
         {options.map(option => (
           <button key={option.value} type="button" role="radio" aria-checked={option.value === value} disabled={disabled}
             tabIndex={option === stop ? 0 : -1}
-            className={css.chip} onClick={() => { if (option.value !== value) onChange(option.value) }}>
+            className={css.chip} onPointerEnter={() => { onPeek?.(option.value) }} onFocus={() => { onPeek?.(option.value) }} onClick={() => { if (option.value !== value) onChange(option.value) }}>
             {option.mark === undefined ? null : <span className={css.mark} aria-hidden="true">{option.mark}</span>}
-            {option.label}
+            {variant === 'tiles' ? <span className={css.tileLabel}>{option.label}</span> : option.label}
           </button>
         ))}
       </div>

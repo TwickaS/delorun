@@ -213,86 +213,25 @@
   --dsw-alias-label-primary-foreground: var(--dsw-alias-label-primary);
 }
 
-/* Look: the choices beside a small chat drawn with the studio's own tokens, which follow each choice at once. */
-.lookGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
-  align-items: start;
-  gap: var(--delorun-space-8);
-}
-
-.preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  padding: var(--delorun-space-6);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-base);
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-primary);
-}
-
-.bubbleMine {
-  align-self: flex-end;
-  max-width: 85%;
-  padding: var(--delorun-space-3) var(--delorun-space-5);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-2);
-}
-
-.bubbleAgent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-3);
-}
-
-.toolLine {
-  align-self: flex-start;
-  padding: var(--delorun-space-1) var(--delorun-space-4);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.composer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--delorun-space-4);
-  padding: var(--delorun-space-3) var(--delorun-space-3) var(--delorun-space-3) var(--delorun-space-5);
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.send {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--dsw-alias-brand-primary);
-}
-
-/* Agents: what adding one means, confirmed in place. */
-.confirm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  padding-top: var(--delorun-space-5);
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
-}
-
-.facts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-3);
+/* Agents: how a chat uses one, with the guide link. */
+.how {
   margin: 0;
-  padding-left: var(--delorun-space-7);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.how a {
+  display: inline-block;
+  min-height: 24px;
   color: var(--dsw-alias-label-primary);
+  text-underline-offset: 2px;
+}
+
+.how a:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* A command with its Copy button. */
@@ -421,11 +360,7 @@
 }
 
 @media (max-width: 767px) {
-  .lookGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
+    /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
   .folder {
     min-height: 44px;
   }
@@ -490,14 +425,6 @@
   justify-content: center;
 }
 
-/* The Look preview stays in view while the choices scroll, where the two columns sit side by side. */
-@media (min-width: 768px) {
-  .lookGrid > :last-child {
-    position: sticky;
-    top: 0;
-  }
-}
-
 /* A card shaped placeholder while a recommended plugin's title is read. */
 .skeleton {
   display: flex;
@@ -558,4 +485,27 @@
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* The original-look screen's list of what it turns off. */
+.stockList {
+  margin: 0;
+  padding-left: var(--delorun-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-2);
+}
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .inline {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}
+
+/* The link under the original-look question lines up with the text above it. */
+.stockLink {
+  padding-inline: 0;
 }

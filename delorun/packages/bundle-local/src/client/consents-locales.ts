@@ -1,7 +1,11 @@
 /** The copy of the full-access consent, the MCP server review, the approval card's actions, the waiting-server notice, the Permissions section and the External agents section. */
 
+import { gateEn, gateZh } from './gate.ts'
+
 /** English dictionary. */
 export const en = {
+  ...gateEn,
+  'unlockWhere': 'Unlock is under Settings → Devices.',
   'permissions.nav': 'Permissions',
   'permissions.title': 'Permissions',
   'permissions.loading': 'Loading…',
@@ -139,6 +143,8 @@ export type ConsentsLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
+  ...gateZh,
+  'unlockWhere': '解锁在“设置 → 设备”中。',
   'permissions.nav': '权限',
   'permissions.title': '权限',
   'permissions.loading': '正在加载…',

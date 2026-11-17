@@ -33,7 +33,7 @@
  * @module @delorun/release/build-closure
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -45,6 +45,7 @@ import { verifyStagedDependencies } from '../../../../scripts/executable-packagi
 import { semanticVersion } from '@delorun/release-formats/brands'
 import { pruneForeignPrebuilds } from './closure/prune.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
+import { buildReleasePacks } from './closure/packs.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
@@ -214,6 +215,11 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }
+  const packCount = await buildReleasePacks({
+    source, env, version: request.version, platforms: request.platforms, epoch, externals: recipe.closure.packExternals,
+    stage: platform => join(buildRoot, 'stage', platform), targets: TARGETS, out: request.out, scratch: await mkdtemp(join(buildRoot, 'packs-')),
+  })
+  console.log(`build-closure: built ${String(packCount)} plugin packs`)
   if (recipe.closure.platforms.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.closure.platforms, recipe.toolchain, readImagesRecipe().base)}`)
   return results
 }

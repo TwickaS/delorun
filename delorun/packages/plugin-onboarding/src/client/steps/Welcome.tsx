@@ -4,6 +4,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { NoticeFace } from '../types.ts'
+import { COVERED_LOCALES } from '../locales.ts'
 import { ChipGroup } from '@delorun/brand'
 import { Notice } from '../ui/Notice.tsx'
 import type { StepProps } from './shared.ts'
@@ -22,7 +23,7 @@ export function WelcomeStep({ services, notice }: StepProps & { readonly notice:
       <p className={css.lead}>{t('welcome.lead')}</p>
       <div className={css.chipGrid}>
         <ChipGroup label={t('welcome.language')} value={locale.active} onChange={(id) => { language.setLocale(id) }}
-          options={locale.locales.map(each => ({ value: each.id, label: each.label }))} />
+          options={locale.locales.filter(each => COVERED_LOCALES.includes(each.id) || each.id === locale.active).map(each => ({ value: each.id, label: each.label }))} />
       </div>
       {first !== undefined && (
         <Notice title={notice?.title() ?? ''} moreLabel={t('readMore')}

@@ -48,6 +48,7 @@ import {
   claudeQueryOptions,
   consumeClaudeQuery,
   disposeClaudeCodeChild,
+  listClaudeCodeModels,
   startClaudeCodeRun,
   successfulResult,
   textTask,
@@ -340,6 +341,42 @@ afterEach(() => {
   queryMock.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+})
+
+describe('model listing', () => {
+  it('lists the models Claude Code reports without its default row, and releases the process', async () => {
+    const run = fakeRun()
+    const close = vi.fn()
+    queryMock.mockImplementation(({ options }) => {
+      options.spawnClaudeCodeProcess!(sdkSpawnOptions())
+      return Object.assign(queryFrom([], undefined, close), {
+        supportedModels: () => Promise.resolve([
+          { value: 'default', displayName: 'Default (recommended)', description: '' },
+          { value: 'sonnet', displayName: 'Sonnet', description: '' },
+          { value: 'opus', displayName: 'Opus', description: '' },
+        ]),
+      })
+    })
+    await expect(listClaudeCodeModels(run.spec, new AbortController().signal)).resolves.toEqual([
+      { model: 'sonnet', displayName: 'Sonnet' },
+      { model: 'opus', displayName: 'Opus' },
+    ])
+    expect(close).toHaveBeenCalled()
+    expect(run.child.terminate).toHaveBeenCalled()
+  })
+
+  it('rejects when cancelled before the process answers, and still releases it', async () => {
+    const run = fakeRun()
+    const controller = new AbortController()
+    queryMock.mockImplementation(({ options }) => {
+      options.spawnClaudeCodeProcess!(sdkSpawnOptions())
+      return Object.assign(queryFrom([]), { supportedModels: () => new Promise<never>(() => {}) })
+    })
+    const listing = listClaudeCodeModels(run.spec, controller.signal)
+    controller.abort(new Error('stop'))
+    await expect(listing).rejects.toThrow('stop')
+    expect(run.child.terminate).toHaveBeenCalled()
+  })
 })
 
 describe('task admission and package contracts', () => {
@@ -1078,6 +1115,35 @@ describe('run publication, cancellation, and settlement', () => {
       )
       await run.dispose()
     }
+  })
+
+  it('tells the person to sign in again, and the model not to retry, for each sign-in failure', async () => {
+    const signInText
+      = "Claude Code isn't signed in, or its sign-in has expired. Run `delorun agents login claude-code` on this computer, then try again.\n"
+      + 'Do not retry this task or start another run of this agent until the person has signed in again.'
+    const scenarios = [
+      () => fakeRun([success('Not logged in · Please run /login', true)]),
+      () => fakeRun([failure('error_during_execution', ['API Error: 401 SECRET_TOKEN'])]),
+      () => fakeRun([], new Error('Claude Code returned an error result: OAuth token has expired · Please run /login')),
+    ]
+    for (const scenario of scenarios) {
+      const fixture = scenario()
+      const run = await startClaudeCodeRun(request(), fixture.spec)
+      const result = await run.result
+      expect(result.stopReason).toBe('error')
+      expect(result.diagnostic).toBe(signInText)
+      expect(result.diagnostic).not.toContain('SECRET_TOKEN')
+      await run.dispose()
+    }
+  })
+
+  it('keeps the fixed facts for a failure that is not a sign-in failure', async () => {
+    const fixture = fakeRun([], new Error('Claude Code returned an error result: model overloaded'))
+    const run = await startClaudeCodeRun(request(), fixture.spec)
+    const result = await run.result
+    expect(result.diagnostic).toBe(expectedFailureDiagnostic('query-run', 'unknown'))
+    expect(result.diagnostic).not.toContain('delorun agents login')
+    await run.dispose()
   })
 
   it('attaches a safe diagnostic when a permission denial precedes failure', async () => {

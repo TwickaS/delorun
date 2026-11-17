@@ -164,7 +164,7 @@ describe('boundedDiff', () => {
 describe('reviewInputOf', () => {
   it('gives each side\'s text for text files within the limit, none for dependency, binary or large files, why the diff does not show a file, and both manifests', async () => {
     const { home, before, after } = await versions({
-      'package.json': '{"name":"p","version":"1.0.0"}',
+      'package.json': '{"name":"p","version":"1.0.0","dependencies":{"d":"1"}}',
       'mod.js': 'old',
       'gone.js': 'g',
       'node_modules/d/index.js': 'd',
@@ -172,7 +172,7 @@ describe('reviewInputOf', () => {
       'image.png': 'x',
     }, (folder) => {
       writeFiles(folder, {
-        'package.json': '{"name":"p","version":"2.0.0"}',
+        'package.json': '{"name":"p","version":"2.0.0","dependencies":{"d":"1"}}',
         'mod.js': 'new',
         'add.js': 'a',
         'node_modules/d/index.js': 'changed',
@@ -183,7 +183,7 @@ describe('reviewInputOf', () => {
       symlinkSync('mod.js', join(folder, 'link'))
     })
     const changes = await compareVersions(home, before, after)
-    const input = await reviewInputOf(home, before, after, changes, { file: 50 }, ['big.js', 'mod.js'])
+    const input = await reviewInputOf(home, before, after, changes, { file: 70 }, ['big.js', 'mod.js'])
     expect(input).toEqual({
       files: [
         { path: 'add.js', status: 'added', dependency: false, after: 'a' },
@@ -193,10 +193,10 @@ describe('reviewInputOf', () => {
         { path: 'link', status: 'added', dependency: false, after: 'mod.js' },
         { path: 'mod.js', status: 'modified', dependency: false, before: 'old', after: 'new', notShown: 'cut-short' },
         { path: 'node_modules/d/index.js', status: 'modified', dependency: true, notShown: 'dependency' },
-        { path: 'package.json', status: 'modified', dependency: false, before: '{"name":"p","version":"1.0.0"}', after: '{"name":"p","version":"2.0.0"}' },
+        { path: 'package.json', status: 'modified', dependency: false, before: '{"name":"p","version":"1.0.0","dependencies":{"d":"1"}}', after: '{"name":"p","version":"2.0.0","dependencies":{"d":"1"}}' },
       ],
-      manifestBefore: { name: 'p', version: '1.0.0' },
-      manifestAfter: { name: 'p', version: '2.0.0' },
+      manifestBefore: { name: 'p', version: '1.0.0', dependencies: { d: '1' } },
+      manifestAfter: { name: 'p', version: '2.0.0', dependencies: { d: '1' } },
     })
   })
 

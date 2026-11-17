@@ -58,8 +58,11 @@
 
 .bar > span {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--dsw-alias-brand-primary);
+  transform-origin: left;
+  transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .scroll {
@@ -67,6 +70,22 @@
   min-height: 0;
   padding: var(--onb-gap-2) var(--onb-gap-3);
   overflow-y: auto;
+  animation: step-enter 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes step-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll { animation: step-fade 120ms ease-out; }
+  .bar > span { transition: none; }
+
+  @keyframes step-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 .body {
@@ -100,6 +119,7 @@
 }
 
 .skip {
+  padding-left: 0;
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -110,13 +130,20 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* On a phone the window is a modal inset from the screen edges, with the dimmed page around it. It fits short content and
+   is centred; long content fills the height the inset leaves, and the body scrolls between the pinned header and footer.
+   The height follows the dynamic viewport, so the on-screen keyboard shrinks the window instead of covering Continue. */
 @media (max-width: 767px) {
   .dialog {
-    width: calc(100% + 48px);
-    height: calc(100% + 2 * max(24px, var(--dsh-frame-overlay-top, 24px)));
-    max-height: none;
-    margin: calc(-1 * max(24px, var(--dsh-frame-overlay-top, 24px))) -24px;
-    border-radius: 0;
+    width: calc(100% + 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+    height: auto;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    margin: 0 calc(env(safe-area-inset-right, 0px) - 12px) 0 calc(env(safe-area-inset-left, 0px) - 12px);
+    align-self: center;
+  }
+
+  .header {
+    padding-top: var(--onb-gap-2);
   }
 
   .header,

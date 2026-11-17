@@ -13,7 +13,9 @@ import { dirname } from 'node:path'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { UpdateSupport } from '@delorun/home-process'
 import type { DelorunLogger } from '@delorun/logs'
-import { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, RuntimeStoreError, START_CHECK_SCHEMA, startCheckHandoffText, type OpenUpdateChannel, type TrustedRootSource, type CheckedRuntime } from '@delorun/runtime-store'
+import { packFilesFor } from '@delorun/plugin-packs/environment'
+import { checkPacksBundle } from '@delorun/release-verify'
+import { carryPacks, FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, RuntimeStoreError, START_CHECK_SCHEMA, startCheckHandoffText, type OpenUpdateChannel, type TrustedRootSource, type CheckedRuntime } from '@delorun/runtime-store'
 import { homeReleaseChannel, runtimePlatformOf } from './channel.ts'
 import { storeReportSources } from './sources.ts'
 import { homeUpdateSupport } from './support.ts'
@@ -66,7 +68,9 @@ export function storeUpdateSupport(home: string, profile: string, running: Runti
   const anchor = launcherAnchor(home, env)
   const fullCheckDays = fullCheckDaysOf(env)
   return homeUpdateSupport({
-    home, profile, store, root: anchor.root, fullCheckDays, preLaunch: (version, root) => releaseLogStartCheck(home, store.paths.platform, version, root), openChannel: storeChannelOpener(home, store, running, anchor, fullCheckDays), sources: storeReportSources({ home, profile, store, running, root: anchor.root, fullCheckDays }), now: () => new Date(),
+    home, profile, store, root: anchor.root, fullCheckDays,
+    carryPacks: (from, to) => carryPacks({ paths: store.paths, root: anchor.root, filesFor: version => packFilesFor(home, version), checkLog: checkPacksBundle }, from, to),
+    preLaunch: (version, root) => releaseLogStartCheck(home, store.paths.platform, version, root), openChannel: storeChannelOpener(home, store, running, anchor, fullCheckDays), sources: storeReportSources({ home, profile, store, running, root: anchor.root, fullCheckDays }), now: () => new Date(),
     ...admitVersion === undefined ? {} : { admitVersion },
   })
 }

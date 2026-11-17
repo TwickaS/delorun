@@ -7,11 +7,13 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
+import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
+import type { HostFetch } from '@delorun/bundle-local/host-api'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
-import type { CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
+import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -211,12 +213,25 @@ export interface HostFace {
   /** @returns the local model servers found on this computer; undefined when the route cannot be read. */
   readonly localModels: () => Promise<readonly LocalServer[] | undefined>
   /**
+   * Ask an installed agent which models it offers.
+   * @param agent - the agent's connection id.
+   * @returns the models, or `unavailable` when the agent is not installed and running, did not answer or the route failed.
+   */
+  readonly agentModels: (agent: 'claude-code' | 'codex') => Promise<AgentModelsAnswer>
+  /**
    * @param registry - whether to read packages that are not installed from the npm registry.
    * @returns which connections each recommended plugin is for.
    */
   readonly recommend: (registry: boolean) => Promise<RecommendAnswer | undefined>
   /** @returns whether the reach step applies. */
   readonly reach: () => Promise<ReachState>
+  /**
+   * Note that a step waits for the computer, or that it is done.
+   * @param id - the step.
+   * @param deferred - true to defer it, false to clear it.
+   * @returns every step deferred now; undefined when the route cannot be asked.
+   */
+  readonly defer: (id: DeferrableStep, deferred: boolean) => Promise<readonly DeferrableStep[] | undefined>
   /**
    * Start cloning a repository into a new folder.
    * @param request - the address, the folder to clone into and the new folder's name.
@@ -276,8 +291,24 @@ export interface CustomEndpoint {
   readonly key: string
 }
 
+/** The field of an agent provider's row that the agents step writes. */
+export interface AgentRowSettings {
+  /** The model the agent runs, or absent for the agent's own default. */
+  readonly model?: string | undefined
+}
+
+/** The settings the agents step reads and writes, by the agent's connection id. */
+export interface AgentsFace {
+  /** The row of an agent's provider; its form is unavailable until the package is installed and running. */
+  readonly rows: Readonly<Record<'claude-code' | 'codex', ConfigForm<AgentRowSettings>>>
+  /** The external-agent consent's row, which holds the run time limit. */
+  readonly limit: ConfigForm<DelegationConsentSettings>
+}
+
 /** The services that do not change while the dialog is open. */
 export interface StaticServices {
+  /** The agents' settings. */
+  readonly agents: AgentsFace
   /** The model providers. */
   readonly providers: ProvidersFace
   /** The preview notice, or undefined where there is none. */
@@ -298,6 +329,16 @@ export interface StaticServices {
   readonly start: StartFace
   /** Resolve a package's localized text in the active language. */
   readonly resolveText: (text: LocalizedText) => string
+  /** The PIN mode step's requests and its link to Settings. */
+  readonly pin: PinFace
+}
+
+/** What the PIN step reaches the home with. */
+export interface PinFace {
+  /** Sends the step's same-origin requests: the browser's `fetch`, or a spec's fake. */
+  readonly fetch: HostFetch
+  /** Open Settings at the PIN mode section. */
+  readonly openSettings: () => void
 }
 
 /** The services the built-in steps draw with: the static ones, this plugin's copy, the recommended packages and the Settings section drawer. */
@@ -338,6 +379,8 @@ export interface OnboardingInjected {
   readonly startChat: (workspaceId?: WorkspaceId, folder?: FolderKind, keepCurrent?: boolean) => Promise<void>
   /** Whether the person chose Finish later in this visit; the Finish setup chip reads it and the dialog sets it. */
   readonly aside: LaterStore
+  /** Whether the dialog shows only the steps a phone deferred to this computer; the sidebar's Finish setup entry sets it, and the dialog clears it when it closes. */
+  readonly deferredOnly: LaterStore
 }
 
 /** The flag that the guide was set aside in this visit. */

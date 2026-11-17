@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "jsx": "react-jsx",
     "rewriteRelativeImportExtensions": false,
     "composite": false,
     "incremental": false,
@@ -13,6 +14,7 @@
     "src/config.ts",
     "src/wire.ts",
     "src/answers.ts",
+    "src/deferred.ts",
     "src/workspace-route.ts",
     "src/clone.ts",
     "src/clone-address.ts",

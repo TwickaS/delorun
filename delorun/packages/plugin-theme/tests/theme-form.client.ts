@@ -29,6 +29,14 @@ export function themeForm(initial: ThemeSettings | undefined, status: 'ready' | 
     if (form.answer) form.publish({ value: { ...(form.scope.getSnapshot().value ?? DEFAULT_SETTINGS), [field]: value } })
     return Promise.resolve(form.answer)
   })
+  // An atomic mutation logs each field as a write, in order, and applies them together.
+  form.mutate.mockImplementation((ops) => {
+    const fields = ops.flatMap(op => op.op === 'set' ? [[op.path[0] as string, op.value] as const] : [])
+    for (const [field, value] of fields) writes.push([field, value])
+    if (form.answer === 'throw') return Promise.reject(new Error('transport'))
+    if (form.answer) form.publish({ value: { ...(form.scope.getSnapshot().value ?? DEFAULT_SETTINGS), ...Object.fromEntries(fields) } })
+    return Promise.resolve(form.answer)
+  })
   if (initial !== undefined || status === 'unavailable') form.publish({ status, value: initial, writable: true })
   return form
 }

@@ -21,6 +21,35 @@ export interface GitHubWebhookHandlerConfig {
   readonly maxBodyBytes: number
 }
 
+/** How many verified delivery ids one handler remembers; the oldest is forgotten first. */
+const SEEN_DELIVERIES = 1024
+
+/** Remembers the last {@link SEEN_DELIVERIES} verified delivery ids, so a captured delivery cannot be replayed into a second Session. */
+class SeenDeliveries {
+  private readonly ids = new Set<string>()
+
+  /**
+   * Whether the id was recorded before; records it otherwise.
+   * @param id - a verified delivery id.
+   * @returns true for a repeat.
+   */
+  repeats(id: string): boolean {
+    if (this.ids.has(id)) return true
+    this.ids.add(id)
+    const oldest = this.ids.values().next()
+    if (this.ids.size > SEEN_DELIVERIES && oldest.done !== true) this.ids.delete(oldest.value)
+    return false
+  }
+
+  /**
+   * Forget an id whose dispatch failed, so the sender's retry is accepted.
+   * @param id - the delivery id.
+   */
+  forget(id: string): void {
+    this.ids.delete(id)
+  }
+}
+
 /** Require one unambiguous non-empty request header. */
 function requiredHeader(request: IncomingMessage, name: string): string {
   const values = request.headersDistinct[name]
@@ -79,6 +108,7 @@ export function createGitHubWebhookHandler(
   ctx: Context,
   config: GitHubWebhookHandlerConfig,
 ): WebRoute['handler'] {
+  const seen = new SeenDeliveries()
   return async (request, response) => {
     try {
       if (request.method !== 'POST') {
@@ -104,6 +134,11 @@ export function createGitHubWebhookHandler(
       }
       if (!verified) throw new WebhookHttpError(401, 'invalid webhook signature')
       const payload = parsePayload(body)
+      // A repeat of a verified delivery id is acknowledged and dropped, so a captured request cannot start a second Session.
+      if (seen.repeats(deliveryId)) {
+        respond(response, 200, 'duplicate delivery ignored')
+        return
+      }
       const delivery: VerifiedWebhookDelivery<'github'> = {
         kind: 'github',
         source: WebhookSourceId(config.source),
@@ -114,6 +149,7 @@ export function createGitHubWebhookHandler(
       try {
         ctx.webhookRuntime.dispatch(delivery)
       } catch {
+        seen.forget(deliveryId)
         ctx.logger.warn('webhook-github: dispatch unavailable')
         throw new WebhookHttpError(503, 'webhook runtime is unavailable')
       }

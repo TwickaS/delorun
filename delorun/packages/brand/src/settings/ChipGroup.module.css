@@ -22,7 +22,9 @@
   white-space: nowrap;
 }
 
-.chips {
+.chips,
+.segmented,
+.tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--delorun-chip-min, 152px), 1fr));
   gap: var(--delorun-space-4, 8px);
@@ -116,4 +118,68 @@
 
 :global(body[data-ds-dark-theme]) .accentDot {
   background: var(--accent-dark);
+}
+
+/* Segmented: one joined row of equal options. */
+.segmented {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0;
+  width: 100%;
+  max-width: var(--delorun-segmented-max, 360px);
+  padding: var(--delorun-space-1, 2px);
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2, var(--dl-border));
+  border-radius: var(--dsw-radius-md, var(--dl-radius-md));
+  background: var(--dsw-alias-bg-layer-2, var(--dl-surface-sunken));
+}
+
+.segmented .chip {
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+}
+
+.segmented .chip[aria-checked='true'] {
+  border-color: var(--dsw-alias-border-l2, var(--dl-border));
+  background: var(--dsw-alias-bg-base, var(--dl-surface));
+  box-shadow: none;
+  font-weight: 600;
+}
+
+/* Tiles: a picture above its name, several to a row. */
+.tiles {
+  grid-template-columns: repeat(auto-fill, minmax(var(--delorun-tile-min, 104px), 1fr));
+  gap: var(--delorun-space-3, 6px);
+}
+
+.tiles .chip {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--delorun-space-2, 4px);
+  min-height: 44px;
+  padding: var(--delorun-space-2, 4px);
+  text-align: center;
+}
+
+.tiles .mark {
+  display: block;
+}
+
+.tileLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tiles .chip[aria-checked='true'] {
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip {
+    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  }
 }

@@ -10,6 +10,7 @@
     "./archive/*": "./src/archive/*.ts",
     "./brands": "./src/brands.ts",
     "./log/*": "./src/log/*.ts",
+    "./packs/*": "./src/packs/*.ts",
     "./sign/*": "./src/sign/*.ts"
   },
   "dependencies": {

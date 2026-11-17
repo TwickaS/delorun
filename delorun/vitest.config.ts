@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
+import { standardDecoratorPlugin } from '../vitest.shared.ts'
 
 /**
  * Vitest for Delorun's own workspaces: the specs under `delorun/apps/*` and `delorun/packages/*`, in three projects.
@@ -51,6 +52,8 @@ const WEBSITE_MODULES = fileURLToPath(new URL('./apps/website/node_modules', imp
 
 /** The unit project: `*.spec.ts` specs that start no process; `@design` is the sites' shared design package, and `@brand` is the brand package, as in the docs and website tsconfigs. */
 export const forkUnitProject = {
+  // A Host remote's source has decorators, which the plugin rewrites before Vite parses the file.
+  plugins: [standardDecoratorPlugin()],
   resolve: {
     alias: [
       { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
@@ -87,6 +90,7 @@ export default defineConfig({
     projects: [
       forkUnitProject,
       {
+        plugins: [standardDecoratorPlugin()],
         test: {
           name: 'fork-integration',
           include: SPEC_DIRS.map(dir => `${dir}/*.integration.spec.ts`),

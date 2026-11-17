@@ -93,6 +93,12 @@ export const ClosureRecipe = z.strictObject({
     directory: z.string().regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/u, 'a relative path inside the package').refine(noDotSegment, 'no . or .. segment'),
     platforms: z.array(z.string().regex(/^[a-z0-9]+-[a-z0-9]+$/u, 'a platform such as darwin-arm64')).min(1),
   })),
+  /**
+   * Packages a pack never carries: their licence forbids redistribution, so the packs file pins each by npm tarball
+   * URL and SHA-512 and the client fetches it from the registry. A name ending in `*` matches a prefix (a package per
+   * platform, such as `@openai/codex-linux-x64`).
+   */
+  packExternals: z.array(z.string().regex(/^(@[a-z0-9-]+\/)?[a-z0-9._-]+\*?$/u, 'an npm package name, or a prefix ending in *')).default([]),
   /** The install anchor upstream's runtime resolution reads, and the Delorun bundles it must declare as dependencies. */
   anchor: z.strictObject({
     package: z.string().min(1),

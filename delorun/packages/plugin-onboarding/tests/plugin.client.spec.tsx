@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, FINISH_SETUP_ENTRY, FINISH_SETUP_OVERLAY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -55,8 +55,10 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
   } as never)
   const progress = liveForm<OnboardingSettings>(options.progress ?? settings())
   const theme = liveForm(THEME)
+  // The agents' provider rows and the external-agent consent's row, served only once an agent is added.
+  const otherRows = new Set(['subagent-claude-code', 'subagent-codex', 'delorun-delegation-consent'])
   ctx.provide('configForms', {
-    get: (id: string) => (id === ONBOARDING_ROW_ID ? progress.form : id === THEME_ROW_ID ? theme.form : (() => { throw new Error(`unexpected row ${id}`) })()),
+    get: (id: string) => (id === ONBOARDING_ROW_ID ? progress.form : id === THEME_ROW_ID ? theme.form : otherRows.has(id) ? liveForm<object>(undefined, { status: 'unavailable' }).form : (() => { throw new Error(`unexpected row ${id}`) })()),
     whileServed: (ids: readonly string[], register: () => () => void) => {
       served.ids = ids
       served.register = register
@@ -96,8 +98,7 @@ const ROW_KEY = `settings.general.item#${SHOW_AGAIN_ROW.id}`
 const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
 const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 const RENAME_KEY = `tool.call.toolview#${RENAME_TOOL}`
-const FINISH_KEY = `conversation.input.dock#${FINISH_SETUP_ENTRY.id}`
-const FINISH_FLOAT_KEY = `shell.overlay#${FINISH_SETUP_OVERLAY.id}`
+const DEFERRED_KEY = `sidebar.footer.action#${DEFERRED_ENTRY.id}`
 const SET_ASIDE_KEY = `conversation.input.dock#${SET_ASIDE_ENTRY.id}`
 
 describe('the stock look', () => {
@@ -111,7 +112,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(8)
+    expect(entries.size).toBe(7)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('delorunOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -138,7 +139,7 @@ describe('the registrations', () => {
     expect([...entries.keys()]).toEqual([RENAME_KEY])
     expect(entries.get(RENAME_KEY)?.options).toMatchObject({ name: 'tool.call.toolview', key: 'rename_workspace', locale: NS })
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, FINISH_FLOAT_KEY, FINISH_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DEFERRED_KEY, DOCK_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delorun-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
@@ -146,37 +147,6 @@ describe('the registrations', () => {
     expect(entries.get(DOCK_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', locale: NS })
     served.off()
     expect([...entries.keys()]).toEqual([RENAME_KEY])
-  })
-
-  it('shows the Finish setup chip where no chat has a dock, once the guide is set aside, and reopens it at the saved step', async () => {
-    const openOnboarding = vi.fn()
-    const { entries, served, progress } = await harness({ provide: { settingsShell: { openOnboarding } }, progress: settings({ step: 'agents' }) })
-    served.on()
-    const Floating = entries.get(FINISH_FLOAT_KEY)?.component as ComponentType<Record<string, unknown>>
-    const float = face<Record<string, unknown>>(entries, FINISH_FLOAT_KEY)
-    const view = render(<Floating t={t} {...float} />)
-    expect(screen.queryByRole('button', { name: en.finishSetup })).toBeNull()
-    await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.finishSetup })) })
-    expect(openOnboarding).toHaveBeenCalledExactlyOnceWith('delorun-onboarding')
-    // Reopening takes the guide out of its set-aside state, so the chip goes until the next Finish later.
-    expect(screen.queryByRole('button', { name: en.finishSetup })).toBeNull()
-    expect(progress.value()).toMatchObject({ step: 'agents' })
-    view.unmount()
-  })
-
-  it('shows the chip once: in a chat\'s dock when there is one, and floating otherwise', async () => {
-    const { entries, served } = await harness()
-    served.on()
-    const Floating = entries.get(FINISH_FLOAT_KEY)?.component as ComponentType<Record<string, unknown>>
-    const Docked = entries.get(FINISH_KEY)?.component as ComponentType<Record<string, unknown>>
-    await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
-    render(<Floating t={t} {...face<Record<string, unknown>>(entries, FINISH_FLOAT_KEY)} />)
-    expect(screen.getAllByRole('button', { name: en.finishSetup })).toHaveLength(1)
-    const docked = render(<Docked t={t} {...face<Record<string, unknown>>(entries, FINISH_KEY)} />)
-    expect(screen.getAllByRole('button', { name: en.finishSetup })).toHaveLength(1)
-    docked.unmount()
-    expect(screen.getAllByRole('button', { name: en.finishSetup })).toHaveLength(1)
   })
 
   it('open onboarding explicitly from the General row by the step\'s id', async () => {
@@ -246,6 +216,19 @@ describe('the services the dialog draws with', () => {
     expect(useStockLook).toHaveBeenCalledOnce()
     expect(services.resolveText({ en: 'Hello' })).toBe('Hello')
     expect(services.appearance('mode')).toBeTruthy()
+  })
+
+  it('give the PIN step the page\'s fetch and a link that opens Settings at PIN mode', async () => {
+    const openSection = vi.fn()
+    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    const { entries, served } = await harness({ provide: { settingsShell: { openSection, openOnboarding: vi.fn() } } })
+    served.on()
+    const { pin } = face<OnboardingInjected>(entries, STEP_KEY).services
+    await pin.fetch('/auth/pin/mode')
+    expect(fetched).toHaveBeenCalledWith('/auth/pin/mode', undefined)
+    pin.openSettings()
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('delorun-pin-mode')
+    fetched.mockRestore()
   })
 
   it('give the preview notice from bundle-local\'s dictionary and acknowledgement, and none where bundle-local is absent', async () => {

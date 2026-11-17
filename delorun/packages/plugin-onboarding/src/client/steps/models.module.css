@@ -112,3 +112,45 @@
   align-self: flex-start;
   min-height: var(--onb-target);
 }
+
+/* A key Delorun already has: the source line and the disclosure sit under the found state, no input. */
+.found {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+  padding: var(--onb-gap-1) var(--onb-gap-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.source {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  overflow-wrap: anywhere;
+}
+
+.how {
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+}
+
+.howBody {
+  margin: var(--onb-gap-1) 0 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.replace {
+  align-self: flex-start;
+}
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .replace {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}

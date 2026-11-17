@@ -75,6 +75,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'bundle-local/src/report.ts': {
     REPORT_ROUTE: UNLOCKED('the report excerpt can hold paths of the home'),
   },
+  'bundle-local/src/requirements.ts': {
+    'REQUIREMENT_ROUTES.check': READ('a read of which programs and settings a bundle needs are present, as the owner sees it'),
+  },
   'bundle-local/src/update-check.ts': {
     UPDATE_CHANNEL_PATH: READ('names the release host alone'),
     UPDATE_NOTICE_PATH: READ('says whether a newer release exists'),
@@ -99,6 +102,8 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
+    DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
+    AGENT_MODELS_PATH: UNLOCKED('starts the agent\'s own process to list its models'),
     LOCAL_MODELS_PATH: READ('probes the two loopback model listings'),
     RECOMMEND_PATH: READ('names the recommended packages and connections'),
   },

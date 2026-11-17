@@ -252,9 +252,9 @@ describe('with the studio additions on', () => {
     const Section = section.component
     const face = section.options.inject?.() as AppearanceInjected
     render(<Section t={makeTranslate(en)} {...face} />)
-    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: 'Moss' })) })
+    await act(async () => { fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Theme' })).getByRole('radio', { name: /Grove/ })) })
     await act(async () => { fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Mode' })).getByRole('radio', { name: /Dark/ })) })
-    expect(form.writes).toEqual([['accent', 'moss']])
+    expect(form.writes).toEqual([['palette', 'grove']])
     expect(preference()).toBe('dark')
     const changed = vi.fn()
     const stop = face.scheme.subscribe(changed)

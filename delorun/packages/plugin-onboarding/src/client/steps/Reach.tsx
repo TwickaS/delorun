@@ -1,11 +1,12 @@
 /**
- * Phone access: what it does and the command that turns it on, with the Tailscale checks and the PIN option under More.
+ * Phone access: what it does and the command that turns it on, with the Tailscale checks under More.
  */
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import type { ReactNode } from 'react'
 import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
 import { CommandRow } from '../ui/CommandRow.tsx'
+import { StateLine } from '../ui/StateLine.tsx'
 import { useStore, type StepProps } from './shared.ts'
 import more from './reach.module.css'
 import css from './steps.module.css'
@@ -57,7 +58,7 @@ function TailscaleChecks({ tailscale, t }: { readonly tailscale: TailscaleReadin
 
 /**
  * Phone access, while reach is not set up: one sentence on what it does and the command that turns it on; the Tailscale
- * checks, the approval command and the PIN option sit under More. A studio opened from a phone has no such step.
+ * checks and the approval command sit under More; the PIN step follows once reach is on. A studio opened from a phone has no such step.
  * @param props - the services and the guide.
  * @returns the step body.
  */
@@ -67,8 +68,9 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
   const tailscale = readiness.status === 'ready' ? readiness.value.tailscale : undefined
   return (
     <div className={css.stack}>
-      <p className={css.lead}>{t('reach.lead')}</p>
-      <CommandRow command={REACH_COMMAND} t={t} />
+      {tailscale?.state === 'ready'
+        ? <StateLine tone="success">{t('reach.ready')}</StateLine>
+        : <><p className={css.lead}>{t('reach.lead')}</p><CommandRow command={REACH_COMMAND} t={t} /></>}
       <details className={more.details}>
         <summary className={more.summary}>{t('reach.more')}</summary>
         <div className={more.more}>
@@ -81,7 +83,6 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
           <CommandRow command={APPROVE_COMMAND} t={t} />
           {tailscale?.state === 'ready' && <span>{t('reach.address', { address: `https://${tailscale.dnsName}` })}</span>}
           <span>{t('reach.limits')}</span>
-          <span>{t('reach.pin')}</span>
         </div>
       </details>
     </div>

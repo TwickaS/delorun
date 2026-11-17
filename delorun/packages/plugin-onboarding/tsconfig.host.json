@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
+    "jsx": "react-jsx",
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
@@ -10,7 +11,9 @@
     "src/config.ts",
     "src/wire.ts",
     "src/answers.ts",
+    "src/deferred.ts",
     "src/workspace-route.ts",
+    "src/agent-models.ts",
     "src/clone.ts",
     "src/clone-address.ts",
     "src/folder-kind.ts",
@@ -35,6 +38,9 @@
     },
     {
       "path": "../../../packages/settings/settings"
+    },
+    {
+      "path": "../../../packages/subagent/subagent"
     },
     {
       "path": "../../../packages/util/brand"
