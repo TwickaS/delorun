@@ -8,10 +8,21 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { newStartId } from '@delorun/home'
 import { HomeProcess, listenProcessSignals, openHandoverPipe, openHomeLog, updateChannelProbe, type HomeProcessOptions } from '../../src/index.ts'
-import { behaviourOf, FixtureCopies, FixtureHarness, FixtureHostRunner, FixtureSnapshots, FixtureStore } from '../support.ts'
+import { behaviourOf, FixtureCopies, type FixtureBehaviour, FixtureHarness, FixtureHostRunner, FixtureSnapshots, FixtureStore } from '../support.ts'
 
 const [mode, home = '', profile = '', versionText = ''] = process.argv.slice(2)
 const version = brandString<RuntimeVersion>(versionText)
+
+/**
+ * A version's behaviour in this process: a successor fails its health check under `unhealthySuccessor` and disables
+ * `successorDisabled` when the version names them.
+ * @param behaviour - the version's behaviour.
+ * @returns the behaviour this process's Host has.
+ */
+function successorBehaviour(behaviour: FixtureBehaviour): FixtureBehaviour {
+  if (mode !== 'successor') return behaviour
+  return { ...behaviour, ...behaviour.unhealthySuccessor === true ? { healthy: false } : {}, ...behaviour.successorDisabled === undefined ? {} : { disabled: behaviour.successorDisabled } }
+}
 
 /**
  * The options of this process, with the start id it logs and locks under.
@@ -24,7 +35,7 @@ function optionsOf(startId: HomeProcessOptions['startId'], running: RuntimeVersi
   const snapshots = new FixtureSnapshots()
   process.on('exit', () => { log.close() })
   return {
-    home, profile, running, startId, host: new FixtureHostRunner(() => behaviourOf(home, running)), preStart: () => Promise.resolve(), probe: updateChannelProbe(home, profile), logger, redactor,
+    home, profile, running, startId, host: new FixtureHostRunner(() => successorBehaviour(behaviourOf(home, running))), preStart: () => Promise.resolve(), probe: updateChannelProbe(home, profile), logger, redactor,
     updates: { store: new FixtureStore(home, profile), snapshots, copies: new FixtureCopies(snapshots), harness: new FixtureHarness() }, supervisor: undefined,
     onExit: (listener) => { process.on('exit', listener) },
     onSignal: listenProcessSignals,
