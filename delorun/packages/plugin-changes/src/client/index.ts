@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the 'sidebar.footer.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+// Type-only: the 'remote/call-denied' event, which opens the studio's unlock dialog.
+import type {} from '@deepseek-ai/dsh-api-gateway/client'
 import { ChangesController } from './controller.ts'
 import { createChangesToastSource, ChangesToast } from './ChangesToast.tsx'
 import { CreateSection, type CreateSectionInjected } from './CreateSection.tsx'
@@ -24,7 +26,7 @@ import { en, zh, type ChangesLocaleKey } from './locales.ts'
 import { WorkBadge, type WorkBadgeInjected } from './WorkBadge.tsx'
 
 export type { ChangesLocaleKey } from './locales.ts'
-export type { ActionOutcome, ChangesLoad, ChangesNotice } from './controller.ts'
+export type { ActionOutcome, ChangesLoad, ChangesNotice, CopyOutcome, HarnessEffects } from './controller.ts'
 export type { ChangesSectionInjected, ChangesSectionProps } from './ChangesSection.tsx'
 export type { CreateSectionInjected, CreateSectionProps } from './CreateSection.tsx'
 export type { WorkBadgeInjected, WorkBadgeProps } from './WorkBadge.tsx'
@@ -75,7 +77,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-changes: dictionaries')
   const t = ctx.locale.bind(NS)
   const toast = createChangesToastSource()
-  const changes = new ChangesController({ report: toast.report })
+  // A refusal until the device is unlocked opens the studio's unlock dialog the way a refused Remote call does.
+  const changes = new ChangesController({
+    report: toast.report,
+    unlockNeeded: (control) => {
+      const endpoint = `delorunChanges/${control}`
+      ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
+    },
+  })
   ctx.effect(() => {
     void changes.refresh()
     return changes.poll(STATE_REFRESH_MS)
@@ -86,7 +95,7 @@ export function apply(ctx: Context): void {
     inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
   }, ChangesToast))
   const section: ChangesSectionInjected = {
-    hooks: { changes: changes.state, refusedRemote: changes.refusedRemote },
+    hooks: { changes: changes.state, harnessEffects: changes.harnessEffects },
     reload: () => changes.refresh(),
     retry: () => changes.retry(),
     show: id => changes.show(id),
@@ -98,6 +107,13 @@ export function apply(ctx: Context): void {
     undo: id => changes.undo(id),
     beginWork: plugin => changes.beginWork(plugin),
     done: (plugin, version, confirmedRisk) => changes.done(plugin, version, confirmedRisk),
+    harnessApply: (id, to, confirmedRisk) => changes.harnessApply(id, to, confirmedRisk),
+    harnessUndo: id => changes.harnessUndo(id),
+    harnessDiscard: id => changes.harnessDiscard(id),
+    makeCopy: () => changes.makeCopy(),
+    protectionOn: () => changes.protectionOn(),
+    protectionOff: confirmed => changes.protectionOff(confirmed),
+    noticeSeen: id => changes.noticeSeen(id),
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: CHANGES_SECTION_ID, order: CHANGES_SECTION_ORDER, label: () => t('nav'), locale: NS,

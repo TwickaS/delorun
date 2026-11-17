@@ -6,25 +6,76 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type { FunctionComponent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, CHANGES_SECTION_ID, CHANGES_SECTION_ORDER, inject, NS, STATE_REFRESH_MS, WORK_BADGE_ID, WORK_BADGE_ORDER } from '../src/client/index.ts'
+import { RELEASE_COMMAND } from '../src/client/SelfGroup.tsx'
 import { en, zh } from '../src/client/locales.ts'
-import { ACTION_PATHS, SHOW_PATH, STATE_PATH, type ChangesStateView, type ChangeView, type EntryView, type HarnessEntryView, type HarnessReviewView, type PendingView, type WorkReviewView } from '../src/wire.ts'
+import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SHOW_PATH, STATE_PATH, type AccessView, type ActorView, type ChangesStateView, type ChangeView, type EntryView, type HarnessEffectView, type HarnessEntryView, type HarnessPendingView, type HarnessReviewView, type MayView, type PendingView, type WorkReviewView } from '../src/wire.ts'
 
 const VERSION = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9'
 const HOUR = 3_600_000
 
-/** What the stand-in harness holds: the state, with the changes `show?pending` lists in place of the folders it names. */
-type FakeState = Omit<ChangesStateView, 'folders'> & { readonly pending: readonly PendingView[] }
+/**
+ * What the stand-in harness holds: the state, with the changes `show?pending` lists in place of the folders it names
+ * and of the copy's waiting changes, and why the copy could not be read.
+ */
+type FakeState = Omit<ChangesStateView, 'folders'> & {
+  readonly pending: readonly PendingView[]
+  readonly harnessPending: readonly HarnessPendingView[]
+  readonly harnessProblem?: string
+}
 
-/** A state with nothing in it, at the computer. */
+/** Every control usable: the person at the computer. */
+const ACCESS_COMPUTER: AccessView = {
+  actor: 'computer',
+  phonePowers: { level: 'careful', chosen: false },
+  may: {
+    'harness-apply': { ok: true }, 'harness-undo': { ok: true }, 'harness-discard': { ok: true },
+    'protection-off': { ok: true }, 'protection-on': { ok: true },
+    'make-copy': { ok: true }, 'restart': { ok: true },
+    'plugin-apply': { ok: true }, 'plugin-undo': { ok: true }, 'plugin-discard': { ok: true }, 'plugin-other': { ok: true },
+    'notice-seen': { ok: true },
+  },
+}
+
+const UNLOCK: MayView = { ok: false, needs: 'unlock' }
+const COMPUTER: MayView = { ok: false, needs: 'computer' }
+
+/**
+ * A paired phone's access at a Phone powers level, as the route computes it: Careful keeps the controls that apply or
+ * switch changes at the computer; Full leaves them to a fresh unlock; the phone locked asks an unlock of what it may do.
+ * @param actor - the phone's state.
+ * @param level - the Phone powers level.
+ * @returns the access.
+ */
+function phoneAccess(actor: ActorView, level: 'careful' | 'full'): AccessView {
+  const locked = actor !== 'device-unlocked'
+  const fresh: MayView = locked ? UNLOCK : { ok: true }
+  const kept: MayView = level === 'careful' ? COMPUTER : fresh
+  return {
+    actor,
+    phonePowers: { level, chosen: true },
+    may: {
+      'harness-apply': kept, 'harness-undo': kept, 'harness-discard': fresh,
+      'protection-off': kept, 'protection-on': fresh,
+      'make-copy': kept, 'restart': kept,
+      'plugin-apply': kept, 'plugin-undo': fresh, 'plugin-discard': fresh, 'plugin-other': kept,
+      'notice-seen': COMPUTER,
+    },
+  }
+}
+
+/** A state with nothing in it, at the computer, with no way to change Delorun itself. */
 function emptyState(fields: Partial<FakeState> = {}): FakeState {
-  return { atComputer: true, profile: 'default', protection: 'on', leftOut: [], pending: [], requests: [], recent: [], harness: [], problems: [], ...fields }
+  return {
+    atComputer: true, access: ACCESS_COMPUTER, profile: 'default', protection: 'on', leftOut: [], pending: [], requests: [], recent: [], harness: [], harnessPending: [],
+    harnessAvailable: { kind: 'unavailable' }, unreviewedSinceOff: 0, notices: [], problems: [], ...fields,
+  }
 }
 
 /**
  * @param state - what the harness holds.
  * @returns the state route's answer: the plugin of each change waiting for review named as a folder.
  */
-function stateView({ pending, ...state }: FakeState): ChangesStateView {
+function stateView({ pending, harnessPending: _waiting, harnessProblem: _problem, ...state }: FakeState): ChangesStateView {
   return { ...state, folders: pending.map(({ plugin, source, kind }) => ({ plugin, source, kind })) }
 }
 
@@ -71,8 +122,20 @@ const SELF_FILE = 'app/node_modules/delorun/lib/main.js'
 /** A logged change to Delorun itself. */
 function self(fields: Partial<HarnessEntryView> & Pick<HarnessEntryView, 'id' | 'state'>): HarnessEntryView {
   const at = new Date(Date.now() - 3 * HOUR).toISOString()
-  return { file: SELF_FILE, runtime: '0.4.0', summary: `Delorun 0.4.0 itself: ${SELF_FILE}`, createdAt: at, decidedAt: at, ...fields }
+  return { file: SELF_FILE, runtime: '0.4.0', summary: `Delorun 0.4.0 itself: ${SELF_FILE}`, createdAt: at, decidedAt: at, undoable: false, ...fields }
 }
+
+/** A change waiting in the person's copy of Delorun. */
+const WAITING: HarnessPendingView = { id: 'c00000000b1', file: SELF_FILE, runtime: '0.4.0', status: 'modified', to: VERSION }
+
+/** A waiting change whose checks flagged it: the route asks a second confirmation. */
+const WAITING_FLAGGED: HarnessPendingView = { id: 'c00000000b2', file: 'app/node_modules/delorun/lib/net.js', runtime: '0.4.0', status: 'added', to: 'c'.repeat(64) }
+
+/** The person's copy of Delorun exists. */
+const COPY_MADE = { kind: 'available', runtime: '0.4.0', copy: true } as const
+
+/** The person has no copy of Delorun yet. */
+const COPY_NONE = { kind: 'available', runtime: '0.4.0', copy: false } as const
 
 /** The review of a change to Delorun itself. */
 const SELF_REVIEW: HarnessReviewView = {
@@ -90,14 +153,19 @@ function harness(initial: FakeState = emptyState()) {
   const calls: Array<{ path: string, body: Record<string, unknown> }> = []
   const replaced = new Map<string, Route>()
   const changes = new Map<string, ChangeView>([[PENDING.id, change()], [FLAGGED.id, FLAGGED_CHANGE]])
+  let effect: HarnessEffectView = { kind: 'live' }
   let work: WorkReviewView = { kind: 'work', plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString(), version: VERSION, failedToLoad: false, change: change() }
   const decided = (body: Record<string, unknown>, fields: Partial<EntryView>) => logged({ id: String(body.id), ...fields })
   const routes: Record<string, Route> = {
     [STATE_PATH]: () => Response.json(stateView(state)),
     [SHOW_PATH]: ({ url }) => {
-      if (url.searchParams.has('pending')) return Response.json({ kind: 'pending-list', pending: state.pending })
+      if (url.searchParams.has('pending')) {
+        return Response.json({ kind: 'pending-list', pending: state.pending, harness: state.harnessPending, ...state.harnessProblem === undefined ? {} : { harnessProblem: state.harnessProblem } })
+      }
       const work = url.searchParams.get('work')
       if (work !== null) return Response.json(workReview())
+      const waiting = state.harnessPending.find(item => item.id === url.searchParams.get('id'))
+      if (waiting !== undefined) return Response.json({ kind: 'harness-pending', change: waiting, review: SELF_REVIEW })
       const harnessEntry = state.harness.find(entry => entry.id === url.searchParams.get('id'))
       if (harnessEntry !== undefined) return Response.json({ kind: 'harness', entry: harnessEntry, ...harnessEntry.state === 'applied' ? { review: SELF_REVIEW } : {} })
       const shown = changes.get(String(url.searchParams.get('id')))
@@ -122,6 +190,43 @@ function harness(initial: FakeState = emptyState()) {
       return Response.json({ entry: decided(body, { state: 'discarded' }) })
     },
     [ACTION_PATHS.undo]: ({ body }) => Response.json({ entry: decided(body, { state: 'undone' }), reload: { kind: 'reloaded' } }),
+    [HARNESS_PATHS.apply]: ({ body }) => {
+      const waiting = state.harnessPending.find(item => item.id === body.id)
+      if (waiting?.id === WAITING_FLAGGED.id && body.confirmedRisk !== true) {
+        return Response.json({ code: 'CONFIRM_RISK', message: 'Confirm again.', kinds: ['network'], notShown: [] }, { status: 409 })
+      }
+      const entry = self({ id: String(body.id), state: 'applied', undoable: true, file: waiting?.file ?? SELF_FILE })
+      state = { ...state, harnessPending: state.harnessPending.filter(item => item.id !== body.id), harness: [entry, ...state.harness] }
+      return Response.json({ kind: 'harness', entry, effect })
+    },
+    [HARNESS_PATHS.undo]: ({ body }) => {
+      const entry = self({ id: String(body.id), state: 'undone' })
+      state = { ...state, harness: state.harness.map(item => item.id === body.id ? entry : item) }
+      return Response.json({ kind: 'harness', entry, effect })
+    },
+    [HARNESS_PATHS.discard]: ({ body }) => {
+      state = { ...state, harnessPending: state.harnessPending.filter(item => item.id !== body.id) }
+      return Response.json({ kind: 'harness', entry: self({ id: String(body.id), state: 'discarded' }) })
+    },
+    [HARNESS_PATHS.copy]: () => {
+      state = { ...state, harnessAvailable: COPY_MADE }
+      return Response.json({ kind: 'copy', created: true, runtime: '0.4.0', place: '<Delorun home>/runtimes/0.4.0/app' })
+    },
+    [PROTECTION_PATHS.on]: () => {
+      state = { ...state, protection: 'on' }
+      return Response.json({ protection: 'on', unreviewedSinceOff: state.unreviewedSinceOff })
+    },
+    [PROTECTION_PATHS.off]: ({ body }) => {
+      if (body.confirmed !== true) {
+        return Response.json({ code: 'CONFIRM_PROTECTION', message: 'Confirm.', willLoad: { plugins: state.pending.map(item => item.plugin), harnessFiles: state.harnessPending.length } }, { status: 409 })
+      }
+      state = { ...state, protection: 'off' }
+      return Response.json({ protection: 'off', unreviewedSinceOff: 0 })
+    },
+    [NOTICE_SEEN_PATH]: ({ body }) => {
+      state = { ...state, notices: state.notices.filter(item => item.id !== body.id) }
+      return Response.json({ dismissed: true })
+    },
     [ACTION_PATHS.work]: ({ body }) => {
       const session = { plugin: String(body.plugin), source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + 2 * HOUR).toISOString() }
       state = { ...state, workSession: session }
@@ -149,6 +254,8 @@ function harness(initial: FakeState = emptyState()) {
   return {
     calls, callsTo,
     set: (next: FakeState) => { state = next },
+    /** When the harness says a change to Delorun itself takes effect. */
+    setEffect: (next: HarnessEffectView) => { effect = next },
     setWork: (next: WorkReviewView) => { work = next },
     replace: (path: string, route: Route) => { replaced.set(path, route) },
   }
@@ -297,7 +404,7 @@ describe('the Changes section', () => {
     expect(screen.getByText(en['pending.empty'])).toBeTruthy()
   })
 
-  it('shows each part of the state: the work session, changes left out, pending changes, requests, recent changes and the protection setting with its command and no control', async () => {
+  it('shows each part of the state: the work session, changes left out, pending changes, requests, recent changes and the protection switch', async () => {
     await openSection(emptyState({
       problems: ['The change log cannot be read: bad JSON'],
       safeMode: { since: new Date().toISOString(), reason: 'asked', skipped: ['x'] },
@@ -335,11 +442,9 @@ describe('the Changes section', () => {
     expect(within(recentRows[1] as HTMLElement).queryByRole('button')).toBeNull()
     const protection = screen.getByRole('region', { name: en['protection.heading'] })
     expect(within(protection).getByText(en['protection.on'])).toBeTruthy()
-    expect(within(protection).getByText('delorun changes protection on|off')).toBeTruthy()
+    expect(within(protection).getByRole('switch', { name: en['protection.switch'] }).getAttribute('aria-checked')).toBe('true')
     expect(document.querySelector('[data-delorun-changes-live]')).toBeNull()
-    expect(within(protection).queryByRole('button')).toBeNull()
-    expect(within(protection).queryByRole('switch')).toBeNull()
-    expect(within(protection).queryByRole('radio')).toBeNull()
+    expect(document.querySelector('[data-delorun-changes-remote]')).toBeNull()
   })
 
   it('says when nothing waits, no change was made yet and no plugin is linked, and leaves out the setting it cannot read', async () => {
@@ -352,20 +457,19 @@ describe('the Changes section', () => {
     expect(screen.getByText(en['work.none'])).toBeTruthy()
     const selfGroup = screen.getByRole('region', { name: en['self.heading'] })
     expect(within(selfGroup).getByText(en['self.empty'])).toBeTruthy()
-    expect(within(selfGroup).getByText('delorun changes list')).toBeTruthy()
+    expect(within(selfGroup).getByText(en['self.unavailable'])).toBeTruthy()
+    expect(within(selfGroup).queryByText(RELEASE_COMMAND)).toBeNull()
     expect(screen.queryByRole('region', { name: en['protection.heading'] })).toBeNull()
     expect(screen.queryByRole('region', { name: en['leftOut.heading'] })).toBeNull()
     expect(screen.queryByRole('region', { name: en['requests.heading'] })).toBeNull()
   })
 
-  it('with protection off, says that changes load and linked plugins reload live on save without review, read only', async () => {
+  it('with protection off, says that changes load and linked plugins reload live on save without review, and shows the switch off', async () => {
     await openSection(emptyState({ protection: 'off' }))
     expect(document.querySelector('[data-delorun-changes-live]')?.textContent).toBe(en.live)
     const protection = screen.getByRole('region', { name: en['protection.heading'] })
     expect(within(protection).getByText(en['protection.off'])).toBeTruthy()
-    expect(within(protection).getByText('delorun changes protection on|off')).toBeTruthy()
-    expect(within(protection).queryByRole('button')).toBeNull()
-    expect(within(protection).queryByRole('switch')).toBeNull()
+    expect(within(protection).getByRole('switch', { name: en['protection.switch'] }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('reads the plugins\' folders only through show?pending: when it opens, after an action and when asked, never on the state\'s poll', async () => {
@@ -376,7 +480,7 @@ describe('the Changes section', () => {
     // The state's poll reads the records only.
     await act(async () => { await (page.entryOf('settings.section').options.inject?.() as { reload: () => Promise<void> }).reload() })
     expect(fake.callsTo(SHOW_PATH)).toHaveLength(1)
-    // The person asks; a read that is under way says so, and one that fails says the folders could not be read.
+    // The person asks; the list on display stays while the read is under way, and a read that fails says the folders could not be read.
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
     fake.replace(SHOW_PATH, async () => {
@@ -384,12 +488,13 @@ describe('the Changes section', () => {
       return new Response(null, { status: 500 })
     })
     fireEvent.click(within(pending).getByRole('button', { name: en['pending.check'] }))
-    expect((await screen.findByText(en['pending.reading'])).getAttribute('role')).toBe('status')
+    await waitFor(() => { expect(fake.callsTo(SHOW_PATH)).toHaveLength(2) })
+    expect(within(pending).getByText('hello-plugin')).toBeTruthy()
     release()
     expect((await within(screen.getByRole('region', { name: en['pending.heading'] })).findByRole('alert')).textContent).toBe(en['pending.unread'])
     expect(fake.callsTo(SHOW_PATH)).toHaveLength(2)
     // A folder that holds what was approved waits for nothing.
-    fake.replace(SHOW_PATH, () => Response.json({ kind: 'pending-list', pending: [] }))
+    fake.replace(SHOW_PATH, () => Response.json({ kind: 'pending-list', pending: [], harness: [] }))
     fireEvent.click(screen.getByRole('button', { name: en['pending.check'] }))
     expect(await screen.findByText(en['pending.empty'])).toBeTruthy()
     // An action reads the folders again.
@@ -707,35 +812,24 @@ describe('the Changes section', () => {
     expect(toasts()).toContain(en['toast.wentBack'].replace('{failure}', 'Error: z'))
   })
 
-  it('the studio lists changes to Delorun itself with their diff and offers no action for them', async () => {
-    const applied = self({ id: 'c00000000a1', state: 'applied', decidedAt: new Date(Date.now() - 2 * HOUR).toISOString() })
+  it('lists the changes to Delorun itself with Review, and Undo where one takes the change back', async () => {
+    const applied = self({ id: 'c00000000a1', state: 'applied', undoable: true, decidedAt: new Date(Date.now() - 2 * HOUR).toISOString() })
     const leftOut = self({ id: 'c00000000a2', state: 'left-out-at-start', file: 'app/node_modules/delorun/lib/added.js', leftOut: { at: new Date().toISOString(), failure: 'SyntaxError: no' } })
     const { decidedAt: _undecided, ...discarded } = self({ id: 'c00000000a3', state: 'discarded' })
     const { fake } = await openSection(emptyState({ harness: [applied, leftOut, discarded] }))
     const group = screen.getByRole('region', { name: en['self.heading'] })
     const rows = within(group).getAllByRole('listitem')
     expect(rows[0]?.textContent).toContain(`${SELF_FILE}${en['state.applied']}${en['recent.at.hours'].replace('{n}', '2')}${en['self.version'].replace('{version}', '0.4.0')}`)
-    expect(within(rows[0] as HTMLElement).getByText(en['self.undo'])).toBeTruthy()
-    expect(within(rows[0] as HTMLElement).getByText('delorun changes undo c00000000a1')).toBeTruthy()
     expect(within(rows[1] as HTMLElement).getByText(en['self.leftOut'].replace('{failure}', 'SyntaxError: no'))).toBeTruthy()
-    expect(within(rows[1] as HTMLElement).getByText(en['self.applyOrUndo'])).toBeTruthy()
-    expect(within(rows[1] as HTMLElement).getByText('delorun changes apply c00000000a2')).toBeTruthy()
-    expect(within(rows[1] as HTMLElement).getByText('delorun changes undo c00000000a2')).toBeTruthy()
     expect(rows[2]?.textContent).toContain(`${en['state.discarded']}${en['recent.at.hours'].replace('{n}', '3')}`)
-    expect(rows[2]?.textContent).not.toContain('delorun changes')
-    expect(within(rows[3] as HTMLElement).getByText(en['self.list'])).toBeTruthy()
-    expect(within(rows[3] as HTMLElement).getByText('delorun changes list')).toBeTruthy()
-    // Review is the one button of each change; a terminal decides it.
-    expect(within(group).getAllByRole('button').map(button => button.textContent)).toEqual([en['pending.review'], en['pending.review'], en['pending.review']])
+    expect(within(group).getAllByRole('button').map(button => button.textContent)).toEqual([en['pending.review'], en['confirm.undo'], en['pending.review'], en['pending.review']])
+    expect(group.textContent).not.toContain('delorun changes apply')
+    expect(group.textContent).not.toContain('delorun changes undo')
     fireEvent.click(within(rows[0] as HTMLElement).getByRole('button', { name: en['pending.review'] }))
     let dialog = await screen.findByRole('dialog', { name: en['self.title'].replace('{file}', SELF_FILE) })
     const diff = await within(dialog).findByRole('region', { name: en['review.diff'] })
     expect(diff.querySelector('pre')?.textContent).toBe(SELF_REVIEW.diff.text)
-    expect(within(dialog).getByText(en['self.notice'])).toBeTruthy()
-    expect(within(dialog).getByText(en['self.terminal'])).toBeTruthy()
-    expect(within(dialog).queryByText(en['risk.notice'])).toBeNull()
-    expect(dialog.textContent).not.toContain(en['review.folder'].replace('{folder}', ''))
-    expect(within(dialog).getAllByRole('button').every(button => button.textContent === en['confirm.close'] || button.getAttribute('aria-label') === en['confirm.close'])).toBe(true)
+    expect(within(dialog).getByRole('button', { name: en['confirm.undo'] })).toBeTruthy()
     fireEvent.click(within(dialog).getAllByRole('button', { name: en['confirm.close'] }).at(-1) as HTMLElement)
     expect(screen.queryByRole('dialog')).toBeNull()
     // A change whose content Delorun no longer keeps is shown without its diff.
@@ -743,6 +837,7 @@ describe('the Changes section', () => {
     dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText(en['self.gone'])).toBeTruthy()
     expect(within(dialog).queryByRole('region', { name: en['review.diff'] })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: en['confirm.undo'] })).toBeNull()
     fireEvent.click(within(dialog).getAllByRole('button', { name: en['confirm.close'] }).at(-1) as HTMLElement)
     // A review that cannot be read says so.
     fake.replace(SHOW_PATH, () => new Response(null, { status: 500 }))
@@ -753,47 +848,280 @@ describe('the Changes section', () => {
     expect(fake.calls.filter(call => call.path !== STATE_PATH && call.path !== SHOW_PATH)).toEqual([])
   })
 
+  it('names the device that decided a change, in Recent and among the changes to Delorun itself', async () => {
+    await openSection(emptyState({
+      recent: [logged({ id: 'c0000000006', decidedOn: 'Ana\'s phone' })],
+      harness: [self({ id: 'c00000000a1', state: 'applied', decidedOn: 'Ben\'s tablet' })],
+    }))
+    const recent = screen.getByRole('region', { name: en['recent.heading'] })
+    expect(within(recent).getByText(en.decidedOn.replace('{device}', 'Ana\'s phone'))).toBeTruthy()
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    expect(within(group).getByText(en.decidedOn.replace('{device}', 'Ben\'s tablet'))).toBeTruthy()
+  })
+
+  it('offers the release command, and no other terminal command, where Delorun can change its own files', async () => {
+    await openSection(emptyState({ harnessAvailable: COPY_MADE, harness: [self({ id: 'c00000000a1', state: 'applied', undoable: true })] }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    expect(within(group).getByText(en['self.intro'])).toBeTruthy()
+    expect(within(group).getByText(RELEASE_COMMAND)).toBeTruthy()
+    expect(within(group).queryByText(en['self.unavailable'])).toBeNull()
+    expect(within(group).getAllByText(/^delorun /).map(command => command.textContent)).toEqual([RELEASE_COMMAND])
+  })
+
+  it('says a copy of Delorun cannot be read, in the group, and lists nothing as waiting', async () => {
+    await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessProblem: 'EACCES: permission denied' }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    expect(within(group).getByRole('alert').textContent).toBe(en['self.problem'].replace('{problem}', 'EACCES: permission denied'))
+    expect(within(group).queryByText(en['self.nothingWaits'])).toBeNull()
+    expect(toasts()).toEqual([])
+  })
+
+  it('shows a change waiting in the copy and applies exactly the version its review showed', async () => {
+    const reviewed = 'b'.repeat(64)
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [WAITING] }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    const row = within(group).getByText(en['self.waiting']).closest('li') as HTMLElement
+    expect(row.textContent).toContain(`${SELF_FILE}${en['self.waiting']}${en['review.file.modified']}`)
+    // The file changed again after the list was read: the review shows, and Apply sends, what the copy holds now.
+    fake.set(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [{ ...WAITING, to: reviewed }] }))
+    fireEvent.click(within(row).getByRole('button', { name: en['pending.review'] }))
+    const dialog = await screen.findByRole('dialog', { name: en['self.title'].replace('{file}', SELF_FILE) })
+    expect(await within(dialog).findByText(en['self.reviewVersion'].replace('{version}', 'bbbbbbb'))).toBeTruthy()
+    expect(within(dialog).getByRole('region', { name: en['review.diff'] })).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.apply)).toEqual([{ id: WAITING.id, to: reviewed }]) })
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+    expect(toasts()).toContain(en['toast.self.live'])
+  })
+
+  it.each([
+    [{ kind: 'live' }, 'toast.self.live', 'self.effect.live'],
+    [{ kind: 'restart' }, 'toast.self.restart', 'self.effect.restart'],
+    [{ kind: 'not-running' }, 'toast.self.nextStart', 'self.effect.not-running'],
+  ] as const)('tells when an applied change to Delorun itself takes effect: %o', async (effect, toast, tag) => {
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [WAITING] }))
+    fake.setEffect(effect)
+    fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByRole('region', { name: en['review.diff'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
+    await waitFor(() => { expect(toasts()).toContain(en[toast]) })
+    const row = await screen.findByText(en['state.applied'])
+    expect(within(row.closest('li') as HTMLElement).getByText(en[tag])).toBeTruthy()
+  })
+
+  it('asks a second confirmation before applying a flagged change to Delorun itself, and sends the confirmation with the reviewed version', async () => {
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [WAITING_FLAGGED] }))
+    fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
+    let dialog = await screen.findByRole('dialog', { name: en['self.title'].replace('{file}', WAITING_FLAGGED.file) })
+    await within(dialog).findByRole('region', { name: en['review.diff'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
+    dialog = await screen.findByRole('dialog', { name: en['second.title'] })
+    expect(within(dialog).getAllByRole('listitem').map(row => row.textContent)).toEqual([en['risk.network']])
+    expect(within(dialog).getByText(en['self.notice'])).toBeTruthy()
+    expect(fake.callsTo(HARNESS_PATHS.apply)).toEqual([{ id: WAITING_FLAGGED.id, to: WAITING_FLAGGED.to }])
+    fireEvent.click(within(dialog).getByRole('button', { name: en['second.apply'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.apply)).toEqual([{ id: WAITING_FLAGGED.id, to: WAITING_FLAGGED.to }, { id: WAITING_FLAGGED.id, to: WAITING_FLAGGED.to, confirmedRisk: true }]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.self.live']) })
+  })
+
+  it('discards a change waiting in the copy only after a confirmation', async () => {
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [WAITING] }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    fireEvent.click(within(group).getByRole('button', { name: en['review.discard'] }))
+    let dialog = screen.getByRole('dialog', { name: en['confirm.selfDiscard.title'] })
+    expect(within(dialog).getByText(en['confirm.selfDiscard.body'].replace('{file}', SELF_FILE))).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(fake.callsTo(HARNESS_PATHS.discard)).toEqual([])
+    fireEvent.click(within(group).getByRole('button', { name: en['review.discard'] }))
+    dialog = screen.getByRole('dialog', { name: en['confirm.selfDiscard.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['review.discard'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.discard)).toEqual([{ id: WAITING.id }]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.discarded']) })
+    expect(await within(group).findByText(en['self.nothingWaits'])).toBeTruthy()
+  })
+
+  it.each([
+    [{ kind: 'live' }, 'toast.self.undoneLive'],
+    [{ kind: 'restart' }, 'toast.self.undoneRestart'],
+  ] as const)('undoes a decided change to Delorun itself after a confirmation, and tells when the undo takes effect: %o', async (effect, toast) => {
+    const applied = self({ id: 'c00000000a1', state: 'applied', undoable: true })
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harness: [applied] }))
+    fake.setEffect(effect)
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    fireEvent.click(within(group).getByRole('button', { name: en['confirm.undo'] }))
+    let dialog = screen.getByRole('dialog', { name: en['confirm.undo.title'] })
+    expect(within(dialog).getByText(en['confirm.selfUndo.body'].replace('{file}', SELF_FILE))).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    expect(fake.callsTo(HARNESS_PATHS.undo)).toEqual([])
+    fireEvent.click(within(group).getByRole('button', { name: en['confirm.undo'] }))
+    dialog = screen.getByRole('dialog', { name: en['confirm.undo.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.undo'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.undo)).toEqual([{ id: 'c00000000a1' }]) })
+    await waitFor(() => { expect(toasts()).toContain(en[toast]) })
+    expect(await within(group).findByText(en['state.undone'])).toBeTruthy()
+    expect(within(group).queryByRole('button', { name: en['confirm.undo'] })).toBeNull()
+  })
+
+  it.each([
+    [true, 'self.copy.made', 'toast.copy.made'],
+    [false, 'self.copy.found', 'toast.copy.found'],
+  ] as const)('makes the person\'s copy of Delorun and shows where it is (created: %s)', async (created, line, toast) => {
+    const place = '<Delorun home>/runtimes/0.4.0/app'
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_NONE }))
+    fake.replace(HARNESS_PATHS.copy, () => Response.json({ kind: 'copy', created, runtime: '0.4.0', place }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    expect(within(group).getByText(en['self.copy.none'])).toBeTruthy()
+    fireEvent.click(within(group).getByRole('button', { name: en['self.copy.make'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.copy)).toEqual([{}]) })
+    expect(await within(group).findByText(en[line].replace('{version}', '0.4.0'))).toBeTruthy()
+    expect(within(group).getByText(place)).toBeTruthy()
+    await waitFor(() => { expect(toasts()).toContain(en[toast]) })
+  })
+
   it('names no harness, integrity, trust or drift in its copy', () => {
     for (const dictionary of [en, zh]) {
       for (const [key, text] of Object.entries(dictionary)) expect(text, key).not.toMatch(/harness|integrity|trust|drift/i)
     }
   })
 
-  it('a remote session sees the changes and cannot act on them', async () => {
+  it('a locked phone sees the changes, the controls Careful keeps at the computer are disabled, and Undo asks it to unlock', async () => {
     const leftOut = logged({ id: 'c0000000009', state: 'left-out-at-start', plugin: 'broken-plugin', undoable: false })
     const session = { plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() }
-    const { fake } = await openSection(emptyState({
-      atComputer: false, protection: 'off', workSession: session, leftOut: [leftOut], pending: [PENDING],
+    const { fake, page } = await openSection(emptyState({
+      atComputer: false, access: phoneAccess('device-locked', 'careful'), workSession: session, leftOut: [leftOut], pending: [PENDING],
       requests: [logged({ id: 'c0000000005', kind: 'plugin-install', state: 'pending', undoable: false })], recent: [logged({ id: 'c0000000006' })],
     }))
-    expect(document.querySelector('[data-delorun-changes-remote]')?.textContent).toBe(`${en['remote.title']}${en['remote.body']}`)
-    // Everything is shown; every action is disabled, reading a change is not.
-    expect(screen.getByText('hello-plugin')).toBeTruthy()
-    for (const name of [en['work.done'], en['leftOut.applyAgain'], en['confirm.undo'], en['review.discard'], en['review.apply']]) {
-      for (const button of screen.getAllByRole('button', { name })) expect(button.hasAttribute('disabled')).toBe(true)
+    const denied: Array<{ endpoint: string, reason?: string | undefined }> = []
+    page.ctx.on('remote/call-denied', (denial) => { denied.push(denial) })
+    const note = document.querySelector('[data-delorun-changes-remote="device-locked"]')
+    expect(note?.getAttribute('data-phone-powers')).toBe('careful')
+    expect(note?.textContent).toContain(en['access.locked.title'])
+    expect(note?.textContent).toContain(en['access.locked.body'])
+    expect(note?.textContent).toContain(en['access.careful.body'])
+    // What Careful keeps at the computer is disabled with the reason; the rest stays enabled and says an unlock comes first.
+    for (const name of [en['work.done'], en['leftOut.applyAgain'], en['review.apply']]) {
+      for (const button of screen.getAllByRole('button', { name })) {
+        expect(button.hasAttribute('disabled'), name).toBe(true)
+        expect(button.getAttribute('title'), name).toBe(en['access.needsComputer'])
+      }
     }
-    // The protection setting and what it means read the same, with no control.
-    expect(document.querySelector('[data-delorun-changes-live]')?.textContent).toBe(en.live)
-    expect(within(screen.getByRole('region', { name: en['protection.heading'] })).queryByRole('button')).toBeNull()
+    const undo = within(screen.getByRole('region', { name: en['recent.heading'] })).getByRole('button', { name: en['confirm.undo'] })
+    expect(undo.hasAttribute('disabled')).toBe(false)
+    expect(undo.getAttribute('title')).toBe(en['access.needsUnlock'])
     fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByRole('region', { name: en['review.files'] })
     expect(within(dialog).getByRole('button', { name: en['review.apply'] }).hasAttribute('disabled')).toBe(true)
-    expect(within(dialog).getByRole('button', { name: en['review.discard'] }).hasAttribute('disabled')).toBe(true)
-    expect(fake.calls.filter(call => call.path !== STATE_PATH && call.path !== SHOW_PATH)).toEqual([])
+    expect(within(dialog).getByRole('button', { name: en['review.discard'] }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    // The route refuses the unlocked-less Undo; the studio opens its unlock dialog and says so.
+    fake.replace(ACTION_PATHS.undo, () => Response.json({ code: 'ELEVATION_REQUIRED', message: 'Unlock this phone.' }, { status: 403 }))
+    fireEvent.click(within(screen.getByRole('region', { name: en['recent.heading'] })).getByRole('button', { name: en['confirm.undo'] }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['confirm.undo'] }))
+    await waitFor(() => { expect(toasts()).toContain(en['toast.unlock']) })
+    expect(denied).toEqual([{ endpoint: 'delorunChanges/plugin-undo', reason: 'elevation-required: delorunChanges/plugin-undo' }])
+    expect(fake.callsTo(ACTION_PATHS.undo)).toEqual([{ id: 'c0000000006' }])
   })
 
-  it('disables every action once the harness answers an action with LOOPBACK_REQUIRED, which the state did not say', async () => {
-    const { fake } = await openSection(emptyState({ pending: [PENDING], recent: [logged({ id: 'c0000000006' })] }))
-    expect(document.querySelector('[data-delorun-changes-remote]')).toBeNull()
-    fake.replace(ACTION_PATHS.apply, () => Response.json({ code: 'LOOPBACK_REQUIRED', message: 'This needs you at your computer.' }, { status: 403 }))
+  it('a phone in its approval grace is told it counts as locked', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-grace', 'full') }))
+    const note = document.querySelector('[data-delorun-changes-remote="device-grace"]')
+    expect(note?.textContent).toContain(en['access.locked.title'])
+    expect(note?.textContent).toContain(en['access.full.title'])
+    expect(note?.textContent).toContain(en['access.change'])
+  })
+
+  it('an unlocked phone under Full powers sees its level and applies a change', async () => {
+    const { fake } = await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'full'), pending: [PENDING] }))
+    const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
+    expect(note?.textContent).toContain(en['access.full.title'])
+    expect(note?.textContent).toContain(en['access.full.body'])
+    expect(note?.textContent).not.toContain(en['access.locked.title'])
     fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByRole('region', { name: en['review.files'] })
-    fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
-    await waitFor(() => { expect(toasts()).toContain(en['toast.remote']) })
-    expect(document.querySelector('[data-delorun-changes-remote]')?.textContent).toContain(en['remote.title'])
-    expect(screen.getByRole('button', { name: en['confirm.undo'] }).hasAttribute('disabled')).toBe(true)
+    const apply = within(dialog).getByRole('button', { name: en['review.apply'] })
+    expect(apply.hasAttribute('disabled')).toBe(false)
+    expect(apply.hasAttribute('title')).toBe(false)
+    fireEvent.click(apply)
+    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS.apply)).toEqual([{ id: PENDING.id }]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.applied']) })
+  })
+
+  it('an unlocked phone under Careful powers cannot turn protection off or apply, and the notices wait for the computer', async () => {
+    const notice = { id: 'n1', level: 'off', at: new Date().toISOString(), device: 'Ana\'s phone' } as const
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful'), notices: [notice], pending: [PENDING] }))
+    const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
+    expect(note?.textContent).toContain(en['access.careful.title'])
+    const protection = screen.getByRole('region', { name: en['protection.heading'] })
+    const toggle = within(protection).getByRole('switch', { name: en['protection.switch'] })
+    expect(toggle.hasAttribute('disabled')).toBe(true)
+    expect(toggle.getAttribute('title')).toBe(en['access.needsComputer'])
+    expect(within(screen.getByRole('list', { name: en['notice.heading'] })).getByRole('button', { name: en['notice.dismiss'] }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('shows the computer no access note', async () => {
+    await openSection(emptyState())
+    expect(document.querySelector('[data-delorun-changes-remote]')).toBeNull()
+  })
+
+  it.each([1, 3])('asks once before turning protection on, and says how many changes loaded without review while it was off (%i)', async (count) => {
+    const { fake } = await openSection(emptyState({ protection: 'off', unreviewedSinceOff: count }))
+    const loaded = en[count === 1 ? 'protection.on.loaded.one' : 'protection.on.loaded.other'].replace('{n}', String(count))
+    const protection = screen.getByRole('region', { name: en['protection.heading'] })
+    expect(within(protection).getByText(en[count === 1 ? 'protection.loaded.one' : 'protection.loaded.other'].replace('{n}', String(count)))).toBeTruthy()
+    fireEvent.click(within(protection).getByRole('switch', { name: en['protection.switch'] }))
+    const dialog = screen.getByRole('dialog', { name: en['protection.on.title'] })
+    expect(within(dialog).getByText(loaded)).toBeTruthy()
+    expect(fake.callsTo(PROTECTION_PATHS.on)).toEqual([])
+    fireEvent.click(within(dialog).getByRole('button', { name: en['protection.on.confirm'] }))
+    await waitFor(() => { expect(fake.callsTo(PROTECTION_PATHS.on)).toEqual([{}]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.protection.on']) })
+    expect(within(await screen.findByRole('region', { name: en['protection.heading'] })).getByRole('switch', { name: en['protection.switch'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('names the plugins and files that load without review before protection goes off, and turns it off with the confirmation', async () => {
+    const { fake } = await openSection(emptyState({ pending: [PENDING, FLAGGED], harnessAvailable: COPY_MADE, harnessPending: [WAITING] }))
+    fireEvent.click(screen.getByRole('switch', { name: en['protection.switch'] }))
+    const dialog = await screen.findByRole('dialog', { name: en['protection.off.title'] })
+    expect(within(dialog).getAllByRole('listitem').map(row => row.textContent)).toEqual(['hello-plugin', 'net-plugin', en['protection.off.files.one'].replace('{n}', '1')])
+    expect(fake.callsTo(PROTECTION_PATHS.off)).toEqual([{}])
+    expect(toasts()).toEqual([])
+    fireEvent.click(within(dialog).getByRole('button', { name: en['protection.off.confirm'] }))
+    await waitFor(() => { expect(fake.callsTo(PROTECTION_PATHS.off)).toEqual([{}, { confirmed: true }]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.protection.off']) })
+    await waitFor(() => { expect(screen.getByRole('switch', { name: en['protection.switch'] }).getAttribute('aria-checked')).toBe('false') })
+  })
+
+  it('says nothing waits for review when protection goes off with nothing waiting, and Cancel sends nothing more', async () => {
+    const { fake } = await openSection(emptyState())
+    fireEvent.click(screen.getByRole('switch', { name: en['protection.switch'] }))
+    const dialog = await screen.findByRole('dialog', { name: en['protection.off.title'] })
+    expect(within(dialog).getByText(en['protection.off.nothing'])).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(fake.callsTo(PROTECTION_PATHS.off)).toEqual([{}])
+    expect(screen.getByRole('switch', { name: en['protection.switch'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('shows a protection notice from a phone and dismisses it by its id', async () => {
+    const notices = [
+      { id: 'n1', level: 'off', at: new Date().toISOString(), device: 'Ana\'s phone' },
+      { id: 'n2', level: 'on', at: new Date().toISOString(), device: 'Ben\'s tablet' },
+    ] as const
+    const { fake } = await openSection(emptyState({ notices }))
+    const list = screen.getByRole('list', { name: en['notice.heading'] })
+    const [off, on] = within(list).getAllByRole('note')
+    expect(off?.textContent).toContain('Ana\'s phone')
+    expect(off?.textContent).toContain(en['notice.offBody'])
+    expect(on?.textContent).toContain('Ben\'s tablet')
+    expect(on?.textContent).not.toContain(en['notice.offBody'])
+    fireEvent.click(within(off as HTMLElement).getByRole('button', { name: en['notice.dismiss'] }))
+    await waitFor(() => { expect(fake.callsTo(NOTICE_SEEN_PATH)).toEqual([{ id: 'n1' }]) })
+    await waitFor(() => { expect(within(screen.getByRole('list', { name: en['notice.heading'] })).getAllByRole('note')).toHaveLength(1) })
+    expect(toasts()).toEqual([])
   })
 })
 
