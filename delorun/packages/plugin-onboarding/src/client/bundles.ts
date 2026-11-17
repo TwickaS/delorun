@@ -212,9 +212,10 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
       const pack = packViews.get(name)
+      const packWhy = packReason(pack)
       set(name, {
         state: stateOf(bundle, pack),
-        ...packReason(pack) === undefined ? {} : { reason: packReason(pack) },
+        ...packWhy === undefined ? {} : { reason: packWhy },
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},

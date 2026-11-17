@@ -690,7 +690,7 @@ export class PluginManager extends TypertRemoteService {
     }
     const changes = profileVersionChanges(current, files)
     const pack = await this.packOutsideItsFolder(changes)
-    if (pack !== undefined) return { ok: false, error: { code: 'operation-error', diagnostic: `${pack}: ${PACK_RESTORE}` } }
+    if (pack !== undefined) return { ok: false, error: { code: 'operation-error', diagnostic: pack } }
     return { ok: true, version: { version: held.id, summary: held.summary }, changes }
   }
 
@@ -712,14 +712,17 @@ export class PluginManager extends TypertRemoteService {
    * The first package a version would bring back or change whose spec is not its signed pack's folder, for a package
    * the release publishes as a pack.
    * @param changes - what the version changes.
-   * @returns the package name, or `undefined` when every pack the version holds is linked through its pack folder.
+   * @returns why the version is refused, naming the package, or `undefined` when every pack it holds is linked
+   * through its pack folder of the running release.
    */
   private async packOutsideItsFolder(changes: ProfileVersionChanges): Promise<string | undefined> {
     const packs = this.ownerContext.get('packInstallTargets')
     if (packs === undefined) return undefined
     for (const plugin of changes.plugins) {
       if (plugin.change === 'removed' || !await packs.isPack(plugin.name)) continue
-      if (dependencySpec(plugin.name, plugin.to, this.profile.dir) !== packs.linkSpec(plugin.name)) return plugin.name
+      if (dependencySpec(plugin.name, plugin.to, this.profile.dir) !== packs.linkSpec(plugin.name)) return `${plugin.name}: ${PACK_RESTORE}`
+      // The pack's own folder is linked through `packs/current`, which names another release once an update switched.
+      if (!await packs.runsCurrentRelease()) return `${plugin.name}: ${PACK_UPDATE_PENDING}`
     }
     return undefined
   }
@@ -783,7 +786,7 @@ export class PluginManager extends TypertRemoteService {
     const changes = profileVersionChanges(current, files)
     result.changes = changes
     const pack = await this.packOutsideItsFolder(changes)
-    if (pack !== undefined) throw new ManagementFailure('operation-error', undefined, `${pack}: ${PACK_RESTORE}`)
+    if (pack !== undefined) throw new ManagementFailure('operation-error', undefined, pack)
     const provided = changes.plugins.flatMap(plugin => this.providedProtected(plugin.name))
     if (provided.length > 0) throw this.protectionFailure(provided)
     const rows = this.currentRows()

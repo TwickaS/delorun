@@ -3199,6 +3199,20 @@ describe('a package the release publishes as a signed pack', () => {
     expect(profileFiles(dir)).toEqual(before)
   })
 
+  it('refuses to restore the pack\'s own link once an update has switched away from this Host\'s release', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true, undefined, false))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    const version = held.versions[0]!.id
+    const before = profileFiles(dir)
+    const update = { ok: false, error: { diagnostic: expect.stringMatching(/Restart Delorun to finish the update/u) } }
+    expect(await manager.previewRestore(version)).toMatchObject(update)
+    expect(await manager.restore(version)).toMatchObject({ application: 'failed', error: { diagnostic: expect.stringMatching(/Restart Delorun/u) } })
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
   it('restores a version whose pack is linked through its pack folder', async () => {
     const { manager, dir } = await fixture('live', false, targets(true))
     const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
