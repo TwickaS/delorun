@@ -1,0 +1,114 @@
+[
+  {
+    "scene": "ask",
+    "items": [
+      {
+        "kind": "user",
+        "text": "How many tests does this project have, and do they pass?"
+      },
+      {
+        "kind": "assistant",
+        "text": "I will run the test suite and count the results."
+      },
+      {
+        "kind": "button",
+        "text": "Send message"
+      }
+    ]
+  },
+  {
+    "scene": "asks-first",
+    "items": [
+      {
+        "kind": "user",
+        "text": "How many tests does this project have, and do they pass?"
+      },
+      {
+        "kind": "assistant",
+        "text": "I will run the test suite and count the results."
+      },
+      {
+        "kind": "group",
+        "text": "Running commands · pnpm test"
+      },
+      {
+        "kind": "title",
+        "text": "Bash"
+      },
+      {
+        "kind": "command",
+        "text": "pnpm test"
+      },
+      {
+        "kind": "button",
+        "text": "Reject"
+      },
+      {
+        "kind": "button",
+        "text": "Allow once"
+      }
+    ]
+  },
+  {
+    "scene": "runs",
+    "items": [
+      {
+        "kind": "user",
+        "text": "How many tests does this project have, and do they pass?"
+      },
+      {
+        "kind": "assistant",
+        "text": "I will run the test suite and count the results."
+      },
+      {
+        "kind": "group",
+        "text": "Analyzing the request"
+      },
+      {
+        "kind": "title",
+        "text": "Bash"
+      },
+      {
+        "kind": "command",
+        "text": "pnpm test"
+      },
+      {
+        "kind": "button",
+        "text": "Send message"
+      }
+    ]
+  },
+  {
+    "scene": "result",
+    "items": [
+      {
+        "kind": "user",
+        "text": "How many tests does this project have, and do they pass?"
+      },
+      {
+        "kind": "assistant",
+        "text": "I will run the test suite and count the results."
+      },
+      {
+        "kind": "group",
+        "text": "Ran commands"
+      },
+      {
+        "kind": "title",
+        "text": "Bash"
+      },
+      {
+        "kind": "command",
+        "text": "pnpm test"
+      },
+      {
+        "kind": "assistant",
+        "text": "The project has 214 tests in 31 files, and all of them pass. The run took about four seconds."
+      },
+      {
+        "kind": "button",
+        "text": "Send message"
+      }
+    ]
+  }
+]
