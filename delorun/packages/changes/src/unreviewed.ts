@@ -25,6 +25,7 @@ import { readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
 import { approvedOf, findEntry, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import type { ActiveRecord, ApprovedRecord, ChangeEntry, ChangeId, ChangeLog, ContentVersion, LeftOut } from './types.ts'
+import { referenceRelease } from './tree.ts'
 
 /** A plugin's folder content that loaded without review. */
 export interface UnreviewedLoad {
@@ -192,7 +193,7 @@ export async function loadUnreviewed(ctx: ChangesContext, plugin: string, reload
     const activeBefore = await readActiveRecord(ctx.home, ctx.profile)
     const activeVersion = Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin]!.version : undefined
     await writeApproved(ctx.profileDir, approvedWith(approved, plugin, source, version, at))
-    await holdContent(ctx.home, directory, version)
+    await holdContent(ctx.home, directory, version, await referenceRelease(ctx.home, ctx.runningRelease))
     await writeActiveRecord(ctx.home, ctx.profile, activeWith(activeBefore, plugin, version))
     const applied: ChangeEntry = { ...entry, ...await recordVersion(ctx, entry.summary) }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(log, applied))
@@ -200,7 +201,7 @@ export async function loadUnreviewed(ctx: ChangesContext, plugin: string, reload
     if (outcome === undefined) return { kind: 'not-running', plugin, entry: applied }
     if (outcome.ok) return { kind: 'loaded', plugin, entry: applied }
     await writeApproved(ctx.profileDir, approved)
-    await holdContent(ctx.home, directory, activeVersion)
+    await holdContent(ctx.home, directory, activeVersion, await referenceRelease(ctx.home, ctx.runningRelease))
     await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
     await recordVersion(ctx, `Went back: ${entry.id} failed to load`)
     const lastFailure: LeftOut = { at: timeOf(ctx), failure: outcome.error }

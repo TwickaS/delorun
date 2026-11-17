@@ -225,7 +225,7 @@ export function apply(ctx: Context, config: Config): void {
       connection: routeConnection(scope.connection),
       profile: () => {
         const profile = scope.get('profileContext')
-        return profile === undefined ? undefined : { home: profile.home, profile: profile.name, profileDir: profile.dir }
+        return profile === undefined ? undefined : { home: profile.home, profile: profile.name, profileDir: profile.dir, ...runningRelease() }
       },
       reload: () => reloadProfile(scope.get('hmr')),
       pluginOperation: changes => hostPluginOperation(scope, changes),
@@ -276,7 +276,7 @@ export function apply(ctx: Context, config: Config): void {
     if (held === undefined) return atComputer(action)
     if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')
     try {
-      const entry = await recordPluginRequest({ home: profile.home, profile: profile.name, profileDir: profile.dir }, { action: held.action, spec: held.target })
+      const entry = await recordPluginRequest({ home: profile.home, profile: profile.name, profileDir: profile.dir, ...runningRelease() }, { action: held.action, spec: held.target })
       return pendingDecision(entry)
     } catch (error) {
       return unrecorded(messageOf(error))
@@ -359,6 +359,16 @@ export function routeConnection(connection: HostConnectionAdmission): RouteConne
 }
 
 /**
+ * The installed release this Host runs from, for every Changes request it makes: the links an action writes and the
+ * check before a recomposition name the same release's packages.
+ * @returns `{ runningRelease }` from `DELORUN_VERSION`, or nothing when the Host runs from a source checkout.
+ */
+function runningRelease(): { readonly runningRelease?: string } {
+  const release = getDelorunRuntimeVersion()
+  return release === undefined ? {} : { runningRelease: release }
+}
+
+/**
  * The check before a recomposition of the profile: `@delorun/changes`' `prepareReload`, with the links the running Host
  * already loads as the harness's own; what it moved is logged.
  * @param ctx - the plugin context.
@@ -368,8 +378,7 @@ export function routeConnection(connection: HostConnectionAdmission): RouteConne
  */
 async function checkReload(ctx: Context, profile: ProfileContext): Promise<void> {
   const harnessLink = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
-  const release = getDelorunRuntimeVersion()
-  const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink, ...release === undefined ? {} : { runningRelease: release } })
+  const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink, ...runningRelease() })
   const notice = startNotice(changes)
   if (notice !== '') ctx.logger.info(notice.trimEnd())
 }

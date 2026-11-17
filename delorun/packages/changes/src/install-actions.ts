@@ -33,6 +33,7 @@ import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './pat
 import { approvedOf, findEntry, PACKAGE_NAME_PATTERN, readApproved, readChangeLog, requirePresence, withEntry, writeApproved, writeChangeLog, type AtComputer } from './records.ts'
 import { storeFolder } from './store.ts'
 import type { ChangeEntry, ChangeId, ChangeKind, ChangeLog, ChangeSubject } from './types.ts'
+import { referenceRelease } from './tree.ts'
 
 /** What the agent asked `plugin_manager` to do: `install_bundle` is `install`, `remove_bundle` is `remove`. */
 export interface PluginRequest {
@@ -287,7 +288,7 @@ async function folderOperation(ctx: ChangesContext, log: ChangeLog, folder: stri
   if (alias !== undefined && alias !== plugin) throw new ChangesError('INVALID_REQUEST', folder, `The folder ${folder} holds the package ${plugin}, not ${alias}.`)
   const active = activeDirectory(ctx.home, ctx.profile, plugin)
   const approval = approvedOf(await readApproved(ctx.profileDir), plugin)
-  await holdContent(ctx.home, active, approval?.version)
+  await holdContent(ctx.home, active, approval?.version, await referenceRelease(ctx.home, ctx.runningRelease))
   const args = ['add', `${plugin}@${LINK_PREFIX}${active}`]
   if (approval !== undefined) return { args, log, after: NOTHING_AFTER, folder }
   const scanCache = join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache)

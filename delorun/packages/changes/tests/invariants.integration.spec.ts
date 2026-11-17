@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { startWork } from '../src/actions.ts'
 import { prepareReload } from '../src/enforce.ts'
 import { checkChangesInvariants, checkLoadedContent } from '../src/invariants.ts'
 import { changesStatus } from '../src/status.ts'
@@ -77,6 +78,15 @@ describe('checkChangesInvariants', () => {
       expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.2.0', 'app', 'node_modules', '@s', 'peer')))
       expect(await atLoad(fx, '0.2.0')).toEqual([])
       expect(await atDoctor(fx)).toEqual([])
+    })
+
+    it('keeps naming the old release\'s packages when the old Host acts on it, and that Host\'s recomposition accepts it', async () => {
+      const { fx, peer } = await updated()
+      const host = { home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => new Date('2026-01-01T00:00:00Z'), runningRelease: '0.1.0' }
+      await startWork(host, 'plug', terminal(), { reload: () => Promise.resolve({ ok: true }), minutes: 60 })
+      expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')))
+      await expect(prepareReload({ ...host, harnessLink: undefined })).resolves.toBeDefined()
+      expect(await atLoad(fx, '0.1.0')).toEqual([])
     })
 
     it('is refused by a recomposition of the new release, and passes one of the old release, which rewrites no copy', async () => {

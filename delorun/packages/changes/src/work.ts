@@ -51,6 +51,7 @@ import {
 import { storeFolder } from './store.ts'
 import type { ActiveContent, ChangeEntry, ContentVersion, DecidedFrom, PluginChange, WorkSessionRecord } from './types.ts'
 import { removeWorkFailure, writeWorkFailure } from './work-record.ts'
+import { referenceRelease } from './tree.ts'
 
 /**
  * The longest a work session lasts, in minutes: eight hours. Everything the folder holds loads without review while a
@@ -193,7 +194,7 @@ function scanCache(ctx: ChangesContext): string {
  * @param content - what the directory holds.
  */
 async function hold(ctx: ChangesContext, plugin: string, content: ActiveContent): Promise<void> {
-  await holdContent(ctx.home, activeDirectory(ctx.home, ctx.profile, plugin), content.version)
+  await holdContent(ctx.home, activeDirectory(ctx.home, ctx.profile, plugin), content.version, await referenceRelease(ctx.home, ctx.runningRelease))
   const record = await readActiveRecord(ctx.home, ctx.profile)
   await writeActiveRecord(ctx.home, ctx.profile, { ...record, plugins: { ...record.plugins, [plugin]: content } })
 }
@@ -295,7 +296,7 @@ export async function beginWork(ctx: ChangesContext, plugin: string, presence: A
     await removeWorkFailure(ctx.home, ctx.profile)
     const { load, session } = await loadVersion(ctx, opened, version, reload)
     if (load.kind !== 'not-running') return { session, load }
-    await holdContent(ctx.home, directory, Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin]!.version : undefined)
+    await holdContent(ctx.home, directory, Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin]!.version : undefined, await referenceRelease(ctx.home, ctx.runningRelease))
     await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
     await unlink(sessionPath(ctx))
     throw new ChangesError('NOT_ALLOWED', plugin, `Delorun is not running for the profile ${ctx.profile}, so nothing would load live. Start it with delorun start, then run delorun changes work ${plugin}.`)
