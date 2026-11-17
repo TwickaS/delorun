@@ -8,8 +8,24 @@
  */
 import { createRequire } from 'node:module'
 
+/** A reading of the page's largest contentful paint, kept on the window by the observer below. */
+interface LcpReading {
+  readonly time: number
+  readonly text: string
+}
+
+declare global {
+  interface Window {
+    __lcp?: LcpReading
+  }
+}
+
+/** The hosts the script measures: this computer only, since it throttles and loads a page repeatedly. */
+const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]']
+
 const [url, runsText = '5'] = process.argv.slice(2)
 if (url === undefined) throw new Error('usage: lcp.ts <url> [runs]')
+if (!LOCAL_HOSTS.includes(new URL(url).hostname)) throw new Error(`lcp.ts measures local addresses only (${LOCAL_HOSTS.join(', ')}), not ${new URL(url).hostname}`)
 
 // The tools package owns the Playwright dependency.
 const { chromium } = createRequire(new URL('../../../apps/tools/package.json', import.meta.url))('playwright') as typeof import('playwright')
@@ -25,15 +41,14 @@ try {
     await client.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 })
     await client.send('Emulation.setCPUThrottlingRate', { rate: 4 })
     await page.addInitScript(() => {
-      const holder = window as unknown as { __lcp?: { time: number; text: string } }
       new PerformanceObserver((list) => {
         const last = list.getEntries().at(-1) as (PerformanceEntry & { element?: Element }) | undefined
-        if (last !== undefined) holder.__lcp = { time: last.startTime, text: `${last.element?.tagName ?? '?'}: ${(last.element?.textContent ?? '').slice(0, 40)}` }
+        if (last !== undefined) window.__lcp = { time: last.startTime, text: `${last.element?.tagName ?? '?'}: ${(last.element?.textContent ?? '').slice(0, 40)}` }
       }).observe({ type: 'largest-contentful-paint', buffered: true })
     })
     await page.goto(url, { waitUntil: 'load' })
     await page.waitForTimeout(1500)
-    const found = await page.evaluate(() => (window as unknown as { __lcp?: { time: number; text: string } }).__lcp)
+    const found = await page.evaluate(() => window.__lcp)
     if (found !== undefined) { values.push(Math.round(found.time)); element = found.text }
     await context.close()
   }
