@@ -14,7 +14,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ApprovalActionOwnerProps } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { allowAgentForWorkspace, readAgentGrants } from './consents-api.ts'
-import { consentFailureOf, consentFailureText } from './FullAccessConsent.tsx'
+import { consentFailureOf, ConsentFailureLine, type ConsentFailure } from './FullAccessConsent.tsx'
 import { isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -54,7 +54,7 @@ export async function agentOfferFor(fetch: HostFetch): Promise<Offer> {
 export function ExternalAgentAction({ grants, toolName, allow, answered, canAnswer, sessionId, fetch, t }: ExternalAgentActionProps): ReactNode {
   const [offer, setOffer] = useState<Offer>('none')
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>()
+  const [failure, setFailure] = useState<ConsentFailure | undefined>()
   const asks = grants === 'external-agent' && toolName !== undefined
   useEffect(() => {
     if (!asks) return
@@ -73,13 +73,13 @@ export function ExternalAgentAction({ grants, toolName, allow, answered, canAnsw
       // The person may have answered the card, or its request ended, while the grant was recorded.
       if (canAnswer()) await allow()
     } catch (error) {
-      setFailure(consentFailureText(t, consentFailureOf(error), 'action.changeAgent'))
+      setFailure(consentFailureOf(error))
     } finally {
       setBusy(false)
     }
   }
   return <div className={css.action} data-external-agent-action="allow">
     <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
-    {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
+    {failure === undefined ? null : <ConsentFailureLine t={t} failure={failure} action="action.changeAgent" />}
   </div>
 }

@@ -11,7 +11,7 @@ import type { ReactNode } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { acceptServer, type AcceptedServer, type PendingServer, type ServerChange } from './consents-api.ts'
-import { consentFailureOf, consentFailureText, type ConsentFailure } from './FullAccessConsent.tsx'
+import { consentFailureOf, ConsentFailureLine, type ConsentFailure } from './FullAccessConsent.tsx'
 import type { HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -197,7 +197,7 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
         <summary>{t('mcp.details')}</summary>
         <ServerStart t={t} start={server} />
       </details>
-      {review.failure === undefined ? null : <p className={css.failed} role="alert">{consentFailureText(t, review.failure, 'action.answerServer')}</p>}
+      {review.failure === undefined ? null : <ConsentFailureLine t={t} failure={review.failure} action="action.answerServer" />}
     </div>
   </Modal>
 }

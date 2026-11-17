@@ -189,16 +189,27 @@ describe('the Setup versions section', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(en.loopback)
   })
 
-  it('offers a reach device the list and the differences, and no save or switch', async () => {
+  it('offers a reach device the list, the differences, save and switch, and names setup files as done at the computer with the reason', async () => {
     const host = fakeHost({ [LIST]: listing([entry('a', { current: true }), entry('b')]), [CHANGES]: { status: 200, body: { changes: CHANGED } } })
     renderSection(host, false)
-    expect(await screen.findByText(en.atComputer)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: en['save.action'] })).toBeNull()
-    expect(screen.queryByRole('button', { name: en['switch.action'] })).toBeNull()
-    expect(screen.getByText(en.doAtComputer)).toBeTruthy()
+    expect(await screen.findByText(en['gate.computer'].replace('{reason}', en.transferReason))).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['save.action'] })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['switch.action'] })).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: en['changes.show'] })[1]!)
     expect(await screen.findByText(en['changes.intro'])).toBeTruthy()
-    expect(host.count(SAVE) + host.count(SWITCH)).toBe(0)
+  })
+
+  it('asks a locked device to unlock when saving or switching needs it, and keeps the version list', async () => {
+    renderSection(fakeHost({
+      [LIST]: listing([entry('a', { current: true }), entry('b')]),
+      [SWITCH]: refusal(403, 'ELEVATION_REQUIRED'),
+      [SAVE]: refusal(403, 'ELEVATION_REQUIRED'),
+    }), false)
+    fireEvent.click(await screen.findByRole('button', { name: en['switch.action'] }))
+    expect(await screen.findByText(en['gate.unlockUnknown'])).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['save.action'] }))
+    await waitFor(() => { expect(screen.getAllByText(en['gate.unlockUnknown'])).toHaveLength(2) })
+    expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
   })
 
   it('shows the failure of reading the list, and the history problem the home reports', async () => {

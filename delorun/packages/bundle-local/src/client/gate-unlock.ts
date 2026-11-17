@@ -30,6 +30,16 @@ export interface GateUnlock {
 }
 
 /**
+ * Read the unlock now, outside rendering, for a sentence built where a hook cannot run.
+ * @returns the minutes and the opener; both undefined where there is no unlock to offer.
+ */
+export function currentGateUnlock(): GateUnlock {
+  const view = installed?.hooks.unlock.getSnapshot()
+  if (installed === undefined || view === undefined || view.place !== 'device') return { minutes: undefined, open: undefined }
+  return { minutes: view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes, open: installed.open }
+}
+
+/**
  * Read the unlock for a gate notice.
  * @returns the minutes and the opener; both undefined where there is no unlock to offer.
  */

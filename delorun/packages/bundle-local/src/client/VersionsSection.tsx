@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { GateFailure, GateNotice } from './GateNotice.tsx'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import {
   readSetupChanges, readSetupVersions, saveSetupVersion, switchSetupVersion,
@@ -92,13 +93,14 @@ export function VersionsSection({ t, fetch, atComputer, saveFile }: VersionsSect
   return <div className={css.section}>
     <h2 className={css.heading}>{t('title')}</h2>
     <p className={css.intro}>{t('intro')}</p>
-    {computer ? null : <p className={css.line} data-versions-away>{t('atComputer')}</p>}
-    {computer ? <SaveSetup t={t} fetch={fetch} onSaved={async (text) => { setNotice(text); await refresh() }} /> : null}
+    <SaveSetup t={t} fetch={fetch} onSaved={async (text) => { setNotice(text); await refresh() }} />
     {notice === undefined ? null : <p className={css.notice} role="status">{notice}</p>}
-    {computer ? <SetupTransfer t={t} fetch={fetch} saveFile={saveFile} onChanged={refresh} /> : null}
+    {computer
+      ? <SetupTransfer t={t} fetch={fetch} saveFile={saveFile} onChanged={refresh} />
+      : <p className={css.line} data-versions-away><GateNotice gate={{ kind: 'computer' }} t={t} reason={t('transferReason')} /></p>}
     {list.kind === 'loading' ? <p className={css.line}>{t('loading')}</p> : null}
     {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
-    {list.kind === 'ready' ? <VersionList t={t} fetch={fetch} computer={computer} answer={list.value}
+    {list.kind === 'ready' ? <VersionList t={t} fetch={fetch} answer={list.value}
       onSwitched={async (text) => { setNotice(text); await refresh() }} /> : null}
   </div>
 }
@@ -111,7 +113,7 @@ export function VersionsSection({ t, fetch, atComputer, saveFile }: VersionsSect
 function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSaved: (text: string) => Promise<void> }): ReactNode {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>()
+  const [failure, setFailure] = useState<unknown>()
   const save = async (): Promise<void> => {
     setFailure(undefined)
     setBusy(true)
@@ -120,7 +122,7 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
       setName('')
       await onSaved(t(saved.created ? 'save.saved' : 'save.unchanged'))
     } catch (error) {
-      setFailure(versionsFailureText(t, error))
+      setFailure(error)
     } finally {
       setBusy(false)
     }
@@ -132,7 +134,7 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
         onChange={(event) => { setName(event.target.value) }} />
     </label>
     <Button variant="primary" size="sm" type="submit" disabled={busy}>{t('save.action')}</Button>
-    {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
   </form>
 }
 
@@ -141,15 +143,15 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
  * @param props - the copy, the request function, where the studio runs, the answer and what runs after a switch.
  * @returns the list.
  */
-function VersionList({ t, fetch, computer, answer, onSwitched }: {
-  t: Translate; fetch: HostFetch; computer: boolean; answer: VersionsAnswer; onSwitched: (text: string) => Promise<void>
+function VersionList({ t, fetch, answer, onSwitched }: {
+  t: Translate; fetch: HostFetch; answer: VersionsAnswer; onSwitched: (text: string) => Promise<void>
 }): ReactNode {
   if (answer.problem !== undefined) return <p className={css.failed} role="alert">{answer.problem}</p>
   if (answer.versions.length === 0) return <p className={css.line}>{t('empty')}</p>
   return <>
     {answer.unsaved ? <p className={css.line}>{t('unsaved')}</p> : null}
     <ul className={css.list}>
-      {groupVersions(answer.versions).map(({ version, count }) => <VersionRow key={version.id} t={t} fetch={fetch} computer={computer} version={version} count={count} onSwitched={onSwitched} />)}
+      {groupVersions(answer.versions).map(({ version, count }) => <VersionRow key={version.id} t={t} fetch={fetch} version={version} count={count} onSwitched={onSwitched} />)}
     </ul>
   </>
 }
@@ -171,12 +173,12 @@ function titleOf(t: Translate, version: VersionEntry): string {
  * @param props - the copy, the request function, where the studio runs, the version and what runs after a switch.
  * @returns the row.
  */
-function VersionRow({ t, fetch, computer, version, count, onSwitched }: {
-  t: Translate; fetch: HostFetch; computer: boolean; version: VersionEntry; count: number; onSwitched: (text: string) => Promise<void>
+function VersionRow({ t, fetch, version, count, onSwitched }: {
+  t: Translate; fetch: HostFetch; version: VersionEntry; count: number; onSwitched: (text: string) => Promise<void>
 }): ReactNode {
   const [changes, setChanges] = useState<Loaded<VersionChanges> | undefined>()
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>()
+  const [failure, setFailure] = useState<unknown>()
   const toggle = async (): Promise<void> => {
     if (changes !== undefined) {
       setChanges(undefined)
@@ -196,7 +198,7 @@ function VersionRow({ t, fetch, computer, version, count, onSwitched }: {
       const switched = await switchSetupVersion(fetch, version.id)
       await onSwitched(t(switched.restartNeeded ? 'switch.done' : 'switch.doneSame'))
     } catch (error) {
-      setFailure(versionsFailureText(t, error))
+      setFailure(error)
     } finally {
       setBusy(false)
     }
@@ -212,13 +214,11 @@ function VersionRow({ t, fetch, computer, version, count, onSwitched }: {
         <Button variant="outline" size="sm" aria-expanded={changes !== undefined} onClick={() => { void toggle() }}>
           {t(changes === undefined ? 'changes.show' : 'changes.hide')}
         </Button>
-        {version.current ? null : computer
-          ? <Button variant="outline" size="sm" disabled={busy} onClick={() => { void switchTo() }}>{t(busy ? 'switch.busy' : 'switch.action')}</Button>
-          : <span className={css.description}>{t('doAtComputer')}</span>}
+        {version.current ? null : <Button variant="outline" size="sm" disabled={busy} onClick={() => { void switchTo() }}>{t(busy ? 'switch.busy' : 'switch.action')}</Button>}
       </div>
     </div>
     {changes === undefined ? null : <ChangesPanel t={t} changes={changes} />}
-    {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
   </li>
 }
 
