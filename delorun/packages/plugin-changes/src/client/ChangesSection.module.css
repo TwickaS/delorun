@@ -28,6 +28,9 @@
   composes: heading;
   /* Create a plugin shares the Plugins page with the inventory, so the page title does not name it. */
   display: block;
+  /* A section title under the page title: 15px, so it never outranks the 20px page title above it. */
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .group {

@@ -56,10 +56,44 @@
   line-height: 18px;
 }
 
-.others > summary {
+.others > summary,
+.disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: fit-content;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
+  list-style: none;
+}
+
+/* The studio's chevron, not the browser's triangle: it points right when closed and down when open. */
+.others > summary::-webkit-details-marker,
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.others > summary::before,
+.disclosure > summary::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentcolor;
+  border-bottom: 1.5px solid currentcolor;
+  transform: rotate(-45deg);
+}
+
+.others[open] > summary::before,
+.disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .others > summary::before,
+  .disclosure > summary::before {
+    transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* A list that ends its box leaves the closing line to the box's border. */
@@ -85,12 +119,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.disclosure > summary {
-  width: fit-content;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
 }
 
 .action {
