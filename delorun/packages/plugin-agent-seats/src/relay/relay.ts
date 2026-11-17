@@ -58,6 +58,8 @@ interface Pending {
 /** The relay for all seats of one home. */
 export class SeatRelay {
   private readonly pending = new Map<SessionId, Set<Pending>>()
+  /** The signal of each seat child's current turn, which Stop aborts; cleared when the turn ends. */
+  private readonly turnSignals = new Map<SessionId, AbortSignal>()
   private readonly listeners = new Set<(child: SessionId, waiting: boolean) => void>()
 
   /**
@@ -67,6 +69,10 @@ export class SeatRelay {
    */
   constructor(private readonly ctx: Context, private readonly options: SeatRelayOptions, private readonly scope = new RunScope()) {
     ctx.effect(() => this.scope.mount(ctx), 'agent seats: the relay\'s approval listener')
+    ctx.on('agent/pre-step', (payload, next) => {
+      if (this.isSeat(payload.agent)) this.turnSignals.set(payload.agent.id, payload.signal)
+      return next()
+    })
     // The stop boundary comes before `turn/end` is written, so the cancelled decision lands inside the turn.
     ctx.on('agent/turn-stopping', async ({ agent }) => {
       const entries = [...this.pending.get(agent.id) ?? []]
@@ -75,6 +81,7 @@ export class SeatRelay {
     })
     // Backstop for a turn that ended without a stop boundary: its question can no longer be decided in the turn.
     ctx.on('session/event', (session, event) => {
+      if (event.type === 'turn/end') this.turnSignals.delete(session.id)
       if (event.type !== 'turn/end' || !this.pendingOf(session.id)) return
       ctx.logger('agent-seats').warn('a seat turn ended with a question pending; it is cancelled')
       this.abortAll(session.id)
@@ -141,7 +148,10 @@ export class SeatRelay {
     let finish: () => void = () => {}
     const settled = new Promise<void>((resolve) => { finish = resolve })
     const entry: Pending = { controller: new AbortController(), settled, finish }
-    const signal = AbortSignal.any([request.signal, startSignal, entry.controller.signal])
+    // Stop and an error abort the turn's own signal and write `turn/end` without a stop boundary, so the question
+    // must settle on that signal while the step is still awaited.
+    const turnSignal = this.turnSignals.get(child.id)
+    const signal = AbortSignal.any([request.signal, startSignal, entry.controller.signal, ...turnSignal === undefined ? [] : [turnSignal]])
     this.hold(child.id, entry)
     try {
       await untilOrAborted(this.options.recorded(child, request.callId, signal), signal)
@@ -204,14 +214,14 @@ export class SeatRelay {
   }
 
   /**
-   * The consent service's switch `fullAccessStartsAgents`; true while the consent service does not offer it yet.
+   * The consent service's switch `fullAccessStartsAgents`. A consent service without the switch (it arrives with
+   * EA33) fails closed: Full access questions are then rejected.
    * @returns whether a Full access chat's agents may act without asking.
    */
   private fullAccessStartsAgents(): boolean {
     const consent = this.ctx.get('delegationConsent')
     const read: unknown = consent === undefined ? undefined : Reflect.get(consent, 'fullAccessStartsAgents')
-    // TODO: fix/p2-fullaccess (EA33) adds the switch; once it is in this base, an absent switch must fail closed (false).
-    return typeof read === 'function' ? read.call(consent) !== false : true
+    return typeof read === 'function' && read.call(consent) === true
   }
 
   private hold(child: SessionId, entry: Pending): void {

@@ -8,10 +8,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import SessionStore, { type SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { buildForkSeed, SessionLogOffset, SessionSeq, type SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { setApprovalPolicy, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalRequest, SeatRecord } from '@delorun/external-agents/contract'
+import { appendDelegatedPolicyOverrides, captureDelegatedPolicyOverrides, foldSubagentDescriptor, SUBAGENT_DESCRIPTOR_VERSION } from '@deepseek-ai/dsh-subagent'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { assertMarked, EXTERNAL_AGENT_GRANT, RUN_ANSWER, RunScope, SeatRelay, type SeatRelayOptions } from '../src/relay/index.ts'
 
@@ -49,6 +50,7 @@ interface World {
   readonly waiting: Waiting[]
   readonly openTurns: Set<string>
   readonly sandbox: Map<string, string>
+  readonly consent: Record<string, unknown>
   readonly recorded: Map<string, () => void>
   readonly seats: Map<string, SeatRecord>
   readonly descriptors: Map<string, string>
@@ -90,7 +92,9 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
   const openTurns = new Set<string>([root.id, child.id])
   const sandbox = new Map<string, string>([[root.id, rootPolicy === 'never' ? 'danger-full-access' : 'workspace-write']])
   ctx.provide('agents', { get: (id: string) => agents.get(id), turnBoundaryOf: (session: { id: string }) => ({ openTurnStartSeq: openTurns.has(session.id) ? 1 : null }) } as never)
-  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: sandbox.get(session.id) ?? 'workspace-write' }) } as never)
+  const consent: Record<string, unknown> = { fullAccessStartsAgents: () => true }
+  ctx.provide('delegationConsent', consent as never)
+  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: sandbox.get(session.id) ?? 'workspace-write' }), overrideOf: () => undefined } as never)
   const recorded = new Map<string, () => void>()
   const options: SeatRelayOptions = {
     seatProviders: new Set(['agent-seat']),
@@ -111,7 +115,7 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
     return (log.get(agent.id) ?? []).filter(event => event.type === type).map(event => ({ ...event.data }))
   }
   return {
-    ctx, relay, root, child, waiting, openTurns, sandbox, recorded, seats, descriptors, events,
+    ctx, relay, root, child, waiting, openTurns, sandbox, consent, recorded, seats, descriptors, events,
     answer(peer, value, which = waiting.length - 1) {
       const entry = waiting[which]
       if (entry === undefined) throw new Error('no question is pending')
@@ -148,13 +152,30 @@ describe('the lifted pin', () => {
     expect(w.events(w.child, 'approval/policy').map(data => data['policy'])).toEqual(['ask'])
   })
 
-  it('leaves a child the gate does not know pinned: a fork, a child of a seat, any other child', async () => {
+  it('leaves a real fork of a seat and a real child of a seat pinned, though both carry the seat descriptor and the fork the lifted ask', async () => {
     const w = await world()
-    const other = agentOf(w.ctx)
-    setApprovalPolicy(other.session, 'never')
-    w.descriptors.set(other.id, 'agent-seat')
-    expect(w.relay.prepareChild(other)).toBe('not-a-seat')
-    expect(w.ctx.approval.overrideOf(other.session)).toBe('never')
+    w.child.session.append('subagent/descriptor', { version: SUBAGENT_DESCRIPTOR_VERSION, mode: 'continuable', provider: 'agent-seat', label: 'Fix the tests' } as never)
+    const real = new SeatRelay(w.ctx, {
+      seatProviders: new Set(['agent-seat']),
+      descriptorOf: agent => foldSubagentDescriptor(agent.session.snapshotEvents())?.provider,
+      recorded: () => Promise.resolve(), recordName: (_a, name) => name,
+    })
+    expect(real.prepareChild(w.child)).toBe('lifted')
+    const events = w.child.session.snapshotEvents()
+    const seed = buildForkSeed(events, SessionSeq(events.length - 1))
+    const forkSession = w.ctx.sessions.create(undefined, { seed, inheritedEventCount: SessionLogOffset(seed.length), meta: { isSeeded: true } })
+    const fork = { id: forkSession.id, session: forkSession, ctx: w.ctx } as never
+    expect(foldSubagentDescriptor(forkSession.snapshotEvents())?.provider).toBe('agent-seat')
+    expect(w.ctx.approval.overrideOf(forkSession)).toBe('ask')
+    expect(real.prepareChild(fork)).toBe('not-a-seat')
+    await expect(real.onApproval(fork, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(w.waiting).toHaveLength(0)
+    const grandSession = w.ctx.sessions.create()
+    appendDelegatedPolicyOverrides(grandSession, captureDelegatedPolicyOverrides({ ...w.child, ctx: w.ctx } as never))
+    const grandchild = { id: grandSession.id, session: grandSession } as Agent
+    expect(w.ctx.approval.overrideOf(grandSession)).toBe('never')
+    expect(real.prepareChild(grandchild)).toBe('not-a-seat')
+    expect(w.ctx.approval.overrideOf(grandSession)).toBe('never')
   })
 
   it('leaves a gate-known session pinned when its descriptor is not the seat provider\'s', async () => {
@@ -242,7 +263,7 @@ describe('Full access', () => {
 
   it('rejects with the decision logged, and no card, while the consent switch fullAccessStartsAgents is off', async () => {
     const w = await world('never')
-    w.ctx.provide('delegationConsent', { fullAccessStartsAgents: () => false } as never)
+    w.consent['fullAccessStartsAgents'] = () => false
     w.relay.prepareChild(w.child)
     const answer = await w.relay.onApproval(w.child, new AbortController().signal)(question({ runRule: RULE }))
     expect(answer).toBe('reject')
@@ -270,6 +291,15 @@ describe('Full access', () => {
     w.sandbox.set(w.root.id, 'danger-full-access')
     await expect(w.relay.onApproval(w.child, new AbortController().signal)(question({ callId: 'call-2' }))).resolves.toBe('allow-once')
     expect(w.waiting).toHaveLength(1)
+  })
+
+  it('rejects, failing closed, when the consent service has no fullAccessStartsAgents switch', async () => {
+    const w = await world('never')
+    delete w.consent['fullAccessStartsAgents']
+    w.relay.prepareChild(w.child)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(w.waiting).toHaveLength(0)
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
   })
 
   it('asks as usual after the root leaves Full access', async () => {
@@ -332,6 +362,21 @@ describe('ending a question', () => {
     await expect(result).resolves.toBe('cancel')
     expect(types).toEqual(['approval/decided', 'turn/end'])
     expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'cancelled' }])
+  })
+
+  it('settles on the turn\'s own abort signal, before turn/end, when Stop writes no stop boundary', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const turn = new AbortController()
+    await w.ctx.waterfall('agent/pre-step', { agent: w.child, messages: [], turn: 1, step: 1, signal: turn.signal } as never, (() => Promise.resolve({})) as never)
+    const types: string[] = []
+    w.ctx.on('session/event', (session, event) => { if (session === w.child.session && (event.type === 'approval/decided' || event.type === 'turn/end')) types.push(event.type) })
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    turn.abort()
+    await expect(result).resolves.toBe('cancel')
+    w.child.session.append('turn/end', { turn: 1, reason: { kind: 'aborted' } } as never)
+    expect(types).toEqual(['approval/decided', 'turn/end'])
   })
 
   it('cancels at a bare turn end with a warning when no stop boundary came', async () => {
