@@ -22,6 +22,7 @@ export const THEME_COPY: ThemeCopy = {
   light: 'Light',
   dark: 'Dark',
   back: 'Back to how it started',
+  current: (name, scheme) => `This page is in ${name}${scheme === undefined ? '' : `, ${scheme.toLowerCase()}`}.`,
   names: LOOK_NAMES,
   toast: {
     region: 'Notifications',

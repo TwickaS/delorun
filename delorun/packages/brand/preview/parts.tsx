@@ -33,6 +33,7 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
       <SectionHeading title="Make it yours" lead="Change the page, see the entry Delorun would write, and go back." />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <Button variant="primary">Install</Button>
+        <Button variant="solid">Filled with the text colour</Button>
         <Button>Read the docs</Button>
         <Button unavailable aria-describedby={note}>Download for macOS</Button>
         <span id={note} style={{ color: 'var(--dl-text-muted)', fontSize: 13 }}>The desktop app is not available yet.</span>

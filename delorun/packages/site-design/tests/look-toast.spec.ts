@@ -6,7 +6,7 @@ const applied: Look[] = []
 vi.mock('../src/look-store.ts', () => ({ setLook: (look: Look) => { applied.push(look) } }))
 
 const copy: ThemeCopy = {
-  open: 'Change the look', title: 'Look', themes: 'Theme', scheme: 'Light or dark', device: 'System', light: 'Light', dark: 'Dark', back: 'Back to how it started', names: LOOK_NAMES,
+  open: 'Change the look', title: 'Look', themes: 'Theme', scheme: 'Light or dark', device: 'System', light: 'Light', dark: 'Dark', back: 'Back to how it started', current: name => `In ${name}`, names: LOOK_NAMES,
   toast: { region: 'Notifications', theme: name => `Now ${name}.`, scheme: name => `Now ${name}.`, undo: name => `Back to ${name}`, reset: 'Reset.' },
 }
 

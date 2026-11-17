@@ -14,6 +14,9 @@ import { KNOWN_LOOKS, type Look, type LookId } from './looks.ts'
 import type { ThemeCopy } from './shell-copy.ts'
 import { BackToStart } from './back-to-start.tsx'
 
+/** Where focus goes after the page is reset from the menu: the chosen theme. */
+const MENU_FOCUS = (): HTMLElement | null => document.querySelector<HTMLElement>('[popover] [role="radio"][aria-checked="true"]')
+
 /** The themes the menu offers; Custom is the setup strip's. */
 const PRESETS = KNOWN_LOOKS.filter((id): id is Exclude<LookId, 'custom'> => id !== 'custom')
 
@@ -38,7 +41,7 @@ export default function ThemeMenu({ copy, onReady }: { copy: ThemeCopy; onReady:
       <ChoiceGroup label={copy.scheme} value={look.scheme ?? 'device'} disabled={false} fill
         options={[{ value: 'device', label: copy.device }, { value: 'light', label: copy.light }, { value: 'dark', label: copy.dark }]}
         onChange={scheme => change({ ...look, scheme: scheme === 'device' ? undefined : scheme })} />
-      <BackToStart copy={copy} className="self-start" />
+      <BackToStart copy={copy} className="self-start" after={MENU_FOCUS} />
     </div>
   )
 }
