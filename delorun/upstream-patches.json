@@ -2833,6 +2833,12 @@
       "class": "security",
       "reason": "Denied tools: `syncTools` skips every server tool named in `ToolBridgeOptions.deniedTools`, at the first sync and at each list change, so a denied tool is registered in no scope, appears in no tool list and cannot be called through the client. Without the option every listed tool is registered as upstream does. The Playwright browser provider uses it to keep `browser_run_code_unsafe`, which runs model-written code in the server process, away from the model.",
       "sha256": "47cf617548a6089ebc18cf8c6c9c7f0c5371f59b34471f1884608ff6a9dcd24f"
+    },
+    {
+      "path": "packages/context/file-reference-local/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "TODO",
+      "reason": "TODO"
     }
   ],
   "retired": []

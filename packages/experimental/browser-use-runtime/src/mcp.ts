@@ -358,7 +358,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     }
   }, `${options.name}.sessions`)
   ctx.on('agent/created', async ({ agent, signal }) => {
-    const state: ClientState = { status: resources.available(agent) ? 'ready' : 'blocked', signal }
+    const state: ClientState = { status: resources.available(agent) ? 'ready' : 'blocked', signal: signal ?? new AbortController().signal }
     agent.ctx.effect(() => async () => {
       clients.delete(agent)
       await state.mask?.dispose()
@@ -385,11 +385,18 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
   ctx.on('mcp-client/consent-accepted', async (serverName) => {
     if (stopping || serverName !== options.name) return
     for (const [agent, state] of [...clients]) {
-      if (state.status !== 'refused' || state.signal === undefined || state.signal.aborted) continue
+      if (state.status !== 'refused' || state.signal?.aborted !== false) continue
       // The mask denies the server's tools in this Session; it comes off first, because the new registration names them.
       const mask = state.mask
       delete state.mask
-      await mask?.dispose()
+      try {
+        await mask?.dispose()
+      } catch (error) {
+        // The accept already took effect; a Session whose mask would not come off stays as it was.
+        if (mask !== undefined) state.mask = mask
+        ctx.logger.warn(`${options.name}: the browser tools stay off in Session ${agent.id}: ${(error as Error).message}`)
+        continue
+      }
       // Ready while it starts, so the registration's own `tools/change` does not mask the tools it adds.
       state.status = 'ready'
       try {
