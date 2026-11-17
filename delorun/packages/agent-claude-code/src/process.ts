@@ -7,7 +7,7 @@ import { EventEmitter } from 'node:events'
 import { fileURLToPath } from 'node:url'
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import { scrubbedParentEnv, type SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
-import type { ProgramSpawn, ProgramSpawnRequest } from './pending-contract.ts'
+import type { ProgramSpawn, ProgramSpawnRequest } from '@delorun/external-agents/contract'
 
 /**
  * The watcher script's path. It is plain JavaScript, so Node runs it without a loader wherever the package is installed.
@@ -30,8 +30,18 @@ export function watchedArgv(argv: readonly string[], platform: NodeJS.Platform, 
 }
 
 /**
- * The SDK's complete child environment as an overlay on the subprocess owner's scrubbed base: the SDK's values, and a
- * tombstone for each base name the SDK removed.
+ * Whether a variable never reaches the program: `NODE_OPTIONS`, which would load code into a Node program, and every
+ * `DELORUN_*` name, which carries Delorun's own state.
+ * @param name - the variable's name.
+ * @returns whether the overlay removes it.
+ */
+export function withheldVariable(name: string): boolean {
+  return name === 'NODE_OPTIONS' || name.startsWith('DELORUN_')
+}
+
+/**
+ * The SDK's complete child environment as an overlay on the subprocess owner's scrubbed base: the SDK's values, a
+ * tombstone for each base name the SDK removed, and a tombstone for every {@link withheldVariable} either names.
  * @param env - the environment the SDK composed for the program.
  * @param base - the scrubbed base environment the subprocess owner starts from.
  * @returns the overlay.
@@ -39,6 +49,7 @@ export function watchedArgv(argv: readonly string[], platform: NodeJS.Platform, 
 export function environmentOverlay(env: SpawnOptions['env'], base: NodeJS.ProcessEnv = scrubbedParentEnv()): NodeJS.ProcessEnv {
   const overlay: NodeJS.ProcessEnv = { ...env }
   for (const name of Object.keys(base)) if (!(name in env)) overlay[name] = undefined
+  for (const name of [...Object.keys(env), ...Object.keys(base), 'NODE_OPTIONS']) if (withheldVariable(name)) overlay[name] = undefined
   return overlay
 }
 

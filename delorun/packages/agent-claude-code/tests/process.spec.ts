@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { SubprocessHandle, SubprocessOutcome } from '@deepseek-ai/dsh-subprocess'
 import { environmentOverlay, GateProcess, programSpawnRequest, spawnThroughGate, watchedArgv, watcherPath } from '../src/process.ts'
 import { assertTestedSdk, TESTED_SDK_VERSION } from '../src/sdk.ts'
-import type { ProgramSpawnRequest } from '../src/pending-contract.ts'
+import type { ProgramSpawnRequest } from '@delorun/external-agents/contract'
 
 function fakeHandle() {
   const outcome = Promise.withResolvers<SubprocessOutcome>()
@@ -33,11 +33,15 @@ describe('the program process', () => {
     expect(readFileSync(path, 'utf8')).toContain("process.stdin.on('end'")
   })
 
-  it('passes the SDK\'s environment and removes the base names the SDK removed, adding no credential', () => {
+  it('passes the SDK\'s environment and removes the base names the SDK removed, NODE_OPTIONS and every DELORUN_ name, adding no credential', () => {
     expect(environmentOverlay({ PATH: '/bin', MCP_TOOL_TIMEOUT: '900000' }, { PATH: '/usr/bin', HOME: '/home/p', LANG: 'C' }))
       .toEqual({ PATH: '/bin', MCP_TOOL_TIMEOUT: '900000', HOME: undefined, LANG: undefined })
+    expect(environmentOverlay({ PATH: '/bin', NODE_OPTIONS: '--require /evil.js', DELORUN_HOME: '/h' }, { DELORUN_RELAY: 'x', HOME: '/home/p' }))
+      .toEqual({ PATH: '/bin', NODE_OPTIONS: undefined, DELORUN_HOME: undefined, DELORUN_RELAY: undefined, HOME: undefined })
+    expect(environmentOverlay({ PATH: '/bin' }, {})).toEqual({ PATH: '/bin', NODE_OPTIONS: undefined })
     const request = programSpawnRequest({ command: '/pack/claude', args: ['-p'], cwd: '/tmp/task', env: { PATH: '/bin' }, signal: new AbortController().signal }, 'linux', '/w.mjs')
-    expect(Object.keys(request.env).filter(name => /KEY|TOKEN|SECRET|PASSWORD/.test(name) && request.env[name] !== undefined)).toEqual([])
+    const env = request.env ?? {}
+    expect(Object.keys(env).filter(name => /KEY|TOKEN|SECRET|PASSWORD/.test(name) && env[name] !== undefined)).toEqual([])
     expect(request.stdio).toEqual({ stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
     expect(request).not.toHaveProperty('cwd')
   })

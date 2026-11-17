@@ -10,6 +10,9 @@
     "./watcher": "./src/watcher.mjs",
     "./package.json": "./package.json"
   },
+  "dependencies": {
+    "@delorun/external-agents": "workspace:*"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:*",

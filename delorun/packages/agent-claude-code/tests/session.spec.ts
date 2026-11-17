@@ -3,7 +3,7 @@ import type { SpawnedProcess } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCodeDriver } from '../src/driver.ts'
 import { ClaudeCodeDriverError } from '../src/errors.ts'
 import { GateProcess } from '../src/process.ts'
-import type { AccountObservation, ProgramEvent, ProgramOpenRequest, ProgramSession } from '../src/pending-contract.ts'
+import type { AccountObservation, ProgramEvent, ProgramOpenRequest, ProgramSession, SessionId } from '@delorun/external-agents/contract'
 import { assistant, FakeSdk, init, rateLimit, result, toolResults } from './fake-sdk.ts'
 
 const signal = AbortSignal.timeout(5_000)
@@ -18,7 +18,7 @@ function driver(sdk: FakeSdk): ClaudeCodeDriver {
 
 function request(overrides: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
   return {
-    sessionId: 'child-1',
+    sessionId: 'child-1' as SessionId,
     cwd: '/tmp/task',
     runRules: [],
     harnessTools: [],
@@ -46,7 +46,7 @@ async function until(session: ProgramSession, kind: ProgramEvent['kind']): Promi
 }
 
 describe('a Claude Code session', () => {
-  it('maps one program turn to text, reasoning, calls, message ends, results and the turn end in program order', async () => {
+  it('maps one program turn to text, reasoning, calls, message ends, results and the turn end, which carries only tokens no message end reported', async () => {
     const sdk = new FakeSdk()
     const session = await driver(sdk).open(request())
     await session.send('make a file', 'start')
@@ -58,7 +58,7 @@ describe('a Claude Code session', () => {
     query.emit(assistant('m1', [{ type: 'tool_use', id: 'call-1', name: 'Bash', input: { command: 'touch a.txt' } }], { usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 50 } }))
     query.emit(toolResults([{ id: 'call-1', content: [{ type: 'text', text: 'ok' }] }]))
     query.emit(assistant('m2', [{ type: 'text', text: 'Done.' }], { usage: { input_tokens: 130, output_tokens: 4 } }))
-    query.emit(result({ usage: { input_tokens: 230, output_tokens: 24 } }))
+    query.emit(result({ usage: { input_tokens: 240, output_tokens: 30 } }))
     expect(await take(session, 8)).toEqual([
       { kind: 'reasoning', text: 'plan' },
       { kind: 'text', text: 'Making it.' },
@@ -67,7 +67,7 @@ describe('a Claude Code session', () => {
       { kind: 'tool-result', id: 'call-1', output: 'ok', isError: false },
       { kind: 'text', text: 'Done.' },
       { kind: 'message-end', usage: { inputTokens: 130, outputTokens: 4 } },
-      { kind: 'turn-end', outcome: 'completed', usage: { inputTokens: 230, outputTokens: 24 } },
+      { kind: 'turn-end', outcome: 'completed', usage: { inputTokens: 10, outputTokens: 6 } },
     ])
     expect(session.turnRunning).toBe(false)
     expect(session.programSessionId).toBe('program-1')
@@ -130,10 +130,10 @@ describe('a Claude Code session', () => {
   it('interrupts the running turn, which ends interrupted, and stays usable', async () => {
     const sdk = new FakeSdk()
     const session = await driver(sdk).open(request())
-    await session.interrupt()
+    expect(await session.interrupt()).toBe('interrupted')
     expect(sdk.last.interrupts).toBe(0)
     await session.send('long task', 'start')
-    await session.interrupt()
+    expect(await session.interrupt()).toBe('interrupted')
     expect(sdk.last.interrupts).toBe(1)
     sdk.last.emit(result({ subtype: 'error_during_execution', is_error: true }))
     expect(await until(session, 'turn-end')).toEqual([{ kind: 'turn-end', outcome: 'interrupted', usage: { inputTokens: 10, outputTokens: 5 } }])

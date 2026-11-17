@@ -9,7 +9,7 @@ import type {
   AccountInfo, ModelInfo, Options, SDKControlGetUsageResponse, SDKMessage, SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCodeDriverError } from './errors.ts'
-import type { LocatedModule } from './pending-contract.ts'
+import type { LocatedClaudeSdk } from '@delorun/external-agents/locate'
 
 /** The SDK version this driver was tested with: the version upstream's `@deepseek-ai/dsh-subagent-claude-code` pins. */
 export const TESTED_SDK_VERSION = '0.3.263'
@@ -43,7 +43,7 @@ export interface ClaudeSdk {
  * @param located - the SDK's entry and version.
  * @throws ClaudeCodeDriverError `sdk-version` when the versions differ.
  */
-export function assertTestedSdk(located: LocatedModule): void {
+export function assertTestedSdk(located: Pick<LocatedClaudeSdk, 'entry' | 'version'>): void {
   if (located.version === TESTED_SDK_VERSION) return
   throw new ClaudeCodeDriverError('sdk-version', `Claude Code could not start: Delorun was tested with Claude Agent SDK ${TESTED_SDK_VERSION}, but the Claude Code pack brings ${located.version}. Update Delorun or the Claude Code pack so the two match.`)
 }
@@ -54,7 +54,7 @@ export function assertTestedSdk(located: LocatedModule): void {
  * @returns the SDK module.
  * @throws ClaudeCodeDriverError `sdk-version` for an untested version, `sdk-missing` when the module fails to load.
  */
-export async function loadClaudeSdk(located: LocatedModule): Promise<ClaudeSdk> {
+export async function loadClaudeSdk(located: Pick<LocatedClaudeSdk, 'entry' | 'version'>): Promise<ClaudeSdk> {
   assertTestedSdk(located)
   try {
     const sdk: ClaudeSdk = await import(pathToFileURL(located.entry).href)

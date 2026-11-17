@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
-import { allowedToolsFor, CANCELLED_MESSAGE, REJECTED_MESSAGE, ruleText, rulesOf, suggestedAllowRules } from '../src/approvals.ts'
+import type { CanUseTool, PermissionRuleValue, PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
+import { allowedToolsFor, CANCELLED_MESSAGE, exactRunRules, REJECTED_MESSAGE, ruleText, rulesOf } from '../src/approvals.ts'
 import { ClaudeCodeDriver } from '../src/driver.ts'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramRunRule } from '../src/pending-contract.ts'
+import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramRunRule, SessionId } from '@delorun/external-agents/contract'
 import { assistant, FakeSdk, result, TOUCH_SUGGESTIONS } from './fake-sdk.ts'
 
 const signal = AbortSignal.timeout(5_000)
+
+function allow(...rules: PermissionRuleValue[]): PermissionUpdate {
+  return { type: 'addRules', rules, behavior: 'allow', destination: 'localSettings' }
+}
 
 async function opened(answer: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, extra: Partial<ProgramOpenRequest> = {}) {
   const sdk = new FakeSdk()
@@ -14,7 +18,7 @@ async function opened(answer: (request: ProgramApprovalRequest) => Promise<Progr
     harnessToolTimeoutMs: () => 1,
     spawnOption: () => () => { throw new Error('a unit spec starts no process') },
   }).open({
-    sessionId: 'child', cwd: '/tmp/task', runRules: [], harnessTools: [],
+    sessionId: 'child' as SessionId, cwd: '/tmp/task', runRules: [], harnessTools: [],
     spawn: () => { throw new Error('a unit spec starts no process') },
     onApproval: answer, onLimits: () => {}, signal: new AbortController().signal, ...extra,
   })
@@ -132,7 +136,7 @@ describe('Claude Code questions', () => {
     await session.close()
   })
 
-  it('re-applies the run rules the person allowed earlier when the program starts again', async () => {
+  it('re-applies the exact run rules the person allowed earlier when the program starts again, and no other', async () => {
     const rules: ProgramRunRule[] = [
       { provider: 'claude-code', summary: 'Bash(touch a.txt)', data: { rules: [{ toolName: 'Bash', ruleContent: 'touch a.txt' }] } },
       { provider: 'claude-code', summary: 'Bash(touch a.txt)', data: { rules: [{ toolName: 'Bash', ruleContent: 'touch a.txt' }] } },
@@ -140,15 +144,39 @@ describe('Claude Code questions', () => {
       { provider: 'codex', summary: 'not ours', data: { rules: [{ toolName: 'Bash' }] } },
     ]
     const { sdk, session } = await opened(() => Promise.resolve('reject'), { runRules: rules, resume: 'program-1' })
-    expect(sdk.last.options.allowedTools).toEqual(['Bash(touch a.txt)', 'Read'])
+    expect(sdk.last.options.allowedTools).toEqual(['Bash(touch a.txt)'])
     await session.close()
   })
 })
 
 describe('run rules', () => {
-  it('takes only addRules allow entries from the suggestions', () => {
-    expect(suggestedAllowRules(TOUCH_SUGGESTIONS)).toEqual([{ toolName: 'Bash', ruleContent: 'touch a.txt' }])
-    expect(suggestedAllowRules(undefined)).toEqual([])
+  it('takes the one suggested allow rule whose content is the exact command asked about', () => {
+    expect(exactRunRules('Bash', { command: 'touch a.txt' }, TOUCH_SUGGESTIONS)).toEqual([{ toolName: 'Bash', ruleContent: 'touch a.txt' }])
+    expect(exactRunRules('Bash', { command: 'touch a.txt' }, undefined)).toEqual([])
+  })
+
+  it.each<[string, string, Record<string, unknown>, PermissionUpdate[]]>([
+    ['a prefix rule', 'Bash', { command: 'rm -rf build' }, [allow({ toolName: 'Bash', ruleContent: 'rm:*' })]],
+    ['a wildcard rule', 'Bash', { command: 'echo run > run.txt' }, [allow({ toolName: 'Bash', ruleContent: 'echo run *' })]],
+    ['a wildcard in the command itself', 'Bash', { command: 'rm *.txt' }, [allow({ toolName: 'Bash', ruleContent: 'rm *.txt' })]],
+    ['a bare tool rule', 'Bash', { command: 'make' }, [allow({ toolName: 'Bash' })]],
+    ['a path glob', 'Edit', { file_path: '/w/src/a.ts' }, [allow({ toolName: 'Edit', ruleContent: '/w/src/**' })]],
+    ['an exact path', 'Edit', { file_path: '/w/src/a.ts' }, [allow({ toolName: 'Edit', ruleContent: '/w/src/a.ts' })]],
+    ['another command', 'Bash', { command: 'make test' }, [allow({ toolName: 'Bash', ruleContent: 'make' })]],
+    ['another tool', 'Bash', { command: 'make' }, [allow({ toolName: 'PowerShell', ruleContent: 'make' })]],
+    ['two rules', 'Bash', { command: 'make' }, [allow({ toolName: 'Bash', ruleContent: 'make' }, { toolName: 'Bash', ruleContent: 'ls' })]],
+    ['a mode change', 'Bash', { command: 'make' }, [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }]],
+    ['a folder grant', 'Bash', { command: 'make' }, [{ type: 'addDirectories', directories: ['/'], destination: 'session' }]],
+  ])('offers no run rule for %s', (_case, toolName, input, suggestions) => {
+    expect(exactRunRules(toolName, input, suggestions)).toEqual([])
+  })
+
+  it('asks a prefix-rule question with no run rule, so the card offers only Reject and Allow once', async () => {
+    const asked: ProgramApprovalRequest[] = []
+    const { ask, session } = await opened((request) => { asked.push(request); return Promise.resolve('allow-once') })
+    await ask('Bash', { command: 'rm -rf build' }, { signal, toolUseID: 'call-4', requestId: 'r4', suggestions: [allow({ toolName: 'Bash', ruleContent: 'rm:*' })] })
+    expect(asked[0]?.runRule).toBeUndefined()
+    await session.close()
   })
 
   it('writes rules in Claude Code\'s syntax, escaping parentheses and backslashes', () => {
@@ -160,7 +188,8 @@ describe('run rules', () => {
     expect(rulesOf({ provider: 'codex', summary: '', data: { rules: [{ toolName: 'Bash' }] } })).toEqual([])
     expect(rulesOf({ provider: 'claude-code', summary: '', data: 'Bash' })).toEqual([])
     expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: 'Bash' } })).toEqual([])
-    expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: [7, { toolName: 3 }, { toolName: 'Edit', ruleContent: 5 }] } })).toEqual([{ toolName: 'Edit' }])
+    expect(rulesOf({ provider: 'claude-code', summary: '', data: { rules: [7, { toolName: 3 }, { toolName: 'Edit', ruleContent: 5 }, { toolName: 'Bash' }, { toolName: 'Bash', ruleContent: 'rm:*' }, { toolName: 'Bash', ruleContent: 'ls' }] } }))
+      .toEqual([{ toolName: 'Bash', ruleContent: 'ls' }])
     expect(allowedToolsFor([])).toEqual([])
   })
 })

@@ -9,7 +9,7 @@ import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { ClaudeCodeDriver } from '../src/driver.ts'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSession, ProgramSpawn } from '../src/pending-contract.ts'
+import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSession, ProgramSpawn, SessionId } from '@delorun/external-agents/contract'
 import { loadClaudeSdk, TESTED_SDK_VERSION } from '../src/sdk.ts'
 import { startMessagesFixture, type MessagesFixture, type MessagesStep } from './messages-fixture.ts'
 
@@ -100,7 +100,7 @@ async function harness(script: readonly MessagesStep[], signedIn = true): Promis
 
 function openRequest(h: Harness, extra: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
   return {
-    sessionId: 'child-1', cwd: h.task, runRules: [], harnessTools: [], spawn: h.spawn,
+    sessionId: 'child-1' as SessionId, cwd: h.task, runRules: [], harnessTools: [], spawn: h.spawn,
     onApproval: () => Promise.resolve('reject'), onLimits: () => {}, signal: new AbortController().signal, ...extra,
   }
 }

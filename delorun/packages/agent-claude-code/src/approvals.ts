@@ -8,7 +8,7 @@
  * @module @delorun/agent-claude-code/approvals
  */
 import type { CanUseTool, PermissionResult, PermissionRuleValue, PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
-import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule } from './pending-contract.ts'
+import type { JsonValue, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule } from '@delorun/external-agents/contract'
 
 /** What the program's model reads when the person rejects a call. */
 export const REJECTED_MESSAGE = 'The person rejected this tool call.'
@@ -16,13 +16,31 @@ export const REJECTED_MESSAGE = 'The person rejected this tool call.'
 export const CANCELLED_MESSAGE = 'The person stopped this turn.'
 
 /**
- * The allow rules among the program's suggestions.
- * @param suggestions - the program's suggestions for one question.
- * @returns the rules of every `addRules` allow entry, in order; nothing else.
+ * Whether a rule allows exactly one command and nothing more: content present and without Claude Code's wildcard `*`,
+ * which also excludes the `:*` prefix form.
+ * @param rule - a rule.
+ * @returns whether it is exact.
  */
-export function suggestedAllowRules(suggestions: readonly PermissionUpdate[] | undefined): PermissionRuleValue[] {
-  return (suggestions ?? []).flatMap(suggestion =>
-    suggestion.type === 'addRules' && suggestion.behavior === 'allow' ? suggestion.rules.map(rule => ({ ...rule })) : [])
+function exactRule(rule: PermissionRuleValue): boolean {
+  return rule.ruleContent !== undefined && rule.ruleContent.length > 0 && !rule.ruleContent.includes('*')
+}
+
+/**
+ * The rule "Allow for this run" may add for one question: Claude Code's single suggested `addRules` allow entry, only
+ * when it is for the tool that asked and its content equals the exact command asked about. A prefix or wildcard rule,
+ * a rule without content, a path rule, more than one rule, or no command gives none. Mode changes (`setMode`) and
+ * folder grants (`addDirectories`) are never taken.
+ * @param toolName - the tool that asked.
+ * @param input - the call's input.
+ * @param suggestions - Claude Code's suggested permission updates.
+ * @returns the one exact rule, or none.
+ */
+export function exactRunRules(toolName: string, input: Record<string, unknown>, suggestions: readonly PermissionUpdate[] | undefined): PermissionRuleValue[] {
+  const rules = (suggestions ?? []).flatMap(suggestion =>
+    suggestion.type === 'addRules' && suggestion.behavior === 'allow' ? suggestion.rules : [])
+  const [rule] = rules
+  if (rules.length !== 1 || rule === undefined || rule.toolName !== toolName || !exactRule(rule)) return []
+  return typeof input.command === 'string' && rule.ruleContent === input.command ? [{ toolName: rule.toolName, ruleContent: rule.ruleContent }] : []
 }
 
 /**
@@ -55,7 +73,8 @@ function isRecord(value: JsonValue): value is { readonly [key: string]: JsonValu
 }
 
 /**
- * The rules a run rule holds. A rule another driver made, or data that is not this driver's, holds none.
+ * The rules a run rule holds. A rule another driver made, data that is not this driver's, and a rule that is not exact
+ * hold none.
  * @param rule - a run rule from the seat.
  * @returns its rules.
  */
@@ -66,7 +85,9 @@ export function rulesOf(rule: ProgramRunRule): PermissionRuleValue[] {
   return rules.flatMap((entry: JsonValue): PermissionRuleValue[] => {
     if (!isRecord(entry) || typeof entry.toolName !== 'string') return []
     const content = entry.ruleContent
-    return [typeof content === 'string' ? { toolName: entry.toolName, ruleContent: content } : { toolName: entry.toolName }]
+    if (typeof content !== 'string') return []
+    const value = { toolName: entry.toolName, ruleContent: content }
+    return exactRule(value) ? [value] : []
   })
 }
 
@@ -140,7 +161,7 @@ export interface QuestionHooks {
 export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, hooks: QuestionHooks): CanUseTool {
   return async (toolName, input, options) => {
     hooks.beforeAsk()
-    const rules = suggestedAllowRules(options.suggestions)
+    const rules = exactRunRules(toolName, input, options.suggestions)
     const runRule = runRuleFor(rules)
     let answer: ProgramApprovalAnswer
     try {

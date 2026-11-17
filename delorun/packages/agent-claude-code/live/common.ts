@@ -15,7 +15,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { ClaudeCodeDriver } from '../src/driver.ts'
-import type { ProgramEvent, ProgramSession, ProgramSpawn } from '../src/pending-contract.ts'
+import type { ProgramEvent, ProgramSession, ProgramSpawn } from '@delorun/external-agents/contract'
 import { loadClaudeSdk } from '../src/sdk.ts'
 
 /** The worktree root. */

@@ -1834,6 +1834,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/external-agents':
+        specifier: workspace:*
+        version: link:../external-agents
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.263

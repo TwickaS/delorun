@@ -6,13 +6,14 @@
  * @module @delorun/agent-claude-code/live/host
  */
 import { driver, Log, readTurn, runtime } from './common.ts'
+import type { SessionId } from '@delorun/external-agents/contract'
 
 const [task, name] = process.argv.slice(2)
 if (task === undefined || name === undefined) throw new Error('usage: host.ts <task folder> <log name>')
 const log = new Log(name)
 const rt = await runtime(task)
 const session = await driver().open({
-  sessionId: 'live-host', cwd: task, runRules: [], harnessTools: [], spawn: rt.spawn,
+  sessionId: 'live-host' as SessionId, cwd: task, runRules: [], harnessTools: [], spawn: rt.spawn,
   onApproval: (request) => {
     log.line('question', `${request.toolName} ${request.reason}`)
     return Promise.resolve('allow-once')

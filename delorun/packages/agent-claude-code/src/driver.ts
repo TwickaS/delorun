@@ -9,7 +9,7 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { allowedToolsFor, canUseTool } from './approvals.ts'
 import { ClaudeCodeDriverError } from './errors.ts'
 import { probeObservation } from './limits.ts'
-import type { AccountObservation, ExternalAgentDriver, ProgramOpenRequest, ProgramProbeRequest, ProgramSession, ProgramSpawn } from './pending-contract.ts'
+import type { AccountObservation, ExternalAgentDriver, ProgramOpenRequest, ProgramSession, ProgramSpawn } from '@delorun/external-agents/contract'
 import { spawnThroughGate } from './process.ts'
 import type { ClaudeSdk } from './sdk.ts'
 import { ClaudeCodeSession } from './session.ts'
@@ -96,7 +96,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
    * @returns the observation, with no personal field.
    * @throws ClaudeCodeDriverError when the SDK cannot be used; the signal's reason when aborted; the program's failure when it cannot report its account.
    */
-  async probe(request: ProgramProbeRequest): Promise<AccountObservation> {
+  async probe(request: { readonly spawn: ProgramSpawn; readonly cwd: string; readonly signal: AbortSignal }): Promise<AccountObservation> {
     request.signal.throwIfAborted()
     const sdk = await this.#options.sdk()
     const stop = new AbortController()

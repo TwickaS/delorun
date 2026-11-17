@@ -16,7 +16,7 @@ import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
 import { ClaudeCodeDriverError } from './errors.ts'
 import { runObservation } from './limits.ts'
-import type { AccountObservation, OfferedModel, ProgramEvent, ProgramFailure, ProgramSession } from './pending-contract.ts'
+import type { AccountObservation, OfferedModel, ProgramEvent, ProgramFailure, ProgramInterruptOutcome, ProgramSession } from '@delorun/external-agents/contract'
 import { Queue } from './queue.ts'
 import type { ClaudeQuery } from './sdk.ts'
 
@@ -43,6 +43,25 @@ export function tokenUsage(usage: { readonly input_tokens?: number | null; reado
     ...typeof usage.cache_read_input_tokens === 'number' ? { cacheReadTokens: usage.cache_read_input_tokens } : {},
     ...typeof usage.cache_creation_input_tokens === 'number' ? { cacheWriteTokens: usage.cache_creation_input_tokens } : {},
   }
+}
+
+/**
+ * What `total` holds beyond `reported`, field by field and never below zero.
+ * @param total - the turn's usage as the program reports it.
+ * @param reported - the usage the turn's `message-end` events already reported.
+ * @returns the rest, or undefined when nothing is left.
+ */
+function remainingUsage(total: TokenUsage | undefined, reported: TokenUsage | undefined): TokenUsage | undefined {
+  if (total === undefined || reported === undefined) return total
+  const rest = (a: number | undefined, b: number | undefined): number | undefined => a === undefined ? undefined : Math.max(0, a - (b ?? 0))
+  const left: TokenUsage = {
+    inputTokens: Math.max(0, total.inputTokens - reported.inputTokens),
+    outputTokens: Math.max(0, total.outputTokens - reported.outputTokens),
+  }
+  const cacheReadTokens = rest(total.cacheReadTokens, reported.cacheReadTokens)
+  const cacheWriteTokens = rest(total.cacheWriteTokens, reported.cacheWriteTokens)
+  const usage = { ...left, ...cacheReadTokens === undefined ? {} : { cacheReadTokens }, ...cacheWriteTokens === undefined ? {} : { cacheWriteTokens } }
+  return usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0) === 0 ? undefined : usage
 }
 
 function addUsage(total: TokenUsage | undefined, more: TokenUsage | undefined): TokenUsage | undefined {
@@ -108,6 +127,8 @@ export class ClaudeCodeSession implements ProgramSession {
   #rejectedResetsAt: number | undefined
   /** Usage of program turns that continued into the same seat turn. */
   #carriedUsage: TokenUsage | undefined
+  /** Usage the running turn's `message-end` events already reported. */
+  #reportedUsage: TokenUsage | undefined
   /** Why the program ended on its own, once it has. */
   #ended: ProgramFailure | undefined
 
@@ -176,6 +197,7 @@ export class ClaudeCodeSession implements ProgramSession {
     const open = this.#open
     if (open === undefined) return
     this.#open = undefined
+    this.#reportedUsage = addUsage(this.#reportedUsage, open.usage)
     this.#events.push(open.usage === undefined ? { kind: 'message-end' } : { kind: 'message-end', usage: open.usage })
   }
 
@@ -286,8 +308,9 @@ export class ClaudeCodeSession implements ProgramSession {
   }
 
   #endTurn(outcome: 'completed' | 'interrupted' | 'failed', usage: TokenUsage | undefined, failure?: ProgramFailure): void {
-    const total = addUsage(this.#carriedUsage, usage)
+    const total = remainingUsage(addUsage(this.#carriedUsage, usage), this.#reportedUsage)
     this.#carriedUsage = undefined
+    this.#reportedUsage = undefined
     this.#running = false
     this.#interruptRequested = false
     this.#lastError = undefined
@@ -330,11 +353,15 @@ export class ClaudeCodeSession implements ProgramSession {
     if (this.#running) this.#interruptRequested = true
   }
 
-  /** Interrupt the running turn; its `turn-end` reports `interrupted`. The session stays usable. */
-  async interrupt(): Promise<void> {
-    if (!this.#running || this.#closed || this.#query === undefined) return
+  /**
+   * Interrupt the running turn; its `turn-end` reports `interrupted`. The process stays open.
+   * @returns always `interrupted`: Claude Code stops a turn without closing its process.
+   */
+  async interrupt(): Promise<ProgramInterruptOutcome> {
+    if (!this.#running || this.#closed || this.#query === undefined) return 'interrupted'
     this.#interruptRequested = true
     await this.#query.interrupt()
+    return 'interrupted'
   }
 
   /**

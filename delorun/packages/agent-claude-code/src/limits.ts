@@ -5,7 +5,7 @@
  * @module @delorun/agent-claude-code/limits
  */
 import type { AccountInfo, SDKControlGetUsageResponse, SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
-import type { AccountObservation, LimitWindow } from './pending-contract.ts'
+import type { AccountObservation, LimitWindow } from '@delorun/external-agents/contract'
 
 /** The window status a rate-limit event's status maps to. */
 const EVENT_STATUS: Readonly<Record<SDKRateLimitInfo['status'], LimitWindow['status']>> = {
