@@ -38,7 +38,7 @@ function harness(): Harness {
       closeWaitMs: 50,
     }),
   }
-  h.session.attach(THREAD)
+  h.session.attach(THREAD, TASK)
   codex.answer('turn/start', { result: { turn: { id: TURN, items: [], itemsView: 'notLoaded', status: 'inProgress', error: null } } })
   codex.answer('turn/steer', { result: { turnId: TURN } })
   codex.answer('turn/interrupt', { result: {} })
@@ -69,7 +69,11 @@ describe('turns', () => {
   it('starts a turn with turn/start on its thread and maps a recorded command turn to ordered events', async () => {
     const h = harness()
     await startTurn(h)
-    expect(h.codex.requests('turn/start')).toEqual([{ threadId: THREAD, input: [{ type: 'text', text: 'Run this shell command exactly: touch made-by-codex.txt. Then say done.', text_elements: [] }] }])
+    expect(h.codex.requests('turn/start')).toEqual([{
+      threadId: THREAD,
+      input: [{ type: 'text', text: 'Run this shell command exactly: touch made-by-codex.txt. Then say done.', text_elements: [] }],
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
+    }])
     expect(h.session.turnRunning).toBe(true)
     h.codex.notify('item/started', itemFrame(commandItem('inProgress')))
     h.codex.notify('item/completed', itemFrame(commandItem('completed', 0)))

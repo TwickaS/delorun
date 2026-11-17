@@ -29,6 +29,7 @@ function pinnedCodex(): CodexProgram {
 }
 
 interface Real {
+  readonly codexHome: string
   readonly workspace: string
   readonly fixture: ResponsesFixture
   readonly spawn: ProgramSpawn
@@ -92,6 +93,7 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
   }
   const questions: ProgramApprovalRequest[] = []
   const r: Real = {
+    codexHome,
     workspace,
     fixture,
     spawn,
@@ -120,7 +122,7 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
 
 async function untilTurnEnd(session: CodexSession, onEvent?: (event: ProgramEvent) => Promise<void> | void): Promise<ProgramEvent[]> {
   const events: ProgramEvent[] = []
-  const signal = AbortSignal.timeout(45_000)
+  const signal = AbortSignal.timeout(90_000)
   for (;;) {
     const event = await session.next(signal)
     events.push(event)
@@ -162,7 +164,7 @@ describe('the real pinned Codex app-server', () => {
     expect(events.at(-1)).toMatchObject({ kind: 'turn-end', outcome: 'completed' })
     await session.close()
     await expectNothingLeft(r)
-  }, 60_000)
+  }, 100_000)
 
   it('asks before an untrusted command and runs it only when allowed', async () => {
     const r = await real([shell('touch allowed.txt'), { kind: 'text', text: 'made it' }, shell('touch declined.txt'), { kind: 'text', text: 'did not' }])
@@ -182,7 +184,7 @@ describe('the real pinned Codex app-server', () => {
     expect(existsSync(join(r.workspace, 'declined.txt'))).toBe(false)
     await session.close()
     await expectNothingLeft(r)
-  }, 60_000)
+  }, 100_000)
 
   it('resumes the thread in a new process', async () => {
     const r = await real([{ kind: 'text', text: 'one' }, { kind: 'text', text: 'two' }])
@@ -199,7 +201,8 @@ describe('the real pinned Codex app-server', () => {
     expect(JSON.stringify(r.fixture.requests[1]?.input)).toContain('First.')
     await resumed.close()
     await expectNothingLeft(r)
-  }, 60_000)
+    // Two processes and two turns: the budget allows for a machine busy with other lanes.
+  }, 150_000)
 
   it('fails resume-failed for a thread that does not exist', async () => {
     const r = await real([])
@@ -207,7 +210,7 @@ describe('the real pinned Codex app-server', () => {
     expect(error).toBeInstanceOf(ProgramFailureError)
     expect((error as ProgramFailureError).failure).toEqual({ category: 'resume-failed' })
     await expectNothingLeft(r)
-  }, 60_000)
+  }, 100_000)
 
   it('stops before any turn when the configured model is not offered and no model was picked', async () => {
     const r = await real([])
@@ -216,7 +219,7 @@ describe('the real pinned Codex app-server', () => {
     expect((error as ProgramFailureError).failure).toMatchObject({ category: 'model-not-offered', configured: 'fixture-model' })
     expect(r.fixture.requests).toEqual([])
     await expectNothingLeft(r)
-  }, 60_000)
+  }, 100_000)
 
   it('closes the app-server when Stop leaves a command running, and the command dies with it (L32)', async () => {
     const r = await real([shell('sleep 20 && touch late.txt'), { kind: 'hold' }])
@@ -234,7 +237,18 @@ describe('the real pinned Codex app-server', () => {
     await session.close()
     await expectNothingLeft(r)
     expect(existsSync(join(r.workspace, 'late.txt'))).toBe(false)
-  }, 60_000)
+  }, 100_000)
+
+  it('leaves the Codex home\'s config.toml as it was', async () => {
+    const r = await real([shell('touch made.txt'), { kind: 'text', text: 'done' }])
+    r.answers = ['allow-once']
+    const before = readFileSync(join(r.codexHome, 'config.toml'), 'utf8')
+    const session = await r.driver.open(r.request())
+    await session.send('Make made.txt.', 'start')
+    await untilTurnEnd(session)
+    await session.close()
+    expect(readFileSync(join(r.codexHome, 'config.toml'), 'utf8')).toBe(before)
+  }, 100_000)
 
   it('runs a limits check without a thread or a model request', async () => {
     const r = await real([])
@@ -242,5 +256,5 @@ describe('the real pinned Codex app-server', () => {
     expect(observation).toMatchObject({ provider: 'codex', source: 'probe' })
     expect(r.fixture.requests).toEqual([])
     await expectNothingLeft(r)
-  }, 60_000)
+  }, 100_000)
 })

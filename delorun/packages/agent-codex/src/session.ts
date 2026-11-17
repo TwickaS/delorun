@@ -87,6 +87,7 @@ interface OpenCall { readonly type: ToolItem['type']; readonly item?: ToolItem }
 export class CodexSession implements ProgramSession {
   private readonly queue = new EventQueue<ProgramEvent>()
   private threadId = ''
+  private workspace = ''
   /** The running turn's id; undefined between turns, so items of an ended turn are ignored. */
   private currentTurn: string | undefined
   private starting = false
@@ -132,9 +133,11 @@ export class CodexSession implements ProgramSession {
   /**
    * Bind the session to the thread `thread/start` or `thread/resume` opened.
    * @param threadId - the thread id.
+   * @param workspace - the folder each turn may write in.
    */
-  attach(threadId: string): void {
+  attach(threadId: string, workspace: string): void {
     this.threadId = threadId
+    this.workspace = workspace
   }
 
   /**
@@ -162,7 +165,7 @@ export class CodexSession implements ProgramSession {
     if (this.turnRunning) throw new CodexTurnRunningError()
     this.beginTurn()
     try {
-      const { turn } = await this.options.rpc.request('turn/start', { threadId: this.threadId, input }, this.timeout())
+      const { turn } = await this.options.rpc.request('turn/start', { threadId: this.threadId, input, sandboxPolicy: this.sandboxPolicy() }, this.timeout())
       // `turn/started` may already have named the turn, and a quick turn may even have completed before this answer.
       if (this.starting) this.currentTurn ??= turn.id
     } finally {
@@ -187,6 +190,11 @@ export class CodexSession implements ProgramSession {
 
   close(): Promise<void> {
     return this.shutDown('closed')
+  }
+
+  /** Codex's `workspace-write` sandbox for one turn: the workspace and temporary folders writable, no network. */
+  private sandboxPolicy(): Readonly<Record<string, unknown>> {
+    return { type: 'workspaceWrite', writableRoots: [this.workspace], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
   }
 
   private assertOpen(): void {

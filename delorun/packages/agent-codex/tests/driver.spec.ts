@@ -68,10 +68,10 @@ describe('open', () => {
     await session.close()
   })
 
-  it('starts a lasting thread asking under untrusted with workspace-write, never ephemeral (L31)', async () => {
+  it('starts a lasting thread asking under untrusted on a read-only base, never ephemeral (L31)', async () => {
     const s = setup()
     await (await s.driver.open(s.request())).close()
-    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'workspace-write', ephemeral: false }])
+    expect(s.codex.requests('thread/start')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'read-only', ephemeral: false }])
   })
 
   it('passes a picked model on thread/start and thread/resume (L33)', async () => {
@@ -80,7 +80,7 @@ describe('open', () => {
     expect(start.codex.requests('thread/start')[0]).toMatchObject({ model: 'gpt-5.6-terra' })
     const resume = setup()
     const session = await resume.driver.open(resume.request({ model: 'gpt-5.6-terra', resume: THREAD }))
-    expect(resume.codex.requests('thread/resume')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'workspace-write', model: 'gpt-5.6-terra', threadId: THREAD }])
+    expect(resume.codex.requests('thread/resume')).toEqual([{ cwd: TASK, approvalPolicy: 'untrusted', sandbox: 'read-only', model: 'gpt-5.6-terra', threadId: THREAD }])
     expect(session.programSessionId).toBe(THREAD)
     await session.close()
   })

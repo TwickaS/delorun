@@ -1,7 +1,11 @@
 /**
  * The Codex driver: opens a thread in a fresh `codex app-server --stdio` process started through the gate's spawn,
- * and runs limits checks. Threads run under approval policy `untrusted` and sandbox `workspace-write` (L31, T7), are
- * never ephemeral, and use the stable protocol only.
+ * and runs limits checks. Threads ask under approval policy `untrusted` and write only inside the workspace (L31, T7),
+ * are never ephemeral, and use the stable protocol only.
+ *
+ * The workspace-write sandbox is set on each `turn/start`, over a read-only thread: a thread started with sandbox
+ * `workspace-write` makes Codex add `trust_level = "trusted"` for the folder to the person's own `config.toml`, which a
+ * turn's sandbox policy does not.
  *
  * The model rule (L33, EA22): a model the person picked is passed on `thread/start` and `thread/resume`. Without one,
  * the model the thread reports must be one `model/list` offers; otherwise the open fails `model-not-offered` before any
@@ -44,8 +48,11 @@ const MAX_MODEL_PAGES = 10
 /** The client name Codex records for threads the driver starts. */
 const CLIENT_INFO = { name: 'delorun', title: 'Delorun', version: '0.1.0' }
 
-/** Thread settings every seat thread uses: Codex asks before anything outside the workspace (L31, T7). */
-const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'workspace-write' } as const
+/**
+ * Thread settings every seat thread uses: Codex asks before any command it does not know to be safe (L31, T7). The
+ * thread's own sandbox is read-only; each turn widens it to the workspace ({@link CodexSession}).
+ */
+const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'read-only' } as const
 
 /**
  * The argv for the pinned app-server.
@@ -97,7 +104,7 @@ export class CodexDriver implements ExternalAgentDriver {
         throw new ProgramFailureError({ category: 'model-not-offered', configured: opened.model, offered })
       }
       request.onLimits({ ...observationOf({ account, source: 'run' }), offeredModels: offered })
-      session.session.attach(opened.thread.id)
+      session.session.attach(opened.thread.id, request.cwd)
       return session.session
     } catch (error: unknown) {
       await session.session.close()
