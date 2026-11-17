@@ -1,5 +1,5 @@
 ---
-area: Agents
+area: Plugins
 section: Changed
 ---
 
