@@ -1876,6 +1876,21 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/bundle-agent-hooks:
+    dependencies:
+      '@deepseek-ai/dsh-experimental-claude-code-mods':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/claude-code-mods
+      '@deepseek-ai/dsh-experimental-client-ui-claude-code-mods':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/client-ui-claude-code-mods
+      '@deepseek-ai/dsh-hooks-claude-code':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/hooks-claude-code
+      '@deepseek-ai/dsh-hooks-codex':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/hooks-codex
+
   delorun/packages/bundle-browser:
     dependencies:
       '@deepseek-ai/dsh-browser-use':

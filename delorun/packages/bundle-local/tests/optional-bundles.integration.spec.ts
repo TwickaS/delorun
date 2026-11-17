@@ -33,6 +33,7 @@ interface Row { readonly id?: string; readonly name?: string; readonly disabled?
 const BUNDLES = [
   { dir: 'bundle-browser', rows: ['browser-use', 'browser-use-playwright-mcp', 'browser-use-chrome-devtools-mcp', 'browser-use-stagehand-native'], on: ['browser-use', 'browser-use-playwright-mcp'] },
   { dir: 'bundle-code-intelligence', rows: ['lsp', 'lsp-stdio', 'tool-lsp'], on: ['lsp'] },
+  { dir: 'bundle-agent-hooks', rows: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'], on: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
@@ -135,6 +136,8 @@ describe('what needs setup', () => {
 describe('default configuration', () => {
   const CHECKED = [
     ['bundle-browser', 'browser-use-playwright-mcp', 'experimental/browser-use-playwright-mcp'],
+    ['bundle-agent-hooks', 'hooks-claude-code', 'experimental/hooks-claude-code'],
+    ['bundle-agent-hooks', 'hooks-codex', 'experimental/hooks-codex'],
     ['bundle-code-intelligence', 'lsp-stdio', 'lsp/lsp-stdio'],
   ] as const
 
