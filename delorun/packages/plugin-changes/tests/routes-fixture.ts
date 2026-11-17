@@ -21,6 +21,7 @@ import { dirname, join, relative } from 'node:path'
 import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, type HarnessContext, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type PluginOperationResult, type ReloadOutcome } from '@delorun/changes'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { onTestFinished } from 'vitest'
+import { restartRoutes, type RestartRouteDependencies } from '../src/restart-route.ts'
 import { changesRoutes, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
 
 /** The fixture's profile. */
@@ -148,17 +149,17 @@ export interface RouteServer {
  * Serve the Changes routes on a loopback port; stopped after the test.
  * @param ctx - the profile the Host runs, or undefined for a Host that runs none.
  * @param options - what the dependencies answer, replacing the defaults; `operationResult` is what the stand-in plugin
- *   operation answers.
+ *   operation answers; `restartRoute` is the restart the Restart routes reach, none by default.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full' } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly restartRoute?: RestartRouteDependencies } = {}): Promise<RouteServer> {
   let profileReads = 0
   let renewals = 0
   let reloads = 0
   const warnings: string[] = []
   const operations: (readonly string[])[] = []
   let port: number | undefined
-  const routes = changesRoutes({
+  const dependencies: RouteDependencies = {
     connection: {
       admit: (request: IncomingMessage) => {
         if (request.headers['x-test-fence'] === 'refuse') return { rejection: 403 }
@@ -197,8 +198,11 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     },
     harness: () => undefined,
     harnessEffect: () => Promise.resolve({ kind: 'restart' }),
+    restartState: () => Promise.resolve(undefined),
+    clearRestartFailure: () => {},
     ...options,
-  })
+  }
+  const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, options.restartRoute ?? { restart: () => undefined, waitSeconds: 600 })]
   const server = createServer((request, response) => {
     const listener = request.headers['x-test-listener']
     if (typeof listener === 'string') Object.defineProperty(request, REQUEST_LISTENER, { value: listener })

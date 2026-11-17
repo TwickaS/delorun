@@ -58,17 +58,21 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
+import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
 import { REACH_DEVICE, unlockOf, type ReachDevicePrincipal } from '@delorun/home-auth'
 import { recordPluginRequest, type PluginRequest } from '@delorun/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
+import { LiveAssets, harnessEffectOf } from './live-apply.ts'
+import { restartRoutes, restartStateOf } from './restart-route.ts'
 import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The running runtime's harness, which `delorun start`'s home process provides for the Changes routes. */
     changesHarness?: ChangesHarnessHost
+    /** The home process's restart and what this Host booted with, which `delorun start`'s home process provides for the Restart route. */
+    changesRestart?: ChangesRestartHost
   }
 }
 
@@ -96,12 +100,18 @@ export interface Config {
    * `delorun recover safe-mode`.
    */
   readonly installationBundles: string[]
+  /**
+   * How long the studio's Restart waits for running chats before it gives up and keeps Delorun running as it is, in
+   * seconds. New turns are refused while it waits.
+   */
+  readonly restartWaitSeconds: number
 }
 
 /** Validated configuration. The default is the parity value. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
   installationBundles: z.array(z.string().pattern(PACKAGE_NAME_PATTERN)).default([]),
+  restartWaitSeconds: z.natural().min(10).max(86_400).default(600),
 })
 
 /** The tool registry, whose `tools/pre-execute` event and guards the plugin uses. */
@@ -229,7 +239,12 @@ export function apply(ctx: Context, config: Config): void {
   // Upstream hot reload's `ProfileReconcileCheck`: it awaits `check` before every recomposition of the profile.
   ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
   ctx.inject(['webServer', 'connection'], (scope) => {
-    const routes = changesRoutes({
+    const restart = (): ChangesRestartHost | undefined => scope.get('changesRestart')
+    const harness = (): ReturnType<ChangesHarnessHost['context']> => scope.get('changesHarness')?.context()
+    // Only a Host a home process runs serves live files: elsewhere every change waits for the next start.
+    const live = restart() === undefined ? undefined : new LiveAssets(scope.webServer, request => scope.connection.requestRejection(request))
+    if (live !== undefined) scope.effect(() => () => { live.dispose() }, 'plugin-changes: live studio files')
+    const dependencies = {
       connection: routeConnection(scope.connection),
       profile: () => {
         const profile = scope.get('profileContext')
@@ -253,10 +268,12 @@ export function apply(ctx: Context, config: Config): void {
         return version
       },
       devices: routeDevices(scope),
-      harness: () => scope.get('changesHarness')?.context(),
-      // A decided change to Delorun itself takes effect at the next start until the live-apply module says otherwise.
-      harnessEffect: () => Promise.resolve({ kind: 'restart' }),
-    })
+      harness,
+      harnessEffect: harnessEffectOf({ restart, harness, live, logger: scope.logger }),
+      restartState: () => restartStateOf(restart(), harness()),
+      clearRestartFailure: () => { restart()?.clearFailure() },
+    } satisfies Parameters<typeof changesRoutes>[0]
+    const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, { restart, waitSeconds: config.restartWaitSeconds })]
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
       return () => {

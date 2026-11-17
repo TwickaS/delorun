@@ -145,6 +145,7 @@ import {
   type PhonePowersView,
   type ProtectionChangedView,
   type RequestedView,
+  type RestartStateView,
   type RevealedView,
   type RiskView,
   type ShownView,
@@ -250,6 +251,13 @@ export interface RouteDependencies {
    * @returns the effect.
    */
   readonly harnessEffect: (entry: ChangeEntry) => Promise<HarnessEffectView>
+  /**
+   * Whether a restart is needed, under way or failed ([restart route](./restart-route.ts)).
+   * @returns the view, or undefined when none of these holds or this Host cannot restart itself.
+   */
+  readonly restartState: () => Promise<RestartStateView | undefined>
+  /** Forget the last restart's failure, as each decision about a change to Delorun itself does. */
+  readonly clearRestartFailure: () => void
 }
 
 /** A paired device as the routes see it. */
@@ -285,7 +293,7 @@ type Requester =
   | { readonly kind: 'other' }
 
 /** A refusal a route answers with: its status, its code and the sentence the person reads. */
-class RouteRefusal extends Error {
+export class RouteRefusal extends Error {
   /** The HTTP status. */
   readonly status: number
   /** The stable code. */
@@ -497,7 +505,7 @@ async function readBody(request: IncomingMessage, limit = MAX_BODY_BYTES): Promi
  * @param allowed - the fields the route takes.
  * @throws {RouteRefusal} `400 BAD_REQUEST`.
  */
-function onlyFields(body: Readonly<Record<string, unknown>>, allowed: readonly string[]): void {
+export function onlyFields(body: Readonly<Record<string, unknown>>, allowed: readonly string[]): void {
   const extra = Object.keys(body).filter(key => !allowed.includes(key))
   if (extra.length > 0) throw new RouteRefusal(400, 'BAD_REQUEST', `This request takes ${allowed.length === 0 ? 'no fields' : allowed.join(', ')}; it does not take ${extra.join(', ')}.`)
 }
@@ -763,6 +771,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const harnessLog = await part(problems, home, 'The log of changes to Delorun itself', () => readHarnessLog(ctx.home))
   const notices = requester.kind === 'computer' ? await part(problems, home, 'The notices', () => readNotices(ctx.home)) : []
   const harness = dependencies.harness()
+  const restart = await part(problems, home, 'Whether Delorun needs a restart', () => dependencies.restartState())
   const entries = log?.entries ?? []
   return {
     atComputer: requester.kind === 'computer',
@@ -786,6 +795,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
     unreviewedSinceOff: countUnreviewedSinceOff(entries, harnessLog?.entries ?? []),
     notices: (notices ?? []).map(notice => ({ id: notice.id, level: notice.level, at: notice.at, device: notice.device })),
     ...workSession === undefined ? {} : { workSession },
+    ...restart === undefined ? {} : { restart },
     problems,
   }
 }
@@ -1261,7 +1271,9 @@ async function harnessAct(action: HarnessAction, body: Readonly<Record<string, u
     }
     case 'discard': {
       onlyFields(body, ['id'])
-      return { kind: 'harness', entry: harnessEntryView(await discardHarnessChange(harness, changeIdOf(body), presence), harness.runtime)! }
+      const entry = await discardHarnessChange(harness, changeIdOf(body), presence)
+      dependencies.clearRestartFailure()
+      return { kind: 'harness', entry: harnessEntryView(entry, harness.runtime)! }
     }
     case 'copy': {
       onlyFields(body, [])
@@ -1345,7 +1357,7 @@ function noticeSeenRoute(dependencies: RouteDependencies): RouteHandler {
  * @returns the field.
  * @throws {RouteRefusal} `400 BAD_REQUEST` when the field is present and is not true or false.
  */
-function flag(body: Readonly<Record<string, unknown>>, name: string, fallback: boolean): boolean {
+export function flag(body: Readonly<Record<string, unknown>>, name: string, fallback: boolean): boolean {
   const value = body[name]
   if (value === undefined) return fallback
   if (typeof value !== 'boolean') throw new RouteRefusal(400, 'BAD_REQUEST', `${name} is true or false.`)

@@ -247,7 +247,7 @@ describe('the plugin\'s routes in the Host', () => {
     host.provide('profileContext', { name: ctx.profile, dir: ctx.profileDir, home: ctx.home } as never)
     let reconciled = 0
     host.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => { reconciled += 1; return Promise.resolve({}) } } as never)
-    await host.plugin(plugin, { enabled: false, installationBundles: [] })
+    await host.plugin(plugin, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
     const request = Object.assign(Readable.from([Buffer.from('{"plugin":"plug"}')]), { method: 'POST', url: ACTION_PATHS.off, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } })
     let status = 0
     let text = ''
