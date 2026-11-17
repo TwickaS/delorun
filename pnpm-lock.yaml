@@ -1663,6 +1663,9 @@ importers:
       '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
+      '@delorun/release-verify':
+        specifier: workspace:*
+        version: link:../../packages/release-verify
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0

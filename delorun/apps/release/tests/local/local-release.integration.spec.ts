@@ -18,6 +18,7 @@ import { PRODUCTION_KEYS_PATH, PRODUCTION_KEYS_SCHEMA, readProductionKeys, readP
 import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
 import { verifySignedManifest, trustRootChain, verifyFileList, verifyPacks, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 import { readBundle, verifyBundle } from '@delorun/release-formats/log/bundle'
+import { checkPacksBundle } from '@delorun/release-verify/bundle'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { verifyChannel } from '../../scripts/cut-rc.ts'
@@ -564,6 +565,8 @@ describe('a local release with plugin packs', () => {
     const bundle = readBundle(readFileSync(join(release, 'delorun-0.1.0.packs.log.json')))
     expect(bundle.manifest.name).toBe('delorun-0.1.0.packs.json')
     expect(verifyBundle(root.metadata, packsBytes, '0.1.0', bundle, 'packs').treeSize).toBe(2)
+    // The client's own check, which the launcher runs on the stored packs file and bundle, accepts what was published.
+    expect(checkPacksBundle(root.metadata, '0.1.0', packsBytes, readFileSync(join(release, 'delorun-0.1.0.packs.log.json')))).toMatchObject({ ok: true })
     expect(verifyChannel(channel, '0.1.0', Math.floor(Date.now() / 1000)).packs).toBe(1)
   })
 
