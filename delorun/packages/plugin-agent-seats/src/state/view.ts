@@ -54,6 +54,8 @@ export interface AgentSeatView {
   readonly pending?: { readonly since: number }
   /** The agent's final answer of its latest finished turn, for the hand-off line in the lead chat. */
   readonly lastAnswer?: string
+  /** How many turns of this chat have finished; absent before the first one. */
+  readonly turns?: number
   /** While `state` is `model-needed`: the models to pick from. */
   readonly modelPicker?: SeatModelPicker
 }

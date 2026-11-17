@@ -11,7 +11,7 @@ import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type S
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 1
+export const SEAT_FOLD_VERSION = 2
 
 /** The shortest `ownSettings` the view shows before the program's settings are known. */
 export const DEFAULT_OWN_SETTINGS = 'its own settings'
@@ -39,6 +39,8 @@ export interface SeatShown {
   readonly pending: number | null
   /** The agent's latest final answer. */
   readonly lastAnswer: string | null
+  /** How many turns of this chat have finished. */
+  readonly turns: number
 }
 
 /** What the logged state record holds, with absent fields as null. */
@@ -68,7 +70,7 @@ export const NO_LOGGED: SeatLogged = { programSessionId: null, cursor: null, pro
 
 /** The view's fields before any event. */
 export const NO_SHOWN: SeatShown = {
-  agent: null, state: 'idle', version: null, ownSettings: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null,
+  agent: null, state: 'idle', version: null, ownSettings: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
 }
 
 /**
@@ -185,8 +187,10 @@ export function foldSeat(previous: SeatProjectionState, event: SessionEvent): Se
   switch (event.type) {
     case 'turn/start':
       return { ...state, shown: { ...state.shown, state: 'working', resetAt: null, endedReason: null, modelPicker: null, pending: null } }
-    case 'turn/end':
-      return STICKY.has(state.shown.state) ? state : { ...state, shown: { ...state.shown, state: 'idle', pending: null } }
+    case 'turn/end': {
+      const turns = state.shown.turns + 1
+      return { ...state, shown: STICKY.has(state.shown.state) ? { ...state.shown, turns } : { ...state.shown, state: 'idle', pending: null, turns } }
+    }
     case 'assistant/message': {
       const answer = finalAnswerOf(event)
       return answer === null || answer === state.shown.lastAnswer ? state : { ...state, shown: { ...state.shown, lastAnswer: answer } }
@@ -214,6 +218,7 @@ export function viewOf(shown: SeatShown): AgentSeatView | null {
     ...shown.endedReason === null ? {} : { endedReason: shown.endedReason },
     ...shown.pending === null ? {} : { pending: { since: shown.pending } },
     ...shown.lastAnswer === null ? {} : { lastAnswer: shown.lastAnswer },
+    ...shown.turns === 0 ? {} : { turns: shown.turns },
     ...shown.modelPicker === null ? {} : { modelPicker: shown.modelPicker },
   }
 }

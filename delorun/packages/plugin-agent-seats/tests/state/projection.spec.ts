@@ -105,6 +105,39 @@ describe('the agentSeat view', () => {
     expect(h.view()?.pending).toBeUndefined()
   })
 
+  it('counts the finished turns of the seat child, past a sticky state and not before the first', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    expect(h.view()?.turns).toBeUndefined()
+    h.session.append('turn/start', { turn: 1 })
+    expect(h.view()?.turns).toBeUndefined()
+    h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    expect(h.view()?.turns).toBe(1)
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'not-signed-in' })
+    h.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+    expect(h.view()).toMatchObject({ state: 'not-signed-in', turns: 2 })
+  })
+
+  it('counts no turn of a chat that is not a seat child, and none a fork inherited', async () => {
+    const h = await host()
+    h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    expect(h.view()).toBeNull()
+    const state: SeatProjectionState = { inherited: 9, tail: null, logged: NO_LOGGED, shown: { ...NO_SHOWN, agent: 'codex' } }
+    expect(foldSeat(state, { type: 'turn/end', seq: 3, time: 0, data: { turn: 1, reason: { kind: 'completed' } } } as SessionEvent)).toBe(state)
+  })
+
+  it('keeps the view reference across an event that changes nothing shown, and replaces it at a turn\'s end', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const definition = agentSeatProjection()
+    const seated = h.session.snapshotEvents().reduce(foldSeat, definition.init(h.session.header, h.session.inheritedEventCount))
+    const ended = foldSeat(seated, { type: 'turn/end', seq: 5, time: 0, data: { turn: 1, reason: { kind: 'completed' } } } as SessionEvent)
+    expect(definition.wire.view(ended)).not.toBe(definition.wire.view(seated))
+    expect(definition.wire.view(ended)).toMatchObject({ turns: 1 })
+    const stepped = foldSeat(ended, { type: 'step/start', seq: 6, time: 0, data: { turn: 2, step: 1 } } as SessionEvent)
+    expect(definition.wire.view(stepped)).toBe(definition.wire.view(ended))
+  })
+
   it('keeps the final answer of the latest finished step, not a message that calls a tool', async () => {
     const h = await host()
     describeSeat(h.session)

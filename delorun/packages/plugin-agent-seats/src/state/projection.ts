@@ -35,6 +35,7 @@ const shownSchema = z.object({
   modelPicker: pickerSchema.nullable(),
   pending: z.number().nullable(),
   lastAnswer: z.string().nullable(),
+  turns: z.number().int().nonnegative(),
 }).strict()
 
 /** The fold's state schema, which checks a stored checkpoint before it seeds a fold. */
@@ -59,6 +60,7 @@ const viewSchema: z.ZodType<AgentSeatView | null> = z.object({
   endedReason: z.string().optional(),
   pending: z.object({ since: z.number() }).strict().optional(),
   lastAnswer: z.string().optional(),
+  turns: z.number().int().positive().optional(),
   modelPicker: pickerSchema.optional(),
 }).strict().nullable() as z.ZodType<AgentSeatView | null>
 
