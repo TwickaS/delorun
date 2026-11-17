@@ -572,7 +572,7 @@ const AGENT_LEVELS: readonly AgentLevel[] = ['careful', 'standard', 'own', 'unre
 
 /**
  * The level a seat runs at while the consent is off: the one saved on the consent row, `standard` (the consent's own
- * default) when none is saved or the saved value is unknown, and `careful` for a provider without a level field.
+ * default) when none is saved, and `careful` when the saved value is unknown or the provider has no level field.
  * @param provider - the agent to start.
  * @param saved - the consent row's saved configuration.
  * @returns the level.
@@ -585,7 +585,8 @@ function savedLevel(provider: ExternalAgentName, saved: object): AgentLevel {
     default: return 'careful'
   }
   const value: unknown = Reflect.get(saved, field)
-  return AGENT_LEVELS.find(level => level === value) ?? 'standard'
+  if (value === undefined) return 'standard'
+  return AGENT_LEVELS.find(level => level === value) ?? 'careful'
 }
 
 /** What a gate session needs from the gate. */
