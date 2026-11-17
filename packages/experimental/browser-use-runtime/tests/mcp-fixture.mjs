@@ -8,7 +8,7 @@ const record = (event, values = {}) => appendFileSync(join(root, 'events.ndjson'
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 let counter = 0
 let rootsAdvertised = false
-record('start', { cwd: process.cwd() })
+record('start', { cwd: process.cwd(), outputDir: process.env.PLAYWRIGHT_MCP_OUTPUT_DIR ?? null })
 process.once('exit', () => record('exit'))
 const lines = createInterface({ input: process.stdin })
 lines.once('close', () => process.exit(0))

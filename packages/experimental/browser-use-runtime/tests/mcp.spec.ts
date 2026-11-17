@@ -3,7 +3,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
 import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -113,6 +113,7 @@ interface LoadOptions {
   explainFailure?: (message: string) => string | undefined
   directory?: string
   outputFolder?: string
+  outputRoot?: string
   refuseCall?: SessionMcpOptions['refuseCall']
   checkResult?: SessionMcpOptions['checkResult']
   registration?: SessionMcpOptions['registration']
@@ -122,7 +123,7 @@ interface LoadOptions {
 
 async function load(options: LoadOptions = {}) {
   const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
-  const { explainFailure, directory, outputFolder, refuseCall, checkResult, registration, admission, deniedTools } = options
+  const { explainFailure, directory, outputFolder, outputRoot, refuseCall, checkResult, registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -138,6 +139,7 @@ async function load(options: LoadOptions = {}) {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
         ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
+        ...outputRoot === undefined ? {} : { outputRoot },
         ...refuseCall === undefined ? {} : { refuseCall }, ...checkResult === undefined ? {} : { checkResult },
         ...deniedTools === undefined ? {} : { deniedTools },
         ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
@@ -579,6 +581,29 @@ describe('Session MCP Loader composition', () => {
     expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
     expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
     expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('gives each Session its own owner-only output folder under the output root, tells the server, and leaves the Session\'s folder without one', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load({ outputFolder: '.fixture-output', outputRoot: join(tmpdir(), `dsh-output-root-${process.pid}`), refuseCall: async (call) => { offered.push(call); return undefined } })
+    const outputRoot = join(tmpdir(), `dsh-output-root-${process.pid}`)
+    roots.push(outputRoot)
+    const [first, second] = [join(root, 'first'), join(root, 'second')]
+    await Promise.all([mkdir(first), mkdir(second)])
+    for (const [id, cwd] of [['output-one', first], ['output-two', second]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+      expect((await visit(ctx, agent, id)).isError).toBe(false)
+    }
+    const folders = offered.map(call => call.outputDirectory!)
+    expect(new Set(folders).size).toBe(2)
+    for (const folder of folders) {
+      expect(dirname(folder)).toBe(outputRoot)
+      expect((await stat(folder)).mode & 0o777).toBe(0o700)
+    }
+    expect([...new Set((await events(root)).filter(event => event.event === 'start').map(event => String(event.outputDir)))].sort()).toEqual([...folders].sort())
+    expect(await readdir(first)).toEqual([])
+    expect(await readdir(second)).toEqual([])
   })
 
   it('never writes through a link or over a person\'s own rules in the output folder', async () => {

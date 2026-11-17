@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { join, win32 } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -303,6 +303,51 @@ it('gives mountSessionMcp the after-call check', () => {
   expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].checkResult).toBeTypeOf('function')
 })
 
+it('puts the output folders in the per-user cache folder, outside the chat\'s folder and the Delorun home', () => {
+  expect(Provider.outputRoot('linux', { XDG_CACHE_HOME: '/cache' }, '/home/p')).toBe('/cache/delorun-browser-output')
+  expect(Provider.outputRoot('linux', { XDG_CACHE_HOME: 'relative' }, '/home/p')).toBe('/home/p/.cache/delorun-browser-output')
+  expect(Provider.outputRoot('linux', {}, '/home/p')).toBe('/home/p/.cache/delorun-browser-output')
+  expect(Provider.outputRoot('darwin', {}, '/Users/p')).toBe('/Users/p/Library/Caches/delorun-browser-output')
+  expect(Provider.outputRoot('win32', { LOCALAPPDATA: 'C:\\L' }, 'C:\\Users\\p')).toContain('delorun-browser-output')
+  expect(Provider.outputRoot('win32', {}, '/home/p')).toContain('AppData')
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const root = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].outputRoot!
+  expect(root).toBe(Provider.outputRoot(process.platform, process.env, homedir()))
+})
+
+it('with an output folder, accepts names in it and in the chat\'s folder, refuses others, and ignores .playwright-mcp', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
+  const refuse = (args: unknown) =>
+    Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat, outputDirectory })
+  expect(await refuse({ filename: 'page.png' })).toBeUndefined()
+  expect(await refuse({ filename: join(chat, 'page.png') })).toBeUndefined()
+  expect(await refuse({ filename: join(outputDirectory, 'page.png') })).toBeUndefined()
+  expect(await refuse({ filename: join(outside, 'page.png') })).toBe(Provider.outsideFolderMessage(join(outside, 'page.png')))
+  expect(await refuse({ filename: '../../escape.png' })).toContain('leads outside it')
+  await symlink(outside, join(chat, 'link'))
+  expect(await refuse({ filename: join(chat, 'link', 'x.png') })).toContain('leads outside it')
+})
+
+it('with an output folder, still catches a file that landed through a link inside it', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  const elsewhere = join(outside, 'elsewhere')
+  await Promise.all([mkdir(outputDirectory), mkdir(elsewhere)])
+  await symlink(elsewhere, join(outputDirectory, 'out'))
+  const startedAt = Date.now()
+  await writeFile(join(outputDirectory, 'fine.png'), 'png')
+  await writeFile(join(elsewhere, 'landed.pdf'), 'pdf')
+  const lines: string[] = []
+  const call = { tool: 'browser_pdf_save', arguments: { filename: 'out/landed.pdf' }, directory: chat, outputDirectory }
+  expect(await Provider.refuseWrittenOutside(call, startedAt, line => lines.push(line))).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(elsewhere, 'landed.pdf'))).toBe(false)
+  expect(existsSync(join(outputDirectory, 'fine.png'))).toBe(true)
+  expect(lines).toHaveLength(1)
+})
+
 it('keeps the tool denial, the folder guard and the MCP root with browser_additions off', async () => {
   // C16's parity composition turns browser_additions off; the denial and the guard are security invariants that hold
   // with every switch off. The runtime tells the Session's folder as the one MCP root whatever options the provider
@@ -324,7 +369,8 @@ it('keeps the tool denial, the folder guard and the MCP root with browser_additi
   for (const config of [{ mode: 'launch', browserAdditions: true }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222', browserAdditions: true }] as const) {
     Provider.apply(new Context(), Provider.Config(config))
     const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
-    expect(options).toMatchObject({ outputFolder: Provider.OUTPUT_FOLDER, explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(options).toMatchObject({ explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(options.outputFolder).toBeUndefined()
     expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
       .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
   }

@@ -1,5 +1,6 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
+import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -126,6 +127,14 @@ export interface SessionMcpOptions {
    * `.gitignore` are never changed, and a Session whose server did not start gets no folder.
    */
   outputFolder?: string
+  /**
+   * Absolute folder under which the Host creates one output folder for each Session, with mode 0700, and tells the
+   * server to save its output files there instead of in the Session's working directory (`PLAYWRIGHT_MCP_OUTPUT_DIR`).
+   * Choose a folder no sandbox grants a confined command write access to, so a sandboxed command cannot replace the
+   * Session's output folder. When set, {@link outputFolder} is ignored and the Session's own folder gets no output
+   * folder.
+   */
+  outputRoot?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -198,6 +207,19 @@ export interface BrowserToolCall {
   arguments: unknown
   /** The Session's working directory when its server started, which the server was told as its one MCP root. */
   directory: string
+  /** The Session's output folder, when the provider set {@link SessionMcpOptions.outputRoot}. */
+  outputDirectory?: string
+}
+
+/**
+ * Create a Session's output folder under the provider's output root.
+ * @param root - the provider's output root.
+ * @param sessionId - the Session's id.
+ * @returns the folder, named by a digest of the id so the name is safe on every file system, with mode 0700.
+ */
+async function sessionOutputDirectory(root: string, sessionId: string): Promise<string> {
+  const directory = join(await fixedDirectory(root), createHash('sha256').update(sessionId).digest('hex').slice(0, 32))
+  return fixedDirectory(directory)
 }
 
 /**
@@ -354,6 +376,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         try {
           signal.throwIfAborted()
           const sessionDirectory = await workingDirectory.ensure(agent, signal)
+          const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {
@@ -362,6 +385,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             }
             const call: BrowserToolCall = {
               tool: exec.name.slice(toolPrefix.length), arguments: exec.arguments, directory: sessionDirectory,
+              ...outputDirectory === undefined ? {} : { outputDirectory },
             }
             const refusal = await options.refuseCall?.(call)
             if (refusal !== undefined) return failure(refusal)
@@ -384,7 +408,9 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             serverName: options.name,
             command: options.command,
             args: options.args,
-            ...options.env === undefined ? {} : { env: options.env },
+            ...options.env === undefined && outputDirectory === undefined
+              ? {}
+              : { env: { ...options.env, ...outputDirectory === undefined ? {} : { PLAYWRIGHT_MCP_OUTPUT_DIR: outputDirectory } } },
             cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
             roots: [sessionDirectory],
             ...options.deniedTools === undefined ? {} : { deniedTools: options.deniedTools },
@@ -392,7 +418,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             failOnStartupError: true,
             reconnect: { enabled: false },
           }))
-          if (options.outputFolder !== undefined) {
+          if (options.outputFolder !== undefined && outputDirectory === undefined) {
             try {
               await ignoredOutputFolder(join(sessionDirectory, options.outputFolder))
             } catch (error) {

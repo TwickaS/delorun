@@ -1,7 +1,8 @@
 /** Chrome or Chromium browser tools from the pinned Playwright MCP server. @module */
 
 import { lstat, readdir, realpath, unlink } from 'node:fs/promises'
-import { basename, dirname, join, resolve, sep } from 'node:path'
+import { homedir } from 'node:os'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import {
@@ -73,11 +74,10 @@ export interface DeniedToolsConfig {
 export interface BrowserAdditionsConfig {
   /**
    * Replace Playwright's report of a browser build that is not installed with one message that tells the model to stop
-   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}), and give
-   * {@link OUTPUT_FOLDER} a `.gitignore` of `*`. This is Delorun's C16 switch `browser_additions`, off in the parity
-   * composition. The turned-off tools ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard
-   * ({@link refuseOutsideFolder}) and the Session's folder as the server's one MCP root do not depend on it: they hold
-   * with it off. Defaults to off.
+   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}). This is
+   * Delorun's C16 switch `browser_additions`, off in the parity composition. The turned-off tools
+   * ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard ({@link refuseOutsideFolder}) and the
+   * Session's folder as the server's one MCP root do not depend on it: they hold with it off. Defaults to off.
    */
   browserAdditions: boolean
 }
@@ -171,8 +171,34 @@ const MISSING_BROWSER_PATTERN = new RegExp(`${FAILURE_START}(?:${[
   'Browser "[\\w-]+" is not installed(?:; expected executable at [^\\r\\n]+)?\\. Run `npx @playwright/mcp install-browser [\\w-]+` to install',
 ].join('|')})`, 'u')
 
-/** The folder, in the folder its client names as the MCP root, that Playwright's MCP server saves screenshots, PDFs and snapshots to. */
+/**
+ * The folder, in the folder its client names as the MCP root, where Playwright's MCP server saves screenshots, PDFs and
+ * snapshots when no output folder is set. The provider always sets one ({@link outputRoot}), so a new chat's folder
+ * has none; a chat that already has one keeps it and nothing writes there.
+ */
 export const OUTPUT_FOLDER = '.playwright-mcp'
+
+/** The folder, in the per-user cache folder, that holds one output folder for each Session. */
+export const OUTPUT_ROOT_NAME = 'delorun-browser-output'
+
+/**
+ * Where the server's output folders live: a folder in the per-user cache folder, which the sandbox dialects mount
+ * read-only for a confined command (or do not grant) and which lies outside the protected Delorun home, so a
+ * sandboxed command can read a saved file but cannot write, remove, rename or replace the folder.
+ * @param platform - the Host platform.
+ * @param env - the Host environment.
+ * @param home - the Host user's home folder.
+ * @returns an absolute folder: `%LOCALAPPDATA%` on Windows, `~/Library/Caches` on macOS, otherwise an absolute
+ * `$XDG_CACHE_HOME` or `~/.cache`, then {@link OUTPUT_ROOT_NAME}.
+ */
+export function outputRoot(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, home: string): string {
+  const absolute = (value: string | undefined): value is string => value !== undefined && isAbsolute(value)
+  switch (platform) {
+    case 'win32': return join(absolute(env.LOCALAPPDATA) ? env.LOCALAPPDATA : join(home, 'AppData', 'Local'), OUTPUT_ROOT_NAME)
+    case 'darwin': return join(home, 'Library', 'Caches', OUTPUT_ROOT_NAME)
+    default: return join(absolute(env.XDG_CACHE_HOME) ? env.XDG_CACHE_HOME : join(home, '.cache'), OUTPUT_ROOT_NAME)
+  }
+}
 
 /**
  * Replace Playwright's report of a browser that is not installed.
@@ -245,29 +271,39 @@ async function realLocation(path: string): Promise<string | undefined> {
 /**
  * Refuse a tool call that would save or read a file really outside the Session's folder. Playwright's server compares
  * paths as text, so a link inside the folder would let a call write or read wherever the link points; this compares
- * real paths. Every call is refused while the {@link OUTPUT_FOLDER} really lies outside the folder, because the server
- * saves default-named files and downloads there whatever the call's arguments. A call's `filename` and `paths` are
- * tested where the server resolves them: against the folder and against its {@link OUTPUT_FOLDER}. A path that
- * changes between this test and the server's use, a download that lands between calls included, is not covered.
+ * real paths. A call's `filename` and `paths` are tested where the server resolves them: against the folder and against
+ * the Session's output folder, which the Host owns outside the folder ({@link outputRoot}) and which the test treats as
+ * inside. A call with no output folder (a caller that set none) is refused while {@link OUTPUT_FOLDER} really lies
+ * outside the folder, because the server then saves default-named files and downloads there. A path that changes
+ * between this test and the server's use is not covered; {@link refuseWrittenOutside} checks after the call.
  * @param call - the tool call and the folder the Session's server was told as its MCP root.
  * @returns {@link LINKED_OUTPUT_FOLDER_MESSAGE}, or {@link outsideFolderMessage} for the first name that leads
  * outside, or `undefined` when nothing does.
  */
 export async function refuseOutsideFolder(call: BrowserToolCall): Promise<string | undefined> {
   const folder = await realpath(call.directory)
-  if (!inside(folder, await realLocation(join(call.directory, OUTPUT_FOLDER)))) return LINKED_OUTPUT_FOLDER_MESSAGE
+  const roots = [folder]
+  const bases = [call.directory]
+  if (call.outputDirectory === undefined) {
+    if (!inside(folder, await realLocation(join(call.directory, OUTPUT_FOLDER)))) return LINKED_OUTPUT_FOLDER_MESSAGE
+    bases.push(join(call.directory, OUTPUT_FOLDER))
+  } else {
+    roots.push(await realpath(call.outputDirectory))
+    bases.push(call.outputDirectory)
+  }
   if (typeof call.arguments !== 'object' || call.arguments === null) return undefined
   const { filename, paths } = call.arguments as { filename?: unknown; paths?: unknown }
   const names = [filename, ...Array.isArray(paths) ? paths as unknown[] : []].filter(name => typeof name === 'string')
   for (const name of names) {
-    for (const base of [call.directory, join(call.directory, OUTPUT_FOLDER)]) {
-      if (!inside(folder, await realLocation(resolve(base, name)))) return outsideFolderMessage(name)
+    for (const base of bases) {
+      const real = await realLocation(resolve(base, name))
+      if (!roots.some(root => inside(root, real))) return outsideFolderMessage(name)
     }
   }
   return undefined
 }
 
-/** The deepest folder level of the {@link OUTPUT_FOLDER} tree that {@link refuseWrittenOutside} looks through. */
+/** The deepest folder level of the output folder's tree that {@link refuseWrittenOutside} looks through. */
 const OUTPUT_TREE_DEPTH = 6
 
 /**
@@ -276,7 +312,7 @@ const OUTPUT_TREE_DEPTH = 6
  * @returns the model-visible text.
  */
 export function writtenOutsideMessage(removed: boolean): string {
-  return `Browser saved a file outside this chat's folder, through a link inside "${OUTPUT_FOLDER}", so the result is refused${removed ? ' and the file was removed' : ', and the file could not be removed'}. Stop using browser tools for this request and tell the person to remove the link from "${OUTPUT_FOLDER}" in the chat's folder.`
+  return `Browser saved a file outside this chat's folder, through a link, so the result is refused${removed ? ' and the file was removed' : ', and the file could not be removed'}. Stop using browser tools for this request and tell the person to remove the link from the chat's folder.`
 }
 
 /**
@@ -299,23 +335,23 @@ async function removeWritten(real: string, startedAt: number): Promise<boolean> 
 }
 
 /**
- * The links inside the {@link OUTPUT_FOLDER} tree that lead outside the Session's folder. The walk lists folders and
+ * The links inside the output folder's tree that lead outside the Session's folder. The walk lists folders and
  * reads link names; it never follows one.
- * @param folder - the Session's real folder.
+ * @param roots - the real folders a link may lead to: the Session's folder and its output folder.
  * @param directory - the folder to look through.
  * @param depth - how many more levels to look through.
  * @returns the real locations the links lead to.
  */
-async function outsideLinks(folder: string, directory: string, depth: number): Promise<string[]> {
+async function outsideLinks(roots: readonly string[], directory: string, depth: number): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
   const found: string[] = []
   for (const entry of entries) {
     const path = join(directory, entry.name)
     if (entry.isSymbolicLink()) {
       const real = await realLocation(path)
-      if (!inside(folder, real)) found.push(real ?? path)
+      if (!roots.some(root => inside(root, real))) found.push(real ?? path)
     } else if (entry.isDirectory() && depth > 0) {
-      found.push(...await outsideLinks(folder, path, depth - 1))
+      found.push(...await outsideLinks(roots, path, depth - 1))
     }
   }
   return found
@@ -323,7 +359,7 @@ async function outsideLinks(folder: string, directory: string, depth: number): P
 
 /**
  * Check, after a browser tool call, that nothing it wrote landed outside the Session's folder: the call's `filename`
- * where the server resolved it, and every folder a link inside {@link OUTPUT_FOLDER} leads to outside the folder (where
+ * where the server resolved it, and every folder a link inside the output folder leads to outside the folder (where
  * downloads and default-named files land). A plain file there that the call created is removed without following the
  * final name; one that cannot be removed is left and reported. This is what covers the replacement of a folder or link
  * after {@link refuseOutsideFolder}'s test, which that test cannot stop.
@@ -336,16 +372,17 @@ export async function refuseWrittenOutside(
   call: BrowserToolCall, startedAt: number, log: (line: string) => void,
 ): Promise<string | undefined> {
   const folder = await realpath(call.directory)
-  const output = join(call.directory, OUTPUT_FOLDER)
+  const output = call.outputDirectory ?? join(call.directory, OUTPUT_FOLDER)
+  const roots = call.outputDirectory === undefined ? [folder] : [folder, await realpath(call.outputDirectory)]
   const landed: string[] = []
   const { filename } = (typeof call.arguments === 'object' && call.arguments !== null ? call.arguments : {}) as { filename?: unknown }
   if (typeof filename === 'string') {
     for (const base of [call.directory, output]) {
       const real = await realLocation(resolve(base, filename))
-      if (real !== undefined && !inside(folder, real)) landed.push(real)
+      if (real !== undefined && !roots.some(root => inside(root, real))) landed.push(real)
     }
   }
-  for (const target of await outsideLinks(folder, output, OUTPUT_TREE_DEPTH)) {
+  for (const target of await outsideLinks(roots, output, OUTPUT_TREE_DEPTH)) {
     const names = await readdir(target).catch(() => [])
     landed.push(target, ...names.map(name => join(target, name)))
   }
@@ -358,7 +395,7 @@ export async function refuseWrittenOutside(
     if (!await removeWritten(real, startedAt)) kept = true
   }
   if (!found) return undefined
-  log(`${name}: ${call.tool} saved a file outside the chat's folder through a link in ${OUTPUT_FOLDER}; the result was refused${kept ? '' : ' and the file removed'}`)
+  log(`${name}: ${call.tool} saved a file outside the chat's folder through a link; the result was refused${kept ? '' : ' and the file removed'}`)
   return writtenOutsideMessage(!kept)
 }
 
@@ -392,7 +429,10 @@ export function apply(ctx: Context, config: Config): void {
     command: process.execPath,
     args,
     env,
-    ...config.browserAdditions ? { outputFolder: OUTPUT_FOLDER, explainFailure: explainMissingBrowser } : {},
+    // The server saves to a Host-owned folder outside every folder a sandboxed command can write, so the chat's own
+    // folder gets no `.playwright-mcp`.
+    outputRoot: outputRoot(process.platform, process.env, homedir()),
+    ...config.browserAdditions ? { explainFailure: explainMissingBrowser } : {},
     // The denial and the folder guard are security invariants, which C16's `browser_additions` switch never turns off.
     deniedTools: denied,
     admission: providedAdmission(ctx),
