@@ -552,7 +552,13 @@ describe('an elevated action', () => {
 
 describe('the plugin pack actions (A408)', () => {
   const UNLOCK = { id: 'elevation-1' }
-  const CHANGING = ['packs/enqueue', 'packs/cancel', 'packs/remove', 'packs/retry'] as const
+
+  it('lets a paired phone cancel a queued or downloading pack without an unlock, which only stops an install', () => {
+    const call = { action: 'packs/cancel', resource: GLOBAL, args: { name: 'x' } } as const
+    expect(createCondition(facts(), DEVICE)(call)).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ELEVATED_ACTIONS)).not.toContain('packs/cancel')
+  })
+  const CHANGING = ['packs/enqueue', 'packs/remove', 'packs/retry'] as const
 
   it('lets a paired phone read the packs and the install list without an unlock', () => {
     const condition = createCondition(facts(), DEVICE)
@@ -652,7 +658,7 @@ const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettin
 const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
-  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/, /^packs\/(enqueue|cancel|remove|retry)$/,
+  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/, /^packs\/(enqueue|remove|retry)$/,
   /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 

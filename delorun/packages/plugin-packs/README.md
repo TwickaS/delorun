@@ -52,7 +52,7 @@ The service announces every item of the list on the plugin manager's `plugin-man
 
 ## Phones
 
-`packs/list` is a read action every paired phone may take. `packs/enqueue`, `packs/cancel`, `packs/remove` and `packs/retry` are elevated actions of contract C14: a phone takes them only while it holds an unlock (A408).
+`packs/list` is a read action every paired phone may take, and so is `packs/cancel`: cancelling stops a queued or downloading install and never touches an installed pack (A408). `packs/enqueue`, `packs/remove` and `packs/retry` are elevated actions of contract C14: a phone takes them only while it holds an unlock (A408).
 
 ## Where the Host connects it
 

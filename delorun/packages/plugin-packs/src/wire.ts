@@ -69,10 +69,10 @@ export type PacksErrorCode = 'unsupported' | 'unknown-pack' | 'unavailable-pack'
 export type PacksResult = { readonly ok: true, readonly value: PacksSnapshot } | { readonly ok: false, readonly error: { readonly code: PacksErrorCode, readonly message: string } }
 
 /** The remote's actions that a phone may take only while unlocked (contract C14, "Elevation"). */
-export const PACKS_ELEVATED_ACTIONS = ['packs/enqueue', 'packs/cancel', 'packs/remove', 'packs/retry'] as const
+export const PACKS_ELEVATED_ACTIONS = ['packs/enqueue', 'packs/remove', 'packs/retry'] as const
 
-/** The remote's actions that only read. */
-export const PACKS_READ_ACTIONS = ['packs/list'] as const
+/** The remote's actions a locked phone may take: reading, and cancelling an install, which only stops one (A408). */
+export const PACKS_READ_ACTIONS = ['packs/list', 'packs/cancel'] as const
 
 /** How a surface draws one pack. */
 export type PackView =

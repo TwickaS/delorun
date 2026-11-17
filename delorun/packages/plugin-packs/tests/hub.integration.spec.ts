@@ -126,6 +126,17 @@ describe('the pack hub', () => {
     expect(existsSync(paths.pack(V1, 'one'))).toBe(false)
   })
 
+  it('leaves an installed pack installed when a phone cancels it, since cancel only stops a queued or working install', async () => {
+    const { hub, paths } = await setup()
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    await hub.cancel('one')
+    const snapshot = await hub.snapshot()
+    expect(snapshot.queue[0]?.state).toBe('ready')
+    expect(snapshot.packs[0]?.availability).toBe('installed')
+    expect(existsSync(paths.pack(V1, 'one'))).toBe(true)
+  })
+
   it('refuses an unknown pack and keeps the list as it was', async () => {
     const { hub } = await setup()
     expect(await hub.enqueue(['nope'])).toMatchObject({ ok: false, error: { code: 'unknown-pack' } })

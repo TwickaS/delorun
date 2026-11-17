@@ -13,7 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { en, NS, zh, type DownloadsLocaleKey, type Translate } from './locales.ts'
 import { DownloadsSurface } from './Surface.tsx'
-import { EMPTY_SOURCE, provideDownloadsSource, provideTranslate, type DownloadsSource } from './source.ts'
+import { createRemoteDownloadsSource as createPacksSource, type PacksPanelRemote } from './remote.ts'
+import { provideDownloadsSource, provideTranslate, type DownloadsSource } from './source.ts'
 
 export { createFakeDownloadsSource, type DownloadItem, type DownloadState, type DownloadsSource, type FakeDownloadsSource } from './source.ts'
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
@@ -30,14 +31,30 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services. */
 export const inject = ['slots', 'locale']
 
+/** Milliseconds between install-list reads while something is queued or working. */
+const POLL_MS = 1500
+
 /**
- * The adapter between the install queue's remote actions and {@link DownloadsSource}.
- * TODO(lead): the integration wires this to `@delorun/plugin-packs`' typed remote (list, subscribe, cancel, retry, remove).
- * Until then the panel reads an empty list.
+ * The source over the Host's `packs` remote. The remote is read when the panel first needs it, so a profile without
+ * `@delorun/plugin-packs` shows an empty list.
+ * @param ctx - the browser plugin context.
  * @returns the source the panel reads.
  */
-export function createRemoteDownloadsSource(): DownloadsSource {
-  return EMPTY_SOURCE
+export function createRemoteDownloadsSource(ctx: Context): DownloadsSource {
+  const remote = (): PacksPanelRemote | undefined => ctx.get('remote.packs')
+  const missing = (): Promise<never> => Promise.reject(new Error('This Host has no plugin packs.'))
+  return createPacksSource({
+    list: () => remote()?.list() ?? missing(),
+    cancel: request => remote()?.cancel(request) ?? missing(),
+    retry: request => remote()?.retry(request) ?? missing(),
+    remove: request => remote()?.remove(request) ?? missing(),
+  }, {
+    pollMs: POLL_MS,
+    follow: (refresh) => {
+      const stops = [ctx.on('connection/reset', refresh), ctx.get('remote')?.$on('plugin-manager/install-state', refresh)]
+      return () => { for (const stop of stops) stop?.() }
+    },
+  })
 }
 
 /**
@@ -45,7 +62,7 @@ export function createRemoteDownloadsSource(): DownloadsSource {
  * @param ctx - the browser plugin context.
  * @param source - the source; the remote adapter when absent.
  */
-export function apply(ctx: Context, source: DownloadsSource = createRemoteDownloadsSource()): void {
+export function apply(ctx: Context, source: DownloadsSource = createRemoteDownloadsSource(ctx)): void {
   // The spacing tokens exist only while the Delorun look is on, as with every row of the studio bundle.
   ctx.inject(['delorunStudio'], inner => { applyStudio(inner, source) })
 }
