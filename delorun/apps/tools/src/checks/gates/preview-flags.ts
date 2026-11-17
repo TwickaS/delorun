@@ -13,6 +13,9 @@
  * 3. Each declaration names the package as its owner.
  * 4. A source that calls `previewFlags.declare(` belongs to a package with `src/preview-flags.ts`, so no flag is
  *    declared outside the list this gate reads.
+ * 5. No Host source reads a flag (`previewFlags` with `.isOn(`) unless {@link HOST_READERS} names the file with the
+ *    reason the read cannot reach a model. A preview flag changes studio UI only, and the studio reads flags through
+ *    the read route; a Host read is where a flag could start to change model-visible input, so each one is reviewed.
  *
  * @module @delorun/tools/checks/gates/preview-flags
  */
@@ -28,8 +31,14 @@ const PACKAGES_DIR = 'delorun/packages'
 /** The module a declaring package keeps its declarations in, relative to the package. */
 export const DECLARATIONS_MODULE = 'src/preview-flags.ts'
 
-/** The package that defines `declare`, whose own sources name it without declaring a flag. */
+/** The package that defines `declare` and `isOn`, whose own sources name them without declaring or reading a flag. */
 const DEFINING_PACKAGE = '@delorun/preview-flags'
+
+/**
+ * The Host sources that may read a flag, by path relative to `delorun/packages`, each with the reason its read cannot
+ * reach a model request. None reads one today.
+ */
+export const HOST_READERS: Readonly<Record<string, string>> = {}
 
 const manifestFields = z.looseObject({
   name: z.string(),
@@ -54,9 +63,10 @@ function sources(directory: string): string[] {
 /**
  * The gate's violations.
  * @param root - the repository root.
+ * @param readers - the Host sources that may read a flag; {@link HOST_READERS} unless a spec passes its own.
  * @returns one sentence per broken rule, each starting with the package's directory.
  */
-export async function previewFlagViolations(root: string): Promise<string[]> {
+export async function previewFlagViolations(root: string, readers: Readonly<Record<string, string>> = HOST_READERS): Promise<string[]> {
   const violations: string[] = []
   const base = join(root, PACKAGES_DIR)
   for (const entry of existsSync(base) ? readdirSync(base).sort() : []) {
@@ -65,6 +75,15 @@ export async function previewFlagViolations(root: string): Promise<string[]> {
     if (!existsSync(manifestPath)) continue
     const manifest = manifestFields.parse(JSON.parse(readFileSync(manifestPath, 'utf8')))
     const listed = manifest.delorun?.previewFlags ?? []
+    if (manifest.name !== DEFINING_PACKAGE) {
+      for (const file of sources(join(root, dir, 'src'))) {
+        const text = readFileSync(file, 'utf8')
+        const shown = `${entry}/${file.slice(join(root, dir).length + 1)}`
+        if (text.includes('previewFlags') && /\.isOn\(/.test(text) && !Object.hasOwn(readers, shown)) {
+          violations.push(`${dir}: ${shown.slice(entry.length + 1)} reads a preview flag on the Host; a flag changes studio UI only, so name the file in HOST_READERS with the reason the read cannot reach a model`)
+        }
+      }
+    }
     const modulePath = join(root, dir, DECLARATIONS_MODULE)
     if (!existsSync(modulePath)) {
       if (listed.length > 0) violations.push(`${dir}: package.json lists ${listed.join(', ')} under delorun.previewFlags, and ${DECLARATIONS_MODULE} does not exist to declare them`)
@@ -91,6 +110,6 @@ export async function previewFlagViolations(root: string): Promise<string[]> {
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const violations = await previewFlagViolations(repositoryRoot(process.cwd()))
   for (const violation of violations) console.error(`gates:preview-flags: ${violation}`)
-  if (violations.length === 0) console.log('gates:preview-flags: every package\'s listed preview flags are the ones its plugin declares')
+  if (violations.length === 0) console.log('gates:preview-flags: every package\'s listed preview flags are the ones its plugin declares, and no Host source reads one')
   process.exitCode = violations.length === 0 ? 0 : 1
 }

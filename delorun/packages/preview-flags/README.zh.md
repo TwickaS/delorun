@@ -68,7 +68,7 @@ kind: "package-library"
 
 更改在 Delorun 下次启动时生效。该行在加载时检查自己的 `flags`：
 
-- 配置档中没有任何插件列出的开关会使该行停止，消息会指出这个开关和已知的开关。`delorun preview on` 在写入前拒绝这样的开关，`delorun preview off` 可以移除已经设置的这类开关。
+- 配置档中没有任何插件列出的开关会使该行停止，消息会指出这个开关、已知的开关以及移除它的命令。`delorun start` 在缺少 Delorun 自己的 bundle 中的任何一行时不会运行，因此会在此停止并打印该消息；随后 `delorun doctor` 会在上次启动时未加载的插件中列出该行，`delorun preview list` 也会标出这个开关。`delorun preview on` 在写入前拒绝这样的开关，`delorun preview off` 可以移除已经设置的这类开关，例如其插件被移除之后。
 - 开关已打开而声明它的插件处于关闭时，会记录一条警告，且不产生任何变化；`delorun preview list` 会在该开关旁说明。
 - 无法读取其列表的包会被记录为错误，在修复之前它的开关是未知的。
 
@@ -92,7 +92,7 @@ kind: "package-library"
 - **没有设置页面。** 该行由 `delorun preview` 或手动写入。
 - **每个开关只有一个所有者。** 两个包列出同一个 id、插件声明另一个包的开关，以及对同一开关的第二次声明，都会被拒绝。
 
-`tests/ui-only.spec.ts` 在本包力所能及的范围内强制执行第一条规则：本包不导入会话、模型或工具相关的包，Host API 也不提供在 Delorun 运行期间更改开关的途径。
+有两项检查在代码力所能及的范围内保证第一条规则。`tests/ui-only.spec.ts`：本包不导入会话、模型或工具相关的包，Host API 也不提供在 Delorun 运行期间更改开关的途径。`gates:preview-flags` 门禁检查：除非该检查的列表列出该文件并说明该读取不会到达模型的原因，否则任何 Host 源码都不得用 `isOn` 读取开关；目前没有列出任何文件，工作室通过路由读取开关。
 
 <a id="tests"></a>
 ## 测试

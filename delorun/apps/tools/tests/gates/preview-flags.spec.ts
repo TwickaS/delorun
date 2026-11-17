@@ -76,6 +76,16 @@ describe('gates:preview-flags', () => {
     }))).toEqual(['delorun/packages/plugin-a: src/index.ts declares a preview flag, and the package has no src/preview-flags.ts that exports PREVIEW_FLAGS'])
   })
 
+  it('refuses a Host source that reads a flag unless the list of readers names it', async () => {
+    // Pins rule 5: a Host read is where a flag could start to change what a model reads.
+    const root = tree({
+      'plugin-a': { files: { 'src/index.ts': 'if (ctx.previewFlags.isOn(FLAG)) addTool()\n', 'src/other.ts': 'gate.isOn()\n' } },
+      'preview-flags': { name: '@delorun/preview-flags', files: { 'src/registry.ts': 'const previewFlags = { isOn(id) { return flags.isOn(id) } }\n' } },
+    })
+    expect(await previewFlagViolations(root)).toEqual(['delorun/packages/plugin-a: src/index.ts reads a preview flag on the Host; a flag changes studio UI only, so name the file in HOST_READERS with the reason the read cannot reach a model'])
+    expect(await previewFlagViolations(root, { 'plugin-a/src/index.ts': 'draws a Settings row only' })).toEqual([])
+  })
+
   it('passes this repository', async () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..')
     expect(await previewFlagViolations(root)).toEqual([])

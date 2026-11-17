@@ -64,7 +64,7 @@ The row `delorun-preview-flags`, which `@delorun/bundle-studio` inserts, holds t
 
 A change applies the next time Delorun starts. The row checks its `flags` when it loads:
 
-- A flag that no plugin of the profile lists stops the row, with a message that names the flag and the known flags. `delorun preview on` refuses such a flag before it is written, and `delorun preview off` removes one that is already set.
+- A flag that no plugin of the profile lists stops the row, with a message that names the flag, the known flags and the command that removes it. `delorun start` does not run without a row of Delorun's bundles, so it stops there and prints that message; `delorun doctor` then lists the row among the plugins that did not load at the last start, and `delorun preview list` marks the flag. `delorun preview on` refuses such a flag before it is written, and `delorun preview off` removes one that is already set, as after its plugin was removed.
 - A flag that is on while the plugin that declares it is off is logged as a warning and changes nothing; `delorun preview list` says so beside the flag.
 - A package whose list cannot be read is logged as an error, and its flags are unknown until it is fixed.
 
@@ -86,7 +86,7 @@ A change applies the next time Delorun starts. The row checks its `flags` when i
 - **No Settings page.** The row is written by `delorun preview` or by hand.
 - **One owner per flag.** Two packages that list one id, a plugin that declares another package's flag, and a second declaration of one flag are refused.
 
-`tests/ui-only.spec.ts` enforces the first rule as far as the package can: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs.
+Two checks hold the first rule as far as code can. `tests/ui-only.spec.ts`: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs. The `gates:preview-flags` gate: no Host source reads a flag with `isOn` unless the gate's list names the file with the reason the read cannot reach a model; no file is named today, and the studio reads flags through the route.
 
 ## Tests
 
