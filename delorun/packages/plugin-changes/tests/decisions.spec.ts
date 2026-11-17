@@ -27,7 +27,7 @@ const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] =
   { path: HARNESS_PATHS.discard, reach: 'both-levels' },
   { path: PROTECTION_PATHS.on, reach: 'both-levels' },
   // Everything else: an unlocked phone only under Full.
-  ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'full-only' as const })),
+  ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'exit-safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'full-only' as const })),
   ...Object.values(SETUP_PATHS).map(path => ({ path, reach: 'full-only' as const })),
   { path: HARNESS_PATHS.apply, reach: 'full-only' },
   { path: HARNESS_PATHS.undo, reach: 'full-only' },

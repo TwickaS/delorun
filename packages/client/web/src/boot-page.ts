@@ -4,7 +4,8 @@
  * the page names a distribution's recovery routes (`dshRecoveryRoutes`), the
  * failure report, the page at `/recovery`, and a page that has not mounted in
  * time also show a recovery screen built from DOM elements alone: what failed,
- * Turn off, Undo and safe mode, posted to those routes.
+ * Turn off, Undo, safe mode and, when the page names the update routes too (`dshRecoveryUpdateRoutes`), going back
+ * to the release before the last update, posted to those routes.
  * @module @deepseek-ai/dsh-client-web/src/boot-page
  */
 import type { LoaderEntryState } from './loader-status.ts'
@@ -48,6 +49,13 @@ export function bootWordmark(scope: object = globalThis): string {
  */
 export const RECOVERY_ROUTES_GLOBAL = 'dshRecoveryRoutes'
 
+/**
+ * The `globalThis` property through which a distribution names the path prefix of its update routes, set by a `global`
+ * index injection row. The recovery screen offers "Roll back" only on a page that names it; its `state` route answers
+ * `rollback.available`, and its `rollback` route is posted with `{ chats, profileOnly }`.
+ */
+export const RECOVERY_UPDATE_ROUTES_GLOBAL = 'dshRecoveryUpdateRoutes'
+
 /** The page path that shows the recovery screen instead of loading any client plugin. */
 export const RECOVERY_PATH = '/recovery'
 
@@ -61,6 +69,16 @@ export const RECOVERY_AFTER_MS = 30_000
  */
 export function recoveryRoutes(scope: object = globalThis): string | undefined {
   const value: unknown = Reflect.get(scope, RECOVERY_ROUTES_GLOBAL)
+  return typeof value === 'string' && /^(?:\/[a-z0-9-]+)+$/.test(value) ? value : undefined
+}
+
+/**
+ * The update routes' prefix the page names.
+ * @param scope - the object holding the page global; `globalThis` by default.
+ * @returns the prefix, such as `/delorun/update`, or undefined when the page names none or names one that is not a path.
+ */
+export function recoveryUpdateRoutes(scope: object = globalThis): string | undefined {
+  const value: unknown = Reflect.get(scope, RECOVERY_UPDATE_ROUTES_GLOBAL)
   return typeof value === 'string' && /^(?:\/[a-z0-9-]+)+$/.test(value) ? value : undefined
 }
 
@@ -84,6 +102,16 @@ const RECOVERY_TEXT = {
     safeModeHint: 'The next start leaves out every plugin Delorun does not ship.',
     safeModeOn: 'Safe mode is on since ',
     startSafeMode: 'Start in safe mode',
+    leaveSafeMode: 'Leave safe mode',
+    confirmLeaveSafeMode: 'Leave safe mode? The next start loads your whole profile again.',
+    rollback: 'Go back',
+    rollbackHint: 'Delorun {0} started after an update. Going back returns to {1}; chats made since are set aside, not deleted.',
+    rollbackNoCopy: 'No copy of your chats was taken before the update, so only your settings can go back; the chats stay as they are.',
+    rollBack: 'Roll back to {0}',
+    rollBackSettings: 'Go back to {0} (settings only)',
+    confirmRollback: 'Roll back to {0}? Running chats finish first, then Delorun restarts.',
+    confirmRollbackSettings: 'Go back to {0} with your settings only? Your chats stay as they are, and Delorun restarts.',
+    rollbackBegun: 'Going back to {0}. This page loses its connection for a moment; reload it when Delorun is back.',
     confirmOff: 'Turn off {0}? It stops running until you turn it on again.',
     confirmUndo: 'Undo {0}?',
     confirmSafeMode: 'Start in safe mode next time?',
@@ -111,6 +139,16 @@ const RECOVERY_TEXT = {
     safeModeHint: '下次启动将不加载 Delorun 自带插件以外的任何插件。',
     safeModeOn: '安全模式已开启，开始于 ',
     startSafeMode: '以安全模式启动',
+    leaveSafeMode: '退出安全模式',
+    confirmLeaveSafeMode: '要退出安全模式吗？下次启动会重新加载你的整个 profile。',
+    rollback: '回滚',
+    rollbackHint: 'Delorun {0} 在一次更新后启动。回滚会回到 {1}；此后产生的对话会被搁置，不会被删除。',
+    rollbackNoCopy: '更新前没有备份对话数据，因此只能回滚你的设置；对话保持原样。',
+    rollBack: '回滚到 {0}',
+    rollBackSettings: '回到 {0}（仅设置）',
+    confirmRollback: '要回滚到 {0} 吗？正在运行的对话会先结束，然后 Delorun 重新启动。',
+    confirmRollbackSettings: '要只用你的设置回到 {0} 吗？对话保持原样，Delorun 会重新启动。',
+    rollbackBegun: '正在回到 {0}。此页面会短暂断开；Delorun 恢复后请刷新。',
     confirmOff: '要关闭 {0} 吗？在你重新开启之前它不会运行。',
     confirmUndo: '要撤销 {0} 吗？',
     confirmSafeMode: '下次以安全模式启动吗？',
@@ -159,6 +197,13 @@ interface RecoveryState {
   readonly safeModeSince?: string
 }
 
+/** What the update routes' `state` answers that the recovery screen shows: whether a rollback is possible. */
+interface RollbackState {
+  readonly to: string
+  readonly from: string
+  readonly dataCopyMissing: boolean
+}
+
 /**
  * @param value - a JSON value.
  * @returns it as a record, or an empty one.
@@ -181,6 +226,20 @@ function records(value: unknown): readonly Readonly<Record<string, unknown>>[] {
  */
 function text(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * Read the update routes' answer.
+ * @param body - the parsed JSON.
+ * @returns the rollback on offer, or undefined when none is.
+ */
+function readRollback(body: unknown): RollbackState | undefined {
+  const state = record(body)
+  const rollback = record(state.rollback)
+  const to = text(rollback.to)
+  const from = text(record(state.release).delorun)
+  if (state.available !== true || rollback.available !== true || to === undefined || from === undefined) return undefined
+  return { to, from, dataCopyMissing: rollback.dataCopyMissing === true }
 }
 
 /**
@@ -229,8 +288,13 @@ class RecoveryScreen {
   /**
    * @param routes - the recovery routes' prefix.
    * @param environment - the browser's fetch, confirmation and language.
+   * @param updateRoutes - the update routes' prefix, when the page names one: it offers Roll back.
    */
-  constructor(private readonly routes: string, private readonly environment: RecoveryEnvironment) {
+  constructor(
+    private readonly routes: string,
+    private readonly environment: RecoveryEnvironment,
+    private readonly updateRoutes: string | undefined = undefined,
+  ) {
     this.words = recoveryText(environment.language)
     this.element = element('section', css.recovery)
     this.element.dataset.dshRecovery = ''
@@ -261,6 +325,7 @@ class RecoveryScreen {
       return
     }
     if (!state.atComputer) this.notice.textContent = this.words.atComputer
+    const rollback = await this.readRollbackOffer()
     const lines = (items: readonly string[], empty: string): HTMLElement[] =>
       (items.length === 0 ? [empty] : items).map(line => div(css.failedItem, line))
     const plugins = state.plugins.map(plugin =>
@@ -272,10 +337,43 @@ class RecoveryScreen {
       this.section(this.words.failed, lines(state.failures, this.words.nothingFailed)),
       ...plugins.length === 0 ? [] : [this.section(this.words.plugins, plugins)],
       this.section(this.words.recent, recent.length === 0 ? lines([], this.words.noRecent) : recent),
+      ...rollback === undefined || this.updateRoutes === undefined ? [] : [this.rollbackSection(rollback, this.updateRoutes)],
       this.section(this.words.safeMode, state.safeModeSince === undefined
         ? [div(css.hint, this.words.safeModeHint), this.button(this.words.startSafeMode, 'safe-mode', {}, this.words.confirmSafeMode)]
-        : [div(css.failedItem, `${this.words.safeModeOn}${state.safeModeSince}`)]),
+        : [div(css.failedItem, `${this.words.safeModeOn}${state.safeModeSince}`), this.button(this.words.leaveSafeMode, 'exit-safe-mode', {}, this.words.confirmLeaveSafeMode)]),
     )
+  }
+
+  /**
+   * Read whether the update routes offer a rollback. A page without them, or a Host that cannot answer, offers none.
+   * @returns the offer, or undefined.
+   */
+  private async readRollbackOffer(): Promise<RollbackState | undefined> {
+    if (this.updateRoutes === undefined) return undefined
+    try {
+      const response = await this.environment.fetch(`${this.updateRoutes}/state`)
+      return response.ok ? readRollback(await response.json()) : undefined
+    } catch (error) {
+      console.warn('recovery: the update state was not read, so no rollback is offered:', error)
+      return undefined
+    }
+  }
+
+  /**
+   * @param offer - the rollback on offer.
+   * @param base - the update routes' prefix.
+   * @returns the section with Roll back, or with the settings-only choice when no copy of the chats exists.
+   */
+  private rollbackSection(offer: RollbackState, base: string): HTMLElement {
+    const fill = (template: string): string => template.replace('{0}', offer.to).replace('{1}', offer.to)
+    return this.section(this.words.rollback, [
+      div(css.hint, this.words.rollbackHint.replace('{0}', offer.from).replace('{1}', offer.to)),
+      ...offer.dataCopyMissing ? [div(css.hint, this.words.rollbackNoCopy)] : [],
+      this.button(
+        fill(offer.dataCopyMissing ? this.words.rollBackSettings : this.words.rollBack), 'rollback', { chats: 'wait', profileOnly: offer.dataCopyMissing },
+        fill(offer.dataCopyMissing ? this.words.confirmRollbackSettings : this.words.confirmRollback), base,
+      ),
+    ])
   }
 
   /**
@@ -310,12 +408,13 @@ class RecoveryScreen {
    * @param path - the action route under the prefix.
    * @param body - the request's body.
    * @param question - the confirmation.
+   * @param base - the routes' prefix; the recovery routes' by default.
    * @returns the button.
    */
-  private button(label: string, path: string, body: object, question: string): HTMLButtonElement {
+  private button(label: string, path: string, body: object, question: string, base: string = this.routes): HTMLButtonElement {
     const button = element('button', css.recoveryButton, label)
     button.type = 'button'
-    button.addEventListener('click', () => { void this.act(path, body, question) })
+    button.addEventListener('click', () => { void this.act(path, body, question, base) })
     return button
   }
 
@@ -324,15 +423,16 @@ class RecoveryScreen {
    * @param path - the action route under the prefix.
    * @param body - the request's body.
    * @param question - the confirmation.
+   * @param base - the routes' prefix the path is under.
    */
-  private async act(path: string, body: object, question: string): Promise<void> {
+  private async act(path: string, body: object, question: string, base: string): Promise<void> {
     if (!this.environment.confirm(question)) return
     this.notice.textContent = ''
     this.status.textContent = this.words.working
     let answer: Readonly<Record<string, unknown>>
     let response: Response
     try {
-      response = await this.environment.fetch(`${this.routes}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      response = await this.environment.fetch(`${base}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       answer = record(await response.json().catch(() => ({})))
     } catch (error) {
       this.status.textContent = ''
@@ -340,7 +440,7 @@ class RecoveryScreen {
       return
     }
     this.status.textContent = ''
-    if (response.status === 403 && answer.code === 'LOOPBACK_REQUIRED') {
+    if (response.status === 403 && (answer.code === 'LOOPBACK_REQUIRED' || answer.code === 'ELEVATION_REQUIRED')) {
       this.notice.textContent = this.words.atComputer
       return
     }
@@ -350,6 +450,10 @@ class RecoveryScreen {
     }
     const reload = record(answer.reload)
     const lines = Array.isArray(answer.lines) ? answer.lines.flatMap(line => text(line) ?? []) : []
+    if (path === 'rollback') {
+      this.status.textContent = this.words.rollbackBegun.replace('{0}', text(answer.target) ?? '')
+      return
+    }
     this.status.textContent = reload.kind === 'went-back'
       ? `${this.words.wentBack}${text(reload.failure) ?? ''}`
       : [this.words.done, ...lines, ...reload.kind === 'not-running' || path === 'safe-mode' ? [this.words.restart] : []].join(' ')
@@ -455,7 +559,7 @@ export class BootPage {
   private recoveryElement(): HTMLElement | undefined {
     const routes = recoveryRoutes()
     if (routes === undefined) return undefined
-    this.recovery ??= new RecoveryScreen(routes, this.environment)
+    this.recovery ??= new RecoveryScreen(routes, this.environment, recoveryUpdateRoutes())
     return this.recovery.element
   }
 

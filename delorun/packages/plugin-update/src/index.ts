@@ -15,6 +15,7 @@ import type { UpdateChannelAccess } from '@delorun/home-process'
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
 import { updateRoutes } from './routes.ts'
+import { UPDATE_ROUTE_PREFIX } from './wire.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -22,6 +23,12 @@ declare module '@deepseek-ai/cordis' {
     updateChannel?: UpdateChannelAccess
   }
 }
+
+/**
+ * The page global upstream's boot page reads the update routes' prefix from (`dshRecoveryUpdateRoutes` in
+ * `@deepseek-ai/dsh-client-web`'s boot page); without it the recovery screen offers no Roll back.
+ */
+export const RECOVERY_UPDATE_ROUTES_GLOBAL = 'dshRecoveryUpdateRoutes'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'plugin-update'
@@ -68,5 +75,7 @@ export function apply(ctx: Context, config: Config): void {
         for (const off of registered) off()
       }
     }, 'plugin-update: studio routes')
+    // The recovery screen, which runs without any client plugin, reads whether a rollback is on offer from these routes.
+    scope.on('webserver/index-inject', (table) => { table.push({ kind: 'global', name: RECOVERY_UPDATE_ROUTES_GLOBAL, value: UPDATE_ROUTE_PREFIX }) })
   })
 }

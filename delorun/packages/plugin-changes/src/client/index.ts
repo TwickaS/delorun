@@ -116,6 +116,8 @@ export function apply(ctx: Context): void {
     harnessUndo: id => changes.harnessUndo(id),
     harnessDiscard: id => changes.harnessDiscard(id),
     makeCopy: () => changes.makeCopy(),
+    startSafeMode: () => changes.startSafeMode(),
+    exitSafeMode: () => changes.exitSafeMode(),
     protectionOn: () => changes.protectionOn(),
     protectionOff: confirmed => changes.protectionOff(confirmed),
     noticeSeen: id => changes.noticeSeen(id),

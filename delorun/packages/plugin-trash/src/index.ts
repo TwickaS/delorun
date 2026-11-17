@@ -17,6 +17,7 @@
  * @module @delorun/plugin-trash
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
@@ -25,12 +26,14 @@ import type {} from '@deepseek-ai/dsh-spill'
 import type {} from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
 import { admitApprovedDevice, gateByUnlock } from '@delorun/home-auth'
+import { journalPath, readJournal, stashPath } from '@delorun/home-process'
+import { discardKeptData, isDataSafetyError, listKeptData } from '@delorun/update'
 import { TrashError, type ProjectionCachePurge, type SessionIndexPurge, type TrashStores } from '@delorun/trash'
 import { TrashOperationError, TrashOperations } from './operations.ts'
-import { TRASH_PATHS, type TrashRefusal, type TrashRefusalCode } from './wire.ts'
+import { TRASH_PATHS, type SetAsideListing, type SetAsideRemoved, type TrashRefusal, type TrashRefusalCode } from './wire.ts'
 
 export { TrashOperationError, TrashOperations, entryOf, type TrashOperationsConfig, type TrashRegistry } from './operations.ts'
-export { TRASH_PATHS, type EmptyOutcome, type PurgeOutcome, type TrashEntry, type TrashListing, type TrashRefusal, type TrashRefusalCode } from './wire.ts'
+export { TRASH_PATHS, type SetAsideEntry, type SetAsideListing, type SetAsideRemoved, type EmptyOutcome, type PurgeOutcome, type TrashEntry, type TrashListing, type TrashRefusal, type TrashRefusalCode } from './wire.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'delorun-trash'
@@ -167,6 +170,33 @@ export function apply(ctx: Context, config: Config): void {
   route(TRASH_PATHS.restore, body => operations.restore(id(body, 'itemId')))
   route(TRASH_PATHS.purge, body => operations.purge(id(body, 'itemId'), flag(body, 'clearLogs')), true)
   route(TRASH_PATHS.empty, body => operations.empty(flag(body, 'clearLogs')), true)
+
+  // What a rollback set aside and the copies an update took live in the home, outside the trash; they are listed here and
+  // deleted forever only with an unlock, as `delorun recover discard` does.
+  const profileOf = (): ProfileContext => {
+    const launched = ctx.get('profileContext')
+    if (launched === undefined) throw new TrashOperationError('KEPT_DATA_UNAVAILABLE', 'this harness runs no profile whose update record guards the copies')
+    return launched
+  }
+  route(TRASH_PATHS.setAside, async () => {
+    const entries = await listKeptData(profileOf().home)
+    return { entries: entries.flatMap(entry => entry.kind === 'runtimes' ? [] : [{ path: entry.path, kind: entry.kind, bytes: entry.bytes }]) } satisfies SetAsideListing
+  })
+  route(TRASH_PATHS.removeSetAside, async (body) => {
+    const { home, name: profile } = profileOf()
+    const path = id(body, 'path')
+    const records = [await readJournal(journalPath(home, profile)), await readJournal(stashPath(journalPath(home, profile)))]
+    const kept = (await listKeptData(home)).find(entry => entry.path === path && entry.kind !== 'runtimes')
+    if (kept === undefined) throw new TrashOperationError('NOT_KEPT_DATA', `${path} is not a set-aside or copy directory of this home`)
+    try {
+      await discardKeptData(home, path, { referenced: records.flatMap(record => record?.copy === true ? [record.to] : []), rollingBack: records.some(record => record?.phase === 'rolling-back') })
+    } catch (error: unknown) {
+      if (isDataSafetyError(error, 'DATA_IN_USE')) throw new TrashOperationError('DATA_IN_USE', error.detail)
+      if (isDataSafetyError(error, 'NOT_KEPT_DATA')) throw new TrashOperationError('NOT_KEPT_DATA', error.detail)
+      throw error
+    }
+    return { path } satisfies SetAsideRemoved
+  }, true)
 }
 
 /** The cache header every answer carries. */
@@ -177,6 +207,9 @@ const STATUS: Readonly<Record<TrashRefusalCode, number>> = {
   BAD_REQUEST: 400,
   TRASH_ITEM_NOT_FOUND: 404,
   WORKSPACE_NOT_FOUND: 404,
+  NOT_KEPT_DATA: 404,
+  DATA_IN_USE: 409,
+  KEPT_DATA_UNAVAILABLE: 503,
   TRASH_RESTORE_CONFLICT: 409,
   TRASH_FAILED: 500,
 }

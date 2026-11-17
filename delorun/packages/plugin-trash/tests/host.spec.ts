@@ -15,9 +15,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkspaceUnknownSessionError } from '@deepseek-ai/dsh-workspace'
+import { journalPath, writeJournal, type JournalledUpdate } from '@delorun/home-process'
 import { DAY_MS, TrashStore, sessionDirectoryPath } from '@delorun/trash'
 import * as Trash from '../src/index.ts'
-import { TRASH_PATHS, type EmptyOutcome, type PurgeOutcome, type TrashEntry, type TrashListing, type TrashRefusal } from '../src/index.ts'
+import { TRASH_PATHS, type EmptyOutcome, type SetAsideListing, type SetAsideRemoved, type PurgeOutcome, type TrashEntry, type TrashListing, type TrashRefusal } from '../src/index.ts'
 
 /** One fake workspace of the registry. */
 interface FakeWorkspace {
@@ -418,7 +419,7 @@ describe('the routes', () => {
       expect((await asDevice(path, 'locked-phone')).status, path).not.toBe(403)
     }
     // Pins the unlock check on the two routes that delete for good.
-    for (const path of [TRASH_PATHS.purge, TRASH_PATHS.empty]) {
+    for (const path of [TRASH_PATHS.purge, TRASH_PATHS.empty, TRASH_PATHS.removeSetAside]) {
       const locked = await asDevice(path, 'locked-phone')
       expect([locked.status, await locked.json()], path).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
       expect((await asDevice(path, 'unlocked-phone')).status, path).not.toBe(403)
@@ -431,5 +432,77 @@ describe('the routes', () => {
     await harness.ctx.fiber.dispose()
 
     expect(harness.routes.size).toBe(0)
+  })
+})
+
+describe('the data a rollback set aside and an update copied', () => {
+  /** Plant one kept directory with a file in it. */
+  const plantKept = (...segments: string[]): string => {
+    const directory = join(home, ...segments)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'chat.jsonl'), 'x'.repeat(2048))
+    return directory
+  }
+  const provideProfile = (): void => {
+    harness.ctx.provide('profileContext', { name: 'work', home } as never)
+  }
+
+  it('lists the chats a rollback set aside and the copies an update took, and no program store', async () => {
+    await mount()
+    provideProfile()
+    plantKept('data-set-aside', '0.1.2-20261101T101010Z')
+    plantKept('data-copies', '0.1.3')
+    plantKept('runtimes.set-aside-20261101T101010Z')
+
+    const listed = await post<SetAsideListing>(TRASH_PATHS.setAside, {})
+
+    expect(listed.json.entries).toEqual([
+      { path: 'data-copies/0.1.3', kind: 'copy', bytes: 2048 },
+      { path: 'data-set-aside/0.1.2-20261101T101010Z', kind: 'set-aside', bytes: 2048 },
+    ])
+  })
+
+  it('removes a listed set-aside directory and refuses a path the list does not name', async () => {
+    await mount()
+    provideProfile()
+    const directory = plantKept('data-set-aside', '0.1.2-20261101T101010Z')
+    const other = plantKept('sessions-elsewhere')
+
+    const removed = await post<SetAsideRemoved>(TRASH_PATHS.removeSetAside, { path: 'data-set-aside/0.1.2-20261101T101010Z' })
+    const refused = await post<TrashRefusal>(TRASH_PATHS.removeSetAside, { path: 'sessions-elsewhere' })
+    const escaped = await post<TrashRefusal>(TRASH_PATHS.removeSetAside, { path: '../../etc' })
+
+    expect([removed.status, removed.json]).toEqual([200, { path: 'data-set-aside/0.1.2-20261101T101010Z' }])
+    expect(existsSync(directory)).toBe(false)
+    expect([refused.status, refused.json.code]).toEqual([404, 'NOT_KEPT_DATA'])
+    expect([escaped.status, escaped.json.code]).toEqual([404, 'NOT_KEPT_DATA'])
+    expect(existsSync(other)).toBe(true)
+  })
+
+  it('keeps the copy an update record still needs, and everything while a rollback runs', async () => {
+    await mount()
+    provideProfile()
+    const copy = plantKept('data-copies', '0.1.3')
+    const aside = plantKept('data-set-aside', '0.1.2-20261101T101010Z')
+    const update = { from: '0.1.2', to: '0.1.3', previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: true } as JournalledUpdate
+    mkdirSync(join(home, 'run', 'work'), { recursive: true, mode: 0o700 })
+    await writeJournal(journalPath(home, 'work'), update, 'committed')
+
+    const needed = await post<TrashRefusal>(TRASH_PATHS.removeSetAside, { path: 'data-copies/0.1.3' })
+    await writeJournal(journalPath(home, 'work'), update, 'rolling-back')
+    const rolling = await post<TrashRefusal>(TRASH_PATHS.removeSetAside, { path: 'data-set-aside/0.1.2-20261101T101010Z' })
+
+    expect([needed.status, needed.json.code]).toEqual([409, 'DATA_IN_USE'])
+    expect([rolling.status, rolling.json.code]).toEqual([409, 'DATA_IN_USE'])
+    expect(existsSync(copy)).toBe(true)
+    expect(existsSync(aside)).toBe(true)
+  })
+
+  it('answers 503 on a harness that runs no profile', async () => {
+    await mount()
+
+    const listed = await post<TrashRefusal>(TRASH_PATHS.setAside, {})
+
+    expect([listed.status, listed.json.code]).toEqual([503, 'KEPT_DATA_UNAVAILABLE'])
   })
 })

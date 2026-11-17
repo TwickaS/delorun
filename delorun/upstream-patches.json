@@ -1818,7 +1818,7 @@
       "path": "packages/client/web/src/boot-page.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Reads the boot page wordmark from the page global dshBootWordmark that a host plugin sets; without it the page shows HARNESS as in stock."
+      "reason": "Reads the boot page wordmark from the page global dshBootWordmark that a host plugin sets; without it the page shows HARNESS as in stock. Its recovery screen, which a page shows only when a host plugin sets dshRecoveryRoutes, also offers Leave safe mode and, when a host plugin sets dshRecoveryUpdateRoutes, Roll back to the release before the last update, with a settings-only choice when no copy of the chats exists; each button posts to that plugin's own routes, which decide who may use it, and without the globals the page shows no recovery screen and no rollback, as in stock."
     },
     {
       "path": "packages/bundle/web-app/src/index.ts",
