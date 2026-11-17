@@ -24,6 +24,7 @@ description: "@delorun/changes 库：从文件夹链接的插件的已批准副�
 - [工作会话](#work-sessions)
 - [启动失败时](#when-a-start-fails)
 - [更新期间的 harness 变更](#harness-changes-across-an-update)
+- [导出与导入 setup](#setup-export-and-import)
 - [不涵盖的内容](#not-covered)
 - [开发](#development)
 
@@ -105,6 +106,12 @@ pnpm 每次操作都会重置 `link:` 依赖的 `node_modules` 链接，所以�
 ## 更新期间的 harness 变更
 
 `src/harness-merge.ts` 决定更新如何处理 harness 的每个已批准文件（[C3](../../docs/contracts/c03-update-report.zh.md#reasons)）。`mergeHarnessFile({ base, mine, theirs })` 合并运行中发布版本的已签名文件、已批准的内容和目标的已签名文件，每一份都带有其可执行位，没有文件时为 `undefined`：目标已保存已批准内容时为 `same`；目标保持文件原样，或从基线到已批准文本的补丁（jsdiff 的 `structuredPatch`）在不模糊匹配、不转换行尾的情况下能应用到目标的文本时，为带有目标所运行内容的 `carried`；其他情况为带原因的 `conflict`。双方都修改了二进制、非 UTF-8 或大于 `DIFF_FILE_LIMIT` 的文件时是冲突，本人修改之后目标删除的文件、目标修改之后本人删除的文件，以及双方都添加但内容不同的文件也是冲突。`planHarnessCarry(home, record, readSigned)` 按记录的 `signed` 和 `version` 从存储读取每个文件的基线和已批准内容，向 `readSigned` 请求目标已验证的文件，并返回带有三方内容和按路径顺序排列的每个文件结果的 `HarnessCarryPlan`；它不写入任何内容。不是其路径的单文件版本的版本，以 `RECORD_UNREADABLE` 拒绝。`mergedDiffs(plan)` 为每个通过合并来携带的文件（`carried` 且 carry 为 `merged`）给出从目标文件到合并后内容的统一 diff，可执行位不同时带 `old mode` 和 `new mode` 行，每一侧以 `DIFF_FILE_LIMIT` 为界，整个计划以 `DIFF_TOTAL_LIMIT` 为界；二进制或过大的一侧，以及超出总量之后的每个 diff，不显示行并说明原因（`notShown`）。更新报告的 `harness` 条目由 `delorun/apps/cli/src/update/harness-items.ts` 根据该计划，基于 `runningHarnessRecord` 构建，后者会遗漏启动失败时被遗漏的变更。`carryHarness(request, switchRuntime)` 是更新在切换之前的唯一一次调用，全程持有 harness 锁：运行中运行时的副本里有变更在等待审阅时，它以 `HARNESS_CHANGES_PENDING` 拒绝；移除早先安装在 `changes/harness/<to>/` 下留下的一切；对照目标已验证的文件再次制定计划，并把计划交给请求的 `confirm`，后者将其与本人确认过的内容比较，并在写入任何内容之前抛出错误以拒绝；然后写入目标的记录，其中每个携带的文件（其 `signed` 为目标的文件）各带一条 `decidedFrom: "update"` 的已应用 `harness-edit` 日志条目；运行中的运行时有可写副本或有文件冲突时，用 `writeHarnessCopy` 写入目标的可写副本，把每个冲突文件中本人的内容保存在其旁，名为 `<file>.mine`（`keepBeside`）；最后运行切换。切换之前的失败会移除目标的目录；运行中运行时的记录、副本和日志条目从不被写入。
+
+<a id="setup-export-and-import"></a>
+
+## 导出与导入 setup
+
+`@delorun/changes/setup-transfer`（[`src/setup-transfer/`](src/setup-transfer/index.ts)）在电脑之间迁移一个 profile 的 setup。`collectSetup` 读取此人添加的插件（确切版本与 lockfile 的 integrity，或已批准副本的文件），以及策略（[`policy.ts`](src/setup-transfer/policy.ts)）所携带的补丁条目：默认模型与模型提供方、studio 的外观，以及所携带插件的行。该策略从不携带 `@delorun/` 或 `@deepseek-ai/` 范围的包、属于某一台电脑的条目（沙箱、权限、网络、设备、reach、凭据）、`!!js` 表达式或非 https 的端点，并会停止一次会携带凭据的导出。`planSetupImport` 列出导入在本人的选择下将替换的内容：模型条目总是被替换；其他设置除非关闭，否则被替换（归档没有的设置恢复默认）；归档所列的插件；归档未列出的插件只有在本人选择移除时才被移除。导出可以略去设置、只携带所选插件、只写出本人自己编写的插件的名称而不带代码，并附上备注。`applySetupImport` 先保存版本“Before importing a setup”，再把每个移除与安装都当作 agent 的插件请求来记录并应用，因此上游的兼容性检查、安装检查、被扣留的构建脚本与对本地代码的审阅，都与手动安装时遇到的相同；本地插件的文件被写入 `archive/setup-plugins/<profile>/` 下的新文件夹并从该处链接，其内容因此等待审阅。lockfile 校验和与归档不一致、或无法检查的注册表包会使导入停止。设置最后写入，作为一个历史版本。[合约 C8](../../docs/contracts/c08-archive-and-trash.zh.md#the-setup-archive)陈述该归档；`delorun setup export` 与 `delorun setup import`（[`@delorun/cli`](../../apps/cli/README.zh.md)）使用它。
 
 <a id="not-covered"></a>
 

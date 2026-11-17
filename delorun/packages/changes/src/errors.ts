@@ -34,6 +34,8 @@ import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } f
  *   start does not run it.
  * - `HARNESS_CHANGES_PENDING`: changes to the running runtime's harness wait for review in its writable copy, so an
  *   update, which would leave them behind in that runtime's copy, does not apply.
+ * - `SETUP_REFUSED`: a setup export or import refuses what the setup carries or where it would write: a value for a
+ *   secret field, a plugin of Delorun's own scope, a patch row outside what a setup carries, or a profile that cannot be read.
  * - `HARNESS_COPY_UNREADABLE`: the running runtime's writable copy is not a directory, passes the scan's limits or holds
  *   an entry that cannot be read, so which changes wait there is unknown; the subject is the copy's `app/` directory.
  */
@@ -56,6 +58,7 @@ export type ChangesCode =
   | 'HARNESS_CHANGED'
   | 'HARNESS_CHANGES_PENDING'
   | 'HARNESS_COPY_UNREADABLE'
+  | 'SETUP_REFUSED'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {

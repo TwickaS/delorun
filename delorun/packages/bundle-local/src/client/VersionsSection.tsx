@@ -14,6 +14,7 @@ import {
   type VersionChanges, type VersionEntry, type VersionsAnswer,
 } from './versions-api.ts'
 import { groupVersions, settingsEditName } from './version-rows.ts'
+import { SetupTransfer } from './SetupTransfer.tsx'
 import css from './VersionsSection.module.css'
 
 /** What the plugin supplies the section. */
@@ -22,6 +23,8 @@ export interface VersionsSectionInjected {
   fetch: HostFetch
   /** Whether this studio runs on the home's own computer, where saving and switching are offered. */
   atComputer: () => boolean
+  /** Hands a written setup file to the browser as a download. */
+  saveFile: (name: string, bytes: Uint8Array) => void
 }
 
 /** Props the renderer binds for the section. */
@@ -74,7 +77,7 @@ export function changeSentences(t: Translate, changes: VersionChanges): string[]
  * @param props - the section's copy, the request function and where the studio runs.
  * @returns the section.
  */
-export function VersionsSection({ t, fetch, atComputer }: VersionsSectionProps): ReactNode {
+export function VersionsSection({ t, fetch, atComputer, saveFile }: VersionsSectionProps): ReactNode {
   const [list, setList] = useState<Loaded<VersionsAnswer>>({ kind: 'loading' })
   const [notice, setNotice] = useState<string | undefined>()
   const computer = atComputer()
@@ -92,6 +95,7 @@ export function VersionsSection({ t, fetch, atComputer }: VersionsSectionProps):
     {computer ? null : <p className={css.line} data-versions-away>{t('atComputer')}</p>}
     {computer ? <SaveSetup t={t} fetch={fetch} onSaved={async (text) => { setNotice(text); await refresh() }} /> : null}
     {notice === undefined ? null : <p className={css.notice} role="status">{notice}</p>}
+    {computer ? <SetupTransfer t={t} fetch={fetch} saveFile={saveFile} onChanged={refresh} /> : null}
     {list.kind === 'loading' ? <p className={css.line}>{t('loading')}</p> : null}
     {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
     {list.kind === 'ready' ? <VersionList t={t} fetch={fetch} computer={computer} answer={list.value}

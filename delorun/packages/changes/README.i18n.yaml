@@ -12,8 +12,8 @@
   en: 3d0dac950bad856e
   zh: 1bc79eaf34bfa40c
 /delorun-changes/contents:
-  en: 7c10ff1c29f321de
-  zh: c8119f5774c69040
+  en: a9483505bfa65323
+  zh: 91d6e0540e9db073
 /delorun-changes/use-this-package:
   en: 1bc136529a89d520
   zh: 81250b941208f654
@@ -46,7 +46,10 @@
   zh: 7a6cc78926303f16
 /delorun-changes/harness-changes-across-an-update:
   en: 77a689bd597472a0
-  zh: 8a4110254d0fdfe4
+  zh: d3f969dc1aa4d051
+/delorun-changes/setup-export-and-import:
+  en: e421a7883ca426c1
+  zh: 4e944aafe85c2f88
 /delorun-changes/not-covered:
   en: c9c24418398f4344
   zh: f04ee5dc096d1cfc

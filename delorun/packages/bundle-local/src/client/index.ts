@@ -54,6 +54,7 @@ import type { HostFetch } from './devices-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { en as versionsEn, zh as versionsZh, type VersionsLocaleKey } from './versions-locales.ts'
+import { saveBrowserFile } from './save-file.ts'
 import { VersionsSection, type VersionsSectionInjected } from './VersionsSection.tsx'
 import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
 import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
@@ -531,7 +532,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delorun-setup-versions: section dictionaries')
   const versionsT = ctx.locale.bind(VERSIONS_NS)
   const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback
-  const versionsFace = (): VersionsSectionInjected => ({ fetch: browserFetch, atComputer: () => isLoopback })
+  const versionsFace = (): VersionsSectionInjected => ({ fetch: browserFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SETUP_VERSIONS_SECTION_ID,

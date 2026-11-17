@@ -111,6 +111,8 @@ export interface FixtureArchive {
   readonly customisationDeclaredSize?: number
   /** The origin the manifest declares; by default the fixture home key, which no private key signs for. */
   readonly origin?: ArchiveOrigin
+  /** The `content` the manifest declares; by default the manifest has no such field, which is a chats archive. */
+  readonly content?: string
   /** The Delorun version the manifest names as its writer; by default the fixture's own name. */
   readonly createdBy?: string
   /** The key the fixture signs its manifest with, which adds `signature.json` to the archive. */
@@ -133,6 +135,7 @@ export function buildArchive(fixture: FixtureArchive = {}): Uint8Array {
   ]
   const manifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
+    ...fixture.content === undefined ? {} : { content: fixture.content },
     createdBy: fixture.createdBy ?? 'delorun-archive-fixture',
     exportedAt: '2026-01-01T00:00:00Z',
     origin: fixture.origin ?? { homeKeyId: HOME_KEY_ID, publicKey: HOME_PUBLIC_KEY },

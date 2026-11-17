@@ -7,6 +7,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+// Relative: this package depends on Changes only through plugin-changes, which re-exports the restore hook alone.
+import { readChangeLog, writeChangeLog } from '../../changes/src/records.ts'
+import { recordImportReviews } from '../../changes/src/setup-transfer/import-reviews.ts'
+import { CHANGE_LOG_SCHEMA, type ChangeEntry, type ChangeId } from '../../changes/src/types.ts'
 import { ProfileVersions, VersionsError, type VersionsWhere } from '../src/profile-versions.ts'
 
 const hasGit = ((): boolean => {
@@ -47,6 +51,19 @@ describe.skipIf(!hasGit)('the Setup versions service', () => {
     expect(saved.created).toBe(true)
     const listing = await service.list()
     expect(listing.versions).toMatchObject([{ id: saved.id, origin: 'saved', name: 'Alpha only', current: true }])
+  })
+
+  it('discards the code review a setup import created when the profile goes back to the version saved before it', async () => {
+    const { service, profileDir } = setup()
+    const home = join(profileDir, '..', '..')
+    const ctx = { home, profile: 'default', profileDir }
+    const { id } = await service.save('Before importing a setup')
+    const review = 'c0123456789' as ChangeId
+    await writeChangeLog(home, 'default', { schema: CHANGE_LOG_SCHEMA, entries: [{ id: review, kind: 'plugin-install', state: 'pending', subject: { plugin: 'plug', source: 'folder' }, summary: 'Review plug', createdAt: '2026-11-16T10:00:00.000Z' } as ChangeEntry] })
+    await recordImportReviews(ctx, id, [review])
+    await service.switch(id)
+    const log = await readChangeLog(home, 'default')
+    expect(log.entries.find(entry => entry.id === review)?.state).toBe('discarded')
   })
 
   it('compares a version with the profile in the history\'s words, writing nothing', async () => {
