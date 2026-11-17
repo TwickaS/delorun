@@ -36,12 +36,14 @@ export interface OnboardingSettings {
   plugins: string[]
   /** Rows a bundle inserts disabled, by row id, that the recommended-plugins step offers to turn on; the step is left out when this and `plugins` are empty. */
   optionalRows: string[]
+  /** The start of Delorun in which the person pressed Finish later, which keeps the guide closed until the next start; empty for none. */
+  pausedStart: string
   /** How long adding a package may run before its card says it is still working, in seconds. */
   addWaitSeconds: number
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], addWaitSeconds: 60 }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60 }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -49,6 +51,7 @@ export interface Config {
   step: Volatile<string>
   plugins: Volatile<string[]>
   optionalRows: Volatile<string[]>
+  pausedStart: Volatile<string>
   addWaitSeconds: Volatile<number>
   registry: string
   registryTimeoutMs: number
@@ -68,6 +71,7 @@ export const Config = z.object({
   optionalRows: z.array(z.string().pattern(ROW_ID)).max(RECOMMENDED_LIMIT)
     .description('Rows of the profile that a bundle inserts disabled, by row id, which the recommended-plugins step offers to turn on. Each must name a row of the profile, or the plugin does not load.')
     .default([...DEFAULT_SETTINGS.optionalRows]).volatile(),
+  pausedStart: z.string().pattern(/^[A-Za-z0-9-]{0,64}$/).default(DEFAULT_SETTINGS.pausedStart).volatile(),
   addWaitSeconds: z.natural().min(5).max(1800)
     .description('How long adding a package in the guide may run before its card says it is still working, in seconds. The add itself is not stopped.')
     .default(DEFAULT_SETTINGS.addWaitSeconds).volatile(),

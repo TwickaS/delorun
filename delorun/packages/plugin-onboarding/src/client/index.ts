@@ -49,7 +49,7 @@ import { setAddedAgentDefaults } from './agent-defaults.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
-import { hostApi, readWorkspaceNotice } from './host-api.ts'
+import { hostApi, readStartId, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
 import { DICTIONARIES, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
@@ -74,7 +74,7 @@ export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
 export type { RenameModel, RenameRowProps } from './RenameRow.tsx'
 export { renameModel } from './RenameRow.tsx'
 export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
-export { hostApi, readReach, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
+export { hostApi, readReach, readStartId, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
   AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DelorunOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
   OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
@@ -352,7 +352,34 @@ export function applyStudio(ctx: Context): void {
     }
   }
 
-  const laterStore = createSnapshotStore(false)
+  // "Finish later" is kept in the home as the id of the start it was pressed in, so a reload or another tab keeps the
+  // guide closed and the next start of Delorun shows it again. Where the start id cannot be read, as on a phone, the
+  // flag lasts only until the page reloads.
+  const laterBase = createSnapshotStore(false)
+  // Read the first time it is needed, so a studio that never sets the guide aside does not ask.
+  let startRead: Promise<string | undefined> | undefined
+  const currentStart = (): Promise<string | undefined> => (startRead ??= readStartId())
+  // Set once the person opens the guide again, so a saved pause that has not been cleared yet does not close it.
+  let reopened = false
+  const syncLater = (): void => {
+    const saved = progress.getSnapshot().value?.pausedStart ?? ''
+    if (reopened || saved === '') return
+    void currentStart().then((id) => { if (!reopened && id === saved) laterBase.set(true) })
+  }
+  ctx.effect(() => {
+    syncLater()
+    return progress.subscribe(syncLater)
+  }, 'delorun-onboarding: finish later')
+  const laterStore = {
+    ...laterBase,
+    set: (next: boolean): void => {
+      reopened = !next
+      laterBase.set(next)
+      void currentStart().then((id) => {
+        if (id !== undefined && (next || (progress.getSnapshot().value?.pausedStart ?? '') !== '')) writeProgress('pausedStart', next ? id : '')
+      })
+    },
+  }
   const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore })
   const dockedStore = createSnapshotStore(false)
   const finishSetup: FinishSetupInjected = {

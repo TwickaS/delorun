@@ -164,6 +164,53 @@ describe('the registrations', () => {
     view.unmount()
   })
 
+  describe('Finish later is kept in the home until Delorun next starts', () => {
+    const answerStart = (startId: string): void => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ startId }), { status: 200 })))
+    }
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    it('saves the id of this start when the guide is set aside, and clears it when the guide is reopened', async () => {
+      answerStart('start-1')
+      const { entries, served, progress } = await harness({ provide: { settingsShell: { openOnboarding: vi.fn() } } })
+      served.on()
+      await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
+      await act(async () => { await flush() })
+      expect(progress.set).toHaveBeenCalledWith('pausedStart', 'start-1')
+      const Floating = entries.get(FINISH_FLOAT_KEY)?.component as ComponentType<Record<string, unknown>>
+      render(<Floating t={t} {...face<Record<string, unknown>>(entries, FINISH_FLOAT_KEY)} />)
+      progress.publish({ value: settings({ pausedStart: 'start-1' }) })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.finishSetup })) })
+      await act(async () => { await flush() })
+      expect(progress.set).toHaveBeenLastCalledWith('pausedStart', '')
+    })
+
+    it('keeps the guide closed in a new tab of the same start, and shows it after a new start', async () => {
+      answerStart('start-1')
+      const same = await harness({ progress: settings({ pausedStart: 'start-1' }) })
+      same.served.on()
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(same.entries, STEP_KEY).aside.getSnapshot()).toBe(true)
+      answerStart('start-2')
+      const next = await harness({ progress: settings({ pausedStart: 'start-1' }) })
+      next.served.on()
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(next.entries, STEP_KEY).aside.getSnapshot()).toBe(false)
+    })
+
+    it('lasts only until the page reloads where the start id cannot be read, as on a phone', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })))
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { entries, served, progress } = await harness()
+      served.on()
+      await act(async () => { await flush() })
+      await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(entries, STEP_KEY).aside.getSnapshot()).toBe(true)
+      expect(progress.set).not.toHaveBeenCalled()
+    })
+  })
+
   it('shows the chip once: in a chat\'s dock when there is one, and floating otherwise', async () => {
     const { entries, served } = await harness()
     served.on()

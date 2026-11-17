@@ -52,7 +52,8 @@ The ideas on Ready follow what the folder holds, and their text is in the dictio
   | Route | Answers |
   | --- | --- |
   | `GET /api/delorunOnboarding.setupRecord` | `{ sections?, reachSetUp }` from the terminal setup record. |
-  | `GET /api/delorunOnboarding.readiness` | Claude Code's and Codex's sign-in (`found`, `missing` or `unknown`) and Tailscale's state with this computer's DNS name. |
+  | `GET /api/delorunOnboarding.start` | `{ startId }`: a random id of this start of Delorun, kept only in memory. |
+| `GET /api/delorunOnboarding.readiness` | Claude Code's and Codex's sign-in (`found`, `missing` or `unknown`) and Tailscale's state with this computer's DNS name. |
   | `GET /api/delorunOnboarding.workspaceNotice` | The names of the files the workspace registry set records aside into when it started, oldest first (at most 64); empty when none. |
   | `POST /api/delorunOnboarding.keyTest` | Each model provider route's name and result: `works`, `rejected`, `unreachable`, `no-key` (no credential configured), `untested` (a credential or none needed, but no model listing) or `failed`. |
   | `POST /api/delorunOnboarding.recommend` | Each configured plugin's declared connections, where they were read, and whether the registry was reached. |
@@ -89,12 +90,13 @@ An id is `provider:<id>` for a model provider route as Settings → Models lists
 
 ## Configuration
 
-The row `delorun-onboarding` has these fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads. The first five are volatile and change while the studio runs.
+The row `delorun-onboarding` has these fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads. The first six are volatile and change while the studio runs.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `done` | `false` | Whether the person finished or skipped onboarding. |
 | `step` | empty | The id of the step reached. |
+| `pausedStart` | empty | The start of Delorun in which the person pressed Finish later, from `GET /api/delorunOnboarding.start`. The guide stays closed while it names the current start, in any tab or after a reload, and the next start shows it again. The Finish setup chip clears it. |
 | `plugins` | empty | Up to eight npm package names the Recommended plugins step offers. With none, and no `optionalRows`, the step is left out. |
 | `optionalRows` | empty | Up to eight row ids, such as `delorun-cost-meter`, of rows a bundle inserts disabled; the step offers to turn each on. Each must be a row of the profile, or the plugin stops at load with an error that names it. |
 | `registry` | `https://registry.npmjs.org` | The `https://` npm registry a package that is not installed is read from, only when the person asks. |

@@ -372,7 +372,7 @@ export interface OnboardingInjected {
    * @param keepCurrent - when no workspace was chosen, leave the chat in the workspace it is in (the workspace UI's own New Session) instead of the default workspace.
    */
   readonly startChat: (workspaceId?: WorkspaceId, keepCurrent?: boolean) => Promise<void>
-  /** Whether the person chose Finish later in this visit; the Finish setup chip reads it and the dialog sets it. */
+  /** Whether the person chose Finish later since Delorun started; the Finish setup chip reads it and the dialog sets it. */
   readonly aside: LaterStore
 }
 

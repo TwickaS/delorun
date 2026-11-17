@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
-  KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
+  KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, START_ID, START_PATH, StartAnswer, type OnboardingSettings,
 } from '../src/index.ts'
 import { THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
@@ -28,13 +28,13 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], addWaitSeconds: config.addWaitSeconds.get() }
+  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], pausedStart: config.pausedStart.get(), addWaitSeconds: config.addWaitSeconds.get() }
 }
 
 describe('the configuration', () => {
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delorun-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], addWaitSeconds: 60 })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60 })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -49,6 +49,7 @@ describe('the configuration', () => {
   it.each<readonly [string, object]>([
     ['a step id with a capital', { step: 'Look' }],
     ['a step id of a path', { step: '../look' }],
+    ['a paused start that is not an id', { pausedStart: 'a b' }],
     ['a registry that is not https', { registry: 'http://registry.example' }],
     ['a timeout of zero', { keyTestTimeoutMs: 0 }],
     ['a package name with a capital', { plugins: ['Bad'] }],
@@ -63,7 +64,7 @@ describe('the configuration', () => {
 
   it('accepts scoped and plain package names', () => {
     expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], step: 'thinking.reader', done: true, addWaitSeconds: 60 })
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], pausedStart: '', step: 'thinking.reader', done: true, addWaitSeconds: 60 })
   })
 })
 
@@ -199,7 +200,7 @@ async function mount(directory: string | undefined) {
 describe('the route', () => {
   it('is one exact GET route that serves the record uncached, beside the guide\'s read-only routes', async () => {
     const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: [{ id: 'reach', status: 'answered' }] })))
-    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, RECOMMEND_PATH])
+    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, START_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, RECOMMEND_PATH])
     expect(SETUP_RECORD_PATH).toBe('/api/delorunOnboarding.setupRecord')
     expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
     const response = await get()
@@ -218,6 +219,16 @@ describe('the route', () => {
     const call = async (path: string, method: string) => (await routes.get(path)?.fetch(new Request('http://harness.test/api', { method })))?.json()
     expect(Readiness.parse(await call(READINESS_PATH, 'GET'))).toEqual({ agents: { 'claude-code': 'missing', 'codex': 'missing' }, tailscale: { state: 'not-installed' } })
     expect(await call(KEY_TEST_PATH, 'POST')).toEqual({ hidden: [], providers: [] })
+  })
+
+  it('names this start with an id that changes with the next start', async () => {
+    const first = await mount(undefined)
+    const second = await mount(undefined)
+    const ask = async (mounted: typeof first) => StartAnswer.parse(await (await mounted.routes.get(START_PATH)?.fetch(new Request('http://harness.test/api')))?.json()).startId
+    const [one, two] = [await ask(first), await ask(second)]
+    expect(one).toMatch(START_ID)
+    expect(await ask(first)).toBe(one)
+    expect(two).not.toBe(one)
   })
 
   it('serves a record that covers nothing without a profile directory', async () => {
