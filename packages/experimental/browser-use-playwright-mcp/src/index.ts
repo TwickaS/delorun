@@ -34,8 +34,21 @@ export interface DeniedToolsConfig {
   deniedTools: string[]
 }
 
+/** Delorun's additions to the browser tools, which every mode has. */
+export interface BrowserAdditionsConfig {
+  /**
+   * Replace Playwright's report of a browser build that is not installed with one message that tells the model to stop
+   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}), and give
+   * {@link OUTPUT_FOLDER} a `.gitignore` of `*`. This is Delorun's C16 switch `browser_additions`, off in the parity
+   * composition. The turned-off tools ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard
+   * ({@link refuseOutsideFolder}) and the Session's folder as the server's one MCP root do not depend on it: they hold
+   * with it off. Defaults to off.
+   */
+  browserAdditions: boolean
+}
+
 /** Launch settings: the shared ones and which browser launches. */
-export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig {
+export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig, BrowserAdditionsConfig {
   /**
    * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
    * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
@@ -45,7 +58,7 @@ export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig 
 }
 
 /** Existing-browser attachment settings. */
-export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig {}
+export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig, BrowserAdditionsConfig {}
 
 /** Chrome or Chromium launch, or existing-browser attachment settings. */
 export type Config = LaunchConfig | AttachConfig
@@ -63,12 +76,18 @@ export function deniedToolsOf(config: DeniedToolsConfig): string[] {
 
 /** Validate the launch or attachment configuration before activation. */
 export const Config: Schema<
-  | (BrowserMcpAttachConfig & Partial<DeniedToolsConfig>)
-  | (Omit<LaunchConfig, 'headless' | 'browser' | 'deniedTools'> & { headless?: boolean; browser?: BrowserChoice } & Partial<DeniedToolsConfig>),
+  | (BrowserMcpAttachConfig & Partial<DeniedToolsConfig> & Partial<BrowserAdditionsConfig>)
+  | (Omit<LaunchConfig, 'headless' | 'browser' | 'deniedTools' | 'browserAdditions'> & { headless?: boolean; browser?: BrowserChoice }
+    & Partial<DeniedToolsConfig> & Partial<BrowserAdditionsConfig>),
   Config
 > = Schema.union([
-  Schema.object({ ...browserMcpLaunchFields, browser: Schema.union([...BROWSER_CHOICES]).default(UNSET_BROWSER_CHOICE), deniedTools }),
-  Schema.object({ ...browserMcpAttachFields, deniedTools }),
+  Schema.object({
+    ...browserMcpLaunchFields,
+    browser: Schema.union([...BROWSER_CHOICES]).default(UNSET_BROWSER_CHOICE),
+    deniedTools,
+    browserAdditions: Schema.boolean().default(false),
+  }),
+  Schema.object({ ...browserMcpAttachFields, deniedTools, browserAdditions: Schema.boolean().default(false) }),
 ])
 
 /**
@@ -243,8 +262,8 @@ export function apply(ctx: Context, config: Config): void {
     command: process.execPath,
     args,
     env,
-    outputFolder: OUTPUT_FOLDER,
-    explainFailure: explainMissingBrowser,
+    ...config.browserAdditions ? { outputFolder: OUTPUT_FOLDER, explainFailure: explainMissingBrowser } : {},
+    // The denial and the folder guard are security invariants, which C16's `browser_additions` switch never turns off.
     deniedTools: denied,
     // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
     refuseCall: call => denied.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),

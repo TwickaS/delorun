@@ -12,7 +12,7 @@
 
 每行给出一项证据。检查名（如 `parity-switches`）运行 `node_modules/.bin/tsx delorun/apps/tools/src/parity/composition/check-parity-switches.ts`，该检查读取开关注册表、开关字段与对等覆盖层。规格路径指向断言该行的测试文件。以「Manual check:」开头的条目指出审阅者用来确认该行的源码行。
 
-有十一个已构建的开关，其开关开启场景仍待录制：`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history` 和 `container_denial_marker` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
+有十二个已构建的开关，其开关开启场景仍待录制：`browser_additions`、`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history` 和 `container_denial_marker` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
 
 ## Liveshare
 
@@ -102,6 +102,13 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | 已批准插件的写入同意 | `dsh-v0.2.2-rc.3`：智能体向已安装插件的文件夹写入，与向任何其他文件写入一样；本树的 `@delorun/plugin-instruction-consent` 的 `approvedPluginWrites` 开关在 Delorun 的 CLI profile 中开启，并在智能体于一个 chat 中首次向本人已在 Changes 下批准的插件的文件夹写入之前询问，写明该插件并附上差异 | 已构建：`approved_plugin_write_consent`（开关开启场景待录制） | `delorun/packages/plugin-instruction-consent/tests/plugin-folders.spec.ts` |
 | MCP 添加时同意 | `dsh-v0.2.2-rc.3`：每个 MCP 服务器命令都作为可信代码在 agent 沙箱之外运行。本树：[`@delorun/plugin-mcp-consent`](../../packages/plugin-mcp-consent/README.zh.md) 让 stdio 服务器保持停止，并给出写明其命令和参数的拒绝，直到接受存储持有该启动（命令、其参数、文件夹和环境变量名称，以及它们所解析到的可执行文件和文件夹，因此被更改的文件会再次询问），本人在 home 的电脑上通过 studio 或 `delorun mcp accept` 接受它；在 Delorun 的 CLI profile 和 `delorun headless` 所启动的 profile 中开启挂载，后者的模板不挂载计划任务运行时或 MCP 客户端，因此在那里它只保护本人自己的 profile patch 添加的那一个 | 已构建：`mcp_add_consent` | `packages/mcp/mcp-client/tests/consent.spec.ts`、`delorun/packages/plugin-mcp-consent/tests/consent.spec.ts`、`delorun/packages/plugin-mcp-consent/tests/reviews.spec.ts` 和 `parity-switches` |
 | 外部智能体同意 | `dsh-v0.2.2-rc.3`：模型可以不经询问就启动 Claude Code 或 Codex 之类的外部智能体，它在沙箱之外以本人的账户运行。本树：[`@delorun/plugin-delegation-consent`](../../packages/plugin-delegation-consent/README.zh.md) 在每次运行之前于 home 的电脑上询问，提供「Allow once」和「Allow for this workspace」，拒绝处于 Read Only 的 chat，限制每次运行（默认 30 分钟），并拒绝带入这种智能体的 `plugin_manager` 调用；在 Delorun 的 CLI profile 和 `delorun headless` 所启动的 profile 中开启挂载，无论 setup 的提示问题得到什么回答 | 已构建：`external_agent_consent`（开关开启场景待录制） | `delorun/packages/plugin-delegation-consent/tests/consent.spec.ts` 和 `parity-switches` |
+
+### 浏览器
+
+| 项目 | 基线与本树 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| 浏览器附加功能 | `dsh-v0.2.2-rc.3`：Playwright 浏览器提供方以 Playwright 自己的措辞报告未安装的浏览器版本，并且不给 `.playwright-mcp` 放 `.gitignore`。本树：提供方的 `browserAdditions` 开关由 [`@delorun/bundle-browser`](../../packages/bundle-browser/README.zh.md) 开启，它把该报告替换为一条消息，告诉模型停止尝试，并请本人在“插件”中完成 Browser 设置，同时给 `.playwright-mcp` 放入内容为 `*` 的 `.gitignore` | 已构建：`browser_additions`（开关开启场景待录制） | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
+| 浏览器工具拒绝与文件夹防护 | `dsh-v0.2.2-rc.3`：Playwright 提供方提供 `browser_run_code_unsafe`，它在服务器进程中运行模型编写的代码，而服务器按文本把文件参数同它的文件夹比较。本树：MCP 客户端从不注册被拒绝的工具，`browser_run_code_unsafe` 始终被拒绝；提供方拒绝对被拒绝工具的调用，也拒绝 `filename` 或 `paths` 的真实位置在 chat 文件夹之外的调用；服务器被告知该文件夹为它唯一的 MCP root。这些是安全不变量：在所有开关关闭时依然成立，包括 `browser_additions` | 已构建：无开关；`security` 台账条目 | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
 
 ### 限制与容器
 

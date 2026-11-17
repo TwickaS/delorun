@@ -1,8 +1,9 @@
 /**
  * The C16 switch registry held against the tree. A switch's Config field is a
- * property of an interface named `Config`, or of the interface a
- * `const Config: z<…>` schema in the same file is typed by, whose JSDoc names it as
- * `C16 switch \`<id>\``. A boolean field's schema in the same file declares
+ * property of an interface named `Config`, of the interface a
+ * `const Config: z<…>` schema in the same file is typed by, of an interface a
+ * `type Config = A | B` alias names, or of an interface one of those extends in
+ * the same file, whose JSDoc names it as `C16 switch \`<id>\``. A boolean field's schema in the same file declares
  * `<key>: z.boolean().default(<value>)`; a presence field's declares no boolean
  * default, and {@link presenceErrors} holds its key against the rows each
  * composition sets. The checks compare those fields with `PARITY_SWITCHES` in
@@ -67,22 +68,36 @@ function schemaDefaults(source: ts.SourceFile): Map<string, boolean> {
 }
 
 /**
- * The interfaces whose properties are Config fields: `Config`, and the interface a `Config` schema constant is typed
- * by, such as `ConnectionConfig` in `const Config: z<ConnectionConfig>`.
+ * The interfaces whose properties are Config fields: `Config`; the interface a `Config` schema constant is typed by,
+ * such as `ConnectionConfig` in `const Config: z<ConnectionConfig>`; each interface a `type Config = A | B` alias
+ * names; and every interface one of those extends, declared in the same file.
  * @param source - the parsed file.
  * @returns the interface names.
  */
 function configInterfaces(source: ts.SourceFile): Set<string> {
   const names = new Set(['Config'])
+  const declared = new Map<string, ts.InterfaceDeclaration>()
   const visit = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'Config'
       && node.type !== undefined && ts.isTypeReferenceNode(node.type)) {
       const [argument] = node.type.typeArguments ?? []
       if (argument !== undefined && ts.isTypeReferenceNode(argument) && ts.isIdentifier(argument.typeName)) names.add(argument.typeName.text)
     }
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === 'Config') {
+      for (const member of ts.isUnionTypeNode(node.type) ? node.type.types : [node.type]) {
+        if (ts.isTypeReferenceNode(member) && ts.isIdentifier(member.typeName)) names.add(member.typeName.text)
+      }
+    }
+    if (ts.isInterfaceDeclaration(node)) declared.set(node.name.text, node)
     ts.forEachChild(node, visit)
   }
   visit(source)
+  // A Set's iteration also visits the names added during it, so this follows `extends` transitively.
+  for (const name of names) {
+    for (const clause of declared.get(name)?.heritageClauses ?? []) {
+      for (const type of clause.types) if (ts.isIdentifier(type.expression)) names.add(type.expression.text)
+    }
+  }
   return names
 }
 

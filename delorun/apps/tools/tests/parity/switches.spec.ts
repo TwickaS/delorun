@@ -166,6 +166,27 @@ describe('the switch fields', () => {
     ])
   })
 
+  it('reads the fields of the interfaces a Config union alias names and of those they extend in the same file', () => {
+    const text = [
+      'export interface Additions {',
+      '  /** C16 switch `fixture_context`: on in Delorun. */',
+      '  fixtureContext: boolean',
+      '}',
+      'export interface Unrelated {',
+      '  /** C16 switch `other_context`. */',
+      '  otherContext?: boolean',
+      '}',
+      'export interface LaunchConfig extends Shared, Additions { mode: \'launch\' }',
+      'export interface AttachConfig extends Shared, Additions { mode: \'attach\' }',
+      'export type Config = LaunchConfig | AttachConfig',
+      'export const Config = Schema.union([Schema.object({ fixtureContext: Schema.boolean().default(false) })])',
+      '',
+    ].join('\n')
+    expect(switchMarkers('packages/fixture/src/index.ts', text)).toEqual([
+      { path: 'packages/fixture/src/index.ts', line: 3, id: 'fixture_context', key: 'fixtureContext', defaultValue: false },
+    ])
+  })
+
   it('fails a Config field marked as a switch that the registry lacks', () => {
     const markers = switchMarkers('delorun/packages/plugin-fixture/src/config.ts', FIXTURE_CONFIG)
     expect(registryErrors([], markers, () => true)).toEqual([
@@ -473,7 +494,7 @@ describe('the parity overlay', () => {
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
     expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
-      'approved_plugin_write_consent', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
+      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
       'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
       'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
     ])
