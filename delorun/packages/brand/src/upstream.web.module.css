@@ -10,6 +10,15 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+  transition: background-color var(--dl-duration-press) var(--dl-ease), transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+.button:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.button:active:not(:disabled, [aria-disabled='true']) { transform: scale(var(--dl-scale-pressed)); }
+.button[aria-disabled='true'] { cursor: not-allowed; }
+
+@media (hover: hover) and (pointer: fine) {
+  .button:hover:not(:disabled, [aria-disabled='true']) { background-color: var(--dl-surface-sunken); }
 }
 
 .md { height: 36px; padding: 0 var(--dl-space-4); border-radius: var(--dl-radius-md); }
@@ -31,3 +40,10 @@
 .description { margin: 0 0 var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
 .footer { display: flex; justify-content: flex-end; gap: var(--dl-space-2); margin-top: var(--dl-space-4); }
 .close { position: absolute; top: var(--dl-space-3); right: var(--dl-space-3); border: 0; background: transparent; color: var(--dl-text-muted); font-size: 20px; cursor: pointer; }
+
+.switch { box-sizing: border-box; flex: none; width: 36px; height: 20px; padding: 2px; border: 0; border-radius: 999px; corner-shape: round; background: color-mix(in oklab, var(--dl-text-muted) 60%, var(--dl-surface)); cursor: pointer; transition: background-color var(--dl-duration-press) var(--dl-ease); }
+.switch[aria-checked='true'] { background: var(--dl-accent); }
+.switch:disabled { cursor: default; opacity: 0.5; }
+.switch:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.thumb { display: block; width: 16px; height: 16px; border-radius: 50%; corner-shape: round; background: var(--dl-surface-raised); box-shadow: 0 0 0 1px var(--dl-border); transition: transform var(--dl-motion-press) var(--dl-ease-out); }
+.switch[aria-checked='true'] .thumb { transform: translateX(16px); }

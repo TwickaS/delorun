@@ -1,7 +1,7 @@
 /** The brand values agree across `tokens.ts`, `tokens.css`, the mark's static files and the studio's default accent. */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { BRAND_COLOURS, BRAND_FONTS, BRAND_RADII, BRAND_SURFACE } from '../src/tokens.ts'
+import { BRAND_COLOURS, BRAND_FONTS, BRAND_MOTION, BRAND_RADII, BRAND_SURFACE } from '../src/tokens.ts'
 import { MARK } from '../src/mark.tsx'
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -56,6 +56,53 @@ describe('the mark', () => {
       expect(svg).toContain(`d="${MARK.nut}"`)
       expect(svg).toContain(`r="${MARK.plug.r}"`)
       expect(svg.toLowerCase()).toContain(BRAND_COLOURS.peach.toLowerCase())
+    }
+  })
+})
+
+describe('the motion tokens', () => {
+  const css = read('../src/tokens.css')
+  const [base = '', reduced = ''] = css.split('@media (prefers-reduced-motion: reduce)')
+
+  it('are the values tokens.ts declares', () => {
+    expect(base).toContain(`--dl-ease-out: ${BRAND_MOTION.easing.out};`)
+    expect(base).toContain(`--dl-ease-in-out: ${BRAND_MOTION.easing.inOut};`)
+    expect(base).toContain(`--dl-ease: ${BRAND_MOTION.easing.plain};`)
+    for (const [name, ms] of Object.entries(BRAND_MOTION.durations)) {
+      expect(base).toContain(`--dl-duration-${name}: ${ms}ms;`)
+      expect(base).toContain(`--dl-motion-${name}: var(--dl-duration-${name});`)
+    }
+    expect(base).toContain(`--dl-scale-pressed: ${BRAND_MOTION.scale.pressed};`)
+    expect(base).toContain(`--dl-scale-enter: ${BRAND_MOTION.scale.enter};`)
+  })
+
+  it('have no ease-in, keep the interface within 300 ms and leave quicker than anything arrives', () => {
+    expect(css).not.toMatch(/ease-in[;\s)]/)
+    const { leave, explain, ...arrivals } = BRAND_MOTION.durations
+    for (const ms of Object.values(arrivals)) {
+      expect(ms).toBeLessThanOrEqual(300)
+      expect(leave).toBeLessThan(ms)
+    }
+    expect(explain).toBeLessThanOrEqual(400)
+  })
+
+  it('under reduced motion stop movement and pressed shrinking but keep colour and opacity timings', () => {
+    for (const name of Object.keys(BRAND_MOTION.durations)) {
+      expect(reduced).toContain(`--dl-motion-${name}: 0ms;`)
+      expect(reduced).not.toContain(`--dl-duration-${name}`)
+    }
+    expect(reduced).toContain('--dl-scale-pressed: 1;')
+    expect(reduced).toContain('--dl-scale-enter: 1;')
+  })
+
+  it('are the only easing curves and durations in the library\'s stylesheets', () => {
+    const files = readdirSync(new URL('../src', import.meta.url), { recursive: true, encoding: 'utf8' })
+      .filter(file => file.endsWith('.css') && file !== 'tokens.css')
+    expect(files.length).toBeGreaterThan(10)
+    for (const file of files) {
+      const text = read(`../src/${file}`).replace(/\/\*[\s\S]*?\*\//g, '').replace(/var\(--[\w-]+\)/g, '')
+      const raw = text.split('\n').filter(line => /(?:transition|animation)[\w-]*\s*:/.test(line) && /\b\d+(?:\.\d+)?m?s\b|cubic-bezier|\bease(?:-in|-out|-in-out)?\b|\blinear\b/.test(line))
+      expect(raw, file).toEqual([])
     }
   })
 })

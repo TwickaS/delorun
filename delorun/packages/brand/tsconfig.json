@@ -14,7 +14,8 @@
     "tests/components.client.spec.tsx",
     "tests/settings-cards.client.spec.tsx",
     "tests/settings-choice-group.client.spec.tsx",
-    "tests/chip-controls.client.spec.tsx"
+    "tests/chip-controls.client.spec.tsx",
+    "tests/site-parts.client.spec.tsx"
   ],
   "references": [
     {

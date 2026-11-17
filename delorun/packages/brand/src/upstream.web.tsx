@@ -1,7 +1,7 @@
 /**
- * The same four primitives for pages without a studio, built on the native elements that give the behaviour for free: a
- * `button`, an `input`, and a modal `<dialog>` (focus trap, Escape and return of focus come from the browser). The props
- * are the subset of upstream's that the brand components pass.
+ * The same five primitives for pages without a studio, built on the native elements that give the behaviour for free: a
+ * `button`, an `input`, a `button` with the `switch` role, and a modal `<dialog>` (focus trap, Escape and return of focus
+ * come from the browser). The props are the subset of upstream's that the brand components pass.
  * @module @delorun/brand/upstream.web
  */
 import { forwardRef, useEffect, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
@@ -44,5 +44,14 @@ export function Modal({ open, onClose, title, closeLabel, description, children,
         {closeLabel === undefined ? null : <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}>×</button>}
       </> : null}
     </dialog>
+  )
+}
+
+/** A two-state switch: a `button` with the `switch` role whose `aria-checked` carries the state. */
+export function Switch({ checked, onChange, label, disabled = false, title, className }: { checked: boolean, onChange: (next: boolean) => void, label: string, disabled?: boolean, title?: string | undefined, className?: string | undefined }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} title={title} disabled={disabled} className={join(css.switch, className)} onClick={() => { onChange(!checked) }}>
+      <span className={css.thumb} />
+    </button>
   )
 }
