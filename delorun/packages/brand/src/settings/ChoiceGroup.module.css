@@ -83,6 +83,17 @@
   box-sizing: border-box;
 }
 
+/* In a filling group a long label wraps inside its segment instead of pushing another segment onto a second row. */
+.group[data-fill='true'] .segment {
+  height: auto;
+  min-height: var(--segment-height);
+  padding-block: 4px;
+  padding-inline: var(--delorun-space-3, 6px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 16px;
+}
+
 .group[data-mono='true'] .segment {
   font-family: var(--dl-font-mono);
 }
