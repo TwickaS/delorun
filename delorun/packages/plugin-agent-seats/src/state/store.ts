@@ -83,6 +83,26 @@ export class SeatRecords implements SeatStateStore {
     return viewOf(this.stateOf(child).shown)
   }
 
+  /**
+   * The provider of the child's own `subagent/descriptor`.
+   * @param child - the child.
+   * @returns the provider name, or undefined without a descriptor or a loaded Session.
+   */
+  providerOf(child: SessionId): string | undefined {
+    const session = this.sessions.get(child)
+    return session === undefined ? undefined : this.reader.stateOf(session).provider ?? undefined
+  }
+
+  /**
+   * Whether the child's latest approval policy is the pin seeded at delegation.
+   * @param child - the child.
+   * @returns true while the pin is the latest `approval/policy` event.
+   * @throws when the child's Session is not loaded.
+   */
+  delegationPinned(child: SessionId): boolean {
+    return this.stateOf(child).pinned
+  }
+
   read(child: SessionId): SeatState | undefined {
     const { programSessionId, cursor } = this.stateOf(child).logged
     if (programSessionId === null && cursor === null) return undefined

@@ -42,6 +42,8 @@ const shownSchema = z.object({
 export const seatStateSchema: z.ZodType<SeatProjectionState> = z.object({
   inherited: z.number().int().nonnegative(),
   tail: z.string().nullable(),
+  provider: z.string().nullable(),
+  pinned: z.boolean(),
   logged: z.object({ programSessionId: z.string().nullable(), cursor: z.string().nullable(), programMessageId: z.string().nullable() }).strict(),
   shown: shownSchema,
 }).strict()
@@ -74,7 +76,7 @@ export function agentSeatProjection() {
     key: AGENT_SEAT_KEY,
     stateVersion: SEAT_FOLD_VERSION,
     stateSchema: seatStateSchema,
-    init: (_header, inheritedEventCount) => ({ inherited: Number(inheritedEventCount), tail: null, logged: NO_LOGGED, shown: NO_SHOWN }),
+    init: (_header, inheritedEventCount) => ({ inherited: Number(inheritedEventCount), tail: null, provider: null, pinned: false, logged: NO_LOGGED, shown: NO_SHOWN }),
     apply: foldSeat,
     wire: {
       viewSchema,

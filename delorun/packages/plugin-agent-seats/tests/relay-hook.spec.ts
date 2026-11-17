@@ -30,7 +30,6 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
   describeSeat(session)
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'go' }] }), { surfaceOp: 'append' })
-  session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('call-1'), name: 'claude_code.Bash', arguments: '{}' })
   const child = { id: session.id, session } as Agent
   setApprovalPolicy(session, 'ask')
   ctx.provide('externalAgents', { seat: (id: SessionId) => id === child.id ? { child: id, root: id, provider: 'claude-code' } : undefined } as never)
@@ -41,6 +40,8 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
     records: { recorded: state.recorded ?? (() => Promise.resolve()) },
     store: {
       viewOf: () => ({ pending: { since: 1 } }),
+      providerOf: () => 'claude-code-seat',
+      delegationPinned: () => false,
       notice: state.notice ?? ((notified: SessionId, kind: string, text: string) => { calls.notices.push({ child: notified, kind, text }) }),
     },
     setPending: state.setPending ?? ((_child: SessionId, since: number | undefined) => { calls.pending.push(since) }),
@@ -52,6 +53,8 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
     }
   })
   if (approver === undefined) throw new Error('the hook did not build')
+  // The relay notes a call from its event as it commits.
+  session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('call-1'), name: 'claude_code.Bash', arguments: '{}' })
   return { ctx, child, approver, calls }
 }
 

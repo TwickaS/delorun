@@ -11,7 +11,7 @@ import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type S
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 2
+export const SEAT_FOLD_VERSION = 3
 
 /** The shortest `ownSettings` the view shows before the program's settings are known. */
 export const DEFAULT_OWN_SETTINGS = 'its own settings'
@@ -61,6 +61,10 @@ export interface SeatProjectionState {
   readonly logged: SeatLogged
   /** Id of the newest message in the log, which a fresh program session skips after a failed resume. */
   readonly tail: string | null
+  /** The provider of the child's own `subagent/descriptor`, or null before one. */
+  readonly provider: string | null
+  /** Whether the latest `approval/policy` event is the pin seeded at delegation. */
+  readonly pinned: boolean
   /** What the view shows. */
   readonly shown: SeatShown
 }
@@ -170,8 +174,14 @@ export function foldSeat(previous: SeatProjectionState, event: SessionEvent): Se
   const messageId = messageIdOf(event)
   const state = messageId === null || messageId === previous.tail ? previous : { ...previous, tail: messageId }
   if (event.type === 'subagent/descriptor') {
-    const agent = agentOfProvider(event.data.provider)
-    return agent === null || agent === state.shown.agent ? state : { ...state, shown: { ...state.shown, agent } }
+    const { provider } = event.data
+    const agent = agentOfProvider(provider)
+    const named = provider === state.provider ? state : { ...state, provider }
+    return agent === null || agent === named.shown.agent ? named : { ...named, shown: { ...named.shown, agent } }
+  }
+  if (event.type === 'approval/policy') {
+    const pinned = event.data.source === 'delegation'
+    return pinned === state.pinned ? state : { ...state, pinned }
   }
   const record = pluginRecordOf(event)
   if (record !== undefined) {

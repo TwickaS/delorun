@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
-import { appendPluginRecord, type SessionId, type SessionSeq } from '@deepseek-ai/dsh-session'
+import { appendPluginRecord, type SessionEvent, type SessionId, type SessionSeq } from '@deepseek-ai/dsh-session'
 import { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule, SeatConsent } from '@delorun/external-agents/contract'
 import { programSays } from './copy.ts'
@@ -31,6 +31,12 @@ export interface SeatRelayOptions {
    * @returns the provider name, or undefined without a descriptor.
    */
   descriptorOf(child: Agent): string | undefined
+  /**
+   * Whether the child's latest approval policy is the pin seeded at delegation.
+   * @param child - the seat child.
+   * @returns true while the pin is the latest policy event.
+   */
+  pinned(child: Agent): boolean
   /**
    * Resolve once the seat wrote the call's `tool-call` record (L36).
    * @param child - the seat child.
@@ -66,6 +72,14 @@ interface Asked {
   readonly askedSeq?: SessionSeq | undefined
 }
 
+/** What the log said about one open call. */
+interface CallFacts {
+  /** The tool name of the call's `tool/call` record. */
+  readonly name: string
+  /** The `approval/asked` event of the call's latest question. */
+  askedSeq?: SessionSeq
+}
+
 /** Why a Session is not served by the relay. */
 export type PrepareResult = 'lifted' | 'not-a-seat'
 
@@ -82,6 +96,8 @@ export class SeatRelay {
   /** The signal of each seat child's current turn, which Stop aborts; cleared when the turn ends. */
   private readonly turnSignals = new Map<SessionId, AbortSignal>()
   private readonly listeners = new Set<(child: SessionId, waiting: boolean) => void>()
+  /** What the log says about the open calls of each seat child, kept from the events as they commit. */
+  private readonly calls = new Map<SessionId, Map<string, CallFacts>>()
 
   /**
    * @param ctx - the plugin's context.
@@ -103,6 +119,7 @@ export class SeatRelay {
     })
     // Backstop for a turn that ended without a stop boundary: its question can no longer be decided in the turn.
     ctx.on('session/event', (session, event) => {
+      this.noteCall(session.id, event)
       if (event.type === 'turn/end') this.turnSignals.delete(session.id)
       if (event.type !== 'turn/end' || !this.pendingOf(session.id)) return
       ctx.logger('agent-seats').warn('a seat turn ended with a question pending; it is cancelled')
@@ -144,10 +161,7 @@ export class SeatRelay {
    */
   liftOnce(child: Agent): PrepareResult | 'kept' {
     if (!this.isSeat(child)) return 'not-a-seat'
-    const events = child.session.snapshotEvents()
-    const latest = events.findLast(event => event.type === 'approval/policy')
-    if (latest?.type !== 'approval/policy' || latest.data.source !== 'delegation') return 'kept'
-    return this.prepareChild(child)
+    return this.options.pinned(child) ? this.prepareChild(child) : 'kept'
   }
 
   /**
@@ -229,7 +243,7 @@ export class SeatRelay {
       if (!this.isSeat(child)) return { answer: 'cancel' }
       if (this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq === null) return { answer: 'cancel' }
       const toolName = this.options.recordName(child, request.toolName)
-      const recordedAs = recordedNameOf(child, request.callId)
+      const recordedAs = this.calls.get(child.id)?.get(request.callId)?.name
       if (recordedAs !== toolName) {
         // The card names the call by the record the person can read in the transcript; a record that says otherwise is not that call.
         this.ctx.logger('agent-seats').warn('a program question was rejected: call %s is recorded as %s, not %s', request.callId, recordedAs ?? 'nothing', toolName)
@@ -252,7 +266,7 @@ export class SeatRelay {
       this.scope.adopt(built, full)
       const outcome = await approval.request(built)
       const answer = this.answerOf(outcome, built, request)
-      return answer === 'allow-run' ? { answer, askedSeq: askedSeqOf(child, request.callId) } : { answer }
+      return answer === 'allow-run' ? { answer, askedSeq: this.calls.get(child.id)?.get(request.callId)?.askedSeq } : { answer }
     } catch (error) {
       if (signal.aborted) return { answer: 'cancel' }
       this.ctx.logger('agent-seats').warn('a program question could not be asked: %s', error instanceof Error ? error.message : String(error))
@@ -302,6 +316,41 @@ export class SeatRelay {
     return typeof read === 'function' && read.call(consent) === true
   }
 
+  /**
+   * Keep what a seat child's open calls need for a question: the tool name its record gave and the `approval/asked`
+   * event of the latest question, until the call's result or the turn's end.
+   * @param child - the Session the event belongs to.
+   * @param event - the committed event.
+   */
+  private noteCall(child: SessionId, event: SessionEvent): void {
+    switch (event.type) {
+      case 'tool/call':
+        if (this.ctx.get('externalAgents')?.seat(child) === undefined) return
+        this.factsOf(child).set(event.data.callId, { name: event.data.name })
+        return
+      case 'approval/asked': {
+        const facts = event.data.callId === undefined ? undefined : this.calls.get(child)?.get(event.data.callId)
+        if (facts !== undefined) facts.askedSeq = event.seq
+        return
+      }
+      case 'tool/result':
+        this.calls.get(child)?.delete(event.data.message.toolCallId)
+        return
+      case 'turn/end':
+        this.calls.delete(child)
+        return
+      default:
+        // The other events say nothing about a call.
+        return
+    }
+  }
+
+  private factsOf(child: SessionId): Map<string, CallFacts> {
+    const facts = this.calls.get(child) ?? new Map<string, CallFacts>()
+    this.calls.set(child, facts)
+    return facts
+  }
+
   private hold(child: SessionId, entry: Pending): void {
     const set = this.pending.get(child) ?? new Set<Pending>()
     set.add(entry)
@@ -329,27 +378,6 @@ export class SeatRelay {
  */
 function keepsRunRules(consent: unknown): consent is Pick<SeatConsent, 'runRules'> {
   return typeof consent === 'object' && consent !== null && typeof Reflect.get(consent, 'runRules') === 'function'
-}
-
-/**
- * The tool name the seat's record gives a call.
- * @param child - the seat child.
- * @param callId - the program's call id.
- * @returns the name, or undefined when the log holds no record of the call.
- */
-function recordedNameOf(child: Agent, callId: string): string | undefined {
-  const call = child.session.snapshotEvents().findLast(event => event.type === 'tool/call' && event.data.callId === callId)
-  return call?.type === 'tool/call' ? call.data.name : undefined
-}
-
-/**
- * The `approval/asked` event of a call's latest question.
- * @param child - the seat child.
- * @param callId - the question's call.
- * @returns its sequence number, or undefined when the log holds none.
- */
-function askedSeqOf(child: Agent, callId: string): SessionSeq | undefined {
-  return child.session.snapshotEvents().findLast(event => event.type === 'approval/asked' && event.data.callId === callId)?.seq
 }
 
 /**

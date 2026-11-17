@@ -3,11 +3,11 @@
  * states the log moves it through, the same value after a restore and a fork, and a stable view reference.
  */
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
-import { appendPluginRecord, SessionLogOffset, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { appendPluginRecord, buildForkSeed, SessionId, SessionLogOffset, SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import {
   agentSeatProjection, DEFAULT_OWN_SETTINGS, foldSeat, NO_LOGGED, NO_SHOWN, SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD,
-  seatStateSchema, type AgentSeatView, type SeatProjectionState,
+  SeatRecords, seatStateSchema, type AgentSeatView, type SeatProjectionState,
 } from '../../src/state/index.ts'
 import { describeSeat, sessionContext } from './support.ts'
 
@@ -24,6 +24,43 @@ async function host() {
   }
   return { ctx, handle, session, events, view, assistant }
 }
+
+describe('the descriptor provider and the delegation pin the relay reads', () => {
+  it('reads the child\'s own descriptor provider, any provider included, and none before one', async () => {
+    const h = await host()
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    expect(store.providerOf(h.session.header.id)).toBeUndefined()
+    describeSeat(h.session, 'tool-subagent')
+    expect(store.providerOf(h.session.header.id)).toBe('tool-subagent')
+    describeSeat(h.session, 'codex-seat')
+    expect(store.providerOf(h.session.header.id)).toBe('codex-seat')
+    expect(store.providerOf(SessionId('not-loaded'))).toBeUndefined()
+  })
+
+  it('ignores a descriptor a fork inherited, so a fork of a seat has no provider of its own', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const events = h.session.snapshotEvents()
+    const seed = buildForkSeed(events, SessionSeq(events.length - 1))
+    const fork = h.ctx.sessions.create(undefined, { seed, inheritedEventCount: SessionLogOffset(seed.length), meta: { isSeeded: true } })
+    expect(new SeatRecords(h.ctx.sessions, h.handle).providerOf(fork.header.id)).toBeUndefined()
+  })
+
+  it('reports the pin while the delegation pin is the latest approval policy, and not after a switch or a lift', async () => {
+    const h = await host()
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    expect(store.delegationPinned(child)).toBe(false)
+    h.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    expect(store.delegationPinned(child)).toBe(true)
+    h.session.append('approval/policy', { policy: 'ask' })
+    expect(store.delegationPinned(child)).toBe(false)
+    h.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    expect(store.delegationPinned(child)).toBe(true)
+    h.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    expect(store.delegationPinned(child)).toBe(true)
+  })
+})
 
 describe('the agentSeat view', () => {
   it('is null in a chat that is not a seat child', async () => {
@@ -122,7 +159,7 @@ describe('the agentSeat view', () => {
     const h = await host()
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(h.view()).toBeNull()
-    const state: SeatProjectionState = { inherited: 9, tail: null, logged: NO_LOGGED, shown: { ...NO_SHOWN, agent: 'codex' } }
+    const state: SeatProjectionState = { inherited: 9, tail: null, provider: null, pinned: false, logged: NO_LOGGED, shown: { ...NO_SHOWN, agent: 'codex' } }
     expect(foldSeat(state, { type: 'turn/end', seq: 3, time: 0, data: { turn: 1, reason: { kind: 'completed' } } } as SessionEvent)).toBe(state)
   })
 
@@ -217,7 +254,7 @@ describe('the seat fold', () => {
   })
 
   it('accepts its own state as a stored checkpoint', () => {
-    const state: SeatProjectionState = { inherited: 0, tail: null, logged: NO_LOGGED, shown: NO_SHOWN }
+    const state: SeatProjectionState = { inherited: 0, tail: null, provider: null, pinned: false, logged: NO_LOGGED, shown: NO_SHOWN }
     expect(seatStateSchema.parse(state)).toEqual(state)
     expect(() => seatStateSchema.parse({ ...state, extra: 1 })).toThrow()
     expect(foldSeat(state, { type: 'step/start', seq: 5, time: 0, data: { turn: 1, step: 1 } } as SessionEvent)).toBe(state)

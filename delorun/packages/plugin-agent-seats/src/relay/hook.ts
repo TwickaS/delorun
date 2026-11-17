@@ -3,7 +3,6 @@
  * its seat child, and how a waiting question shows in the chat's `agentSeat` view.
  * @module @delorun/plugin-agent-seats/relay/hook
  */
-import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type { SeatApprover, SeatRelayHook } from '../mount.ts'
 import { recordPrefixOf } from '../executor/index.ts'
 import { isExternalAgentName, seatProviderName } from '../provider/index.ts'
@@ -23,7 +22,7 @@ import { SeatRelay } from './relay.ts'
  */
 export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) => {
   const seatOf = (child: Agent): SeatConfig => {
-    const provider = foldSubagentDescriptor(child.session.snapshotEvents())?.provider
+    const provider = state.store.providerOf(child.id)
     const seat = seats.find(candidate => seatProviderName(candidate.provider) === provider)
     /* v8 ignore next -- seatProviders is built from the same seats, so a child the relay serves always has one */
     if (seat === undefined) throw new Error(`delorun-agent-seats: ${child.id} is no configured seat, so its calls have no record name`)
@@ -39,7 +38,8 @@ export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) =
   }
   const relay = new SeatRelay(ctx, {
     seatProviders,
-    descriptorOf: child => foldSubagentDescriptor(child.session.snapshotEvents())?.provider,
+    descriptorOf: child => state.store.providerOf(child.id),
+    pinned: child => state.store.delegationPinned(child.id),
     // An aborted wait is the relay's to read from the signal; it is not a failure of the ledger.
     recorded: (child, callId, signal) => state.records.recorded(child.id, callId, signal).catch((error: unknown) => {
       if (!signal.aborted) throw error

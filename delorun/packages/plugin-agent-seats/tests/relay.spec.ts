@@ -32,7 +32,7 @@ describe('the lifted pin', () => {
     const real = new SeatRelay(w.ctx, {
       seatProviders: new Set(['agent-seat']),
       descriptorOf: agent => foldSubagentDescriptor(agent.session.snapshotEvents())?.provider,
-      recorded: () => Promise.resolve(), recordName: (_a, name) => name, agentName: () => 'Claude Code',
+      recorded: () => Promise.resolve(), recordName: (_a, name) => name, agentName: () => 'Claude Code', pinned: () => true,
     })
     expect(real.prepareChild(w.child)).toBe('lifted')
     const events = w.child.session.snapshotEvents()
@@ -108,7 +108,7 @@ describe('the lift at the first question', () => {
     const real = new SeatRelay(w.ctx, {
       seatProviders: new Set(['agent-seat']),
       descriptorOf: agent => foldSubagentDescriptor(agent.session.snapshotEvents())?.provider,
-      recorded: () => Promise.resolve(), recordName: (_a, name) => name, agentName: () => 'Claude Code',
+      recorded: () => Promise.resolve(), recordName: (_a, name) => name, agentName: () => 'Claude Code', pinned: () => true,
     })
     const events = w.child.session.snapshotEvents()
     const seed = buildForkSeed(events, SessionSeq(events.length - 1))
@@ -162,7 +162,7 @@ describe('the turn signal listener', () => {
     await ctx.plugin(class {
       constructor(scope: Context) {
         relay = new SeatRelay(scope, {
-          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recorded: () => new Promise<void>(() => {}), recordName: (_a, name) => name, agentName: () => 'Claude Code',
+          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recorded: () => new Promise<void>(() => {}), recordName: (_a, name) => name, agentName: () => 'Claude Code', pinned: () => true,
         }, new UnmountedRunScope())
       }
     })
@@ -227,7 +227,7 @@ describe('the question', () => {
     await w.ctx.plugin(class {
       constructor(scope: Context) {
         relay = new SeatRelay(scope, {
-          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => `claude_code.${name}`, agentName: () => 'Claude Code',
+          seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => `claude_code.${name}`, agentName: () => 'Claude Code', pinned: () => true,
           recorded: () => Promise.resolve(),
         }, new UnmountedRunScope())
       }
@@ -242,7 +242,7 @@ describe('the question', () => {
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
     const held = new SeatRelay(w.ctx, {
-      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => `claude_code.${name}`, agentName: () => 'Claude Code',
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => `claude_code.${name}`, agentName: () => 'Claude Code', pinned: () => true,
       recorded: async (agent, callId) => {
         await gate
         agent.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId(callId), name: 'claude_code.Bash', arguments: '{}' })
@@ -403,7 +403,7 @@ describe('ending a question', () => {
     const w = await world()
     w.relay.prepareChild(w.child)
     const never = new SeatRelay(w.ctx, {
-      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, agentName: () => 'Claude Code', recorded: () => new Promise<void>(() => {}),
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, agentName: () => 'Claude Code', pinned: () => true, recorded: () => new Promise<void>(() => {}),
     })
     const stop = new AbortController()
     const result = never.onApproval(w.child, stop.signal)(question())
@@ -419,7 +419,7 @@ describe('ending a question', () => {
     w.relay.prepareChild(w.child)
     let release: () => void = () => {}
     const held = new SeatRelay(w.ctx, {
-      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, agentName: () => 'Claude Code', recorded: () => new Promise<void>((resolve) => { release = resolve }),
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, agentName: () => 'Claude Code', pinned: () => true, recorded: () => new Promise<void>((resolve) => { release = resolve }),
     })
     const result = held.onApproval(w.child, new AbortController().signal)(question())
     await settle()

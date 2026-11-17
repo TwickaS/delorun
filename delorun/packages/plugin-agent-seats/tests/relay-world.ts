@@ -118,6 +118,7 @@ export async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener =
     }),
     recordName: (_agent, toolName) => `claude_code.${toolName}`,
     agentName: () => 'Claude Code',
+    pinned: (agent) => agent.session.snapshotEvents().findLast(event => event.type === 'approval/policy')?.data.source === 'delegation',
   }
   let relay: SeatRelay | undefined
   await ctx.plugin(class { constructor(scope: Context) { relay = new SeatRelay(scope, options, mountListener ? new RunScope() : new UnmountedRunScope()) } })
