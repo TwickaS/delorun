@@ -9,7 +9,7 @@
  */
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, symbols, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -90,6 +90,18 @@ export function spawnEnvironment(overlay: NodeJS.ProcessEnv | undefined, env: Re
   return result
 }
 
+/**
+ * The service object behind a Cordis context proxy: each `ctx.get` of a `Service` returns a new proxy, so two lookups
+ * of one service compare equal only through it.
+ * @param service - a looked-up service, or undefined.
+ * @returns the object the proxy wraps, or the value itself when it is no proxy.
+ */
+function serviceObject(service: unknown): unknown {
+  if (typeof service !== 'object' || service === null) return service
+  const original: unknown = Reflect.get(service, symbols.original)
+  return original ?? service
+}
+
 /** The start gate. */
 export class ExternalAgentsService extends Service implements ExternalAgentsGate {
   private readonly options: GateOptions
@@ -112,6 +124,11 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       // A program started while the consent was off stops once a consent appears (review D11).
       for (const live of [...this.live]) if (live.seat !== undefined && !live.reviewed) void this.end(live)
       scope.effect(() => consent.onLeaseEnded(lease => this.endSeat(lease.child)), 'external agents: lease ends stop programs')
+      // The consent stopping removes this scope before its own teardown ends the leases, so the lease listener above
+      // never hears those ends; every program it reviewed ends here instead.
+      scope.effect(() => () => {
+        for (const live of [...this.live]) if (live.seat !== undefined && live.reviewed) void this.end(live)
+      }, 'external agents: the consent stopping ends the programs it reviewed')
     })
   }
 
@@ -442,8 +459,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
    */
   private async reviewTurn(request: SeatStartRequest, consent: SeatConsent): Promise<string | undefined> {
     // The consent that allowed the program was replaced (its switch turned off and on): the program needs a new review.
-    const current: unknown = this.ctx.get('delegationConsent')
-    if (current !== consent) return consentMissingRefusal(request.provider)
+    if (serviceObject(this.ctx.get('delegationConsent')) !== serviceObject(consent)) return consentMissingRefusal(request.provider)
     const agents = this.seatAgents(request)
     const verdict = await consent.reviewSeat({ provider: request.provider, ...agents, cwd: request.cwd, phase: 'turn', signal: request.signal })
     return verdict.kind === 'refuse' ? verdict.reason : undefined
