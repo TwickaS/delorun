@@ -1397,6 +1397,9 @@ importers:
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../../packages/plugin-update
       '@delorun/preview-flags':
         specifier: workspace:*
         version: link:../../packages/preview-flags
@@ -2159,6 +2162,9 @@ importers:
       '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
@@ -4262,6 +4268,49 @@ importers:
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delorun/packages/plugin-update:
+    dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-process':
+        specifier: workspace:*
+        version: link:../contract-home-process
+      '@delorun/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
+      '@delorun/plugin-changes':
+        specifier: workspace:*
+        version: link:../plugin-changes
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@delorun/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delorun/packages/plugin-workspaces:
     dependencies:

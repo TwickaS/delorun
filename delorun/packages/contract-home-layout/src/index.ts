@@ -213,6 +213,8 @@ export const RUN_ENTRIES = {
   supervisorSocket: 'supervisor.sock',
   /** The update journal (C19). */
   updateJournal: 'update.json',
+  /** How the last update or rollback of the studio or terminal ended, until the person dismisses it (C19, "The outcome record"). */
+  updateResult: 'update-result.json',
   /** The update check's record (C3, "Update check"). */
   updateCheck: 'update-check.json',
   /** The verified release notes of the update check's newest release (C3, "Update check"). */

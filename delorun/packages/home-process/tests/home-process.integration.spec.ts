@@ -14,7 +14,7 @@ import { REQUEST_MAX_BYTES, type HomeStatus } from '@delorun/contract-home-proce
 import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirectory, startTokenFile, writeProtectedFile } from '@delorun/home'
 import { resolveSurface } from '@delorun/logs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { exchangeLines, HostNotStoppedError, journalPath, openHomeLog, queryHomeStatus, readJournal, sendHomeRequest, stashPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
+import { exchangeLines, HostNotStoppedError, journalPath, openHomeLog, queryHomeStatus, readJournal, readUpdateResult, sendHomeRequest, stashPath, updateResultPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
 import { FixtureStore, installFixture, killLockHolder, MemoryLogger, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type StartParts, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -255,6 +255,7 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     const host = running.hosts.latest
     const end = host.chats.begin(() => {})
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'abort-if-busy', dataCopy: false } }))).toEqual({ ok: true, outcome: 'aborted', reason: 'CHATS_RUNNING' })
+    expect(await readUpdateResult(updateResultPath(home, PROFILE))).toMatchObject({ kind: 'update', outcome: 'aborted', reason: 'CHATS_RUNNING', from: V1, to: V2 })
     const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home)).update?.phase === 'waiting', 10_000, 'waiting')
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.cancel' }))).toMatchObject({ ok: true, status: { state: 'running' } })
@@ -337,6 +338,8 @@ describe('health-check-rollback', TIMEOUT, () => {
     expect(running.hosts.latest.closed).toBe(false)
     expect(await status(home)).toMatchObject({ state: 'running', pid: process.pid, runtime: { current: V1, running: V1 } })
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    // The outcome survives the switch for the Host that runs again: the studio shows it.
+    expect(await readUpdateResult(updateResultPath(home, PROFILE))).toMatchObject({ v: 1, kind: 'update', outcome: 'rolled-back', from: V1, to: V2, reason: 'HEALTH_CHECK_FAILED', criterion: 'H3-only-named-disabled' })
   })
 
   it('hands the running Host\'s sandbox protection to the successor: one that denies fewer sockets is rolled back, one that denies more commits', async () => {
@@ -366,6 +369,7 @@ describe('rollback', TIMEOUT, () => {
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V2, 30_000, 'the successor')
     await until(async () => JSON.parse(await text(journalPath(home, PROFILE))).phase === 'committed', 30_000, 'the committed record')
     expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, phase: 'committed', targetStarted: true })
+    expect(await readUpdateResult(updateResultPath(home, PROFILE))).toMatchObject({ kind: 'update', outcome: 'committed', from: V1, to: V2 })
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'rolled-back', lines: [`Went back to ${V1}.`] })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the rolled-back successor')
     // The record goes once the version rolled back to has passed its health check.

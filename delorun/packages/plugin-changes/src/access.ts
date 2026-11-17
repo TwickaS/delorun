@@ -7,7 +7,12 @@
  *   change, Discard of a plugin's change or of a change to Delorun itself, turning protection on);
  * - `phone-powers`: only while Phone powers is Full, which lets an unlocked phone do what the computer can: every other
  *   plugin and harness action, Apply included, turning protection off, Make my copy and Restart;
- * - `computer`: never from a device: dismissing the notice of a change a device made.
+ * - `computer`: never from a device: dismissing the notice of a change a device made;
+ * - `open`: any paired device, unlocked or not: the controls that only read, such as the update check.
+ *
+ * The update controls (`@delorun/plugin-update`) sit in the same table: `update-check` is `open`; `update-begin` and
+ * `update-rollback` are `phone-powers`, so a Careful phone updates at the computer; `update-cancel`, `update-dismiss`
+ * and `stop` are `unlocked`.
  *
  * The routes decide from {@link mayUse} before they read a request's body, and the `state` route answers the same
  * decisions as {@link AccessView}, so the screen says what a control needs before the person presses it. This module
@@ -18,7 +23,7 @@
 import type { AccessView, ActorView, ChangesControl, MayView, PhonePowersView } from './wire.ts'
 
 /** How far from the computer a control reaches. */
-export type ControlLevel = 'phone-powers' | 'unlocked' | 'computer'
+export type ControlLevel = 'open' | 'phone-powers' | 'unlocked' | 'computer'
 
 /** The level of every control. */
 export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
@@ -34,6 +39,12 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
   'make-copy': 'phone-powers',
   'restart': 'phone-powers',
   'notice-seen': 'computer',
+  'update-check': 'open',
+  'update-begin': 'phone-powers',
+  'update-rollback': 'phone-powers',
+  'update-cancel': 'unlocked',
+  'update-dismiss': 'unlocked',
+  'stop': 'unlocked',
 }
 
 /**
@@ -46,6 +57,7 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
 export function mayUse(actor: ActorView, powers: PhonePowersView['level'], control: ChangesControl): MayView {
   if (actor === 'computer') return { ok: true }
   const level = CONTROL_LEVELS[control]
+  if (level === 'open') return { ok: true }
   if (level === 'computer' || (level === 'phone-powers' && powers !== 'full')) return { ok: false, needs: 'computer' }
   return actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' }
 }

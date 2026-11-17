@@ -8,7 +8,7 @@
  *
  * @module @delorun/update
  */
-export { confirmsWithoutAsking } from './confirm.ts'
+export { confirmationNeeds, confirmsWithoutAsking, type ConfirmationNeeds } from './confirm.ts'
 export { compareDataFacts, dataFormatsOf, dataFormatsText, dataItems, DELORUN_RECORDS, parseDataFormats, readDataFormats, type DataComparison, type DataFacts, type ReleaseDataFacts } from './data-formats.ts'
 export { DataSafetyError, isDataSafetyError, UpdateReportError, type DataSafetyErrorCode, type UpdateReportErrorCode } from './errors.ts'
 export {
