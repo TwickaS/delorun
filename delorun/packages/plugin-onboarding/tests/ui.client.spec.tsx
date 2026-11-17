@@ -73,11 +73,12 @@ describe('the step footer', () => {
 describe('the card', () => {
   const long = 'x'.repeat(SUMMARY_LIMIT + 1)
 
-  it('keeps an icon slot for every card: the plugin\'s image, or a neutral glyph', () => {
+  it('keeps an icon slot for every card: the plugin\'s image, or a tinted letter', () => {
     render(<><Card title="With" icon="data:image/png;base64,AA==" labels={LABELS} /><Card title="Without" labels={LABELS} /></>)
     const slots = [...document.querySelectorAll('h4')].map(title => title.closest('div')?.parentElement?.firstElementChild as HTMLElement)
     expect(slots[0]?.querySelector('img')).not.toBeNull()
-    expect(slots[1]?.querySelector('svg')).not.toBeNull()
+    expect(slots[1]?.textContent).toBe('W')
+    expect(slots[1]?.firstElementChild?.getAttribute('data-tint')).not.toBeNull()
   })
 
   it('shows the full text of a long description only after More, and More says it is expanded', async () => {
@@ -94,7 +95,7 @@ describe('the card', () => {
     render(<Card title="T" labels={LABELS} leading={<input type="checkbox" aria-label="Use T" />} />)
     const row = screen.getByRole('checkbox').closest('div') as HTMLElement
     expect(row.firstElementChild?.querySelector('input')).not.toBeNull()
-    expect(row.children[1]?.querySelector('svg')).not.toBeNull()
+    expect(row.children[1]?.textContent).toBe('T')
   })
 
   it('offers no More for a description that fits on two lines', () => {

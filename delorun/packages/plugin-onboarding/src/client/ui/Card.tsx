@@ -1,8 +1,9 @@
 /**
  * A card for one thing the person can add or tick: a fixed icon slot, a title, a summary of up to two lines with the rest of a
- * long description behind "More", one action area and a state line under them. A card without artwork shows a neutral
- * glyph, so every title in a list starts at the same place.
+ * long description behind "More", one action area and a state line under them. A card without artwork shows a tinted
+ * letter tile, so every title in a list starts at the same place.
  */
+import { CardIcon } from '@delorun/brand'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -33,23 +34,13 @@ export interface CardProps {
   readonly selected?: boolean
 }
 
-/** A neutral plugin glyph. */
-function Glyph(): ReactNode {
-  return (
-    <svg className={css.glyph} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect x="6" y="6" width="9" height="9" rx="2" /><rect x="17" y="6" width="9" height="9" rx="2" />
-      <rect x="6" y="17" width="9" height="9" rx="2" /><rect x="17" y="17" width="9" height="9" rx="2" />
-    </svg>
-  )
-}
-
 /**
- * A tile with one or two letters, for a provider that has no logo here.
- * @param props - the letters.
+ * The tinted letter tile for something that has no logo here; brand's {@link CardIcon} draws it.
+ * @param props - the name the tint comes from and, optionally, the letter to show.
  * @returns the tile, hidden from assistive technology because the title says the same.
  */
-export function Monogram({ letters }: { readonly letters: string }): ReactNode {
-  return <span className={css.monogram} aria-hidden="true">{letters}</span>
+export function Monogram({ name, letters }: { readonly name: string; readonly letters?: string | undefined }): ReactNode {
+  return <CardIcon name={name} letter={letters} />
 }
 
 /**
@@ -66,8 +57,7 @@ export function Card({ title, icon, monogram, description, labels, leading, acti
       <div className={css.row}>
         {leading !== undefined && <span className={css.leading}>{leading}</span>}
         <span className={css.icon}>
-          {icon !== undefined ? <img className={css.image} src={icon} alt="" />
-            : monogram !== undefined ? <Monogram letters={monogram} /> : <Glyph />}
+          {icon !== undefined ? <img className={css.image} src={icon} alt="" /> : <Monogram name={title} letters={monogram} />}
         </span>
         <div className={css.text}>
           <h4 className={css.title}>{title}</h4>

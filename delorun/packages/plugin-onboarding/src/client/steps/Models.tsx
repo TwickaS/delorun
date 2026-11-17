@@ -347,7 +347,7 @@ function WalkScreen({ card, services, place, startReplacing = false, onBack, onS
   return (
     <div className={shared.stack}>
       {place.n > 1 && <p className={css.place}>{t('providers.place', { k: String(place.k), n: String(place.n) })}</p>}
-      <h3 className={css.provider}><Monogram letters={monogramOf(card)} />{card.name}</h3>
+      <h3 className={css.provider}><Monogram name={card.name} letters={monogramOf(card)} />{card.name}</h3>
       {custom && (
         <>
           <div className={css.field}>
