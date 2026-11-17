@@ -108,7 +108,7 @@ describe('the first screen', () => {
     const { add, onCreated } = await mount()
     await click(screen.getByRole('button', { name: /^delorun/ }))
     expect(add).toHaveBeenCalledExactlyOnceWith(`${HOME}/src/delorun`)
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1', path: `${HOME}/src/delorun` })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1', path: `${HOME}/src/delorun`, folder: 'code' })
   })
 
   it('shows the reason in place when a recent folder is refused', async () => {
@@ -237,7 +237,7 @@ describe('a folder on this computer', () => {
     await click(screen.getByRole('option', { name: 'src' }))
     await click(button('Use "src"'))
     await click(button(en.createNow))
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-9', path: `${HOME}/src` })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-9', path: `${HOME}/src`, folder: 'code' })
   })
 
   it('makes a new folder inline, selects it, and refuses a name that is not one plain folder name', async () => {
@@ -330,7 +330,7 @@ describe('a new folder', () => {
     expect(create).not.toHaveBeenCalled()
     await click(button(en.createNow))
     expect(create).toHaveBeenCalledExactlyOnceWith({ parent: `${HOME}/Projects`, name: 'my-project', git: false })
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: `${HOME}/Projects/my-project` })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: `${HOME}/Projects/my-project`, folder: 'empty' })
   })
 
   it('starts a Git repository by default', async () => {
@@ -473,7 +473,7 @@ describe('a clone', () => {
     await act(async () => { release() })
     await settle()
     expect(cloneStatus).toHaveBeenCalledTimes(2)
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-3', path: `${HOME}/Projects/site` })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-3', path: `${HOME}/Projects/site`, folder: 'code' })
   })
 
   it('sends the branch when one is typed', async () => {

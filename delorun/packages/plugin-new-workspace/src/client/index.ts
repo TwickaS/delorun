@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-api-gateway/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: `ctx.delorunFullAccess`, the full-access consent for one workspace.
 import type {} from '@delorun/bundle-local/full-access'
+import type { FolderKind } from '../wire.ts'
 import { createApi } from './api.ts'
 import type { FullAccessAsk } from './create.ts'
 import { viewOfCatalog, type ModelCatalogView } from './models.ts'
@@ -37,7 +38,7 @@ export type NewWorkspaceSource = 'sidebar' | 'picker' | 'hero' | 'onboarding'
 
 /** What the flow came to. */
 export type NewWorkspaceOutcome =
-  | { readonly kind: 'created', readonly workspaceId: string, readonly path: string }
+  | { readonly kind: 'created', readonly workspaceId: string, readonly path: string, readonly folder: FolderKind }
   | { readonly kind: 'cancelled' }
 
 /** The new-workspace flow, for the plugins that offer it. */

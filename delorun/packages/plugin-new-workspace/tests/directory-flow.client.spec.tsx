@@ -98,7 +98,7 @@ describe('the ways in', () => {
   it('opens the dialog from a hole and hands back the made workspace\'s folder', async () => {
     const { ctx, registered } = await harness(true)
     const service = ctx.get('delorunNewWorkspace')
-    const open = vi.spyOn(service!, 'open').mockResolvedValue({ kind: 'created', workspaceId: 'workspace-1', path: '/home/person/src/site' })
+    const open = vi.spyOn(service!, 'open').mockResolvedValue({ kind: 'created', workspaceId: 'workspace-1', path: '/home/person/src/site', folder: 'code' })
     const injected = registered.get('workspace.picker.directoryFlow#')?.inject?.() as { openFlow: (from: DirectoryFlowSource) => Promise<string | undefined> }
     expect(await injected.openFlow('picker')).toBe('/home/person/src/site')
     expect(open).toHaveBeenCalledWith({ from: 'picker' })

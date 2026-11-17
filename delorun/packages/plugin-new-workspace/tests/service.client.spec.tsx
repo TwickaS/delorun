@@ -200,7 +200,7 @@ describe('the service', () => {
     const outcome = service(ctx).open({ from: 'onboarding' })
     await settle()
     await click(screen.getByRole('button', { name: /^delorun/ }))
-    expect(await outcome).toEqual({ kind: 'created', workspaceId: 'workspace-1', path: `${HOME}/src/delorun` })
+    expect(await outcome).toEqual({ kind: 'created', workspaceId: 'workspace-1', path: `${HOME}/src/delorun`, folder: 'code' })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(fetch).toHaveBeenCalledWith(ADD_WORKSPACE_PATH.slice(1), expect.objectContaining({ body: JSON.stringify({ path: `${HOME}/src/delorun` }) }))
   })

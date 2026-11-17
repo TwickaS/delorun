@@ -3,7 +3,7 @@
  * Host has added it. A failure carries the wire's own reason so the dialog shows it in place on the right screen.
  * @module @delorun/plugin-new-workspace/client/create
  */
-import type { BrowserChoice, WorkspaceModel } from '../wire.ts'
+import type { BrowserChoice, FolderKind, WorkspaceModel } from '../wire.ts'
 import type { ApiFailure, NetworkSetting, NewWorkspaceApi } from './api.ts'
 import { assertNever, type Choice, type Permission, type Problem } from './flow.ts'
 
@@ -15,7 +15,7 @@ const POLL_FAILURES_ALLOWED = 3
 
 /** What finishing the flow came to. */
 export type CreateResult =
-  | { readonly ok: true, readonly workspaceId: string, readonly path: string }
+  | { readonly ok: true, readonly workspaceId: string, readonly path: string, readonly folder: FolderKind }
   | { readonly ok: false, readonly problem: Problem }
   | { readonly ok: false, readonly cancelled: true }
 
@@ -63,13 +63,14 @@ export async function createChosen(
     case 'existing': {
       const added = await api.add(choice.path)
       if (!added.ok) return { ok: false, problem: problemOfFailure(added.reason) }
-      if (added.value.result === 'added') return { ok: true, workspaceId: added.value.workspaceId, path: added.value.path }
+      if (added.value.result === 'added') return { ok: true, workspaceId: added.value.workspaceId, path: added.value.path, folder: added.value.kind }
       return { ok: false, problem: added.value.result === 'refused' ? { kind: 'place', problem: added.value.problem } : { kind: 'failed' } }
     }
     case 'new': {
       const made = await api.create({ parent: choice.parent, name: choice.name, git: choice.git })
       if (!made.ok) return { ok: false, problem: problemOfFailure(made.reason) }
-      if (made.value.result === 'added') return { ok: true, workspaceId: made.value.workspaceId, path: made.value.path }
+      // A new folder holds only what Git wrote, so it reads as `folderKind` would read it: `code` with `.git`, else `empty`.
+      if (made.value.result === 'added') return { ok: true, workspaceId: made.value.workspaceId, path: made.value.path, folder: made.value.git ? 'code' : 'empty' }
       return { ok: false, problem: made.value.result === 'refused' ? { kind: 'create', problem: made.value.problem } : { kind: 'failed' } }
     }
     case 'clone':
@@ -103,7 +104,7 @@ async function followClone(api: NewWorkspaceApi, job: string | undefined, onProg
     } else {
       failures = 0
       switch (status.value.state) {
-        case 'done': return { ok: true, workspaceId: status.value.workspaceId, path: status.value.path }
+        case 'done': return { ok: true, workspaceId: status.value.workspaceId, path: status.value.path, folder: status.value.kind }
         case 'failed': return { ok: false, problem: { kind: 'clone-failed', failure: status.value.failure } }
         case 'unknown': return { ok: false, problem: { kind: 'clone-lost' } }
         case 'running': onProgress(status.value.percent); break

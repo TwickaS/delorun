@@ -9,7 +9,7 @@ const instant = () => vi.fn(async (_ms: number) => {})
 describe('adding a folder that exists', () => {
   it('reports the workspace the registry made', async () => {
     const { api, add } = fakeApi()
-    expect(await createChosen(api, { kind: 'existing', path: '/home/person/src/site' }, vi.fn())).toEqual({ ok: true, workspaceId: 'workspace-1', path: '/home/person/src/site' })
+    expect(await createChosen(api, { kind: 'existing', path: '/home/person/src/site' }, vi.fn())).toEqual({ ok: true, workspaceId: 'workspace-1', path: '/home/person/src/site', folder: 'code' })
     expect(add).toHaveBeenCalledExactlyOnceWith('/home/person/src/site')
   })
 
@@ -30,7 +30,7 @@ describe('making a new folder', () => {
   it('asks for the folder with the parent, name and Git choice', async () => {
     const { api, create } = fakeApi()
     const result = await createChosen(api, { kind: 'new', parent: '/home/person/Projects', name: 'my-project', git: false }, vi.fn())
-    expect(result).toEqual({ ok: true, workspaceId: 'workspace-2', path: '/home/person/Projects/my-project' })
+    expect(result).toEqual({ ok: true, workspaceId: 'workspace-2', path: '/home/person/Projects/my-project', folder: 'empty' })
     expect(create).toHaveBeenCalledExactlyOnceWith({ parent: '/home/person/Projects', name: 'my-project', git: false })
   })
 
@@ -49,7 +49,7 @@ describe('following a clone', () => {
     const progress = vi.fn()
     const wait = instant()
     const result = await createChosen(api, started, progress, { wait })
-    expect(result).toEqual({ ok: true, workspaceId: 'workspace-3', path: '/home/person/Projects/site' })
+    expect(result).toEqual({ ok: true, workspaceId: 'workspace-3', path: '/home/person/Projects/site', folder: 'code' })
     expect(progress.mock.calls).toEqual([[undefined], [42]])
     expect(wait.mock.calls).toEqual([[CLONE_POLL_MS], [CLONE_POLL_MS]])
     expect(CLONE_POLL_MS).toBe(1000)

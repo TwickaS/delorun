@@ -8,6 +8,7 @@
 import { IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { FolderKind } from '../wire.ts'
 import type { NewWorkspaceApi } from './api.ts'
 import { createChosen, problemOfFailure, setUpWorkspace, type CreateOptions, type FullAccessAsk, type SetupNote, type SetupPlan } from './create.ts'
 import { FooterContext } from './footer.tsx'
@@ -31,6 +32,8 @@ export interface CreatedWorkspace {
   readonly workspaceId: string
   /** The workspace's folder. */
   readonly path: string
+  /** What the folder holds. */
+  readonly folder: FolderKind
 }
 
 /** The props of the dialog. */
@@ -171,7 +174,7 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, fro
     })
     if (!alive()) return
     if (result.ok) {
-      const workspace = { workspaceId: result.workspaceId, path: result.path }
+      const workspace = { workspaceId: result.workspaceId, path: result.path, folder: result.folder }
       if (!setUp) {
         onCreated(workspace)
         return

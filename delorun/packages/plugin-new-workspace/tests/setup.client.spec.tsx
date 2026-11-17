@@ -187,7 +187,7 @@ describe('finishing', () => {
     expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, { model: { provider: 'deepseek', model: 'deepseek-pro', reasoningEffort: 'high' } })
     expect(setNetwork).not.toHaveBeenCalled()
     expect(askFullAccess).not.toHaveBeenCalled()
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE, folder: 'code' })
   })
 
   it('stores the model and level picked, with the canonical path the Host returned', async () => {
@@ -302,7 +302,7 @@ describe('finishing', () => {
     expect(screen.getByRole('alert').textContent).toBe('Turn Full access on later from the permission menu in a chat.')
     expect(onCreated).not.toHaveBeenCalled()
     await click(button(en['done.open']))
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE, folder: 'code' })
   })
 
   it('treats a consent that cannot be asked like an absent one', async () => {
@@ -324,7 +324,7 @@ describe('finishing', () => {
     expect(setNetwork).toHaveBeenCalledOnce()
     expect(onCreated).not.toHaveBeenCalled()
     await click(button(en['done.open']))
-    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE })
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-2', path: SITE, folder: 'code' })
   })
 
   it('reports a network that could not be saved in place, and still asks for Full access', async () => {
