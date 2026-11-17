@@ -52,7 +52,7 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
-import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
+import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointForSuccessor } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
 import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
@@ -627,7 +627,10 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       running,
       startId,
       host: {
-        boot: (_access, controls) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted }),
+        boot: async (_access, controls) => {
+          if (handover !== undefined) await repointForSuccessor(request)
+          return bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted })
+        },
       },
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
