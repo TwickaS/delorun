@@ -19,6 +19,7 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 - [更改一件事，看到它，再撤销它](#change-one-thing-see-it-undo-it)
 - [各个层级](#the-levels)
 - [更改插件的设置](#change-a-plugins-settings)
+- [可选插件](#optional-plugins)
 - [给 studio 起你自己的名称和图标](#give-the-studio-your-own-name-and-icon)
 - [制作 agent 预设](#make-an-agent-preset)
 - [编写插件](#write-a-plugin)
@@ -77,6 +78,25 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 ```
 
 你手工编辑的补丁在下次启动时加载：运行 `delorun stop`，再运行 `delorun start`。补丁会替换该行完整的 `config`，所以请重述插件需要的每个键；缺少必需键的行会使 Delorun 无法启动，错误信息会指出该键。`disabled: true` 则关闭一行。要撤销这项更改，删除该条目并重启。Delorun 不会把手工编辑保存为版本，所以如果想要一份副本，请自己保留文件的副本。DeepSeek Harness 的[加载顺序](../../../docs/user/develop/basic/publish.zh.md#the-loading-order)说明了哪一层优先。如果补丁关闭了 Delorun 的某项保护，Delorun 会拒绝启动，并指出该文件。
+
+<a id="optional-plugins"></a>
+
+## 可选插件
+
+有些插件做的事大多数人用不到，或者需要先做一些设置，所以它们出厂时是关闭的。打开“设置”→“插件”，在关闭的插件列表中找到它，然后把它开启。第一次开启时，Delorun 会下载它，并对照发行版已签名的清单检查它，所以这一步需要网络连接；之后它可以离线工作，并随 Delorun 一起更新。再次关闭它会移除它添加的内容。
+
+| 插件 | 作用 | 需要你提供 | 状态 |
+| --- | --- | --- | --- |
+| 浏览器 | 智能体通过 Playwright，在你电脑上的 Chromium 浏览器中浏览。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 一个它能启动的 Chromium 浏览器。Stagehand 还需要它自己的模型。 | 实验性 |
+| 代码智能 | 一个只读的 `lsp` 工具：跳转到定义、查找引用、查找实现、悬停信息。 | 你的 PATH 上有 `typescript-language-server`；在此之前“插件”会显示“Needs setup”。其他服务器放进你的 profile 补丁。 | 稳定 |
+| Claude Code 与 Codex 钩子 | 在一轮对话的相同时间点运行 `~/.claude/settings.json` 和 `~/.codex/hooks.json` 中的钩子，并加载 Claude Code mod。 | 你自己的钩子文件；文件缺失时不注册任何钩子。 | 实验性 |
+| Webhook | 已签名的 GitHub webhook 可以开始一次对话，监听 `127.0.0.1:3081`，前面需要你自己提供的代理或隧道。 | 环境中的 `DELORUN_GITHUB_WEBHOOK_SECRET`，以及你自己的规则；端点行起初是关闭的，在设置好密钥之前“插件”会显示“Needs setup”。 | 实验性 |
+| 外部智能体 | 智能体把任务交给你已安装的 Codex 或 Claude Code 程序，并在工具程序中运行 Python。 | 已安装并已登录的程序，以及运行 Python 所需的 `python3`；缺少的一项会被略去。Python 在 Windows 上不可用。 | 实验性 |
+| 计算机使用（Cua Driver） | 智能体通过 Cua Driver SDK 查看并操作桌面窗口。 | 启动 Delorun 的程序拥有桌面权限。只支持 Linux 和 Windows；在 macOS 上它显示为不可用，那里的插件是“Computer use”。 | 实验性 |
+
+当可选插件需要你电脑上的某样东西时，“插件”会在它的那一行说明，例如“Needs setup · Needs Chrome or Chromium installed”，旁边附有解决办法（带复制按钮的命令、指向该设置的链接，或一份指南）。这一行绝不会阻止其他插件。每次你打开“插件”以及每次回到它的窗口时，Delorun 都会重新检查，所以一旦你安装了程序或设置了值，这条提示会自行消失。代码智能的语言服务器行和 Webhook 的 GitHub 端点在你开启之前是关闭的；“插件”会告诉你它们还需要什么。
+
+实验性插件在不同发行版之间可能会改变或出问题。Webhook 和浏览器会打开网络监听端口或真实的浏览器，所以开启之前请先阅读每个插件的作用。作为智能体的 Claude Code 和 Codex 是同一个列表中的独立插件。
 
 <a id="give-the-studio-your-own-name-and-icon"></a>
 
