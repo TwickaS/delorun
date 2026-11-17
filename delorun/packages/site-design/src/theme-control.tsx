@@ -15,6 +15,9 @@ const ThemeMenu = lazy(() => import('./theme-menu.tsx'))
 /** The button that opens the menu. */
 const TRIGGER = 'flex size-11 items-center justify-center rounded-(--dl-radius-sm) border border-(--dl-border) bg-(--dl-surface) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--dl-accent-text) active:scale-[0.97]' // us-spelling: quoted output (Tailwind class names)
 
+/** The control's place before scripts run: the button's size. */
+const RESERVED = 'block size-11 shrink-0'
+
 /** The gap between the button and its menu, and the margin kept to the window's edge, in pixels. */
 const GAP = 8
 
@@ -47,7 +50,8 @@ export function ThemeControl({ copy }: { copy: ThemeCopy }) {
   const panel = useRef<HTMLDivElement>(null)
   const [opened, setOpened] = useState(false)
   const place = useCallback(() => { if (button.current !== null && panel.current !== null) placeMenu(button.current, panel.current) }, [])
-  if (!mounted) return null
+  // Until scripts run the control's place is kept, so the header does not grow when the button arrives.
+  if (!mounted) return <span aria-hidden="true" className={RESERVED} />
   return (
     <>
       <button type="button" ref={button} popoverTarget={menu} aria-label={copy.open} className={TRIGGER}>

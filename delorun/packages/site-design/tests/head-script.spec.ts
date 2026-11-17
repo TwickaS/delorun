@@ -147,3 +147,15 @@ describe('the sites\' security headers', () => {
     })
   }
 })
+
+describe('the theme control before scripts run', () => {
+  it('keeps the button\'s place so the header does not grow when it arrives', async () => {
+    const { createElement } = await import('react')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const { ThemeControl } = await import('../src/theme-control.tsx')
+    const html = renderToStaticMarkup(createElement(ThemeControl, { copy: { open: 'Open', title: 'Look', themes: 'Theme', scheme: 'Mode', device: 'System', light: 'Light', dark: 'Dark', back: 'Back', current: name => name, names: { soft: 'Soft', 't3-code': 'Slate', 't3-chat': 'Berry', grove: 'Grove', ocean: 'Ocean', ember: 'Ember', iris: 'Iris', custom: 'Custom' }, toast: { region: 'N', theme: name => name, scheme: name => name, undo: name => name, reset: 'R' } } }))
+    expect(html).toContain('size-11')
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).not.toContain('<button')
+  })
+})
