@@ -125,7 +125,7 @@ function Replays() {
       <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-6" />
       <p className="col-span-full mt-4 max-w-md text-lg text-(--dl-text-muted) lg:col-start-9 lg:col-end-13 lg:mt-0 lg:self-end">{copy.lead}</p>
       <div className="col-span-full mt-10 lg:mt-14">
-        <ReplicaFrame session="changes-and-versions" width="desktop" className="flex justify-center" />
+        <ReplicaFrame session="changes-and-versions" width="responsive" />
       </div>
       <GuideLink link={copy.link} />
     </Section>
