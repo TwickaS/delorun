@@ -11,8 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_IDS, stateAt, stepLength, type ChapterFile } from '../src/replica/model.ts'
 import { ReplicaFrame } from '../src/replica/ReplicaFrame.tsx'
 import { CHAPTER_FILES, loadFixture } from '../src/replica/sessions/index.ts'
-import { ReplicaLive } from '../src/replica/ReplicaLive.tsx'
+import { boxOf, ReplicaLive } from '../src/replica/ReplicaLive.tsx'
 import Studio, { type StudioHandle } from '../src/replica/ReplicaStudio.tsx'
+import { stillMarkup } from '../src/replica/StillScene.tsx'
 
 // The site renders with React 19; this spec mounts through `react-dom/client` itself so no other React copy renders.
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -111,14 +112,76 @@ describe('ReplicaFrame', () => {
     expect(buttonsNamed(container, 'Pause')).toHaveLength(1)
   })
 
-  it('shows each chapter as a still under reduced motion, with no pause', async () => {
+  it('shows each chapter as a still under reduced motion, with no pause, opening on the resting chapter', async () => {
     reduced = true
     const file = CHAPTER_FILES['ordinary-work']
     const { container } = mount(<ReplicaFrame session="ordinary-work" width="desktop" />)
     await until(() => { expect(container.querySelector('[data-studio-replica][inert]')).not.toBeNull() }, 15_000)
     expect(buttonsNamed(container, 'Pause')).toHaveLength(0)
-    act(() => { tabsIn(container).at(-1)!.click() })
-    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(file.chapters.at(-1)!.caption)
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(file.chapters[file.resting]!.caption)
+    act(() => { tabsIn(container)[0]!.click() })
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(file.chapters[0]!.caption)
+  })
+
+  it('keeps the still the server drew once the live replica takes its place', () => {
+    const stills = stillMarkup({ session: 'ordinary-work', width: 'responsive' })
+    const { container } = mount(<ReplicaLive session="ordinary-work" width="responsive" stills={stills} />)
+    for (const width of ['desktop', 'phone'] as const) {
+      expect(container.querySelector(`[data-replica-still="${width}"]`)?.innerHTML).toBe(stills[width])
+    }
+  })
+})
+
+describe('the still the server draws', () => {
+  /**
+   * The text of a still's markup, and of its rows hidden while the replay can play.
+   * @param markup - the still's markup.
+   * @returns the shown text and the hidden text.
+   */
+  function read(markup: string): { readonly shown: string, readonly later: string } {
+    const element = document.createElement('div')
+    element.innerHTML = markup
+    const later = element.querySelector('[data-later]')
+    const hidden = later?.textContent ?? ''
+    later?.remove()
+    return { shown: element.textContent ?? '', later: hidden }
+  }
+
+  it('opens the hero on the question already asked and the agent\'s first reply, and holds the answer for a replay that does not play', async () => {
+    const fixture = await loadFixture('ordinary-work')
+    const texts = fixture.events.flatMap(event => event.type === 'user/message' ? [event.data.content[0]!.text] : event.type === 'assistant/message' ? [event.data.message.content[0]!.text] : [])
+    const { shown, later } = read(stillMarkup({ session: 'ordinary-work', width: 'phone' }).phone!)
+    expect(shown).toContain(texts[0])
+    expect(shown).toContain(texts[1])
+    expect(shown).not.toContain(texts.at(-1))
+    expect(later).toContain(texts.at(-1))
+  })
+
+  it('draws the real Changes section with its rows for the replays, at both widths', () => {
+    const stills = stillMarkup({ session: 'changes-and-versions', width: 'responsive' })
+    for (const width of ['desktop', 'phone'] as const) {
+      const { shown } = read(stills[width]!)
+      expect(shown).toContain('Changed the settings of delorun-theme')
+      expect(shown).toContain('Added the plugin word-count')
+    }
+  })
+
+  it('rests every session on a chapter that ends on its first screen, which one still can hold', () => {
+    for (const id of SESSION_IDS) {
+      const file = CHAPTER_FILES[id]
+      expect(stateAt(file, file.resting, Number.POSITIVE_INFINITY).state.screen).toBe(file.start.screen)
+    }
+  })
+})
+
+describe('the frames', () => {
+  it('fit the hero to about 420 px at a 390 px window, and keep a phone\'s proportions beside the desktop width', () => {
+    // At a 390 px window the frame is 358 px wide.
+    const phone = boxOf('ordinary-work', 'responsive', 'phone')
+    expect(358 * phone.height / phone.width).toBeGreaterThan(400)
+    expect(358 * phone.height / phone.width).toBeLessThan(460)
+    const paired = boxOf('ordinary-work', 'pair', 'phone')
+    expect(paired.height / paired.width).toBeGreaterThan(1.5)
   })
 })
 
@@ -176,7 +239,9 @@ describe('the terminal chapter', () => {
     expect(fixture.terminal?.command).toBe('delorun logs')
     expect(terminal!.textContent).toBe(`$ delorun logs\n${fixture.terminal!.output.join('\n')}\n`)
     // Before the command is typed, the window holds the prompt and the typed part only.
-    view.rerender(draw(file.chapters[index]!.steps[0]!.hold + 3 * 70))
+    const [screen, command] = file.chapters[index]!.steps
+    if (command?.kind !== 'command') throw new Error('the terminal chapter types its command second')
+    view.rerender(draw(screen!.hold + 3 * command.perChar))
     expect(container.querySelector('[data-part="terminal"]')?.textContent).toBe('$ del')
     // Every other chapter draws the studio with its sidebar and no terminal window.
     view.rerender(<Studio file={file} width="desktop" state={stateAt(file, 0, 0).state} epoch={0} handle={createRef<StudioHandle>()} onReady={ready} />)
@@ -184,7 +249,20 @@ describe('the terminal chapter', () => {
     expect(container.querySelector('[data-part="terminal"]')).toBeNull()
   })
 
-  it('shows the terminal from the chapter\'s first moment', () => {
+  it('shows the terminal from the chapter\'s first moment, with the whole command and its output within 700 ms', () => {
     expect(stateAt(file, index, 0).state.screen).toBe('terminal')
+    expect(stateAt(file, index, 700).state.terminal).toEqual({ typed: 'delorun logs', ran: true })
+  })
+})
+
+describe('the replays of changes and setup versions', () => {
+  const file = CHAPTER_FILES['changes-and-versions']
+
+  it('look different from the chapter before within each chapter\'s first 700 ms: a new state, or the press that opens a dialog', () => {
+    for (let chapter = 1; chapter < file.chapters.length; chapter++) {
+      const { state, presses } = stateAt(file, chapter, 700)
+      const before = stateAt(file, chapter - 1, Number.POSITIVE_INFINITY).state
+      expect(JSON.stringify(state) !== JSON.stringify(before) || presses.length > 0).toBe(true)
+    }
   })
 })

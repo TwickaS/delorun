@@ -21,8 +21,8 @@ import * as settings from '../../../packages/plugin-theme/src/settings.ts'
 import { originOf } from '../../../packages/profile-safety/src/versions.ts'
 import { en as versionsCopy } from '../../../packages/bundle-local/src/client/versions-locales.ts'
 import { STRIP_COPY } from '../src/strip/copy.ts'
-import { applyWrites, arrive, BUNDLE_CONFIG, earlierLook, editedName, entryYaml, FRESH_STUDIO, pressesTo, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
-import { differenceName, themeName } from '../src/strip/names.ts'
+import { applyWrites, arrive, BUNDLE_CONFIG, BUNDLE_PACKAGE, earlierLook, editedName, entryYaml, FRESH_STUDIO, heldEntry, pressesTo, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
+import { differenceName, storedAsLine, themeName } from '../src/strip/names.ts'
 import SetupStrip, { fill } from '../src/strip/setup-strip.tsx'
 import { SetupStripStill, STILL_ENTRY, STILL_LOOK_ID } from '../src/strip/still.tsx'
 import { coverRadius, spread, SPREAD_CLASS } from '../src/strip/spread.ts'
@@ -131,6 +131,24 @@ describe('the entry', () => {
     expect(applyWrites(undefined, [])).toBeUndefined()
   })
 
+  it('shows the studio bundle\'s row while the profile holds no entry of its own', () => {
+    expect(heldEntry(START.entry)).toEqual({ config: Object.entries(BUNDLE_CONFIG), bundle: true })
+    expect(heldEntry(after(OCEAN).entry)).toEqual({ config: [['studioAdditions', true], ['palette', 'ocean']], bundle: false })
+    expect(STRIP_COPY.en.bundleFile).toBe(`${BUNDLE_PACKAGE}/cordis.patch.yml`)
+    const bundle = readFileSync(resolve(DELORUN, 'packages/bundle-studio/package.json'), 'utf8')
+    expect(JSON.parse(bundle)).toMatchObject({ name: BUNDLE_PACKAGE })
+  })
+
+  it('says a theme is stored under its id where the id is not its name', () => {
+    expect(storedAsLine(after(look({ look: 't3-chat' })).entry ?? [])).toBe('Berry is stored as t3-chat.')
+    expect(storedAsLine(after(look({ look: 't3-code' })).entry ?? [])).toBe('Slate is stored as t3-code.')
+    for (const id of KNOWN_LOOKS.filter(each => !each.startsWith('t3-'))) {
+      const entry = after(id === 'custom' ? MOSS : look({ look: id })).entry
+      if (entry !== undefined) expect(storedAsLine(entry)).toBeUndefined()
+    }
+    expect(storedAsLine(after(look({ density: 'spacious' })).entry ?? [])).toBeUndefined()
+  })
+
   it('makes no change for light or dark', () => {
     expect(pressesTo(START, look({ scheme: 'dark' }))).toEqual([])
     const dark = after(OCEAN, look({ look: 'ocean', scheme: 'dark' }))
@@ -220,6 +238,28 @@ describe('the strip on the page', () => {
   }
   const press = (button: HTMLButtonElement): void => { act(() => { button.focus(); button.click() }) }
   const status = (): string => host.querySelector('[data-strip-announce]')?.textContent ?? ''
+
+  const entryLine = (): string | undefined => host.querySelector('[data-strip-entry-line]')?.textContent ?? undefined
+
+  it('opens on the entry that applies, the studio\'s sentence for no versions and the page\'s theme marked', () => {
+    const entry = host.querySelector('pre')?.textContent ?? ''
+    expect(entry).toContain(`- id: ${THEME_ROW_ID}`)
+    expect(entry).toContain('studioAdditions: true')
+    expect(entry).not.toContain('palette')
+    expect(host.textContent).toContain(STRIP_COPY.en.bundleFile)
+    expect(entryLine()).toBe(STRIP_COPY.en.bundleNote)
+    expect(host.textContent).toContain(versionsCopy.empty)
+    expect(radio(studio.palette, 'Soft').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('says which id the entry stores Berry under, and drops the line for a theme stored by its name', () => {
+    press(radio(studio.palette, 'Berry'))
+    expect(host.querySelector('pre')?.textContent).toContain('palette: t3-chat')
+    expect(entryLine()).toBe('Berry is stored as t3-chat.')
+    press(radio(studio.palette, 'Ocean'))
+    expect(entryLine()).toBeUndefined()
+    expect(host.textContent).not.toContain(STRIP_COPY.en.bundleFile)
+  })
 
   it('changes the page, writes the entry, lists a version and goes back by name', () => {
     press(radio(studio.palette, 'Ocean'))

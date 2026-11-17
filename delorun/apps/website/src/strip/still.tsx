@@ -68,7 +68,7 @@ export function SetupStripStill() {
     <div className={css.strip} data-setup-strip="still" data-look={STILL_LOOK_ID}>
       <div className={`${css.body} grid grid-cols-4 gap-x-(--grid-gap) lg:grid-cols-12`}>
         <p className={`${css.stillCaption} col-span-full`}>{words.caption}</p>
-        <div className={`${css.controls} col-span-full lg:col-span-4`}>
+        <div className={`${css.controls} col-span-full lg:col-span-5 min-[1440px]:col-span-4`}>
           <div className={css.group}>
             <span className={css.label}>{words.themes}</span>
             <ul className={`${css.tiles} ${css.stillTiles}`}>
@@ -83,7 +83,7 @@ export function SetupStripStill() {
           <Segments label={words.mode} choices={words.modes} chosen={0} />
           <Segments label={words.density} choices={words.densities} chosen={1} />
         </div>
-        <div className={`${css.record} col-span-full grid gap-x-(--grid-gap) lg:col-span-8 lg:grid-cols-2`}>
+        <div className={`${css.record} col-span-full grid gap-x-(--grid-gap) lg:col-span-7 min-[1440px]:col-span-8 min-[1440px]:grid-cols-2`}>
           <section className={css.group} aria-label={copy.entry}>
             <h3 className={css.label}>{copy.entry}</h3>
             <div className={css.entry}>
@@ -93,20 +93,22 @@ export function SetupStripStill() {
               </figure>
             </div>
           </section>
-          <section className={css.group} aria-label={words.versions}>
-            <div className={css.head}><h3 className={css.label}>{words.versions}</h3></div>
-            <div className={css.list}>
-              <ol className={css.versions}>
-                <li className={css.version}>
-                  <span className={css.versionTitle}>{words.version}<span className={css.current}>{words.current}</span></span>
-                  <span className={css.versionLine}>{words.line}</span>
-                </li>
-              </ol>
+          <div className={css.side}>
+            <section className={css.group} aria-label={words.versions}>
+              <div className={css.head}><h3 className={css.label}>{words.versions}</h3></div>
+              <div className={css.list}>
+                <ol className={css.versions}>
+                  <li className={css.version}>
+                    <span className={css.versionTitle}>{words.version}<span className={css.current}>{words.current}</span></span>
+                    <span className={css.versionLine}>{words.line}</span>
+                  </li>
+                </ol>
+              </div>
+            </section>
+            <div className={css.notes}>
+              <p className={css.note}>{copy.backStudio}</p>
+              <p className={css.note}>{copy.backCovers}</p>
             </div>
-          </section>
-          <div className={css.notes}>
-            <p className={css.note}>{copy.backStudio}</p>
-            <p className={css.note}>{copy.backCovers}</p>
           </div>
         </div>
       </div>

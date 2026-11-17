@@ -1,23 +1,28 @@
+/*
+ * The browser's first height: the tabs, the first rows and "Show all plugins". The live browser starts at it and grows
+ * when the visitor shows the whole list; the still holds it while scripts run, so nothing moves when the browser arrives.
+ */
+.root,
+.plain {
+  --browser-first: 500px;
+}
+
 .root {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 640px;
+  grid-template-rows: auto auto;
+  align-content: start;
+  min-height: var(--browser-first);
   min-width: 0;
   color: var(--dl-text);
   font-family: var(--dl-font-sans);
 }
 
-@media (min-width: 960px) {
-  .root { height: 560px; }
-}
-
-.panel { min-height: 0; overflow: hidden; }
+.panel { min-width: 0; }
 
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
+  align-items: start;
 }
 
 @media (min-width: 960px) {
@@ -25,17 +30,19 @@
     grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: var(--dl-space-5);
   }
-  .list { grid-column: 1 / 5; }
-  .detail { grid-column: 5 / 13; }
+  .side { grid-column: 1 / 5; }
+  .detail { grid-column: 5 / 13; position: sticky; top: var(--dl-space-5); }
 }
+
+.side { min-width: 0; padding-bottom: var(--dl-space-3); }
 
 .list {
   margin: 0;
   padding: var(--dl-space-3) 0 var(--dl-space-3);
-  overflow-y: auto;
   list-style: none;
-  scrollbar-width: thin;
 }
+
+.showAll { margin-inline-start: var(--dl-space-3); min-height: 44px; }
 
 .group { margin: 0; padding: 0; list-style: none; }
 
@@ -48,7 +55,7 @@
   line-height: 20px;
 }
 
-.groupName:first-child { margin-top: 0; }
+.list > li:first-child > .groupName { margin-top: 0; }
 
 .row {
   display: block;
@@ -63,7 +70,6 @@
   font: inherit;
   font-size: 15px;
   line-height: 24px;
-  overflow-wrap: anywhere;
   text-align: start;
   cursor: pointer;
   transition:
@@ -71,12 +77,36 @@
     transform var(--dl-motion-press) var(--dl-ease-out);
 }
 
-.row[aria-current="true"] { background: var(--dl-surface-sunken); font-weight: 600; }
+/* A title of more than two lines is clamped; the row's name, its tooltip and the detail's heading carry it whole. */
+.rowTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The chosen row stands apart from the page in every look: a rule in the text colour at its leading edge and a tone mixed
+ * from the text into the ground, since some looks draw the sunken surface as the ground. On a phone no row is chosen
+ * until one is pressed.
+ */
+.row { border-inline-start: 2px solid transparent; }
+
+.row[aria-current="true"] {
+  border-inline-start-color: var(--dl-text);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  background: color-mix(in srgb, var(--dl-text) 7%, var(--dl-surface));
+  font-weight: 600;
+}
+
 .row:active { transform: scale(var(--dl-scale-pressed)); }
 .row:focus-visible { outline: var(--dl-focus-ring); outline-offset: calc(var(--dl-focus-ring-offset) * -1); }
 
 @media (hover: hover) and (pointer: fine) {
-  .row:hover:not([aria-selected='true']) { background: var(--dl-surface-sunken); }
+  .row:hover:not([aria-current='true']) { background: var(--dl-surface-sunken); }
 }
 
 /* On a phone the detail opens under the chosen row; on a wide screen it fills the right-hand columns. */
@@ -89,8 +119,6 @@
 }
 
 .detail {
-  min-height: 0;
-  overflow-y: auto;
   padding: var(--dl-space-3) 0;
 }
 
@@ -111,18 +139,27 @@
 .files p { margin: var(--dl-space-2) 0 0; }
 .files a { color: var(--dl-accent-text); overflow-wrap: anywhere; }
 
-/* The list without scripts: every plugin as text. */
-.plain { height: 100%; overflow-y: auto; padding: var(--dl-space-3) 0; }
-.plain h3 { margin: var(--dl-space-5) 0 var(--dl-space-2); font-size: 14px; font-weight: 600; }
-.plain h3:first-child { margin-top: 0; }
-.plain ul { margin: 0; padding: 0; list-style: none; }
-.plain li { padding: var(--dl-space-2) 0; border-bottom: 1px solid var(--dl-border); }
-.plain strong { display: block; font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
-.plain span { display: block; font-size: 15px; line-height: 24px; max-width: 70ch; overflow-wrap: anywhere; }
-.plain small { display: block; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; }
+/* The list without scripts: every plugin as a term and its descriptions, taking the room it needs. */
+.plain { padding: var(--dl-space-3) 0; color: var(--dl-text); font-family: var(--dl-font-sans); }
+
+/* While scripts run, the still holds the live browser's first height until the browser replaces it. */
+@media (scripting: enabled) {
+  .plain { height: var(--browser-first); overflow: hidden; }
+}
+
+.plainSection + .plainSection { margin-top: var(--dl-space-6); }
+.plainHeading { margin: 0 0 var(--dl-space-2); color: var(--dl-text-muted); font-size: 14px; font-weight: 600; line-height: 20px; }
+.plainList { margin: 0; border-top: 1px solid var(--dl-border); }
+.plainItem { display: grid; gap: var(--dl-space-1); padding: var(--dl-space-3) 0; border-bottom: 1px solid var(--dl-border); }
+.plainTitle { font-size: 16px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.plainSentence { margin: 0; max-width: 70ch; font-size: 15px; line-height: 24px; overflow-wrap: anywhere; }
+.plainNeeds { margin: 0; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.plainIntro { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
+.plain .note { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 14px; }
+.plain .kindSummary { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 15px; line-height: 24px; }
 
 .kinds { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
-.make { height: 100%; overflow-y: auto; padding: var(--dl-space-3) 0; }
+.make { padding: var(--dl-space-3) 0; }
 .make p { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
 .make .kindSummary { margin-top: var(--dl-space-3); color: var(--dl-text-muted); }
 .fileList { margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }

@@ -22,4 +22,10 @@ describe('visible focus, hit areas and the chosen segment on the sites', () => {
   it('fills the solid button with the text colour and reads the surface colour on it', () => {
     expect(css('../src/components/Button.module.css')).toMatch(/\.button\.solid\s*\{[^}]*background:\s*var\(--dl-text\)[^}]*color:\s*var\(--dl-surface\)/)
   })
+
+  it('lets a page hide the tile\'s radio mark and centre the label', () => {
+    const tiles = css('../src/settings/TileGroup.module.css')
+    expect(tiles).toMatch(/\.radio\s*\{[^}]*display:\s*var\(--delorun-tile-mark, block\)/)
+    expect(tiles).toMatch(/\.label\s*\{[^}]*text-align:\s*var\(--delorun-tile-label-align, start\)/)
+  })
 })

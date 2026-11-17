@@ -30,16 +30,18 @@
 
 .frames { display: grid; min-width: 0; }
 
-/* The pair: the desktop width on eight parts and the phone width on three, the phone set lower. */
+/* The pair: the desktop width on eight parts and the phone width on three, the phone set lower. Narrower than 900 px
+   (`PAIR_WIDE` in ReplicaLive.tsx), the phone width alone. */
+.replica[data-width='pair'] { container: replica / inline-size; }
+
 .replica[data-width='pair'] .frames { grid-template-columns: minmax(0, 8fr) minmax(0, 3fr); align-items: start; gap: var(--dl-space-5); }
 
 .replica[data-width='pair'] [data-slot='phone'] { margin-top: var(--dl-space-6); }
 
-@media (max-width: 640px) {
+@container replica (max-width: 899.98px) {
   .replica[data-width='pair'] .frames { grid-template-columns: minmax(0, 1fr); }
-  .replica[data-width='pair'] [data-slot='phone'] { order: -1; margin-top: 0; }
-  .replica[data-width='pair'] [data-slot='desktop'] { overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; }
-  .replica[data-width='pair'] [data-slot='desktop'] > * { min-width: 600px; scroll-snap-align: start; }
+  .replica[data-width='pair'] [data-slot='desktop'] { display: none; }
+  .replica[data-width='pair'] [data-slot='phone'] { margin-top: 0; }
 }
 
 /* Responsive: the desktop width when the replica's column is 700 px or wider, the phone width below; `WIDE` in ReplicaLive.tsx is the same width. */
@@ -48,4 +50,18 @@
 @container replica (max-width: 699.98px) {
   .frames[data-width='responsive'] > [data-slot='desktop'] { display: none; }
   .frames[data-width='responsive'] > [data-slot='phone'] { display: block; }
+}
+
+/* A responsive replica as wide as the page sets its frame on the grid's first eight columns and the caption in the four beside it. */
+@container replica (min-width: 1200px) {
+  .replica[data-width='responsive'] .panel { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--grid-gap, var(--dl-space-5)); }
+  .replica[data-width='responsive'] .panel > .frames { grid-column: 1 / 9; }
+  .replica[data-width='responsive'] .panel > .caption { grid-column: 9 / 13; align-self: start; min-height: 0; max-width: 34ch; font-size: 16px; }
+}
+
+/* On a phone the chapters sit two by two, with Pause beside them, so no chapter is cut off. */
+@media (max-width: 479.98px) {
+  .controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .controls .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .controls .rail [role='tab'] { min-height: 44px; padding-block: var(--dl-space-1); text-align: start; white-space: normal; }
 }

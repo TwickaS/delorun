@@ -8,17 +8,29 @@
  *
  * @module @delorun/website/replica-options
  */
+import { loadView } from '../../packages/site-design/src/changelog.ts'
 import { STUDIO_ALIASES } from './studio-aliases.ts'
 
-/** The release the site markets, which a recorded session must have been made on. */
-export const MARKETED_RELEASE = '0.1.0'
+/**
+ * The release the site markets: the newest version in the changelog record, which is also the version the home page
+ * names. There is no literal to keep in step with it.
+ * @param root - the repository root.
+ * @returns the version, such as `0.1.0-preview.2`.
+ * @throws Error when the record has no version, since a build then has no release to market.
+ */
+export function marketedRelease(root: string): string {
+  const version = loadView(root)?.versions[0]?.version
+  if (version === undefined) throw new Error('replica: the changelog record has no version, so there is no release to market')
+  return version
+}
 
 export { ALLOW_STANDINS as ALLOW_STANDINS_VARIABLE } from './src/replica/build/release.ts'
 
 /**
  * The replica plugins' options.
+ * @param root - the repository root, where the changelog record is.
  * @returns the aliases and the marketed release. Nothing here names or sets the stand-in variable.
  */
-export function replicaOptions() {
-  return { aliases: STUDIO_ALIASES, release: MARKETED_RELEASE } as const
+export function replicaOptions(root: string) {
+  return { aliases: STUDIO_ALIASES, release: marketedRelease(root) } as const
 }

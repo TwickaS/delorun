@@ -23,6 +23,12 @@ export interface ChatScreenProps {
   readonly strings: ReplicaStrings
   /** Draws the approval card for a pending approval; the still leaves it out. */
   readonly approval?: ((pending: PendingApproval) => ReactNode) | undefined
+  /**
+   * For the still: the number of events the replay starts from. The events after it, up to `shown`, are drawn in a
+   * wrapper the stylesheet shows only where the replay does not play (reduced motion, scripts off), so one markup holds
+   * both the replay's first state and the finished chat, which then keeps its end in view.
+   */
+  readonly later?: number | undefined
 }
 
 /**
@@ -64,7 +70,7 @@ export function pendingApproval(shown: readonly ReplicaEvent[]): PendingApproval
  * @param props - see {@link ChatScreenProps}.
  * @returns the transcript and the composer or the card.
  */
-export function ChatScreen({ events, shown, draft, typing, strings, approval }: ChatScreenProps) {
+export function ChatScreen({ events, shown, draft, typing, strings, approval, later }: ChatScreenProps) {
   const visible = events.slice(0, shown)
   const pending = pendingApproval(visible)
   const rows = visible.map((event, index): ReactNode => {
@@ -89,8 +95,13 @@ export function ChatScreen({ events, shown, draft, typing, strings, approval }: 
         return null
     }
   })
-  return <div className={css.chatScreen}>
-    <Transcript label={REPLICA_COPY.transcript} className={css.transcript}>{rows}</Transcript>
+  const first = later === undefined ? rows : rows.slice(0, later)
+  const rest = later === undefined ? [] : rows.slice(later)
+  return <div className={css.chatScreen} data-still-chat={later === undefined ? undefined : ''}>
+    <Transcript label={REPLICA_COPY.transcript} className={css.transcript}>
+      {first}
+      {rest.some(row => row !== null) ? <div className={css.later} data-later="">{rest}</div> : null}
+    </Transcript>
     <div className={css.composerSlot}>
       {pending !== undefined && approval !== undefined
         ? approval(pending)

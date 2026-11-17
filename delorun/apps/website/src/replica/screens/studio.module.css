@@ -92,6 +92,19 @@
 
 .transcript { padding: var(--dl-space-4); }
 
+/*
+ * The still's chat: the rows after the replay's first state are the finished chat, drawn only where the replay does not
+ * play; there the chat keeps its end in view without a script. ReplicaLive's noscript rule does the same with scripts off.
+ */
+.later { display: none; }
+
+[data-still-chat] .transcript { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .later { display: contents; }
+  [data-still-chat] .transcript { justify-content: flex-end; }
+}
+
 .composerSlot { padding: 0 var(--dl-space-4) var(--dl-space-4); }
 
 /* A press the chapter script plays: the control shrinks as a pressed button does and carries the focus ring's colour. */

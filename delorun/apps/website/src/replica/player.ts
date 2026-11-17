@@ -1,8 +1,8 @@
 /**
  * The replica's player: which chapter shows, how far into it, and whether it plays. It plays only while the drawn
  * studio is ready, the frame is on screen, the tab is visible and the visitor has not paused it; it moves on to the next
- * chapter by itself and stops after the last. Under reduced motion it never plays: each chapter shows as its last
- * state, a still, and the visitor moves between chapters with the rail. A press in the script is handed to the drawn
+ * chapter by itself and stops after the last. Under reduced motion it never plays: it opens on the session's resting
+ * chapter, each chapter shows as its last state, a still, and the visitor moves between chapters with the rail. A press in the script is handed to the drawn
  * studio once, when the timeline reaches it.
  * @module @delorun/website/replica/player
  */
@@ -91,7 +91,8 @@ function useOnScreen(frame: RefObject<Element | null>): boolean {
 export function usePlayer({ file, ready, frame, press }: PlayerOptions): Player {
   const reduced = useReducedMotion()
   const onScreen = useOnScreen(frame)
-  const [chapter, setChapter] = useState(0)
+  // A replay that does not play opens on its resting chapter, the one its still shows.
+  const [chapter, setChapter] = useState(() => reduced ? file.resting : 0)
   const [at, setAt] = useState(0)
   const [epoch, setEpoch] = useState(0)
   const [paused, setPaused] = useState(false)

@@ -11,7 +11,7 @@ import type { ReplicaFixture } from '../model.ts'
 export const FIXTURE: ReplicaFixture = {
   id: 'ordinary-work',
   standIn: true,
-  release: '0.1.0-preview.2',
+  release: '0.1.0-preview.1.6',
   clock: '2026-11-17T10:50:00Z',
   events: [
     { type: 'turn/start', data: { turn: 1 } },

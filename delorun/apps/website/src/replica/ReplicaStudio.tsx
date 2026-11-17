@@ -3,7 +3,8 @@
  * wrapper that carries the scoped studio tokens. It is inert: it takes no focus and no press, and assistive technology
  * reads the chapter's caption instead (`ReplicaLive.tsx`). It loads in the browser only, as a chunk of its own, with
  * the session's fixture as another; the player in `ReplicaLive.tsx` tells it what to show and which control to press.
- * In a terminal chapter it draws the terminal window in the studio's place.
+ * In a terminal chapter it draws the terminal window in the studio's place. On Setup versions it scrolls the section
+ * to its list of saved versions, which is what the chapter is about, once the section has drawn it.
  * @module @delorun/website/replica/ReplicaStudio
  */
 import 'virtual:replica-tokens.css'
@@ -67,6 +68,19 @@ export function findTarget(root: ParentNode, target: PressTarget): HTMLButtonEle
 }
 
 /**
+ * Scroll a screen so the settings card holding the first saved version sits at its top.
+ * @param screen - the screen's scrolling element.
+ * @returns whether the list was there to scroll to.
+ */
+function revealVersions(screen: HTMLElement): boolean {
+  const row = screen.querySelector('[data-version]')
+  const card = row?.closest('section') ?? row
+  if (card == null) return false
+  screen.scrollTop += card.getBoundingClientRect().top - screen.getBoundingClientRect().top - Number.parseFloat(getComputedStyle(screen).paddingTop)
+  return true
+}
+
+/**
  * Render the drawn studio.
  * @param props - see {@link StudioProps}.
  * @returns the studio, or nothing until its fixture arrives.
@@ -76,7 +90,11 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
   const [fixture, setFixture] = useState<ReplicaFixture | undefined>()
   useEffect(() => {
     let current = true
-    void loadFixture(file.session).then((loaded) => { if (current) setFixture(shiftClock(loaded, Date.now() - Date.parse(loaded.clock))) })
+    // Without its fixture the studio is never ready, so the frame keeps its still.
+    loadFixture(file.session).then(
+      (loaded) => { if (current) setFixture(shiftClock(loaded, Date.now() - Date.parse(loaded.clock))) },
+      (error: unknown) => { console.error('The studio replay did not load.', error) },
+    )
     return () => { current = false }
   }, [file.session])
   useEffect(() => { if (fixture !== undefined) onReady() }, [fixture, onReady])
@@ -91,6 +109,15 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
       return true
     },
   }), [])
+  const onVersions = state.screen === 'versions' && fixture !== undefined
+  useEffect(() => {
+    const screen = onVersions ? root.current?.querySelector<HTMLElement>('[data-screen="versions"]') : undefined
+    if (screen == null || revealVersions(screen)) return
+    // The section asks for its list after its first render, so the rows arrive a moment later.
+    const observer = new MutationObserver(() => { if (revealVersions(screen)) observer.disconnect() })
+    observer.observe(screen, { childList: true, subtree: true })
+    return () => { observer.disconnect() }
+  }, [onVersions, epoch])
   if (fixture === undefined) return null
   const changes = fixture.changes[state.changes]
   const versions = fixture.versions[state.versions]

@@ -19,6 +19,9 @@ export const THEME_PLUGIN = '@delorun/plugin-theme'
 /** The studio bundle's own row config, the layer a profile's entry is written over. */
 export const BUNDLE_CONFIG: Readonly<Record<string, string | number | boolean>> = { studioAdditions: true }
 
+/** The package whose `cordis.patch.yml` holds the bundle's row. */
+export const BUNDLE_PACKAGE = '@delorun/bundle-studio'
+
 /** The studio's contrast value for each of the site's contrast stops: quiet text moves 60% of the way at 200, as the site's stops move it. */
 export const STOP_CONTRAST: Readonly<Record<ContrastId, number>> = { default: 100, high: 125, highest: 150 }
 
@@ -160,6 +163,26 @@ export function editedName(): string {
  */
 export function earlierLook(state: StripState): Look | undefined {
   return state.history.length < 2 ? undefined : state.history.at(-2)
+}
+
+/**
+ * The entry that applies: the profile's own, or the studio bundle's row while the profile holds none, as in a fresh
+ * studio and after a change back to the bundle's settings removed the profile's entry.
+ * @param entry - the profile's entry config, or undefined.
+ * @returns the config that applies and whether it is the bundle's.
+ */
+export function heldEntry(entry: EntryConfig | undefined): { readonly config: EntryConfig; readonly bundle: boolean } {
+  return entry === undefined ? { config: Object.entries(BUNDLE_CONFIG), bundle: true } : { config: entry, bundle: false }
+}
+
+/**
+ * The palette id an entry stores, if it stores one.
+ * @param entry - the entry's config.
+ * @returns the id, such as `t3-chat`, or undefined.
+ */
+export function storedPalette(entry: EntryConfig): string | undefined {
+  const value = entry.find(([key]) => key === 'palette')?.[1]
+  return typeof value === 'string' ? value : undefined
 }
 
 /**
