@@ -9,14 +9,15 @@
  */
 import 'virtual:replica-tokens.css'
 import strings from 'virtual:replica-strings'
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
-import { shiftClock, type ChapterFile, type PressTarget, type ReplicaFixture, type StudioState } from './model.ts'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref, type RefObject } from 'react'
+import { shiftClock, type ChapterFile, type PressTarget, type ReplicaFixture, type Screen, type StudioState } from './model.ts'
 import { ChatScreen } from './screens/ChatScreen.tsx'
 import { RealApproval, RealChanges, RealVersions, SECTION_DICTIONARIES } from './screens/real.tsx'
 import { StudioLayout, type ReplicaWidth } from './screens/StudioLayout.tsx'
 import { TerminalWindow } from './screens/TerminalWindow.tsx'
 import { loadFixture } from './sessions/index.ts'
 import { IconSprite } from './studio/icons.tsx'
+import live from './screens/live.module.css'
 import css from './screens/studio.module.css'
 import { WRAPPER_PROPS } from './wrapper.ts'
 
@@ -80,6 +81,44 @@ function revealVersions(screen: HTMLElement): boolean {
   return true
 }
 
+/** How many frames the incoming chapter gets to draw its first state before the outgoing one fades; the fade starts early if it is drawn. */
+const SETTLE_FRAMES = 30
+
+/**
+ * The chapter that has just ended, kept painted above the new one as an inert copy until the new one has drawn its first
+ * state, then faded out (and removed at once under reduced motion). The studio is never shown empty between chapters.
+ * @param props - the copy's markup, the new chapter's root, the screen it shows, and what to call when the copy can go.
+ * @returns the copy.
+ */
+function Outgoing({ html, root, screen, onDone }: { readonly html: string, readonly root: RefObject<HTMLElement | null>, readonly screen: Screen, readonly onDone: () => void }) {
+  const [fading, setFading] = useState(false)
+  useEffect(() => {
+    let frames = 0
+    let frame = 0
+    const settled = (): boolean => {
+      // Setup versions asks for its list after its first render; every other screen is drawn by then.
+      if (screen !== 'versions') return frames >= 2
+      return frames >= 2 && root.current?.querySelector('[data-version]') != null
+    }
+    const tick = () => {
+      frames += 1
+      if (settled() || frames >= SETTLE_FRAMES) setFading(true)
+      else frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(frame) }
+  }, [root, screen])
+  useEffect(() => {
+    if (!fading) return
+    const timer = setTimeout(onDone, FADE_LIMIT)
+    return () => { clearTimeout(timer) }
+  }, [fading, onDone])
+  return <div className={live.outgoing} data-outgoing="" data-fading={fading ? '' : undefined} aria-hidden="true" inert onTransitionEnd={(event) => { if (event.target === event.currentTarget) onDone() }} dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+/** The longest the fade takes before the copy is removed whether or not the browser reported its end, in milliseconds. */
+const FADE_LIMIT = 400
+
 /**
  * Render the drawn studio.
  * @param props - see {@link StudioProps}.
@@ -118,19 +157,30 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
     observer.observe(screen, { childList: true, subtree: true })
     return () => { observer.disconnect() }
   }, [onVersions, epoch])
+  const [seenEpoch, setSeenEpoch] = useState(epoch)
+  const [outgoing, setOutgoing] = useState<string | undefined>()
+  // A new chapter draws its sections from their first state; the chapter before stays painted over it until then.
+  if (seenEpoch !== epoch) {
+    setSeenEpoch(epoch)
+    setOutgoing(root.current === null ? undefined : root.current.outerHTML.replace(/\sid="[^"]*"/g, ''))
+  }
+  const dropOutgoing = useCallback(() => { setOutgoing(undefined) }, [])
   if (fixture === undefined) return null
   const changes = fixture.changes[state.changes]
   const versions = fixture.versions[state.versions]
   const { screen } = state
-  return <div ref={root} {...WRAPPER_PROPS} className={css.root} inert>
-    <IconSprite />
-    {screen === 'terminal'
-      ? <TerminalWindow terminal={state.terminal} output={fixture.terminal?.output ?? []} />
-      : <StudioLayout file={file} width={width} screen={screen} strings={strings} screens={{
-          chat: <ChatScreen events={fixture.events} shown={state.shown} draft={state.draft} typing={state.typing} strings={strings}
-            approval={pending => <RealApproval key={`${String(epoch)} ${pending.id}`} pending={pending} />} />,
-          changes: changes === undefined ? null : <RealChanges key={epoch} state={changes} groups={state.groups} />,
-          versions: versions === undefined ? null : <RealVersions key={epoch} versions={versions} changes={fixture.versionChanges} />,
-        }} />}
-  </div>
+  return <>
+    <div ref={root} {...WRAPPER_PROPS} className={css.root} inert>
+      <IconSprite />
+      {screen === 'terminal'
+        ? <TerminalWindow terminal={state.terminal} output={fixture.terminal?.output ?? []} />
+        : <StudioLayout file={file} width={width} screen={screen} strings={strings} screens={{
+            chat: <ChatScreen events={fixture.events} shown={state.shown} draft={state.draft} typing={state.typing} strings={strings}
+              approval={pending => <RealApproval key={`${String(epoch)} ${pending.id}`} pending={pending} />} />,
+            changes: changes === undefined ? null : <RealChanges key={epoch} state={changes} groups={state.groups} />,
+            versions: versions === undefined ? null : <RealVersions key={epoch} versions={versions} changes={fixture.versionChanges} />,
+          }} />}
+    </div>
+    {outgoing === undefined ? null : <Outgoing key={seenEpoch} html={outgoing} root={root} screen={state.screen} onDone={dropOutgoing} />}
+  </>
 }

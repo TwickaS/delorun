@@ -21,12 +21,16 @@ export interface ChatScreenProps {
   readonly draft: string
   readonly typing: boolean
   readonly strings: ReplicaStrings
-  /** Draws the approval card for a pending approval; the still leaves it out. */
+  /**
+   * Draws the approval card for a pending approval. The still passes it too, for an approval pending in the events it
+   * starts from (`later`).
+   */
   readonly approval?: ((pending: PendingApproval) => ReactNode) | undefined
   /**
    * For the still: the number of events the replay starts from. The events after it, up to `shown`, are drawn in a
    * wrapper the stylesheet shows only where the replay does not play (reduced motion, scripts off), so one markup holds
-   * both the replay's first state and the finished chat, which then keeps its end in view.
+   * both the replay's first state and the finished chat, which then keeps its end in view. An approval pending at that
+   * first state shows its card there, and the composer in the finished chat.
    */
   readonly later?: number | undefined
 }
@@ -95,6 +99,8 @@ export function ChatScreen({ events, shown, draft, typing, strings, approval, la
         return null
     }
   })
+  const atStart = later === undefined || approval === undefined ? undefined : pendingApproval(visible.slice(0, later))
+  const composer = <Composer label={strings.conversation['placeholder.default']} placeholder={strings.conversation['placeholder.default']} value={draft} typing={typing} sendLabel={strings.conversation['input.send']} />
   const first = later === undefined ? rows : rows.slice(0, later)
   const rest = later === undefined ? [] : rows.slice(later)
   return <div className={css.chatScreen} data-still-chat={later === undefined ? undefined : ''}>
@@ -103,9 +109,12 @@ export function ChatScreen({ events, shown, draft, typing, strings, approval, la
       {rest.some(row => row !== null) ? <div className={css.later} data-later="">{rest}</div> : null}
     </Transcript>
     <div className={css.composerSlot}>
-      {pending !== undefined && approval !== undefined
-        ? approval(pending)
-        : <Composer label={strings.conversation['placeholder.default']} placeholder={strings.conversation['placeholder.default']} value={draft} typing={typing} sendLabel={strings.conversation['input.send']} />}
+      {atStart !== undefined && approval !== undefined
+        ? <>
+            <div className={css.startOnly} data-start-only="">{approval(atStart)}</div>
+            <div className={css.later} data-later="">{composer}</div>
+          </>
+        : pending !== undefined && approval !== undefined ? approval(pending) : composer}
     </div>
   </div>
 }

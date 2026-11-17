@@ -105,14 +105,21 @@ const STILL_SECTION_STYLES = [
 ] as const
 
 /**
- * Every CSS module of a directory and its subdirectories, but a `preview/` one.
+ * The styles of the approval card, which only a still that opens on an approval draws (`opens` on the replica). Its "Allow
+ * for this chat" choice has styles of its own only for a failure message, which a still never shows.
+ */
+const STILL_APPROVAL_STYLES = ['packages/client/ui-approval/src/client/ApprovalPanel.module.css'] as const
+
+/**
+ * Every CSS module of a directory and its subdirectories, but a `preview/` one and the live studio's own (`live.module.css`,
+ * which the server's still does not draw).
  * @param dir - the directory.
  * @returns absolute paths.
  */
 function cssModules(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
     ? entry.name === 'preview' ? [] : cssModules(join(dir, entry.name))
-    : entry.name.endsWith('.module.css') ? [join(dir, entry.name)] : [])
+    : entry.name.endsWith('.module.css') && entry.name !== 'live.module.css' ? [join(dir, entry.name)] : [])
 }
 
 /**
@@ -128,10 +135,12 @@ function cssModules(dir: string): string[] {
 function island(server: boolean, tokens: string): string {
   if (!server) return "export function island() { return '' }\n"
   const styles = [...cssModules(here('../')), ...cssModules(`${ROOT}delorun/packages/brand/src/replica`), ...BRAND_STILL_COMPONENTS.map(name => `${ROOT}delorun/packages/brand/src/components/${name}.module.css`), ...STILL_SECTION_STYLES.map(file => `${ROOT}${file}`)]
+  const approval = STILL_APPROVAL_STYLES.map(file => `${ROOT}${file}`)
   return `import { createElement } from 'react'\nimport { renderToStaticMarkup } from 'react-dom/server'\nimport { ReplicaLive } from ${JSON.stringify(here('../ReplicaLive.tsx'))}\nimport { stillMarkup } from ${JSON.stringify(here('../StillScene.tsx'))}\n`
-    + styles.map((file, index) => `import style${String(index)} from ${JSON.stringify(`${file}?inline`)}\n`).join('')
+    + [...styles, ...approval].map((file, index) => `import style${String(index)} from ${JSON.stringify(`${file}?inline`)}\n`).join('')
     + `const STYLE = [${JSON.stringify(tokens)}, ${styles.map((_, index) => `style${String(index)}`).join(', ')}].join('')\n`
-    + 'export function island(props) { return `<style>${STYLE}</style>` + renderToStaticMarkup(createElement(ReplicaLive, { ...props, stills: stillMarkup(props) })) }\n'
+    + `const APPROVAL = [${approval.map((_, index) => `style${String(styles.length + index)}`).join(', ')}].join('')\n`
+    + 'export function island(props) { return `<style>${STYLE}${props.opens === undefined ? \'\' : APPROVAL}</style>` + renderToStaticMarkup(createElement(ReplicaLive, { ...props, stills: stillMarkup(props) })) }\n'
 }
 
 /**

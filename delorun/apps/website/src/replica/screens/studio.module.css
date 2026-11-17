@@ -90,7 +90,10 @@
 
 .chatScreen { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
 
+/* Messages sit at the bottom, next to the composer, as the studio draws them; an overflowing chat still scrolls to its start. */
 .transcript { padding: var(--dl-space-4); }
+
+.transcript > :first-child { margin-block-start: auto; }
 
 /*
  * The still's chat: the rows after the replay's first state are the finished chat, drawn only where the replay does not
@@ -98,10 +101,14 @@
  */
 .later { display: none; }
 
+/* What the still shows at the replay's first state only: the finished chat shows the later rows in its place. */
+.startOnly { display: contents; }
+
 [data-still-chat] .transcript { overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   .later { display: contents; }
+  .startOnly { display: none; }
   [data-still-chat] .transcript { justify-content: flex-end; }
 }
 
@@ -115,46 +122,12 @@
   transition: transform var(--dl-motion-press) var(--dl-ease-out);
 }
 
-/* The terminal window: a plain terminal in the frame's box, outside the studio's layout. */
-.terminalWindow {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
-  overflow: hidden;
-  background: var(--dl-surface-sunken);
-  color: var(--dl-text);
-  contain: layout paint;
-}
-
-.terminalBar {
-  display: flex;
-  align-items: center;
-  gap: var(--dl-space-2);
-  padding: var(--dl-space-3) var(--dl-space-4);
-  border-bottom: 1px solid var(--dl-border);
-  background: var(--dl-surface-raised);
-}
-
-.terminalDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--dl-border);
-}
-
-.terminalBody {
-  box-sizing: border-box;
-  min-height: 0;
-  margin: 0;
-  padding: var(--dl-space-4);
-  overflow: auto;
-  font-family: var(--dl-font-mono);
-  font-size: 12.5px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.prompt { color: var(--dl-text-muted); }
-
 .root { height: 100%; }
+
+/* A change's name wraps in a narrow frame instead of being cut off. */
+.layout :global([data-replica-changes]) [data-change-id] > div:first-child > :first-child {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

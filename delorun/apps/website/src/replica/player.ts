@@ -18,6 +18,8 @@ export interface PlayerOptions {
   readonly frame: RefObject<Element | null>
   /** Shows a press on a control and presses it. */
   readonly press: (target: PressTarget) => Promise<boolean>
+  /** The index of the chapter the replay opens on, and plays again from after the last chapter; 0 when absent. */
+  readonly opening?: number | undefined
 }
 
 /** What the player shows and what the visitor can do with it. */
@@ -88,11 +90,11 @@ function useOnScreen(frame: RefObject<Element | null>): boolean {
  * @param options - see {@link PlayerOptions}.
  * @returns the player.
  */
-export function usePlayer({ file, ready, frame, press }: PlayerOptions): Player {
+export function usePlayer({ file, ready, frame, press, opening = 0 }: PlayerOptions): Player {
   const reduced = useReducedMotion()
   const onScreen = useOnScreen(frame)
   // A replay that does not play opens on its resting chapter, the one its still shows.
-  const [chapter, setChapter] = useState(() => reduced ? file.resting : 0)
+  const [chapter, setChapter] = useState(() => reduced ? file.resting : opening)
   const [at, setAt] = useState(0)
   const [epoch, setEpoch] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -148,8 +150,8 @@ export function usePlayer({ file, ready, frame, press }: PlayerOptions): Player 
     setPaused(false)
   }, [])
   const toggle = useCallback(() => {
-    if (ended) select(0)
+    if (ended) select(opening)
     else setPaused(value => !value)
-  }, [ended, select])
+  }, [ended, select, opening])
   return { chapter, state, epoch, playing, paused, ended, reduced, select, toggle }
 }
