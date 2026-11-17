@@ -8,6 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
 import { createPacksClient } from '@delorun/plugin-packs/client'
 import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
@@ -181,8 +182,11 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
   const rows = createSnapshotStore<Readonly<Record<string, RowView>>>({})
   const knownRows = new Map<string, PluginEntryId>()
   const setRow = (id: string, view: RowView): void => { rows.set({ ...rows.getSnapshot(), [id]: view }) }
+  // An add in flight keeps its own "installing" card: a re-read of the list must not reset it, or its Add would show again and be pressed twice.
+  const inflight = new Set<string>()
+  const inflightRows = new Set<string>()
   const setAllRows = (ids: readonly string[], state: BundleState): void => {
-    rows.set({ ...rows.getSnapshot(), ...Object.fromEntries(ids.map(id => [id, { state }])) })
+    rows.set({ ...rows.getSnapshot(), ...Object.fromEntries(ids.filter(id => !inflightRows.has(id)).map(id => [id, { state }])) })
   }
   const readRows = async (ids: readonly string[]): Promise<void> => {
     const remote = pluginManager(ctx)
@@ -196,6 +200,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       return
     }
     for (const id of ids) {
+      if (inflightRows.has(id)) continue
       const found = listed.value.flatMap(bundle => bundle.rows.filter(each => each.rowId === id).map(each => ({ bundle, each })))[0]
       const plugin = found?.each.entryId === undefined ? undefined : live.value.find(each => each.entryId === found.each.entryId)
       if (found?.each.entryId === undefined || plugin === undefined) {
@@ -215,7 +220,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
   }
   const set = (name: string, view: BundleView): void => { views.set({ ...views.getSnapshot(), [name]: view }) }
   const setAll = (names: readonly string[], state: BundleState): void => {
-    views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
+    views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.filter(name => !inflight.has(name)).map(name => [name, { state }])) })
   }
   const packViews = new Map<string, PackView>()
   // The Host's packs routes; a Host without plugin packs answers 404, which reads as no packs.
@@ -252,6 +257,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       return
     }
     const show = (name: string, packsKnown: boolean): void => {
+      if (inflight.has(name)) return
       const bundle = listed.value.find(each => each.name === name)
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
@@ -326,6 +332,72 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       following.delete(name)
     }
   }
+  const runInstall = async (name: string): Promise<void> => {
+    const bundle = known.get(name)
+    const remote = pluginManager(ctx)
+    const before = views.getSnapshot()[name]
+    const pack = packViews.get(name)
+    // A failed pack starts again from the same Retry; the Host's queue takes a failed item back.
+    if ((before?.state === 'available' && pack?.kind === 'available') || (before?.state === 'failed' && pack?.kind === 'failed')) {
+      const packs: PacksRemote = packsClient
+      const { reason: _failure, ...fresh } = before
+      set(name, { ...fresh, state: 'installing' })
+      try {
+        const queued = await packs.enqueue({ names: [name] })
+        set(name, { ...fresh, state: queued.ok ? 'installing' : 'failed' })
+        // The downloads panel reads the same install list; asking it to read now shows this add at once.
+        if (queued.ok) { currentDownloadsSource().refresh(); void followPack(name) }
+      } catch (error) {
+        console.warn('delorun onboarding: the plugin pack was not queued', error)
+        set(name, { ...fresh, state: 'failed' })
+      }
+      return
+    }
+    if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
+    set(name, { ...before, state: 'installing' })
+    let done = false
+    const finish = (view: BundleView): void => {
+      if (done) return
+      done = true
+      clearTimeout(slowTimer)
+      clearInterval(pollTimer)
+      set(name, view)
+    }
+    // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
+    const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())
+    const pollTimer = setInterval(() => {
+      if (done || views.getSnapshot()[name]?.state !== 'slow') return
+      void remote.listBundles().then((listed) => {
+        const now = listed.ok ? listed.value.find(each => each.name === name) : undefined
+        const state = stateOf(now)
+        if (state === 'installed') finish({ ...before, state })
+      }, () => undefined)
+    }, options.pollMs)
+    try {
+      const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
+      const result = target === undefined
+        ? await remote.setBundleEnabled(name, true)
+        : await remote.installBundle(target.spec, {
+          enabled: true,
+          requestId: randomUUID() as NonNullable<InstallOptions['requestId']>,
+          registry: null,
+          ...target.spec.startsWith('link:') ? {} : { saveExact: true },
+        })
+      if (!result.ok) {
+        // The plugin manager's refusal, in its own words, so the card says what happened.
+        finish({ ...before, state: 'failed', ...reasonOfFailure(result.error) })
+      } else if (result.value.application === 'applied' || result.value.application === 'restart-required') {
+        finish({ ...before, state: result.value.application === 'applied' ? 'installed' : 'restart' })
+      } else {
+        const error = result.value.error
+        finish({ ...before, state: 'failed', ...error === undefined ? {} : { reason: error.diagnostic ?? error.code } })
+      }
+    } catch (error) {
+      // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
+      console.warn('delorun onboarding: the plugin was not added', error)
+      finish({ ...before, state: 'failed' })
+    }
+  }
   return {
     views,
     refresh: (names) => {
@@ -336,69 +408,8 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       })
     },
     install: async (name) => {
-      const bundle = known.get(name)
-      const remote = pluginManager(ctx)
-      const before = views.getSnapshot()[name]
-      const pack = packViews.get(name)
-      // A failed pack starts again from the same Retry; the Host's queue takes a failed item back.
-      if ((before?.state === 'available' && pack?.kind === 'available') || (before?.state === 'failed' && pack?.kind === 'failed')) {
-        const packs: PacksRemote = packsClient
-        const { reason: _failure, ...fresh } = before
-        set(name, { ...fresh, state: 'installing' })
-        try {
-          const queued = await packs.enqueue({ names: [name] })
-          set(name, { ...fresh, state: queued.ok ? 'installing' : 'failed' })
-          if (queued.ok) void followPack(name)
-        } catch (error) {
-          console.warn('delorun onboarding: the plugin pack was not queued', error)
-          set(name, { ...fresh, state: 'failed' })
-        }
-        return
-      }
-      if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
-      set(name, { ...before, state: 'installing' })
-      let done = false
-      const finish = (view: BundleView): void => {
-        if (done) return
-        done = true
-        clearTimeout(slowTimer)
-        clearInterval(pollTimer)
-        set(name, view)
-      }
-      // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
-      const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())
-      const pollTimer = setInterval(() => {
-        if (done || views.getSnapshot()[name]?.state !== 'slow') return
-        void remote.listBundles().then((listed) => {
-          const now = listed.ok ? listed.value.find(each => each.name === name) : undefined
-          const state = stateOf(now)
-          if (state === 'installed') finish({ ...before, state })
-        }, () => undefined)
-      }, options.pollMs)
-      try {
-        const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
-        const result = target === undefined
-          ? await remote.setBundleEnabled(name, true)
-          : await remote.installBundle(target.spec, {
-            enabled: true,
-            requestId: randomUUID() as NonNullable<InstallOptions['requestId']>,
-            registry: null,
-            ...target.spec.startsWith('link:') ? {} : { saveExact: true },
-          })
-        if (!result.ok) {
-          // The plugin manager's refusal, in its own words, so the card says what happened.
-          finish({ ...before, state: 'failed', ...reasonOfFailure(result.error) })
-        } else if (result.value.application === 'applied' || result.value.application === 'restart-required') {
-          finish({ ...before, state: result.value.application === 'applied' ? 'installed' : 'restart' })
-        } else {
-          const error = result.value.error
-          finish({ ...before, state: 'failed', ...error === undefined ? {} : { reason: error.diagnostic ?? error.code } })
-        }
-      } catch (error) {
-        // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
-        console.warn('delorun onboarding: the plugin was not added', error)
-        finish({ ...before, state: 'failed' })
-      }
+      inflight.add(name)
+      try { await runInstall(name) } finally { inflight.delete(name) }
     },
     rows,
     refreshRows: (ids) => {
@@ -414,6 +425,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const before = rows.getSnapshot()[id]
       if (before?.state !== 'available' || entry === undefined || remote === undefined) return
       setRow(id, { ...before, state: 'installing' })
+      inflightRows.add(id)
       try {
         const result = await remote.setPluginEnabled(entry, true)
         const application = result.ok ? result.value.application : 'failed'
@@ -422,7 +434,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
         // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
         console.warn('delorun onboarding: the optional plugin was not turned on', error)
         setRow(id, { ...before, state: 'failed' })
-      }
+      } finally { inflightRows.delete(id) }
     },
     openPlugins: () => { ctx.get('pluginNavigation')?.openList() },
   }

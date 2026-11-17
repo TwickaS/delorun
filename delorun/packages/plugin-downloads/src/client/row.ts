@@ -3,4 +3,4 @@
  * @module @delorun/plugin-downloads/row
  */
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
-export { createFakeDownloadsSource, provideDownloadsSource } from './source.ts'
+export { createFakeDownloadsSource, currentDownloadsSource, provideDownloadsSource } from './source.ts'

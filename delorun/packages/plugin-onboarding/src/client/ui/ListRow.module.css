@@ -79,7 +79,14 @@
 .more {
   min-height: 24px;
   padding: 0 var(--delorun-space-2);
-  color: var(--dsw-alias-link);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--onb-small-size);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.more:hover {
+  color: var(--dsw-alias-label-primary);
 }
 
 .action {

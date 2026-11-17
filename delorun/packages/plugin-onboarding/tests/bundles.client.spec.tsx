@@ -189,6 +189,24 @@ describe('adding a bundle', () => {
     expect(state('a')?.state).toBe('installed')
   })
 
+  it('takes eight quick Add presses in a row, and a re-read of the list in between does not reset any of them', async () => {
+    const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    const { installer, pluginManager, state } = bench(names.map(name => row({ name })))
+    const releases: (() => void)[] = []
+    pluginManager.setBundleEnabled.mockImplementation(() => new Promise((resolve) => { releases.push(() => { resolve({ ok: true, value: { application: 'applied' } }) }) }))
+    installer.refresh(names)
+    await flush()
+    const adds = names.map(name => installer.install(name))
+    // The step reads the list again when its shown packages change, while the adds still run.
+    installer.refresh(names)
+    await flush()
+    expect(pluginManager.setBundleEnabled).toHaveBeenCalledTimes(8)
+    expect(names.map(name => state(name)?.state)).toEqual(Array(8).fill('installing'))
+    for (const release of releases) release()
+    await Promise.all(adds)
+    expect(names.map(name => state(name)?.state)).toEqual(Array(8).fill('installed'))
+  })
+
   it('installs a catalog entry from its target with the registry the profile names, and pins the version', async () => {
     const { installer, pluginManager, state } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: '@scope/a@1.2.3', version: '1.2.3' } })])
     installer.refresh(['a'])

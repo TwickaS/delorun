@@ -3,6 +3,7 @@
  * check) and the state line under the card (checking, adding, restart, unavailable or failed with what to do next).
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { BundleState } from '../bundles.ts'
@@ -23,6 +24,46 @@ function assertNever(value: never): never {
   throw new Error(`unhandled bundle state ${String(value)}`)
 }
 
+/**
+ * The Add control: a secondary button with a plus, as wide as the Adding and Added states beside it.
+ * @param props - the visible label, the full accessible name and the handler.
+ * @returns the button.
+ */
+function AddButton({ label, name, onAdd }: { readonly label: string; readonly name: string; readonly onAdd: () => void }): ReactNode {
+  return (
+    <Button variant="outline" size="sm" className={`${css.inline} ${css.slotButton}`} aria-label={name} onClick={onAdd}>
+      <svg className={css.plus} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" /></svg>
+      {label}
+    </Button>
+  )
+}
+
+/**
+ * The Adding state of a row: the label and, when the install queue reports bytes, a thin progress bar.
+ * @param props - the label and how far the download has come, from 0 to 1.
+ * @returns the state.
+ */
+function Adding({ label, progress }: { readonly label: string; readonly progress?: number | undefined }): ReactNode {
+  return (
+    <span className={css.adding} role="status">
+      <span>{label}</span>
+      {progress !== undefined && <span className={css.bar} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}><span style={{ width: `${String(Math.round(progress * 100))}%` }} /></span>}
+    </span>
+  )
+}
+
+/**
+ * How far the install queue says a package's download has come.
+ * @param name - the package name.
+ * @returns the fraction from 0 to 1, or undefined when the queue holds no size for it.
+ */
+function useDownloadProgress(name: string): number | undefined {
+  const source = currentDownloadsSource()
+  const items = useSyncExternalStore(source.subscribe, source.snapshot, source.snapshot)
+  const item = items.find(each => each.key === name)
+  return item?.totalBytes === undefined || item.totalBytes <= 0 ? undefined : Math.min(1, item.receivedBytes / item.totalBytes)
+}
+
 /** The props of an addable card. */
 interface AddableProps {
   /** The services. */
@@ -39,6 +80,8 @@ interface AddableProps {
   readonly icon?: string | undefined
   /** The description. */
   readonly description?: string | undefined
+  /** How far the download has come, from 0 to 1, when the install queue knows it. */
+  readonly progress?: number | undefined
   /** Add it; the agents' card opens its confirmation here. */
   readonly onAdd: () => void
   /** Extra state lines and content under the card. */
@@ -50,7 +93,7 @@ interface AddableProps {
  * @param props - the package's state, text and Add handler.
  * @returns the card.
  */
-export function AddableCard({ services, state, reason, packsReason, title, icon, description, onAdd, children }: AddableProps): ReactNode {
+export function AddableCard({ services, state, reason, packsReason, title, icon, description, progress, onAdd, children }: AddableProps): ReactNode {
   const { t } = services
   let action: ReactNode
   let line: ReactNode
@@ -59,15 +102,16 @@ export function AddableCard({ services, state, reason, packsReason, title, icon,
       line = <StateLine tone="loading">{t('bundle.checking')}</StateLine>
       break
     case 'available':
-      action = <Button variant="outline" size="sm" className={css.inline} aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
+      action = <AddButton label={t('bundle.add')} name={t('bundle.addNamed', { name: title })} onAdd={onAdd} />
       break
     case 'installing':
-      line = <StateLine tone="loading">{t('bundle.adding')}</StateLine>
+      action = <Adding label={t('bundle.adding')} progress={progress} />
       break
     case 'offline':
       line = <StateLine tone="info">{t('bundle.offline')}</StateLine>
       break
     case 'slow':
+      action = <Adding label={t('bundle.adding')} progress={progress} />
       line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>
       break
     case 'installed':
@@ -89,7 +133,7 @@ export function AddableCard({ services, state, reason, packsReason, title, icon,
   }
   return (
     <li>
-      <Card title={title} icon={icon} description={description} labels={{ more: t('more'), less: t('less') }} action={action}>
+      <Card title={title} icon={icon} description={description} labels={{ more: t('more'), less: t('less') }} action={action === undefined ? undefined : <div className={css.slot}>{action}</div>}>
         {children}
         {line}
       </Card>
@@ -125,9 +169,10 @@ export function BundleCard({ name, title, description, services, onAdd, children
   readonly children?: ReactNode
 }): ReactNode {
   const view = useBundle(services, name)
+  const progress = useDownloadProgress(name)
   if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} packsReason={view?.packsReason} title={title ?? ''} description={description}
+    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} packsReason={view?.packsReason} title={title ?? ''} description={description} progress={progress}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>
