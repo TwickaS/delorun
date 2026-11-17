@@ -17,7 +17,7 @@ const levels = { levels: [
   { provider: 'claude-code', agent: 'Claude Code', level: 'standard', sandboxMissing: { tools: ['socat'], installCommand: 'x' } },
   { provider: 'codex', agent: 'Codex', level: 'careful' },
 ] }
-const answering = (status: number, body: unknown) => vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status })))
+const answering = (status: number, body: unknown) => vi.fn((_url: string) => Promise.resolve(new Response(JSON.stringify(body), { status })))
 const settle = (): Promise<void> => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 const props = (fetch: ReturnType<typeof answering>, openLevels = vi.fn()) =>
   ({ node: { data: { time: 0 } }, t: makeTranslate(en), fetch, openLevels }) as never as AgentLevelsNoticeProps
