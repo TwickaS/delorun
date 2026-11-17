@@ -71,7 +71,16 @@ export function begin(access: UpdateChannelAccess, request: UnsignedRequest): Pr
       if (first.ok) resolve({ first, done })
       else reject(refusalFor(typeof first.error === 'string' ? first.error : undefined))
     }
-    const done: Promise<ResponseLine[]> = access.send(request, { onLine: line => { answer(line, done) } })
+    let exchange: Promise<ResponseLine[]> | undefined
+    let early: ResponseLine | undefined
+    const done: Promise<ResponseLine[]> = access.send(request, {
+      onLine: (line) => {
+        if (exchange === undefined) early ??= line
+        else answer(line, exchange)
+      },
+    })
+    exchange = done
+    if (early !== undefined) answer(early, done)
     done.then((lines) => {
       const first = lines[0]
       if (first !== undefined) answer(first, done)

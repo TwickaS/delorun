@@ -16,7 +16,7 @@ export const UPDATE_ROUTE_PREFIX = '/delorun/update'
  * the control's level for the requester, then the proof).
  *
  * - `check`: run the release check now, answering {@link UpdateCheckedView}.
- * - `prepare`: fetch, verify and install the newest release and answer its {@link PreparedUpdateView}.
+ * - `prepare`: fetch, verify and install the newest release and answer `{ prepared }` holding its {@link PreparedUpdateView}.
  * - `apply`: begin the update of a prepared release, body {@link UpdateApplyBody}, answering {@link UpdateBegunView}.
  * - `cancel`: end an update or a rollback that still waits for chats, answering {@link UpdateCancelView}.
  * - `rollback`: go back from the committed update, body {@link RollbackBody}, answering {@link UpdateBegunView}.

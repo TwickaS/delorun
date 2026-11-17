@@ -90,7 +90,7 @@ export async function readUpdateResult(path: string): Promise<UpdateResultRecord
   const data = parsed.data
   return {
     v: 1, kind: data.kind, outcome: data.outcome, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), at: data.at,
-    ...data.reason === undefined ? {} : { reason: brandString<HomeProcessErrorCode>(data.reason) },
+    ...data.reason === undefined ? {} : { reason: data.reason as HomeProcessErrorCode },
     ...data.criterion === undefined ? {} : { criterion: data.criterion },
   }
 }
