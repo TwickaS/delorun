@@ -12,7 +12,7 @@ import type { HeaderCopy, ShellLink } from './shell-copy.ts'
 import { ThemeControl } from './theme-control.tsx'
 
 /** Focus ring for the header's links. */
-const FOCUS = 'rounded-(--dl-radius-xs) focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--dl-accent-text)'
+const FOCUS = 'rounded-(--dl-radius-xs) focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--dl-text)'
 
 /** The header bar, the mark with the name, and a row of items. */
 const BAR = 'mx-auto flex w-full items-center justify-between gap-4 py-5' // us-spelling: quoted output (Tailwind class names)

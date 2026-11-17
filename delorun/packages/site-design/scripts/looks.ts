@@ -128,6 +128,10 @@ const GENERIC = `[data-look],\n${DEFAULT_SELECTOR} {
   --dl-on-accent: var(--look-on-accent);
   --dsw-alias-label-primary: var(--look-text);
   --dsw-alias-label-tertiary: var(--look-tertiary);
+  /* The focus ring is drawn in the text colour with a 2 px offset; the accent marks what is chosen, not what has focus. */
+  --dl-focus-ring: 2px solid var(--look-text);
+  --dsw-focus-ring-color: var(--look-text);
+  --dsw-focus-ring-width: 2px;
   --dsw-alias-bg-base: var(--look-surface);
   --dsw-alias-bg-layer-1: var(--look-raised);
   --dsw-alias-bg-layer-2: var(--look-sunken);

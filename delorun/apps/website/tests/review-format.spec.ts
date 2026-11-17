@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { median } from '../review/audit.ts'
 import { expected, headFindings, readHeadTags } from '../review/head-tags.ts'
 import { parsePictureName, passFolder, pictureName } from '../review/naming.ts'
 import { auditMarkdown, indexMarkdown, reportJson, summarise, summaryLines, type Report } from '../review/report.ts'
@@ -108,5 +109,12 @@ describe('head tags', () => {
     expect(headFindings('404', readHeadTags('<head></head>')).some(finding => finding.message.startsWith('canonical'))).toBe(false)
     const broken = headFindings('home', readHeadTags('<head><script type="application/ld+json">{</script></head>'))
     expect(broken.some(finding => finding.severity === 'fail')).toBe(true)
+  })
+})
+
+describe('median', () => {
+  it('takes the middle of an odd list and the mean of an even one', () => {
+    expect(median([3080, 2196, 2400])).toBe(2400)
+    expect(median([10, 20, 30, 40])).toBe(25)
   })
 })

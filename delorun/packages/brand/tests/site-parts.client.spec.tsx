@@ -110,6 +110,19 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('status').textContent).toBe('')
   })
 
+  it('keeps its lines, takes focus and is named when it scrolls', () => {
+    render(<CodeBlock code={'a:\n  b: 1'} scroll codeLabel="Settings entry" {...labels} />)
+    const region = screen.getByRole('region', { name: 'Settings entry' })
+    expect(region.tabIndex).toBe(0)
+    expect(region.hasAttribute('data-scroll')).toBe(true)
+  })
+
+  it('does not take focus or a role when it does not scroll', () => {
+    render(<CodeBlock code="delorun" {...labels} />)
+    expect(screen.queryByRole('region')).toBeNull()
+    expect(document.querySelector('pre')?.hasAttribute('tabindex')).toBe(false)
+  })
+
   it('marks the copy button as the main button only when asked', () => {
     const { unmount } = render(<CodeBlock code="delorun" emphasis="primary" {...labels} />)
     expect(screen.getByRole('button', { name: 'Copy command' }).dataset.emphasis).toBe('primary')
