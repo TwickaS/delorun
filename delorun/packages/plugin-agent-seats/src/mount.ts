@@ -123,6 +123,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     },
   })
   // A stopped plugin leaves no program open: an open session keeps the consent's turn timer, and so the process, alive.
+  // The disposer cannot wait for the close: the gate's reaper ends a program whose close does not finish at Host exit.
   ctx.effect(() => () => { for (const adapter of adapters.values()) adapter.releaseAll().catch((error: unknown) => { logger.warn(`a program did not close at shutdown: ${String(error)}`) }) }, 'delorun-agent-seats: close open programs')
   for (const seat of config.seats) {
     const dispose = await ctx.agentPresets.register(seatPreset(seat))
