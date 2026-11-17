@@ -16,7 +16,7 @@ export default defineConfig({
   root: at('./'),
   // The brand's fonts sit in `delorun/packages/brand`, outside this preview's root.
   server: { host: '127.0.0.1', port: 18670, strictPort: true, fs: { allow: [at('../../../../../')] } },
-  plugins: [replicaPlugins({ aliases: STUDIO_ALIASES, sessions: { release: '0.1.0-preview.2', preview: true } }), tailwindcss(), react()],
+  plugins: [replicaPlugins({ aliases: STUDIO_ALIASES, release: '0.1.0-preview.2' }), tailwindcss(), react()],
   resolve: {
     tsconfigPaths: true,
     alias: [...STUDIO_ALIASES, { find: '#upstream', replacement: at('../../../../../packages/brand/src/upstream.web.tsx') }, { find: /^sonner$/, replacement: at('../../../node_modules/sonner') }, { find: /^fumadocs-ui\/css\//, replacement: at('../../../node_modules/fumadocs-ui/css/') }],
