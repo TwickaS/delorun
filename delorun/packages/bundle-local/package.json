@@ -24,6 +24,7 @@
     "./pin-api": "./src/client/pin-api.ts",
     "./pin-rules": "./src/client/pin-rules.ts",
     "./host-api": "./src/client/host-api.ts",
+    "./full-access": "./src/client/full-access.ts",
     "./profile-versions": "./src/profile-versions.ts",
     "./requirements": "./src/requirements.ts",
     "./report": "./src/report.ts",
