@@ -5,7 +5,7 @@
 import { GateRefusedError, ProgramOpenError, type ProgramEvent } from '@delorun/external-agents/contract'
 import { describe, expect, it } from 'vitest'
 import { RESULT_DELIVERY_GUIDANCE } from '../../src/adapter/input.ts'
-import { agentMessage, CHILD, collect, finishOf, request, system, toolResult, user, userBlocks, world, type World } from './support.ts'
+import { agentMessage, CHILD, collect, finishOf, request, ScriptedProgram, system, toolResult, user, userBlocks, world, type World } from './support.ts'
 
 const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -385,15 +385,43 @@ describe('turns that cannot run or end in failure', () => {
     expect(w.reports.failures).toEqual([{ child: CHILD, category: 'program' }])
   })
 
-  it('ends the turn and drops the program when it no longer accepts input', async () => {
+  it('starts a program that went quiet again, resuming its session, and sends the message to it', async () => {
+    const w = world()
+    const first = user('task')
+    await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
+    const quiet = w.gate.latest
+    quiet.sendError = new Error('closed')
+    const more = user('more')
+    const next = collect(w.adapter.stream(request([first, more])))
+    await tick()
+    expect(w.gate.starts.at(-1)).toMatchObject({ resume: quiet.programSessionId })
+    expect(w.gate.latest).not.toBe(quiet)
+    expect(w.gate.latest.sent).toEqual([{ text: 'more', mode: 'start' }])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    expect(finishOf(await next)).toEqual({ kind: 'stop' })
+    expect(w.states.states.get(CHILD)?.cursor).toBe(more.id)
+  })
+
+  it('ends the turn and drops the program when the restarted program no longer accepts input either', async () => {
     const w = world()
     const first = user('task')
     await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
     w.gate.latest.sendError = new Error('closed')
+    w.gate.next = () => Object.assign(new ScriptedProgram('program-2'), { sendError: new Error('closed again') })
     const chunks = await collect(w.adapter.stream(request([first, user('more')])))
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_PROGRAM_CLOSED' } })
     expect(w.adapter.runOf(CHILD)).toBeUndefined()
     expect(w.states.states.get(CHILD)?.cursor).toBe(first.id)
+  })
+
+  it('reports a restart that cannot open the program', async () => {
+    const w = world()
+    const first = user('task')
+    await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
+    w.gate.latest.sendError = new Error('closed')
+    w.gate.failure = new ProgramOpenError({ category: 'program', detail: 'gone' })
+    const chunks = await collect(w.adapter.stream(request([first, user('more')])))
+    expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_FAILED' } })
   })
 })
 

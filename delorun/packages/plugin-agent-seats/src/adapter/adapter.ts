@@ -261,18 +261,34 @@ export class SeatAdapter extends LlmAdapter {
       }
     }
     for (const result of input.harnessResults) host.deliverHarnessResult?.(child, result)
-    try {
-      for (const [at, text] of input.texts.entries()) {
-        await run.program.send(text, at === 0 && run.turnEnded ? 'start' : 'steer')
-        run.turnEnded = false
-        run.failure = undefined
+    // A program that went quiet and closed is started again once, resuming its own session, before the message is given up.
+    let sent = 0
+    let restarted = false
+    for (;;) {
+      try {
+        for (const text of input.texts.slice(sent)) {
+          await run.program.send(text, run.turnEnded ? 'start' : 'steer')
+          run.turnEnded = false
+          run.failure = undefined
+          sent++
+        }
+        break
+      } catch (error: unknown) {
+        if (signal.aborted) throw error
+        this.runs.delete(child)
+        await run.program.close()
+        if (restarted) {
+          yield errorFinish(PROGRAM_CLOSED)
+          return
+        }
+        restarted = true
+        try {
+          run = await this.open(child, run.program.programSessionId, run.cursor, signal)
+        } catch (openError: unknown) {
+          yield this.openFailure(child, openError)
+          return
+        }
       }
-    } catch (error: unknown) {
-      if (signal.aborted) throw error
-      this.runs.delete(child)
-      await run.program.close()
-      yield errorFinish(PROGRAM_CLOSED)
-      return
     }
     run.cursor = input.lastId
     await this.options.states.write(child, { programSessionId: run.program.programSessionId, cursor: input.lastId })
