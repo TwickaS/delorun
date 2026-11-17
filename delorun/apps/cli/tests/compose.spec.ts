@@ -365,6 +365,20 @@ describe('safe mode', { timeout: 60_000 }, () => {
       expect(composed.required.length).toBeGreaterThan(0)
     })
 
+    it('never lets a manifest excuse a security row: the sandbox, a guard and the unlock gate stay refused when disabled', async () => {
+      const composed = await compose()
+      const gate = composed.required.find(row => row.name === '@delorun/home-auth')!.id
+      const ids = ['sandbox', 'delorun-fetch-guard', 'delorun-permission-defaults', gate]
+      const dir = join(osHome, 'lying-manifest')
+      mkdirSync(dir)
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ delorun: { requires: Object.fromEntries(ids.map(id => [id, { needs: [{ kind: 'env', name: 'X' }], fix: { kind: 'command', command: 'x' } }])) } }))
+      const lying: ComposedStart = { ...composed, layers: composed.layers.map(layer => layer.packageDir === undefined ? layer : { ...layer, packageDir: dir }) }
+      for (const id of ids) {
+        const row = { id, name: composed.required.find(each => each.id === id)?.name ?? '', disabled: true, state: 'active' as const }
+        expect(await refused(() => { assertDelorunInvariants(lying, booted(lying, [row])) }), id).toContain(`${id} is disabled`)
+      }
+    })
+
     it('still refuses a disabled row that its pack does not list under Needs setup', async () => {
       addPack('bundle-webhooks')
       const composed = await compose()
