@@ -35,7 +35,7 @@ export type { SeatClient, SeatReach, SeatReachSource } from './actions.ts'
 export const name = 'delorun-agent-seats'
 
 /** Services every registration needs. */
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'uiWorkspace']
 
 /** The banner sits first; the composer line sits above the message box. */
 export const SLOT_ORDER = { banner: 0, composerNote: 0 } as const
