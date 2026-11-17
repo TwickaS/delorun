@@ -18,6 +18,7 @@
     "@delorun/contract-release-log": "workspace:*",
     "@delorun/contract-release-manifest": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
+    "@delorun/home": "workspace:*",
     "@delorun/release-formats": "workspace:*",
     "@delorun/runtime-closure": "workspace:*",
     "@delorun/runtime-store": "workspace:*",

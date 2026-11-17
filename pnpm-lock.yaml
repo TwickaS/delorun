@@ -1626,6 +1626,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../../packages/home
       '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats

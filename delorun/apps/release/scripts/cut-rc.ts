@@ -6,7 +6,7 @@
  * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N[.M]|0.1.0-rc.N[.M]> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
- * [--log-poll-seconds <n>] [--dry-run]`
+ * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--no-smoke] [--dry-run]`
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
  * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
@@ -15,6 +15,12 @@
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
  * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
  * which is also how to rerun after a timestamp or logging failure without rebuilding.
+ *
+ * The last step is the installed-release smoke (`installed-smoke.ts`): it installs the candidate from the channel into a
+ * scratch home with a launcher built for a scratch origin, adds every pack, restarts twice and creates a chat, within
+ * `--smoke-minutes` (default 30). It runs after the candidate is published into the channel directory, so a failure
+ * means: do not tag, and do not give the candidate to anyone. `--no-smoke` leaves it out, for a channel of closures that
+ * are not real runtimes.
  *
  * A private test build `<x.y.z>-preview.<n>.<m>` (M from 1) sits between `preview.<n>` and `preview.<n+1>`. It updates from
  * `preview.<n>` for M = 1, and from `preview.<n>.<m-1>` otherwise; the next candidate `preview.<n+1>` updates from the
@@ -91,6 +97,8 @@ export interface CutRequest {
   readonly log: { readonly submit: string, readonly checkpoint: string, readonly tiles: string }
   /** Seconds between checkpoint polls. */
   readonly logPollSeconds: string
+  /** The installed-release smoke's time budget in minutes; undefined with `--no-smoke`. */
+  readonly smokeMinutes: number | undefined
   /** Print the plan and run nothing. */
   readonly dryRun: boolean
 }
@@ -122,6 +130,8 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
       'log-checkpoint': { type: 'string', default: REKOR.checkpoint },
       'log-tiles': { type: 'string', default: REKOR.tiles },
       'log-poll-seconds': { type: 'string', default: '30' },
+      'smoke-minutes': { type: 'string', default: '30' },
+      'no-smoke': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
     },
   })
@@ -143,6 +153,8 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
   const number = Number(match[3])
   const iteration = match[4] === undefined ? undefined : Number(match[4])
   const work = resolve(values.work ?? dirname(channel))
+  const smokeMinutes = Number(values['smoke-minutes'])
+  if (!Number.isInteger(smokeMinutes) || smokeMinutes < 1 || smokeMinutes > 240) throw new Error(`--smoke-minutes is a whole number from 1 to 240, not ${values['smoke-minutes']!}`)
   return {
     version,
     kind,
@@ -161,6 +173,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
     platforms,
     log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
     logPollSeconds: values['log-poll-seconds']!,
+    smokeMinutes: values['no-smoke'] ? undefined : smokeMinutes,
     dryRun: values['dry-run'],
   }
 }
@@ -168,7 +181,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
 /** One step of the plan. */
 export interface PlannedStep {
   /** A short name, stable for specs. */
-  readonly id: 'tree' | 'changelog' | 'highlights' | 'clear-stages' | 'closure' | 'sign' | 'verify'
+  readonly id: 'tree' | 'changelog' | 'highlights' | 'clear-stages' | 'closure' | 'sign' | 'verify' | 'smoke'
   /** What the step does, for the log. */
   readonly title: string
   /** The commands it runs, as printable lines; key files appear by path only. */
@@ -246,7 +259,17 @@ export function planSteps(request: CutRequest): PlannedStep[] {
       : [],
     { id: 'sign', title: `sign, log and publish ${request.version} into ${request.channel}`, commands: [`${tsx} ${localReleaseArgs(request).join(' ')}`] },
     { id: 'verify', title: 'verify the channel as a client does', commands: ['timestamp, root chain, manifest, notes and every other release in the channel'] },
+    ...request.smokeMinutes === undefined ? [] : [{ id: 'smoke', title: `install ${request.version} from the channel with every pack, restart twice and create a chat (at most ${String(request.smokeMinutes)} min)`, commands: [`${tsx} ${smokeArgs(request).join(' ')}`] } as const],
   ]
+}
+
+/**
+ * The arguments of the smoke step for `tsx`.
+ * @param request - the request.
+ * @returns the arguments of `installed-smoke.ts`.
+ */
+export function smokeArgs(request: CutRequest): string[] {
+  return ['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', request.version, '--budget-minutes', String(request.smokeMinutes ?? 30), '--log', join(request.work, `installed-smoke-${request.version}.log`)]
 }
 
 /** The result of one command. */
@@ -509,6 +532,17 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
     return failed((error as Error).message, 'do not tag; inspect the channel and the log')
   }
   done(started, ` (timestamp ${String(verified.timestampVersion)}${verified.notes === undefined ? ', no notes' : ', signed notes'}; also in the channel: ${verified.others.join(', ') || 'nothing'})`)
+
+  if (request.smokeMinutes !== undefined) {
+    started = begin('smoke')
+    const smoked = await command(tsx, smokeArgs(request))
+    const summary = smoked.stdout.trim().split('\n').filter(line => line.startsWith('installed smoke'))
+    for (const line of summary) say(`      ${line}`)
+    if (smoked.status !== 0) {
+      return failed(`the installed-release smoke failed; ${request.version} is already in the channel directory`, `do not tag or hand it out; read ${join(request.work, `installed-smoke-${request.version}.log`)} and ${logFile}, fix, and cut the next candidate`)
+    }
+    done(started)
+  }
   printHandOff(request, say)
   return { code: 0, verified }
 }

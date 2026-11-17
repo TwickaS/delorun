@@ -36,7 +36,7 @@ describe('cutting two candidates', () => {
       const request = parseCutArgs([
         '--version', version, '--channel', join(directory, 'channel'), '--state', join(keys, 'state.json'), '--keys', keys, '--root', root,
         '--commit', real, '--work', join(directory, 'work'), '--closures-from', closures,
-        '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--log-poll-seconds', '0',
+        '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--log-poll-seconds', '0', '--no-smoke',
       ])
       const deps: CutDeps = {
         repository: REPO,
