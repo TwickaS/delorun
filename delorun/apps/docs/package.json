@@ -12,6 +12,7 @@
     "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json"
   },
   "dependencies": {
+    "@delorun/site-design": "link:../../packages/site-design",
     "@fumadocs/language": "0.2.16",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
@@ -21,6 +22,7 @@
     "github-slugger": "2.0.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "sonner": "2.0.8",
     "zod": "4.6.6"
   },
   "devDependencies": {

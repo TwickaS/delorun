@@ -4159,6 +4159,22 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/site-design:
+    dependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
+    devDependencies:
+      '@delorun/plugin-theme':
+        specifier: workspace:*
+        version: link:../plugin-theme
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   delorun/packages/skill-plugin-authoring:
     devDependencies:
       '@deepseek-ai/cordis':

@@ -7,6 +7,7 @@
 @import 'fumadocs-ui/css/preset.css';
 @import '../../brand/src/tokens.css';
 @import '../../brand/src/fonts.css';
+@import './looks.css';
 
 /*
  * Fumadocs UI's roles on Delorun's brand tokens, so the docs and the website draw with the brand: the typefaces, the
