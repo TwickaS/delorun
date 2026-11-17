@@ -450,11 +450,10 @@ async function viaGate(w: World, request: ProgramApprovalRequest) {
   return answer === 'allow-run' && !(request.runRule !== undefined && consent.addRunRule(w.child.id, request.runRule)) ? 'allow-once' : answer
 }
 
-const runAllowed = (w: World): Array<{ seq: number, ignorable?: true, data: unknown }> => w.child.session.snapshotEvents()
-  .filter(event => (event.type as string) === 'plugin:delorun/agent-seat/run-allowed')
+const runAllowed = (w: World) => w.child.session.snapshotEvents().filter(event => event.type === 'external-agent/run-allowed')
 
 describe('the log of Allow for this run', () => {
-  it('appends a run-allowed record naming the question once the gate kept the rule', async () => {
+  it('appends a run-allowed event naming the question once the gate kept the rule', async () => {
     const w = await world()
     w.relay.prepareChild(w.child)
     const result = viaGate(w, question({ runRule: RULE }))
@@ -463,7 +462,7 @@ describe('the log of Allow for this run', () => {
     await expect(result).resolves.toBe('allow-run')
     await settle()
     const asked = w.child.session.snapshotEvents().find(event => event.type === 'approval/asked')
-    expect(runAllowed(w)).toMatchObject([{ ignorable: true, data: { askedSeq: asked?.seq } }])
+    expect(runAllowed(w)).toMatchObject([{ data: { askedSeq: asked?.seq } }])
     expect(w.kept).toEqual([RULE])
   })
 

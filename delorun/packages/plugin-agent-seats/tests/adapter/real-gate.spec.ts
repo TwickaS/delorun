@@ -78,6 +78,7 @@ describe('a first turn of an unregistered seat child on the real gate', () => {
     } as never)
     await ctx.plugin(ExternalAgentsService, {
       maxLivePrograms: 4, graceMs: 100, limitRefusal: false, env: { PATH: '/bin' }, now: () => 1_000_000, probeFolder: () => Promise.resolve('/tmp'),
+      programRecords: undefined, processTable: undefined, programExecutables: () => [], programScripts: () => [],
     })
     const driver = new CountingDriver()
     ctx.externalAgents.registerDriver(driver)

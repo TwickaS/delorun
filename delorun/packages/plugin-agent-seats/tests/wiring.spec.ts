@@ -169,7 +169,7 @@ describe('the end of a lease', () => {
     const child = session.header.id
     mounted.events.onStarting?.(child, 'claude-code')
     const consent = ctx.get('delegationConsent') as unknown as FakeConsent
-    const lease: SeatLease = { child, root: child, workspace: 'w', cwd: '/work', provider: 'claude-code', workspaceListed: false, grantedAt: 0 }
+    const lease: SeatLease = { child, root: child, workspace: 'w', cwd: '/work', provider: 'claude-code', workspaceListed: false, grantedAt: 0, why: 'asked' }
     for (const listener of consent.listeners) listener(lease, 'archived')
     expect(mounted.store.viewOf(child)).toMatchObject({ state: 'ended', endedReason: LEASE_END_TEXT.archived })
   })
@@ -180,7 +180,7 @@ describe('the end of a lease', () => {
     const mounted = await mountSeats(ctx, Config(null))
     const consent = ctx.get('delegationConsent') as unknown as FakeConsent
     const session = ctx.sessions.create()
-    const lease: SeatLease = { child: session.header.id, root: session.header.id, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0 }
+    const lease: SeatLease = { child: session.header.id, root: session.header.id, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0, why: 'asked' }
     for (const listener of consent.listeners) listener(lease, 'revoked')
     expect(mounted.store.viewOf(session.header.id)).toBeNull()
   })
@@ -191,7 +191,7 @@ describe('the end of a lease', () => {
     await mountSeats(ctx, Config(null))
     const consent = ctx.get('delegationConsent') as unknown as FakeConsent
     const gone = SessionId('archived-away')
-    const lease: SeatLease = { child: gone, root: gone, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0 }
+    const lease: SeatLease = { child: gone, root: gone, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0, why: 'asked' }
     expect(() => { for (const listener of consent.listeners) listener(lease, 'archived') }).not.toThrow()
   })
 })

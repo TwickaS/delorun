@@ -36,6 +36,14 @@ declare module '@deepseek-ai/dsh-session/types' {
      * model history, and survives compaction.
      */
     'subagent/descriptor': SubagentDescriptorData
+    /**
+     * The person answered a live external agent's question with "Allow for this run" and the start gate kept the
+     * program's rule for the rest of the run. Log-only audit: it carries no `surfaceOp` and never enters model
+     * history. Declared here because the persistence catalog scans `packages/` for Session event declarations;
+     * `@delorun/plugin-agent-seats` appends it.
+     * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
+     */
+    'external-agent/run-allowed': { askedSeq: SessionSeq }
   }
 }
 

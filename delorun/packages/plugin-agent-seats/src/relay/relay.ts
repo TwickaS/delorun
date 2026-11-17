@@ -8,11 +8,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
-import { appendPluginRecord, type SessionEvent, type SessionId, type SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+// Type-only: the `external-agent/run-allowed` event merge.
+import type {} from '@deepseek-ai/dsh-subagent'
 import { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule, SeatConsent } from '@delorun/external-agents/contract'
 import { programSays } from './copy.ts'
-import { SEAT_RUN_ALLOWED_RECORD } from '../state/record.ts'
 import { RunScope, RUN_SCOPE } from './run-scope.ts'
 
 /** The marker every relayed question carries, so only the computer or an unlocked page may allow it (D1). */
@@ -211,7 +212,7 @@ export class SeatRelay {
       try {
         const consent: unknown = this.ctx.get('delegationConsent')
         if (!keepsRunRules(consent) || !consent.runRules(child.id).includes(rule)) return
-        appendPluginRecord(child.session, SEAT_RUN_ALLOWED_RECORD, { askedSeq })
+        child.session.append('external-agent/run-allowed', { askedSeq })
       } catch (error) {
         this.ctx.logger('agent-seats').warn('the run allowance could not be logged: %s', error instanceof Error ? error.message : String(error))
       }

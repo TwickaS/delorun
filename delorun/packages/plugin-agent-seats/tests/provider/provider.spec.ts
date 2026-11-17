@@ -189,7 +189,7 @@ describe('the gate refusals', () => {
   const cases: readonly { readonly refusal: GateRefusal, readonly expected: string | RegExp }[] = [
     { refusal: { category: 'not-installed' }, expected: 'Claude Code was not started: Claude Code is not added to this Delorun. Tell the person; do not retry.' },
     { refusal: { category: 'consent', reason: 'The consent said no.' }, expected: 'The consent said no.' },
-    { refusal: { category: 'limit', window: 'five-hour', resetsAt: now + 7_500_000 }, expected: /^Claude Code was not started: your Claude plan's 5-hour limit is reached until .* \(in 2 h 5 min\)\. Do not hand work to Claude Code before then; do the task yourself or tell the person\.$/ },
+    { refusal: { category: 'limit', window: 'five_hour', resetsAt: now + 7_500_000 }, expected: /^Claude Code was not started: your Claude plan's 5-hour limit is reached until .* \(in 2 h 5 min\)\. Do not hand work to Claude Code before then; do the task yourself or tell the person\.$/ },
     { refusal: { category: 'capacity', busy: ['codex', 'claude-code'] }, expected: 'Claude Code was not started: 2 live agents already run (Codex, Claude Code), which is the most this Delorun runs at once. Wait for one to finish, or do the task yourself.' },
     { refusal: { category: 'seat-running' }, expected: 'Claude Code was not started: this agent already has a running program. Send it a message instead of starting it again.' },
   ]
