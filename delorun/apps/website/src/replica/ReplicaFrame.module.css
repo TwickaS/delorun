@@ -1,7 +1,10 @@
 /* The replica's frame, caption and rail. Brand tokens only. */
 .replica { display: grid; gap: var(--dl-space-3); min-width: 0; }
 
-.panel { display: grid; gap: var(--dl-space-3); border-radius: var(--dl-radius-md); }
+.panel { display: grid; gap: var(--dl-space-3); min-width: 0; border-radius: var(--dl-radius-md); }
+
+/* No child may widen the replica past its column; a wide slot scrolls inside it instead. */
+.replica > *, .panel > *, .frames > * { min-width: 0; }
 
 .panel:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
 
@@ -19,7 +22,7 @@
 
 .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--dl-space-2); }
 
-.rail { min-width: 0; }
+.rail { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 
 .toggle { flex: none; }
 

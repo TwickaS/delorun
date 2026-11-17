@@ -14,7 +14,8 @@ const at = (path: string): string => fileURLToPath(new URL(path, import.meta.url
 
 export default defineConfig({
   root: at('./'),
-  server: { host: '127.0.0.1', port: 18670, strictPort: true },
+  // The brand's fonts sit in `delorun/packages/brand`, outside this preview's root.
+  server: { host: '127.0.0.1', port: 18670, strictPort: true, fs: { allow: [at('../../../../../')] } },
   plugins: [replicaPlugins({ aliases: STUDIO_ALIASES }), tailwindcss(), react()],
   resolve: {
     tsconfigPaths: true,
