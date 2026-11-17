@@ -12,6 +12,7 @@
       "default": "./lib/client.js"
     },
     "./wire": "./src/wire.ts",
+    "./phone-powers-locales": "./src/client/locales/phone-powers.ts",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },

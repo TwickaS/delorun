@@ -1,5 +1,7 @@
 /** The Changes section's, its dialogs', its toasts' and the work-session badge's copy. */
 
+import * as phonePowers from './locales/phone-powers.ts'
+
 /** English dictionary. Plural pairs are chosen by count: `.one` for 1, `.other` otherwise. */
 export const en = {
   'nav': 'Changes',
@@ -10,11 +12,11 @@ export const en = {
   'load.failed': 'Your changes could not be loaded.',
   'load.retry': 'Try again',
   'access.locked.title': 'Unlock this phone to act on your changes',
-  'access.locked.body': 'You can see your changes here. Pressing Apply, Discard, Undo or the protection switch asks you to unlock this phone first, with a code from your computer or your PIN. The 15 minutes after you approve a phone do not count.',
+  'access.locked.body': 'You can see your changes here. The actions Phone powers allows ask you to unlock this phone first, with a code from your computer or your PIN. The 15 minutes after you approve a phone do not count.',
   'access.careful.title': 'Phone powers: Careful',
-  'access.careful.body': 'An unlocked phone cannot open a terminal, turn protection off, apply or switch plugin changes or change Delorun\'s own files. It can still undo or discard a change and turn protection on. Approvals it gives, such as accepting an MCP server, allowing an external agent or giving a workspace full access, can still start programs outside the sandbox.',
+  'access.careful.body': phonePowers.en.careful,
   'access.full.title': 'Phone powers: Full',
-  'access.full.body': 'An unlocked phone can do everything this computer can, the terminal included, each time with an unlock you entered on the phone. The 15 minutes after you approve a phone never count.',
+  'access.full.body': phonePowers.en.full,
   'access.change': 'Change this at your computer, in Settings → Devices.',
   'access.needsComputer': 'Needs your computer',
   'access.needsUnlock': 'Unlock this phone first',
@@ -298,11 +300,11 @@ export const zh: typeof en = {
   'load.failed': '无法加载变更。',
   'load.retry': '重试',
   'access.locked.title': '解锁此手机后才能处理变更',
-  'access.locked.body': '你可以在这里查看变更。点击“应用”“丢弃”“撤销”或保护开关时，会先请你解锁此手机：使用电脑上显示的代码或你的 PIN。批准手机后的 15 分钟不算解锁。',
+  'access.locked.body': '你可以在这里查看变更。手机权限允许的操作会先请你解锁此手机：使用电脑上显示的代码或你的 PIN。批准手机后的 15 分钟不算解锁。',
   'access.careful.title': '手机权限：谨慎',
-  'access.careful.body': '已解锁的手机不能打开终端、关闭保护、应用或切换插件变更，也不能修改 Delorun 自身的文件。它仍然可以撤销或丢弃变更，以及开启保护。它给出的批准，例如接受 MCP 服务器、允许外部智能体或给工作区完全访问权限，仍可能在沙箱外启动程序。',
+  'access.careful.body': phonePowers.zh.careful,
   'access.full.title': '手机权限：完全',
-  'access.full.body': '已解锁的手机可以做这台电脑能做的一切，包括终端，每次都需要你在手机上输入的解锁。批准手机后的 15 分钟从不算数。',
+  'access.full.body': phonePowers.zh.full,
   'access.change': '请在电脑上的“设置 → 设备”中更改。',
   'access.needsComputer': '需要在你的电脑上操作',
   'access.needsUnlock': '请先解锁此手机',

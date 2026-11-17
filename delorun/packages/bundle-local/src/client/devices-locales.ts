@@ -1,5 +1,7 @@
 /** The Devices settings section's copy, the remote studio's refused-answer notice and its unlock. */
 
+import * as phonePowers from '@delorun/plugin-changes/phone-powers-locales'
+
 /** English dictionary. */
 export const en = {
   'nav': 'Devices',
@@ -136,9 +138,9 @@ export const en = {
   'powers.title': 'Phone powers',
   'powers.intro': 'How much an unlocked phone may do. Each action still needs an unlock you entered on the phone.',
   'powers.careful': 'Careful',
-  'powers.careful.body': 'An unlocked phone cannot open a terminal, turn protection off, apply or switch plugin changes or change Delorun\'s own files. It can still undo or discard a change and turn protection on. Approvals it gives, such as accepting an MCP server, allowing an external agent or giving a workspace full access, can still start programs outside the sandbox.',
+  'powers.careful.body': phonePowers.en.careful,
   'powers.full': 'Full',
-  'powers.full.body': 'An unlocked phone can do everything this computer can, the terminal included, each time with an unlock you entered on the phone. The 15 minutes after you approve a phone never count.',
+  'powers.full.body': phonePowers.en.full,
   'powers.device': 'Change this at your computer.',
   'powers.unchosen.careful': 'Delorun uses Careful until you choose: an unlocked phone cannot open a terminal. Choose Full to let it.',
   'powers.unchosen.full': 'Delorun uses Full until you choose: an unlocked phone can do everything this computer can.',
@@ -286,9 +288,9 @@ export const zh: typeof en = {
   'powers.title': '手机权限',
   'powers.intro': '已解锁的手机可以做多少事。每项操作仍需要你在手机上输入的解锁。',
   'powers.careful': '谨慎',
-  'powers.careful.body': '已解锁的手机不能打开终端、关闭保护、应用或切换插件变更，也不能修改 Delorun 自身的文件。它仍然可以撤销或丢弃变更，以及开启保护。它给出的批准，例如接受 MCP 服务器、允许外部智能体或给工作区完全访问权限，仍可能在沙箱外启动程序。',
+  'powers.careful.body': phonePowers.zh.careful,
   'powers.full': '完全',
-  'powers.full.body': '已解锁的手机可以做这台电脑能做的一切，包括终端，每次都需要你在手机上输入的解锁。批准手机后的 15 分钟从不算数。',
+  'powers.full.body': phonePowers.zh.full,
   'powers.device': '请在你的电脑上更改。',
   'powers.unchosen.careful': '在你选择之前，Delorun 使用“谨慎”：已解锁的手机不能打开终端。选择“完全”即可允许。',
   'powers.unchosen.full': '在你选择之前，Delorun 使用“完全”：已解锁的手机可以做这台电脑能做的一切。',
