@@ -38,6 +38,7 @@ import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines, clientBuildValueDefines } from '../../scripts/client-build-environment.ts'
 import { isExperimentalPackageName } from '../../scripts/experimental-package-policy.ts'
+import { claimStyleTag, styleTagId, type StyleTagClaims } from '../../scripts/client-style-tags.ts'
 import { BundleInputIsolation, physicalBundleInput } from '../../scripts/bundle-input-isolation.ts'
 
 /**
@@ -58,12 +59,15 @@ const INLINE_CSS_QUERY = '?inline'
 function styleInjectionModule(
   id: string,
   fileId: string,
+  claims: StyleTagClaims,
   css: string,
   classMap?: Readonly<Record<string, string>>,
 ): string {
+  const tagId = styleTagId(id, fileId, REPOSITORY_ROOT)
+  claimStyleTag(claims, tagId, fileId)
   const source = [
     `const css = ${css};`,
-    `const tagId = ${JSON.stringify(`${id}/${basename(fileId)}`)};`,
+    `const tagId = ${JSON.stringify(tagId)};`,
     'if (typeof document !== \'undefined\' && document.querySelector(\'style[data-plugin-css=\' + JSON.stringify(tagId) + \']\') === null) {',
     '  const tag = document.createElement(\'style\');',
     `  tag.dataset.plugin = ${JSON.stringify(id)};`,
@@ -787,6 +791,7 @@ function clientConfig(
   const isRequested = (specifier: string): boolean => (requested ??= clientExternals(manifest)).has(specifier)
   const isolation = clientInputIsolation(id)
   const assets = packageAssets(manifest, packageDir)
+  const styleTagClaims: StyleTagClaims = new Map()
   return {
     name: `${id}/client`,
     entry: { client: entry },
@@ -888,7 +893,7 @@ function clientConfig(
         const exportEntries = Object.entries(cssExports ?? {})
           .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         for (const [local, exp] of exportEntries) classMap[local] = exp.name
-        return styleInjectionModule(id, fileId, stylesheetSource(code.toString(), stylesheetAssets.references), classMap)
+        return styleInjectionModule(id, fileId, styleTagClaims, stylesheetSource(code.toString(), stylesheetAssets.references), classMap)
       },
     }, {
       name: 'dsh-css-text-inline',
@@ -921,7 +926,7 @@ function clientConfig(
         const source = await readFile(fileId)
         const stylesheetAssets = assets.urlRewrite(this, fileId)
         const { code } = transform({ filename: fileId, code: source, minify: true, ...stylesheetAssets.options })
-        return styleInjectionModule(id, fileId, stylesheetSource(code.toString(), stylesheetAssets.references))
+        return styleInjectionModule(id, fileId, styleTagClaims, stylesheetSource(code.toString(), stylesheetAssets.references))
       },
     }, assets.plugin],
     outputOptions: {

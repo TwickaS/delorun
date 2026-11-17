@@ -198,12 +198,12 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
     <div className={css.chooser}>
       <p className={css.text}>{t('chooser.lead')}</p>
       <div className={css.chooserBar}>
-        <Button variant="outline" size="sm" disabled={parent === undefined} onClick={() => { open(parent) }}>{t('chooser.up')}</Button>
+        <Button variant="outline" size="sm" className={css.inline} disabled={parent === undefined} onClick={() => { open(parent) }}>{t('chooser.up')}</Button>
         <p className={css.location}>
           <span className={css.label}>{t('chooser.location')}</span>
           <span className={css.path}>{listing?.path}</span>
         </p>
-        <Button variant="outline" size="sm" disabled={listing === undefined || naming} onClick={() => { setNaming(true); setCreateFailed(false) }}>
+        <Button variant="outline" size="sm" className={css.inline} disabled={listing === undefined || naming} onClick={() => { setNaming(true); setCreateFailed(false) }}>
           {t('chooser.new')}
         </Button>
       </div>
@@ -212,8 +212,8 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
           <label htmlFor={nameId} className={css.label}>{t('chooser.newName')}</label>
           <Input id={nameId} className={css.nameInput as string} value={name} autoComplete="off" spellCheck={false}
             onChange={(event) => { setName(event.target.value) }} />
-          <Button type="submit" variant="outline" size="sm" disabled={name.trim() === ''}>{t('chooser.create')}</Button>
-          <Button variant="ghost" size="sm" onClick={() => { setNaming(false); setName(''); setCreateFailed(false) }}>{t('chooser.cancel')}</Button>
+          <Button type="submit" variant="outline" size="sm" className={css.inline} disabled={name.trim() === ''}>{t('chooser.create')}</Button>
+          <Button variant="ghost" size="sm" className={css.inline} onClick={() => { setNaming(false); setName(''); setCreateFailed(false) }}>{t('chooser.cancel')}</Button>
         </form>
       )}
       {createFailed && <p className={css.failure} role="alert">{t('chooser.createFailed')}</p>}
@@ -231,12 +231,12 @@ export function FolderChooser({ services, onAdded, pick, onHold }: FolderChooser
       {listFailed && (
         <div className={css.chooserFailure}>
           <p className={css.failure} role="alert">{t('chooser.listFailed')}</p>
-          <Button variant="outline" size="sm" onClick={() => { open(requested) }}>{t('chooser.retry')}</Button>
+          <Button variant="outline" size="sm" className={css.inline} onClick={() => { open(requested) }}>{t('chooser.retry')}</Button>
         </div>
       )}
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <div className={css.chooserActions}>
-        <Button variant="outline" size="sm" disabled={selected === undefined} onClick={() => { open(selected, { focusList: true }) }}>{t('chooser.open')}</Button>
+        <Button variant="outline" size="sm" className={css.inline} disabled={selected === undefined} onClick={() => { open(selected, { focusList: true }) }}>{t('chooser.open')}</Button>
         {pick === undefined
           ? (
             <Button variant="outline" disabled={addPath === undefined || adding} onClick={addPath === undefined ? undefined : () => { void add(addPath) }}>

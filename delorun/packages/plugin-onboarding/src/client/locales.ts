@@ -193,6 +193,7 @@ export const en = {
   'bundle.open': 'Open Plugins',
 
   'reach.lead': 'Use Delorun from your phone over your own Tailscale network. Turn it on from a terminal on this computer:',
+  'reach.ready': 'Phone access is ready.',
   'reach.checking': 'Checking Tailscale on this computer…',
   'reach.unread': 'Delorun could not check Tailscale here. You can still follow the steps below.',
   'reach.check.installed': 'Tailscale is installed',
@@ -240,7 +241,7 @@ export const en = {
   'clone.parent.missing': 'Choose the folder to clone into.',
   'clone.name': 'New folder name',
   'clone.signIn': 'Delorun never asks for a password here. If the repository needs a sign-in, clone it in a terminal, then choose its folder.',
-  'clone.start': 'Clone',
+  'clone.continue': 'Clone and continue',
   'clone.starting': 'Starting the clone…',
   'clone.running': 'Cloning…',
   'clone.percent': 'Cloning… {percent}%',
@@ -285,6 +286,7 @@ export const en = {
   'problem.failed': 'Delorun could not add this folder. Check that it still exists, then try again.',
 
   'ready.model': 'Model',
+  'ready.model.unverified': '{name} (key found, not checked)',
   'ready.model.none': 'No working key yet. Chats need one; add it in Settings → Agent → Models.',
   'ready.look': 'Look',
   'ready.stock': 'Delorun switches to the original look when you finish.',
@@ -541,6 +543,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'bundle.open': '打开插件',
 
   'reach.lead': '通过你自己的 Tailscale 网络，在手机上使用 Delorun。请在这台电脑的终端中打开它：',
+  'reach.ready': '手机访问已就绪。',
   'reach.checking': '正在检查这台电脑上的 Tailscale…',
   'reach.unread': 'Delorun 无法在这里检查 Tailscale。你仍然可以按照下面的步骤操作。',
   'reach.check.installed': '已安装 Tailscale',
@@ -588,7 +591,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'clone.parent.missing': '请选择要克隆到的文件夹。',
   'clone.name': '新文件夹名称',
   'clone.signIn': 'Delorun 不会在这里要求输入密码。如果仓库需要登录，请在终端中克隆，然后选择它的文件夹。',
-  'clone.start': '克隆',
+  'clone.continue': '克隆并继续',
   'clone.starting': '正在开始克隆…',
   'clone.running': '正在克隆…',
   'clone.percent': '正在克隆… {percent}%',
@@ -633,6 +636,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'problem.failed': 'Delorun 无法添加这个文件夹。请确认它仍然存在，然后重试',
 
   'ready.model': '模型',
+  'ready.model.unverified': '{name}（已找到密钥，尚未检查）',
   'ready.model.none': '还没有可用的密钥。对话需要它；请在“设置 → 模型”中添加。',
   'ready.look': '外观',
   'ready.stock': '完成时，Delorun 会切换到原版外观。',
@@ -697,3 +701,9 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'row.show': '再次运行设置',
   ...pinZh,
 }
+
+/** The dictionaries this plugin registers, by locale id. */
+export const DICTIONARIES = { en, zh } as const
+
+/** The locales this plugin's own copy covers; the guide's language chooser offers these. */
+export const COVERED_LOCALES: readonly string[] = Object.keys(DICTIONARIES)

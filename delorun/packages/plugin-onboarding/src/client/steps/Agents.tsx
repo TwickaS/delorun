@@ -21,7 +21,7 @@ export const AGENT_BUNDLES = [
 ] as const
 
 /** The state line of an agent's sign-in. */
-const SIGN_IN_TONES: Readonly<Record<AgentSignIn, StateTone>> = { found: 'success', missing: 'warning', unknown: 'info' }
+const SIGN_IN_TONES: Readonly<Record<AgentSignIn, StateTone>> = { found: 'info', missing: 'info', unknown: 'info' }
 
 /** Where the guide explains how a chat uses an agent. */
 export const AGENTS_GUIDE_URL = 'https://docs.delorun.com/guide/agents'

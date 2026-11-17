@@ -97,9 +97,9 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
         {recommendations?.status === 'loading' && <p className={css.status}>{t('plugins.reading')}</p>}
         {shown.length === 0 && optionalRows.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}
       </div>
-      {unread && <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target}`} onClick={() => { guide.recommend(true) }}>{t('plugins.registry')}</Button>}
+      {unread && <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target} ${css.inline}`} onClick={() => { guide.recommend(true) }}>{t('plugins.registry')}</Button>}
       {slow && (
-        <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target}`}
+        <Button variant="outline" size="sm" className={`${css.alignStart} ${css.target} ${css.inline}`}
           onClick={() => { bundles.refresh(shown.map(each => each.name)); if (optionalRows.length > 0) bundles.refreshRows(optionalRows) }}>{t('bundle.retry')}</Button>
       )}
       <button type="button" className={css.linkRow} onClick={() => { bundles.openPlugins() }}>{t('plugins.later')}</button>
