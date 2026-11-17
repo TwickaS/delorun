@@ -35,7 +35,7 @@ function ForgetChoice() {
 export function Privacy() {
   const copy = { ...PRIVACY_EN, title: COPY.privacy.title }
   return (
-    <Frame>
+    <Frame signup="/privacy">
       <main className="mx-auto w-full max-w-2xl px-5 pt-10 sm:px-8 sm:pt-16">
         <h1 className="text-4xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="mt-5 text-lg leading-8 text-(--dl-text-muted)">{copy.intro}</p>
