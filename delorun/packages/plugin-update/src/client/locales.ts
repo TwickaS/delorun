@@ -147,7 +147,7 @@ export const en = {
 export type UpdateLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
-export const zh: typeof en = {
+export const zh: Record<UpdateLocaleKey, string> = {
   'nav': '更新',
   'title': '更新',
   'intro': '在这里更新 Delorun，无需终端。Delorun 会检查新版本，说明它会改变什么；如果新版本无法运行，会自动退回。',

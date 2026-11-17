@@ -6,12 +6,12 @@
  * The progress and outcome cards are frame-wide (see `UpdateOverlay`), so they show here and wherever the person is.
  */
 import { useEffect, useState } from 'react'
-import { Button, relativeTime, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RollbackBody } from '../wire.ts'
 import type { Outcome, UpdateLoad } from './controller.ts'
 import css from './UpdatePanel.module.css'
-import { controlUse, pluralKey, refusalText, type T } from './parts.tsx'
+import { controlUse, pluralKey, refusalText } from './parts.tsx'
 import { RollbackPanel } from './RollbackPanel.tsx'
 
 /** What the panel reads and does. */
@@ -64,7 +64,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
         <div className={css.main}>
           <p className={css.title}>{t('running', { version: state.release.delorun })}</p>
           <p className={css.meta}>
-            {!check.enabled ? t('check.off') : check.failed === true ? t('check.failed') : check.checkedAt === undefined ? t('check.never') : t('check.when', { time: relativeTime(check.checkedAt) })}
+            {!check.enabled ? t('check.off') : check.failed === true ? t('check.failed') : check.checkedAt === undefined ? t('check.never') : t('check.when', { time: new Date(check.checkedAt).toLocaleString() })}
           </p>
           {note === undefined ? null : <p className={css.meta} role="alert">{note}</p>}
         </div>

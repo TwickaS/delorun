@@ -10,13 +10,13 @@ import { Button, Checkbox, Modal, StateDot, Tag } from '@deepseek-ai/dsh-client-
 import type { ReportItem, UpdateReport } from '@delorun/contract-update-report'
 import { dataCopyNote, reasonMessage, UNVERIFIED_NOTE, uncheckedMessage } from '@delorun/update/messages'
 import type { PreparedUpdateView, UpdateStateView } from '../wire.ts'
-import type { Outcome, UpdateRefusal } from './controller.ts'
+import type { Outcome, PreparedUpdateAnswer, UpdateRefusal } from './controller.ts'
 import css from './UpdatePanel.module.css'
 import { controlUse, pluralKey, refusalText, sizeText, type T } from './parts.tsx'
 
 /** What the dialog asks the controller to do. */
 export interface UpdateDialogActions {
-  readonly prepare: () => Promise<Outcome<PreparedUpdateView>>
+  readonly prepare: () => Promise<Outcome<PreparedUpdateAnswer>>
   readonly apply: (body: { readonly handle: string, readonly chats: 'wait' | 'stop', readonly dataCopy: boolean, readonly acknowledged: readonly string[] }) => Promise<Outcome<unknown>>
 }
 
@@ -41,7 +41,7 @@ type Step =
  * @param item - the item.
  * @returns its plugin, bundle, row or file name; the chat data's name for a data item.
  */
-function itemName(item: ReportItem, t: T): string {
+function itemName(item: ReportItem): string {
   switch (item.kind) {
     case 'plugin': return `${item.subject.name} ${item.subject.version}`
     case 'bundle': return item.subject.package
@@ -176,7 +176,7 @@ function Items({ report, versions, ticks, ticked, toggle, t }: {
         return <li key={key} className={css.item} data-update-item={item.reason}>
           <span className={css.itemName}>
             <StateDot state={item.effect === 'disabled' || item.effect === 'removed' ? 'warning' : 'idle'} />
-            {itemName(item, t)}
+            {itemName(item)}
             <Tag>{t(`report.item.${item.effect}`)}</Tag>
           </span>
           <span className={css.meta}>{reasonMessage(item, versions)}</span>
