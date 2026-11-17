@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { LOOKS, selector } from '../../../packages/site-design/scripts/looks.ts'
 import { buildTokens, tokenInputs } from '../src/replica/build/tokens.ts'
-import { WRAPPER } from '../src/replica/wrapper.ts'
+import { WRAPPER_SELECTOR } from '../src/replica/wrapper.ts'
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 const REPLICA = fileURLToPath(new URL('../src/replica/', import.meta.url))
@@ -23,15 +23,15 @@ function declared(rule: string): readonly string[] | undefined {
 
 describe('the replica token block', () => {
   it('holds Soft light in full on the wrapper, and only what Soft dark changes under .dark', () => {
-    const light = declared(`.${WRAPPER}`)
-    const dark = declared(`.dark .${WRAPPER}`)
+    const light = declared(WRAPPER_SELECTOR)
+    const dark = declared(`.dark ${WRAPPER_SELECTOR}`)
     expect(light?.length).toBeGreaterThan(20)
     expect(dark?.length).toBeGreaterThan(0)
     expect(dark!.length).toBeLessThan(light!.length)
   })
 
   it('declares every studio token any declared value reads', () => {
-    const declaredNames = new Set(declared(`.${WRAPPER}`))
+    const declaredNames = new Set(declared(WRAPPER_SELECTOR))
     // A read with its own fallback, such as the brand's `var(--dsw-font-mono, ui-monospace, …)`, may stay undeclared.
     const read = new Set([...block.matchAll(/var\((--dsw-[\w-]+)\)/g)].map(match => match[1]!))
     expect([...read].filter(name => !declaredNames.has(name))).toEqual([])
@@ -41,13 +41,13 @@ describe('the replica token block', () => {
     // The custom look with the peach accent draws exactly Soft, so the block needs no rule for it.
     const same = new Set(['[data-look="soft"]', '[data-look="custom"][data-accent="peach"]'])
     const missing = LOOKS.map(selector).filter(each => !same.has(each))
-      .flatMap(each => [`${each}:not(.dark) .${WRAPPER}`, `${each}.dark .${WRAPPER}`])
+      .flatMap(each => [`${each}:not(.dark) ${WRAPPER_SELECTOR}`, `${each}.dark ${WRAPPER_SELECTOR}`])
       .filter(rule => declared(rule) === undefined)
     expect(missing).toEqual([])
   })
 
   it('declares nothing outside the wrapper', () => {
     const selectors = [...block.matchAll(/([^{}]+)\{/g)].map(match => match[1]!.trim()).filter(each => !each.startsWith('/*'))
-    expect(selectors.filter(each => !each.endsWith(`.${WRAPPER}`))).toEqual([])
+    expect(selectors.filter(each => !each.endsWith(WRAPPER_SELECTOR))).toEqual([])
   })
 })

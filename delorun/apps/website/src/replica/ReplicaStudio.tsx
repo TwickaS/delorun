@@ -17,7 +17,7 @@ import { TerminalWindow } from './screens/TerminalWindow.tsx'
 import { loadFixture } from './sessions/index.ts'
 import { IconSprite } from './studio/icons.tsx'
 import css from './screens/studio.module.css'
-import { WRAPPER } from './wrapper.ts'
+import { WRAPPER_PROPS } from './wrapper.ts'
 
 /** What the player asks of the drawn studio. */
 export interface StudioHandle {
@@ -95,7 +95,7 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
   const changes = fixture.changes[state.changes]
   const versions = fixture.versions[state.versions]
   const { screen } = state
-  return <div ref={root} className={`${WRAPPER} ${css.root}`} inert>
+  return <div ref={root} {...WRAPPER_PROPS} className={css.root} inert>
     <IconSprite />
     {screen === 'terminal'
       ? <TerminalWindow terminal={state.terminal} output={fixture.terminal?.output ?? []} />

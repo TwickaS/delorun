@@ -19,7 +19,7 @@ import { applyLayers, type SchemeValues } from '../../../../../packages/plugin-t
 import { themeLayers } from '../../../../../packages/plugin-theme/src/palette/layers.ts'
 import { STOCK_TOKENS } from '../../../../../packages/plugin-theme/src/palette/stock.ts'
 import { LOOKS, selector, type Look } from '../../../../../packages/site-design/scripts/looks.ts'
-import { WRAPPER } from '../wrapper.ts'
+import { WRAPPER_SELECTOR } from '../wrapper.ts'
 
 type Values = Record<string, string>
 
@@ -158,7 +158,7 @@ export function buildTokens(inputs: TokenInputs): string {
   const softLight = lookValues(soft, 'light', extras.light)
   const softDark = lookValues(soft, 'dark', extras.dark)
   const names = closure(read, [softLight, softDark, ...LOOKS.flatMap(look => [lookValues(look, 'light', extras.light), lookValues(look, 'dark', extras.dark)])])
-  const at = `.${WRAPPER}`
+  const at = WRAPPER_SELECTOR
   let css = block(at, delta(softLight, {}, names), 'color-scheme:light;')
     + block(`.dark ${at}`, delta(softDark, softLight, names), 'color-scheme:dark;')
     + block(at, brand)
