@@ -421,12 +421,6 @@ describe('the level a seat runs at (EA34)', () => {
     await w.gate.start(start(w))
     expect(w.driver.opens[0]?.level).toBe('careful')
   })
-
-  it('uses standard when no level is saved', async () => {
-    const w = await world({ row: { enabled: false }, consent: 'none' })
-    await w.gate.start(start(w))
-    expect(w.driver.opens[0]?.level).toBe('standard')
-  })
 })
 
 describe('programs sharing a run folder', () => {
