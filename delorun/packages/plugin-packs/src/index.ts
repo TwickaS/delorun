@@ -17,7 +17,7 @@ import z from '@deepseek-ai/schemastery'
 import { reloadProfile } from '@delorun/changes'
 import type { ChatGate } from '@delorun/home-process'
 import { packRequestId } from './wire.ts'
-import { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
+import { DEFAULT_STALL_SECONDS, hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 import { PacksHub } from './hub.ts'
 import type { PluginInstallRequestId } from '@deepseek-ai/dsh-plugin-manager/types'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
@@ -98,6 +98,19 @@ export interface PackInstallTargets {
   isPack(name: string): Promise<boolean>
 }
 
+/**
+ * A failure as the Host's log states it: the message and its causes, which name the address that failed.
+ * @param error - what the install raised.
+ * @returns the message followed by each cause's message.
+ */
+function describeFailure(error: unknown): string {
+  const parts: string[] = []
+  for (let current: unknown = error; current !== undefined && parts.length < 4; current = (current as { cause?: unknown }).cause) {
+    parts.push(current instanceof Error ? current.message : String(current))
+  }
+  return parts.join(' <- ')
+}
+
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'packs'
 
@@ -105,11 +118,17 @@ export const name = 'packs'
 export interface Config {
   /** How many pack downloads and installs run at once; at least 1. */
   readonly concurrency: number
+  /** Seconds a pack download may receive nothing before it fails; a download that keeps receiving is never cut off. At least 1. */
+  readonly stallSeconds: number
+  /** The least time between two progress reports of one download, in milliseconds, so a large download does not rewrite the install list and every device's view at each piece. */
+  readonly progressIntervalMs: number
 }
 
 /** The plugin's configuration schema. */
 export const Config: z<Config> = z.object({
   concurrency: z.number().step(1).min(1).default(2),
+  stallSeconds: z.number().min(1).default(DEFAULT_STALL_SECONDS),
+  progressIntervalMs: z.number().min(0).default(500),
 })
 
 /** No required services: a profile without the plugin manager still mounts the plugin and lists no packs. */
@@ -154,7 +173,7 @@ export function apply(ctx: Context, config: Config): void {
     const manager = scope.pluginManager
     const slot = scope.delorunChatGate
     void (async () => {
-      const environment = scope.get('packsEnvironment') ?? await hostPacksEnvironment(process.env)
+      const environment = scope.get('packsEnvironment') ?? await hostPacksEnvironment(process.env, { stallSeconds: config.stallSeconds })
       const hub = new PacksHub({
         environment,
         installBundle: (spec, options) => manager.installBundle(spec, { enabled: options.enabled, requestId: options.requestId as PluginInstallRequestId, expected: options.expected }),
@@ -165,6 +184,8 @@ export function apply(ctx: Context, config: Config): void {
         },
         file: join(profile.home, 'run', profile.name, 'installs.json'),
         concurrency: config.concurrency,
+        progressIntervalMs: config.progressIntervalMs,
+        logFailure: (key, error) => { ctx.logger.warn(`${name}: installing ${key} failed: ${describeFailure(error)}`) },
         requestId: packRequestId,
       })
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))

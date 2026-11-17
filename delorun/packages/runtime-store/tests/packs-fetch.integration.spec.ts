@@ -4,6 +4,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { PackExternal, SemanticVersion, Sha512Base64 } from '@delorun/contract-release-manifest'
@@ -19,24 +20,24 @@ async function serve(handler: (request: IncomingMessage, response: ServerRespons
   return `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/release/`
 }
 
-const pin = (url: string, length: number): PackExternal => ({ name: 'native', version: brandString<SemanticVersion>('1.0.0'), url, sha512: brandString<Sha512Base64>('x'.repeat(86) + '=='), length })
+const pin = (url: string, length: number, body = 'abc'): PackExternal => ({ name: 'native', version: brandString<SemanticVersion>('1.0.0'), url, sha512: brandString<Sha512Base64>(createHash('sha512').update(body).digest('base64')), length })
 
 describe('the pack transport', () => {
   it('fetches a signed name from the channel within its exact size', async () => {
     const channel = await serve((request, response) => { response.end(request.url === '/release/a.tar.gz' ? 'hello' : 'wrong') })
-    expect(Buffer.from((await createPackFiles({ channel }).fetchRelease('a.tar.gz', { exact: 5 }))!).toString()).toBe('hello')
+    expect(Buffer.from((await createPackFiles({ channel, stallSeconds: 30 }).fetchRelease('a.tar.gz', { exact: 5 }))!).toString()).toBe('hello')
   })
 
   it('returns undefined for a file the channel lacks', async () => {
     const channel = await serve((_request, response) => { response.statusCode = 404; response.end() })
-    expect(await createPackFiles({ channel }).fetchRelease('a.tar.gz', { max: 5 })).toBeUndefined()
+    expect(await createPackFiles({ channel, stallSeconds: 30 }).fetchRelease('a.tar.gz', { max: 5 })).toBeUndefined()
   })
 
   it('refuses a redirect and never reads where it points', async () => {
     let followed = false
     const target = await serve((_request, response) => { followed = true; response.end('x') })
     const channel = await serve((_request, response) => { response.statusCode = 302; response.setHeader('location', target); response.end() })
-    await expect(createPackFiles({ channel }).fetchRelease('a.tar.gz', { max: 5 })).rejects.toMatchObject({ code: 'FETCH_REFUSED' })
+    await expect(createPackFiles({ channel, stallSeconds: 30 }).fetchRelease('a.tar.gz', { max: 5 })).rejects.toMatchObject({ code: 'FETCH_REFUSED' })
     expect(followed).toBe(false)
   })
 
@@ -48,28 +49,28 @@ describe('the pack transport', () => {
       const timer = setInterval(() => { sent += 1024; response.write(Buffer.alloc(1024)) }, 1)
       response.on('close', () => { clearInterval(timer) })
     })
-    await expect(createPackFiles({ channel }).fetchRelease('a.tar.gz', { exact: 2048 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
+    await expect(createPackFiles({ channel, stallSeconds: 30 }).fetchRelease('a.tar.gz', { exact: 2048 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
     await vi.waitFor(() => { expect(closed).toBe(true) })
     expect(sent).toBeLessThan(64 * 1024)
   })
 
   it('refuses a declared length above the limit before reading, and a short body of an exact size', async () => {
     const big = await serve((_request, response) => { response.setHeader('content-length', '1000'); response.write('x'); setTimeout(() => response.end(Buffer.alloc(999)), 50) })
-    await expect(createPackFiles({ channel: big }).fetchRelease('a.tar.gz', { max: 10 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
+    await expect(createPackFiles({ channel: big, stallSeconds: 30 }).fetchRelease('a.tar.gz', { max: 10 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
     const short = await serve((_request, response) => { response.end('abc') })
-    await expect(createPackFiles({ channel: short }).fetchRelease('a.tar.gz', { exact: 5 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
+    await expect(createPackFiles({ channel: short, stallSeconds: 30 }).fetchRelease('a.tar.gz', { exact: 5 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
   })
 
   it('refuses a name that is not one plain file name', async () => {
     const channel = await serve((_request, response) => { response.end('x') })
-    const files = createPackFiles({ channel })
+    const files = createPackFiles({ channel, stallSeconds: 30 })
     for (const name of ['../x', 'a/b', '..', '.', '', '%2e%2e', 'a b']) await expect(files.fetchRelease(name, { max: 5 })).rejects.toMatchObject({ code: 'FETCH_REFUSED' })
   })
 
   it('fetches an external only from registry.npmjs.org over https, and only the signed URL', async () => {
     const seen: string[] = []
     const fetcher: typeof fetch = vi.fn((url: string | URL | Request) => { seen.push(String(url)); return Promise.resolve(new Response('abc')) })
-    const files = createPackFiles({ channel: 'https://releases.example/x/', fetch: fetcher })
+    const files = createPackFiles({ channel: 'https://releases.example/x/', stallSeconds: 30, fetch: fetcher })
     await files.fetchExternal(pin('https://registry.npmjs.org/native/-/native-1.0.0.tgz', 3))
     expect(seen).toEqual(['https://registry.npmjs.org/native/-/native-1.0.0.tgz'])
     for (const url of ['https://evil.example/native.tgz', 'http://registry.npmjs.org/native.tgz', 'https://registry.npmjs.org:444/native.tgz', 'https://user@registry.npmjs.org/native.tgz', 'https://registry.npmjs.org.evil.example/native.tgz', 'https://registry.npmjs.org/native.tgz?x=1']) {
@@ -79,6 +80,47 @@ describe('the pack transport', () => {
   })
 
   it('refuses a channel that is neither https nor loopback', () => {
-    expect(() => createPackFiles({ channel: 'http://releases.example/' })).toThrow(/not an https address/u)
+    expect(() => createPackFiles({ channel: 'http://releases.example/', stallSeconds: 30 })).toThrow(/not an https address/u)
+  })
+  it('refuses a body whose SHA-512 differs from the signed one, as it arrives', async () => {
+    const fetcher: typeof fetch = vi.fn(() => Promise.resolve(new Response('abd')))
+    const files = createPackFiles({ channel: 'https://releases.example/x/', stallSeconds: 30, fetch: fetcher })
+    await expect(files.fetchExternal(pin('https://registry.npmjs.org/native/-/native-1.0.0.tgz', 3))).rejects.toMatchObject({ code: 'DIGEST_MISMATCH' })
+  })
+
+  it('lets a slow download that keeps receiving data finish, however long it takes in total', async () => {
+    const body = 'abcdefghij'
+    const channel = await serve((_request, response) => {
+      response.writeHead(200, { 'content-length': String(body.length) })
+      let sent = 0
+      const timer = setInterval(() => {
+        response.write(body.slice(sent, sent + 2))
+        sent += 2
+        if (sent >= body.length) { clearInterval(timer); response.end() }
+      }, 250)
+    })
+    // Five pieces 250 ms apart take about 1.25 s, longer than the 1 s stall limit, yet no gap reaches it.
+    const received: number[] = []
+    const files = createPackFiles({ channel, stallSeconds: 1 })
+    const bytes = await files.fetchRelease('a.tar.gz', { exact: body.length, sha512: createHash('sha512').update(body).digest('base64') }, { onBytes: (count) => { received.push(count) } })
+    expect(Buffer.from(bytes!).toString()).toBe(body)
+    expect(received.at(-1)).toBe(body.length)
+  })
+
+  it('fails a download that stops receiving data, saying how long and from where', async () => {
+    const channel = await serve((_request, response) => {
+      response.writeHead(200, { 'content-length': '10' })
+      response.write('abc')
+    })
+    const files = createPackFiles({ channel, stallSeconds: 1 })
+    const failure = await files.fetchRelease('a.tar.gz', { exact: 10 }).catch((error: unknown) => error as Error)
+    expect(failure).toMatchObject({ code: 'FETCH_REFUSED' })
+    expect(failure.message).toMatch(/a\.tar\.gz \(http:\/\/127\.0\.0\.1:\d+\/release\/a\.tar\.gz\) received no data for 1 seconds/u)
+  })
+
+  it('fails a server that sends no response, naming the wait', async () => {
+    const channel = await serve(() => undefined)
+    const files = createPackFiles({ channel, stallSeconds: 1, timeoutSeconds: 1 })
+    await expect(files.fetchRelease('a.tar.gz', { exact: 10 })).rejects.toThrow(/sent no response for 1 seconds/u)
   })
 })

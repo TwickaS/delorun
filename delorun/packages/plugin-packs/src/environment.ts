@@ -28,26 +28,37 @@ export interface PacksEnvironment {
   readonly files: PackFiles
 }
 
+/** How long a pack download may receive nothing before it fails; the plugin's `stallSeconds` default, which callers without a plugin configuration use. */
+export const DEFAULT_STALL_SECONDS = 60
+
+/** What the pack transport is asked for. */
+export interface PackTransportSettings {
+  /** The fetch the downloads go through; the global one by default. */
+  readonly fetch?: typeof globalThis.fetch
+  /** Seconds a download may go without receiving a byte; {@link DEFAULT_STALL_SECONDS} by default. */
+  readonly stallSeconds?: number
+}
+
 /**
  * The files of one release's channel: the channel the installing launcher recorded, or the production one.
  * @param home - the resolved Delorun home.
  * @param version - the release.
- * @param fetchImpl - the fetch the downloads go through.
+ * @param settings - the fetch and the stall limit.
  * @returns the transport for that release's directory.
  */
-export async function packFilesFor(home: string, version: RuntimeVersion, fetchImpl?: typeof globalThis.fetch): Promise<PackFiles> {
+export async function packFilesFor(home: string, version: RuntimeVersion, settings: PackTransportSettings = {}): Promise<PackFiles> {
   const record = await readChannelRecord(home)
   const sample = record?.channelOrigin === undefined ? RELEASE_SOURCE.files(semanticVersion(version), 'x') : `${record.channelOrigin.replace(/\/$/u, '')}/releases/download/v${version}/x`
-  return createPackFiles({ channel: sample.slice(0, -1), ...fetchImpl === undefined ? {} : { fetch: fetchImpl } })
+  return createPackFiles({ channel: sample.slice(0, -1), stallSeconds: settings.stallSeconds ?? DEFAULT_STALL_SECONDS, ...settings.fetch === undefined ? {} : { fetch: settings.fetch } })
 }
 
 /**
  * The environment of the running installation.
  * @param env - the process environment: `DELORUN_HOME`, `DELORUN_VERSION` and the launcher's roots.
- * @param fetchImpl - the fetch the downloads go through.
+ * @param settings - the fetch and the stall limit of the downloads.
  * @returns the environment, or the reason this process has no installation to take packs from.
  */
-export async function hostPacksEnvironment(env: Readonly<Record<string, string | undefined>>, fetchImpl?: typeof globalThis.fetch): Promise<PacksEnvironment | { readonly unsupported: string }> {
+export async function hostPacksEnvironment(env: Readonly<Record<string, string | undefined>>, settings: PackTransportSettings = {}): Promise<PacksEnvironment | { readonly unsupported: string }> {
   const home = env[DELORUN_HOME_ENV]
   const text = getDelorunRuntimeVersion(env)
   const version = text === undefined ? undefined : parseRuntimeVersion(text)
@@ -57,7 +68,7 @@ export async function hostPacksEnvironment(env: Readonly<Record<string, string |
   const platform = RUNTIME_PLATFORMS.find((each): each is RuntimePlatform => each === `${process.platform}-${process.arch}`)
   if (platform === undefined) return { unsupported: `Delorun publishes no plugin packs for ${process.platform}-${process.arch}.` }
   const paths = new StorePaths(home, platform)
-  const files = await packFilesFor(home, version, fetchImpl)
+  const files = await packFilesFor(home, version, settings)
   return {
     release: async () => {
       const root = (await readAnchoredRoot(home, await readShippedRoots(roots))).metadata
