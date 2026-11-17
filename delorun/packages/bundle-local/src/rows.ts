@@ -184,6 +184,18 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no externalAgents service exists, so no live agent starts and no limit refuses a one-shot run.' },
   },
   {
+    id: 'delorun-agent-claude-code',
+    kind: 'added',
+    reason: 'The Claude Code driver of the live external-agent start gate: it registers with the gate only while upstream\'s `claude-code` provider is registered, which needs the Claude Code pack the person adds; upstream has no live agents, and a disabled row is the parity value.',
+    parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no driver registers with the gate, so no live Claude Code program can start.' },
+  },
+  {
+    id: 'delorun-agent-codex',
+    kind: 'added',
+    reason: 'The Codex driver of the live external-agent start gate: it registers with the gate only while upstream\'s `codex` provider is registered, which needs the Codex pack the person adds; upstream has no live agents, and a disabled row is the parity value.',
+    parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no driver registers with the gate, so no live Codex program can start.' },
+  },
+  {
     id: 'delorun-plugin-changes',
     kind: 'added',
     reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',

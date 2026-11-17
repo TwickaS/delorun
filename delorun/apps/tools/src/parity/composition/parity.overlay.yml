@@ -148,6 +148,18 @@
         limitRefusal: true
       disabled: true
 
+    - id: delorun-agent-claude-code
+      name: '@delorun/agent-claude-code'
+      config:
+        harnessToolTimeoutSeconds: 900
+      disabled: true
+
+    - id: delorun-agent-codex
+      name: '@delorun/agent-codex'
+      config:
+        harnessToolTimeoutSeconds: 900
+      disabled: true
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:

@@ -2191,6 +2191,12 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/agent-claude-code':
+        specifier: workspace:*
+        version: link:../agent-claude-code
+      '@delorun/agent-codex':
+        specifier: workspace:*
+        version: link:../agent-codex
       '@delorun/brand':
         specifier: workspace:*
         version: link:../brand

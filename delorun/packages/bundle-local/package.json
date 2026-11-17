@@ -100,6 +100,8 @@
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-subprocess": "workspace:*",
+    "@delorun/agent-claude-code": "workspace:*",
+    "@delorun/agent-codex": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/external-agents": "workspace:*",

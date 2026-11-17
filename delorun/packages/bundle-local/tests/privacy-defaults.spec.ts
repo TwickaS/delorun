@@ -174,6 +174,8 @@ describe('a Delorun CLI profile', () => {
       '@delorun/skill-report-problem',
       '@delorun/plugin-delegation-consent',
       '@delorun/external-agents',
+      '@delorun/agent-claude-code',
+      '@delorun/agent-codex',
       '@delorun/plugin-changes',
       '@delorun/plugin-packs',
       '@delorun/bundle-local/workspace-rename',

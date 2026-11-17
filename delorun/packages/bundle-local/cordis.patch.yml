@@ -197,6 +197,17 @@
           - check-now
         limitRefusal: true
 
+    # The drivers of the gate for Claude Code and Codex. Each registers only while upstream's provider of that name is
+    # (its pack is added), so both mount dormant; a harness tool call may wait fifteen minutes for the person.
+    - id: delorun-agent-claude-code
+      name: '@delorun/agent-claude-code'
+      config:
+        harnessToolTimeoutSeconds: 900
+    - id: delorun-agent-codex
+      name: '@delorun/agent-codex'
+      config:
+        harnessToolTimeoutSeconds: 900
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:
@@ -326,6 +337,8 @@
       - '@delorun/plugin-tool-failure-guard'
       - '@delorun/plugin-delegation-consent'
       - '@delorun/external-agents'
+      - '@delorun/agent-claude-code'
+      - '@delorun/agent-codex'
       - '@delorun/plugin-changes'
       - '@delorun/bundle-local/update-gate'
       - '@delorun/bundle-local/update-check'

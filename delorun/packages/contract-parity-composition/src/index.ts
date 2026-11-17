@@ -462,7 +462,10 @@ export const PARITY_SWITCHES = [
     // description, the refusal an unapproved start throws and the refusal of a
     // plugin_manager call; these files are the ones whose behaviour the switch
     // turns off at its parity value.
+    // `archive-admission.ts` lists and stops the external runs beneath an archived chat; with the consent off no
+    // external run it could list is started under review, and the file's pre-step rejection is upstream's own.
     sources: [
+      'packages/subagent/subagent/src/archive-admission.ts',
       'packages/subagent/subagent/src/consent.ts',
       'packages/subagent/subagent/src/index.ts',
       'packages/subagent/tool-subagent/src/index.ts',
