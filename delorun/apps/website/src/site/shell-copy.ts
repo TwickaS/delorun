@@ -18,6 +18,7 @@ export const THEME_COPY: ThemeCopy = {
   title: 'Look',
   themes: 'Theme',
   scheme: 'Light or dark',
+  device: 'Device',
   light: 'Light',
   dark: 'Dark',
   back: 'Back to how it started',

@@ -147,17 +147,22 @@ export interface LookRoot {
 
 /**
  * Applies a look to the page's root: the theme, accent, density and contrast attributes, and the dark class when the
- * scheme is chosen. A scheme left undefined is not touched, so the device's setting stands.
+ * scheme is chosen. With no scheme the page follows the device again: the chosen scheme is removed and the dark class
+ * takes the device's setting.
  * @param root - the root element.
  * @param look - the look.
+ * @param deviceDark - whether the device prefers dark, used when the look has no scheme.
  */
-export function applyLook(root: LookRoot, look: Look): void {
+export function applyLook(root: LookRoot, look: Look, deviceDark = false): void {
   root.dataset['look'] = look.look
   if (look.look === 'custom') root.dataset['accent'] = look.accent
   else delete root.dataset['accent']
   root.dataset['density'] = look.density
   root.dataset['contrast'] = look.contrast
-  if (look.scheme !== undefined) {
+  if (look.scheme === undefined) {
+    delete root.dataset['scheme']
+    root.classList.toggle('dark', deviceDark)
+  } else {
     root.dataset['scheme'] = look.scheme
     root.classList.toggle('dark', look.scheme === 'dark')
   }
@@ -166,7 +171,7 @@ export function applyLook(root: LookRoot, look: Look): void {
 /**
  * The look the page's root shows now.
  * @param root - the root element.
- * @returns the look, validated; an attribute that names nothing known reads as the default.
+ * @returns the look, validated; an attribute that names nothing known reads as the default, and no chosen scheme reads as undefined (the device's).
  */
 export function currentLook(root: LookRoot): Look {
   const data = root.dataset
@@ -175,6 +180,6 @@ export function currentLook(root: LookRoot): Look {
     accent: oneOf(KNOWN_ACCENTS, data['accent'] ?? null) ?? DEFAULT_LOOK.accent,
     density: oneOf(KNOWN_DENSITIES, data['density'] ?? null) ?? DEFAULT_LOOK.density,
     contrast: oneOf(KNOWN_CONTRASTS, data['contrast'] ?? null) ?? DEFAULT_LOOK.contrast,
-    scheme: root.classList.contains('dark') ? 'dark' : 'light',
+    scheme: oneOf(KNOWN_SCHEMES, data['scheme'] ?? null),
   }
 }
