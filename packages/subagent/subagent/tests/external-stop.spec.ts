@@ -132,6 +132,20 @@ describe('stopping external runs', () => {
     expect(alive(earlier)).toBe(true)
   })
 
+  it('records no turn for a run accepted after its chat\'s turn ended', async () => {
+    const { ctx, startRun, openTurn, endTurn } = await setup()
+    const chat = await externalTestParent(ctx)
+    openTurn(chat, 1)
+    endTurn(chat, 1, 'completed')
+    const outside = await startRun(chat)
+
+    endTurn(chat, 1, 'user')
+
+    // A stop is asynchronous, so give a wrongly attributed one time to land.
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(alive(outside)).toBe(true)
+  })
+
   it('leaves the runs alone when the turn ends normally or by disposal', async () => {
     const { ctx, startRun, openTurn, endTurn } = await setup()
     const chat = await externalTestParent(ctx)
@@ -144,5 +158,65 @@ describe('stopping external runs', () => {
 
     expect(alive(first)).toBe(true)
     expect(alive(second)).toBe(true)
+  })
+})
+
+describe('a cancel arriving while an external run starts', () => {
+  async function startingProvider(honoursSignal: boolean) {
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(TestSessionQuery)
+    const spawned = Promise.withResolvers<{ run: SubagentRun; pid: number; signal: AbortSignal }>()
+    const finish = Promise.withResolvers<undefined>()
+    ctx.subagents.registerProvider({
+      name: 'external',
+      capabilities,
+      inheritsParentContext: false,
+      start: async ({ signal }) => {
+        const started = standIn()
+        spawned.resolve({ ...started, signal })
+        if (honoursSignal) {
+          signal.addEventListener('abort', () => { finish.resolve(undefined) }, { once: true })
+          await finish.promise
+          await started.run.dispose()
+          signal.throwIfAborted()
+        } else {
+          await finish.promise
+        }
+        return started.run
+      },
+    })
+    const chat = await externalTestParent(ctx)
+    const toolCall = new AbortController()
+    const starting = ctx.subagents.startActivation({
+      provider: 'external', label: 'External work', signal: toolCall.signal, delivery: 'caller',
+      parent: chat, prompt: [{ type: 'text', text: 'Work independently' }],
+    })
+    return { ctx, chat, toolCall, starting, finish, started: await spawned.promise }
+  }
+
+  it('hands the start the tool call\'s own cancellation and leaves no process when the start stops', async () => {
+    const { ctx, chat, toolCall, starting, started } = await startingProvider(true)
+    const rejected = expect(starting).rejects.toThrow('cancelled mid-start')
+    toolCall.abort(new Error('cancelled mid-start'))
+
+    expect(started.signal.aborted).toBe(true)
+    await rejected
+    await expect.poll(() => alive(started.pid)).toBe(false)
+    expect(await activityOf(ctx, chat.id)).toEqual([])
+  })
+
+  it('rolls the run back when the start finishes after the cancel without noticing it', async () => {
+    const { ctx, chat, toolCall, starting, finish, started } = await startingProvider(false)
+    const rejected = expect(starting).rejects.toThrow('cancelled mid-start')
+    toolCall.abort(new Error('cancelled mid-start'))
+    finish.resolve(undefined)
+
+    await rejected
+    await expect.poll(() => alive(started.pid)).toBe(false)
+    expect(await activityOf(ctx, chat.id)).toEqual([])
   })
 })

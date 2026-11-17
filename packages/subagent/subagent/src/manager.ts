@@ -179,6 +179,8 @@ export class SubagentManager {
         this.turnStarts.set(session.id, event.seq)
       } else if (event.type === 'turn/end') {
         this.stopTurnExternalRuns(session.id, event.data.reason)
+        // A run accepted after this point is outside any turn and records none.
+        this.turnStarts.delete(session.id)
       }
     })
     ctx.on('agent/disposed', ({ agent }) => {
