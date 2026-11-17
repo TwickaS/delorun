@@ -82,7 +82,7 @@ describe('the update routes\' fence and levels', () => {
     const locked = await send(update.server.port, UPDATE_PATHS.check, fromDevice('none'))
     expect(locked.status, locked.body).toBe(200)
     expect(json(locked)).toMatchObject({ enabled: true, checkedAt: 5 })
-    const stranger = await send(update.server.port, UPDATE_PATHS.check, { method: 'POST', host: 'studio.example.ts.net', headers: [CREDENTIAL, 'x-test-remote: 1', 'Origin: https://studio.example.ts.net'], body: {} })
+    const stranger = await send(update.server.port, UPDATE_PATHS.check, { method: 'POST', host: 'studio.example.ts.net', headers: [CREDENTIAL, 'x-test-remote: 1'], body: {} })
     expect(json(stranger)).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     const cross = await send(update.server.port, UPDATE_PATHS.check, { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: {}, withholdBody: true })
     expect(json(cross)).toMatchObject({ code: 'CROSS_SITE' })
@@ -99,8 +99,14 @@ describe('the update routes\' fence and levels', () => {
 
   it('a Host with no home process of an installed release refuses every control and says it is not available', async () => {
     const update = await serveUpdate({ noChannel: true })
-    for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.cancel, UPDATE_PATHS.rollback, UPDATE_PATHS.stop]) {
-      expect(json(await post(update.server.port, path, { chats: 'wait' })), path).toMatchObject({ code: 'UPDATE_UNAVAILABLE' })
+    const bodies: readonly (readonly [string, object])[] = [
+      [UPDATE_PATHS.prepare, {}],
+      [UPDATE_PATHS.cancel, {}],
+      [UPDATE_PATHS.rollback, { chats: 'wait', profileOnly: false }],
+      [UPDATE_PATHS.stop, { chats: 'wait' }],
+    ]
+    for (const [path, body] of bodies) {
+      expect(json(await post(update.server.port, path, body)), path).toMatchObject({ code: 'UPDATE_UNAVAILABLE' })
     }
     expect(json(await get(update.server.port, UPDATE_PATHS.state))).toMatchObject({ available: false })
   })

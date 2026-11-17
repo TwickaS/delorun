@@ -6,6 +6,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { UPDATE_REPORT_SCHEMA, type ReportItem, type UpdateReport } from '@delorun/contract-update-report'
 import type { ResponseLine, UnsignedRequest, UpdateChannelAccess } from '@delorun/home-process'
 import { changesGate } from '@delorun/plugin-changes'
@@ -47,24 +48,32 @@ export class FakeChannel implements UpdateChannelAccess {
   }
 }
 
+/** The channel the stand-in releases are on. */
+const CHANNEL: UpdateReport['from']['channel'] = 'beta'
+
+/** A semantic version as the report types carry it. */
+function version(text: string): UpdateReport['from']['delorun'] {
+  return brandString<UpdateReport['from']['delorun']>(text)
+}
+
 /** A report with the items given; the release facts are those of a clean, verified release. */
 export function report(items: readonly ReportItem[] = [], release: Partial<UpdateReport['release']> = {}): UpdateReport {
   return {
     schema: UPDATE_REPORT_SCHEMA,
     installation: 'cli-home',
-    from: { delorun: '0.1.0', dsh: '1.0.0', channel: 'preview' },
-    to: { delorun: '0.1.1', dsh: '1.0.0', channel: 'preview' },
-    release: { manifest: 'f'.repeat(64), signature: 'passed', freshness: 'passed', log: 'passed', ...release },
-    generated: '2026-11-17T12:00:00Z',
+    from: { delorun: version('0.1.0'), dsh: version('1.0.0'), channel: CHANNEL },
+    to: { delorun: version('0.1.1'), dsh: version('1.0.0'), channel: CHANNEL },
+    release: { manifest: brandString<UpdateReport['release']['manifest']>('f'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'passed', ...release },
+    generated: brandString<UpdateReport['generated']>('2026-11-17T12:00:00Z'),
     installations: [],
     items,
     notChecked: [],
     counts: { disabled: 0, removed: 0, changed: items.length, unverified: 0, data: 0, harness: 0 },
-  } as UpdateReport
+  }
 }
 
 /** An item that disables a plugin. */
-export const DISABLED_PLUGIN = { kind: 'plugin', subject: { name: '@x/plug', version: '1.0.0' }, reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: {}, actions: [] } as ReportItem
+export const DISABLED_PLUGIN = { kind: 'plugin', subject: { name: '@x/plug', version: version('1.0.0') }, reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: {}, actions: [] } as ReportItem
 
 /** The data item: the chat data changes format. */
 export const DATA_ITEM = { kind: 'data', subject: { directories: ['sessions', 'storages'] }, reason: 'data-format-changed', effect: 'changed', verification: 'verified', detail: {}, actions: ['copy-session-data', 'continue-without-copy'] } as ReportItem

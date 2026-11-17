@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@delorun/bundle-local": "workspace:*",
     "@types/semver": "^7.8.0"
