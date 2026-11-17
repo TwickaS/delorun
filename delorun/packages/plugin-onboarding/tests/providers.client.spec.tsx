@@ -47,7 +47,9 @@ describe('the providers landing', () => {
       ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false], [en['providers.custom.name'], false],
     ])
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
-    expect(screen.getByRole('button', { name: en['providers.connect'] })).toBeTruthy()
+    // Every ticked provider has its key, so the primary goes straight on.
+    expect(screen.getByRole('button', { name: en.continue })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['providers.connect'] })).toBeNull()
     await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     expect(screen.getByRole('button', { name: en['providers.connect'] }).hasAttribute('disabled')).toBe(false)
     await click(screen.getByRole('checkbox', { name: /DeepSeek/ }))
@@ -369,6 +371,8 @@ describe('a key Delorun already has', () => {
   ] })
   const walk = async (source?: KeyTestAnswer['providers'][number]['source'], change: Parameters<typeof providersFake>[0] = {}) => {
     const mounted = await mount(change, found(source))
+    // A ticked provider that still needs a key keeps Connect; the found provider's own screen is the first one walked.
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
     await click(screen.getByRole('button', { name: en['providers.connect'] }))
     return mounted
   }
@@ -409,6 +413,7 @@ describe('a key Delorun already has', () => {
   it('keeps the provider connected, and saves nothing, when Next is pressed untouched', async () => {
     const { save } = await walk({ kind: 'saved' })
     await click(screen.getByRole('button', { name: en['providers.next'] }))
+    await click(screen.getByRole('button', { name: en['providers.skipOne'] }))
     expect(save).not.toHaveBeenCalled()
     expect(screen.getByText(en['providers.outcome.connected'])).toBeTruthy()
   })
