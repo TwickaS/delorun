@@ -36,7 +36,7 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
 }
 
 /** What {@link requireComputerOrDevice}, {@link unlockOf} and {@link gateByUnlock} read of the home. */
-export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'>
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'> & Partial<Pick<HomeAuthService, 'touchUnlock'>>
 
 /**
  * The running unlock a reach device's Peer holds: its page's unlock when the Peer carries one (PIN mode), otherwise the
@@ -89,7 +89,10 @@ export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetc
     admitPeer: (request, peer) => {
       const home = homeAuth()
       if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
-      if (unlockOf(home, peer.principal as ReachDevicePrincipal) === undefined) locked.add(request)
+      const unlock = unlockOf(home, peer.principal as ReachDevicePrincipal)
+      if (unlock === undefined) locked.add(request)
+      // The route needs an unlock, so the call renews the unlock it ran under.
+      else home.touchUnlock?.(unlock.id)
       return true
     },
     fetch: (request) => {

@@ -1062,7 +1062,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1081,7 +1081,10 @@ export function createCondition(
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
     const elevation = unlock()
     if (elevation === undefined) return { kind: 'deny', reason }
-    if (call) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+    if (call) {
+      facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+      facts.touchUnlock?.(elevation.id)
+    }
     return undefined
   }
   return ({ action, resource, args }) => {
@@ -1189,6 +1192,11 @@ export interface ReachAccessFacts {
    * @returns its id, or undefined.
    */
   readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string; readonly grace?: true } | undefined
+  /**
+   * Renew an unlock after a call that needed it; reads and questions without arguments never call it.
+   * @param elevationId - the id of the unlock the call ran under.
+   */
+  readonly touchUnlock?: (elevationId: string) => void
   /**
    * The running PIN mode page unlock one Peer was admitted under.
    * @param unlockId - the id in the Peer's principal.

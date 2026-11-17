@@ -221,6 +221,11 @@ export interface HomeAuthOptions {
    * each sign-in; the grace is also capped at the unlock minutes of the listener. 0 turns it off; absent is off.
    */
   readonly approvalGraceMinutes?: () => number
+  /**
+   * The most minutes a computer-approved unlock lasts from its start, however much it is used, read at each unlock;
+   * a listener's unlock minutes must not exceed it. Absent, an unlock does not slide.
+   */
+  readonly unlockCapMinutes?: () => number
 }
 
 /**
@@ -240,6 +245,7 @@ export class HomeAuth {
   private readonly challengeDevices: AttemptLimiter
   private readonly now: () => number
   private readonly approvalGraceMinutes: () => number
+  private readonly unlockCapMinutes: (() => number) | undefined
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
   private readonly random: RandomBytes
@@ -287,8 +293,10 @@ export class HomeAuth {
     this.challenges = new Challenges(this.now, this.random)
     this.pairingSpec = options.pairing ?? (() => PAIRING_DEFAULTS)
     this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec, secrets: options.secrets })
+    const capMinutes = options.unlockCapMinutes
     this.elevations = new Elevations({
       now: this.now,
+      ...capMinutes === undefined ? {} : { capMs: () => capMinutes() * 60_000 },
       random: this.random,
       secrets: options.secrets,
       changed: (change) => {
@@ -330,6 +338,7 @@ export class HomeAuth {
       ...(options.now === undefined ? {} : { now: options.now }),
     })
     this.approvalGraceMinutes = options.approvalGraceMinutes ?? (() => 0)
+    this.unlockCapMinutes = options.unlockCapMinutes
     const challengeLimits = options.challengeLimits ?? CHALLENGE_LIMIT_DEFAULTS
     this.challengeSources = new AttemptLimiter({ limit: challengeLimits.perSourcePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
     this.challengeDevices = new AttemptLimiter({ limit: challengeLimits.perDevicePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
@@ -577,6 +586,10 @@ export class HomeAuth {
     if (served.elevationMinutes !== undefined && !isElevationMinutes(served.elevationMinutes)) {
       throw new HomeAuthError('BAD_REQUEST', `an elevation lasts a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(served.elevationMinutes)}`)
     }
+    const cap = this.unlockCapMinutes?.()
+    if (cap !== undefined && (served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) > cap) {
+      throw new HomeAuthError('BAD_REQUEST', `an unlock lasts ${String(served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes)} minutes, more than the ${String(cap)}-minute cap on one unlock`)
+    }
     this.served.set(served.listener, served)
     return () => {
       if (this.served.get(served.listener) !== served) return
@@ -652,6 +665,15 @@ export class HomeAuth {
     const record = this.elevations.of(deviceId, listener)
     // With PIN mode on there is no approval grace: the first unlock-needing action asks for the PIN.
     return record?.grace === true && this.pin.enabled() ? undefined : record
+  }
+
+  /**
+   * Renew a computer-approved unlock after an action that needed it, which the reach-device policy and the unlock-gated
+   * routes call; reads and polling never do.
+   * @param elevationId - the id of the unlock the action ran under.
+   */
+  touchUnlock(elevationId: string): void {
+    this.elevations.touch(elevationId)
   }
 
   /**

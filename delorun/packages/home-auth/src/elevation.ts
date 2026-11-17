@@ -51,6 +51,12 @@ export interface ElevationRecord extends ElevationAsker {
    * computer-approved elevation, and the device's own call to end the grace ({@link Elevations.endGraceFor}) ends it.
    */
   readonly grace?: true
+  /**
+   * Set on a computer-approved unlock: the minutes it lasts after its last action that needed it, in milliseconds. An
+   * action that needed the unlock moves its end to that long after the action ({@link Elevations.touch}), never beyond the
+   * absolute cap from its start.
+   */
+  readonly slideMs?: number
 }
 
 /** One request to elevate, waiting for the person at the computer. */
@@ -82,6 +88,8 @@ export interface ElevationsOptions {
   readonly changed: (change: ElevationChange) => void
   /** Where a pending request's 8-digit code is registered in each spelling while the request is kept; none registers nothing. */
   readonly secrets?: SecretSink | undefined
+  /** The most milliseconds a computer-approved unlock lasts from its start, however much it is used; absent is no slide. */
+  readonly capMs?: () => number
 }
 
 /** A pending request and the wrong codes typed for it; the request changes only when its session rolls. */
@@ -195,7 +203,25 @@ export class Elevations {
     this.discard(requestId)
     const { request } = pending
     this.endFor(request.deviceId, request.listener, 'replaced')
-    return this.begin(request, at, at + minutes * 60_000)
+    const cap = this.options.capMs?.()
+    const slideMs = minutes * 60_000
+    return this.begin(request, at, at + slideMs, false, false, cap === undefined ? undefined : slideMs)
+  }
+
+  /**
+   * Renew a computer-approved unlock after an action that needed it: its end moves to its minutes after now, at most to
+   * the absolute cap from its start. A page unlock, the approval grace and a call that would shorten the unlock change
+   * nothing.
+   * @param elevationId - the unlock the action ran under.
+   * @returns whether the end moved.
+   */
+  touch(elevationId: string): boolean {
+    const running = this.running.get(elevationId)
+    const cap = this.options.capMs?.()
+    if (running === undefined || cap === undefined || running.record.slideMs === undefined) return false
+    const at = this.options.now()
+    const end = Math.min(at + running.record.slideMs, running.record.startedAt + cap)
+    return end > running.record.endsAt && this.moveEnd(elevationId, end)
   }
 
   /**
@@ -266,9 +292,10 @@ export class Elevations {
    * @param endsAt - the end.
    * @param page - whether it is a page unlock.
    * @param grace - whether it is an approval grace.
+   * @param slideMs - the idle time a computer-approved unlock lasts, when it slides.
    * @returns the record.
    */
-  private begin(asker: ElevationAsker, at: number, endsAt: number, page = false, grace = false): ElevationRecord {
+  private begin(asker: ElevationAsker, at: number, endsAt: number, page = false, grace = false, slideMs?: number): ElevationRecord {
     const record: ElevationRecord = {
       id: newSecret(ELEVATION_LIMITS.idBytes, this.options.random),
       deviceId: asker.deviceId,
@@ -278,6 +305,7 @@ export class Elevations {
       endsAt,
       ...page ? { page: true } : {},
       ...grace ? { grace: true } : {},
+      ...slideMs === undefined ? {} : { slideMs },
     }
     const running: Running = { record, timer: setTimeout(() => { this.end(running, 'expired') }, endsAt - at) }
     running.timer.unref()

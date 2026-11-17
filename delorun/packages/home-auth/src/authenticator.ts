@@ -286,6 +286,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         },
         delorunHome: ctx.homeAuth.delorunHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
+        touchUnlock: id => { ctx.homeAuth.touchUnlock(id) },
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
         pinEnabled: () => ctx.homeAuth.pinEnabled(),
         keyRefs: () => keyRefsOf(access),
