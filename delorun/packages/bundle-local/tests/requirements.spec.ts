@@ -15,7 +15,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 /** A computer with these files, variables and platform. */
 function computer(files: readonly string[], env: Record<string, string> = {}, platform: NodeJS.Platform = 'linux'): CheckEnvironment {
   return {
-    platform, env: { PATH: '/usr/bin:/opt/bin', ...env }, home: '/home/person', isExecutable: path => files.includes(path),
+    platform, env: { PATH: '/usr/bin:/opt/bin', ...env }, osHome: '/home/person', isExecutable: path => files.includes(path),
     exists: path => files.includes(path),
     readJson: (path) => { throw new Error(`unexpected read of ${path}`) },
     resolvePackage: (_from, name) => { throw new Error(`unexpected resolution of ${name}`) },
