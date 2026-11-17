@@ -6,18 +6,10 @@
  *
  * @module @delorun/external-agents/accounts/limit
  */
-import type { ExternalAgentName } from '../contract.ts'
+import type { ExternalAgentName, ReachedLimit } from '../contract.ts'
 import type { AccountState, StoredWindow } from './wire.ts'
 
-/** A reached limit that refuses a start. */
-export interface ReachedLimit {
-  /** The agent. */
-  readonly provider: ExternalAgentName
-  /** The window's kind, such as `five_hour`; the latest-resetting one when several are reached. */
-  readonly window: string
-  /** When it resets, in milliseconds since the epoch; always after the `now` it was found at. */
-  readonly resetsAt: number
-}
+export type { ReachedLimit }
 
 /**
  * The reached limit that refuses a start now, if any.

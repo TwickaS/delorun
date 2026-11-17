@@ -4,7 +4,7 @@
  *
  * @module @delorun/external-agents/accounts/wire
  */
-import type { ExternalAgentName, LimitWindow, OfferedModel } from '../contract.ts'
+import type { AccountRecord, AccountRefreshOutcome, AgentAccounts, ExternalAgentName, RecordedLimitWindow } from '../contract.ts'
 
 /** The providers whose accounts are kept, in display order. */
 export const ACCOUNT_PROVIDERS = ['claude-code', 'codex'] as const satisfies readonly ExternalAgentName[]
@@ -20,34 +20,11 @@ export const ACCOUNT_ROUTES = {
 /** The largest request body a route reads, in bytes. */
 export const MAX_ACCOUNT_REQUEST_BYTES = 1024
 
-/** One limit window as stored: a {@link LimitWindow} with when it was seen and where. */
-export interface StoredWindow extends LimitWindow {
-  /** When the figures were seen, in milliseconds since the epoch. */
-  readonly seenAt: number
-  /** Whether a run or a limits check reported them. */
-  readonly source: 'run' | 'probe'
-}
+/** One limit window as stored, with when it was seen and where. */
+export type StoredWindow = RecordedLimitWindow
 
-/** One provider's stored figures. */
-export interface AccountState {
-  /** Whether the program last said it is signed in; `unknown` until a check or a run says. */
-  readonly signedIn: 'yes' | 'no' | 'unknown'
-  /** The plan's name as the program spells it, such as `max` or `plus`. */
-  readonly plan?: string
-  /** The limit windows, one per kind. */
-  readonly windows: readonly StoredWindow[]
-  /** The models the program offers on this sign-in, when it lists them (Codex). */
-  readonly offeredModels?: readonly OfferedModel[]
-  /** When a limits check last answered, in milliseconds since the epoch. */
-  readonly checkedAt?: number
-  /** When a limits check last failed, in milliseconds since the epoch. */
-  readonly checkFailedAt?: number
-  /**
-   * When `delorun agents login` finished a sign-in while Delorun was not running, in milliseconds since the epoch: the
-   * Host checks this agent once when its driver registers at the next start, and the check clears the mark.
-   */
-  readonly checkRequestedAt?: number
-}
+/** One provider's stored figures: its {@link AccountRecord} without what the Host knows only at run time. */
+export type AccountState = Omit<AccountRecord, 'provider' | 'installed'>
 
 /** The accounts file's content. */
 export interface AccountsFile {
@@ -57,21 +34,11 @@ export interface AccountsFile {
   readonly accounts: Readonly<Partial<Record<ExternalAgentName, AccountState>>>
 }
 
-/** One provider's entry in {@link AccountsAnswer}. */
-export interface AccountView extends AccountState {
-  /** The provider. */
-  readonly provider: ExternalAgentName
-  /** Whether the provider's pack is added, so a check can run. */
-  readonly installed: boolean
-}
+/** One provider's entry in {@link AccountsAnswer}: its stored figures, and whether its pack is added. */
+export type AccountView = AccountRecord
 
-/** The `accounts` route's answer. */
-export interface AccountsAnswer {
-  /** Every provider, in {@link ACCOUNT_PROVIDERS} order. */
-  readonly accounts: readonly AccountView[]
-  /** The time the answer was made, in milliseconds since the epoch, which "as of" and "reset at" compare against. */
-  readonly now: number
-}
+/** The `accounts` route's answer, `AgentAccounts.readAll`'s: every provider in {@link ACCOUNT_PROVIDERS} order, and the time "as of" and "reset at" compare against. */
+export type AccountsAnswer = Awaited<ReturnType<AgentAccounts['readAll']>>
 
 /** The `refresh` route's request. */
 export interface RefreshRequest {
@@ -79,32 +46,11 @@ export interface RefreshRequest {
   readonly provider: ExternalAgentName
 }
 
-/**
- * What a refresh did:
- * - `checked`: a check ran and answered; `record` holds its figures;
- * - `failed`: a check ran and did not answer; the figures stay as they were seen;
- * - `throttled`: the last check was too recent; `nextAt` is when the next may run;
- * - `not-installed`: the provider's pack is not added, so nothing started;
- * - `refused`: the start gate refused the check, with its sentence for the person;
- * - `turned-off`: the profile's Config does not let this kind of act start a check.
- */
-export type RefreshOutcome =
-  | { readonly kind: 'checked' }
-  | { readonly kind: 'failed'; readonly problem: string }
-  | { readonly kind: 'throttled'; readonly nextAt: number }
-  | { readonly kind: 'not-installed' }
-  | { readonly kind: 'refused'; readonly problem: string }
-  | { readonly kind: 'turned-off' }
+/** What a refresh did. */
+export type RefreshOutcome = AccountRefreshOutcome
 
-/** The `refresh` route's answer. */
-export interface RefreshAnswer {
-  /** What the refresh did. */
-  readonly outcome: RefreshOutcome
-  /** The provider's figures after it. */
-  readonly record: AccountView
-  /** The time the answer was made, in milliseconds since the epoch. */
-  readonly now: number
-}
+/** The `refresh` route's answer, `AgentAccounts.refresh`'s: the outcome, the provider's figures after it, and the time. */
+export type RefreshAnswer = Awaited<ReturnType<AgentAccounts['refresh']>>
 
 /** The names a person knows each limit window kind by, as the drivers name them; any other kind is shown in words. */
 export const WINDOW_TITLES: Readonly<Record<string, string>> = {

@@ -9,6 +9,7 @@ import { GateRefusedError, type ExternalAgentsGate } from '../contract.ts'
 import { AGENT_PACKS } from '../locate.ts'
 import type { CheckResult } from './service.ts'
 import { problemOf } from './store.ts'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 
 /**
  * The account service's check, run through a gate.
@@ -32,6 +33,11 @@ export function checkThrough(gate: Pick<ExternalAgentsGate, 'probe'>): (provider
           return { kind: 'refused', problem: refusal.reason }
         case 'limit':
           return { kind: 'refused', problem: `${AGENT_PACKS[provider].title} is at a plan limit, so it was not checked.` }
+        case 'seat-running':
+          // A probe names no seat; the gate does not answer it this way, and the person reads it as a refusal.
+          return { kind: 'refused', problem: `${AGENT_PACKS[provider].title} was not checked: the gate refused the check.` }
+        default:
+          return assertNever(refusal)
       }
     }
   }
