@@ -54,7 +54,6 @@ export {
 export { HostConnectionService } from './rpc-host.ts'
 export {
   Authenticator,
-  LOOPBACK_LISTENER,
   type Admission,
   type DeclaredScheme,
   type HostRule,
@@ -63,8 +62,6 @@ export {
   type PreLoginRoute,
 } from './authenticator.ts'
 export {
-  REACH_REFUSAL_STATUS,
-  reachContentSecurityPolicy,
   type HostConnectionAdmission,
   type ReachListener,
   type ReachListenerOptions,

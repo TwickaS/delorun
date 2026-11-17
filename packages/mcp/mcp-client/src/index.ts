@@ -33,20 +33,13 @@ import type {} from '@deepseek-ai/dsh-tools'
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
-export {
-  findMcpAddConsent,
-  MCP_ADD_CONSENT_PROVIDER_EXPORT,
-  McpAddConsent,
-  McpConsentRefusedError,
-  McpConsentUnavailableError,
-  sortedEnvEntries,
-} from './consent.ts'
+export { McpAddConsent, McpConsentRefusedError, McpConsentUnavailableError } from './consent.ts'
 export type { McpConsentDecision, McpServerCommand } from './consent.ts'
-export { McpServerStartUnresolvedError, resolveServerStart } from './server-start.ts'
+export { McpServerStartUnresolvedError } from './server-start.ts'
 export type { McpConnectionStatusHandle } from './status.ts'
 export type * from './types.ts'
 export { probeServer } from './probe.ts'
-export { assertLiteralStart, assertTemplateSyntax, isRunAffectingEnv } from './templates.ts'
+export { assertTemplateSyntax } from './templates.ts'
 export type { McpProbeOptions } from './probe.ts'
 
 /** Cordis plugin name used by loader diagnostics. */

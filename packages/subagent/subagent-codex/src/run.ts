@@ -14,8 +14,8 @@ import { dirname, resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { agentSignInFailureText } from '@deepseek-ai/dsh-subagent/out-of-process'
 import {
-  agentSignInFailureText,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,

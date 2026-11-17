@@ -17,7 +17,7 @@ import { guardProfile, pluginManagerVerdict, type GuardRow } from './guard.ts'
 import { registerDelegationRoutes } from './routes.ts'
 import { FailedDelegationConsent } from './failed.ts'
 import { DelorunDelegationConsent } from './service.ts'
-import { missingClaudeSandboxTools } from '@deepseek-ai/dsh-subagent'
+import { missingClaudeSandboxTools } from '@deepseek-ai/dsh-subagent/safety-level'
 import { AGENT_LEVEL_FIELDS, AGENT_LEVELS, DEFAULT_AGENT_LEVEL, DELEGATION_CONSENT_ROW, RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from './wire.ts'
 
 export { DelorunDelegationConsent, DelegationConsentError } from './service.ts'

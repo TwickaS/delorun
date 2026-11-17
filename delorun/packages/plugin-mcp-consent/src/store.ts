@@ -31,7 +31,7 @@ import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
+import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client/consent'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
 import {
   currentHolder, holderAlive, holderIdentity, isLockId, LockFile, parseHolder, randomLockId, readProtectedFile, writeProtectedFile,

@@ -12,7 +12,7 @@ import { truncateWithoutSplittingSurrogatePair } from '@deepseek-ai/dsh-output-r
 import { sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
-import { protectedReadCheck, refuseProtectedRead } from '@deepseek-ai/dsh-tool-fs'
+import { protectedReadCheck, refuseProtectedRead } from '@deepseek-ai/dsh-tool-fs/read-target'
 import { ToolArgsError, defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
 

@@ -18,9 +18,8 @@ import {
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { agentSignInFailureText, isAgentSignInFailure } from '@deepseek-ai/dsh-subagent/out-of-process'
 import {
-  agentSignInFailureText,
-  isAgentSignInFailure,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,

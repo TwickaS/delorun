@@ -9,7 +9,7 @@
 import { fileURLToPath } from 'node:url'
 import { confirm, isCancel } from '@clack/prompts'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import { setAsideFile } from '@deepseek-ai/dsh-storage-json'
+import { setAsideFile } from '@deepseek-ai/dsh-storage-json/set-aside'
 import { acquireHomeLock, newStartId, runDirectory } from '@delorun/home'
 import { updateChannelProbe } from '@delorun/home-process'
 import { readFile } from 'node:fs/promises'

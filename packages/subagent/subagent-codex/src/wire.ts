@@ -10,7 +10,7 @@
 import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
-import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
+import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent/out-of-process'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { CodexRunPermissions } from './run.ts'
 

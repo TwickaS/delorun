@@ -80,9 +80,8 @@ import { assertExternalDelegationConsent, findDelegationConsent, limitExternalRu
 
 export type {} from './catalog.ts'
 export type {} from './projection.ts'
-export * from './out-of-process.ts'
-export { assertExternalDelegationConsent, DELEGATION_CONSENT_PROVIDER_EXPORT, findDelegationConsent, limitExternalRunTime } from './consent.ts'
-export { CLAUDE_SANDBOX_INSTALL_COMMAND, missingClaudeSandboxTools, SUBAGENT_SAFETY_LEVELS } from './safety-level.ts'
+export { NO_START_CAPABILITIES, assertPositiveFinite, assertUsableCwd, settleRunResult, subprocessRunHandle } from './out-of-process.ts'
+export type { RunResultSettlement, SubprocessRunHandleParts } from './out-of-process.ts'
 export type { SubagentSafetyLevel } from './safety-level.ts'
 export type { DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict } from './consent.ts'
 export { AssistantOutputFold, finalAssistantOutput } from './assistant-output.ts'
