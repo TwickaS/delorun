@@ -46,7 +46,7 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
       </div>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><Switch checked={on} label="Delorun look" onChange={setOn} />Delorun look</label>
       <ToastCard message="Theme changed to Ocean" action={{ label: 'Back to Soft', onClick: () => {} }} onDone={() => {}} />
-      <Button onClick={() => { showToast({ message: `Theme changed to ${scheme === 'dark' ? 'Ocean' : 'Forest'}`, action: { label: 'Back to Soft', onClick: () => {} } }) }}>Show a toast</Button>
+      <Button style={{ justifySelf: 'start' }} onClick={() => { showToast({ message: `Theme changed to ${scheme === 'dark' ? 'Ocean' : 'Forest'}`, action: { label: 'Back to Soft', onClick: () => {} } }) }}>Show a toast</Button>
     </section>
   )
 }

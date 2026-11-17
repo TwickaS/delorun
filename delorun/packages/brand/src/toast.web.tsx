@@ -72,7 +72,7 @@ export interface ToasterProps {
 export function Toaster({ label, holdMs = TOAST_HOLD_MS }: ToasterProps) {
   return (
     <SonnerToaster
-      position="bottom-center"
+      position="bottom-center" // us-spelling: quoted output (Sonner's API value)
       visibleToasts={1}
       duration={holdMs}
       swipeDirections={['bottom', 'left', 'right']}
