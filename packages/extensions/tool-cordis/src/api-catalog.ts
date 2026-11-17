@@ -5624,6 +5624,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; callers own their request inputs and must keep them unchanged until the stream settles.' }],
   },
   {
+    name: 'mcp-client/consent-accepted',
+    mode: 'parallel',
+    signature: '\'mcp-client/consent-accepted\'(serverName: string): void | Promise<void>',
+    summary: 'The add-time consent accepted one server\'s start.',
+    description: 'The add-time consent accepted one server\'s start. A provider that mounts the server per Session starts it again in the live Sessions the refusal left without its tools; the consent is still checked at that start.',
+    parameters: [{ name: 'serverName', description: 'the accepted server.' }],
+  },
+  {
     name: 'mcp-manager/status',
     mode: 'parallel',
     signature: '\'mcp-manager/status\'(name: string, status: McpManagedServerStatus): void | Promise<void>',

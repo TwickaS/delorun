@@ -1672,6 +1672,7 @@ function listenerPackages(listeners: Set<string>, pkgsByShort: Map<string, Pkg>)
  */
 const DISPATCHED_OUTSIDE_PROGRAM: Record<string, string> = {
   'browser-use/admission-changed': 'Delorun\'s `@delorun/plugin-new-workspace` (`parallel`), outside this Program',
+  'mcp-client/consent-accepted': 'Delorun\'s `@delorun/plugin-mcp-consent` (`parallel`), outside this Program',
 }
 
 /**
