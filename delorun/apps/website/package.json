@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "node ../../packages/site-design/scripts/write-looks.ts --check && vite build && tsc --noEmit && node ../docs/scripts/check-links.mjs out && node scripts/check-weight.ts out",
+    "build": "node ../../packages/site-design/scripts/write-looks.ts --check && vite build && tsc --noEmit && node ../docs/scripts/check-links.mjs out && node scripts/check-weight.ts out && node scripts/check-styles.ts out",
     "dev": "vite dev",
     "preview": "node ../docs/scripts/serve-static.mjs out",
     "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json",

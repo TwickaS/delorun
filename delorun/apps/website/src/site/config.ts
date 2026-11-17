@@ -37,3 +37,10 @@ export const UPDATES_EMAIL = 'updates@delorun.com'
 
 /** The trading name that signs the site's messages. */
 export const TRADING_NAME = 'Delo Run'
+
+/**
+ * Chunks the prerender renders in full but the browser loads on demand, by page file. The build links each chunk's
+ * stylesheet from the page, so the page is styled with scripts off. `scripts/check-styles.ts` fails the build for a class
+ * with no rule.
+ */
+export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {}
