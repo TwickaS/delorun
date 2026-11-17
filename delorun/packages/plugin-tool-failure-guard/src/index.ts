@@ -52,6 +52,11 @@ export interface Config {
    * run of failures. A pattern that matches no registered tool is allowed.
    */
   readonly exclude: string[]
+  /**
+   * Also write {@link STDERR_NOTICE} to the process's standard error when the guard stops a turn. `delorun headless`
+   * sets it on, because it prints only the turn's final text and has no chat to show the notice in.
+   */
+  readonly stderrNotice: boolean
 }
 
 /** The configuration schema; `enabled` defaults to the parity value, the limits to the shipped ones. */
@@ -62,7 +67,11 @@ export const Config: z<Config> = z.object({
   windowFailures: z.natural().default(8),
   reminderAfter: z.natural().default(3),
   exclude: z.array(z.string()).default([]),
+  stderrNotice: z.boolean().default(false),
 })
+
+/** The line `stderrNotice` writes when the guard stops a turn. */
+export const STDERR_NOTICE = 'delorun: the turn stopped because tool calls kept failing; check the errors in the chat, then run the task again.\n'
 
 /** The source stamped on the reminder; the session renders it as a plugin notice, not as the person's words. */
 function reminderSource(count: number): UserMessage['source'] {
@@ -140,6 +149,7 @@ export function apply(ctx: Context, config: Config): void {
     if (tallies.get(agent)?.tripped === true) {
       tallies.delete(agent)
       agent.cancel({ kind: 'hook', reason: TOOL_FAILURE_GUARD_STOP_REASON }, { keepInbox: true })
+      if (config.stderrNotice) process.stderr.write(STDERR_NOTICE)
     }
     return next()
   })

@@ -1989,6 +1989,9 @@ importers:
       '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delorun/plugin-tool-failure-guard':
+        specifier: workspace:*
+        version: link:../plugin-tool-failure-guard
 
   delorun/packages/bundle-local:
     dependencies:

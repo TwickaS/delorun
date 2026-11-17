@@ -2,7 +2,7 @@
  * The guard driven through a real agent loop against a scripted model (no network): when a turn stops, what the model
  * reads first, what does not count, and what starts a fresh count.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -17,7 +17,7 @@ type Script = ConstructorParameters<typeof MockAdapter>[0]
 
 /** The row's Config with the shipped limits, switched on unless a test says otherwise. */
 function configOf(overrides: Partial<Guard.Config> = {}): Guard.Config {
-  return { enabled: true, consecutiveFailures: 6, windowSize: 12, windowFailures: 8, reminderAfter: 3, exclude: [], ...overrides }
+  return { enabled: true, consecutiveFailures: 6, windowSize: 12, windowFailures: 8, reminderAfter: 3, exclude: [], stderrNotice: false, ...overrides }
 }
 
 /** Boot the loop with a failing tool, a working tool and the guard. */
@@ -119,6 +119,33 @@ describe('stopping a turn', () => {
     const { agent } = await agentWith(ctx, [...calls('browser', 5), ...calls('ls', 1, 5), textResponse('done')])
     await runTurn(ctx, agent)
     expect(turnEnds(agent)).toEqual([{ kind: 'completed' }])
+  })
+})
+
+describe('the headless line', () => {
+  it('writes one line to standard error on a stop with stderrNotice on', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      const ctx = await harness(configOf({ stderrNotice: true }))
+      const { agent } = await agentWith(ctx, [...calls('browser', 6), textResponse('never')])
+      await runTurn(ctx, agent)
+      expect(write.mock.calls.filter(([chunk]) => chunk === Guard.STDERR_NOTICE)).toHaveLength(1)
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('writes nothing with stderrNotice off, the studio value', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      const ctx = await harness()
+      const { agent } = await agentWith(ctx, [...calls('browser', 6), textResponse('never')])
+      await runTurn(ctx, agent)
+      expect(turnEnds(agent)).toEqual([STOPPED])
+      expect(write.mock.calls.filter(([chunk]) => chunk === Guard.STDERR_NOTICE)).toHaveLength(0)
+    } finally {
+      write.mockRestore()
+    }
   })
 })
 

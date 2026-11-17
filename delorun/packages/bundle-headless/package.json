@@ -1,6 +1,6 @@
 {
   "name": "@delorun/bundle-headless",
-  "description": "Delorun's headless bundle: the guard rows delorun headless mounts over upstream's headless profile, the fetch guard, the instruction write, MCP, schedule and full-access consents, the plugin changes held for review, the turn gate and the protection of those rows from plugin management",
+  "description": "Delorun's headless bundle: the guard rows delorun headless mounts over upstream's headless profile, the fetch guard, the tool-failure guard, the instruction write, MCP, schedule and full-access consents, the plugin changes held for review, the turn gate and the protection of those rows from plugin management",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
@@ -28,7 +28,8 @@
     "@delorun/plugin-instruction-consent": "workspace:*",
     "@delorun/plugin-mcp-consent": "workspace:*",
     "@delorun/plugin-permission-defaults": "workspace:*",
-    "@delorun/plugin-schedule-consent": "workspace:*"
+    "@delorun/plugin-schedule-consent": "workspace:*",
+    "@delorun/plugin-tool-failure-guard": "workspace:*"
   },
   "delorun": {
     "state": "shipped"
