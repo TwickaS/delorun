@@ -1,4 +1,4 @@
-/** The web entry page lets a phone draw under its notch and colours the browser chrome per scheme. */
+/** The web entry page lets a phone draw under its notch; the theme presenter colours the browser chrome. */
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -10,8 +10,7 @@ describe('web index.html', () => {
     expect(html).toMatch(/<meta name="viewport" content="[^"]*viewport-fit=cover[^"]*"/)
   })
 
-  it('gives one theme-color for each colour scheme', () => {
-    expect(html.match(/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: light\)"/g)).toHaveLength(1)
-    expect(html.match(/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: dark\)"/g)).toHaveLength(1)
+  it('has no static theme-color, because the theme presenter owns the one node', () => {
+    expect(html).not.toMatch(/<meta name="theme-color"/)
   })
 })
