@@ -12,7 +12,7 @@ import { spawn as spawnChild } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { ProgramFailureError } from '../src/contract.ts'
+import { ProgramOpenError } from '@delorun/external-agents/contract'
 import { REPO, answerText, listingDiff, live, processesIn, removeTask, sleep, taskFolder, topListing, untilTurnEnd, type Live } from './common.ts'
 
 /** Run one scenario with set-up, the leftover checks and clean-up around it. */
@@ -22,7 +22,7 @@ async function scenario(name: string, body: (run: Live) => Promise<void>, task?:
   try {
     await body(run)
   } catch (error: unknown) {
-    run.log.report('failed', error instanceof ProgramFailureError ? error.failure : String(error))
+    run.log.report('failed', error instanceof ProgramOpenError ? error.failure : String(error))
     process.exitCode = 1
   } finally {
     await run.dispose()
@@ -72,7 +72,7 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
       if (event.kind !== 'tool-call') return
       await sleep(3_000)
       run.log.report('programs before Stop', processesIn(run.task))
-      await session.interrupt()
+      run.log.report('interrupt outcome', await session.interrupt())
     })
     run.log.report('turn end', events.at(-1))
     run.log.report('closed reason', session.closedReason ?? 'still open')
@@ -130,7 +130,7 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
       run.log.report('opened with the configured model', session.programSessionId)
       await session.close()
     } catch (error: unknown) {
-      if (!(error instanceof ProgramFailureError)) throw error
+      if (!(error instanceof ProgramOpenError)) throw error
       run.log.report('open refused', error.failure)
     }
   }),

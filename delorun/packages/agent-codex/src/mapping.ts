@@ -6,7 +6,7 @@
  */
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
-import type { AccountObservation, LimitWindow, OfferedModel, ProgramFailure, ProgramRunRule } from './contract.ts'
+import type { AccountObservation, LimitWindow, OfferedModel, ProgramFailure, ProgramRunRule } from '@delorun/external-agents/contract'
 import type { ClientResult, RateLimitSnapshot, TokenUsageBreakdown, ToolItem, TurnError, WireJson } from './protocol.ts'
 
 /** A program tool call as the seat records it. */

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { ProgramFailureError, type AccountObservation, type ProgramOpenRequest, type ProgramSpawnRequest } from '../src/contract.ts'
-import { CodexDriver, type CodexProgram } from '../src/driver.ts'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
+import { ProgramOpenError, type AccountObservation, type ProgramOpenRequest, type ProgramSpawnRequest } from '@delorun/external-agents/contract'
+import type { LocatedCodex } from '@delorun/external-agents/locate'
+import { CodexDriver } from '../src/driver.ts'
 import { TESTED_CODEX_VERSION } from '../src/protocol.ts'
 import { FakeAppServer } from './fake-app-server.ts'
 import {
   TASK, THREAD, accountSignedIn, accountSignedOut, initializeResult, modelList, rateLimitsRead, threadOpened,
 } from './recorded.ts'
 
-const PINNED: CodexProgram = { entry: '/pack/node_modules/@openai/codex/bin/codex.js', version: TESTED_CODEX_VERSION }
+const PINNED: LocatedCodex = { directory: '/pack/node_modules/@openai/codex', script: '/pack/node_modules/@openai/codex/bin/codex.js', version: TESTED_CODEX_VERSION }
 
 interface Setup {
   readonly codex: FakeAppServer
@@ -18,7 +20,7 @@ interface Setup {
 }
 
 /** A driver whose spawn returns one fake app-server answering the recorded open sequence. */
-function setup(program: CodexProgram = PINNED, configuredModel = 'gpt-5.6-luna'): Setup {
+function setup(program: LocatedCodex = PINNED, configuredModel = 'gpt-5.6-luna'): Setup {
   const codex = new FakeAppServer()
   codex.answer('initialize', { result: initializeResult })
   codex.answer('account/read', { result: accountSignedIn })
@@ -38,7 +40,7 @@ function setup(program: CodexProgram = PINNED, configuredModel = 'gpt-5.6-luna')
     limits,
     driver: new CodexDriver({ locate: () => program, requestTimeoutMs: 2_000, closeWaitMs: 50 }),
     request: overrides => ({
-      sessionId: 'seat-child',
+      sessionId: SessionId('seat-child'),
       cwd: TASK,
       runRules: [],
       harnessTools: [],
@@ -51,17 +53,17 @@ function setup(program: CodexProgram = PINNED, configuredModel = 'gpt-5.6-luna')
   }
 }
 
-async function failureOf(promise: Promise<unknown>): Promise<ProgramFailureError> {
+async function failureOf(promise: Promise<unknown>): Promise<ProgramOpenError> {
   const error: unknown = await promise.then(() => undefined, (thrown: unknown) => thrown)
-  expect(error).toBeInstanceOf(ProgramFailureError)
-  return error as ProgramFailureError
+  expect(error).toBeInstanceOf(ProgramOpenError)
+  return error as ProgramOpenError
 }
 
 describe('open', () => {
   it('starts the pinned app-server through the gate\'s spawn, on the stable protocol', async () => {
     const s = setup()
     const session = await s.driver.open(s.request())
-    expect(s.spawned).toEqual([{ argv: [process.execPath, PINNED.entry, 'app-server', '--stdio'], stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }])
+    expect(s.spawned).toEqual([{ argv: [process.execPath, PINNED.script, 'app-server', '--stdio'], stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }])
     expect(s.codex.requests('initialize')).toEqual([{ clientInfo: { name: 'delorun', title: 'Delorun', version: '0.1.0' }, capabilities: { experimentalApi: false, requestAttestation: false } }])
     expect(s.codex.received.some(frame => frame.method === 'initialized')).toBe(true)
     expect(session.programSessionId).toBe(THREAD)
@@ -122,9 +124,16 @@ describe('open', () => {
   })
 
   it('refuses an untested Codex version without starting it', async () => {
-    const s = setup({ entry: PINNED.entry, version: '0.154.0' })
+    const s = setup({ ...PINNED, version: '0.154.0' })
     const error = await failureOf(s.driver.open(s.request()))
     expect(error.failure).toMatchObject({ category: 'program' })
+    expect(s.spawned).toEqual([])
+  })
+
+  it('fails without starting anything when the Codex pack has no program', async () => {
+    const s = setup()
+    const driver = new CodexDriver({ locate: () => undefined, requestTimeoutMs: 2_000, closeWaitMs: 50 })
+    expect((await failureOf(driver.open(s.request()))).failure).toMatchObject({ category: 'program' })
     expect(s.spawned).toEqual([])
   })
 

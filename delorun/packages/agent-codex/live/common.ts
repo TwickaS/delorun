@@ -6,17 +6,18 @@
  * Live runs use the person's own Codex sign-in. Never part of a Vitest lane.
  * @module @delorun/agent-codex/live/common
  */
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSpawn } from '../src/contract.ts'
-import { CodexDriver, type CodexProgram } from '../src/driver.ts'
+import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSpawn } from '@delorun/external-agents/contract'
+import { locateCodex, type LocatedCodex } from '@delorun/external-agents/locate'
+import { CodexDriver } from '../src/driver.ts'
 import type { CodexSession } from '../src/session.ts'
 
 /** The worktree root. */
@@ -29,13 +30,13 @@ export const MODEL = process.env.EA1_CODEX_MODEL ?? 'gpt-5.6-luna'
 export const CODEX_HOME = process.env.CODEX_HOME ?? join(homedir(), '.codex')
 
 /**
- * The pinned program, found through upstream's Codex package as the gate finds it.
- * @returns its bin script and version.
+ * The pinned program, found by the gate's locator from the repository's installed packs.
+ * @returns its launcher script and version.
  */
-export function pinnedCodex(): CodexProgram {
-  const manifest = createRequire(join(REPO, 'packages/subagent/subagent-codex/package.json')).resolve('@openai/codex/package.json')
-  const pkg = JSON.parse(readFileSync(manifest, 'utf8')) as { readonly version: string; readonly bin: { readonly codex: string } }
-  return { entry: join(dirname(manifest), pkg.bin.codex), version: pkg.version }
+export function pinnedCodex(): LocatedCodex {
+  const program = locateCodex(REPO)
+  if (program === undefined) throw new Error('the Codex pack is not installed in this worktree')
+  return program
 }
 
 /**
@@ -200,7 +201,7 @@ export async function live(name: string, task = taskFolder()): Promise<Live> {
     answers: [],
     driver: new CodexDriver({ locate: pinnedCodex, requestTimeoutMs: 120_000, closeWaitMs: 5_000, tap: (direction, frame) => { log.frame(direction, frame) } }),
     request: overrides => ({
-      sessionId: `live-${name}`,
+      sessionId: SessionId(`live-${name}`),
       cwd: task,
       model: MODEL,
       runRules: [],

@@ -12,28 +12,20 @@
  * turn, with the configured name and the offered list. The driver never picks a model for the person.
  * @module @delorun/agent-codex/driver
  */
-import type {
-  AccountObservation, ExternalAgentDriver, OfferedModel, ProgramFailure, ProgramOpenRequest, ProgramProbeRequest,
-  ProgramSpawn,
-} from './contract.ts'
-import { ProgramFailureError } from './contract.ts'
+import {
+  ProgramOpenError, type AccountObservation, type ExternalAgentDriver, type OfferedModel, type ProgramFailure,
+  type ProgramOpenRequest, type ProgramSpawn,
+} from '@delorun/external-agents/contract'
+import type { LocatedCodex } from '@delorun/external-agents/locate'
 import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
 import { CodexSession } from './session.ts'
 
-/** The pinned Codex program the driver starts. */
-export interface CodexProgram {
-  /** The `@openai/codex` package's `bin.codex` script, run with this Node. */
-  readonly entry: string
-  /** The package's version, which must equal {@link TESTED_CODEX_VERSION}. */
-  readonly version: string
-}
-
 /** The driver's settings, from its row's validated configuration. */
 export interface CodexDriverOptions {
-  /** Finds the pinned program in upstream's Codex pack. */
-  readonly locate: () => CodexProgram
+  /** Finds the pinned launcher in upstream's Codex pack; undefined when the pack or the program is missing. */
+  readonly locate: () => LocatedCodex | undefined
   /** How long one request may wait for Codex's answer, in milliseconds; a fresh `thread/start` can take 30 s. */
   readonly requestTimeoutMs: number
   /** How long the process may take to exit after its input ends before it is terminated, in milliseconds. */
@@ -59,8 +51,8 @@ const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'read-only' } as c
  * @param program - the located program.
  * @returns Node, the package's bin script and the app-server arguments.
  */
-export function appServerArgv(program: CodexProgram): string[] {
-  return [process.execPath, program.entry, 'app-server', '--stdio']
+export function appServerArgv(program: LocatedCodex): string[] {
+  return [process.execPath, program.script, 'app-server', '--stdio']
 }
 
 /** The Codex driver. */
@@ -82,7 +74,7 @@ export class CodexDriver implements ExternalAgentDriver {
       const rpc = session.rpc
       await this.handshake(rpc, request.signal)
       const account = await rpc.request('account/read', { refreshToken: false }, this.timeout(request.signal))
-      if (account.account === null && account.requiresOpenaiAuth) throw new ProgramFailureError({ category: 'signed-out' })
+      if (account.account === null && account.requiresOpenaiAuth) throw new ProgramOpenError({ category: 'signed-out' })
       const thread = {
         cwd: request.cwd,
         ...THREAD_POLICY,
@@ -95,13 +87,13 @@ export class CodexDriver implements ExternalAgentDriver {
         try {
           opened = await rpc.request('thread/resume', { ...thread, threadId: request.resume }, this.timeout(request.signal))
         } catch (error: unknown) {
-          if (error instanceof CodexRpcError) throw new ProgramFailureError({ category: 'resume-failed' }, { cause: error })
+          if (error instanceof CodexRpcError) throw new ProgramOpenError({ category: 'resume-failed' }, { cause: error })
           throw error
         }
       }
       const offered = await this.listModels(rpc, request.signal)
       if (request.model === undefined && !offered.some(model => model.id === opened.model)) {
-        throw new ProgramFailureError({ category: 'model-not-offered', configured: opened.model, offered })
+        throw new ProgramOpenError({ category: 'model-not-offered', configured: opened.model, offered })
       }
       request.onLimits({ ...observationOf({ account, source: 'run' }), offeredModels: offered })
       session.session.attach(opened.thread.id, request.cwd)
@@ -114,7 +106,7 @@ export class CodexDriver implements ExternalAgentDriver {
     }
   }
 
-  async probe(request: ProgramProbeRequest): Promise<AccountObservation> {
+  async probe(request: Parameters<ExternalAgentDriver['probe']>[0]): Promise<AccountObservation> {
     request.signal.throwIfAborted()
     const session = this.connect(request.spawn, () => Promise.resolve('reject'), () => {})
     const close = (): void => { void session.session.close() }
@@ -144,13 +136,14 @@ export class CodexDriver implements ExternalAgentDriver {
   /** Locate the program, refuse an untested version, and start the app-server through the gate. */
   private connect(spawn: ProgramSpawn, onApproval: ProgramOpenRequest['onApproval'], onLimits: ProgramOpenRequest['onLimits']): { readonly rpc: CodexRpc; readonly session: CodexSession } {
     const program = this.options.locate()
+    if (program === undefined) throw new ProgramOpenError({ category: 'program', detail: 'The Codex program was not found in the Codex pack.' })
     if (program.version !== TESTED_CODEX_VERSION) {
-      throw new ProgramFailureError({ category: 'program', detail: `Codex ${program.version} is not a version Delorun has tested; Delorun runs Codex ${TESTED_CODEX_VERSION}.` })
+      throw new ProgramOpenError({ category: 'program', detail: `Codex ${program.version} is not a version Delorun has tested; Delorun runs Codex ${TESTED_CODEX_VERSION}.` })
     }
     const handle = spawn({ argv: appServerArgv(program), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } })
     if (handle.stdin === undefined || handle.stdout === undefined) {
       handle.terminate()
-      throw new ProgramFailureError({ category: 'program', detail: 'The Codex app-server started without its input and output pipes.' })
+      throw new ProgramOpenError({ category: 'program', detail: 'The Codex app-server started without its input and output pipes.' })
     }
     const { tap } = this.options
     if (handle.stderr !== undefined) {
@@ -186,14 +179,14 @@ export class CodexDriver implements ExternalAgentDriver {
 }
 
 /**
- * Any open or probe failure as a {@link ProgramFailureError}: a typed failure passes through; anything else becomes a
+ * Any open or probe failure as a {@link ProgramOpenError}: a typed failure passes through; anything else becomes a
  * `program` failure whose detail is for the person's view only.
  */
-function asFailure(error: unknown, stage: 'open' | 'probe'): ProgramFailureError {
-  if (error instanceof ProgramFailureError) return error
+function asFailure(error: unknown, stage: 'open' | 'probe'): ProgramOpenError {
+  if (error instanceof ProgramOpenError) return error
   const detail = error instanceof Error && error.name === 'TimeoutError'
     ? `Codex did not answer in time during the ${stage}.`
     : `Codex could not ${stage === 'open' ? 'start' : 'be checked'}: ${error instanceof Error ? error.message : 'no reason was given'}`
   const failure: ProgramFailure = { category: 'program', detail }
-  return new ProgramFailureError(failure, { cause: error })
+  return new ProgramOpenError(failure, { cause: error })
 }

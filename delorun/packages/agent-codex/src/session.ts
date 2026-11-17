@@ -14,9 +14,9 @@
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {
-  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramRunRule,
-  ProgramSession,
-} from './contract.ts'
+  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramInterruptOutcome,
+  ProgramRunRule, ProgramSession,
+} from '@delorun/external-agents/contract'
 import { addUsage, commandRunRule, observationOf, toolCall, toolResult, turnFailure, usageOf } from './mapping.ts'
 import { MappedItem, TOOL_ITEM_TYPES, type CodexNotification, type CodexServerRequest, type RateLimitSnapshot, type ToolItem, type TurnError, type WireJson } from './protocol.ts'
 import { EventQueue } from './queue.ts'
@@ -100,6 +100,7 @@ export class CodexSession implements ProgramSession {
   private readonly questions = new Map<RequestId, { readonly turnId: string; readonly callId: string; readonly controller: AbortController }>()
   private closed: CodexClosedReason | undefined
   private closing: Promise<void> | undefined
+  private readonly turnEndWaiters: (() => void)[] = []
   private readonly options: CodexSessionOptions
 
   /** @param options - the process, its connection, the seat's callbacks and the timeouts. */
@@ -173,15 +174,25 @@ export class CodexSession implements ProgramSession {
     }
   }
 
-  async interrupt(): Promise<void> {
+  /**
+   * Interrupt the running turn and wait for it to end. When a command is still open at its end, the process is closed
+   * (L32) and the outcome is `closed`; Codex not ending the turn within the request timeout closes it too.
+   */
+  async interrupt(): Promise<ProgramInterruptOutcome> {
     const turnId = this.currentTurn
-    if (turnId === undefined || this.closed !== undefined) return
-    try {
-      await this.options.rpc.request('turn/interrupt', { threadId: this.threadId, turnId }, this.timeout())
-    } catch (error: unknown) {
-      // A turn that ended on its own before the request arrived needs no interrupt.
-      if (!(error instanceof CodexRpcError) || this.currentTurn === turnId) throw error
+    if (turnId !== undefined && this.closed === undefined) {
+      const ended = new Promise<void>((resolve) => { this.turnEndWaiters.push(resolve) })
+      try {
+        await this.options.rpc.request('turn/interrupt', { threadId: this.threadId, turnId }, this.timeout())
+      } catch (error: unknown) {
+        // A turn that ended on its own before the request arrived needs no interrupt.
+        if (!(error instanceof CodexRpcError) || this.currentTurn === turnId) throw error
+      }
+      const timeout = this.timeout()
+      const timedOut = new Promise<'timeout'>((resolve) => { timeout.addEventListener('abort', () => { resolve('timeout') }, { once: true }) })
+      if (await Promise.race([ended, timedOut]) === 'timeout') await this.shutDown('closed')
     }
+    return this.closed === undefined ? 'interrupted' : 'closed'
   }
 
   next(signal: AbortSignal): Promise<ProgramEvent> {
@@ -345,6 +356,7 @@ export class CodexSession implements ProgramSession {
       ...usage === undefined ? {} : { usage },
       ...failure === undefined ? {} : { failure },
     })
+    for (const resolve of this.turnEndWaiters.splice(0)) resolve()
   }
 
   private processEnded(): void {

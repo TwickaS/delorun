@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent } from '../src/contract.ts'
+import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent } from '@delorun/external-agents/contract'
 import { CodexRpc } from '../src/rpc.ts'
 import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
 import { FakeAppServer, settle, type Frame } from './fake-app-server.ts'
@@ -17,7 +17,7 @@ interface Harness {
   answer: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
 }
 
-function harness(): Harness {
+function harness(options: { readonly requestTimeoutMs?: number } = {}): Harness {
   const codex = new FakeAppServer()
   const questions: ProgramApprovalRequest[] = []
   const limits: AccountObservation[] = []
@@ -34,7 +34,7 @@ function harness(): Harness {
         return h.answer(request)
       },
       onLimits: (observation) => { limits.push(observation) },
-      requestTimeoutMs: 5_000,
+      requestTimeoutMs: options.requestTimeoutMs ?? 5_000,
       closeWaitMs: 50,
     }),
   }
@@ -214,9 +214,11 @@ describe('interrupt (L32)', () => {
   it('sends turn/interrupt for the running turn and keeps the process when nothing is left running', async () => {
     const h = harness()
     await startTurn(h)
-    await h.session.interrupt()
+    const interrupted = h.session.interrupt()
+    await h.codex.waitFor(frame => frame.method === 'turn/interrupt')
     expect(h.codex.requests('turn/interrupt')).toEqual([{ threadId: THREAD, turnId: TURN }])
     h.codex.notify('turn/completed', turnCompleted('interrupted'))
+    expect(await interrupted).toBe('interrupted')
     expect((await untilTurnEnd(h.session)).at(-1)).toEqual({ kind: 'turn-end', outcome: 'interrupted' })
     expect(h.session.closedReason).toBeUndefined()
     expect(h.codex.exited).toBe(false)
@@ -227,8 +229,10 @@ describe('interrupt (L32)', () => {
     await startTurn(h)
     h.codex.notify('item/started', itemFrame(commandItem('inProgress', null, EXEC, "/usr/bin/zsh -lc 'sleep 30 && echo late > late.txt'")))
     await settle()
-    await h.session.interrupt()
+    const interrupted = h.session.interrupt()
+    await h.codex.waitFor(frame => frame.method === 'turn/interrupt')
     h.codex.notify('turn/completed', turnCompleted('interrupted'))
+    expect(await interrupted).toBe('closed')
     const events: ProgramEvent[] = []
     const signal = AbortSignal.timeout(2_000)
     for (;;) {
@@ -246,6 +250,21 @@ describe('interrupt (L32)', () => {
     await h.session.close()
     expect(h.codex.exited).toBe(true)
     await expect(h.session.send('next message', 'start')).rejects.toMatchObject({ reason: 'interrupted-with-open-command' })
+  })
+
+  it('closes the app-server when Codex does not end the interrupted turn in time', async () => {
+    const h = harness({ requestTimeoutMs: 100 })
+    await startTurn(h)
+    expect(await h.session.interrupt()).toBe('closed')
+    expect(h.session.closedReason).toBe('closed')
+    expect(h.codex.exited).toBe(true)
+  })
+
+  it('reports interrupted with no turn running and closed after the session closed', async () => {
+    const h = harness()
+    expect(await h.session.interrupt()).toBe('interrupted')
+    await h.session.close()
+    expect(await h.session.interrupt()).toBe('closed')
   })
 
   it('terminates a process that does not exit when its input ends', async () => {

@@ -4,29 +4,26 @@
  * with each answer that matters, resume in a new process, the model rule, Stop during a command, a limits check, and
  * that nothing is left running.
  */
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, existsSync, rmSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSpawn } from '../src/contract.ts'
-import { ProgramFailureError } from '../src/contract.ts'
-import { CodexDriver, type CodexProgram } from '../src/driver.ts'
+import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramSpawn } from '@delorun/external-agents/contract'
+import { ProgramOpenError } from '@delorun/external-agents/contract'
+import { locateCodex } from '@delorun/external-agents/locate'
+import { CodexDriver } from '../src/driver.ts'
 import type { CodexSession } from '../src/session.ts'
 import { startResponsesFixture, type ResponsesFixture, type ResponsesStep } from './responses-fixture.ts'
 
 const REPO = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../..')
 
-/** The pinned program, found the way the gate finds it: through upstream's Codex package. */
-function pinnedCodex(): CodexProgram {
-  const manifest = createRequire(join(REPO, 'packages/subagent/subagent-codex/package.json')).resolve('@openai/codex/package.json')
-  const pkg = JSON.parse(readFileSync(manifest, 'utf8')) as { readonly version: string; readonly bin: { readonly codex: string } }
-  return { entry: join(dirname(manifest), pkg.bin.codex), version: pkg.version }
-}
+/** The pinned program, found by the gate's locator from the repository's installed packs. */
+const pinnedCodex = () => locateCodex(REPO)
 
 interface Real {
   readonly codexHome: string
@@ -102,7 +99,7 @@ async function real(script: readonly ResponsesStep[]): Promise<Real> {
     answers: [],
     driver: new CodexDriver({ locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000 }),
     request: overrides => ({
-      sessionId: 'seat-child',
+      sessionId: SessionId('seat-child'),
       cwd: workspace,
       model: 'fixture-model',
       runRules: [],
@@ -207,8 +204,8 @@ describe('the real pinned Codex app-server', () => {
   it('fails resume-failed for a thread that does not exist', async () => {
     const r = await real([])
     const error: unknown = await r.driver.open(r.request({ resume: '01a1ea16-0000-7000-8000-000000000000' })).catch((thrown: unknown) => thrown)
-    expect(error).toBeInstanceOf(ProgramFailureError)
-    expect((error as ProgramFailureError).failure).toEqual({ category: 'resume-failed' })
+    expect(error).toBeInstanceOf(ProgramOpenError)
+    expect((error as ProgramOpenError).failure).toEqual({ category: 'resume-failed' })
     await expectNothingLeft(r)
   }, 100_000)
 
@@ -216,7 +213,7 @@ describe('the real pinned Codex app-server', () => {
     const r = await real([])
     const { model: _picked, ...unpicked } = r.request()
     const error: unknown = await r.driver.open(unpicked).catch((thrown: unknown) => thrown)
-    expect((error as ProgramFailureError).failure).toMatchObject({ category: 'model-not-offered', configured: 'fixture-model' })
+    expect((error as ProgramOpenError).failure).toMatchObject({ category: 'model-not-offered', configured: 'fixture-model' })
     expect(r.fixture.requests).toEqual([])
     await expectNothingLeft(r)
   }, 100_000)
@@ -226,12 +223,14 @@ describe('the real pinned Codex app-server', () => {
     r.answers = ['allow-once']
     const session = await r.driver.open(r.request())
     await session.send('Sleep, then make late.txt.', 'start')
+    let outcome: string | undefined
     const events = await untilTurnEnd(session, async (event) => {
       if (event.kind !== 'tool-call') return
       // Give the approved command time to start before Stop.
       await new Promise(resolveWait => setTimeout(resolveWait, 1_500))
-      await session.interrupt()
+      outcome = await session.interrupt()
     })
+    expect(outcome).toBe('closed')
     expect(events.at(-1)).toMatchObject({ kind: 'turn-end', outcome: 'interrupted' })
     expect(session.closedReason).toBe('interrupted-with-open-command')
     await session.close()

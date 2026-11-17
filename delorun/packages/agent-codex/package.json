@@ -10,6 +10,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@delorun/external-agents": "workspace:*",
     "zod": "4.6.6"
   },
   "peerDependencies": {
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-subagent": "workspace:*",
     "@deepseek-ai/dsh-subprocess": "workspace:*",
     "@deepseek-ai/dsh-subprocess-local": "workspace:*",

@@ -11,9 +11,11 @@
   "include": ["src", "tests", "live"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/core/session" },
     { "path": "../../../packages/llm/llm" },
     { "path": "../../../packages/subagent/subagent" },
     { "path": "../../../packages/subprocess/subprocess" },
-    { "path": "../../../packages/subprocess/subprocess-local" }
+    { "path": "../../../packages/subprocess/subprocess-local" },
+    { "path": "../../../packages/util/values" }
   ]
 }

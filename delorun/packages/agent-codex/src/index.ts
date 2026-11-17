@@ -4,7 +4,7 @@
  * its questions, and reads plan limits.
  * @module @delorun/agent-codex
  */
-export { CodexDriver, appServerArgv, type CodexDriverOptions, type CodexProgram } from './driver.ts'
+export { CodexDriver, appServerArgv, type CodexDriverOptions } from './driver.ts'
 export { CodexSession, CodexSessionClosedError, CodexTurnRunningError, type CodexClosedReason } from './session.ts'
 export { TESTED_CODEX_VERSION } from './protocol.ts'
 export type { WireTap } from './rpc.ts'
