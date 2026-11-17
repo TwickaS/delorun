@@ -18,7 +18,7 @@ export { ensurePacksCurrent, isRunningRelease, requireRunningRelease, PACKS_CURR
 export { carryPacks, repairPacks, type PackCarry } from './packs-carry.ts'
 export { createPackFiles, NPM_REGISTRY_HOST, type PackTransportOptions } from './packs-fetch.ts'
 export { parseRuntimeVersion, StorePaths } from './paths.ts'
-export type { RuntimePointers } from './pointer.ts'
+export { readPointerFile, type RuntimePointers } from './pointer.ts'
 export { readStoredRelease, type ReleaseFileBytes, type TrustedRootSource, type VerifiedRelease } from './release.ts'
 export {
   HomeRuntimeStore,

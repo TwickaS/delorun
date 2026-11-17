@@ -468,7 +468,7 @@ function pnpmLinks(dir: string) {
 
 /**
  * Store a pack folder as Changes does for a linked plugin and put the copy where the profile's link was. The folder's
- * installed packages stand for the pack's peers: the fixture home's active runtime, `runtimes/test/app/node_modules`,
+ * installed packages stand for the pack's peers: the fixture home's active runtime, `runtimes/0.1.0/app/node_modules`,
  * is a link to this repository, so the copy keeps every link into it as Changes keeps a pack's links into the runtime.
  * @param home - the fixture's Delorun home.
  * @param folder - the pack folder.
@@ -476,10 +476,10 @@ function pnpmLinks(dir: string) {
  * @returns the copy's path.
  */
 async function reviewCopy(home: string, folder: string, target: string): Promise<string> {
-  mkdirSync(join(home, 'runtimes', 'test', 'app'), { recursive: true })
-  writeFileSync(join(home, 'runtimes', 'current'), 'test\n')
-  rmSync(join(home, 'runtimes', 'test', 'app', 'node_modules'), { force: true })
-  symlinkSync(fileURLToPath(new URL('../../../../', import.meta.url)), join(home, 'runtimes', 'test', 'app', 'node_modules'), 'junction')
+  mkdirSync(join(home, 'runtimes', '0.1.0', 'app'), { recursive: true })
+  writeFileSync(join(home, 'runtimes', 'current'), '0.1.0\n')
+  rmSync(join(home, 'runtimes', '0.1.0', 'app', 'node_modules'), { force: true })
+  symlinkSync(fileURLToPath(new URL('../../../../', import.meta.url)), join(home, 'runtimes', '0.1.0', 'app', 'node_modules'), 'junction')
   const { version, skipped } = await storeFolder(home, folder, { dependencies: 'include' })
   expect(skipped.filter(path => !path.startsWith('node_modules/') || path.includes('/node_modules/')), 'paths the copy left out').toEqual([])
   rmSync(target, { force: true })
