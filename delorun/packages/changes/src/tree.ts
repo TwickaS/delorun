@@ -942,6 +942,8 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     included: new Map([[root, '']]),
     dependencies: 'home' in options ? options.dependencies ?? 'include' : 'active',
     home,
+    // A folder scan reads against runtimes/current, which packs/current and so a pack source's links always follow; an
+    // active directory is written and checked against the running release ({@link referenceRelease}).
     runtimeModules: 'active' in options ? await runtimeModulesOf(options.runtimeHome, options.runtimeRelease) : await runtimeModulesOf(home, undefined),
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
