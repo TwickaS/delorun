@@ -5,7 +5,7 @@
  */
 import type { z } from 'zod'
 import {
-  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
+  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneRequest,
 } from '../wire.ts'
 import type { CloneStartOutcome, HostFace, ReachState } from './types.ts'
@@ -38,7 +38,7 @@ async function ask<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promi
 }
 
 /** Whether a page's hostname names this computer's loopback interface. */
-function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
 }
 
@@ -77,6 +77,7 @@ export const hostApi: HostFace = {
   agentModels: async agent => await ask(AGENT_MODELS_PATH, AgentModelsAnswer, { agent }) ?? { state: 'unavailable' },
   recommend: registry => ask(RECOMMEND_PATH, RecommendAnswer, { registry }),
   reach: readReach,
+  defer: async (id, deferred) => (await ask(DEFER_STEP_PATH, DeferStepAnswer, { id, deferred }))?.deferred,
   cloneStart: async (request: CloneRequest): Promise<CloneStartOutcome> => {
     const answer = await ask(CLONE_PATH, CloneStart, request)
     if (answer === undefined) return { kind: 'failed' }

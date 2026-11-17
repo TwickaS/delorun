@@ -33,7 +33,7 @@ export const gateEn = {
   'gate.unlockUnknown': 'Unlock this device to do this. The unlock ends on its own.',
   'gate.unlockButton': 'Unlock',
   'gate.computer': 'Do this on your computer: {reason}',
-} as const
+} satisfies Record<string, string>
 
 /** Chinese copy of {@link Gate}. */
 export const gateZh: typeof gateEn = {

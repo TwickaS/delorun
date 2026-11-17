@@ -12,7 +12,7 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { AgentModelsAnswer, CloneStatus, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
+import type { AgentModelsAnswer, CloneStatus, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
   AddOutcome, AgentRowSettings, AgentsFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
@@ -150,6 +150,7 @@ export function hostFake(change: {
   readonly cloneStart?: CloneStartOutcome
   readonly cloneStatus?: readonly CloneStatus[]
 } = {}) {
+  const deferred = new Set<DeferrableStep>()
   const statuses = [...change.cloneStatus ?? [{ state: 'unknown' } as const]]
   const readiness = vi.fn(() => Promise.resolve('readiness' in change ? change.readiness : READY))
   const keyTest = vi.fn(() => Promise.resolve('keys' in change ? change.keys : KEYS))
@@ -159,8 +160,13 @@ export function hostFake(change: {
   const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
   const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
   const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const }))
-  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
-  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, cloneStart, cloneStatus }
+  const defer = vi.fn((id: DeferrableStep, on: boolean) => {
+    if (on) deferred.add(id)
+    else deferred.delete(id)
+    return Promise.resolve([...deferred] as readonly DeferrableStep[] | undefined)
+  })
+  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
+  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
 }
 
 /** The home directory the folder listings start at. */

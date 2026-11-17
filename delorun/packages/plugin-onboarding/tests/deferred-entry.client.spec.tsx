@@ -1,0 +1,100 @@
+// @vitest-environment jsdom
+/**
+ * The sidebar's "Finish setup · N left" entry shows at the computer while a phone's deferred step waits, drops a step
+ * whose work is done, opens the guide for the deferred steps only, and is absent at zero or away from the computer.
+ */
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DeferredSetupEntry, readWaiting } from '../src/client/DeferredSetupEntry.tsx'
+import { en } from '../src/client/locales.ts'
+import type { DeferrableStep, SetupRecord } from '../src/wire.ts'
+import { t } from './fixtures.client.ts'
+
+afterEach(cleanup)
+
+const PIN_OFF = { enabled: false, idleMinutes: 15, lockWhenHidden: false, paused: false }
+const PIN_ON = { enabled: true, kind: 'pin', idleMinutes: 15, lockWhenHidden: false, paused: false }
+
+/** The entry over fakes: the record, the reach read, the PIN read and where the page is. */
+function services(options: { readonly deferred?: readonly DeferrableStep[]; readonly reach?: 'set-up' | 'off'; readonly pin?: object; readonly computer?: boolean } = {}) {
+  const record: SetupRecord = { reachSetUp: false, ...options.deferred === undefined ? {} : { deferred: [...options.deferred] } }
+  const cleared: DeferrableStep[] = []
+  const defer = vi.fn((id: DeferrableStep, deferred: boolean) => { if (!deferred) cleared.push(id); return Promise.resolve([] as readonly DeferrableStep[]) })
+  const reach = vi.fn(() => Promise.resolve(options.reach ?? 'off'))
+  const fetch = vi.fn((_input: string) => Promise.resolve(new Response(JSON.stringify(options.pin ?? PIN_OFF))))
+  const deferredOnly = createSnapshotStore(false)
+  const changed = createSnapshotStore(0)
+  const open = vi.fn()
+  return { host: { reach, defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
+}
+
+const mount = async (face: ReturnType<typeof services>, wide = true) => {
+  const { cleared: _cleared, defer: _defer, ...injected } = face
+  const view = render(<DeferredSetupEntry wide={wide} t={t} {...injected} />)
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+  return view
+}
+
+describe('readWaiting', () => {
+  it('counts the deferred steps that have a screen, and drops the ones already done', async () => {
+    const face = services({ deferred: ['reach', 'pin', 'approve'], reach: 'set-up', pin: PIN_OFF })
+    expect(await readWaiting(face)).toEqual(['pin'])
+    expect(face.cleared).toEqual(['reach'])
+  })
+
+  it('drops a step whose PIN is set, and keeps it when the PIN cannot be read', async () => {
+    const done = services({ deferred: ['pin'], pin: PIN_ON })
+    expect(await readWaiting(done)).toEqual([])
+    expect(done.cleared).toEqual(['pin'])
+    const unreadable = services({ deferred: ['pin'] })
+    unreadable.fetch.mockRejectedValue(new Error('down'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await readWaiting(unreadable)).toEqual(['pin'])
+    expect(unreadable.cleared).toEqual([])
+  })
+
+  it('reads nothing more when nothing is deferred', async () => {
+    const face = services()
+    expect(await readWaiting(face)).toEqual([])
+    expect(face.host.reach).not.toHaveBeenCalled()
+  })
+})
+
+describe('the Finish setup entry', () => {
+  it('names the number of steps left and opens the guide for them only', async () => {
+    const face = services({ deferred: ['reach', 'pin'] })
+    await mount(face)
+    const entry = screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '2') })
+    await act(async () => { fireEvent.click(entry) })
+    expect(face.deferredOnly.getSnapshot()).toBe(true)
+    expect(face.open).toHaveBeenCalledOnce()
+  })
+
+  it('is a counted dot in the narrow rail', async () => {
+    await mount(services({ deferred: ['pin'] }), false)
+    expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') }).textContent).toBe('1')
+  })
+
+  it('is absent at zero, once the work is done and away from the computer', async () => {
+    await mount(services())
+    expect(screen.queryByRole('button')).toBeNull()
+    cleanup()
+    await mount(services({ deferred: ['pin'], pin: PIN_ON }))
+    expect(screen.queryByRole('button')).toBeNull()
+    cleanup()
+    const away = services({ deferred: ['pin'], computer: false })
+    await mount(away)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(away.fetch).not.toHaveBeenCalled()
+  })
+
+  it('reads again when a step changes and when the guide closes', async () => {
+    const face = services({ deferred: ['pin'] })
+    await mount(face)
+    expect(screen.getByRole('button')).toBeTruthy()
+    face.fetch.mockResolvedValue(new Response(JSON.stringify(PIN_ON)))
+    await act(async () => { face.changed.set(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})

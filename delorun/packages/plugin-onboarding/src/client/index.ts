@@ -34,6 +34,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the ctx.modelKeyStatus merge this plugin provides.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
+// Type-only: the 'sidebar.footer.action' SlotMap entry.
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: the ctx.theme merge.
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 // Type-only: the ctx.uiWorkspace merge.
@@ -48,7 +50,7 @@ import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../con
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
-import { hostApi, readWorkspaceNotice } from './host-api.ts'
+import { hostApi, isLoopbackHostname, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
@@ -56,6 +58,7 @@ import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
+import { DeferredSetupEntry, type DeferredSetupInjected } from './DeferredSetupEntry.tsx'
 import { FinishSetupChip, FloatingFinishSetupChip, type FinishSetupInjected } from './FinishSetupChip.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
@@ -112,6 +115,9 @@ export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } 
 
 /** The Finish setup chip's place in the input dock: just above the message box, below the notices. */
 export const FINISH_SETUP_ENTRY = { id: 'delorun-onboarding.finish-setup', order: 8 } as const
+
+/** The `sidebar.footer.action` id and order of the entry that counts the steps a phone left for this computer. */
+export const DEFERRED_ENTRY = { id: 'delorun-onboarding.deferred-steps', order: 40 } as const
 
 /** The floating Finish setup chip's place over the studio, used while no chat has a dock. */
 export const FINISH_SETUP_OVERLAY = { id: 'delorun-onboarding.finish-setup.floating', order: 8 } as const
@@ -214,6 +220,8 @@ export function applyStudio(ctx: Context): void {
   const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), unverified: keyT('keyStatus.unverified'), retry: keyT('keyStatus.retry'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))
   ctx.effect(() => ctx.provide('modelKeyStatus', keyStatus), 'delorun-onboarding: key status')
   const extra = createSnapshotStore<readonly OnboardingStep[]>([])
+  /** Bumps when a step is deferred or cleared, so the sidebar entry reads again. */
+  const deferredChanged = createSnapshotStore(0)
   ctx.effect(() => ctx.provide('delorunOnboarding', {
     registerStep: (step) => {
       extra.set([...extra.getSnapshot().filter(each => each.id !== step.id), step])
@@ -262,7 +270,15 @@ export function applyStudio(ctx: Context): void {
       limit: ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW),
     },
     bundles: createBundleInstaller(ctx),
-    host: { ...hostApi, keyTest: () => keyStatus.refresh() },
+    host: {
+      ...hostApi,
+      keyTest: () => keyStatus.refresh(),
+      defer: async (id, deferred) => {
+        const now = await hostApi.defer(id, deferred)
+        deferredChanged.set(deferredChanged.getSnapshot() + 1)
+        return now
+      },
+    },
     providers: createProvidersFace(ctx),
     start,
     resolveText: text => ctx.locale.resolveText(text),
@@ -354,7 +370,20 @@ export function applyStudio(ctx: Context): void {
   }
 
   const laterStore = createSnapshotStore(false)
-  const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore })
+  const deferredOnly = createSnapshotStore(false)
+  const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore, deferredOnly })
+  const deferredEntry: DeferredSetupInjected = {
+    host: { reach: hostApi.reach, defer: hostApi.defer },
+    loadRecord: loadSetupRecord,
+    fetch: (input, init) => globalThis.fetch(input, init),
+    atComputer: () => isLoopbackHostname(location.hostname),
+    deferredOnly,
+    changed: deferredChanged,
+    open: () => {
+      laterStore.set(false)
+      ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
+    },
+  }
   const dockedStore = createSnapshotStore(false)
   const finishSetup: FinishSetupInjected = {
     later: laterStore,
@@ -424,6 +453,9 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: FINISH_SETUP_OVERLAY.id, order: FINISH_SETUP_OVERLAY.order, locale: NS, inject: () => finishSetup,
       }, FloatingFinishSetupChip)),
+      ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+        name: 'sidebar.footer.action', id: DEFERRED_ENTRY.id, order: DEFERRED_ENTRY.order, locale: NS, inject: () => deferredEntry,
+      }, DeferredSetupEntry)),
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: SET_ASIDE_ENTRY.id, order: SET_ASIDE_ENTRY.order, locale: NS, inject: () => setAside,
       }, SetAsideBanner)),

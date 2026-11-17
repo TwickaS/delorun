@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, FINISH_SETUP_ENTRY, FINISH_SETUP_OVERLAY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, hostApi, inject, DEFERRED_ENTRY, FINISH_SETUP_ENTRY, FINISH_SETUP_OVERLAY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -100,6 +100,7 @@ const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 const RENAME_KEY = `tool.call.toolview#${RENAME_TOOL}`
 const FINISH_KEY = `conversation.input.dock#${FINISH_SETUP_ENTRY.id}`
 const FINISH_FLOAT_KEY = `shell.overlay#${FINISH_SETUP_OVERLAY.id}`
+const DEFERRED_KEY = `sidebar.footer.action#${DEFERRED_ENTRY.id}`
 const SET_ASIDE_KEY = `conversation.input.dock#${SET_ASIDE_ENTRY.id}`
 
 describe('the stock look', () => {
@@ -113,7 +114,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(8)
+    expect(entries.size).toBe(9)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('delorunOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -140,7 +141,7 @@ describe('the registrations', () => {
     expect([...entries.keys()]).toEqual([RENAME_KEY])
     expect(entries.get(RENAME_KEY)?.options).toMatchObject({ name: 'tool.call.toolview', key: 'rename_workspace', locale: NS })
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, FINISH_FLOAT_KEY, FINISH_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DEFERRED_KEY, DOCK_KEY, FINISH_FLOAT_KEY, FINISH_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delorun-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)

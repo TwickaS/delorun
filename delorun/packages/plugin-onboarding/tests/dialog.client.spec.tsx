@@ -39,6 +39,10 @@ interface Options {
   readonly reach?: ReachState
   readonly start?: ReturnType<typeof startFace>
   readonly useStockLook?: () => Promise<boolean>
+  /** The PIN state a phone reads; absent fails the read. */
+  readonly pinState?: object
+  /** Whether the Finish setup entry at the computer opened the dialog for the deferred steps only. */
+  readonly deferredOnly?: boolean
 }
 
 /** The step entry over fakes, as the Settings shell mounts it. */
@@ -54,15 +58,17 @@ async function mountEntry(options: Options = {}) {
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
   const host = hostFake({ reach: options.reach ?? 'absent' })
   const start = options.start ?? startFace()
-  const services = stepServices({ notice: options.notice?.face, host: host.host, start: start.face, ...options.useStockLook === undefined ? {} : { look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: options.useStockLook } } })
+  const deferredOnly = createSnapshotStore(options.deferredOnly ?? false)
+  const pinFetch = vi.fn((_input: string) => options.pinState === undefined ? Promise.reject(new Error('no PIN request')) : Promise.resolve(new Response(JSON.stringify(options.pinState))))
+  const services = stepServices({ notice: options.notice?.face, host: host.host, pin: { fetch: pinFetch, openSettings: () => undefined }, start: start.face, ...options.useStockLook === undefined ? {} : { look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: options.useStockLook } } })
   const props = {
     t, complete, completeStep, renderSection: (id: string) => `section ${id}`, ...options.explicit === undefined ? {} : { explicit: options.explicit },
-    progress: progress.form, extra, loadRecord, services, startChat, aside,
+    progress: progress.form, extra, loadRecord, services, startChat, aside, deferredOnly,
   } satisfies OnboardingStepEntryProps
   const view = render(<OnboardingStepEntry {...props} />)
   await settle()
   await settle()
-  return { ...view, aside, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start }
+  return { ...view, aside, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start, deferredOnly }
 }
 
 /** The steps a first run shows with nothing configured. */
@@ -331,14 +337,14 @@ describe('which steps apply', () => {
     expect(titles().includes(en['step.reach'])).toBe(false)
   })
 
-  it('counts only the steps the person will see: one fewer on a phone and where the terminal covered some', async () => {
+  it('counts only the steps the person will see: a phone has the PIN step in place of phone access, and fewer where the terminal covered some', async () => {
     const { unmount } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
     const withPhone = titles().length
     expect(screen.getByText(`Step 1 of ${String(withPhone)}`)).toBeTruthy()
     unmount()
     await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    expect(screen.getByText(`Step 1 of ${String(withPhone - 1)}`)).toBeTruthy()
-    expect(titles()).toHaveLength(withPhone - 1)
+    expect(screen.getByText(`Step 1 of ${String(withPhone)}`)).toBeTruthy()
+    expect(titles()).toHaveLength(withPhone)
   })
 
   it('counts phone access as on in Ready when the terminal setup set it up', async () => {
@@ -574,5 +580,69 @@ describe('finishing later and the last step', () => {
       const term = [...document.querySelectorAll('dt')].find(each => each.textContent === 'Phone access')
       expect(term?.nextElementSibling?.textContent).toBe(summary)
     })
+  })
+})
+
+describe('on a phone, the steps only the computer can do', () => {
+  const PIN_LEAD = en['computer.lead.pin']
+
+  it('shows the PIN step as done on the computer, with the reason, before Workspace', async () => {
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    expect(titles().slice(-3)).toEqual([en['step.pin'], en['step.workspace'], en['step.ready']])
+    await forward(titles().indexOf(en['step.pin']))
+    expect(heading().textContent).toBe(en['step.pin'])
+    expect(screen.getByText(PIN_LEAD)).toBeTruthy()
+    expect(screen.getByText(en['computer.why.pin'])).toBeTruthy()
+    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+  })
+
+  it('records the step as deferred and goes on when the person chooses Do it on my computer', async () => {
+    const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    await forward(titles().indexOf(en['step.pin']))
+    await click(button(en['computer.defer']))
+    expect(view.host.defer).toHaveBeenCalledWith('pin', true)
+    expect(heading().textContent).toBe(en['step.workspace'])
+  })
+
+  it('leaves the step undone and unrecorded on Skip', async () => {
+    const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    await forward(titles().indexOf(en['step.pin']))
+    await click(button(en.skip))
+    expect(view.host.defer).not.toHaveBeenCalled()
+    expect(heading().textContent).toBe(en['step.workspace'])
+  })
+
+  it.each<readonly [string, { readonly record?: SetupRecord; readonly pinState?: object }]>([
+    ['it was already deferred', { record: { reachSetUp: false, deferred: ['pin'] } }],
+    ['PIN mode is already on', { pinState: { kind: 'on', secret: 'pin', idleMinutes: 15, paused: false, unlock: null } }],
+  ])('leaves the step out when %s', async (_, options) => {
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false }, ...options })
+    expect(titles().includes(en['step.pin'])).toBe(false)
+  })
+
+  it('does not show the computer-only step at the computer', async () => {
+    await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+    expect(document.querySelector('[data-computer-only]')).toBeNull()
+  })
+})
+
+describe('at the computer, opened from the Finish setup entry', () => {
+  it('shows only the deferred steps and no Welcome or Ready', async () => {
+    await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    expect(titles()).toEqual([en['step.pin']])
+  })
+
+  it('closes after the last deferred step without starting a chat or saving the place', async () => {
+    const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    await click(button(en.continue))
+    expect(view.startChat).not.toHaveBeenCalled()
+    expect(view.progress.set).not.toHaveBeenCalled()
+    expect(view.aside.getSnapshot()).toBe(true)
+    expect(view.deferredOnly.getSnapshot()).toBe(false)
+  })
+
+  it('lists phone access then the PIN step, in the guide\'s order', async () => {
+    await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'off', record: { reachSetUp: false, deferred: ['pin', 'reach'] } })
+    expect(titles()).toEqual([en['step.reach'], en['step.pin']])
   })
 })
