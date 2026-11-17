@@ -23,6 +23,12 @@
       "path": "../../../vendor/schemastery"
     },
     {
+      "path": "../../../packages/api/gateway/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/api/remote-access/tsconfig.host.json"
+    },
+    {
       "path": "../../../packages/boot/app-boot"
     },
     {
@@ -54,6 +60,12 @@
     },
     {
       "path": "../../../packages/subagent/subagent"
+    },
+    {
+      "path": "../../../packages/typert/protocol"
+    },
+    {
+      "path": "../../../packages/typert/registry"
     },
     {
       "path": "../../../packages/util/brand"

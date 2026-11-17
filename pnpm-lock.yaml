@@ -2805,6 +2805,12 @@ importers:
       '@deepseek-ai/dsh-agent-preset-registry':
         specifier: workspace:*
         version: link:../../../packages/preset/agent-preset-registry
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-api-remote-access':
+        specifier: workspace:*
+        version: link:../../../packages/api/remote-access
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
@@ -2847,6 +2853,12 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-typert-registry':
+        specifier: workspace:*
+        version: link:../../../packages/typert/registry
       '@deepseek-ai/dsh-user-approval':
         specifier: workspace:*
         version: link:../../../packages/interaction/user-approval
