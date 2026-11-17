@@ -3,13 +3,14 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--dsh-settings-page-gap, 20px);
   max-width: var(--dsh-settings-section-max-width, 760px);
   color: var(--dsw-alias-label-primary);
 }
 
 .header {
-  display: flex;
+  /* A page the shell titles hides its own header, so no empty row is left under the title. */
+  display: var(--dsh-settings-section-title-display, flex);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -30,18 +31,28 @@
   display: block;
 }
 
+.lead {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--dsh-settings-lead-color, var(--dsw-alias-label-secondary));
+  font-size: var(--dsh-settings-lead-size, 13px);
+  line-height: var(--dsh-settings-lead-line-height, 20px);
+}
+
 .group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+/* The page template's section heading, the same properties the cards of the other pages read. */
 .groupHeading {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-secondary);
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--dsh-settings-card-heading-size, 15px);
+  line-height: var(--dsh-settings-card-heading-line-height, 22px);
+  font-weight: var(--dsh-settings-card-heading-weight, 500);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-primary));
 }
 
 .rows {

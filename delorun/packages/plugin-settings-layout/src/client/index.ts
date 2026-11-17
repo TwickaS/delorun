@@ -72,8 +72,9 @@ const NS = 'settings.delorunLayout'
  * heading colour resolves in light and dark.
  */
 export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw);'
-  + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:600;'
-  + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)}'
+  + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:500;'
+  + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary);'
+  + '--dsh-settings-lead-size:13px;--dsh-settings-lead-line-height:20px;--dsh-settings-lead-color:var(--dsw-alias-label-secondary);--dsh-settings-page-gap:20px}'
 
 /**
  * The phone Settings strip. Upstream's shell has no slot that replaces its narrow layout, so the strip is restyled from
