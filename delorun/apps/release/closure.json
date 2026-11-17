@@ -20,6 +20,7 @@
     }
   ],
   "packExternals": [
+    "@anthropic-ai/claude-agent-sdk",
     "@anthropic-ai/claude-agent-sdk-*",
     "@openai/codex-*"
   ],
