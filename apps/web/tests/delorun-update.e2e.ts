@@ -34,8 +34,8 @@ const SHOTS = process.env.DELORUN_UPDATE_SHOTS
 interface Script {
   release: string
   progress: object
-  result?: object
-  prepared?: object
+  result?: object | undefined
+  prepared?: object | undefined
 }
 
 /**
@@ -140,12 +140,12 @@ it.skipIf(webSnapshotMode() === 'record')('updates from the sidebar notice throu
   await notice.getByRole('button', { name: 'Update now…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Update to Delorun 0.1.3' })
   await dialog.waitFor()
-  await expect(dialog.getByText('Release note:')).toBeVisible()
+  await dialog.getByText('Release note:').waitFor()
   const update = dialog.getByRole('button', { name: 'Update', exact: true })
-  await expect(update).toBeDisabled()
+  expect(await update.isDisabled()).toBe(true)
   await dialog.getByRole('checkbox').first().check()
   await shoot(page, 'report-dialog')
-  await expect(update).toBeEnabled()
+  await expect.poll(() => update.isEnabled()).toBe(true)
   const before = loads
   await update.click()
   await page.getByText('Waiting for 1 chat to finish.').waitFor({ timeout: 15_000 })
@@ -159,7 +159,7 @@ it.skipIf(webSnapshotMode() === 'record')('updates from the sidebar notice throu
   expect(loads - before).toBe(1)
   await shoot(page, 'updated')
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click()
-  await expect(card).toHaveCount(0)
+  await expect.poll(() => card.count()).toBe(0)
 
   // An update that did not work: the outcome is worded as a rollback by the home process.
   script.release = '0.1.2'
