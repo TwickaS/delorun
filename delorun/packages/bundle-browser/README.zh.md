@@ -18,6 +18,6 @@ description: "让智能体通过 Playwright，在这台电脑上的 Chromium 浏
 
 ## 需要设置
 
-- Stagehand 在你给它一个模型之前保持关闭；Playwright 提供方在装有 Chrome 时启动 Chrome，此时无需设置。没有 Chrome，或在 `browser-use-playwright-mcp` 行上设置了 `browser: chromium` 时，它需要它的 Playwright 所需的 Chromium 版本，也只有这时 Delorun 更新后才可能需要重新下载。下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上为该版本运行 Playwright 自带安装程序的命令；浏览器步骤会让智能体停下，请你完成设置。
+- Stagehand 在你给它一个模型之前保持关闭；Playwright 提供方在装有 Chrome 时启动 Chrome，此时无需设置。没有 Chrome，或在 `browser-use-playwright-mcp` 行上设置了 `browser: chromium` 时，它需要它的 Playwright 所需的 Chromium 版本，也只有这时 Delorun 更新后才可能需要重新下载。浏览器在 Delorun 启动时选择 Chrome 或 Chromium，所以安装或移除 Chrome 之后，请重启 Delorun（先 `delorun stop`，再 `delorun start`）。下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上为该版本运行 Playwright 自带安装程序的命令；浏览器步骤会让智能体停下，请你完成设置。
 
 此 bundle 在新 profile 中是关闭的。[`@delorun/bundle-local`](../bundle-local/README.zh.md) 没有列出它；用户在“插件”中开启它，发行版把它作为可选包提供，而不是放进默认安装。

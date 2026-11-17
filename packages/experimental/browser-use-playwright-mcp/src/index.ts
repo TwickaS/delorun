@@ -44,13 +44,17 @@ export const Config: Schema<
  * server's arguments, which the MCP add-time consent covers, stay the same on one computer until Chrome is installed
  * or removed.
  * @param config - the launch settings.
- * @returns the configured browser; under `auto`, Chrome when {@link launchedBrowser} finds it, except that a
- * configured `executablePath` keeps `chromium`, whose launch settings that executable has always run with.
+ * @returns {@link launchedBrowser}'s answer for the configured browser and `executablePath`.
  */
 export function launchBrowser(config: LaunchConfig): LaunchedBrowser {
-  if (config.browser === 'auto' && config.executablePath !== undefined) return 'chromium'
-  return launchedBrowser(config.browser)
+  return launchedBrowser(config.browser, undefined, config.executablePath)
 }
+
+/**
+ * The tool failure that replaces Playwright's report that Google Chrome, which the configuration tells it to launch,
+ * is not installed. The model cannot install it, so the text tells it to stop and send the person to Browser's setup.
+ */
+export const MISSING_CHROME_MESSAGE = 'Browser is set to use Google Chrome, which is not installed on this computer, so no browser tool can run until the person finishes Browser setup in Plugins. Stop using browser tools and other ways to browse for this request; tell the person to finish Browser setup in Plugins, then ask again.'
 
 /**
  * The tool failure that replaces Playwright's report of a browser build that is not installed. The model cannot install
@@ -59,12 +63,24 @@ export function launchBrowser(config: LaunchConfig): LaunchedBrowser {
 export const MISSING_BROWSER_MESSAGE = 'Browser needs its Chromium download, so no browser tool can run until the person finishes Browser setup in Plugins. Stop using browser tools and other ways to browse for this request; tell the person to finish Browser setup in Plugins, then ask again.'
 
 /**
+ * How a failure from Playwright's MCP server starts: its `### Error` header line, then an optional `Error: `. A failure
+ * without the header starts the same way.
+ */
+const FAILURE_START = '^(?:### Error\\n)?(?:Error: )?'
+
+/**
+ * Playwright's report that the `chrome` channel has no installed Chrome, at the start of a failure:
+ * `[browserType.launch: ]Chromium distribution 'chrome' is not found`.
+ */
+const MISSING_CHROME_PATTERN = new RegExp(`${FAILURE_START}(?:browserType\\.\\w+: )?Chromium distribution 'chrome' is not found`, 'u')
+
+/**
  * Playwright's reports of a browser executable that is not installed, at the start of a failure: its launch error,
  * `[browserType.launch: ]Executable doesn't exist at <path>`, and the MCP server's rewording of it, `Browser "<name>" is
  * not installed[; expected executable at <path>]. Run \`npx @playwright/mcp install-browser <name>\` to install`. The
  * same words later in a failure, such as in a page's own text, are not such a report.
  */
-const MISSING_BROWSER_PATTERN = new RegExp(`^(?:Error: )?(?:${[
+const MISSING_BROWSER_PATTERN = new RegExp(`${FAILURE_START}(?:${[
   '(?:browserType\\.\\w+: )?Executable doesn\'t exist at \\S',
   'Browser "[\\w-]+" is not installed(?:; expected executable at [^\\r\\n]+)?\\. Run `npx @playwright/mcp install-browser [\\w-]+` to install',
 ].join('|')})`, 'u')
@@ -73,12 +89,30 @@ const MISSING_BROWSER_PATTERN = new RegExp(`^(?:Error: )?(?:${[
 export const OUTPUT_FOLDER = '.playwright-mcp'
 
 /**
- * Replace Playwright's report of a browser executable that is not installed.
+ * Replace Playwright's report of a browser that is not installed.
  * @param message - a failed browser tool call's error message.
- * @returns {@link MISSING_BROWSER_MESSAGE} for a missing browser build, otherwise `undefined`.
+ * @returns {@link MISSING_BROWSER_MESSAGE} for a missing browser build, {@link MISSING_CHROME_MESSAGE} for a missing
+ * Chrome, otherwise `undefined`.
  */
 export function explainMissingBrowser(message: string): string | undefined {
-  return MISSING_BROWSER_PATTERN.test(message) ? MISSING_BROWSER_MESSAGE : undefined
+  if (MISSING_BROWSER_PATTERN.test(message)) return MISSING_BROWSER_MESSAGE
+  return MISSING_CHROME_PATTERN.test(message) ? MISSING_CHROME_MESSAGE : undefined
+}
+
+/**
+ * The refusal of every browser tool call while the Session's {@link OUTPUT_FOLDER} is a link that leads outside the
+ * Session's folder: the server saves default-named files and downloads there without a file argument.
+ */
+export const LINKED_OUTPUT_FOLDER_MESSAGE = `Browser saves files in "${OUTPUT_FOLDER}" in this chat's folder, and that name is a link that leads outside the folder, so no browser tool can run. Stop using browser tools for this request and tell the person to remove or replace "${OUTPUT_FOLDER}" in the chat's folder.`
+
+/**
+ * Whether a real location is the folder or inside it.
+ * @param folder - the folder's real path.
+ * @param real - a real location, or `undefined` when it cannot be told.
+ * @returns true when inside.
+ */
+function inside(folder: string, real: string | undefined): boolean {
+  return real !== undefined && (real === folder || real.startsWith(folder + sep))
 }
 
 /**
@@ -114,23 +148,25 @@ async function realLocation(path: string): Promise<string | undefined> {
 }
 
 /**
- * Refuse a tool call whose `filename` or `paths` argument really lies outside the Session's folder. Playwright's server
- * compares those paths as text, so a link inside the folder would let a call write or read wherever the link points;
- * this compares real paths. Each name is tested where the server resolves it: against the folder and against its
- * {@link OUTPUT_FOLDER}. A path that changes between this test and the server's use is not covered.
+ * Refuse a tool call that would save or read a file really outside the Session's folder. Playwright's server compares
+ * paths as text, so a link inside the folder would let a call write or read wherever the link points; this compares
+ * real paths. Every call is refused while the {@link OUTPUT_FOLDER} really lies outside the folder, because the server
+ * saves default-named files and downloads there whatever the call's arguments. A call's `filename` and `paths` are
+ * tested where the server resolves them: against the folder and against its {@link OUTPUT_FOLDER}. A path that
+ * changes between this test and the server's use, a download that lands between calls included, is not covered.
  * @param call - the tool call and the folder the Session's server was told as its MCP root.
- * @returns {@link outsideFolderMessage} for the first name that leads outside, or `undefined` when none does.
+ * @returns {@link LINKED_OUTPUT_FOLDER_MESSAGE}, or {@link outsideFolderMessage} for the first name that leads
+ * outside, or `undefined` when nothing does.
  */
 export async function refuseOutsideFolder(call: BrowserToolCall): Promise<string | undefined> {
+  const folder = await realpath(call.directory)
+  if (!inside(folder, await realLocation(join(call.directory, OUTPUT_FOLDER)))) return LINKED_OUTPUT_FOLDER_MESSAGE
   if (typeof call.arguments !== 'object' || call.arguments === null) return undefined
   const { filename, paths } = call.arguments as { filename?: unknown; paths?: unknown }
   const names = [filename, ...Array.isArray(paths) ? paths as unknown[] : []].filter(name => typeof name === 'string')
-  if (names.length === 0) return undefined
-  const folder = await realpath(call.directory)
   for (const name of names) {
     for (const base of [call.directory, join(call.directory, OUTPUT_FOLDER)]) {
-      const real = await realLocation(resolve(base, name))
-      if (real === undefined || (real !== folder && !real.startsWith(folder + sep))) return outsideFolderMessage(name)
+      if (!inside(folder, await realLocation(resolve(base, name)))) return outsideFolderMessage(name)
     }
   }
   return undefined

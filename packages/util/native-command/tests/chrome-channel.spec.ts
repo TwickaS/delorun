@@ -56,6 +56,8 @@ describe('Chrome channel lookup', () => {
     expect(launchedBrowser('chrome', host('darwin'))).toBe('chrome')
     expect(launchedBrowser('chromium', host('darwin', [MAC]))).toBe('chromium')
     expect(launchedBrowser('auto')).toBe(chromeChannelExecutable() === undefined ? 'chromium' : 'chrome')
+    expect(launchedBrowser('auto', host('darwin', [MAC]), '/custom/chromium')).toBe('chromium')
+    expect(launchedBrowser('chrome', host('darwin', [MAC]), '/custom/chrome')).toBe('chrome')
   })
 
   it('reads an unset choice as auto and refuses anything that is not a choice', () => {

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { join, win32 } from 'node:path'
@@ -17,8 +17,8 @@ vi.mock('@deepseek-ai/dsh-native-command/chrome-channel', async (importOriginal)
   const original = await importOriginal<typeof import('@deepseek-ai/dsh-native-command/chrome-channel')>()
   return {
     ...original,
-    launchedBrowser: vi.fn((choice: Parameters<typeof original.launchedBrowser>[0]) =>
-      original.launchedBrowser(choice, { platform: 'linux', env: {}, exists: path => computer.chromeInstalled && path === CHROME })),
+    launchedBrowser: vi.fn((choice: Parameters<typeof original.launchedBrowser>[0], _host?: unknown, executable?: string) =>
+      original.launchedBrowser(choice, { platform: 'linux', env: {}, exists: path => computer.chromeInstalled && path === CHROME }, executable)),
   }
 })
 
@@ -141,6 +141,10 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
     expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
   }
   for (const message of [
+    // As Playwright's server sends a failure: a `### Error` header line, then the message, with or without `Error: `.
+    '### Error\nError: Browser "chromium" is not installed; expected executable at /cache/chromium-1243/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
+    '### Error\nBrowser "chromium" is not installed. Run `npx @playwright/mcp install-browser chromium` to install',
+    '### Error\nError: browserType.launch: Executable doesn\'t exist at /cache/chromium-1243/chrome-linux64/chrome\n╔═ Looks like Playwright was just installed ═╗',
     'Browser "chromium" is not installed. Run `npx @playwright/mcp install-browser chromium` to install',
     'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1243/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
     'Executable doesn\'t exist at /cache/chromium-1243/chrome-linux64/chrome\n╔═ Looks like Playwright was just installed ═╗',
@@ -148,10 +152,20 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
     expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
   }
   for (const message of [
+    '### Error\nError: browserType.launch: Chromium distribution \'chrome\' is not found at /opt/google/chrome/chrome\nRun "npx playwright install chrome"',
+    'Chromium distribution \'chrome\' is not found at /opt/google/chrome/chrome',
+  ]) {
+    expect(explain(message)).toBe(Provider.MISSING_CHROME_MESSAGE)
+  }
+  expect(Provider.MISSING_CHROME_MESSAGE).toContain('finish Browser setup in Plugins')
+  for (const message of [
     'page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/',
     'page.evaluate: Error: the page says Executable doesn\'t exist at /usr/bin/tool',
     'expect(locator).toHaveText failed: received "Browser "chromium" is not installed; expected executable at /x. Run `npx @playwright/mcp install-browser chromium` to install"',
     'The plugin is not installed; expected executable at /usr/bin/plugin',
+    '### Error\nError: page.evaluate: the page says Chromium distribution \'chrome\' is not found',
+    '### Result\n### Error\nBrowser "chromium" is not installed. Run `npx @playwright/mcp install-browser chromium` to install',
+    'Chromium distribution \'msedge\' is not found at /opt/microsoft/msedge/msedge',
     'Browser "chromium" is not installed; expected executable at /x',
   ]) {
     expect(explain(message)).toBeUndefined()
@@ -187,11 +201,30 @@ it('refuses a file argument that a link inside the chat\'s folder leads outside,
   expect(existsSync(join(outside, 'shot.png'))).toBe(false)
 })
 
-it('refuses a file argument when the output folder itself is a link that leads outside the chat\'s folder', async () => {
+it('refuses every call, with or without a file argument, while the output folder is a link that leads outside the chat\'s folder', async () => {
   const { chat, outside } = await chatFolder()
+  const refuse = (tool: string, args: unknown) => Provider.refuseOutsideFolder({ tool, arguments: args, directory: chat })
+  const calls: [string, unknown][] = [
+    ['browser_navigate', { url: 'https://example.com/download' }], ['browser_take_screenshot', {}], ['browser_click', { ref: 'e1' }],
+    ['browser_pdf_save', { filename: 'page.pdf' }], ['browser_snapshot', undefined],
+  ]
+  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBeUndefined()
   await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
-  expect(await Provider.refuseOutsideFolder({ tool: 'browser_pdf_save', arguments: { filename: 'page.pdf' }, directory: chat }))
-    .toBe(Provider.outsideFolderMessage('page.pdf'))
+  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(Provider.LINKED_OUTPUT_FOLDER_MESSAGE)
+  await rm(join(chat, Provider.OUTPUT_FOLDER))
+  await symlink(join(outside, 'not-there-yet'), join(chat, Provider.OUTPUT_FOLDER))
+  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(Provider.LINKED_OUTPUT_FOLDER_MESSAGE)
+  expect(await readdir(outside)).toEqual([])
+  expect(Provider.LINKED_OUTPUT_FOLDER_MESSAGE).toContain('tell the person to remove or replace ".playwright-mcp"')
+})
+
+it('lets calls through when the output folder is a real folder or a link that stays inside the chat\'s folder', async () => {
+  const { chat } = await chatFolder()
+  await mkdir(join(chat, 'shots'))
+  await symlink(join(chat, 'shots'), join(chat, Provider.OUTPUT_FOLDER))
+  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
+  expect(await refuse({})).toBeUndefined()
+  expect(await refuse({ filename: 'shot.png' })).toBeUndefined()
 })
 
 it('lets through file arguments that stay inside the chat\'s folder, and calls without file arguments', async () => {

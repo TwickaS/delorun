@@ -58,7 +58,7 @@ lines.on('line', line => {
       if (request.params.name === 'disconnect') process.exit(0)
       counter += 1
       if (request.params.arguments.label === 'missing-browser') {
-        reply(request.id, { isError: true, content: [{ type: 'text', text: 'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1/chrome. Run `npx @playwright/mcp install-browser chromium` to install' }] })
+        reply(request.id, { isError: true, content: [{ type: 'text', text: '### Error\nError: Browser "chromium" is not installed; expected executable at /cache/chromium-1/chrome. Run `npx @playwright/mcp install-browser chromium` to install' }] })
         break
       }
       reply(request.id, { content: [{ type: 'text', text: `Visit ${counter}: ${request.params.arguments.label}` }], structuredContent: { counter, pid: process.pid } })

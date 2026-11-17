@@ -97,11 +97,14 @@ export function chromeChannelExecutable(host: ChromeChannelHost = processChromeC
  * The browser a launch with the given choice uses on a computer.
  * @param choice - the configured choice.
  * @param host - the computer; omission reads this process's.
- * @returns the choice itself for `chrome` and `chromium`; for `auto`, `chrome` when Chrome is installed where
- * Playwright looks and `chromium` otherwise.
+ * @param executable - a browser executable the configuration names for the launch, if it names one.
+ * @returns the choice itself for `chrome` and `chromium`; for `auto`, `chromium` when the configuration names its own
+ * executable, which runs with Chromium's launch settings, else `chrome` when Chrome is installed where Playwright
+ * looks and `chromium` otherwise.
  */
-export function launchedBrowser(choice: BrowserChoice, host?: ChromeChannelHost): LaunchedBrowser {
+export function launchedBrowser(choice: BrowserChoice, host?: ChromeChannelHost, executable?: string): LaunchedBrowser {
   if (choice !== 'auto') return choice
+  if (executable !== undefined) return 'chromium'
   return chromeChannelExecutable(host) === undefined ? 'chromium' : 'chrome'
 }
 

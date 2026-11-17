@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。`browser` 决定启动哪个浏览器：默认值 `auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时启动它，否则启动 Playwright 自己的 Chromium 版本；`chrome` 和 `chromium` 总是启动对应的那一个。Chrome 使用 Playwright 为本次启动创建的配置文件（`--isolated`）运行，从不使用用户自己的 Chrome 配置文件。只有 Chromium 版本与固定的 Playwright 版本绑定，因此本包更新后，仅在实际启动 Chromium 时才可能需要重新下载 Chromium：即 `chromium`，或没有安装 Chrome 的电脑上的 `auto`。使用 `executablePath` 选择其他 Chromium 安装；在 `auto` 下它保留 Chromium 的启动设置。固定的 Playwright 所需的 Chromium 版本未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
+在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。`browser` 决定启动哪个浏览器：默认值 `auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时启动它，否则启动 Playwright 自己的 Chromium 版本；`chrome` 和 `chromium` 总是启动对应的那一个。Chrome 使用 Playwright 为本次启动创建的配置文件（`--isolated`）运行，从不使用用户自己的 Chrome 配置文件。只有 Chromium 版本与固定的 Playwright 版本绑定，因此本包更新后，仅在实际启动 Chromium 时才可能需要重新下载 Chromium：即 `chromium`，或没有安装 Chrome 的电脑上的 `auto`。使用 `executablePath` 选择其他 Chromium 安装；在 `auto` 下它保留 Chromium 的启动设置。提供方在加载时决定启动哪个浏览器，因此安装或移除 Chrome 要在 Harness 重启后才生效。固定的 Playwright 所需的 Chromium 版本未安装时，或设置了 `chrome` 而 Chrome 未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -83,7 +83,7 @@ kind: "package-reference"
 
 #### 模型可见内容
 
-工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。这些文件可能显示私密页面，而 Git 不会跳过隐藏目录，因此当某个 Session 的服务器启动时，提供方会在该目录缺失时创建它，并在其中没有 `.gitignore` 时放入内容为 `*` 的 `.gitignore`；它从不经由 `.playwright-mcp` 或该 `.gitignore` 处的链接写入，也从不改动其中已有的 `.gitignore` 或项目自己的 `.gitignore`。Playwright 的服务器按文本把工具的 `filename` 与 `paths` 同该目录比较，因此当 `filename` 或 `paths` 的真实位置（经由链接或其他方式）在该目录之外时，提供方会在调用到达服务器之前拒绝它；模型会读到一句话，要求使用对话文件夹内的路径。检查会分别相对该目录和 `.playwright-mcp` 解析每个名称，不覆盖在检查与服务器使用之间发生变化的路径。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
+工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。这些文件可能显示私密页面，而 Git 不会跳过隐藏目录，因此当某个 Session 的服务器启动时，提供方会在该目录缺失时创建它，并在其中没有 `.gitignore` 时放入内容为 `*` 的 `.gitignore`；它从不经由 `.playwright-mcp` 或该 `.gitignore` 处的链接写入，也从不改动其中已有的 `.gitignore` 或项目自己的 `.gitignore`。Playwright 的服务器按文本把工具的 `filename` 与 `paths` 同该目录比较，因此当 `filename` 或 `paths` 的真实位置（经由链接或其他方式）在该目录之外时，提供方会在调用到达服务器之前拒绝它；模型会读到一句话，要求使用对话文件夹内的路径。当 `.playwright-mcp` 本身是指向该目录之外的链接时，所有浏览器工具调用都会被拒绝，因为服务器会在没有文件参数的情况下把默认命名的文件和下载内容保存到那里。检查会分别相对该目录和 `.playwright-mcp` 解析每个名称，不覆盖在检查与服务器使用之间发生变化的路径。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
 
 #### Token 影响
 
