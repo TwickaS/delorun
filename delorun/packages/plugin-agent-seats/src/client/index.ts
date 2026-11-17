@@ -19,6 +19,8 @@ import './actions.ts'
 import { Banner, ComposerNote, type BannerInjected } from './Banner.tsx'
 import { SeatApproval, selectSeatApproval, type ApprovalInjected } from './Approval.tsx'
 import { en, NS, zh } from './locales.ts'
+import type { SeatReachSource } from './actions.ts'
+import { createSeatClient } from './host-routes.ts'
 import { SeatToolRow } from './ToolRow.tsx'
 import { RECORD_TOOL_NAMES } from './tool-model.ts'
 import './view.ts'
@@ -29,7 +31,8 @@ export { agentOfTool, ALLOWED_FOR_RUN, allowedForRunDecision, SeatApproval, sele
 export { recordInput, SeatToolRow, type SeatToolRowProps } from './ToolRow.tsx'
 export { isRecordName, RECORD_PREFIXES, RECORD_TOOL_NAMES, toolCard, type ToolCard, type ToolRecordInput } from './tool-model.ts'
 export { AGENT_NAMES, loginCommand, type AgentSeatView, type SeatAgent, type SeatModelPicker, type SeatState } from './view.ts'
-export type { SeatClient, SeatReach, SeatReachSource } from './actions.ts'
+export type { SeatClient, SeatReach, SeatReachService, SeatReachSource } from './actions.ts'
+export { createSeatClient, SEAT_ROUTES, type SeatFetch } from './host-routes.ts'
 
 /** The Loader row name. */
 export const name = 'delorun-agent-seats'
@@ -49,14 +52,15 @@ const copy = (text: string): Promise<void> => navigator.clipboard.writeText(text
  */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-agent-seats: dictionaries')
-  const bannerInjected = (): BannerInjected => ({ client: ctx.agentSeatClient, copy, clock })
+  const seatClient = createSeatClient((input, init) => globalThis.fetch(input, init))
+  const bannerInjected = (): BannerInjected => ({ client: seatClient, copy, clock })
   ctx.effect(() => ctx.slots.inject('conversation.session.banner', () => ctx.slots.register({
     name: 'conversation.session.banner', id: 'agent-seat', order: SLOT_ORDER.banner, locale: NS, inject: bannerInjected,
   }, Banner)), 'delorun-agent-seats: banner')
   ctx.effect(() => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock', id: 'agent-seat-note', order: SLOT_ORDER.composerNote, locale: NS,
   }, ComposerNote)), 'delorun-agent-seats: composer line')
-  const approvalInjected = (): ApprovalInjected => ({ reach: ctx.agentSeatClient?.reach, clock })
+  const approvalInjected = (): ApprovalInjected => ({ reach: ctx.get('agentSeatReach') as SeatReachSource | undefined, clock })
   ctx.effect(() => ctx.slots.inject('conversation.composer', () => ctx.slots.register({
     name: 'conversation.composer', priority: 2, select: selectSeatApproval, locale: NS, inject: approvalInjected,
   }, SeatApproval)), 'delorun-agent-seats: approval card')

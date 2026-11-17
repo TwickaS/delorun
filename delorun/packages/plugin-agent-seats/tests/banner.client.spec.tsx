@@ -6,7 +6,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
-import { allowedForRunDecision, Banner, ComposerNote, en, SeatApproval, selectSeatApproval, type AgentSeatView, type SeatClient } from '../src/client/index.ts'
+import { allowedForRunDecision, createSeatClient, SEAT_ROUTES, Banner, ComposerNote, en, SeatApproval, selectSeatApproval, type AgentSeatView, type SeatClient } from '../src/client/index.ts'
 
 afterEach(cleanup)
 
@@ -23,7 +23,6 @@ const base: AgentSeatView = { agent: 'claude-code', version: '2.3.14', ownSettin
 const copy = vi.fn(() => Promise.resolve())
 const client = (): SeatClient => ({
   resume: vi.fn(() => Promise.resolve()), chooseModel: vi.fn(() => Promise.resolve()),
-  reach: { get: () => ({ kind: 'computer' }), subscribe: () => () => undefined, openUnlock: vi.fn() },
 })
 
 function banner(seat: AgentSeatView | undefined, ...given: [] | [SeatClient | undefined]) {
@@ -169,5 +168,21 @@ describe('the approval card', () => {
     render(<SeatApproval matched={pending()} t={t} reach={reach('unlocked-phone')} clock={clock} />)
     expect(screen.getByText('This phone is unlocked until T1402.')).toBeTruthy()
     expect(screen.getByText('Allow for this run')).toBeTruthy()
+  })
+})
+
+describe('the host routes', () => {
+  it('posts Resume and the model choice to the Host\'s agentSeat methods', async () => {
+    const fetch = vi.fn((_path: string, _init?: RequestInit) => Promise.resolve(new Response('{}', { status: 200 })))
+    const seat = createSeatClient(fetch)
+    await seat.resume('s1')
+    await seat.chooseModel('s1', 'm')
+    expect(fetch.mock.calls.map(([path, init]) => [path, init?.body])).toEqual([
+      [SEAT_ROUTES.resume, '{"sessionId":"s1"}'], [SEAT_ROUTES.chooseModel, '{"sessionId":"s1","modelId":"m"}'],
+    ])
+  })
+
+  it('rejects when the Host refuses', async () => {
+    await expect(createSeatClient(() => Promise.resolve(new Response('{}', { status: 403 }))).resume('s1')).rejects.toThrow('403')
   })
 })

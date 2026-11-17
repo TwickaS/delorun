@@ -92,7 +92,7 @@ export function SeatApproval({ matched, t, reach, clock }: SeatApprovalProps) {
       <span className={css.approvalTitle}>{t('approval.title', { agent })}</span>
       {matched.reason !== undefined && <div className={css.command}>{matched.reason}</div>}
       <p className={css.text}>{t('approval.note', { agent })}</p>
-      {standing.kind === 'unlocked-phone' && <p className={css.text}>{t('approval.unlockedUntil', { time: clock(standing.until) })}</p>}
+      {standing.kind === 'unlocked-phone' && standing.until !== undefined && <p className={css.text}>{t('approval.unlockedUntil', { time: clock(standing.until) })}</p>}
       {standing.kind === 'locked-phone' && <p className={css.text}>{t('approval.locked')}</p>}
       <div className={css.actions}>
         <Button variant="outline" disabled={sent} onClick={() => { send('rejected') }}>{t('approval.reject')}</Button>
