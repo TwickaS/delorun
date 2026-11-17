@@ -158,6 +158,11 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     const peer = join(home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')
     const pack = join(home, 'packs', '0.1.0', 'plug', 'package')
     writeFiles(home, {
+      'runtimes/current': '0.1.0\n',
+      'runtimes/keys/key': 'secret',
+      'runtimes/0.1.0/bin/delorun': 'binary',
+      'runtimes/0.0.9/app/node_modules/@s/peer/package.json': JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
+      'runtimes/0.0.9/app/node_modules/@s/peer/index.js': 'export const answer = 9\n',
       'runtimes/0.1.0/app/node_modules/@s/peer/package.json': JSON.stringify({ name: '@s/peer', type: 'module', exports: './index.js' }),
       'runtimes/0.1.0/app/node_modules/@s/peer/index.js': 'export const answer = 42\n',
       'secrets/home-auth/key': 'secret',
@@ -171,12 +176,34 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     return { home, pack, peer }
   }
 
-  it('keeps a peer link into the runtime store as a link, and still leaves out a link to anywhere else in the home', async () => {
+  it('keeps a peer link into the active runtime\'s installed packages as a link, and still leaves out a link to anywhere else in the home', async () => {
     const { home, pack, peer } = packHome()
     const scanned = await scanFolder(pack, { home })
     expect(scanned.entries).toContainEqual({ type: 'link', path: 'node_modules/@s/peer', target: peer, outside: true })
     expect(scanned.entries.some(entry => entry.path.startsWith('node_modules/secret'))).toBe(false)
     expect(scanned.skipped).toContain('node_modules/secret')
+  })
+
+  it.each([
+    ['another runtime version\'s package', 'runtimes/0.0.9/app/node_modules/@s/peer'],
+    ['a path that climbs out of the active runtime\'s app folder', 'runtimes/0.1.0/app/../../keys'],
+    ['the active runtime outside its app/node_modules', 'runtimes/0.1.0/bin'],
+    ['the runtime store itself', 'runtimes'],
+  ])('leaves out a link to %s', async (_what, target) => {
+    const { home, pack } = packHome()
+    // Written as given, so a `..` reaches the link's target unresolved.
+    symlinkSync(`${home}/${target}`, join(pack, 'node_modules', 'elsewhere'))
+    const scanned = await scanFolder(pack, { home })
+    expect(scanned.entries.some(entry => entry.path.startsWith('node_modules/elsewhere'))).toBe(false)
+    expect(scanned.skipped).toContain('node_modules/elsewhere')
+  })
+
+  it('keeps no runtime link at all while runtimes/current names no version', async () => {
+    const { home, pack } = packHome()
+    writeFiles(home, { 'runtimes/current': '../0.1.0\n' })
+    const scanned = await scanFolder(pack, { home })
+    expect(scanned.entries.some(entry => entry.path.startsWith('node_modules/@s/peer'))).toBe(false)
+    expect(scanned.skipped).toContain('node_modules/@s/peer')
   })
 
   it('stores a copy whose own package loads the peer from the runtime store, as the pack does', async () => {

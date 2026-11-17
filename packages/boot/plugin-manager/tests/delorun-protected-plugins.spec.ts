@@ -4,11 +4,12 @@
  * module, give its row id to another row, or deselect, remove, install or change the package that carries or provides
  * it, and the profile's files stay as they were.
  */
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import {
@@ -27,6 +28,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'v
 import PluginManager from '../src/index.ts'
 import type { PackFolderCheck, PluginInstallRequestId } from '../src/types.ts'
 import { DELORUN_PROFILE_BUNDLES } from '../../../../delorun/packages/bundle-local/src/profile.ts'
+import { materialize, storeFolder } from '../../../../delorun/packages/changes/src/store.ts'
 import * as operations from '../src/operations.ts'
 import * as tool from '../src/tools.ts'
 import { isolateGitCommandLineConfig } from './git-environment.ts'
@@ -464,6 +466,27 @@ function pnpmLinks(dir: string) {
   return pnpm
 }
 
+/**
+ * Store a pack folder as Changes does for a linked plugin and put the copy where the profile's link was. The folder's
+ * installed packages stand for the pack's peers: the fixture home's active runtime, `runtimes/test/app/node_modules`,
+ * is a link to this repository, so the copy keeps every link into it as Changes keeps a pack's links into the runtime.
+ * @param home - the fixture's Delorun home.
+ * @param folder - the pack folder.
+ * @param target - where the profile loads the package from.
+ * @returns the copy's path.
+ */
+async function reviewCopy(home: string, folder: string, target: string): Promise<string> {
+  mkdirSync(join(home, 'runtimes', 'test', 'app'), { recursive: true })
+  writeFileSync(join(home, 'runtimes', 'current'), 'test\n')
+  rmSync(join(home, 'runtimes', 'test', 'app', 'node_modules'), { force: true })
+  symlinkSync(fileURLToPath(new URL('../../../../', import.meta.url)), join(home, 'runtimes', 'test', 'app', 'node_modules'), 'junction')
+  const { version, skipped } = await storeFolder(home, folder, { dependencies: 'include' })
+  expect(skipped.filter(path => !path.startsWith('node_modules/') || path.includes('/node_modules/')), 'paths the copy left out').toEqual([])
+  rmSync(target, { force: true })
+  await materialize(home, version, target)
+  return target
+}
+
 describe('every pack the release publishes, on Delorun\'s default profile', () => {
   it('names every Delorun bundle marked as a pack', () => {
     const marked = Object.entries(WORKSPACE_DIRS).filter(([name, folder]) => name.startsWith('@delorun/bundle-')
@@ -484,6 +507,16 @@ describe('every pack the release publishes, on Delorun\'s default profile', () =
     for (const enabled of [false, true]) {
       const switched = await ctx.pluginManager.setBundleEnabled(name, enabled)
       expect(switched.error, `${String(enabled)} ${JSON.stringify(switched.error)}`).toBeUndefined()
+    }
+    // Changes copies the linked pack into the profile, and every row module loads from that copy.
+    const copy = await reviewCopy(dirname(dirname(dir)), PACK_DIRS[name]!, join(dir, 'node_modules', name))
+    // Each package the pack depends on stays a link into the active runtime, as a pack's peers are linked.
+    const { dependencies = {} } = JSON.parse(readFileSync(join(copy, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+    for (const dependency of Object.keys(dependencies)) expect(lstatSync(join(copy, 'node_modules', dependency)).isSymbolicLink(), dependency).toBe(true)
+    const patch = loadOverlayPatches('dsh', join(copy, 'cordis.patch.yml')) as Patch
+    for (const module of new Set(patchModules(patch))) {
+      const resolved = createRequire(join(copy, 'package.json')).resolve(module)
+      await expect(import(/* @vite-ignore */ pathToFileURL(resolved).href), module).resolves.toBeDefined()
     }
   })
 
