@@ -85,6 +85,7 @@ While dangerous mode holds, an unlocked, signed-in device does what the computer
 | `pluginManager/setPluginEnabled` on a protected row (the plugin manager still refuses a change to a guard plugin itself) | Refused, unlocked or not | Decided by the unlock |
 | `commands/execute` of a command a device does not run | Refused, unlocked or not | Decided by the unlock |
 | An approval prompt marked `full-access`, `workspace-management` or `external-agent` answered from a device | `LOOPBACK_REQUIRED` | Given by an unlocked device |
+| An approval prompt marked `real-browser` answered from a device | Given by a device unlocked with a code or PIN; `LOOPBACK_REQUIRED` to a locked device or one in its approval grace | Unchanged |
 | The permission-defaults routes that review and grant a workspace's consent (`delorunPermission.workspaces`, `.review`, `.setFullAccess`) | `LOOPBACK_REQUIRED` before the body is read | Admitted for an unlocked device |
 | The network routes (`delorunNetwork.list`, `.set`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
 | The MCP consent routes (`delorunMcpConsent.pending`, `.accept`, `.decline`, `.revoke`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |

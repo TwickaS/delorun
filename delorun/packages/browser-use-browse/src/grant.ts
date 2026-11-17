@@ -151,7 +151,7 @@ export class RealBrowserGrants {
   mayUse(session: Session): UseVerdict {
     const state = this.handle.stateOf(session)
     if (state.grantedSeq === null) return { kind: 'refuse', reason: 'no-grant' }
-    if (state.attended) return { kind: 'allow' }
+    if (this.attended(session)) return { kind: 'allow' }
     if (state.awayUntil !== null && this.now() < state.awayUntil) return { kind: 'allow' }
     return { kind: 'refuse', reason: 'away' }
   }
@@ -173,11 +173,13 @@ export class RealBrowserGrants {
   }
 
   /**
-   * Whether the current turn of a Session holds a prompt the person sent.
+   * Whether the current turn of a Session holds a prompt the person sent. A delegated Session's prompts come from the
+   * Agent that delegated it, whatever their kind, so its turns are never attended.
    * @param session - the Session.
    * @returns the answer the log gives.
    */
   attended(session: Session): boolean {
+    if ((session.header.delegationDepth ?? 0) > 0) return false
     return this.handle.stateOf(session).attended
   }
 

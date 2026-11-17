@@ -290,6 +290,24 @@ describe('the authenticator provider', () => {
     expect(() => { give(admitted.peer) }).toThrow(expect.objectContaining({ details: { action: 'real-browser' } }))
   })
 
+  it('refuses a real-browser grant from a device in its approval grace while dangerous mode holds', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => true } : Context.prototype.get.call(ctx, name as never))) as never)
+    expect(ctx.homeAuth.dangerousMode()).toBe(true)
+    let unlock: { id: string; grace?: true } = { id: 'grace-1', grace: true }
+    vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => unlock as never)
+    const give = (grantsMarker: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: grantsMarker }, value: 'allowed-once' })
+    }
+    // Pins the grace exclusion in dangerous mode: the mode lifts the computer's grants for the grace, not this one.
+    expect(() => { give('real-browser') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: REAL_BROWSER_REFUSAL, details: { action: 'real-browser' } }))
+    expect(() => { give('full-access') }).not.toThrow()
+    unlock = { id: 'elevation-1' }
+    expect(() => { give('real-browser') }).not.toThrow()
+  })
+
   it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
     // The home reads the clock it was built with, so it is rebuilt over a faked `Date`.
     await fiber.dispose()

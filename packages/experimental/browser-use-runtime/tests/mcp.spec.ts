@@ -401,6 +401,12 @@ describe('Session MCP Loader composition', () => {
     expect(JSON.stringify(refused)).toContain('this Session may not use this browser')
     expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(0)
     expect((await visit(ctx, granted.agent, 'first')).isError).toBe(false)
+    // Pins the call-time check: once the provider stops admitting a Session, its calls are refused before the change is
+    // reported and its server stopped.
+    admittedSessions.delete('granted')
+    expect((await visit(ctx, granted.agent, 'early')).isError).toBe(true)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    admittedSessions.add('granted')
     // A change of admission starts the newly admitted Session's server and stops the one no longer admitted.
     admittedSessions.add('other')
     admittedSessions.delete('granted')

@@ -482,7 +482,9 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     if (!exec.name.startsWith(toolPrefix) && !ownResource) return next()
     const agent = exec.agent
     const status = agent === undefined ? undefined : clients.get(agent)?.status
-    if (status === 'unadmitted') throw new Error(`${options.name}: this Session may not use this browser`)
+    // Asked at call time too: a call can run between the provider's change and the stop of the Session's server.
+    const admitted = agent === undefined || options.admission === undefined || options.admission.admitted(agent)
+    if (status === 'unadmitted' || !admitted) throw new Error(`${options.name}: this Session may not use this browser`)
     if (agent === undefined || status !== 'ready') {
       throw new Error(`${options.name}: browser tool belongs to another Session`)
     }

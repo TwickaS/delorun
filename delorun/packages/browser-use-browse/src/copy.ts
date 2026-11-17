@@ -49,6 +49,18 @@ export function grantedAnswer(purpose: string): string {
 export const ALREADY_GRANTED_ANSWER = 'The person\'s own browser is already allowed in this chat; use the mcp__browse__ tools.'
 
 /**
+ * The tool's answer when the chat holds a grant but browse offers it no tools, such as while the person has not yet
+ * accepted starting browse on this computer.
+ * @param purpose - the task the grant is for.
+ * @returns the answer.
+ */
+export function browseWaitingAnswer(purpose: string): string {
+  return `The person allowed their own browser, with their sign-ins, for this chat, for: ${purpose}. `
+    + 'Its tools are not available yet: browse has not started, because the person has not accepted starting it on this computer or it could not start. '
+    + 'Tell the person, and keep the isolated browser until the mcp__browse__ tools appear.'
+}
+
+/**
  * The approval card's text: what the agent asks for and what it can do with it.
  * @param purpose - the task the model gave.
  * @returns the English and Chinese text.

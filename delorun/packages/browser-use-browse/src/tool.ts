@@ -10,7 +10,7 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { RealBrowserGrants, UseVerdict } from './grant.ts'
 import {
-  ALREADY_GRANTED_ANSWER, askText, AWAY_REFUSAL, BROWSE_SERVER, BROWSE_TOOL_PREFIX, declinedRefusal, grantedAnswer,
+  ALREADY_GRANTED_ANSWER, askText, AWAY_REFUSAL, BROWSE_SERVER, BROWSE_TOOL_PREFIX, browseWaitingAnswer, declinedRefusal, grantedAnswer,
   NO_GRANT_REFUSAL, UNANSWERABLE_REFUSAL, USE_MY_BROWSER_DESCRIPTION, USE_MY_BROWSER_TOOL,
 } from './copy.ts'
 
@@ -55,7 +55,9 @@ export function useMyBrowserTool(ctx: Context, grants: RealBrowserGrants): ToolD
         throw new Error(`${USE_MY_BROWSER_TOOL}: give the task in one line of 1 to ${String(MAX_PURPOSE)} characters`)
       }
       const session = agent.session
-      if (grants.live(session)) return { allowed: true, message: ALREADY_GRANTED_ANSWER }
+      // The browse tools exist for this chat only once its server has started, which the MCP consent may still hold.
+      const offered = (): boolean => ctx.tools.schemas(agent).some(tool => tool.name.startsWith(BROWSE_TOOL_PREFIX))
+      if (grants.live(session)) return { allowed: true, message: offered() ? ALREADY_GRANTED_ANSWER : browseWaitingAnswer(purpose) }
       // A run the person did not start, such as a scheduled one, raises no card: nobody is there to read it.
       if (!grants.attended(session)) return { allowed: false, message: AWAY_REFUSAL }
       const approval = ctx.get('approval')
@@ -82,7 +84,7 @@ export function useMyBrowserTool(ctx: Context, grants: RealBrowserGrants): ToolD
       grants.grant(session, { kind: 'approval', askedSeq })
       // The browse server starts for the chat now, so its tools are there for the model's next step.
       await grants.settled(session)
-      return { allowed: true, message: grantedAnswer(purpose) }
+      return { allowed: true, message: offered() ? grantedAnswer(purpose) : browseWaitingAnswer(purpose) }
     },
     presentCall: args => ({ card: 'generic', title: 'Ask to use your own browser', kind: 'other', rawInput: args }),
   })

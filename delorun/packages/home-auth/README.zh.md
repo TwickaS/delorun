@@ -92,6 +92,7 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 | 针对受保护配置项的 `pluginManager/setPluginEnabled`（插件管理器仍会拒绝对防护插件本身的更改） | 拒绝，无论是否解锁 | 由解锁决定 |
 | 设备不运行的命令的 `commands/execute` | 拒绝，无论是否解锁 | 由解锁决定 |
 | 从设备应答的、标记为 `full-access`、`workspace-management` 或 `external-agent` 的审批提示 | `LOOPBACK_REQUIRED` | 由已解锁的设备给出 |
+| 从设备应答的、标记为 `real-browser` 的审批提示 | 由已用验证码或 PIN 解锁的设备给出；锁定的设备或处于审批宽限期的设备得到 `LOOPBACK_REQUIRED` | 不变 |
 | 审阅并授予工作区同意的 permission-defaults 路由（`delorunPermission.workspaces`、`.review`、`.setFullAccess`） | 在读取请求体之前 `LOOPBACK_REQUIRED` | 对已解锁的设备放行 |
 | 网络路由（`delorunNetwork.list`、`.set`） | `LOOPBACK_REQUIRED` | 对已解锁的设备放行 |
 | MCP 同意路由（`delorunMcpConsent.pending`、`.accept`、`.decline`、`.revoke`） | `LOOPBACK_REQUIRED` | 对已解锁的设备放行 |

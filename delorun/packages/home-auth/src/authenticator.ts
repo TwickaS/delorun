@@ -356,8 +356,10 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (reach === undefined) return
     if (refusal.reach === 'unlocked-device') {
       const unlock = unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId))
-      // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant.
+      // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant, in
+      // dangerous mode too: the unlock read here is the page's or the device's, the ones the lines below accept.
       if (unlock !== undefined && unlock.grace !== true) return
+      throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
     }
     // An unlocked PIN page gives what the computer gives. This Peer is the answering page's, so a locked tab stays
     // refused while a sibling tab is unlocked.

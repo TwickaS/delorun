@@ -25,9 +25,9 @@ kind: "package-bundle"
 
 - **请求。** `use_my_browser` 接收一行任务说明，并弹出带 `real-browser` 授权标记的审批卡片（[文案](src/copy.ts)）。`@delorun/home-auth` 接受来自本机或已用验证码或 PIN 解锁的已批准设备的回答；仅已登录、或只处于审批宽限期的设备会被拒绝，卡片保持待答。允许会先记录 `approval/decided`，再记录 `real-browser/granted`，后者指明它回答的 `approval/asked`。其他回答都不记录许可，并告诉模型继续使用隔离浏览器。审批策略为 `never` 的对话会直接拒绝请求，不询问任何人。
 - **许可。** `realBrowserGrant` 投影（[grant](src/grant.ts)）从对话自己的日志折叠 `real-browser/granted`、`real-browser/away` 和 `real-browser/ended`，因此恢复的对话保留许可，分叉的对话不继承父对话的许可。关闭许可会追加 `real-browser/ended`，同时结束“不在时”许可。
-- **谁可以使用。** browse 调用只在由本人自己的提示（`user` 或 `retry`）发起的轮次中运行，或在“不在时”许可有效期间的任何轮次中运行；其他调用都会在服务器收到之前以一句话被拒绝（[guard](src/tool.ts)）。在本人没有发起的轮次中，`use_my_browser` 不会弹出卡片。没有许可的运行（例如普通的 `delorun headless` 任务）保持使用隔离浏览器，并会被告知。
+- **谁可以使用。** browse 调用只在由本人自己的提示（`user` 或 `retry`）发起的轮次中运行，或在“不在时”许可有效期间的任何轮次中运行；其他调用都会在服务器收到之前以一句话被拒绝（[guard](src/tool.ts)）。在本人没有发起的轮次中，以及在委派会话中（其提示来自委派它的智能体），`use_my_browser` 都不会弹出卡片。没有许可的运行（例如普通的 `delorun headless` 任务）保持使用隔离浏览器，并会被告知。
 - **“不在时”许可。** `real-browser/away` 记录许可的结束时间，即给出后 `awayDays` 天，并带 `cause: 'person'`；再次给出会续期，关闭则记录 `until: null`。非本人发起的运行中的 browse 调用因许可到期被拒绝时，会以 `until: null` 和 `cause: 'expired'` 记录一次到期。
-- **服务器。** browse 只为许可有效的对话启动；`use_my_browser` 在它启动后才回答，因此其工具在模型的下一步就已可用。许可结束时它会停止。该配置行不占用浏览器使用槽位，因此隔离浏览器保持可用。程序是 `@opencode/browse` 为本机固定的平台二进制文件（[config](src/config.ts)）。其环境是 MCP 客户端清理过的环境：除 `inheritEnv` 列出的变量外，所有继承的 `OPENCODE_BROWSER_*` 变量都被清空，并设置 `OPENCODE_BROWSER_AUTO_UPDATE=off` 和 `OPENCODE_BROWSER_UPDATE_CHECK=0`。`inheritEnv` 永远不能列出更新开关、放宽限制的变量（`ALLOW_ALL_COOKIES`、`ALLOW_ALL_STORAGE`、`ALLOW_FILE_URLS`、`ALLOW_FOREGROUND`、`FILE_ROOTS`）或工具形式开关（`TOOLS`）；列出它们的配置行无法加载。
+- **服务器。** browse 只为许可有效的对话启动；`use_my_browser` 在它启动后才回答，因此其工具在模型的下一步就已可用。browse 尚未提供工具时（例如本人还没有接受在本机启动它），回答会说明这一点，而不是列出这些工具。许可结束时它会停止。该配置行不占用浏览器使用槽位，因此隔离浏览器保持可用。程序是 `@opencode/browse` 为本机固定的平台二进制文件（[config](src/config.ts)）。其环境是 MCP 客户端清理过的环境：除 `inheritEnv` 列出的变量外，所有继承的 `OPENCODE_BROWSER_*` 变量都被清空，`inheritEnv` 永远不能列出的名称即使未设置也会被清空，并设置 `OPENCODE_BROWSER_AUTO_UPDATE=off` 和 `OPENCODE_BROWSER_UPDATE_CHECK=0`。`inheritEnv` 永远不能列出更新开关、放宽限制的变量（`ALLOW_ALL_COOKIES`、`ALLOW_ALL_STORAGE`、`ALLOW_FILE_URLS`、`ALLOW_FOREGROUND`、`FILE_ROOTS`）或工具形式开关（`TOOLS`）；列出它们的配置行无法加载。
 - **服务。** 该配置行运行期间提供 `realBrowser`（各对话的许可），只在驱动旁边才有意义的插件（例如其技能）会注入它。
 
 <a id="configuration"></a>
@@ -63,4 +63,4 @@ kind: "package-bundle"
 
 ## 测试
 
-[`tests/grant.spec.ts`](tests/grant.spec.ts) 通过真实的智能体循环、会话日志和审批服务驱动 `use_my_browser` 和守卫：允许会记录指明其请求的许可，“暂不”不记录许可且 browse 调用被拒绝，无人可答的运行和计划运行会以一句话被拒绝，已获许可对话中的计划运行只在“不在时”许可有效期间被接纳且到期只记录一次，关闭许可会同时结束两者，许可在从日志重启后依然有效。[`tests/plugin.spec.ts`](tests/plugin.spec.ts) 用替身 browse 服务器运行整个配置行：没有许可就不启动服务器，允许后在下一步之前只为该对话启动，关闭许可会停止它。[`tests/routes.spec.ts`](tests/routes.spec.ts) 覆盖每个路由的访问级别，包括锁定设备和处于宽限期的设备打开“不在时”许可被拒绝；[`tests/config.spec.ts`](tests/config.spec.ts) 覆盖二进制文件的解析和环境的拒绝规则。回答守卫在 `delorun/packages/home-auth/tests/authenticator.spec.ts` 中覆盖。
+[`tests/grant.spec.ts`](tests/grant.spec.ts) 通过真实的智能体循环、会话日志和审批服务驱动 `use_my_browser` 和守卫：允许会记录指明其请求的许可，“暂不”不记录许可且 browse 调用被拒绝，无人可答的运行和计划运行会以一句话被拒绝，委派会话不会弹出卡片，已获许可对话中的计划运行只在“不在时”许可有效期间被接纳且到期只记录一次，关闭许可会同时结束两者，许可在从日志重启后依然有效。[`tests/plugin.spec.ts`](tests/plugin.spec.ts) 用替身 browse 服务器运行整个配置行：没有许可就不启动服务器，允许后在下一步之前只为该对话启动，两个对话以相同方式启动它，没有工具的 browse 会如实报告，关闭许可会停止它。[`tests/routes.spec.ts`](tests/routes.spec.ts) 覆盖每个路由的访问级别，包括锁定设备和处于宽限期的设备打开“不在时”许可被拒绝；[`tests/config.spec.ts`](tests/config.spec.ts) 覆盖二进制文件的解析和环境的拒绝规则。回答守卫（包括危险模式）在 `delorun/packages/home-auth/tests/authenticator.spec.ts` 中覆盖。
