@@ -22,7 +22,7 @@ export interface SidebarProps {
  * @returns the sidebar.
  */
 export function Sidebar({ workspace, chats, strings, settings }: SidebarProps) {
-  return <div className={css.sidebar}>
+  return <div className={css.sidebar} data-part="sidebar">
     <div className={css.workspace}><span className={css.badge}>{workspace.slice(0, 1).toUpperCase()}</span>{workspace}</div>
     <div className={css.newChat}>{strings.sidebar['session.new.label']}</div>
     <ul className={css.chats} aria-label={strings.sidebar['navigation.label']}>

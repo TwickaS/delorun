@@ -102,4 +102,46 @@
   transition: transform var(--dl-motion-press) var(--dl-ease-out);
 }
 
+/* The terminal window: a plain terminal in the frame's box, outside the studio's layout. */
+.terminalWindow {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+  background: var(--dl-surface-sunken);
+  color: var(--dl-text);
+  contain: layout paint;
+}
+
+.terminalBar {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-2);
+  padding: var(--dl-space-3) var(--dl-space-4);
+  border-bottom: 1px solid var(--dl-border);
+  background: var(--dl-surface-raised);
+}
+
+.terminalDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dl-border);
+}
+
+.terminalBody {
+  box-sizing: border-box;
+  min-height: 0;
+  margin: 0;
+  padding: var(--dl-space-4);
+  overflow: auto;
+  font-family: var(--dl-font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.prompt { color: var(--dl-text-muted); }
+
 .root { height: 100%; }

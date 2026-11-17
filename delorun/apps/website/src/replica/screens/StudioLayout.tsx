@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react'
 import { REPLICA_COPY } from '../copy.ts'
-import type { ChapterFile, Screen } from '../model.ts'
+import type { ChapterFile, StudioScreen } from '../model.ts'
 import type { ReplicaStrings } from '../strings.ts'
 import { Sidebar } from './Sidebar.tsx'
 import css from './studio.module.css'
@@ -17,10 +17,10 @@ export type ReplicaWidth = 'desktop' | 'phone'
 export interface StudioLayoutProps {
   readonly file: ChapterFile
   readonly width: ReplicaWidth
-  readonly screen: Screen
+  readonly screen: StudioScreen
   readonly strings: ReplicaStrings
   /** Each screen's content. */
-  readonly screens: Readonly<Record<Screen, ReactNode>>
+  readonly screens: Readonly<Record<StudioScreen, ReactNode>>
 }
 
 /**
@@ -30,7 +30,7 @@ export interface StudioLayoutProps {
  * @param strings - the product text.
  * @returns the text.
  */
-function heading(screen: Screen, file: ChapterFile, strings: ReplicaStrings): string {
+function heading(screen: StudioScreen, file: ChapterFile, strings: ReplicaStrings): string {
   switch (screen) {
     case 'chat': return file.chats[0] ?? ''
     case 'changes': return `${strings.settings.title} › ${strings.layout['page.changes']}`
@@ -50,7 +50,7 @@ export function StudioLayout({ file, width, screen, strings, screens }: StudioLa
     <div className={css.main}>
       <div className={css.header}>{heading(screen, file, strings)}</div>
       <div className={css.screens}>
-        {(Object.keys(screens) as Screen[]).map(name => <div key={name} className={css.screen} data-screen={name} data-active={name === screen ? '' : undefined}>{screens[name]}</div>)}
+        {(Object.keys(screens) as StudioScreen[]).map(name => <div key={name} className={css.screen} data-screen={name} data-active={name === screen ? '' : undefined}>{screens[name]}</div>)}
       </div>
     </div>
   </div>
