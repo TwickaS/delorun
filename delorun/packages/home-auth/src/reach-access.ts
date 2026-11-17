@@ -98,7 +98,6 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
   'session/modelCatalog': 'read the models a chat can run',
-  'mcpManager/watch': 'follow whether each MCP server runs, by name and status, the waiting-for-consent notice reads',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
   'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
   'session/fork': 'start a chat from a point of another',
@@ -234,14 +233,13 @@ export const REACH_DENIED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
- * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
+ * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock. None: opening a
+ * chat's folder in an application acts on the computer's own screen, so both such actions stay at the computer. The role
  * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
  * `elevation-required: <action>` to a locked device while it holds. Each other action of the never table stays at the
  * computer in every mode.
  */
 export const REACH_DANGEROUS_ACTIONS = {
-  'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
-  'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
 } as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
 
@@ -478,6 +476,7 @@ export const REACH_ELEVATED_ACTIONS = {
   'terminal/watch': TERMINAL,
   'mcpManager/probe': MCP_MANAGEMENT,
   'mcpManager/restart': MCP_MANAGEMENT,
+  'mcpManager/watch': MCP_MANAGEMENT,
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
@@ -923,6 +922,59 @@ export const COMPUTER_ONLY_ROW_MODULES = {
 } as const satisfies Readonly<Record<string, string>>
 
 /**
+ * Whether a settings write names the namespace of a row of {@link COMPUTER_ONLY_ROW_MODULES} (a namespace is the row's
+ * Loader entry id, with or without its `include:` prefix), or while those rows cannot be read. A call whose
+ * namespace is not text names no row; the wire validates it.
+ * @param facts - the computer-only rows.
+ * @param args - the call's arguments.
+ * @returns whether the write is refused to a device in every mode.
+ */
+function settingsOfComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.computerOnlyEntryIds()
+  if (ids === undefined) return true
+  if (typeof args.ns !== 'string') return false
+  return ids.has(args.ns) || ids.has(`include:${args.ns}`)
+}
+
+/**
+ * Whether a settings write names the namespace of a row the plugin manager protects (its `protectedPlugins`), or the
+ * protected rows cannot be read.
+ * @param facts - the protected rows.
+ * @param args - the call's arguments.
+ * @returns whether the write needs a real unlock.
+ */
+function settingsOfProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.protectedEntryIds()
+  if (ids === undefined) return true
+  return typeof args.ns === 'string' && (ids.has(args.ns) || ids.has(`include:${args.ns}`))
+}
+
+/** The plugin-manager calls that enable, disable, remove or update one bundle (package) by `name`. */
+const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'])
+
+/**
+ * The bundles whose rows include a {@link COMPUTER_ONLY_ROW_MODULES} module, besides the packages that provide those
+ * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it.
+ */
+export const COMPUTER_ONLY_BUNDLES: readonly string[] = [
+  '@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio',
+  '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-minimal', '@deepseek-ai/dsh-headless',
+]
+
+/**
+ * Whether a bundle call names a package that provides a computer-only module or holds its rows, or names its package in
+ * a non-text `name`. A call with no `name` is malformed and is left to the unlock and the plugin manager.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device in every mode.
+ */
+function namesComputerOnlyBundle(args: Readonly<Record<string, unknown>>): boolean {
+  if (args.name === undefined) return false
+  if (typeof args.name !== 'string') return true
+  const name = args.name
+  return COMPUTER_ONLY_BUNDLES.includes(name) || Object.keys(COMPUTER_ONLY_ROW_MODULES).some(module => module === name || module.startsWith(`${name}/`))
+}
+
+/**
  * Whether a plugin-manager call names a row of {@link COMPUTER_ONLY_ROW_MODULES}, or names its row in arguments the
  * condition cannot read. While those rows cannot be read, every call that names a row counts.
  * @param facts - the computer-only rows.
@@ -1010,7 +1062,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1029,7 +1081,10 @@ export function createCondition(
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
     const elevation = unlock()
     if (elevation === undefined) return { kind: 'deny', reason }
-    if (call) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+    if (call) {
+      facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+      facts.touchUnlock?.(elevation.id)
+    }
     return undefined
   }
   return ({ action, resource, args }) => {
@@ -1048,12 +1103,17 @@ export function createCondition(
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
+        if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+        // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.
+        if (unlockId === undefined && facts.elevationOf(deviceId, listener)?.grace === true && settingsOfProtectedRow(facts, args)) return { kind: 'deny', reason: `elevation-required: ${action}` }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
       }
       // The rows that carry the unlock gate and the sandbox stay refused to every device: no unlock and no mode lifts them.
       if (ROW_CALLS.has(action) && namesComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+      if (BUNDLE_CALLS.has(action) && namesComputerOnlyBundle(args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
       if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
@@ -1131,7 +1191,12 @@ export interface ReachAccessFacts {
    * @param listener - the listener its Peer sits on.
    * @returns its id, or undefined.
    */
-  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string } | undefined
+  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string; readonly grace?: true } | undefined
+  /**
+   * Renew an unlock after a call that needed it; reads and questions without arguments never call it.
+   * @param elevationId - the id of the unlock the call ran under.
+   */
+  readonly touchUnlock?: (elevationId: string) => void
   /**
    * The running PIN mode page unlock one Peer was admitted under.
    * @param unlockId - the id in the Peer's principal.

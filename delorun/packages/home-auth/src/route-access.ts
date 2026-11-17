@@ -10,6 +10,8 @@
  * @module @delorun/home-auth/route-access
  */
 
+import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
+
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
@@ -101,6 +103,53 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     RECOMMEND_PATH: READ('names the recommended packages and connections'),
   },
 }
+
+/** What kind of thing a computer-only row names. */
+export type ComputerOnlyKind = 'action' | 'settings-write' | 'plugin-row' | 'auth-route' | 'changes-route' | 'mode'
+
+/** One thing a paired device never does, whatever its unlock, a PIN page, dangerous mode or the approval grace. */
+export interface ComputerOnlyRow {
+  readonly kind: ComputerOnlyKind
+  readonly id: string
+  readonly reason: string
+}
+
+const AUTH = (id: string, reason: string): ComputerOnlyRow => ({ kind: 'auth-route', id, reason })
+
+/**
+ * Everything that stays at the computer, with the reason for each row. A row here is refused to a device with
+ * `LOOPBACK_REQUIRED` under every unlock kind, in dangerous mode and during the approval grace; a row not here is a read
+ * (`R`) or an action behind an unlock (`U`) for a device. The actions come from `REACH_DENIED_ACTIONS` and the plugin
+ * rows from `COMPUTER_ONLY_ROW_MODULES`, which carry the same reasons in code.
+ */
+export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
+  ...Object.entries(COMPUTER_ONLY_ROW_MODULES).map(([module, reason]): ComputerOnlyRow => ({ kind: 'settings-write', id: `settings of ${module}`, reason: `a write there replaces the row in effect, and ${reason}` })),
+  { kind: 'action', id: 'account/*', reason: 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer' },
+  { kind: 'action', id: 'settings/openSettingsDocument', reason: 'opens the settings document in an editor on the computer\'s own screen' },
+  { kind: 'action', id: 'session/openWorkspacePath', reason: 'opens an application on the computer\'s own screen, in every mode' },
+  { kind: 'action', id: 'session/workspacePathApplications', reason: 'lists the applications on the computer\'s own screen, in every mode' },
+  { kind: 'settings-write', id: 'delorun-home-auth', reason: 'pairing and secrets decide who is admitted, so a device never changes them' },
+  { kind: 'settings-write', id: 'delorun-reach', reason: 'turning remote access on or off, or changing what it exposes, decides who can reach the home' },
+  { kind: 'settings-write', id: 'delorun-update-check enabled: false', reason: 'a stolen unlocked phone could silence security fixes; turning checks on is allowed anywhere' },
+  { kind: 'plugin-row', id: '@delorun/home-auth', reason: 'disabling it removes the unlock gate' },
+  { kind: 'plugin-row', id: '@delorun/reach', reason: 'disabling it removes the control over which addresses reach the studio' },
+  { kind: 'plugin-row', id: '@deepseek-ai/dsh-sandbox-local', reason: 'disabling it removes the confinement of commands a chat runs' },
+  { kind: 'plugin-row', id: '@deepseek-ai/dsh-sandbox-policy', reason: 'disabling it removes what the sandbox allows' },
+  { kind: 'mode', id: 'dangerous mode on', reason: 'it is setup and config only, the same class as turning remote access on' },
+  AUTH('/auth/owner/claim', 'it establishes who owns the home'),
+  AUTH('/auth/devices/window', 'a phone that approves devices would let a stolen phone mint lasting access'),
+  AUTH('/auth/devices/pending', 'a phone that approves devices would let a stolen phone mint lasting access'),
+  AUTH('/auth/devices/approve', 'a phone that approves devices would let a stolen phone mint lasting access'),
+  AUTH('/auth/devices/cancel', 'it belongs to approving devices'),
+  AUTH('/auth/elevation/pending', 'a device never approves its own unlock'),
+  AUTH('/auth/elevation/approve', 'a device never approves its own unlock'),
+  AUTH('/auth/elevation/revoke', 'ending another device\'s unlock is the computer\'s decision'),
+  AUTH('/auth/pin/set', 'a phone must not choose or lengthen its own unlock secret'),
+  AUTH('/auth/pin/options', 'a phone must not choose the rules of its own unlock secret'),
+  AUTH('/auth/pin/off', 'a phone must not turn its own unlock gate off'),
+  AUTH('/auth/pin/resume', 'a phone must not lift a brute-force pause on its own unlock'),
+  { kind: 'changes-route', id: '/delorun/changes actions and setup', reason: 'apply, discard, undo and setup attest the person at the computer in the change log; the reveal action opens the computer\'s file manager' },
+]
 
 /**
  * The web-server routes of Changes: `/delorun/changes/state`, `show` and `workspaces` are read by any admitted session

@@ -492,7 +492,7 @@ function routesOver(service: DelorunDelegationConsent, listener: string | undefi
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }>()
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }) => { routes.set(route.path, route) } } },
   }
   registerDelegationRoutes(ctx as never, service)
@@ -549,6 +549,18 @@ describe('the routes', () => {
       expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('unlocked-phone'), body)).status).not.toBe(403)
       expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, { kind: 'sdk' }, body)).status).toBe(403)
     }
+  })
+
+  it('answers a device holding only the approval grace ELEVATION_REQUIRED on allow, and runs it after a code', async () => {
+    const { consent } = await mounted()
+    const routes = routesOver(consent, 'reach-tailscale-private')
+    const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+    const body = { sessionId: 'chat-1', provider: 'codex', confirmed: false }
+    // Pins the grace exclusion: allowing an agent loosens a consent row.
+    const grace = await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('grace-phone'), body)
+    expect([grace.status, await grace.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect((await routes.callAs(DELEGATION_CONSENT_ROUTES.allow, device('unlocked-phone'), body)).status).not.toBe(403)
+    expect(routes.admits(DELEGATION_CONSENT_ROUTES.revoke, device('grace-phone'))).toBe(true)
   })
 
   it('answer the service\'s calls and refusals', async () => {

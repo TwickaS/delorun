@@ -131,3 +131,17 @@ describe('the plugin Fetch routes', () => {
     expect(matches('R', "register({ path: X, fetch })")).toBe(false)
   })
 })
+
+describe('the computer-only table', () => {
+  it('gives every row a reason, and lists each denied action family and each protected plugin row', async () => {
+    const { COMPUTER_ONLY } = await import('../src/route-access.ts')
+    const { COMPUTER_ONLY_ROW_MODULES, REACH_DENIED_ACTIONS } = await import('../src/reach-access.ts')
+    for (const row of COMPUTER_ONLY) expect(row.reason.length, row.id).toBeGreaterThan(10)
+    const ids = new Set(COMPUTER_ONLY.map(row => row.id))
+    // Pins the link to the code: an action or plugin row added there without a row here fails.
+    for (const action of Object.keys(REACH_DENIED_ACTIONS)) {
+      expect(ids.has(action) || (action.startsWith('account/') && ids.has('account/*')) || (action.startsWith('event:deepseek-account/') && ids.has('account/*')), action).toBe(true)
+    }
+    for (const module of Object.keys(COMPUTER_ONLY_ROW_MODULES)) expect(ids.has(module), module).toBe(true)
+  })
+})

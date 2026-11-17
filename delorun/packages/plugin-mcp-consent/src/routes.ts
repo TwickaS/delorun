@@ -116,7 +116,7 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
       const body = await bodyOf(request, AcceptBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the server name, the review id and confirmed' })
       return answered(() => reviews.acceptReview(body.serverName, body.reviewId, body.confirmed))
-    }),
+    }, { grace: false }),
   })
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.decline,

@@ -36,7 +36,7 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
 }
 
 /** What {@link requireComputerOrDevice}, {@link unlockOf} and {@link gateByUnlock} read of the home. */
-export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'>
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'> & Partial<Pick<HomeAuthService, 'touchUnlock'>>
 
 /**
  * The running unlock a reach device's Peer holds: its page's unlock when the Peer carries one (PIN mode), otherwise the
@@ -46,7 +46,7 @@ export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMo
  * @param principal - the device Peer's principal.
  * @returns the unlock, or undefined while the device is locked.
  */
-export function unlockOf(home: Pick<DangerousModeHome, 'elevationOf' | 'pageUnlockOf'>, principal: ReachDevicePrincipal): { readonly id: string } | undefined {
+export function unlockOf(home: Pick<DangerousModeHome, 'elevationOf' | 'pageUnlockOf'>, principal: ReachDevicePrincipal): { readonly id: string; readonly grace?: true } | undefined {
   return principal.unlockId === undefined ? home.elevationOf(principal.deviceId, principal.listener) : home.pageUnlockOf(principal.unlockId)
 }
 
@@ -78,9 +78,11 @@ const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code f
  * ({@link requireComputerOrDevice}) already placed at the computer.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @param fetch - the route's own handler.
+ * @param options - `grace: false` for a route that loosens a consent or guard row: the approval grace does not open it, only
+ *   a code or a PIN unlock does. The grace opens the route by default.
  * @returns the `admitPeer` and `fetch` for `ConnectionFetchRoute`.
  */
-export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>): {
+export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>, options: { readonly grace?: boolean } = {}): {
   readonly admitPeer: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean
   readonly fetch: (request: Request) => Promise<Response>
 } {
@@ -89,7 +91,10 @@ export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetc
     admitPeer: (request, peer) => {
       const home = homeAuth()
       if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
-      if (unlockOf(home, peer.principal as ReachDevicePrincipal) === undefined) locked.add(request)
+      const unlock = unlockOf(home, peer.principal as ReachDevicePrincipal)
+      if (unlock === undefined || (unlock.grace === true && options.grace === false)) locked.add(request)
+      // The route needs an unlock, so the call renews the unlock it ran under.
+      else home.touchUnlock?.(unlock.id)
       return true
     },
     fetch: (request) => {
