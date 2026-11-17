@@ -2,13 +2,13 @@
  * Live Claude Code runs through the driver, under the person's own sign-in and settings, each in a throwaway task
  * folder. One command each:
  *
- *   node_modules/.bin/tsx delorun/packages/agent-claude-code/live/claude.ts <task|steer|interrupt|resume|questions|limits|hostkill>
+ *   node_modules/.bin/tsx delorun/packages/agent-claude-code/live/claude.ts <task|steer|interrupt|resume|questions|limits|hostkill|settings>
  *
  * Logs are redacted and kept under `~/delorun-rc-release/ea1-claude-logs/`. Never part of a Vitest lane.
  * @module @delorun/agent-claude-code/live/claude
  */
 import { spawn as spawnChild } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -178,7 +178,28 @@ const hostkill = (): Promise<void> => inTask('hostkill', async (rt, folder, log)
   await resumed.close()
 })
 
-const runs: Readonly<Record<string, () => Promise<void>>> = { task, steer, interrupt, resume, questions, limits, hostkill }
+/** The person's own settings apply: a project rule in the task folder allows one exact command; another one asks. */
+const settings = (): Promise<void> => inTask('settings', async (rt, folder, log) => {
+  mkdirSync(join(folder, '.claude'))
+  writeFileSync(join(folder, '.claude', 'settings.json'), `${JSON.stringify({ permissions: { allow: ['Bash(touch allowed.txt)'] } })}\n`)
+  const asked: string[] = []
+  const onApproval = (question: ProgramApprovalRequest): Promise<ProgramApprovalAnswer> => {
+    asked.push(question.reason)
+    log.line('question', question.reason)
+    return Promise.resolve('allow-once')
+  }
+  const session = await driver().open(request(rt, folder, log, { onApproval }))
+  await session.send('Run this shell command exactly: touch allowed.txt. Then say done.', 'start')
+  await readTurn(session, log)
+  log.line('questions after the allowed command', asked.length)
+  await session.send('Run this shell command exactly: touch other.txt. Then say done.', 'start')
+  await readTurn(session, log)
+  log.line('questions after the other command', asked.length)
+  await session.close()
+  log.line('files', { allowed: existsSync(join(folder, 'allowed.txt')), other: existsSync(join(folder, 'other.txt')) })
+})
+
+const runs: Readonly<Record<string, () => Promise<void>>> = { task, steer, interrupt, resume, questions, limits, hostkill, settings }
 const name = process.argv[2] ?? ''
 const run = runs[name]
 if (run === undefined) {

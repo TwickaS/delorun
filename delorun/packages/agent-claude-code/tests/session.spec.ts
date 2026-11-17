@@ -245,12 +245,13 @@ describe('a Claude Code session', () => {
     await vi.waitFor(() => { expect(sdk.last.closed).toBe(true) })
   })
 
-  it('sets the harness tool wait limit and keeps AskUserQuestion away from the program', async () => {
+  it('loads the person\'s own settings and default mode, sets the harness tool wait limit and keeps AskUserQuestion away from the program', async () => {
     const sdk = new FakeSdk()
     const session = await driver(sdk).open(request())
     expect(sdk.last.options.env?.MCP_TOOL_TIMEOUT).toBe('900000')
     expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion'])
-    expect(sdk.last.options.settingSources).toBeUndefined()
+    expect(sdk.last.options.settingSources).toEqual(['user', 'project', 'local'])
+    expect(sdk.last.options.permissionMode).toBeUndefined()
     expect(sdk.last.options.cwd).toBe('/tmp/task')
     expect(sdk.last.options.allowedTools).toBeUndefined()
     await session.close()

@@ -323,3 +323,31 @@ describe(`the real Claude Agent SDK ${TESTED_SDK_VERSION} and its pinned Claude 
     await quiescent(h)
   })
 })
+
+describe('the person\'s own Claude Code settings in a seat', { timeout: 60_000 }, () => {
+  interface Case { readonly user?: string[]; readonly local?: string[]; readonly project?: Record<string, unknown>; readonly asked: number; readonly made: boolean }
+  // Claude Code takes only the restricting parts of a run folder's own `.claude/settings.json`: its deny and ask
+  // rules hold, its allow rules and an escalating default mode do not.
+  it.each<[string, Case]>([
+    ['a user allow rule runs the command without asking', { user: ['Bash(touch a.txt)'], asked: 0, made: true }],
+    ['a local allow rule runs the command without asking', { local: ['Bash(touch a.txt)'], asked: 0, made: true }],
+    ['a project allow rule still asks', { project: { permissions: { allow: ['Bash(touch a.txt)'] } }, asked: 1, made: true }],
+    ['a project accept-edits default mode still asks', { project: { permissions: { defaultMode: 'acceptEdits' } }, asked: 1, made: true }],
+    ['a project deny rule refuses under a user allow rule', { user: ['Bash'], project: { permissions: { deny: ['Bash(touch a.txt)'] } }, asked: 0, made: false }],
+    ['a project ask rule asks under a user allow rule', { user: ['Bash'], project: { permissions: { ask: ['Bash(touch a.txt)'] } }, asked: 1, made: true }],
+  ])('%s', async (_case, settings) => {
+    const h = await harness([{ tool: 'Bash', input: { command: 'touch a.txt', description: 'Make a file' } }, { text: 'made' }])
+    if (settings.user !== undefined) writeFileSync(join(h.root, 'claude-config', 'settings.json'), `${JSON.stringify({ model: 'fixture-model', permissions: { defaultMode: 'default', allow: settings.user } })}\n`)
+    if (settings.local !== undefined || settings.project !== undefined) mkdirSync(join(h.task, '.claude'))
+    if (settings.local !== undefined) writeFileSync(join(h.task, '.claude', 'settings.local.json'), `${JSON.stringify({ permissions: { allow: settings.local } })}\n`)
+    if (settings.project !== undefined) writeFileSync(join(h.task, '.claude', 'settings.json'), `${JSON.stringify(settings.project)}\n`)
+    const asked: ProgramApprovalRequest[] = []
+    const session = await h.driver.open(openRequest(h, { onApproval: answering(['allow-once'], asked) }))
+    await session.send('Make a.txt.', 'start')
+    expect((await turn(session)).at(-1)).toMatchObject({ outcome: 'completed' })
+    await session.close()
+    expect(asked).toHaveLength(settings.asked)
+    expect(existsSync(join(h.task, 'a.txt'))).toBe(settings.made)
+    await quiescent(h)
+  })
+})

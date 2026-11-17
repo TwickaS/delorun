@@ -4,7 +4,7 @@
  * @module @delorun/agent-claude-code/driver
  */
 import { randomUUID } from 'node:crypto'
-import type { Options, SDKControlGetUsageResponse, SDKUserMessage, SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, SDKControlGetUsageResponse, SDKUserMessage, SettingSource, SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { allowedToolsFor, canUseTool } from './approvals.ts'
 import { ClaudeCodeDriverError } from './errors.ts'
@@ -14,6 +14,12 @@ import { ProgramOpenError, type AccountObservation, type ExternalAgentDriver, ty
 import { spawnThroughGate } from './process.ts'
 import type { ClaudeSdk } from './sdk.ts'
 import { ClaudeCodeSession } from './session.ts'
+
+/**
+ * The person's own Claude Code settings a seat loads: user, project and local, as the CLI does. No `permissionMode` is
+ * passed, so the person's own default mode applies.
+ */
+const SEAT_SETTING_SOURCES: SettingSource[] = ['user', 'project', 'local']
 
 /** The dialogs Claude Code may raise in a run nobody watches at a terminal; the driver cancels each one. */
 const SUPPORTED_DIALOG_KINDS = ['refusal_fallback_prompt']
@@ -89,6 +95,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
     const allowedTools = allowedToolsFor(request.runRules)
     const options: Options = {
       cwd: request.cwd,
+      settingSources: SEAT_SETTING_SOURCES,
       env: this.#env({ MCP_TOOL_TIMEOUT: String(this.#options.harnessToolTimeoutMs()) }),
       ...request.resume === undefined ? { sessionId: programSessionId } : { resume: request.resume },
       ...request.model === undefined ? {} : { model: request.model },
