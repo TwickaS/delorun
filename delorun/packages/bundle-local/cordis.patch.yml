@@ -157,6 +157,19 @@
       config:
         enabled: true
 
+    # Stops a turn that keeps hitting failing tool calls: one reminder to the model after 3 failures in a row, then a
+    # stop before the next model request after 6 in a row or 8 of the last 12, with one notice in the chat. A call the
+    # person refused and a cancelled call do not count; the person's next message starts a fresh count.
+    - id: delorun-tool-failure-guard
+      name: '@delorun/plugin-tool-failure-guard'
+      config:
+        enabled: true
+        consecutiveFailures: 6
+        windowSize: 12
+        windowFailures: 8
+        reminderAfter: 3
+        exclude: []
+
     # The skill that teaches the agent to make a plugin in the chat's workspace; turning it on stays the person's step.
     - id: delorun-plugin-authoring
       name: '@delorun/skill-plugin-authoring'
@@ -296,6 +309,7 @@
       - '@delorun/plugin-permission-defaults'
       - '@delorun/plugin-schedule-consent'
       - '@delorun/plugin-fetch-guard'
+      - '@delorun/plugin-tool-failure-guard'
       - '@delorun/plugin-delegation-consent'
       - '@delorun/plugin-changes'
       - '@delorun/bundle-local/update-gate'

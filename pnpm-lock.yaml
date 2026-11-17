@@ -1989,6 +1989,9 @@ importers:
       '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delorun/plugin-tool-failure-guard':
+        specifier: workspace:*
+        version: link:../plugin-tool-failure-guard
 
   delorun/packages/bundle-local:
     dependencies:
@@ -2055,6 +2058,9 @@ importers:
       '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delorun/plugin-tool-failure-guard':
+        specifier: workspace:*
+        version: link:../plugin-tool-failure-guard
       '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
@@ -3855,6 +3861,73 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delorun/packages/plugin-tool-failure-guard:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-chat':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-chat
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/tool-testkit
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

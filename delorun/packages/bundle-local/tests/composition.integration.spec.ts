@@ -48,6 +48,7 @@ const MOUNTED_PLUGINS = [
   { id: 'delorun-permission-defaults', name: '@delorun/plugin-permission-defaults' },
   { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent' },
   { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard' },
+  { id: 'delorun-tool-failure-guard', name: '@delorun/plugin-tool-failure-guard' },
   { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent' },
   { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes' },
   { id: 'delorun-reach', name: '@delorun/reach' },

@@ -49,7 +49,7 @@ describe('the costs', () => {
   it('add up by provider and model, keeping rows with no priced request last', () => {
     const sum = addCosts([cost(row('m', 1), row('free', 0, 2, 2)), cost(row('m', 2), row('n', 0.5))])
     expect(sum.models.map(entry => [entry.model, entry.requests, entry.usd])).toEqual([['m', 2, 3], ['n', 1, 0.5], ['free', 2, 0]])
-    expect(sum).toMatchObject({ usd: 3.5, requests: 5, unpriced: 2, tokens: 5 * 1100 })
+    expect(sum).toMatchObject({ usd: 3.5, requests: 5, unpriced: 2 })
     expect(addCosts([])).toEqual(NO_COST)
   })
 

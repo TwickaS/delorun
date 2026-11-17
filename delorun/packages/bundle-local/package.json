@@ -99,6 +99,7 @@
     "@delorun/plugin-mcp-consent": "workspace:*",
     "@delorun/plugin-permission-defaults": "workspace:*",
     "@delorun/plugin-schedule-consent": "workspace:*",
+    "@delorun/plugin-tool-failure-guard": "workspace:*",
     "@delorun/plugin-trash": "workspace:*",
     "@delorun/profile-safety": "workspace:*",
     "@delorun/skill-plugin-authoring": "workspace:*",

@@ -37,6 +37,7 @@ English | [中文](README.zh.md)
 | `delorun-schedule-consent` | [`@delorun/plugin-schedule-consent`](../plugin-schedule-consent/README.md) | A scheduled follow-up that a person's own patch makes possible asks for consent, which no one answers, so it is refused |
 | `delorun-permission-defaults` | [`@delorun/plugin-permission-defaults`](../plugin-permission-defaults/README.md) | A switch to full access for a workspace without a recorded grant is refused |
 | `delorun-fetch-guard` | [`@delorun/plugin-fetch-guard`](../plugin-fetch-guard/README.md) | A fetch of a private, loopback or link-local address is refused |
+| `delorun-tool-failure-guard` | [`@delorun/plugin-tool-failure-guard`](../plugin-tool-failure-guard/README.md), with `stderrNotice` | A turn whose tool calls keep failing (6 in a row, or 8 of the last 12) stops before its next model request, and one line on standard error says why |
 | `delorun-plugin-changes` | [`@delorun/plugin-changes`](../plugin-changes/README.md) | An agent's `plugin_manager` install or removal does not run; it is recorded in the profile's change log as a change waiting for the person's review at their computer ([C21](../../docs/contracts/c21-changes.md#the-agent-and-plugins)); the profile serves no studio, so the plugin registers no Changes route |
 | `delorun-update-gate` | `@delorun/bundle-local/update-gate`, with `holdUntilChecked` | The first step of every turn waits until `delorun headless` has checked the booted Host's rows and services; no update or stop waits on a headless run's chats; a turn that waits longer than `checkWaitSeconds` (60 by default) ends with `START_CHECK_PENDING` instead of waiting without a message |
 | `plugin-manager` | upstream's plugin management, `protectedPlugins` | The guard rows above and the sandbox rows cannot be disabled, reconfigured or removed through the `plugin_manager` tool, which full access runs without a prompt, as in [`@delorun/bundle-local`](../bundle-local/README.md) |
@@ -49,7 +50,7 @@ English | [中文](README.zh.md)
 
 ## Parity composition
 
-No profile the recorded-session replay runs mounts this bundle: the [parity composition](../../docs/contracts/c16-parity-composition.md) keeps upstream's `headless` profile as it is. `instruction_layer_consent`, `permission_defaults`, `fetch_guard` and `update_turn_refusal` are registered by the plugins and by `@delorun/bundle-local`, and the parity checks read only `@delorun/bundle-local`'s and `@delorun/bundle-studio`'s patches, so this bundle adds no switch and no entry to the registry.
+No profile the recorded-session replay runs mounts this bundle: the [parity composition](../../docs/contracts/c16-parity-composition.md) keeps upstream's `headless` profile as it is. `instruction_layer_consent`, `permission_defaults`, `fetch_guard`, `tool_failure_guard` and `update_turn_refusal` are registered by the plugins and by `@delorun/bundle-local`, and the parity checks read only `@delorun/bundle-local`'s and `@delorun/bundle-studio`'s patches, so this bundle adds no switch and no entry to the registry.
 
 ## Tests
 

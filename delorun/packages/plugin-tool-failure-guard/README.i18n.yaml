@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-tool-failure-guard/README.md
+/:
+  en: 724448c6084e0e31
+  zh: 684e8ed8cf09d8fd
+/delorun-plugin-tool-failure-guard:
+  en: f0aefb51ad3a186d
+  zh: 33473838c246bf6a
+/delorun-plugin-tool-failure-guard/summary:
+  en: 3318018cff34db4a
+  zh: 59833757fd9a72d3
+/delorun-plugin-tool-failure-guard/contents:
+  en: 73a8b921c70b4cb6
+  zh: 03d8dbbafebdd50b
+/delorun-plugin-tool-failure-guard/contract:
+  en: a083e5274dfdd516
+  zh: 2c235f0570a66ffd
+/delorun-plugin-tool-failure-guard/configuration:
+  en: 130a64c9c0e5bbaa
+  zh: fd505fd428f1fd11
+/delorun-plugin-tool-failure-guard/known-limitations:
+  en: a69f2915be845c4d
+  zh: ae84e368a2de5645
+/delorun-plugin-tool-failure-guard/tests:
+  en: 38c04a5fb87ebd27
+  zh: 379b7e0db132a5d4

@@ -43,6 +43,7 @@ kind: "package-bundle"
 | `delorun-schedule-consent` | [`@delorun/plugin-schedule-consent`](../plugin-schedule-consent/README.zh.md) | 本人自己的补丁使之成为可能的定时后续任务会请求同意；没有人回答，因此被拒绝 |
 | `delorun-permission-defaults` | [`@delorun/plugin-permission-defaults`](../plugin-permission-defaults/README.zh.md) | 对没有授权记录的工作区切换到完全访问，会被拒绝 |
 | `delorun-fetch-guard` | [`@delorun/plugin-fetch-guard`](../plugin-fetch-guard/README.zh.md) | 对私有、回环或链路本地地址的抓取会被拒绝 |
+| `delorun-tool-failure-guard` | [`@delorun/plugin-tool-failure-guard`](../plugin-tool-failure-guard/README.zh.md)，带 `stderrNotice` | 工具调用接连失败（连续 6 次，或最近 12 次中有 8 次）的轮次会在下一次模型请求前停止，并在标准错误输出一行说明原因 |
 | `delorun-plugin-changes` | [`@delorun/plugin-changes`](../plugin-changes/README.zh.md) | agent 通过 `plugin_manager` 进行的安装或移除不会执行；它作为等待本人在自己电脑上审阅的变更，记录在 profile 的变更日志中（[C21](../../docs/contracts/c21-changes.zh.md#the-agent-and-plugins)）；该 profile 不提供 studio，因此插件不注册「变更」路由 |
 | `delorun-update-gate` | `@delorun/bundle-local/update-gate`，带 `holdUntilChecked` | 每个轮次的第一步都会等到 `delorun headless` 检查完已启动 Host 的行和服务；任何更新或停止都不会等待 headless 运行中的 chat；等待超过 `checkWaitSeconds`（默认 60）的轮次，以 `START_CHECK_PENDING` 结束，而不是无提示地一直等待 |
 | `plugin-manager` | 上游的插件管理，`protectedPlugins` | 上面的守卫行和沙箱行不能通过 `plugin_manager` 工具被禁用、重新配置或移除；完全访问模式下，该工具不经提示即运行，这与 [`@delorun/bundle-local`](../bundle-local/README.zh.md) 中相同 |
@@ -59,7 +60,7 @@ kind: "package-bundle"
 
 ## 一致性组合
 
-录制会话回放所运行的 profile 都不挂载此 bundle：[一致性组合](../../docs/contracts/c16-parity-composition.zh.md)保持上游的 `headless` profile 不变。`instruction_layer_consent`、`permission_defaults`、`fetch_guard` 和 `update_turn_refusal` 由这些插件和 `@delorun/bundle-local` 注册，而一致性检查只读取 `@delorun/bundle-local` 和 `@delorun/bundle-studio` 的补丁，因此此 bundle 不增加开关，也不向注册表增加条目。
+录制会话回放所运行的 profile 都不挂载此 bundle：[一致性组合](../../docs/contracts/c16-parity-composition.zh.md)保持上游的 `headless` profile 不变。`instruction_layer_consent`、`permission_defaults`、`fetch_guard`、`tool_failure_guard` 和 `update_turn_refusal` 由这些插件和 `@delorun/bundle-local` 注册，而一致性检查只读取 `@delorun/bundle-local` 和 `@delorun/bundle-studio` 的补丁，因此此 bundle 不增加开关，也不向注册表增加条目。
 
 <a id="tests"></a>
 

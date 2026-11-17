@@ -43,8 +43,8 @@ describe('the cost pill', () => {
     const dialog = open()
     expect(dialog).toBe(document.activeElement)
     expect(within(dialog).getByText('Chat cost')).toBeTruthy()
-    const opus = within(dialog).getByRole('button', { name: 'claude-opus-5-5: 2 requests, 2.2K tokens, $1.50' })
-    expect(within(dialog).getByRole('button', { name: 'llama: 1 requests, 1.1K tokens, No price' })).toBeTruthy()
+    const opus = within(dialog).getByRole('button', { name: 'claude-opus-5-5: 2 requests, 2.2K new tokens, 0 cached tokens, $1.50' })
+    expect(within(dialog).getByRole('button', { name: 'llama: 1 requests, 1.1K new tokens, 0 cached tokens, No price' })).toBeTruthy()
     expect(within(dialog).getByText('1 request has no price. Add its model to the cost meter\'s prices on the Plugins page in the sidebar.')).toBeTruthy()
     expect(within(dialog).queryByText('Input')).toBeNull()
     fireEvent.click(opus)
@@ -72,6 +72,24 @@ describe('the cost pill', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('splits each row into new and cached tokens, places each bucket under its column, and explains cached tokens', () => {
+    show({ costMeter: cost({ ...row('deepseek-flash', 0.01, 9), input: 9_000, cacheWrite: 1_000, output: 2_000, cacheRead: 105_000 }) })
+    const dialog = open()
+    expect(within(dialog).getByText('New')).toBeTruthy()
+    expect(within(dialog).getByText('Cached')).toBeTruthy()
+    const flash = within(dialog).getByRole('button', { name: 'deepseek-flash: 9 requests, 12K new tokens, 105K cached tokens, $0.01' })
+    expect(within(dialog).getByText('Cached tokens are earlier input the provider read back from its cache; they cost much less than new input.')).toBeTruthy()
+    fireEvent.click(flash)
+    const cells = (name: string): string[] => [...within(dialog).getByRole('group', { name }).children].map(cell => cell.textContent ?? '')
+    expect(cells('Input: 9,000 tokens')).toEqual(['Input', '', '9,000', '', ''])
+    expect(cells('Cache read: 105,000 tokens')).toEqual(['Cache read', '', '', '105,000', ''])
+  })
+
+  it('leaves out the cached-tokens note when nothing came from the cache', () => {
+    show({ costMeter: cost(row('m', 1)) })
+    expect(within(open()).queryByText(/^Cached tokens are/)).toBeNull()
+  })
+
   it('rolls up the agents: the pill shows both totals and the dialog one row per direct agent, costliest first', () => {
     show({ costMeter: cost(row('m', 1)), subagentCatalog: [agent('a', 'Planner'), agent('b', 'Writer'), agent('idle', 'Idle')] }, {
       byId: {
@@ -87,13 +105,13 @@ describe('the cost pill', () => {
     expect(within(dialog).getByText('Chat and agents cost')).toBeTruthy()
     const names = within(dialog).getAllByRole('button').map(button => button.getAttribute('aria-label'))
     expect(names).toEqual([
-      'This chat: 1 requests, 1.1K tokens, $1.00',
-      'Planner: 2 requests, 2.2K tokens, $2.50',
-      'Writer: 1 requests, 1.1K tokens, $0.25',
+      'This chat: 1 requests, 1.1K new tokens, 0 cached tokens, $1.00',
+      'Planner: 2 requests, 2.2K new tokens, 0 cached tokens, $2.50',
+      'Writer: 1 requests, 1.1K new tokens, 0 cached tokens, $0.25',
     ])
     fireEvent.click(within(dialog).getByRole('button', { name: /^Planner/ }))
     const models = within(dialog).getAllByRole('button').map(button => button.getAttribute('aria-label'))
-    expect(models.slice(2, 4)).toEqual(['n: 1 requests, 1.1K tokens, $2.00', 'm: 1 requests, 1.1K tokens, $0.50'])
+    expect(models.slice(2, 4)).toEqual(['n: 1 requests, 1.1K new tokens, 0 cached tokens, $2.00', 'm: 1 requests, 1.1K new tokens, 0 cached tokens, $0.50'])
     fireEvent.click(within(dialog).getByRole('button', { name: /^n: / }))
     expect(within(dialog).getByRole('group', { name: 'Cache read: 0 tokens' })).toBeTruthy()
   })
@@ -104,7 +122,7 @@ describe('the cost pill', () => {
     })
     expect(screen.getByRole('button', { name: 'Estimated chat cost $0.00, $2.00 including agents' })).toBeTruthy()
     const dialog = open()
-    expect(within(dialog).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Agent 123456: 1 requests, 1.1K tokens, $2.00'])
+    expect(within(dialog).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Agent 123456: 1 requests, 1.1K new tokens, 0 cached tokens, $2.00'])
   })
 
   it('asks for the agents whose cost is missing when it opens, says so, and counts external agents', () => {

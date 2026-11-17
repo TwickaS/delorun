@@ -59,6 +59,20 @@
       config:
         enabled: true
 
+    # A turn whose tool calls keep failing stops before its next model request,
+    # with the same limits as the CLI profile, and writes one line to standard
+    # error saying why, because a one-shot run prints only the turn's final text.
+    - id: delorun-tool-failure-guard
+      name: '@delorun/plugin-tool-failure-guard'
+      config:
+        enabled: true
+        consecutiveFailures: 6
+        windowSize: 12
+        windowFailures: 8
+        reminderAfter: 3
+        exclude: []
+        stderrNotice: true
+
     # An external agent such as Claude Code or Codex starts only with a grant
     # recorded for the workspace: no one answers its ask in a one-shot run.
     - id: delorun-delegation-consent
@@ -101,6 +115,7 @@
       - '@delorun/plugin-permission-defaults'
       - '@delorun/plugin-schedule-consent'
       - '@delorun/plugin-fetch-guard'
+      - '@delorun/plugin-tool-failure-guard'
       - '@delorun/plugin-delegation-consent'
       - '@delorun/plugin-install-check'
       - '@delorun/plugin-changes'

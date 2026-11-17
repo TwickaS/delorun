@@ -1,0 +1,47 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/core/agent-loop"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/test-support/agent-loop-testkit"
+    },
+    {
+      "path": "../../../packages/test-support/tool-testkit"
+    }
+  ],
+  "exclude": [
+    "tests/**/*.client.spec.tsx",
+    "tests/**/*.client.ts"
+  ]
+}

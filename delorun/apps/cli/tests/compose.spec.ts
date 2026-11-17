@@ -481,6 +481,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
       { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent' },
       { id: 'delorun-permission-defaults', name: '@delorun/plugin-permission-defaults' },
       { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard' },
+      { id: 'delorun-tool-failure-guard', name: '@delorun/plugin-tool-failure-guard' },
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent' },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes' },
       { id: 'delorun-update-gate', name: '@delorun/bundle-local/update-gate' },

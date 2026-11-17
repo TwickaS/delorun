@@ -1,0 +1,20 @@
+# C16 switch tool_failure_guard on: after 3 failed tool calls in a row the model
+# reads one reminder, and after 6 in a row the turn stops before its next model
+# request. The model is scripted: every call reads a file that does not exist.
+- insert:
+    - id: tool-failure-guard
+      name: '../../../delorun/packages/plugin-tool-failure-guard/src/index.ts'
+      config:
+        enabled: true
+        consecutiveFailures: 6
+        windowSize: 12
+        windowFailures: 8
+        reminderAfter: 3
+        exclude: []
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

@@ -1,0 +1,39 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "include": [
+    "src/client",
+    "src/tally.ts",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/client/locale/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-chat/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/core/session"
+    }
+  ]
+}
