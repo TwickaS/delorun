@@ -1876,6 +1876,21 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/bundle-browser:
+    dependencies:
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-chrome-devtools-mcp
+      '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-playwright-mcp
+      '@deepseek-ai/dsh-experimental-browser-use-stagehand-native':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-stagehand-native
+
   delorun/packages/bundle-headless:
     dependencies:
       '@delorun/bundle-local':

@@ -24,6 +24,8 @@ export interface WorkspacePackage {
   readonly state: string | undefined
   /** Whether the package declares `dsh.bundle.patch`, which makes it a bundle that Plugins can switch on. */
   readonly bundle: boolean
+  /** Whether a private Delorun bundle's manifest asks to be built as a pack (`delorun.pack`). */
+  readonly pack: boolean
 }
 
 /** A package the closure does not carry, and the reason. */
@@ -72,7 +74,7 @@ function readPackages(root: string, group: string): WorkspacePackage[] {
       ? readdirSync(join(parent, entry.name), { withFileTypes: true }).filter(each => each.isDirectory()).map(each => `${group}/${entry.name}/${each.name}`)
       : [`${group}/${entry.name}`]
     for (const dir of directories) {
-      let manifest: { name?: string; private?: boolean; delorun?: { state?: string }; dsh?: { bundle?: { patch?: string } } }
+      let manifest: { name?: string; private?: boolean; delorun?: { state?: string; pack?: boolean }; dsh?: { bundle?: { patch?: string } } }
       try {
         manifest = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8'))
       } catch (error) {
@@ -81,7 +83,7 @@ function readPackages(root: string, group: string): WorkspacePackage[] {
         throw error
       }
       if (manifest.name === undefined) continue
-      found.push({ dir, name: manifest.name, private: manifest.private === true, state: manifest.delorun?.state, bundle: manifest.dsh?.bundle?.patch !== undefined })
+      found.push({ dir, name: manifest.name, private: manifest.private === true, state: manifest.delorun?.state, bundle: manifest.dsh?.bundle?.patch !== undefined, pack: manifest.delorun?.pack === true })
     }
   }
   return found
@@ -145,7 +147,7 @@ export function selectedBundles(packages: readonly WorkspacePackage[], selection
 
 /**
  * The packs a release builds: bundles of the selection that the default install does not carry. A private Delorun
- * package is a pack only when its manifest says so, which none does yet.
+ * package is a pack only when its manifest says `delorun.pack: true`, as the optional-plugin bundles do.
  * @param packages - the workspace packages.
  * @param selection - the selection.
  * @param carried - package names in the staged closure's `node_modules`.
@@ -153,5 +155,5 @@ export function selectedBundles(packages: readonly WorkspacePackage[], selection
  */
 export function packCandidates(packages: readonly WorkspacePackage[], selection: ClosureSelection, carried: ReadonlySet<string>): WorkspacePackage[] {
   const included = new Set(selection.included)
-  return packages.filter(each => each.bundle && !each.private && included.has(each.name) && !carried.has(each.name)).sort((a, b) => (a.name < b.name ? -1 : 1))
+  return packages.filter(each => each.bundle && (!each.private || (each.pack && each.dir.startsWith('delorun/'))) && included.has(each.name) && !carried.has(each.name)).sort((a, b) => (a.name < b.name ? -1 : 1))
 }
