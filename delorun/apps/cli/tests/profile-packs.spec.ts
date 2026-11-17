@@ -18,7 +18,7 @@ function profileLinks(links: Record<string, string>): void {
   mkdirSync(profileDirectory(home, 'default'), { recursive: true })
   writeFileSync(join(profileDirectory(home, 'default'), 'package.json'), JSON.stringify({ dependencies: links }))
 }
-const folder = (version: string, name: string): string => join(home, 'packs', version, name, 'package')
+const folder = (release: string, name: string): string => join(home, 'packs', release, name, 'package')
 
 function start(lines: string[], stored = true): PreStartContext {
   return {
@@ -30,25 +30,25 @@ function start(lines: string[], stored = true): PreStartContext {
 
 describe('the packs a profile links but the home lacks', () => {
   it('finds a link into the running release\'s pack folder whose folder is missing, and nothing else', async () => {
-    mkdirSync(folder('0.1.0', 'present'), { recursive: true })
+    mkdirSync(folder('current', 'present'), { recursive: true })
     profileLinks({
-      a: `link:${folder('0.1.0', '@delorun__bundle-browser')}`,
-      b: `link:${folder('0.1.0', 'present')}`,
+      a: `link:${folder('current', '@delorun__bundle-browser')}`,
+      b: `link:${folder('current', 'present')}`,
       c: `link:${folder('0.0.9', 'other-release')}`,
       d: 'link:/somewhere/else/plugin',
       e: '^1.0.0',
     })
-    expect(await missingProfilePacks(home, 'default', '0.1.0')).toEqual(['@delorun__bundle-browser'])
+    expect(await missingProfilePacks(home, 'default')).toEqual(['@delorun__bundle-browser'])
   })
 
   it('finds none for a profile without a manifest', async () => {
-    expect(await missingProfilePacks(home, 'default', '0.1.0')).toEqual([])
+    expect(await missingProfilePacks(home, 'default')).toEqual([])
   })
 })
 
 describe('the profile-packs step', () => {
   it('fetches the missing packs and says which', async () => {
-    profileLinks({ a: `link:${folder('0.1.0', '@delorun__bundle-browser')}` })
+    profileLinks({ a: `link:${folder('current', '@delorun__bundle-browser')}` })
     const lines: string[] = []
     const fetched: string[][] = []
     await profilePacksStep((_context, folders) => { fetched.push([...folders]); return Promise.resolve() })(start(lines))
@@ -59,12 +59,12 @@ describe('the profile-packs step', () => {
   it('fetches nothing when no pack is missing, or when the start runs no stored runtime', async () => {
     const never = (): Promise<void> => Promise.reject(new Error('must not fetch'))
     await profilePacksStep(never)(start([]))
-    profileLinks({ a: `link:${folder('0.1.0', 'x')}` })
+    profileLinks({ a: `link:${folder('current', 'x')}` })
     await profilePacksStep(never)(start([], false))
   })
 
   it('carries on with one line naming the reason and the remedy when a missing pack cannot be fetched', async () => {
-    profileLinks({ a: `link:${folder('0.1.0', 'x')}` })
+    profileLinks({ a: `link:${folder('current', 'x')}` })
     const errors: string[] = []
     const context = { ...start([]), output: { stdout: () => undefined, stderr: (text: string) => { errors.push(text) } } }
     await expect(profilePacksStep(() => Promise.reject(new Error('x needs a connection')))(context)).resolves.toBeUndefined()

@@ -66,9 +66,9 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       signal.throwIfAborted()
       progress.stage('verifying')
       progress.stage('installing')
-      const directory = await installFetchedPack(release, fetched)
+      await installFetchedPack(release, fetched)
       signal.throwIfAborted()
-      const result = await deps.installBundle(`link:${directory}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } })
+      const result = await deps.installBundle(`link:${release.paths.packLink(entry.name)}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } })
       if (result.application === 'cancelled') throw new Error('cancelled')
       if (result.application === 'failed') throw new InstallRefusal('failed', `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)
       return { reloadNeeded: result.application === 'restart-required' }

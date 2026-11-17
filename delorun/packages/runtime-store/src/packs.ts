@@ -18,7 +18,8 @@ import { extractExternal, extractPack, joinInside, PackRefusal } from '@delorun/
 import { createStagingDirectory, installedFileMode, moveOutAndRemove, removeTree, sealInstallation, setInstalledModes, writeStoreFile } from './files.ts'
 import { withStoreLock } from './lock.ts'
 import type { StorePaths } from './paths.ts'
-import { syncDirectory } from './pointer.ts'
+import { readPointerFile, syncDirectory } from './pointer.ts'
+import { pointPacks } from './packs-current.ts'
 
 /** What installing one pack needs. */
 export interface PackInstallRequest {
@@ -139,13 +140,15 @@ async function installLocked(request: PackInstallRequest): Promise<string> {
     }
     const externals = await recordExternals(packageDirectory, variant)
     await seal(packageDirectory, variant)
+    // The record goes first: a crash between the two steps leaves a record with no pack, which the next install
+    // overwrites, and never a pack with no record, which would refuse every start.
+    const record: PackRecord = { v: 1, release, name: entry.name, version: entry.version, externals }
+    await mkdir(dirname(paths.packRecord(release, entry.name)), { recursive: true, mode: PRIVATE_DIR_MODE })
+    await writeStoreFile(paths.packRecord(release, entry.name), Buffer.from(`${JSON.stringify(record)}\n`), 0o600)
     await mkdir(dirname(target), { recursive: true, mode: PRIVATE_DIR_MODE })
     await rename(stage, target)
     await sealInstallation(target)
     await syncDirectory(dirname(target))
-    const record: PackRecord = { v: 1, release, name: entry.name, version: entry.version, externals }
-    await mkdir(dirname(paths.packRecord(release, entry.name)), { recursive: true, mode: PRIVATE_DIR_MODE })
-    await writeStoreFile(paths.packRecord(release, entry.name), Buffer.from(`${JSON.stringify(record)}\n`), 0o600)
     return join(target, 'package')
   } catch (error) {
     await removeTree(stage)
@@ -165,7 +168,12 @@ async function installLocked(request: PackInstallRequest): Promise<string> {
  */
 export async function installPack(request: PackInstallRequest): Promise<string> {
   await mkdir(request.paths.root, { recursive: true, mode: PRIVATE_DIR_MODE })
-  return withStoreLock(request.paths.lock, STORE_LOCK_WAIT_MS, () => installLocked(request))
+  return withStoreLock(request.paths.lock, STORE_LOCK_WAIT_MS, async () => {
+    const directory = await installLocked(request)
+    // A pack of the running release is reached through `packs/current`, so the link must exist before a profile links it.
+    if (await readPointerFile(request.paths.pointer('current')) === request.release) await pointPacks(request.paths, request.release)
+    return directory
+  })
 }
 
 async function readRecord(paths: StorePaths, release: RuntimeVersion, name: string): Promise<PackRecord | undefined> {
@@ -194,6 +202,10 @@ export async function packProblems(paths: StorePaths, release: RuntimeVersion, e
   const directory = join(paths.pack(release, entry.name), 'package')
   const record = await readRecord(paths, release, entry.name)
   if (record === undefined) return [`${entry.name} has no install record`]
+  const signed = new Set(variant.files.map(file => file.path))
+  const roots = variant.external.map(pin => `node_modules/${pin.name}/`)
+  const strays = record.externals.filter(file => signed.has(file.path) || !roots.some(root => file.path.startsWith(root)) || file.path.includes('..'))
+  if (strays.length > 0) return [`${entry.name}'s install record names ${strays.slice(0, 3).map(file => file.path).join(', ')}, which is not inside a pinned external package`]
   const expected = new Map<string, { length: number, sha256: string, mode: '0644' | '0755' }>([...variant.files, ...record.externals].map(file => [file.path, file]))
   const files: string[] = []
   const links: string[] = []
@@ -250,4 +262,13 @@ export async function removePack(paths: StorePaths, release: RuntimeVersion, nam
     if (await exists(target)) await moveOutAndRemove(target, paths.staging)
     await removeTree(paths.packRecord(release, name))
   })
+}
+
+/**
+ * Remove a directory of `packs/<release>/` that the signed packs file does not list, under `store.lock`.
+ * @param paths - the store's paths.
+ * @param directory - the directory.
+ */
+export async function removeUnlisted(paths: StorePaths, directory: string): Promise<void> {
+  await withStoreLock(paths.lock, STORE_LOCK_WAIT_MS, () => moveOutAndRemove(directory, paths.staging))
 }

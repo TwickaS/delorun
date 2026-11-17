@@ -5,13 +5,15 @@
  *
  * @module @delorun/runtime-store/packs-carry
  */
-import { access, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { RootMetadata } from '@delorun/contract-release-manifest'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { verifyPacks } from '@delorun/release-formats/sign/verify'
 import { acquirePacks, fetchPack, installFetchedPack, type InstalledRelease, type PackFiles, type PacksLogCheck, type PackTransfer } from './packs-client.ts'
-import { packProblems, removePack } from './packs.ts'
+import { packProblems, removePack, removeUnlisted } from './packs.ts'
+import { pointPacks } from './packs-current.ts'
 import type { StorePaths } from './paths.ts'
 
 /** What carrying and repairing packs need. */
@@ -66,14 +68,16 @@ export async function carryPacks(carry: PackCarry, from: RuntimeVersion, to: Run
     if (packs === undefined) throw new PackRefusal(`release ${to} publishes no plugin packs, but this home has added ${names.join(', ')}`, 'NO_SUCH_PACK')
     for (const name of names) {
       if (!packs.packs.some(entry => entry.name === name)) throw new PackRefusal(`release ${to} no longer publishes the plugin pack ${name}`, 'NO_SUCH_PACK')
+      // A pack that `to` already had stays, with the rest, when a later pack fails: only what this call created is undone.
+      const existed = await present(carry.paths.pack(to, name))
       await installFetchedPack(release, await fetchPack(release, name, files))
-      done.push(name)
+      if (!existed) done.push(name)
     }
   } catch (error) {
     for (const name of done) await removePack(carry.paths, to, name)
     throw error
   }
-  return done
+  return names
 }
 
 /**
@@ -90,6 +94,13 @@ export async function repairPacks(carry: PackCarry, version: RuntimeVersion, tra
   const packs = await acquirePacks(release, files)
   const result = { intact: [] as string[], repaired: [] as string[] }
   if (packs === undefined) return result
+  // A directory the signed packs file does not list is not a pack of this release; it refuses every start until removed.
+  const listed = new Set(packs.packs.map(entry => carry.paths.pack(version, entry.name)))
+  for (const directory of await readdir(join(carry.paths.packs, version)).catch(() => [])) {
+    const path = join(carry.paths.packs, version, directory)
+    if (!listed.has(path)) await removeUnlisted(carry.paths, path)
+  }
+  await pointPacks(carry.paths, version)
   for (const entry of packs.packs) {
     if (!await present(carry.paths.pack(version, entry.name))) continue
     if ((await packProblems(carry.paths, version, entry, carry.paths.platform)).length === 0) {

@@ -13,7 +13,7 @@ import { buildPackArchive, PackRefusal } from '@delorun/release-formats/packs/ar
 import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { StorePaths, type InstalledRelease, type PackFiles } from '@delorun/runtime-store'
-import { fixtureHome, PLATFORM, version, type FixtureHome } from '../../runtime-store/tests/support.ts'
+import { fixtureHome, makeWritable, PLATFORM, version, type FixtureHome } from '../../runtime-store/tests/support.ts'
 import type { PacksEnvironment } from '../src/environment.ts'
 import { PacksHub } from '../src/hub.ts'
 import type { InstallBundle } from '../src/runner.ts'
@@ -83,11 +83,18 @@ describe('the pack hub', () => {
     const { hub, installs, paths, file } = await setup()
     expect((await hub.enqueue(['one'])).ok).toBe(true)
     const snapshot = await until(hub, each => each.queue[0]?.state === 'ready')
-    expect(installs).toEqual([{ spec: `link:${join(paths.pack(V1, 'one'), 'package')}`, requestId: 'pack:one', expected: { name: 'one', version: '1.0.0' } }])
+    expect(installs).toEqual([{ spec: `link:${paths.packLink('one')}`, requestId: 'pack:one', expected: { name: 'one', version: '1.0.0' } }])
     expect(snapshot.packs.find(pack => pack.name === 'one')?.availability).toBe('installed')
     expect(packView(snapshot.packs[0], snapshot.queue[0])).toEqual({ kind: 'installed' })
     expect(statSync(file).mode & 0o777).toBe(0o600)
-    expect(hub.installedTarget('one', '0.1.0')).toEqual({ spec: `link:${join(paths.pack(V1, 'one'), 'package')}`, version: '0.1.0' })
+    expect(hub.installedTarget('one', '0.1.0')).toEqual({ spec: `link:${paths.packLink('one')}`, version: '0.1.0' })
+    expect(hub.linkSpec('one')).toBe(`link:${paths.packLink('one')}`)
+    expect(hub.listed('one')).toBe(true)
+    expect(hub.listed('nope')).toBe(false)
+    expect(await hub.isPack('two')).toBe(true)
+    expect(await hub.isPack('nope')).toBe(false)
+    // The link names a pack that matched its signed list; a pack changed since the snapshot has no target after the next one.
+    expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
   })
 
@@ -135,6 +142,17 @@ describe('the pack hub', () => {
     expect(snapshot.queue[0]?.state).toBe('ready')
     expect(snapshot.packs[0]?.availability).toBe('installed')
     expect(existsSync(paths.pack(V1, 'one'))).toBe(true)
+  })
+
+  it('offers no target for a pack whose files changed since they were installed', async () => {
+    const { hub, paths } = await setup()
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    expect(hub.installedTarget('one', '0.1.0')).toBeDefined()
+    makeWritable(paths.pack(V1, 'one'))
+    writeFileSync(join(paths.pack(V1, 'one'), 'package', 'package.json'), '{"name":"one","version":"9.9.9","type":"module"}')
+    await hub.snapshot()
+    expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
   })
 
   it('dismisses a failed or cancelled row but never a ready one', async () => {

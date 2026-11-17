@@ -56,6 +56,10 @@ export class PacksHub {
   /** The collaborators this hub was made with. */
   readonly deps: HubDeps
   private release: InstalledRelease | undefined
+  /** The names the release's packs file lists, once read. */
+  private names: ReadonlySet<string> | undefined
+  /** The packs whose files matched their signed list at the last snapshot. */
+  private sealed: ReadonlySet<string> = new Set()
 
   /**
    * @param deps - the collaborators.
@@ -75,6 +79,8 @@ export class PacksHub {
       save: (items) => { saveItems(deps.file, items) },
     })
     this.queue.restore()
+    // Read the packs file now, so a name the release lists is known to be a pack before anything asks for a target.
+    void this.snapshot().catch(() => undefined)
   }
 
   /**
@@ -107,16 +113,20 @@ export class PacksHub {
       const packs = await packsOf(release, environment.files)
       if (packs === undefined) return { supported: false, reason: 'This release publishes no plugin packs.', release: release.version, packs: [], queue }
       const infos: PackInfo[] = []
+      const sealed = new Set<string>()
+      this.names = new Set(packs.packs.map(entry => entry.name))
       for (const entry of packs.packs) {
         const base = { name: entry.name, version: entry.version, experimental: entry.experimental }
         try {
           packVariantFor(entry, release.paths.platform)
           const installed = await checkInstalledPack(release.paths, release.version, entry, release.paths.platform).then(() => true, () => false)
+          if (installed) sealed.add(entry.name)
           infos.push({ ...base, downloadBytes: packDownloadSize(entry, release.paths.platform), availability: installed ? 'installed' : 'available' })
         } catch (error) {
           infos.push({ ...base, downloadBytes: 0, availability: 'unavailable', reason: error instanceof Error ? error.message : String(error) })
         }
       }
+      this.sealed = sealed
       return { supported: true, release: release.version, packs: infos, queue }
     } catch (error) {
       return { supported: false, reason: error instanceof Error ? error.message : String(error), packs: [], queue }
@@ -127,13 +137,40 @@ export class PacksHub {
    * The spec the plugin manager installs for a pack already in the home, for Plugins' official installs.
    * @param name - the package name.
    * @param version - the running Delorun version.
-   * @returns the `link:` spec, or `undefined` when the pack is not installed for the release this Host runs.
+   * @returns the `link:` spec through `packs/current`, or `undefined` unless the pack's files matched their signed list at the last snapshot.
    */
   installedTarget(name: string, version: string): { readonly spec: string, readonly version: string } | undefined {
     const release = this.release
-    if (release === undefined) return undefined
-    const directory = join(release.paths.pack(release.version, name), 'package')
-    return existsSync(directory) ? { spec: `link:${directory}`, version } : undefined
+    if (release === undefined || !this.sealed.has(name)) return undefined
+    return { spec: `link:${release.paths.packLink(name)}`, version }
+  }
+
+  /**
+   * The only spec through which the plugin manager may install a pack.
+   * @param name - the package name.
+   * @returns the `link:` spec through `packs/current`, or `undefined` before the release is known.
+   */
+  linkSpec(name: string): string | undefined {
+    return this.release === undefined ? undefined : `link:${this.release.paths.packLink(name)}`
+  }
+
+  /**
+   * Whether the release's packs file lists a package, as far as it is known now.
+   * @param name - the package name.
+   * @returns `true` or `false` once the packs file was read, `undefined` before.
+   */
+  listed(name: string): boolean | undefined {
+    return this.names?.has(name)
+  }
+
+  /**
+   * Whether the release's packs file lists a package, waiting for the file to be read.
+   * @param name - the package name.
+   * @returns `true` for a pack; `false` for any other package and when this process has no installed release.
+   */
+  async isPack(name: string): Promise<boolean> {
+    await this.snapshot().catch(() => undefined)
+    return this.names?.has(name) ?? false
   }
 
   /**

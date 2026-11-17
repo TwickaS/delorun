@@ -116,6 +116,16 @@ export class StorePaths {
   }
 
   /**
+   * The folder a profile links a pack through: `packs/current/<name>/package`, which names the running release's pack
+   * whichever release runs ({@link pointPacks}).
+   * @param name - the pack's package name.
+   * @returns the path, with `/` in a scoped name written `__`.
+   */
+  packLink(name: string): string {
+    return join(this.packs, 'current', name.replaceAll('/', '__'), 'package')
+  }
+
+  /**
    * An installed pack's identity record, outside the pack so a confined command that can write the pack cannot
    * rewrite what the pack is checked against.
    * @param version - the release version.

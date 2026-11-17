@@ -73,6 +73,24 @@ export interface PackInstallTargets {
    * @returns the `link:` spec and version, or `undefined` when the pack is not installed here.
    */
   resolve(name: string, version: string): { readonly spec: string, readonly version: string } | undefined
+  /**
+   * The only spec through which a pack may be installed.
+   * @param name - the package name.
+   * @returns the `link:` spec through `packs/current`, or `undefined` before the release is known.
+   */
+  linkSpec(name: string): string | undefined
+  /**
+   * Whether the release's packs file lists a package, as far as it is known now.
+   * @param name - the package name.
+   * @returns whether it is a pack; `undefined` before the file was read.
+   */
+  listed(name: string): boolean | undefined
+  /**
+   * Whether the release's packs file lists a package, waiting for the file to be read.
+   * @param name - the package name.
+   * @returns whether it is a pack.
+   */
+  isPack(name: string): Promise<boolean>
 }
 
 /** The plugin's name in the loader's diagnostics. */
@@ -145,7 +163,7 @@ export function apply(ctx: Context, config: Config): void {
         requestId: packRequestId,
       })
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))
-      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version) })
+      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName) })
       scope.plugin(PacksService, hub)
     })()
   })

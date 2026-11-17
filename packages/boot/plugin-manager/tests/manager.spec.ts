@@ -9,7 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import type { Context } from '@deepseek-ai/cordis'
-import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   boot, composeEntries, initProfile, loadProfileDirectory, readProfilePatches, readProfileManifest,
   reconcileProfilePatches, PluginPackages, readPluginMeta, getDshRuntimeVersion,
@@ -3074,4 +3074,47 @@ it('refuses an update whose target does not match where the copy was installed f
   expect(pnpm).not.toHaveBeenCalled()
   expect(view).not.toHaveBeenCalled()
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+describe('a package the release publishes as a signed pack', () => {
+  const targets = (listed: boolean, installed?: string) => (ctx: Context) => {
+    ctx.provide('packInstallTargets', {
+      resolve: (_name: string, version: string) => installed === undefined ? undefined : { spec: installed, version },
+      linkSpec: () => 'link:/home/packs/current/pack/package',
+      listed: () => listed,
+      isPack: () => Promise.resolve(listed),
+    })
+  }
+
+  it('has no registry install target while it is not installed, and says it is a pack', async () => {
+    const { manager } = await fixture('live', false, targets(true), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    const listed = (await manager.listBundles()).find(item => item.name === name)
+    expect(listed?.installTarget).toBeUndefined()
+    expect(listed?.error).toMatchObject({ code: 'pack-only' })
+  })
+
+  it('offers the link to the installed pack and nothing else', async () => {
+    const { manager } = await fixture('live', false, targets(true, 'link:/home/packs/current/pack/package'), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    expect((await manager.listBundles()).find(item => item.name === name)?.installTarget).toEqual({ spec: 'link:/home/packs/current/pack/package', version: getDshRuntimeVersion() })
+  })
+
+  it('keeps the usual target for a package the release does not publish as a pack', async () => {
+    const { manager } = await fixture('live', false, targets(false), {}, undefined, undefined, true)
+    const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
+    expect((await manager.listBundles()).find(item => item.name === name)?.error?.code).not.toBe('pack-only')
+  })
+
+  it('refuses a registry install of a pack, whoever asks, before pnpm runs', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = readFileSync(join(dir, 'package.json'), 'utf8')
+    const result = await manager.installBundle('@delorun/bundle-browser@0.1.0')
+    expect(result).toMatchObject({ application: 'failed', changed: false })
+    expect(result.error).toMatchObject({ code: 'pack-only' })
+    expect(pnpm).not.toHaveBeenCalled()
+    expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+  })
 })

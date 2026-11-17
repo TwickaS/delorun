@@ -22,6 +22,7 @@ import { changeTimeOf, fullCheckDue, nowNs, RACY_WINDOW_NS, readIdentityRecord, 
 import { launchCommand, readStoreLayout, requireLayout, requireProtocol, SUPPORTED, type LauncherSupport, type LaunchCommand } from './launch.ts'
 import { withStoreLock } from './lock.ts'
 import { installedPacksProblems } from './packs-check.ts'
+import { packsCurrentProblem, pointPacksIfUsed } from './packs-current.ts'
 import { identityRecordVersion, parseRuntimeVersion, releaseFileVersion, StorePaths } from './paths.ts'
 import { isInstalled, readPointerFile, readPointers, syncDirectory, writePointers, type RuntimePointers } from './pointer.ts'
 import { readStoredRelease, verifyRelease, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
@@ -216,6 +217,7 @@ export class RuntimeStore {
       if (current !== from) throw new RuntimeStoreError('POINTER_CHANGED', this.paths.pointer(STORE_ENTRIES.current), `current names ${current}, not ${from}; the switch to ${to} was not made`)
       await this.requireInstalled(to)
       await writePointers(this.paths, { current: to, previous: from })
+      await pointPacksIfUsed(this.paths, to)
     })
   }
 
@@ -231,6 +233,7 @@ export class RuntimeStore {
       await this.requireInstalled(before.current)
       if (before.previous !== undefined) await this.requireInstalled(before.previous)
       await writePointers(this.paths, before)
+      await pointPacksIfUsed(this.paths, before.current)
     })
   }
 
@@ -384,7 +387,10 @@ export class RuntimeStore {
         // Every file was hashed from the bytes it was written from, as a full check would hash it.
         this.shared.getStore()?.set(`${request.version}\n${this.listDigest(release)}`, { full: true, check: Promise.resolve({ full: true, hashed: release.files.files.length, files: release.files.files.length, fullCheckAt: Number(capturedAt / NS_PER_MS) }) })
         const current = await readPointerFile(this.paths.pointer(STORE_ENTRIES.current))
-        if (current === undefined || current === 'malformed') await writePointers(this.paths, { current: request.version })
+        if (current === undefined || current === 'malformed') {
+          await writePointers(this.paths, { current: request.version })
+          await pointPacksIfUsed(this.paths, request.version)
+        }
         return { version: request.version, ...release }
       } catch (error) {
         await removeTree(staging)
@@ -478,7 +484,11 @@ export class RuntimeStore {
    */
   private async requirePacksIntact(version: RuntimeVersion, root: RootMetadata): Promise<void> {
     const problems = await installedPacksProblems(this.paths, root, version)
-    if (problems.length > 0) throw new RuntimeStoreError('RUNTIME_CHANGED', join(this.paths.packs, version), `the plugin packs of ${version} differ from their signed file lists: ${problems.slice(0, 5).join('; ')}`, await this.remediesFor(version))
+    if (problems.length > 0) throw new RuntimeStoreError('RUNTIME_CHANGED', join(this.paths.packs, version), `the plugin packs of ${version} differ from their signed file lists: ${problems.slice(0, 5).join('; ')}`, ['recover-packs', ...await this.remediesFor(version)])
+    // Only the running release is reached through the link; another installed release is checked without it.
+    const running = (await readPointers(this.paths).catch(() => undefined))?.current === version
+    const link = running ? await packsCurrentProblem(this.paths, version) : undefined
+    if (link !== undefined) throw new RuntimeStoreError('RUNTIME_CHANGED', join(this.paths.packs, 'current'), `the plugin packs link does not match the running release: ${link}`, ['recover-packs', ...await this.remediesFor(version)])
   }
 
   /**

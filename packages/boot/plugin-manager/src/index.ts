@@ -864,7 +864,13 @@ export class PluginManager extends TypertRemoteService {
       let target: Pick<BundleInfo, 'installTarget'> = {}
       let targetError: ManagementError | undefined
       if (offered !== undefined) {
-        try { target = { installTarget: this.ownerContext.get('packInstallTargets')?.resolve(name, runtimeVersion) ?? officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) } }
+        try {
+          // A package the release publishes as a signed pack never has a registry target, installed or not.
+          const packs = this.ownerContext.get('packInstallTargets')
+          const pack = packs?.resolve(name, runtimeVersion)
+          if (pack === undefined && packs?.listed(name) === true) throw new ManagementFailure('pack-only')
+          target = { installTarget: pack ?? officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) }
+        }
         catch (error) { targetError = managementError(error) }
       }
       const catalogMeta = offered === undefined ? {} : { meta: offered.meta }
@@ -1323,6 +1329,9 @@ export class PluginManager extends TypertRemoteService {
       const before = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
       // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       const known = specPackageName(spec, before, this.profile.dir)
+      // A package the release publishes as a signed pack installs only from its pack folder, never from a registry or another source.
+      const packs = this.ownerContext.get('packInstallTargets')
+      if (known !== undefined && packs !== undefined && await packs.isPack(known) && packs.linkSpec(known) !== spec) throw new ManagementFailure('pack-only')
       const provided = known === undefined ? [] : this.providedProtected(known)
       if (provided.length > 0) throw this.protectionFailure(provided)
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {
