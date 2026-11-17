@@ -54,7 +54,6 @@ export const en = {
   'safety.hostsInvalid': '"{host}" is not a site name. Write one such as registry.npmjs.org or *.npmjs.org.',
   'safety.hostsTooMany': 'List at most {n} sites.',
   'safety.hostsEmpty': 'List at least one site, or choose Off.',
-  'safety.override': 'One chat can still switch to Read only or Full access from the permission menu or /permission.',
 
   'chats.intro': 'Each chat starts with these. In any chat you can:',
   'chats.model': 'switch the model from the model menu or /model',
@@ -245,7 +244,6 @@ export const zh: Record<NewWorkspaceLocaleKey, string> = {
   'safety.hostsInvalid': '“{host}”不是网站名称。请写成 registry.npmjs.org 或 *.npmjs.org 这样的形式。',
   'safety.hostsTooMany': '最多列出 {n} 个网站。',
   'safety.hostsEmpty': '请至少列出一个网站，或选择“关闭”。',
-  'safety.override': '单个对话仍可通过权限菜单或 /permission 切换到只读或完全访问。',
 
   'chats.intro': '每个对话都从这些设置开始。在任何对话中，你都可以：',
   'chats.model': '通过模型菜单或 /model 切换模型',

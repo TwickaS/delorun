@@ -90,7 +90,6 @@ export function SafetyScreen({ t, safety, busy, problem, onChange, onCreate, onB
           {hosts?.kind === 'empty' && <p id={hostsError} className={css.hint}>{t('safety.hostsEmpty')}</p>}
         </div>
       )}
-      <p className={css.hint}>{t('safety.override')}</p>
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <ChatsBlock t={t} />
       <DialogFooter back={{ label: t('back'), onClick: onBack, disabled: busy }}

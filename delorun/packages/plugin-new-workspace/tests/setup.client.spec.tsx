@@ -139,9 +139,9 @@ describe('the safety screen', () => {
     expect(en['safety.files.body']).toContain('Recommended')
   })
 
-  it('shows the override line and the shared copy block', async () => {
+  it('shows the shared copy block, which names the per-chat permission switch once', async () => {
     await toSafety()
-    expect(screen.getByText('One chat can still switch to Read only or Full access from the permission menu or /permission.')).toBeTruthy()
+    expect(screen.queryAllByText(/permission menu or \/permission/)).toHaveLength(1)
     expect(screen.getByText(en['chats.intro'])).toBeTruthy()
     expect(within(screen.getByRole('region', { name: en['chats.intro'] })).getAllByRole('listitem').map(each => each.textContent))
       .toEqual([en['chats.model'], en['chats.permission'], en['chats.network']])
