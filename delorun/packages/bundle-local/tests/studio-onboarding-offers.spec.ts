@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
+import { Config as OnboardingConfig } from '@delorun/plugin-onboarding'
 
 const CHAT_IMPORT = '@deepseek-ai/dsh-deepseek-chat-import'
 const patch = yaml.load(readFileSync(fileURLToPath(new URL('../../bundle-studio/cordis.patch.yml', import.meta.url)), 'utf8')) as Array<{ insert?: Array<{ id: string; name: string; config?: { plugins?: string[]; optionalRows?: string[]; hiddenProviders?: string[] } }> }>
@@ -34,5 +35,12 @@ describe('the studio bundle offers the optional bundles as packs (A405)', () => 
 
   it('mounts none of them as a row, so each stays off until the person adds it', () => {
     for (const name of OPTIONAL_BUNDLES) expect(rows.some(row => row.name === name), name).toBe(false)
+  })
+})
+
+describe('the studio bundle\'s onboarding row', () => {
+  it('passes the onboarding plugin\'s own config validation, so the plugin starts', () => {
+    const config = rows.find(row => row.id === 'delorun-onboarding')?.config
+    expect(() => OnboardingConfig(config as never)).not.toThrow()
   })
 })

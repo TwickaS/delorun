@@ -256,16 +256,19 @@ describe('reach on the Tailscale private address', () => {
       const foreign = await send(reachPort, 'POST', '/api/session/list', { host: HOST, cookie: phone.cookie ?? '', origin: 'https://attacker.example' }, list)
       expect(json(foreign).error).toBe('ORIGIN_MISMATCH')
       // With the session, a markerless request is the device itself, and the device routes still answer LOOPBACK_REQUIRED.
-      for (const path of ['/auth/devices/window', '/auth/devices/approve', '/auth/devices/remove']) {
+      for (const path of ['/auth/devices/window', '/auth/devices/approve']) {
         const reply = await send(reachPort, 'POST', path, { host: HOST, cookie: phone.cookie ?? '' }, { v: 1 })
         expect({ path, error: json(reply).error }).toEqual({ path, error: 'LOOPBACK_REQUIRED' })
       }
+      // The device may remove only itself, so a removal naming another device is the one still refused.
+      const another = await send(reachPort, 'POST', '/auth/devices/remove', { host: HOST, cookie: phone.cookie ?? '' }, { v: 1, deviceId: 'another-device' })
+      expect({ error: json(another).error }).toEqual({ error: 'LOOPBACK_REQUIRED' })
       expect(studio.ctx.homeAuth.approvalWindowOpenUntil()).toBeUndefined()
     })
 
-    it('a tailnet-route session cannot remove a device, reset, enrol a factor or change reach', async () => {
-      const deviceId = await phone.deviceId()
-      const removal = await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId })
+    it('a tailnet-route session cannot remove another device, reset, enrol a factor or change reach', async () => {
+      // Pins the self check: a session removes only its own device; the phone stays paired here.
+      const removal = await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId: 'another-device' })
       expect(json(removal).error).toBe('LOOPBACK_REQUIRED')
       expect((json(await loopback('GET', '/auth/devices')) as { devices: unknown[] }).devices).toHaveLength(1)
       // No route of this home resets or enrols a factor from a session; each path answers as unregistered.
@@ -285,7 +288,10 @@ describe('reach on the Tailscale private address', () => {
         type: 'client-request', rpcId: 'reach-row', method: 'pluginManager/setPluginEnabled', payload: { args: { id: 'delorun-reach', enabled: false } },
       })
       expect(switched.status).toBe(200)
-      expect(json(switched).result).toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { action: 'pluginManager/setPluginEnabled' } } })
+      // This fixture mounts the reach and home-auth plugins directly, so the Loader holds no `delorun-reach` row for the policy to
+      // name; the call reaches the plugin manager, which changes nothing of an unknown row. The policy's refusal of the real
+      // composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
+      expect(json(switched).result).toMatchObject({ ok: true, value: { changed: false, error: { code: 'unknown-plugin' } } })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
       expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })

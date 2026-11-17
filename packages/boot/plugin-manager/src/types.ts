@@ -666,3 +666,27 @@ declare module '@deepseek-ai/cordis' {
     'plugin-manager/update-state'(progress: PluginUpdateProgress): void
   }
 }
+
+/**
+ * What the manager asks of the `packInstallTargets` service, provided by `@delorun/plugin-packs`, about packages the
+ * release publishes as signed packs.
+ */
+export interface PackFolderCheck {
+  /**
+   * Whether the release's packs file lists a package.
+   * @param name - the package name.
+   * @returns true for a pack.
+   */
+  isPack(name: string): Promise<boolean>
+  /**
+   * The only spec through which a pack installs.
+   * @param name - the package name.
+   * @returns the `link:` spec through the home's `packs/current`, or `undefined` before the release is known.
+   */
+  linkSpec(name: string): string | undefined
+  /**
+   * Whether this Host still runs the release `runtimes/current` names.
+   * @returns false once an update has switched away from it.
+   */
+  runsCurrentRelease(): Promise<boolean>
+}

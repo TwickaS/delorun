@@ -2,8 +2,8 @@
  * @delorun/plugin-packs: the Host side of plugin packs (A403, A404). A pack is a plugin outside the default install that
  * the release publishes as a separate signed file. This plugin keeps the Host's one install queue
  * (`@delorun/install-queue`), runs each item through the runtime store's verified pack install, loads the result
- * through the plugin manager's `installBundle('link:<pack directory>')`, and exposes the `packs` remote and announces progress on
- * `plugin-manager/install-state`. The idle signal is the chat gate that `delorun`'s Host attaches through `delorunChatGate`; the
+ * through the plugin manager's `installBundle('link:<pack directory>')`, serves the install list through Host fetch routes
+ * ({@link PACK_ROUTES}) and announces progress on `plugin-manager/install-state`. The idle signal is the chat gate that `delorun`'s Host attaches through `delorunChatGate`; the
  * plugin manager's `packInstallTargets` service lets Plugins' official installs resolve an installed pack to its
  * directory.
  *
@@ -21,14 +21,14 @@ import { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 import { PacksHub } from './hub.ts'
 import type { PluginInstallRequestId } from '@deepseek-ai/dsh-plugin-manager/types'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
-import { PacksService } from './service.ts'
+import { registerPackRoutes } from './routes.ts'
 
 export type * from './wire.ts'
-export { PACKS_ELEVATED_ACTIONS, PACKS_READ_ACTIONS, packRequestId, packView } from './wire.ts'
+export { PACK_ELEVATED_ROUTES, PACK_ROUTES, packRequestId, packView } from './wire.ts'
 export { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 export { PacksHub } from './hub.ts'
 export { createPackRunner, failureOf } from './runner.ts'
-export { PacksService } from './service.ts'
+export { registerPackRoutes } from './routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -86,6 +86,11 @@ export interface PackInstallTargets {
    */
   listed(name: string): boolean | undefined
   /**
+   * Whether this Host still runs the release `runtimes/current` names, which an update switches away from.
+   * @returns false once an update switched; a pack installed then would be linked through `packs/current` to another release.
+   */
+  runsCurrentRelease(): Promise<boolean>
+  /**
    * Whether the release's packs file lists a package, waiting for the file to be read.
    * @param name - the package name.
    * @returns whether it is a pack.
@@ -138,13 +143,13 @@ class ChatGateService extends Service implements ChatGateSlot {
 }
 
 /**
- * Mount the queue, the remote and the slots.
+ * Mount the queue, the routes and the slots.
  * @param ctx - the Host context.
  * @param config - the validated configuration.
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.plugin(ChatGateService)
-  ctx.inject(['pluginManager', 'profileContext'], (scope) => {
+  ctx.inject(['pluginManager', 'profileContext', 'connection', 'delorunChatGate'], (scope) => {
     const profile: ProfileContext = scope.profileContext
     const manager = scope.pluginManager
     const slot = scope.delorunChatGate
@@ -163,8 +168,12 @@ export function apply(ctx: Context, config: Config): void {
         requestId: packRequestId,
       })
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))
-      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName) })
-      scope.plugin(PacksService, hub)
+      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName), runsCurrentRelease: () => hub.runsCurrentRelease() })
+      // Each listed item is announced on the plugin manager's install-state under its request id, as an install of Plugins is.
+      scope.effect(() => hub.subscribe((snapshot) => {
+        for (const item of snapshot.queue) scope.emit('plugin-manager/install-state', { requestId: packRequestId(item.key) as PluginInstallRequestId, phase: item.state === 'ready' || item.state === 'needs-reload' ? 'applying' : 'installing' })
+      }))
+      registerPackRoutes(scope, hub)
     })()
   })
 }

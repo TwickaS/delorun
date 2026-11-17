@@ -11,6 +11,9 @@
   ],
   "references": [
     {
+      "path": "../../../packages/api/gateway/tsconfig.client.json"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {
@@ -24,6 +27,9 @@
     },
     {
       "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-plugin-manager/tsconfig.client.json"
     },
     {
       "path": "../../../packages/client/ui-renderer"

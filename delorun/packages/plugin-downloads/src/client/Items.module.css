@@ -66,6 +66,13 @@
   white-space: nowrap;
 }
 
+.status[data-failed] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
 .track {
   display: block;
   height: 3px;

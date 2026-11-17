@@ -8,12 +8,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./wire": "./src/wire.ts",
-    "./environment": "./src/environment.ts"
+    "./environment": "./src/environment.ts",
+    "./client": "./src/client.ts",
+    "./routes": "./src/routes.ts"
   },
   "dependencies": {
     "@delorun/changes": "workspace:*",
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/contract-release-manifest": "workspace:*",
+    "@delorun/home-auth": "workspace:*",
     "@delorun/home-process": "workspace:*",
     "@delorun/install": "workspace:*",
     "@delorun/install-queue": "workspace:*",
@@ -24,6 +27,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-hmr": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
@@ -32,6 +36,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"

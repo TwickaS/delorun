@@ -34,6 +34,8 @@ const LOOPBACK_REQUIRED = JSON.stringify({ error: 'LOOPBACK_REQUIRED' })
 
 /** Why the install-time files are served to a device. */
 const STATIC = 'upstream\'s frontend-static fallback: the studio page, its built assets and its install-time files'
+/** Why the Changes routes are reached by a device: reads answer it, and every action and setup route attests the person at the computer and answers a device `403 LOOPBACK_REQUIRED`. */
+const CHANGES = '@delorun/plugin-changes: reads for any signed-in device; actions and setup refused to a device, whose request is not the person at the computer'
 /** Why the routes of `@delorun/home-auth` are reached by a device. */
 const HOME_AUTH = '@delorun/home-auth: sign-in and the device routes, which refuse a reach session where C5 reserves them'
 
@@ -48,6 +50,24 @@ const REACHED: Readonly<Record<string, string>> = {
   'prefix /plugins': 'upstream\'s client modules: the client plugin bundles',
   'exact /plugins/events': 'upstream\'s client HMR events: the module graph updates the client loader follows',
   'exact /delorun/reach/status': '@delorun/reach: the reach status the studio shows',
+  'exact /delorun/branding/icon': '@delorun/plugin-theme: the studio\'s custom icon, which the page and the installed app show',
+  'exact /delorun/changes/apply': CHANGES,
+  'exact /delorun/changes/create': CHANGES,
+  'exact /delorun/changes/discard': CHANGES,
+  'exact /delorun/changes/done': CHANGES,
+  'exact /delorun/changes/off': CHANGES,
+  'exact /delorun/changes/on': CHANGES,
+  'exact /delorun/changes/request': CHANGES,
+  'exact /delorun/changes/reveal': CHANGES,
+  'exact /delorun/changes/safe-mode': CHANGES,
+  'exact /delorun/changes/setup-apply': CHANGES,
+  'exact /delorun/changes/setup-export': CHANGES,
+  'exact /delorun/changes/setup-inspect': CHANGES,
+  'exact /delorun/changes/show': CHANGES,
+  'exact /delorun/changes/state': CHANGES,
+  'exact /delorun/changes/undo': CHANGES,
+  'exact /delorun/changes/work': CHANGES,
+  'exact /delorun/changes/workspaces': CHANGES,
   'exact /auth/owner/claim': HOME_AUTH,
   'exact /auth/branding/icon': HOME_AUTH,
   'exact /auth/devices': HOME_AUTH,
@@ -115,12 +135,15 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunNetwork.set': UNLOCKED('a looser network setting lets commands reach more of the network'),
   '/api/delorunOnboarding.clone': UNLOCKED('runs Git as the person and adds the clone as a workspace'),
   '/api/delorunOnboarding.cloneStatus': UNLOCKED('reports a clone an unlocked device started'),
+  '/api/delorunOnboarding.agentModels': UNLOCKED('starts the agent\'s own process to list its models'),
+  '/api/delorunOnboarding.deferStep': OPEN('notes that a setup step waits for the computer; ids from a closed list, no setting changes', 400),
+  '/api/delorunRequirements.check': READ('what each row of the profile needs set up, and whether it is: names, never values'),
   '/api/delorunOnboarding.localModels': READ('probes this computer\'s loopback model servers'),
   '/api/delorunOnboarding.readiness': READ('whether the coding agents are signed in and how far Tailscale is set up serves onboarding on a phone'),
   '/api/delorunOnboarding.keyTest': OPEN('An approved phone tests its model keys; the answer names each provider and its result, never a key; while PIN mode is on only an unlocked page is admitted'),
   '/api/delorunOnboarding.recommend': OPEN('An approved phone reads what the recommended plugins are for, so the Recommended plugins step orders them; the answer names packages and connections only', 400),
   '/api/delorunBranding.icon': OPEN('an approved phone uploads the Branding icon as it writes any everyday setting; the host checks the bytes (PNG, JPEG or WebP, at most 256 KB, never SVG), and the probe sends none, so the route answers 415 past its admission', 415),
-  '/api/delorunMainChat.open': OPEN('opens the main chat, which exists to be opened'),
+  '/api/delorunMainChat.open': OPEN('opens the main chat, which exists to be opened; the probe\'s composition cannot create it, so the route answers 502 past its admission', 502),
   '/api/delorunMainChat.reports': READ('a count for the main chat\'s sidebar mark'),
   '/api/delorunTrust.bill': READ('the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret'),
   '/api/delorunTrust.check': UNLOCKED('Check now hashes the runtime and runs the release-log check on the computer'),
@@ -132,7 +155,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunUpdateCheck.channel': READ('the Settings copy on a signed-in device names the release host this installation contacts, which is the channel origin\'s host alone; it names no secret and changes nothing'),
   '/api/delorunUpdateCheck.notice': READ('the update notice names the release that runs and how many installed plugins an update would turn off'),
   '/api/delorunUpdateCheck.notes': READ('the release notes of the update that would run'),
-  '/api/delorunTrash.list': READ('the trash lists deleted chats and workspaces'),
+  '/api/delorunTrash.list': OPEN('the trash lists deleted chats and workspaces; a POST, so the bodiless probe answers 400', 400),
   '/api/delorunTrash.deleteChat': OPEN('moving a chat to the trash is reversible', 400),
   '/api/delorunTrash.deleteWorkspace': OPEN('moving a workspace to the trash is reversible', 400),
   '/api/delorunTrash.restore': OPEN('restoring from the trash is reversible', 400),

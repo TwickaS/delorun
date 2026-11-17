@@ -14,6 +14,12 @@ export interface PacksPanelRemote {
    */
   list(): Promise<PacksSnapshot>
   /**
+   * Add packs to the install list.
+   * @param request - the package names.
+   * @returns the new snapshot, or why nothing was added.
+   */
+  enqueue(request: { readonly names: readonly string[] }): Promise<PacksResult>
+  /**
    * Cancel a queued or working install.
    * @param request - the package name.
    * @returns the new snapshot.
@@ -49,6 +55,12 @@ export interface RemoteSourceOptions {
   readonly follow: (refresh: () => void) => () => void
   /** Milliseconds between reads while an item is queued or working. */
   readonly pollMs: number
+  /**
+   * Called when the Host refused an action until the device is unlocked, so the studio can open its unlock dialog.
+   * @param action - the action refused: `enqueue`, `retry` or `remove`.
+   * @param reason - the refusal in the unlock dialog's form, `elevation-required: packs/<action>`.
+   */
+  readonly unlockNeeded?: (action: string, reason: string) => void
 }
 
 /** The refusal reason prefix that asks for an unlock (contract C14). */
@@ -65,6 +77,18 @@ export function needsUnlock(error: unknown): boolean {
   const reason: unknown = typeof details === 'object' && details !== null ? Reflect.get(details, 'reason') : undefined
   const message: unknown = Reflect.get(error, 'message')
   return [reason, message].some(text => typeof text === 'string' && text.includes(ELEVATION_REQUIRED))
+}
+
+/**
+ * The refusal reason in the unlock dialog's form.
+ * @param error - what the call threw.
+ * @param action - the action refused.
+ * @returns `elevation-required: packs/<action>`, or the Host's own reason when it gave one.
+ */
+function reasonOf(error: unknown, action: string): string {
+  const details: unknown = typeof error === 'object' && error !== null ? Reflect.get(error, 'details') : undefined
+  const reason: unknown = typeof details === 'object' && details !== null ? Reflect.get(details, 'reason') : undefined
+  return typeof reason === 'string' ? reason : `${ELEVATION_REQUIRED}: packs/${action}`
 }
 
 function toItem(item: InstallItem): DownloadItem {
@@ -99,6 +123,8 @@ function sameOr(before: readonly DownloadItem[], after: readonly DownloadItem[])
 export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: RemoteSourceOptions): DownloadsSource {
   let items: readonly DownloadItem[] = []
   let waiting = new Set<string>()
+  /** Packs whose add awaits an unlock; they have no queue item until the Host accepts it. */
+  const unlockAsks = new Set<string>()
   const listeners = new Set<() => void>()
   let stopFollowing: (() => void) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -112,18 +138,23 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
   const apply = (snapshot: PacksSnapshot): void => {
     const keys = new Set(snapshot.queue.map(item => item.key))
     waiting = new Set([...waiting].filter(key => keys.has(key)))
-    publish(snapshot.queue.map(item => (waiting.has(item.key) ? { ...toItem(item), state: 'waiting-for-unlock' as const } : toItem(item))))
+    for (const key of keys) unlockAsks.delete(key)
+    const queued = snapshot.queue.map(item => (waiting.has(item.key) ? { ...toItem(item), state: 'waiting-for-unlock' as const } : toItem(item)))
+    // An add that is waiting for an unlock has no queue item yet.
+    const asked = [...unlockAsks].filter(key => !keys.has(key)).map(key => ({ key, state: 'waiting-for-unlock' as const, receivedBytes: 0 }))
+    publish([...queued, ...asked])
   }
   const refresh = (): void => {
     remote.list().then(apply, (error: unknown) => { console.warn('delorun downloads: the install list was not read', error) })
   }
-  const act = (key: string, call: (request: { readonly name: string }) => Promise<PacksResult>): void => {
+  const act = (key: string, action: string, call: (request: { readonly name: string }) => Promise<PacksResult>): void => {
     call({ name: key }).then(
       (result) => {
         if (result.ok) { waiting.delete(key); apply(result.value) }
       },
       (error: unknown) => {
         if (!needsUnlock(error)) { console.warn('delorun downloads: the change was not made', error); return }
+        options.unlockNeeded?.(action, reasonOf(error, action))
         waiting.add(key)
         publish(items.map(item => (item.key === key ? { ...item, state: 'waiting-for-unlock' as const } : item)))
       },
@@ -150,11 +181,26 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
         if (listeners.size === 0) stop()
       }
     },
-    cancel: (key) => { act(key, request => remote.cancel(request)) },
-    retry: (key) => { act(key, request => remote.retry(request)) },
+    enqueue: (key) => {
+      remote.enqueue({ names: [key] }).then(
+        (result) => {
+          unlockAsks.delete(key)
+          if (result.ok) apply(result.value)
+        },
+        (error: unknown) => {
+          if (!needsUnlock(error)) { console.warn('delorun downloads: the plugin was not added', error); return }
+          options.unlockNeeded?.('enqueue', reasonOf(error, 'enqueue'))
+          unlockAsks.add(key)
+          publish([...items.filter(item => item.key !== key), { key, state: 'waiting-for-unlock', receivedBytes: 0 }])
+        },
+      )
+    },
+    cancel: (key) => { act(key, 'cancel', request => remote.cancel(request)) },
+    retry: (key) => { act(key, 'retry', request => remote.retry(request)) },
     remove: (key) => {
       const state = items.find(item => item.key === key)?.state
-      act(key, request => (state === 'failed' || state === 'cancelled' ? remote.dismiss(request) : remote.remove(request)))
+      const dismissing = state === 'failed' || state === 'cancelled'
+      act(key, dismissing ? 'dismiss' : 'remove', request => (dismissing ? remote.dismiss(request) : remote.remove(request)))
     },
   }
 }

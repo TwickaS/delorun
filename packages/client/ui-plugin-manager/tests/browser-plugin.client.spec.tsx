@@ -269,6 +269,7 @@ describe('ui-plugin-manager browser plugin', () => {
     expect(b.slots.spec('plugins.item')).toMatchObject({ kind: 'list', scope: 'root' })
     expect(b.slots.spec('plugins.bundle.config')).toMatchObject({ kind: 'keyed', scope: 'root' })
     expect(b.slots.spec('plugins.row.config')).toMatchObject({ kind: 'keyed', scope: 'root' })
+    expect(b.slots.spec('plugins.bundle.action')).toMatchObject({ kind: 'chain', scope: 'root' })
     for (const name of ['plugins.detail.actions', 'plugins.detail.badge', 'plugins.detail.section'] as const) {
       expect(b.slots.spec(name)).toMatchObject({ kind: 'list', scope: 'root' })
     }

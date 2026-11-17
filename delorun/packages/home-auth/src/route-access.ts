@@ -94,6 +94,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'plugin-trash/src/index.ts': {
     path: { level: 'R+U', reason: 'listing, deleting to the trash and restoring are reversible and need no unlock; deleting forever (purge, empty) needs one' },
   },
+  'plugin-packs/src/routes.ts': {
+    path: { level: 'R+U', reason: 'listing, cancelling an install and clearing a failed row change nothing installed and need no unlock; adding, retrying and removing a plugin pack write code the Host will run, so they need one' },
+  },
   'plugin-onboarding/src/index.ts': {
     WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     ADD_WORKSPACE_PATH: UNLOCKED('a workspace is what the model may write'),
@@ -102,6 +105,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
+    START_PATH: READ('a random id naming this start of the home, with no setting or data'),
     DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
     AGENT_MODELS_PATH: UNLOCKED('starts the agent\'s own process to list its models'),
     LOCAL_MODELS_PATH: READ('probes the two loopback model listings'),
