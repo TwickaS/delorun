@@ -103,10 +103,10 @@ async function write(root: string, path: string, data: Buffer, mode: number): Pr
   }
 }
 
-/** Read a tar stream, turning a malformed archive into a refusal. */
-async function* entriesOf(bytes: Uint8Array, name: string): AsyncGenerator<Awaited<ReturnType<typeof readTar>> extends AsyncIterable<infer E> ? E : never> {
+/** Read a tar stream, turning a malformed archive into a refusal; `foreign` for a tarball another tool wrote. */
+async function* entriesOf(bytes: Uint8Array, name: string, foreign = false): AsyncGenerator<Awaited<ReturnType<typeof readTar>> extends AsyncIterable<infer E> ? E : never> {
   try {
-    yield* readTar(Readable.from(Buffer.from(bytes)).pipe(createGunzip()) as AsyncIterable<Buffer>, MAX_PACK_ENTRY_BYTES)
+    yield* readTar(Readable.from(Buffer.from(bytes)).pipe(createGunzip()) as AsyncIterable<Buffer>, MAX_PACK_ENTRY_BYTES, { foreign })
   } catch (error) {
     if (error instanceof PackRefusal) throw error
     throw new PackRefusal(`${name} is not a valid archive: ${(error as Error).message}`, 'BAD_ARCHIVE', { cause: error })
@@ -151,7 +151,7 @@ export async function extractPack(bytes: Uint8Array, variant: Pick<PackVariant, 
 export async function extractExternal(bytes: Uint8Array, pin: PackExternal, root: string): Promise<void> {
   if (bytes.byteLength !== pin.length) throw new PackRefusal(`${pin.name}@${pin.version} has ${String(bytes.byteLength)} bytes; the signed packs file lists ${String(pin.length)}`, 'SIZE_MISMATCH')
   if (sha512Base64(bytes) !== pin.sha512) throw new PackRefusal(`${pin.name}@${pin.version} does not match its signed SHA-512`, 'DIGEST_MISMATCH')
-  for await (const entry of entriesOf(bytes, `${pin.name}@${pin.version}`)) {
+  for await (const entry of entriesOf(bytes, `${pin.name}@${pin.version}`, true)) {
     const relativePath = safeRelative(entry.path)
     if (!relativePath.startsWith('package/')) throw new PackRefusal(`${pin.name}@${pin.version} holds ${relativePath}, outside package/`, 'UNSAFE_PATH')
     await write(root, relativePath.slice('package/'.length), entry.data, entry.mode & 0o111 ? 0o755 : 0o644)

@@ -124,10 +124,58 @@ function octalField(block: Buffer, offset: number, length: number, name: string)
   return value
 }
 
-function checksumMatches(block: Buffer): boolean {
+/**
+ * Read a numeric header field the way tar writers other than Delorun's produce it: octal digits padded with spaces or
+ * NULs, or GNU base-256 (the high bit of the first byte set, the rest a big-endian number). An empty field, all spaces
+ * or NULs, is zero only when `allowEmpty` says so.
+ * @param block - the header block.
+ * @param offset - where the field starts.
+ * @param length - the field's width.
+ * @param name - the field's name in a refusal.
+ * @param allowEmpty - whether an empty field reads as 0.
+ * @returns the number.
+ * @throws Error when the field is neither octal nor base-256, is negative, or exceeds the safe integer range.
+ */
+function writerNumber(block: Buffer, offset: number, length: number, name: string, allowEmpty: boolean): number {
+  const raw = block.subarray(offset, offset + length)
+  if ((raw[0]! & 0x80) !== 0) {
+    if ((raw[0]! & 0x40) !== 0) throw new Error(`tar header ${name} is negative`)
+    let value = raw[0]! & 0x3f
+    for (let index = 1; index < raw.byteLength; index++) {
+      value = value * 256 + raw[index]!
+      if (!Number.isSafeInteger(value)) throw new Error(`tar header ${name} is out of range`)
+    }
+    return value
+  }
+  const text = field(block, offset, length).toString('ascii').trim()
+  if (text === '') {
+    if (allowEmpty) return 0
+    throw new Error(`tar header ${name} is empty`)
+  }
+  return octalField(block, offset, length, name)
+}
+
+/**
+ * The fields a reader does not use: read when they parse, and 0 when they do not, so a writer's habit never refuses an
+ * archive that Delorun applies nothing from.
+ * @param block - the header block.
+ * @param offset - where the field starts.
+ * @param length - the field's width.
+ * @returns the number, or 0.
+ */
+function ignoredNumber(block: Buffer, offset: number, length: number): number {
+  try {
+    return writerNumber(block, offset, length, 'field', true)
+  } catch {
+    // A field nothing here uses, in a form this reader does not know: it reads as 0 and no file attribute follows from it.
+    return 0
+  }
+}
+
+function checksumMatches(block: Buffer, foreign: boolean): boolean {
   let sum = 0
   for (let index = 0; index < BLOCK; index++) sum += index >= 148 && index < 156 ? 0x20 : block[index]!
-  return octalField(block, 148, 8, 'checksum') === sum
+  return (foreign ? writerNumber(block, 148, 8, 'checksum', false) : octalField(block, 148, 8, 'checksum')) === sum
 }
 
 function parsePax(records: Buffer): Buffer {
@@ -150,15 +198,28 @@ function parsePax(records: Buffer): Buffer {
   return path
 }
 
+/** How {@link readTar} reads. */
+export interface TarReadOptions {
+  /**
+   * The archive was written by a tool other than Delorun's, such as `npm pack`: numeric fields may be padded with
+   * spaces or NULs, or be GNU base-256; an empty uid, gid or mtime reads as 0 and a uid, gid or mtime that does not
+   * parse reads as 0, since nothing is applied from them. `size`, `mode` and the checksum stay strict (octal or
+   * base-256 for `size`, octal for `mode`), as do the entry type, the path and the size limit.
+   */
+  readonly foreign?: boolean
+}
+
 /**
  * Read a tar stream's entries. Only regular files and pax headers with a `path` record are accepted; a link,
  * directory, device or any other entry type fails the read.
  * @param source - the uncompressed tar bytes.
  * @param maxEntryBytes - the largest entry the reader accepts.
+ * @param options - how to read; a canonical Delorun archive reads strictly by default.
  * @returns each entry with its header fields and bytes, in archive order.
  * @throws Error on a malformed header, a bad checksum, a refused entry type or a truncated stream.
  */
-export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes: number): AsyncGenerator<TarReadEntry> {
+export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes: number, options: TarReadOptions = {}): AsyncGenerator<TarReadEntry> {
+  const foreign = options.foreign === true
   const reader = new ChunkReader(source)
   let paxPath: Buffer | undefined
   for (;;) {
@@ -171,9 +232,9 @@ export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes:
       if (!(await reader.atEnd())) throw new Error('tar stream has bytes after its end blocks')
       return
     }
-    if (!checksumMatches(block)) throw new Error('tar header checksum does not match')
+    if (!checksumMatches(block, foreign)) throw new Error('tar header checksum does not match')
     const type = String.fromCharCode(block[156]!)
-    const size = octalField(block, 124, 12, 'size')
+    const size = foreign ? writerNumber(block, 124, 12, 'size', false) : octalField(block, 124, 12, 'size')
     if (size > maxEntryBytes) throw new Error(`tar entry of ${String(size)} bytes exceeds the limit`)
     const data = await reader.read(size)
     if (data.byteLength < size) throw new Error('tar stream ends inside an entry')
@@ -192,11 +253,11 @@ export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes:
     yield {
       path: path.toString('utf8'),
       mode: octalField(block, 100, 8, 'mode'),
-      uid: octalField(block, 108, 8, 'uid'),
-      gid: octalField(block, 116, 8, 'gid'),
+      uid: foreign ? ignoredNumber(block, 108, 8) : octalField(block, 108, 8, 'uid'),
+      gid: foreign ? ignoredNumber(block, 116, 8) : octalField(block, 116, 8, 'gid'),
       uname: field(block, 265, 32).toString('utf8'),
       gname: field(block, 297, 32).toString('utf8'),
-      mtime: octalField(block, 136, 12, 'mtime'),
+      mtime: foreign ? ignoredNumber(block, 136, 12) : octalField(block, 136, 12, 'mtime'),
       data,
     }
   }
