@@ -17,6 +17,10 @@ describe('the configuration', () => {
     expect(() => plugin.Config({ concurrency: 1.5, stallSeconds: 60, progressIntervalMs: 0 })).toThrow()
     expect(plugin.Config({} as plugin.Config)).toMatchObject({ stallSeconds: 60, progressIntervalMs: 500 })
     expect(() => plugin.Config({ concurrency: 1, stallSeconds: 0, progressIntervalMs: 0 })).toThrow()
+    // Node fires a timer above 2^31-1 ms after 1 ms, which would fail every download at once.
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS + 1, progressIntervalMs: 0 })).toThrow()
+    expect(plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS }).stallSeconds).toBe(3600)
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 60, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS + 1 })).toThrow()
   })
 })
 
@@ -76,5 +80,11 @@ describe('the mounted plugin', () => {
     expect(ended).toBe(1)
     detach()
     expect(slot.running()).toBe(0)
+  })
+
+  it('states a failure with its causes, and a null cause ends the chain instead of replacing the failure', () => {
+    expect(plugin.describeFailure(new Error('outer', { cause: new Error('inner') }))).toBe('outer <- inner')
+    expect(plugin.describeFailure(new Error('outer', { cause: null }))).toBe('outer')
+    expect(plugin.describeFailure('plain')).toBe('plain')
   })
 })

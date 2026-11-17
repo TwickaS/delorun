@@ -154,4 +154,32 @@ describe('the pack transport', () => {
     await expect(files.fetchRelease('a.tar.gz', { exact: 6 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
     expect(wrote).toBeLessThan(40)
   })
+
+  it('shows an address without its user name and password in a refusal', async () => {
+    const fetcher: typeof fetch = vi.fn(() => Promise.reject(new Error('refused')))
+    const files = createPackFiles({ channel: 'https://person:secret@releases.example/x/', stallSeconds: 30, fetch: fetcher })
+    const failure = await files.fetchRelease('a.tar.gz', { exact: 3 }).then(() => undefined, (error: unknown) => error)
+    expect((failure as Error).message).toContain('https://releases.example/x/a.tar.gz')
+    expect((failure as Error).message).not.toMatch(/person|secret/u)
+  })
+
+  it('cuts a metadata file at the release files\' 30 seconds in total, however steadily its pieces arrive', async () => {
+    vi.useFakeTimers()
+    try {
+      // Like the real fetch, the stand-in errors its body when the request is aborted.
+      const fetcher: typeof fetch = vi.fn((_url: string | URL | Request, init?: RequestInit) => Promise.resolve(new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          let sent = 0
+          const timer = setInterval(() => { sent += 1; controller.enqueue(new Uint8Array([97])); if (sent > 100) { clearInterval(timer); controller.close() } }, 5000)
+          init?.signal?.addEventListener('abort', () => { clearInterval(timer); controller.error(new Error('This operation was aborted')) })
+        },
+      }))))
+      const files = createPackFiles({ channel: 'https://releases.example/x/', stallSeconds: 3600, fetch: fetcher })
+      const outcome = files.fetchRelease('delorun-0.1.0.packs.json', { max: 1000 }).then(() => undefined, (error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(31_000)
+      expect((await outcome as Error).message).toMatch(/took more than 30 seconds in total/u)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
