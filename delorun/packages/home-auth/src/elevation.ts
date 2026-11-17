@@ -351,8 +351,9 @@ export class Elevations {
    */
   stateOf(deviceId: string, listener: ReachListenerId): ElevationState {
     const elevation = this.of(deviceId, listener)
-    if (elevation !== undefined) return { kind: 'elevated', elevationId: elevation.id, endsAt: elevation.endsAt, ...elevation.grace === true ? { reason: 'approval-grace' as const } : {} }
     const request = this.requestOf(deviceId, listener)
+    // A device that holds only the approval grace and asks for a code is shown the request, so it can read the code out.
+    if (elevation !== undefined && !(elevation.grace === true && request !== undefined)) return { kind: 'elevated', elevationId: elevation.id, endsAt: elevation.endsAt, ...elevation.grace === true ? { reason: 'approval-grace' as const } : {} }
     if (request !== undefined) return { kind: 'pending', requestId: request.requestId, code: request.code, expiresAt: request.expiresAt }
     return { kind: 'none' }
   }
