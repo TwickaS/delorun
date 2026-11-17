@@ -6,7 +6,7 @@
  * @module @delorun/website/replica/Still
  */
 import strings from 'virtual:replica-strings'
-import { chapterStart, type ChapterFile } from './model.ts'
+import type { ChapterFile } from './model.ts'
 import { ChatScreen } from './screens/ChatScreen.tsx'
 import { StudioLayout, type ReplicaWidth } from './screens/StudioLayout.tsx'
 import css from './screens/studio.module.css'
@@ -18,9 +18,8 @@ import { WRAPPER } from './wrapper.ts'
  * @returns the still.
  */
 export function Still({ file, width }: { readonly file: ChapterFile, readonly width: ReplicaWidth }) {
-  const state = chapterStart(file, 0)
   return <div className={`${WRAPPER} ${css.root}`} aria-hidden="true">
-    <StudioLayout file={file} width={width} screen={state.screen} strings={strings} screens={{
+    <StudioLayout file={file} width={width} screen={file.start.screen} strings={strings} screens={{
       chat: <ChatScreen events={[]} shown={0} draft="" typing={false} strings={strings} />,
       changes: null,
       versions: null,

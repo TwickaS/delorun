@@ -10,7 +10,7 @@ import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_IDS, stateAt, stepLength, type ChapterFile } from '../src/replica/model.ts'
 import { ReplicaFrame } from '../src/replica/ReplicaFrame.tsx'
-import { CHAPTER_FILES } from '../src/replica/sessions/index.ts'
+import { CHAPTER_FILES, loadFixture } from '../src/replica/sessions/index.ts'
 import { ReplicaLive } from '../src/replica/ReplicaLive.tsx'
 import Studio, { type StudioHandle } from '../src/replica/ReplicaStudio.tsx'
 
@@ -152,4 +152,39 @@ describe('the chapter scripts', () => {
       })
     }
   }
+})
+
+describe('the terminal chapter', () => {
+  const file = CHAPTER_FILES['changes-and-versions']
+  const index = file.chapters.findIndex(chapter => chapter.id === 'terminal')
+
+  it('is the last chapter', () => {
+    expect(index).toBe(file.chapters.length - 1)
+  })
+
+  it('draws a terminal window with the real output in place of the studio, with no sidebar and no studio navigation', async () => {
+    const ready = vi.fn()
+    const draw = (at: number) => <Studio file={file} width="desktop" state={stateAt(file, index, at).state} epoch={index} handle={createRef<StudioHandle>()} onReady={ready} />
+    const view = mount(draw(Number.POSITIVE_INFINITY))
+    await until(() => { expect(ready).toHaveBeenCalled() }, 15_000)
+    const { container } = view
+    const terminal = container.querySelector('[data-part="terminal"]')
+    expect(terminal).not.toBeNull()
+    expect(container.querySelector('[data-part="sidebar"]')).toBeNull()
+    expect(container.querySelector('[data-screen]')).toBeNull()
+    const fixture = await loadFixture('changes-and-versions')
+    expect(fixture.terminal?.command).toBe('delorun logs')
+    expect(terminal!.textContent).toBe(`$ delorun logs\n${fixture.terminal!.output.join('\n')}\n`)
+    // Before the command is typed, the window holds the prompt and the typed part only.
+    view.rerender(draw(file.chapters[index]!.steps[0]!.hold + 3 * 70))
+    expect(container.querySelector('[data-part="terminal"]')?.textContent).toBe('$ del')
+    // Every other chapter draws the studio with its sidebar and no terminal window.
+    view.rerender(<Studio file={file} width="desktop" state={stateAt(file, 0, 0).state} epoch={0} handle={createRef<StudioHandle>()} onReady={ready} />)
+    expect(container.querySelector('[data-part="sidebar"]')).not.toBeNull()
+    expect(container.querySelector('[data-part="terminal"]')).toBeNull()
+  })
+
+  it('shows the terminal from the chapter\'s first moment', () => {
+    expect(stateAt(file, index, 0).state.screen).toBe('terminal')
+  })
 })
