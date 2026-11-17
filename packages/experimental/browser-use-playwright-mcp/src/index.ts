@@ -1,11 +1,12 @@
 /** Chrome or Chromium browser tools from the pinned Playwright MCP server. @module */
 
-import { dirname, join } from 'node:path'
+import { lstat, realpath } from 'node:fs/promises'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   browserMcpAttachFields, browserMcpLaunchFields, browserServerDirectory, mountSessionMcp, validateBrowserMcpConfig,
-  type BrowserMcpAttachConfig, type BrowserMcpLaunchConfig,
+  type BrowserMcpAttachConfig, type BrowserMcpLaunchConfig, type BrowserToolCall,
 } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
 import { BROWSER_CHOICES, launchedBrowser, UNSET_BROWSER_CHOICE, type BrowserChoice, type LaunchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import Schema from '@deepseek-ai/schemastery'
@@ -57,10 +58,16 @@ export function launchBrowser(config: LaunchConfig): LaunchedBrowser {
  */
 export const MISSING_BROWSER_MESSAGE = 'Browser needs its Chromium download, so no browser tool can run until the person finishes Browser setup in Plugins. Stop using browser tools and other ways to browse for this request; tell the person to finish Browser setup in Plugins, then ask again.'
 
-/** Playwright's reports of a browser executable that is not installed: its launch error and the MCP server's rewording of it. */
-const MISSING_BROWSER_PATTERN = new RegExp([
-  'Executable doesn\'t exist', 'is not installed; expected executable at', 'is not installed\\. Run `npx @playwright/mcp install-browser',
-].join('|'), 'u')
+/**
+ * Playwright's reports of a browser executable that is not installed, at the start of a failure: its launch error,
+ * `[browserType.launch: ]Executable doesn't exist at <path>`, and the MCP server's rewording of it, `Browser "<name>" is
+ * not installed[; expected executable at <path>]. Run \`npx @playwright/mcp install-browser <name>\` to install`. The
+ * same words later in a failure, such as in a page's own text, are not such a report.
+ */
+const MISSING_BROWSER_PATTERN = new RegExp(`^(?:Error: )?(?:${[
+  '(?:browserType\\.\\w+: )?Executable doesn\'t exist at \\S',
+  'Browser "[\\w-]+" is not installed(?:; expected executable at [^\\r\\n]+)?\\. Run `npx @playwright/mcp install-browser [\\w-]+` to install',
+].join('|')})`, 'u')
 
 /** The folder, in the folder its client names as the MCP root, that Playwright's MCP server saves screenshots, PDFs and snapshots to. */
 export const OUTPUT_FOLDER = '.playwright-mcp'
@@ -72,6 +79,61 @@ export const OUTPUT_FOLDER = '.playwright-mcp'
  */
 export function explainMissingBrowser(message: string): string | undefined {
   return MISSING_BROWSER_PATTERN.test(message) ? MISSING_BROWSER_MESSAGE : undefined
+}
+
+/**
+ * The refusal of a browser tool call whose file argument leads outside the Session's folder.
+ * @param name - the argument as the model wrote it.
+ * @returns the model-visible text.
+ */
+export function outsideFolderMessage(name: string): string {
+  return `Browser only saves and reads files inside this chat's folder, and "${name}" leads outside it. Use a file name or a path inside the chat's folder.`
+}
+
+/**
+ * Where a path really is: the real path of its nearest existing ancestor, followed by the part that does not exist yet.
+ * @param path - an absolute path.
+ * @returns the real location, or `undefined` when it cannot be told: a link whose target is missing, a link loop, or
+ * a folder that cannot be read.
+ */
+async function realLocation(path: string): Promise<string | undefined> {
+  const missing: string[] = []
+  for (let current = path; ; current = dirname(current)) {
+    try {
+      return join(await realpath(current), ...missing)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') return undefined
+    }
+    // A link whose target does not exist yet would be created wherever it points.
+    if (await lstat(current).then(stats => stats.isSymbolicLink(), () => false)) return undefined
+    /* v8 ignore next -- the filesystem root always resolves, so the walk ends above */
+    if (dirname(current) === current) return undefined
+    missing.unshift(basename(current))
+  }
+}
+
+/**
+ * Refuse a tool call whose `filename` or `paths` argument really lies outside the Session's folder. Playwright's server
+ * compares those paths as text, so a link inside the folder would let a call write or read wherever the link points;
+ * this compares real paths. Each name is tested where the server resolves it: against the folder and against its
+ * {@link OUTPUT_FOLDER}. A path that changes between this test and the server's use is not covered.
+ * @param call - the tool call and the folder the Session's server was told as its MCP root.
+ * @returns {@link outsideFolderMessage} for the first name that leads outside, or `undefined` when none does.
+ */
+export async function refuseOutsideFolder(call: BrowserToolCall): Promise<string | undefined> {
+  if (typeof call.arguments !== 'object' || call.arguments === null) return undefined
+  const { filename, paths } = call.arguments as { filename?: unknown; paths?: unknown }
+  const names = [filename, ...Array.isArray(paths) ? paths as unknown[] : []].filter(name => typeof name === 'string')
+  if (names.length === 0) return undefined
+  const folder = await realpath(call.directory)
+  for (const name of names) {
+    for (const base of [call.directory, join(call.directory, OUTPUT_FOLDER)]) {
+      const real = await realLocation(resolve(base, name))
+      if (real === undefined || (real !== folder && !real.startsWith(folder + sep))) return outsideFolderMessage(name)
+    }
+  }
+  return undefined
 }
 
 /**
@@ -105,6 +167,7 @@ export function apply(ctx: Context, config: Config): void {
     env,
     outputFolder: OUTPUT_FOLDER,
     explainFailure: explainMissingBrowser,
+    refuseCall: refuseOutsideFolder,
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },
   })

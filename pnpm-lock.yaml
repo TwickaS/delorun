@@ -1995,6 +1995,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-native-command':
         specifier: workspace:*
         version: link:../../../packages/util/native-command
@@ -2143,9 +2146,6 @@ importers:
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:*
         version: link:../../../packages/llm/deepseek-llm-api-extensions
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:*
-        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
