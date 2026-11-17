@@ -1,18 +1,20 @@
 /**
  * The driver contract between Delorun's start gate and the program drivers for Claude Code and Codex, and the service
  * interfaces of the gate (`ctx.externalAgents`) and the account and limits store (`ctx.agentAccounts`). Its imports are
- * type-only, so every driver, the limits service and the CLI import it without loading another package.
+ * type-only, so every driver, the limits service, the consent and the CLI import it without loading another package.
  *
  * A driver turns one pinned program into an ordered {@link ProgramEvent} stream. It never starts a process itself: the
  * gate hands it {@link ProgramSpawn}, the only way to get one (T1).
  * @module @delorun/external-agents/contract
  */
+import type {} from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle, SubprocessStdio } from '@deepseek-ai/dsh-subprocess'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
-export type { JsonValue, SessionId, SubprocessHandle, TokenUsage }
+export type { Agent, JsonValue, SessionId, SubprocessHandle, TokenUsage }
 
 /** An external agent by upstream's provider name. */
 export type ExternalAgentName = 'claude-code' | 'codex'
@@ -56,6 +58,8 @@ export type ProgramFailure =
   | { readonly category: 'model-not-offered'; readonly configured: string; readonly offered: readonly OfferedModel[] }
   /** The program's own session or thread named by `resume` is gone. */
   | { readonly category: 'resume-failed' }
+  /** The gate ended the turn at the consent's time limit, `limitMs`; only the gate reports it, never a driver. */
+  | { readonly category: 'time-limit'; readonly limitMs: number }
   /** Anything else; `detail` is for the person's view only. */
   | { readonly category: 'program'; readonly detail: string }
 
@@ -207,7 +211,10 @@ export interface ProgramSession {
 
 /** One limit window as a program reports it. */
 export interface LimitWindow {
-  /** The program's name for the window, such as `five_hour` or `primary`. */
+  /**
+   * The window, normalised by the driver from the program's own name: `five-hour`, `seven-day`, `seven-day-opus`,
+   * `seven-day-sonnet`, `thirty-day` or `<n>-minute`; another program name passes through unchanged.
+   */
   readonly kind: string
   /** Share of the window used, 0 to 100, when the program says. */
   readonly usedPercent?: number
@@ -316,6 +323,8 @@ export type GateRefusal =
   | { readonly category: 'limit'; readonly window: string; readonly resetsAt: number }
   /** `maxLivePrograms` programs already run; `busy` names the agents running them. */
   | { readonly category: 'capacity'; readonly busy: readonly ExternalAgentName[] }
+  /** The gate already holds a program for this seat child. */
+  | { readonly category: 'seat-running' }
 
 /** The gate's typed refusal of a start. */
 export class GateRefusedError extends Error {
@@ -355,6 +364,14 @@ export interface ExternalAgentsGate {
    */
   probe(provider: ExternalAgentName, signal: AbortSignal): Promise<AccountObservation>
   /**
+   * The fixed refusal of a start while the agent's plan limit is reached with a reset time in the future, when the
+   * C16 switch `external_agent_limit_refusal` is on; stale figures never refuse. The consent's one-shot review asks it
+   * too.
+   * @param provider - the agent.
+   * @returns the sentence for the model, or undefined when nothing refuses.
+   */
+  limitRefusal(provider: ExternalAgentName): Promise<string | undefined>
+  /**
    * Hear each driver registration, for the limits check that follows adding a pack; a registration effect.
    * @param listener - called with the agent whose driver registered.
    * @returns the disposer.
@@ -389,8 +406,14 @@ export interface AccountRecord {
   readonly windows: readonly RecordedLimitWindow[]
   /** The models the program offers, when known. */
   readonly offeredModels?: readonly OfferedModel[]
+  /** Whether a driver for the agent is registered, that is whether its pack is added. */
+  readonly installed: boolean
   /** When a limits check last answered, in milliseconds since the epoch. */
   readonly checkedAt?: number
+  /** When a limits check last failed, in milliseconds since the epoch; a failure counts towards the interval between checks. */
+  readonly checkFailedAt?: number
+  /** When `delorun agents login` finished with no Host running and left a check for the Host's next start, in milliseconds since the epoch. */
+  readonly checkRequestedAt?: number
 }
 
 /** A limit that refuses a start now. */
@@ -404,7 +427,19 @@ export interface ReachedLimit {
 }
 
 /** How a refresh ended. */
-export type AccountRefreshOutcome = 'checked' | 'throttled' | 'not-installed' | 'failed'
+export type AccountRefreshOutcome =
+  /** The check answered and the record holds its figures. */
+  | { readonly kind: 'checked' }
+  /** A check ran too recently; the next may run at `nextAt`, in milliseconds since the epoch. */
+  | { readonly kind: 'throttled'; readonly nextAt: number }
+  /** No driver for the agent is registered. */
+  | { readonly kind: 'not-installed' }
+  /** The check ran and failed, with the reason the person reads. */
+  | { readonly kind: 'failed'; readonly problem: string }
+  /** The gate refused the check, for example at its cap, with the refusal the person reads. */
+  | { readonly kind: 'refused'; readonly problem: string }
+  /** The reason is not in the gate row's `probeTriggers` list, so no check runs. */
+  | { readonly kind: 'turned-off' }
 
 /** The explicit act about one agent that asked for a check; nothing else starts one. */
 export type AccountRefreshReason = 'pack-added' | 'signed-in' | 'check-now'
@@ -418,6 +453,11 @@ export interface AgentAccounts {
    */
   read(provider: ExternalAgentName): Promise<AccountRecord>
   /**
+   * Read what the store knows about every agent.
+   * @returns one record per agent, and the time they were read at, in milliseconds since the epoch.
+   */
+  readAll(): Promise<{ readonly accounts: readonly AccountRecord[]; readonly now: number }>
+  /**
    * Merge figures from a run or a check into the store: windows by kind, the newer `seenAt` wins.
    * @param observation - the figures.
    */
@@ -426,9 +466,9 @@ export interface AgentAccounts {
    * Check one agent's account through the gate's `probe`, at most once per `probeMinIntervalMinutes` and one at a time.
    * @param provider - the agent.
    * @param reason - why the check is asked for.
-   * @returns how the check ended and the record afterwards.
+   * @returns how the check ended, the record afterwards, and the time it ended at, in milliseconds since the epoch.
    */
-  refresh(provider: ExternalAgentName, reason: AccountRefreshReason): Promise<{ readonly outcome: AccountRefreshOutcome; readonly record: AccountRecord }>
+  refresh(provider: ExternalAgentName, reason: AccountRefreshReason): Promise<{ readonly outcome: AccountRefreshOutcome; readonly record: AccountRecord; readonly now: number }>
   /**
    * The limit that refuses a start at `now`, if any. Pure: stale figures (a reset time not after `now`) never refuse.
    * @param record - the agent's record.
@@ -436,4 +476,122 @@ export interface AgentAccounts {
    * @returns the reached window with the latest reset time, or undefined.
    */
   reachedLimit(record: AccountRecord, now: number): ReachedLimit | undefined
+}
+
+/** The consent row the gate reads to tell "consent switched off" from "consent missing" (review D6). */
+export const DELEGATION_CONSENT_ROW_ID = 'delorun-delegation-consent'
+
+/**
+ * When a seat review runs: at hand-off (the first program for a new seat), at resume (a program for a seat whose
+ * earlier program ended), or at the start of each seat turn. A turn review never asks anyone.
+ */
+export type SeatReviewPhase = 'hand-off' | 'resume' | 'turn'
+
+/** The facts of one seat review. */
+export interface SeatReview {
+  /** The agent the seat runs. */
+  readonly provider: ExternalAgentName
+  /** The Agent that created the seat. */
+  readonly creator: Agent
+  /** The chat at the top of the seat's tree, whose workspace the lease and grant are keyed to. */
+  readonly root: Agent
+  /** The seat child. */
+  readonly child: Agent
+  /** The run folder. */
+  readonly cwd: string
+  /** The seat's label, named on the card. */
+  readonly label?: string
+  /** When the review runs. */
+  readonly phase: SeatReviewPhase
+  /** Aborts a pending card. */
+  readonly signal: AbortSignal
+}
+
+/** A seat review's answer; `timeoutMs` bounds one seat turn. */
+export type SeatVerdict =
+  | { readonly kind: 'allow'; readonly timeoutMs: number }
+  | { readonly kind: 'refuse'; readonly reason: string }
+
+/** One approval of a seat, kept in memory only until an end event (T4, review D11). */
+export interface SeatLease {
+  /** The seat child. */
+  readonly child: SessionId
+  /** The root chat when the seat was allowed. */
+  readonly root: SessionId
+  /** The workspace key when the seat was allowed. */
+  readonly workspace: string
+  /** The run folder when the seat was allowed. */
+  readonly cwd: string
+  /** The agent allowed. */
+  readonly provider: ExternalAgentName
+  /** Whether the workspace was in Delorun's workspace list when allowed; the lease ends once such a workspace is removed. */
+  readonly workspaceListed: boolean
+  /** When the person or a grant allowed it, in milliseconds since the epoch. */
+  readonly grantedAt: number
+}
+
+/** Why a lease ended. */
+export type SeatLeaseEnd =
+  /** The child, the root or an ancestor of the child was archived. */
+  | 'archived'
+  /** The person revoked the lease. */
+  | 'revoked'
+  /** The workspace grant for the agent was revoked. */
+  | 'grant-revoked'
+  /** The consent switch turned off or the consent's service stopped. */
+  | 'consent-off'
+  /** A review refused, or the root, workspace, run folder or agent no longer match the lease, or its workspace was removed. */
+  | 'refused'
+
+/**
+ * The seat side of Delorun's consent service (`ctx.delegationConsent`): the gate finds it by the presence of
+ * `reviewSeat` and refuses every seat start without it (T3).
+ */
+export interface SeatConsent {
+  /**
+   * Review one seat: the shared ordered rules, then the lease, the grant, and at hand-off or resume a card.
+   * @param review - the facts of the review.
+   * @returns the verdict; a refusal ends the child's lease.
+   */
+  reviewSeat(review: SeatReview): Promise<SeatVerdict>
+  /**
+   * The child's lease.
+   * @param child - the seat child.
+   * @returns the lease, or undefined.
+   */
+  leaseOf(child: SessionId): SeatLease | undefined
+  /**
+   * End the child's lease and its run rules.
+   * @param child - the seat child.
+   * @param reason - why.
+   */
+  endLease(child: SessionId, reason: SeatLeaseEnd): void
+  /**
+   * Hear every lease end, so the gate stops that child's program; a registration effect.
+   * @param listener - called with the ended lease and why.
+   * @returns the disposer.
+   */
+  onLeaseEnded(listener: (lease: SeatLease, reason: SeatLeaseEnd) => void): () => void
+  /**
+   * The rules the person allowed "for this run" for the child.
+   * @param child - the seat child.
+   * @returns the rules, oldest first; none without a lease.
+   */
+  runRules(child: SessionId): readonly ProgramRunRule[]
+  /**
+   * Keep one "for this run" rule beside the child's lease, until the lease ends (review D12).
+   * @param child - the seat child.
+   * @param rule - the rule.
+   * @returns false, keeping nothing, when the child has no lease.
+   */
+  addRunRule(child: SessionId, rule: ProgramRunRule): boolean
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The start gate for external agents' programs, provided by `@delorun/external-agents`. */
+    externalAgents: ExternalAgentsGate
+    /** The account and limits store of external agents, provided by `@delorun/external-agents`. */
+    agentAccounts: AgentAccounts
+  }
 }

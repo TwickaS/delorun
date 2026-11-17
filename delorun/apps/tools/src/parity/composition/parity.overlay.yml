@@ -135,6 +135,19 @@
         enabled: true
       disabled: true
 
+    - id: delorun-external-agents
+      name: '@delorun/external-agents'
+      config:
+        maxLivePrograms: 4
+        graceMs: 3000
+        probeMinIntervalMinutes: 30
+        probeTriggers:
+          - pack-added
+          - signed-in
+          - check-now
+        limitRefusal: true
+      disabled: true
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:
