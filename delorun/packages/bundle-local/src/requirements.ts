@@ -96,8 +96,8 @@ export interface CheckEnvironment {
   readonly platform: NodeJS.Platform
   /** The environment variables. */
   readonly env: Readonly<Record<string, string | undefined>>
-  /** The user's home directory. */
-  readonly home: string
+  /** The person's operating-system home directory (`os.homedir()`), not the Delorun home. */
+  readonly osHome: string
   /**
    * Whether a file or folder exists.
    * @param path - an absolute path.
@@ -141,7 +141,7 @@ export function hostEnvironment(): CheckEnvironment {
   return {
     platform: process.platform,
     env: process.env,
-    home: homedir(),
+    osHome: homedir(),
     exists: existsSync,
     readJson: (path): unknown => JSON.parse(readFileSync(path, 'utf8')),
     resolvePackage: (from, name) => createRequire(from).resolve(`${name}/package.json`),
@@ -232,9 +232,9 @@ function playwrightCache(host: CheckEnvironment, core: string, folder: string | 
  */
 function defaultCache(host: CheckEnvironment): string {
   switch (host.platform) {
-    case 'darwin': return join(host.home, 'Library', 'Caches')
-    case 'win32': return host.env.LOCALAPPDATA || join(host.home, 'AppData', 'Local')
-    default: return host.env.XDG_CACHE_HOME || join(host.home, '.cache')
+    case 'darwin': return join(host.osHome, 'Library', 'Caches')
+    case 'win32': return host.env.LOCALAPPDATA || join(host.osHome, 'AppData', 'Local')
+    default: return host.env.XDG_CACHE_HOME || join(host.osHome, '.cache')
   }
 }
 

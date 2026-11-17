@@ -95,6 +95,7 @@ DeepSeek 会话日志上传在每个挂载了 `@delorun/bundle-local` 的 profil
 | `instruction_layer_consent` | Delorun 对指令层文件的审批 | 开 | 关 | 模型发起的、对 skill、预设或 `AGENTS.md` 的写入所需的审批，它写明效果并展示差异。 |
 | `approved_plugin_write_consent` | Delorun 对已批准插件写入的审批，位于 `@delorun/plugin-instruction-consent` | 开 | 关 | 智能体在一个 chat 中首次写入本人已在 Changes 下批准的某个插件的文件夹之前所请求的审批，它写明该插件、说明此更改将等待本人在 Changes 中评审并展示差异，以及对被拒绝写入的带类型拒绝。 |
 | `mcp_add_consent` | Delorun 的 MCP 服务器添加流程 | 开 | 关 | 同意书，写明添加的 MCP 服务器将运行的命令。 |
+| `browser_additions` | Delorun 对上游 Playwright 浏览器提供方的修改，`@delorun/bundle-browser` 以开启该开关的方式设置其行 | 开 | 关 | 替换 Playwright 对未安装浏览器版本之报告的 Browser 设置消息，以及提供方输出文件夹的 `.gitignore`。工具拒绝（`browser_run_code_unsafe` 始终被拒绝）、chat 文件夹防护以及把 chat 文件夹作为服务器唯一 MCP root，都是安全不变量，在所有开关关闭时依然成立。 |
 | `external_agent_consent` | `@delorun/plugin-delegation-consent` | 开；本人可以在 Settings、External agents 中关闭它，setup 的提示回答不会改变它 | 关 | Claude Code 或 Codex 之类外部智能体启动之前的同意、其运行时限、其工具描述，以及对其包的 `plugin_manager` 拒绝。 |
 | `container_denial_marker` | Delorun 对上游容器拒绝报告的编辑 | 开 | 关 | 容器内拒绝时的环境拒绝标记。 |
 | `update_turn_refusal` | `@delorun/bundle-local`，其 `delorun-update-gate` 行 | 开 | 关 | 当 `delorun` 的 chat 闸门被持有时，每个新轮次的第一步以 `UPDATE_PENDING` 被拒绝（[C19](c19-home-process.zh.md)），因此该轮次以这条消息结束，且没有模型请求；并且，在 `holdUntilChecked` 下，每个轮次的第一步要等到 `delorun` 检查完已启动的 Host 的行与服务，最长 `checkWaitSeconds`，之后该轮次以 `START_CHECK_PENDING` 结束。 |

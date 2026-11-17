@@ -54,7 +54,7 @@ it('uses the pinned Playwright executable with isolated Chromium launch settings
   Provider.apply(new Context(), Provider.Config({ mode: 'launch', executablePath: '/custom/chromium', toolCallTimeoutMs: 123 }))
   const options = vi.mocked(mountSessionMcp).mock.calls[0]![1]
   expect(existsSync(options.args[0]!)).toBe(true)
-  expect(options).toMatchObject({ name: 'playwright-mcp', exclusive: false, command: process.execPath, toolCallTimeoutMs: 123, outputFolder: '.playwright-mcp' })
+  expect(options).toMatchObject({ name: 'playwright-mcp', exclusive: false, command: process.execPath, toolCallTimeoutMs: 123 })
   expect(options.env?.PLAYWRIGHT_MCP_CDP_ENDPOINT).toBe('')
   expect(options.args.slice(1)).toEqual(['--browser', 'chromium', '--isolated', '--headless', '--executable-path', '/custom/chromium'])
   expect(options.args).toHaveLength(7)
@@ -132,7 +132,7 @@ it('rejects malformed endpoints before mounting any browser resources', () => {
 })
 
 it('replaces only Playwright\'s missing-browser failure with the final setup message', () => {
-  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', browserAdditions: true }))
   const explain = vi.mocked(mountSessionMcp).mock.calls[0]![1].explainFailure!
   for (const message of [
     'Browser "chromium" is not installed; expected executable at /home/user/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
@@ -239,6 +239,33 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
     { url: 'https://example.com' }, { filename: 7, paths: 'not-a-list' }, { paths: [7] }, {}, null, 'text', undefined,
   ]) {
     expect(await refuse(args)).toBeUndefined()
+  }
+})
+
+it('keeps the tool denial, the folder guard and the MCP root with browser_additions off', async () => {
+  // C16's parity composition turns browser_additions off; the denial and the guard are security invariants that hold
+  // with every switch off. The runtime tells the Session's folder as the one MCP root whatever options the provider
+  // passes (browser-use-runtime's mcp.spec), so the guard checks the folder the server resolves against.
+  const { chat, outside } = await chatFolder()
+  for (const config of [{ mode: 'launch' }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222' }, { mode: 'launch', browserAdditions: false }] as const) {
+    expect(Provider.Config(config).browserAdditions).toBe(false)
+    Provider.apply(new Context(), Provider.Config(config))
+    const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
+    expect(options.explainFailure).toBeUndefined()
+    expect(options.outputFolder).toBeUndefined()
+    expect(options.deniedTools).toEqual(['browser_run_code_unsafe'])
+    expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: { code: 'async page => 1' }, directory: chat }))
+      .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+    expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
+      .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+    expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: 'shot.png' }, directory: chat })).toBeUndefined()
+  }
+  for (const config of [{ mode: 'launch', browserAdditions: true }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222', browserAdditions: true }] as const) {
+    Provider.apply(new Context(), Provider.Config(config))
+    const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
+    expect(options).toMatchObject({ outputFolder: Provider.OUTPUT_FOLDER, explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
+      .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
   }
 })
 

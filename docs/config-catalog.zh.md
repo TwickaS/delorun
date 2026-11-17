@@ -1031,14 +1031,14 @@ export type Config = BrowserMcpConfig
 
 - `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `workingDirectory`
 - `refs`: `BrowserChoice` (`@deepseek-ai/dsh-native-command/chrome-channel`) · `BrowserMcpAttachConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`) · `BrowserMcpLaunchConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
-- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:51`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
+- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:64`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 
 ```ts config-catalog
 /** Chrome or Chromium launch, or existing-browser attachment settings. */
 export type Config = LaunchConfig | AttachConfig
 
 /** Launch settings: the shared ones and which browser launches. */
-export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig {
+export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig, BrowserAdditionsConfig {
   /**
    * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
    * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
@@ -1048,7 +1048,7 @@ export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig 
 }
 
 /** Existing-browser attachment settings. */
-export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig {}
+export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig, BrowserAdditionsConfig {}
 
 /** Settings every mode has. */
 export interface DeniedToolsConfig {
@@ -1057,6 +1057,19 @@ export interface DeniedToolsConfig {
    * that is off is never offered to the model and is refused when called. Defaults to none.
    */
   deniedTools: string[]
+}
+
+/** Delorun's additions to the browser tools, which every mode has. */
+export interface BrowserAdditionsConfig {
+  /**
+   * Replace Playwright's report of a browser build that is not installed with one message that tells the model to stop
+   * and send the person to Browser setup ({@link MISSING_BROWSER_MESSAGE}, {@link MISSING_CHROME_MESSAGE}), and give
+   * {@link OUTPUT_FOLDER} a `.gitignore` of `*`. This is Delorun's C16 switch `browser_additions`, off in the parity
+   * composition. The turned-off tools ({@link SERVER_CODE_TOOLS} and `deniedTools`), the folder guard
+   * ({@link refuseOutsideFolder}) and the Session's folder as the server's one MCP root do not depend on it: they hold
+   * with it off. Defaults to off.
+   */
+  browserAdditions: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-playwright-mcp -->

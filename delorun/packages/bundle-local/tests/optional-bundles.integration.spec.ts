@@ -240,6 +240,14 @@ describe('default configuration', () => {
     expect(server.default.Config(interpolate({ process }, row.config))).toMatchObject({ host: '127.0.0.1', port: 3081 })
   })
 
+  it('bundle-browser: row browser-use-playwright-mcp turns on C16 switch browser_additions, the parity value being off', async () => {
+    const flat = (rows: Row[]): Row[] => rows.flatMap(row => row.group ? [row, ...flat((row.config as Row[]) ?? [])] : [row])
+    const row = flat(patchRows('bundle-browser')).find(each => each.id === 'browser-use-playwright-mcp')!
+    const { Config } = await import(/* @vite-ignore */ join(UPSTREAM, 'experimental/browser-use-playwright-mcp', 'src/index.ts')) as { Config: (value: unknown) => { browserAdditions: boolean } }
+    expect(Config(interpolate({ process }, row.config)).browserAdditions).toBe(true)
+    expect(Config({ mode: 'launch' }).browserAdditions).toBe(false)
+  })
+
   it.each(CHECKED)('%s: row %s passes its plugin schema', async (dir, id, plugin) => {
     const flat = (rows: Row[]): Row[] => rows.flatMap(row => row.group ? [row, ...flat((row.config as Row[]) ?? [])] : [row])
     const row = flat(patchRows(dir)).find(each => each.id === id)!
