@@ -1666,7 +1666,6 @@ describe('run lifecycle and quiescence', () => {
     const scenarios = [
       ['contextWindowExceeded', 'limit', 'max-tokens', undefined],
       ['sessionBudgetExceeded', 'limit', 'error', undefined],
-      ['unauthorized', 'access-policy', 'error', undefined],
       ['internalServerError', 'service', 'error', undefined],
       [{ httpConnectionFailed: { httpStatusCode: 503 } }, 'transport', 'error', 503],
       [{ activeTurnNotSteerable: { turnKind: 'review' } }, 'product-error', 'error', undefined],
@@ -1695,6 +1694,50 @@ describe('run lifecycle and quiescence', () => {
       expect(result.diagnostic).not.toContain('turnKind')
       await run.dispose()
     }
+  })
+
+  it('tells the person to sign in again, and the model not to retry, for each sign-in failure', async () => {
+    const signInFailures = [
+      { message: 'SECRET_TOKEN rejected', codexErrorInfo: 'unauthorized' },
+      {
+        message: 'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header',
+        codexErrorInfo: 'other',
+      },
+      {
+        message: 'Your access token could not be refreshed because your refresh token has expired.',
+        codexErrorInfo: 'other',
+      },
+      {
+        message: 'stream failed',
+        codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 401 } },
+      },
+    ]
+    for (const error of signInFailures) {
+      const { child, run, turnStart } = await publishRun()
+      child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+      child.peer.send(turnCompleted('failed', 'turn-1', 'thread-1', error))
+      const result = await run.result
+      expect(result.stopReason).toBe('error')
+      expect(result.diagnostic).toBe(
+        "Codex isn't signed in, or its sign-in has expired. Run `delorun agents login codex` on this computer, then try again.\n"
+        + 'Do not retry this task or start another run of this agent until the person has signed in again.',
+      )
+      expect(result.diagnostic).not.toContain('SECRET_TOKEN')
+      await run.dispose()
+    }
+  })
+
+  it('keeps the fixed product-error facts for a failure that is not a sign-in failure', async () => {
+    const { child, run, turnStart } = await publishRun()
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    child.peer.send(turnCompleted('failed', 'turn-1', 'thread-1', {
+      message: 'the model refused the request',
+      codexErrorInfo: 'other',
+    }))
+    const result = await run.result
+    expect(result.diagnostic).toBe(expectedFailureDiagnostic('turn', 'product-error'))
+    expect(result.diagnostic).not.toContain('delorun agents login')
+    await run.dispose()
   })
 
   it('includes a structured permission fact in a max-token result', async () => {

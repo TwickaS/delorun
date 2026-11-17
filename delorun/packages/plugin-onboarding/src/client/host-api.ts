@@ -74,7 +74,7 @@ export const hostApi: HostFace = {
   readiness: () => ask(READINESS_PATH, Readiness),
   keyTest: () => ask(KEY_TEST_PATH, KeyTestAnswer, {}),
   localModels: async () => (await ask(LOCAL_MODELS_PATH, LocalModelsAnswer))?.servers,
-  agentModels: async agent => await ask(AGENT_MODELS_PATH, AgentModelsAnswer, { agent }) ?? { state: 'unavailable' },
+  agentModels: async agent => await ask(AGENT_MODELS_PATH, AgentModelsAnswer, { agent }) ?? { state: 'unavailable', reason: 'failed' },
   recommend: registry => ask(RECOMMEND_PATH, RecommendAnswer, { registry }),
   reach: readReach,
   defer: async (id, deferred) => (await ask(DEFER_STEP_PATH, DeferStepAnswer, { id, deferred }))?.deferred,

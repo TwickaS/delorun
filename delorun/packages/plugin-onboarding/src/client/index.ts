@@ -46,13 +46,14 @@ import type {} from '@delorun/bundle-local/client'
 import type {} from '@delorun/plugin-theme/client'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
-import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
+import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
+import { setAddedAgentDefaults } from './agent-defaults.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, isLoopbackHostname, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
-import { en, zh, type OnboardingLocaleKey } from './locales.ts'
+import { DICTIONARIES, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
@@ -214,7 +215,7 @@ export function apply(ctx: Context): void {
  * @param ctx - the browser plugin context, holding `delorunStudio`.
  */
 export function applyStudio(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-onboarding: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, DICTIONARIES), 'delorun-onboarding: dictionaries')
   const progress = ctx.configForms.get<OnboardingSettings>(ONBOARDING_ROW_ID)
   const keyT = ctx.locale.bind(NS)
   const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), unverified: keyT('keyStatus.unverified'), retry: keyT('keyStatus.retry'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))
@@ -269,7 +270,11 @@ export function applyStudio(ctx: Context): void {
       },
       limit: ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW),
     },
-    bundles: createBundleInstaller(ctx),
+    bundles: createBundleInstaller(ctx, {
+      addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
+      pollMs: 3000,
+      afterAdd: name => setAddedAgentDefaults(name, ctx.configForms.get<AgentRowSettings>(AGENT_ROWS['claude-code']), (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000),
+    }),
     host: {
       ...hostApi,
       keyTest: () => keyStatus.refresh(),

@@ -151,6 +151,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
     setOrder(pending.map(card => card.provider))
     guide.setProvidersPhase('walk')
   }
+  // Every ticked provider already has a key that passed: there is nothing to walk through, so the primary goes straight on.
+  const keysAllFound = walk.length > 0 && walk.every(card => card.found && !didNotPass(card.result))
   const present = (card: ProviderCard): ReactNode => (
     <li key={card.provider}>
       <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
@@ -198,7 +200,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       <p className={shared.hint}>{t('welcome.model.hint')}</p>
       <FooterPortal>
         <StepFooter back={{ label: t('back'), onClick: back }}
-          next={walk.length === 0 ? { label: t('providers.continueNoKey'), onClick: next } : { label: t('providers.connect'), onClick: connect }} />
+          next={walk.length === 0 ? { label: t('providers.continueNoKey'), onClick: next }
+            : keysAllFound ? { label: t('continue'), onClick: next } : { label: t('providers.connect'), onClick: connect }} />
       </FooterPortal>
     </div>
   )
@@ -239,13 +242,13 @@ function LocalServers({ services, taken }: { readonly services: StepServices; re
           <Card title={LOCAL_NAMES[server.kind]} labels={{ more: t('more'), less: t('less') }}
             action={added.has(server.kind) ? <span className={shared.added}><span aria-hidden="true">✓ </span>{t('bundle.added')}</span>
               : asking === server.kind ? undefined
-                : <Button variant="outline" size="sm" aria-label={t('local.addNamed', { name: LOCAL_NAMES[server.kind] })} onClick={() => { setAsking(server.kind) }}>{t('bundle.add')}</Button>}>
+                : <Button variant="outline" size="sm" className={shared.inline} aria-label={t('local.addNamed', { name: LOCAL_NAMES[server.kind] })} onClick={() => { setAsking(server.kind) }}>{t('bundle.add')}</Button>}>
             <StateLine tone="success">{t('local.found', { n: String(server.models.length), address: server.baseURL })}</StateLine>
             {asking === server.kind && (
               <div className={shared.stack}>
                 <p className={shared.hint}>{t('local.confirm', { name: LOCAL_NAMES[server.kind], address: server.baseURL })}</p>
-                <Button size="sm" onClick={() => { confirm(server) }}>{t('local.confirmYes')}</Button>
-                <Button variant="outline" size="sm" onClick={() => { setAsking(undefined); setFailed(false) }}>{t('local.confirmNo')}</Button>
+                <Button size="sm" className={shared.inline} onClick={() => { confirm(server) }}>{t('local.confirmYes')}</Button>
+                <Button variant="outline" size="sm" className={shared.inline} onClick={() => { setAsking(undefined); setFailed(false) }}>{t('local.confirmNo')}</Button>
               </div>
             )}
             {failed && asking === server.kind && <StateLine tone="error">{t('local.failed')}</StateLine>}
@@ -354,7 +357,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
             ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
             : <StateLine tone="success">{t('providers.found')}</StateLine>}
           <FoundKey t={t} source={card.source} />
-          <Button variant="outline" size="sm" className={css.replace} onClick={() => { setReplacing(true) }}>{t('providers.replace')}</Button>
+          <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => { setReplacing(true) }}>{t('providers.replace')}</Button>
         </div>
       ) : (
         <div className={css.field}>
@@ -370,7 +373,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
             {test.state === 'done' && test.probe.kind === 'unchecked' && <StateLine tone="info">{t('providers.unchecked')}</StateLine>}
             {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
           </div>
-          {card.found && <Button variant="ghost" size="sm" className={css.replace} onClick={() => { setReplacing(false); setKey(''); setProblem(false) }}>{t('providers.replace.cancel')}</Button>}
+          {card.found && <Button variant="ghost" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => { setReplacing(false); setKey(''); setProblem(false) }}>{t('providers.replace.cancel')}</Button>}
           {card.keyPage !== undefined && (
             <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a>
           )}

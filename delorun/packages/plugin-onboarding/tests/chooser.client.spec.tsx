@@ -117,8 +117,30 @@ describe('the Start step\'s own folder chooser', () => {
     expect(screen.getByRole('listbox', { name: 'Folders in projects' })).toBeTruthy()
     expect(names()).toEqual(['site'])
     expect(option('site').getAttribute('aria-selected')).toBe('false')
-    expect(button(en['chooser.add']).disabled).toBe(true)
     expect(document.activeElement).toBe(option('site'))
+  })
+
+  it('adds the folder shown, named on the button, when nothing is selected below the home directory', async () => {
+    const { start, onAdded } = await mountChooser({ listings: { ...LISTINGS, [`${HOME}/projects/site`]: listingOf(`${HOME}/projects/site`, []) } })
+    await click(option('projects'))
+    await click(button(en['chooser.open']))
+    await click(option('site'))
+    await click(button(en['chooser.open']))
+    expect(names()).toEqual([])
+    expect(button('Add site').disabled).toBe(false)
+    await click(button('Add site'))
+    expect(start.addFolder).toHaveBeenCalledExactlyOnceWith(`${HOME}/projects/site`)
+    expect(onAdded).toHaveBeenCalledOnce()
+  })
+
+  it('adds the selected folder when one is selected, even inside a folder', async () => {
+    const { start } = await mountChooser()
+    await click(option('projects'))
+    await click(button(en['chooser.open']))
+    await click(option('site'))
+    expect(button(en['chooser.add']).disabled).toBe(false)
+    await click(button(en['chooser.add']))
+    expect(start.addFolder).toHaveBeenCalledExactlyOnceWith(`${HOME}/projects/site`)
   })
 
   it('goes up with its button and with the left arrow, and not past the filesystem root', async () => {

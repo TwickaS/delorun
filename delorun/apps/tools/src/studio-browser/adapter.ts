@@ -5,7 +5,9 @@
  * @module @delorun/tools/studio-browser/adapter
  */
 import { createBrowseAdapter, type BrowseDeps } from './browse.ts'
+import { createPlaywrightAdapter } from './playwright.ts'
 import type { LoopbackOrigin } from './origin.ts'
+import type { Step } from './steps.ts'
 
 /** The outcome of {@link StudioBrowser.check}. */
 export interface BrowserCheck {
@@ -19,8 +21,18 @@ export interface BrowserCheck {
 export interface RunSpec {
   /** The only origin the run may reach. */
   readonly origin: LoopbackOrigin
-  /** The body of an async function that receives Playwright's `page` and may `return` a JSON value. */
-  readonly code: string
+  /** The address the run opens first, a studio sign-in link included. It is on {@link RunSpec.origin}. */
+  readonly startUrl: string
+  /** The body of an async function that receives Playwright's `page` and may `return` a JSON value; absent when only steps or a screenshot are asked for. */
+  readonly code?: string
+  /** The viewport in CSS pixels; the adapter's own default when absent. Only the `playwright` adapter honours it. */
+  readonly viewport?: { readonly width: number, readonly height: number }
+  /** The `prefers-color-scheme` the page sees. Only the `playwright` adapter honours it. */
+  readonly scheme?: 'light' | 'dark'
+  /** The JSON steps to run after the page is idle and before `code`. Only the `playwright` adapter honours them. */
+  readonly steps?: readonly Step[]
+  /** Absolute path of the `.png` taken after steps and code. Only the `playwright` adapter honours it. */
+  readonly screenshotTo?: string
   /** Absolute path of the `.webm` file to record the run to; the run is not recorded when absent. */
   readonly recordTo?: string
   /** The script's time limit in milliseconds. */
@@ -58,6 +70,7 @@ export interface StudioBrowser {
 
 /** The adapters by id. */
 export const ADAPTERS: Readonly<Record<string, (deps: BrowseDeps) => StudioBrowser>> = {
+  playwright: createPlaywrightAdapter,
   browse: createBrowseAdapter,
 }
 

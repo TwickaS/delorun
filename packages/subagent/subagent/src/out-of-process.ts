@@ -215,3 +215,32 @@ export function subprocessRunHandle(parts: SubprocessRunHandleParts): SubagentRu
     },
   }
 }
+
+/** Patterns an external agent's own error text uses when it is not signed in or its sign-in expired. */
+const SIGN_IN_FAILURE_PATTERNS: readonly RegExp[] = [
+  /\b401\b|unauthori[sz]ed|missing bearer/i,
+  /not logged in|please run \/login|invalid api key|authentication[ _]failed/i,
+  /token[^.\n]{0,40}(?:expired|revoked|invalid)|(?:expired|invalid)[^.\n]{0,40}token/i,
+  /refresh[^.\n]{0,40}fail|fail[^.\n]{0,40}refresh/i,
+  /sign(?:ed)?[ -]?in (?:again|required|expired)|log ?in (?:again|required)/i,
+]
+
+/**
+ * Whether an external agent's error text says its sign-in is missing or expired.
+ * @param text - the agent's own error text.
+ * @returns true for a 401, "unauthorized", "not logged in", or an expired or failed-refresh token.
+ */
+export function isAgentSignInFailure(text: string): boolean {
+  return SIGN_IN_FAILURE_PATTERNS.some(pattern => pattern.test(text))
+}
+
+/**
+ * The chat-visible text for an external agent that is not signed in.
+ * @param product - the agent's display name, e.g. `Codex`.
+ * @param agentId - the id `delorun agents login` takes, e.g. `codex`.
+ * @returns text naming the command to run, and telling the model not to retry.
+ */
+export function agentSignInFailureText(product: string, agentId: string): string {
+  return `${product} isn't signed in, or its sign-in has expired. Run \`delorun agents login ${agentId}\` on this computer, then try again.\n`
+    + 'Do not retry this task or start another run of this agent until the person has signed in again.'
+}

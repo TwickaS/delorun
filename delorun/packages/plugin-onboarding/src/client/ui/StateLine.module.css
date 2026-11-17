@@ -39,3 +39,12 @@
 .line[data-tone='error'] {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .action {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}

@@ -13,15 +13,15 @@ describe('the agent models route', () => {
   })
 
   it('answers unavailable, never an error, when the agent is not installed or cannot list', async () => {
-    await expect(listAgentModels('codex', deps(undefined))).resolves.toEqual({ state: 'unavailable' })
-    await expect(listAgentModels('codex', deps({}))).resolves.toEqual({ state: 'unavailable' })
+    await expect(listAgentModels('codex', deps(undefined))).resolves.toEqual({ state: 'unavailable', reason: 'not-running' })
+    await expect(listAgentModels('codex', deps({}))).resolves.toEqual({ state: 'unavailable', reason: 'not-running' })
   })
 
   it('answers unavailable and logs when the agent fails or does not answer in time', async () => {
     const failing = deps({ listModels: () => Promise.reject(new Error('spawn failed')) })
-    await expect(listAgentModels('codex', failing)).resolves.toEqual({ state: 'unavailable' })
+    await expect(listAgentModels('codex', failing)).resolves.toEqual({ state: 'unavailable', reason: 'failed' })
     expect(failing.warn).toHaveBeenCalledWith('the codex model list was not read: spawn failed')
     const slow = deps({ listModels: (_cwd: string, signal: AbortSignal) => new Promise((_, reject) => { signal.addEventListener('abort', () => { reject(signal.reason) }) }) }, 5)
-    await expect(listAgentModels('codex', slow)).resolves.toEqual({ state: 'unavailable' })
+    await expect(listAgentModels('codex', slow)).resolves.toEqual({ state: 'unavailable', reason: 'timeout' })
   })
 })

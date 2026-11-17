@@ -29,13 +29,13 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()] }
+  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], addWaitSeconds: config.addWaitSeconds.get() }
 }
 
 describe('the configuration', () => {
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delorun-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [], optionalRows: [] })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [], optionalRows: [], addWaitSeconds: 60 })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -67,8 +67,8 @@ describe('the configuration', () => {
 
   it('accepts scoped and plain package names and a session id', () => {
     expect(plain({ starterSession: PENDING_STARTERS }).starterSession).toBe('pending')
-    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true })
+    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true, addWaitSeconds: 60 })
   })
 })
 

@@ -7,8 +7,8 @@ import { OnboardingStepEntry, UPSTREAM_KEY_STEP, type OnboardingStepEntryProps }
 import { en } from '../src/client/locales.ts'
 import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
-import { NO_RECORD, type SetupRecord } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
+import { NO_RECORD, type Readiness, type SetupRecord } from '../src/wire.ts'
+import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
 afterEach(() => {
@@ -29,6 +29,8 @@ const click = async (element: HTMLElement) => { await act(async () => { fireEven
 const button = (name: string) => screen.getByRole('button', { name })
 
 interface Options {
+  /** Tailscale as the guide reads it; the fixtures' ready one by default. */
+  readonly tailscale?: Readiness['tailscale']
   readonly settings?: OnboardingSettings | undefined
   readonly status?: 'loading' | 'ready' | 'unavailable'
   readonly explicit?: boolean
@@ -56,7 +58,7 @@ async function mountEntry(options: Options = {}) {
   const completeStep = vi.fn((_id: string) => {})
   const startChat = vi.fn((_workspaceId?: string, _folder?: string, _keepCurrent?: boolean) => Promise.resolve())
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
-  const host = hostFake({ reach: options.reach ?? 'absent' })
+  const host = hostFake({ reach: options.reach ?? 'absent', ...options.tailscale === undefined ? {} : { readiness: { ...READY, tailscale: options.tailscale } } })
   const start = options.start ?? startFace()
   const deferredOnly = createSnapshotStore(options.deferredOnly ?? false)
   const pinFetch = vi.fn((_input: string) => options.pinState === undefined ? Promise.reject(new Error('no PIN request')) : Promise.resolve(new Response(JSON.stringify(options.pinState))))
@@ -564,7 +566,7 @@ describe('finishing later and the last step', () => {
     ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
   ])('phone access with %s', (_, action, reachNow, summary) => {
     it(`tells Ready: ${summary}`, async () => {
-      const { host } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+      const { host } = await mountEntry({ reach: 'off', record: { reachSetUp: false }, tailscale: { state: 'signed-out' } })
       await forward(titles().indexOf(en['step.reach']))
       expect(heading().textContent).toBe(en['step.reach'])
       expect(screen.queryByRole('button', { name: en.continue })).toBeNull()

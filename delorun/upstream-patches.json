@@ -2670,7 +2670,7 @@
       "path": "apps/web/index.html",
       "class": "delorun-feature",
       "feature": "tab-icon",
-      "reason": "Adds a plain SVG icon link without a media query and the `favicon.ico` link beside the dark and light variants, so a browser that ignores the media-scoped links or asks for `/favicon.ico` on its own still shows Delorun's mark and drops a stale cached icon."
+      "reason": "Adds a plain SVG icon link without a media query and the `favicon.ico` link beside the dark and light variants, so a browser that ignores the media-scoped links or asks for `/favicon.ico` on its own still shows Delorun's mark and drops a stale cached icon. It also sets `viewport-fit=cover` so safe-area insets apply on a phone, and one `theme-color` per colour scheme."
     },
     {
       "path": "apps/web/public/manifest.webmanifest",
@@ -2707,6 +2707,36 @@
       "class": "delorun-feature",
       "feature": "agents-setup",
       "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
+    },
+    {
+      "path": "packages/subagent/subagent/src/out-of-process.ts",
+      "class": "delorun-feature",
+      "feature": "agent-sign-in-failures",
+      "reason": "Adds helpers that recognise an external agent sign-in failure and word the chat result, shared by the Codex and Claude Code providers."
+    },
+    {
+      "path": "apps/web/public/favicon.ico",
+      "class": "delorun-feature",
+      "feature": "studio-favicon",
+      "reason": "Adds the favicon.ico the studio serves for its tab icon."
+    },
+    {
+      "path": "packages/client/tsdown.client.ts",
+      "class": "delorun-feature",
+      "feature": "client-style-collisions",
+      "reason": "Keys injected style tags by repository-relative path and fails the build when two stylesheets in one bundle share an id, so same-named stylesheets both apply."
+    },
+    {
+      "path": "scripts/client-style-tags.ts",
+      "class": "delorun-feature",
+      "feature": "client-style-collisions",
+      "reason": "Style tag id and collision check used by the client bundle config."
+    },
+    {
+      "path": "packages/client/web/src/base.css",
+      "class": "delorun-feature",
+      "feature": "phone-safe-areas",
+      "reason": "Turns off the mobile tap highlight flash so taps feel native."
     }
   ],
   "retired": []

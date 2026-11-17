@@ -17,7 +17,8 @@
   background: var(--dsw-alias-bg-layer-2);
   font-family: var(--dsw-font-mono, ui-monospace, monospace);
   font-size: var(--onb-small-size);
-  overflow-wrap: anywhere;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 .copy {
@@ -40,4 +41,13 @@
 /* The empty live region takes no room beside the Copy button. */
 .status:empty {
   margin-inline-start: calc(-1 * var(--onb-gap-1));
+}
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .copy {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
 }

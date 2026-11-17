@@ -2,7 +2,7 @@
  * An agent's Advanced options: the model, chosen from the list the added agent reports, and the run time limit per
  * task. Closed by default; the default path never needs it.
  */
-import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { RUN_TIMEOUT_MINUTES } from '@delorun/plugin-delegation-consent/wire'
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
@@ -21,25 +21,41 @@ function useForm<T>(form: ConfigForm<T>): ReturnType<ConfigForm<T>['getSnapshot'
   return useSyncExternalStore(useCallback(listener => form.subscribe(listener), [form]), () => form.getSnapshot())
 }
 
+/** How many times a model list is asked again while the agent has not registered, and how long to wait between. */
+const NOT_RUNNING_RETRIES = 10
+const NOT_RUNNING_RETRY_MS = 3000
+
 /** The model choice: the agent's own default first, then the models the installed agent reports. */
-function ModelChoice({ agent, form, live, services, title }: {
+function ModelChoice({ agent, form, live, added, services, title }: {
   readonly agent: AgentId
   readonly form: ConfigForm<AgentRowSettings>
   readonly live: boolean
+  readonly added: boolean
   readonly services: StepServices
   readonly title: string
 }): ReactNode {
   const { t } = services
   const row = useForm(form)
   const [answer, setAnswer] = useState<AgentModelsAnswer | 'reading' | undefined>()
+  const [attempt, setAttempt] = useState(0)
   const name = useId()
+  // The list comes from the added agent itself; it does not wait for the agent's settings row to be writable. An agent
+  // that has not registered yet is asked again a few times.
   useEffect(() => {
-    if (!live) { setAnswer(undefined); return undefined }
+    if (!added) { setAnswer(undefined); return undefined }
     let current = true
-    setAnswer('reading')
-    void services.host.agentModels(agent).then((next) => { if (current) setAnswer(next) })
-    return () => { current = false }
-  }, [live, agent, services.host])
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const ask = (left: number): void => {
+      setAnswer('reading')
+      void services.host.agentModels(agent).then((next) => {
+        if (!current) return
+        setAnswer(next)
+        if (next.state === 'unavailable' && next.reason === 'not-running' && left > 0) timer = setTimeout(() => { ask(left - 1) }, NOT_RUNNING_RETRY_MS)
+      })
+    }
+    ask(NOT_RUNNING_RETRIES)
+    return () => { current = false; clearTimeout(timer) }
+  }, [added, agent, services.host, attempt])
   const saved = row.value?.model ?? ''
   const listed = typeof answer === 'object' && answer.state === 'listed' ? answer.models : []
   const options: readonly { readonly value: string; readonly label: string }[] = [
@@ -52,7 +68,11 @@ function ModelChoice({ agent, form, live, services, title }: {
     if (!live) return
     void (value === '' ? form.unset('model') : form.set('model', value)).catch((error: unknown) => { console.warn('delorun onboarding: the agent model was not saved', error) })
   }
-  const note = !live ? t('agents.model.later', { name: title }) : answer === 'reading' || answer === undefined ? t('agents.model.reading') : answer.state === 'unavailable' ? t('agents.model.unavailable') : undefined
+  const note = !added ? t('agents.model.later', { name: title })
+    : answer === 'reading' || answer === undefined ? t('agents.model.reading')
+      : answer.state === 'unavailable' ? t(`agents.model.${answer.reason === 'not-running' ? 'notRunning' : answer.reason}`, { name: title })
+        : undefined
+  const retry = typeof answer === 'object' && answer.state === 'unavailable'
   return (
     <div className={css.field}>
       <span className={css.fieldLabel} id={`${name}-label`}>{t('agents.model.label')}</span>
@@ -66,6 +86,7 @@ function ModelChoice({ agent, form, live, services, title }: {
         ))}
       </div>
       {note !== undefined && <span className={css.hint} role="status">{note}</span>}
+      {retry && <Button variant="outline" size="sm" className={css.inline} onClick={() => { setAttempt(each => each + 1) }}>{t('agents.model.retry')}</Button>}
     </div>
   )
 }
@@ -78,6 +99,8 @@ export interface AgentAdvancedProps {
   readonly title: string
   /** The services. */
   readonly services: StepServices
+  /** Whether the agent is added; the model list is read only then. */
+  readonly added: boolean
 }
 
 /**
@@ -85,7 +108,7 @@ export interface AgentAdvancedProps {
  * @param props - the agent, its name and the services.
  * @returns the disclosure.
  */
-export function AgentAdvanced({ agent, title, services }: AgentAdvancedProps): ReactNode {
+export function AgentAdvanced({ agent, title, services, added }: AgentAdvancedProps): ReactNode {
   const { t, remote } = services
   const form = services.agents.rows[agent]
   const row = useForm(form)
@@ -104,7 +127,7 @@ export function AgentAdvanced({ agent, title, services }: AgentAdvancedProps): R
   const limitLive = limit.status === 'ready' && limit.writable && !remote
   return (
     <Disclosure label={t('agents.advanced')}>
-      <ModelChoice agent={agent} form={form} live={live} services={services} title={title} />
+      <ModelChoice agent={agent} form={form} live={live} added={added} services={services} title={title} />
       {savedMinutes !== undefined && (
         <div className={css.field}>
           <label className={css.fieldLabel} htmlFor={`${name}-limit`}>{t('agents.limit.label')}</label>

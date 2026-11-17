@@ -5,7 +5,7 @@ import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
-import { ReadyStep } from '../src/client/steps/Ready.tsx'
+import { middleEllipsis, ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
@@ -167,7 +167,6 @@ describe('the look step', () => {
     look(stepServices())
     const preview = screen.getByRole('img', { name: en['look.preview'] })
     expect(preview.textContent).toContain(en['look.preview.ask'])
-    expect(preview.textContent).toContain(en['look.preview.tool'])
     expect(preview.textContent).toContain(en['look.preview.box'])
   })
 
@@ -255,9 +254,8 @@ describe('the agents step', () => {
     for (const line of lines) expect(screen.getAllByText(line).length).toBeGreaterThan(0)
   })
 
-  it.each<readonly [string, 'checking' | 'installing' | 'failed' | 'unavailable']>([
+  it.each<readonly [string, 'checking' | 'failed' | 'unavailable']>([
     ['is being checked', 'checking'],
-    ['is being added', 'installing'],
     ['could not be added', 'failed'],
     ['is not included', 'unavailable'],
   ])('shows one state at a time while a bundle %s: no sign-in line beside it', async (_, state) => {
@@ -268,6 +266,25 @@ describe('the agents step', () => {
     const card = screen.getByRole('heading', { level: 4, name: 'Claude Code' }).closest('li') as HTMLElement
     expect(within(card).queryByText(en['agents.claude.signIn.found'])).toBeNull()
     expect(within(card).queryByText(en['agents.signIn.checking'])).toBeNull()
+  })
+
+  it.each(['installing', 'slow'] as const)('keeps the sign-in line and the download size while the agent is %s', async (state) => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf(hostFake({ readiness: READY }).host)} />)
+    await settle()
+    const card = screen.getByRole('heading', { level: 4, name: 'Claude Code' }).closest('li') as HTMLElement
+    expect(within(card).getByText(en['agents.claude.signIn.found'])).toBeTruthy()
+    expect(within(card).getByText('Downloads about 206 MB when you add it.')).toBeTruthy()
+  })
+
+  it('shows the slow state as still working, and a failure with the plugin manager\'s reason and the download size', () => {
+    const [claude, codex] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'slow' }, [codex.name]: { state: 'failed', reason: 'disk full' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
+    expect(screen.getByText(en['bundle.slow'])).toBeTruthy()
+    expect(screen.getByText('Could not add it: disk full. Try again, or add it from Plugins.')).toBeTruthy()
+    expect(screen.getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
   })
 
   it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', () => {
@@ -341,6 +358,7 @@ describe('the agents step', () => {
       return card
     }
     const available = (): ReturnType<typeof installerFake> => installerFake({ [AGENT_BUNDLES[0].name]: { state: 'available' }, [AGENT_BUNDLES[1].name]: { state: 'available' } })
+    const added = (): ReturnType<typeof installerFake> => installerFake({ [AGENT_BUNDLES[0].name]: { state: 'installed' }, [AGENT_BUNDLES[1].name]: { state: 'installed' } })
 
     it('stays closed on the default path: no model list and no time limit until it is opened', () => {
       render(<AgentsStep services={stepServices({ bundles: available().installer })} guide={guideOf()} />)
@@ -362,7 +380,7 @@ describe('the agents step', () => {
     it('lists the models the installed agent reports after the default and writes the one chosen', async () => {
       const agents = agentsFake()
       const host = hostFake({ agentModels: { state: 'listed', models: [{ model: 'gpt-codex', displayName: 'GPT Codex' }, { model: 'gpt-mini', displayName: 'GPT Mini' }] } })
-      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      render(<AgentsStep services={stepServices({ bundles: added().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
       const card = await open('Codex')
       await settle()
       expect(host.agentModels).toHaveBeenCalledExactlyOnceWith('codex')
@@ -376,13 +394,29 @@ describe('the agents step', () => {
 
     it('says so briefly, with the default still chosen, when the agent cannot list its models', async () => {
       const agents = agentsFake()
-      const host = hostFake({ agentModels: { state: 'unavailable' } })
-      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const host = hostFake({ agentModels: { state: 'unavailable', reason: 'failed' } })
+      render(<AgentsStep services={stepServices({ bundles: added().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
       const card = await open('Claude Code')
       await settle()
-      expect(within(card).getByText(en['agents.model.unavailable'])).toBeTruthy()
+      expect(within(card).getByText('Claude Code could not list its models, so the default is used.')).toBeTruthy()
+      expect(within(card).getByRole('button', { name: en['agents.model.retry'] })).toBeTruthy()
       expect(within(card).queryByRole('alert')).toBeNull()
       expect((within(card).getByRole('radio', { name: en['agents.model.default'] }) as HTMLInputElement).checked).toBe(true)
+    })
+
+    it('asks again while the added agent has not registered, then lists its models, and Try again asks at once', async () => {
+      vi.useFakeTimers()
+      try {
+        const agents = agentsFake()
+        const host = hostFake({ agentModels: { state: 'unavailable', reason: 'not-running' } })
+        render(<AgentsStep services={stepServices({ bundles: added().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+        const card = await open('Codex')
+        await settle()
+        expect(within(card).getByText('Codex is not running yet. It starts a moment after it is added.')).toBeTruthy()
+        host.agentModels.mockResolvedValue({ state: 'listed', models: [{ model: 'gpt-codex', displayName: 'GPT Codex' }] })
+        await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+        expect(within(card).getByRole('radio', { name: 'GPT Codex' })).toBeTruthy()
+      } finally { vi.useRealTimers() }
     })
 
     it('writes the run time limit only as a whole number of minutes in range', async () => {
@@ -670,7 +704,7 @@ describe('the ready step', () => {
     await settle()
     expect(rows()).toEqual([
       ['Model', 'DeepSeek', undefined],
-      ['Look', 'Soft · Peach · System', undefined],
+      ['Look', 'Soft · System', undefined],
       ['Agents', 'Claude Code', undefined],
       ['Plugins', '1 added', undefined],
       ['Phone access', 'On', undefined],
@@ -705,7 +739,7 @@ describe('the ready step', () => {
   it('names the default look while the theme settings are still loading', async () => {
     ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
     await settle()
-    expect(rows()[1]).toEqual(['Look', 'Soft · Peach · System', undefined])
+    expect(rows()[1]).toEqual(['Look', 'Soft · System', undefined])
   })
 
   it('shows the default workspace once the dialog chose it', async () => {
@@ -788,5 +822,38 @@ describe('a set of chips', () => {
     await key(light, 'a')
     await key(group('Mode'), 'ArrowRight')
     expect(set).not.toHaveBeenCalled()
+  })
+})
+
+describe('what the guide shows after the audit', () => {
+  it('offers only the languages the guide has copy for, plus the active one', () => {
+    const locales = { active: 'en', revision: 1, locales: [{ id: 'en', label: 'English' }, { id: 'zh', label: '中文' }, { id: 'ja', label: '日本語' }] }
+    const store = createSnapshotStore(locales)
+    const face = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, setLocale: vi.fn() }
+    render(<WelcomeStep services={stepServices({ language: face })} guide={guideOf()} notice={undefined} />)
+    expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual(['English', '中文'])
+  })
+
+  it('shortens a long path in the middle and keeps its start and end', () => {
+    expect(middleEllipsis('/home/person/app')).toBe('/home/person/app')
+    const long = `/home/person/${'deeply/'.repeat(10)}project`
+    const shown = middleEllipsis(long)
+    expect(shown.length).toBeLessThan(long.length)
+    expect(shown.startsWith('/home/')).toBe(true)
+    expect(shown.endsWith('project')).toBe(true)
+    expect(shown).toContain('…')
+  })
+
+  it('reads one key state on Ready and Models: a found key the test could not reach is named, not called missing', async () => {
+    render(<ReadyStep services={stepServices()} guide={guideOf(hostFake({ keys: { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'unreachable' }] } }).host)} reach="absent" target={{ kind: 'none' }} keepCurrent={false} />)
+    await settle()
+    expect(screen.getByText('DeepSeek (key found, not checked)')).toBeTruthy()
+  })
+
+  it('says phone access is ready, and leaves out the command, when every Tailscale check passes', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(hostFake({ readiness: { ...READY, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } } }).host)} />)
+    await settle()
+    expect(screen.getByText(en['reach.ready'])).toBeTruthy()
+    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
   })
 })
