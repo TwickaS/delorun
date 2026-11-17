@@ -426,9 +426,6 @@ export class SeatAdapter extends LlmAdapter {
           yield { type: 'finish', reason: { kind: 'stop' } }
           return
         }
-        case 'tool-result':
-          // SeatRun.next keeps results for the executor and never returns one.
-          break
       }
     }
   }

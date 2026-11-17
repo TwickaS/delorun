@@ -14,6 +14,9 @@ export interface ProgramToolResult {
   readonly isError: boolean
 }
 
+/** What {@link SeatRun.next} returns: every program event but a tool result, which {@link SeatRun.result} serves. */
+export type ProgramStep = Exclude<ProgramEvent, { readonly kind: 'tool-result' }>
+
 /** One live seat: a program session and the harness side's view of it. */
 export class SeatRun {
   /** Id of the last harness message handed to the program. */
@@ -46,7 +49,7 @@ export class SeatRun {
    * @param signal - aborts the wait.
    * @returns the event.
    */
-  async next(signal: AbortSignal): Promise<ProgramEvent> {
+  async next(signal: AbortSignal): Promise<ProgramStep> {
     for (;;) {
       const event = this.held.shift() ?? await this.program.next(signal)
       if (event.kind !== 'tool-result') return event

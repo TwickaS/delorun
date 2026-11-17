@@ -159,6 +159,20 @@ describe('a hand-off', () => {
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('the person said no.')
   })
+
+  it('reports a start failure that is no gate refusal as it is', async () => {
+    const { ctx, agent, call } = await stack()
+    vi.spyOn(ctx.subagents, 'startActivation').mockRejectedValue(new Error('the session store is full'))
+    const lead = await agent('lead')
+    const result = await call(lead, 'claude_code', { description: 'Task', prompt: 'Do it.' })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('the session store is full')
+  })
+
+  it('may run beside the lead\'s other tool calls', async () => {
+    const { ctx } = await stack()
+    expect(ctx.tools.get('claude_code')?.isConcurrencySafe?.({ description: 'Task', prompt: 'Do it.' })).toBe(true)
+  })
 })
 
 describe('the depth rule', () => {
@@ -208,6 +222,10 @@ describe('the gate refusals', () => {
     expect(result.isError).toBe(true)
     if (typeof expected === 'string') expect(refusalText(result)).toBe(expected)
     else expect(refusalText(result)).toMatch(expected)
+  })
+
+  it('refuses a refusal category it does not know rather than wording it', () => {
+    expect(() => gateRefusalSentence('codex', { category: 'invented' } as never, now)).toThrow(/unhandled gate refusal/)
   })
 
   it('names Codex in its own sentences', () => {

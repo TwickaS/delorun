@@ -19,7 +19,7 @@ import { registerSeatRoutes, type SeatRouteRegistration, type SeatRouteSpec } fr
 import type { Config, SeatConfig } from './config.ts'
 import { followLeaseEnds } from './lease.ts'
 import { questionRefusedNotice } from './relay/copy.ts'
-import { isExternalAgentName, registerSeatProviders, seatProviderName } from './provider/index.ts'
+import { registerSeatProviders, seatProviderName } from './provider/index.ts'
 import { recordPrefixOf, seatPreset } from './executor/index.ts'
 import { mountSeatState, type SeatStateMount } from './state/index.ts'
 
@@ -71,7 +71,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
   const dir = ctx.get('profileContext')?.dir
   if (dir === undefined) throw new Error('delorun-agent-seats: live agents keep the chosen models in the profile folder, and this profile has none')
   // Fails before anything registers when the seat list is unusable.
-  registerSeatProviders(ctx, config, () => true)
+  const externalSeats = registerSeatProviders(ctx, config, () => true)
   const logger = ctx.logger('agent-seats')
   let adapters: SeatRouteRegistration = new Map()
   // The registry's workspace of the child when it lists one, otherwise the child's run folder.
@@ -90,16 +90,15 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     dir,
     warn: (message) => { logger.warn(message) },
   })
-  const seatProviders = new Set(config.seats.map(seat => seatProviderName(seat.provider)))
+  const seatProviders = new Set(externalSeats.map(({ agent }) => seatProviderName(agent)))
   const approver = options.relay?.({ ctx, state, seatProviders, seats: config.seats })
   const routes: SeatRouteSpec[] = []
-  for (const seat of config.seats) {
-    if (!isExternalAgentName(seat.provider)) continue
+  for (const { seat, agent } of externalSeats) {
     routes.push({
       route: seat.route,
-      provider: seat.provider,
-      descriptorProvider: seatProviderName(seat.provider),
-      displayName: agentTitle(seat.provider),
+      provider: agent,
+      descriptorProvider: seatProviderName(agent),
+      displayName: agentTitle(agent),
       recordPrefix: recordPrefixOf(seat),
       contextWindow: seat.contextWindow,
     })

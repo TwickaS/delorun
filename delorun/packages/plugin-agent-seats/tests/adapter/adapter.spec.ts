@@ -5,7 +5,7 @@
 import { GateRefusedError, ProgramOpenError, type ProgramEvent } from '@delorun/external-agents/contract'
 import { describe, expect, it } from 'vitest'
 import { RESULT_DELIVERY_GUIDANCE } from '../../src/adapter/input.ts'
-import { agentMessage, CHILD, collect, finishOf, request, user, userBlocks, world, type World } from './support.ts'
+import { agentMessage, CHILD, collect, finishOf, request, system, user, userBlocks, world, type World } from './support.ts'
 
 const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -132,6 +132,20 @@ describe('what the program is sent', () => {
     w.states.states.set(CHILD, { programSessionId: 'earlier', cursor: 'gone' })
     const chunks = await collect(w.adapter.stream(request([user('a')])))
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_HISTORY_PARTED' } })
+    expect(w.gate.starts).toEqual([])
+  })
+
+  it('sends nothing for a first task whose guidance is fused into its text', async () => {
+    const w = world()
+    const chunks = await collect(w.adapter.stream(request([user(`Fix the build. ${RESULT_DELIVERY_GUIDANCE}`)])))
+    expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_TASK_UNSEPARABLE' } })
+    expect(w.gate.starts).toEqual([])
+  })
+
+  it('starts nothing for a request with no message for the program and no open program', async () => {
+    const w = world()
+    const chunks = await collect(w.adapter.stream(request([system()])))
+    expect(finishOf(chunks)).toEqual({ kind: 'stop' })
     expect(w.gate.starts).toEqual([])
   })
 })

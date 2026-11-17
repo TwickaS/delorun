@@ -3,7 +3,9 @@
  * services the profile supplies: with the preview flag off nothing a model or a person meets is registered, and with it
  * on the hand-off tools, providers, model routes, presets and Host routes are.
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -11,13 +13,13 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { onTestFinished } from 'vitest'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SeatLease, SeatLeaseEnd } from '@delorun/external-agents/contract'
 import * as Plugin from '../src/index.ts'
 import { Config, LIVE_AGENTS, mountSeats, type SeatRelayHook } from '../src/index.ts'
 import { LEASE_END_TEXT } from '../src/lease.ts'
-import { CHOOSE_MODEL_PATH, RESUME_PATH } from '../src/state/index.ts'
-import { FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
+import { CHOOSE_MODEL_PATH, MODEL_CHOICES_FILE, RESUME_PATH } from '../src/state/index.ts'
+import { captureWarnings, FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
 import { FakeGate, FixtureWorkingDirectory } from './provider/harness.ts'
 
 /** A consent service that tells when a lease ends. */
@@ -174,6 +176,13 @@ describe('the end of a lease', () => {
     expect(mounted.store.viewOf(child)).toMatchObject({ state: 'ended', endedReason: LEASE_END_TEXT.archived })
   })
 
+  it('mounts beside a consent service that cannot tell when a lease ends', async () => {
+    const { ctx } = await world(true)
+    ctx.provide('delegationConsent', {} as never)
+    const mounted = await mountSeats(ctx, Config(null))
+    expect(mounted.routes).toHaveLength(2)
+  })
+
   it('says nothing about a lease whose child never ran as a seat', async () => {
     const { ctx } = await world(true)
     await ctx.plugin(FakeConsent)
@@ -193,5 +202,58 @@ describe('the end of a lease', () => {
     const gone = SessionId('archived-away')
     const lease: SeatLease = { child: gone, root: gone, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0, why: 'asked' }
     expect(() => { for (const listener of consent.listeners) listener(lease, 'archived') }).not.toThrow()
+  })
+})
+
+/** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
+function arrival(url: string) {
+  const request = new IncomingMessage(new Socket())
+  request.url = url
+  request.headers.host = 'localhost:3080'
+  const response = new ServerResponse(request)
+  const writeHead = vi.spyOn(response, 'writeHead').mockReturnValue(response)
+  const end = vi.spyOn(response, 'end').mockReturnValue(response)
+  return { request, response, writeHead, end }
+}
+
+describe('who may reach the Host routes', () => {
+  it('refuses a request for a seat route while the home is not mounted, before the route reads it', async () => {
+    const { ctx } = await world(true)
+    await mountSeats(ctx, Config(null))
+    const { request, response, writeHead } = arrival(RESUME_PATH)
+    const next = vi.fn(async () => {})
+    await ctx.waterfall('connection/request', request, response, next)
+    expect([next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+  })
+
+  it('leaves every other path to the rest of the Connection', async () => {
+    const { ctx } = await world(true)
+    await mountSeats(ctx, Config(null))
+    const { request, response, writeHead } = arrival('/api/somethingElse')
+    const next = vi.fn(async () => {})
+    await ctx.waterfall('connection/request', request, response, next)
+    expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
+  })
+})
+
+describe('a mounted seat with no open program', () => {
+  it('has nothing to stop and offers no live program to the executor', async () => {
+    const { ctx } = await world(true)
+    const mounted = await mountSeats(ctx, Config(null))
+    const child = SessionId('no-program')
+    await expect(mounted.stop(child)).resolves.toBe('none')
+    expect(mounted.programs.program(child)).toBeUndefined()
+  })
+
+  it('tells the log when a model pick cannot be saved, and keeps the pick for the run', async () => {
+    const { ctx, dir } = await world(true)
+    const warnings = captureWarnings(ctx)
+    const mounted = await mountSeats(ctx, Config(null))
+    // A directory where the pick's temporary file goes makes the write fail.
+    await mkdir(join(dir, `${MODEL_CHOICES_FILE}.${String(process.pid)}.tmp`))
+    mounted.choices.set('w', 'model-a')
+    await mounted.settled()
+    expect(mounted.choices.get('w')).toBe('model-a')
+    expect(warnings.join('\n')).toContain('the model pick could not be saved')
   })
 })

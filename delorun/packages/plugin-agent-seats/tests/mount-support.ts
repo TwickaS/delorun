@@ -70,3 +70,18 @@ export class FakeProfile extends Service {
     this.dir = dir
   }
 }
+
+/**
+ * Collect what the plugin's loggers say at warning level or above.
+ * @param ctx - the context the plugin is mounted on.
+ * @returns the message texts, appended as they are logged.
+ */
+export function captureWarnings(ctx: Context): string[] {
+  const texts: string[] = []
+  ctx.logger.exporter({
+    colors: false,
+    levels: { default: 2 },
+    export: (message) => { texts.push(message.args.map(String).join(' ')) },
+  })
+  return texts
+}

@@ -16,13 +16,13 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime, { appendDelegatedPolicyOverrides } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalAnswer, SeatRecord, SeatSession, SeatStartRequest } from '@delorun/external-agents/contract'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as Plugin from '../src/index.ts'
 import { Config, mountSeats } from '../src/index.ts'
 import { SeatToolExecutor, SEAT_MAX_PARALLEL_HARNESS_TOOLS } from '../src/executor/index.ts'
 import { RUN_ANSWER } from '../src/relay/index.ts'
 import { ScriptedGate } from './adapter/support.ts'
-import { FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
+import { captureWarnings, FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
 import { FixtureWorkingDirectory } from './provider/harness.ts'
 import { describeSeat, until } from './state/support.ts'
 
@@ -192,6 +192,37 @@ describe('a program question on a seat child', () => {
     expect(w.waiting).toEqual([])
     expect(w.child.session.snapshotEvents().filter(event => (event.type as string) === 'plugin:delorun/agent-seat/notice').map(event => event.data))
       .toEqual([{ kind: 'question-refused', text: expect.stringContaining('no way to ask you') }])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    await done
+  })
+
+  it('rejects the question, asking nobody, when the asking chat is no live agent', async () => {
+    const w = await world(true)
+    const done = w.idle(w.child)
+    w.child.followup(say('run the tests'))
+    await until(() => w.gate.programs.length === 1, 'the program')
+    vi.spyOn(w.ctx.agents, 'get').mockReturnValue(undefined)
+    const answer = w.gate.starts[0]?.onApproval?.({ callId: 'call-1', toolName: 'Bash', reason: 'Run', signal: new AbortController().signal })
+    await expect(answer).resolves.toBe('reject')
+    expect(w.waiting).toEqual([])
+    expect(w.child.session.snapshotEvents().filter(event => (event.type as string) === 'plugin:delorun/agent-seat/notice').map(event => event.data))
+      .toEqual([{ kind: 'question-refused', text: expect.stringContaining('Bash') }])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    await done
+  })
+
+  it('still rejects the question when the refusal cannot be shown in the chat', async () => {
+    const w = await world(true)
+    const warnings = captureWarnings(w.ctx)
+    const done = w.idle(w.child)
+    w.child.followup(say('run the tests'))
+    await until(() => w.gate.programs.length === 1, 'the program')
+    vi.spyOn(w.ctx.agents, 'get').mockReturnValue(undefined)
+    const sessions = vi.spyOn(w.ctx.sessions, 'get').mockReturnValue(undefined)
+    const answer = w.gate.starts[0]?.onApproval?.({ callId: 'call-1', toolName: 'Bash', reason: 'Run', signal: new AbortController().signal })
+    await expect(answer).resolves.toBe('reject')
+    sessions.mockRestore()
+    expect(warnings.join('\n')).toContain('a refused question of seat-child could not be shown')
     w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
     await done
   })
