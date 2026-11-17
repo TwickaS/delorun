@@ -156,10 +156,10 @@ describe('linking needs to the closure only at a version they accept, and one co
     expect([...peers]).toEqual(['react'])
   })
 
-  it('refuses a version specifier it cannot compare', () => {
+  it('refuses a version specifier it cannot compare, and an alias of another package', () => {
     const need = { importer: 'a', directory: 'node_modules/a', name: 'b', via: 'dependencies' as const }
     expect(rangeProblem({ ...need, range: 'github:x/b' }, '1.0.0')).toMatch(/at github:x\/b, which is not a version range/u)
-    expect(rangeProblem({ ...need, range: 'npm:b@^1.0.0' }, '1.2.0')).toBeUndefined()
+    expect(rangeProblem({ ...need, range: 'npm:other@^1.0.0' }, '1.2.0')).toMatch(/at npm:other@\^1\.0\.0, an alias of another package/u)
     expect(rangeProblem({ ...need, name: '@deepseek-ai/b', range: '@deepseek-ai/b@file:///source/packages/b' }, '0.2.2-rc.3')).toBeUndefined()
     expect(rangeProblem({ ...need, range: '^0.2.2-rc.1' }, '0.2.2-rc.3')).toBeUndefined()
   })
