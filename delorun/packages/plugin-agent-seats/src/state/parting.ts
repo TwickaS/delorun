@@ -3,6 +3,7 @@
  * part when the program did work the log lacks, or when the program's conversation cannot be resumed at all.
  * @module @delorun/plugin-agent-seats/state/parting
  */
+import type { ProgramExit } from '@delorun/external-agents/contract'
 import type { SeatAgent } from './view.ts'
 import type { SeatNoticeKind } from './record.ts'
 
@@ -39,6 +40,20 @@ export function unresumableNotice(name: string): PartingNotice {
     kind: 'unresumable',
     text: `${name}'s earlier conversation could not be resumed. Your next message starts a new one, with that message alone.`,
   }
+}
+
+/**
+ * The sentence for a program that failed, with the fixed facts only: where it failed and how its process ended. The
+ * program's own words are never part of it, because they can quote paths, settings or account details.
+ * @param name - the agent's display name.
+ * @param stage - whether the failure came while the program started or during a turn.
+ * @param exit - how the program's process ended, when known.
+ * @returns the notice.
+ */
+export function programFailedNotice(name: string, stage: 'start' | 'turn', exit: ProgramExit | undefined): PartingNotice {
+  const where = stage === 'start' ? 'while starting' : 'during its turn'
+  const ended = exit?.signal !== undefined ? `its process ended with signal ${exit.signal}` : exit?.code === undefined ? undefined : `its process exited with code ${String(exit.code)}`
+  return { kind: 'program-failed', text: `${name} failed ${where}${ended === undefined ? '' : `; ${ended}`}.` }
 }
 
 /**

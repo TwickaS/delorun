@@ -14,7 +14,7 @@
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {
-  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramInterruptOutcome,
+  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramExit, ProgramInterruptOutcome,
   ProgramRunRule, ProgramSession,
 } from '@delorun/external-agents/contract'
 import type { HarnessServer } from './harness-server.ts'
@@ -82,6 +82,15 @@ const UNFINISHED_CALL = 'The call did not finish before the turn ended.'
 /** The person's-view detail for a process that ended during a turn. */
 const PROCESS_ENDED = 'Codex stopped unexpectedly.'
 
+/**
+ * How a finished process ended, without any output it wrote.
+ * @param outcome - the process's outcome.
+ * @returns the exit code, or the signal when one ended it.
+ */
+function exitOf(outcome: { readonly exitCode: number | null, readonly signal: string | null }): ProgramExit {
+  return { ...outcome.exitCode === null ? {} : { code: outcome.exitCode }, ...outcome.signal === null ? {} : { signal: outcome.signal } }
+}
+
 /** Codex's decision for each answer; "Allow for this run" is a one-time accept, and the driver keeps the rule. */
 const DECISIONS: Readonly<Record<ProgramApprovalAnswer, 'accept' | 'decline' | 'cancel'>> = {
   'allow-once': 'accept',
@@ -108,6 +117,7 @@ export class CodexSession implements ProgramSession {
   private lastSnapshot: RateLimitSnapshot | undefined
   private readonly questions = new Map<RequestId, { readonly turnId: string; readonly callId: string; readonly controller: AbortController }>()
   private closed: CodexClosedReason | undefined
+  private exit: ProgramExit | undefined
   private closing: Promise<void> | undefined
   private readonly turnEndWaiters: (() => void)[] = []
   private readonly runRules: ProgramRunRule[]
@@ -124,7 +134,7 @@ export class CodexSession implements ProgramSession {
     })
     void options.rpc.ended.then(() => { this.processEnded() })
     // The process's exit is observed through its output closing; a spawn failure rejects `done` and closes it too.
-    options.handle.done.catch(() => { this.processEnded() })
+    options.handle.done.then((outcome) => { this.exit = exitOf(outcome) }, () => { this.processEnded() })
   }
 
   /** The Codex thread id, which `thread/resume` takes. */
@@ -362,7 +372,7 @@ export class CodexSession implements ProgramSession {
 
   private processEnded(): void {
     if (this.closed !== undefined) return
-    if (this.turnRunning) this.endTurn('failed', { category: 'program', detail: PROCESS_ENDED }, 'exited')
+    if (this.turnRunning) this.endTurn('failed', { category: 'program', detail: PROCESS_ENDED, ...this.exit === undefined ? {} : { exit: this.exit } }, 'exited')
     else void this.shutDown('exited')
   }
 

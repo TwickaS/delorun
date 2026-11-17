@@ -92,6 +92,7 @@ export interface SeatAdapterEvents {
    * carries only a fixed sentence.
    * @param child - the seat child.
    * @param failure - why the turn ended.
+   * @param stage - `start` when the program could not be opened, `turn` when it failed during a turn.
    */
-  onTurnFailure?(child: SessionId, failure: ProgramFailure): void
+  onTurnFailure?(child: SessionId, failure: ProgramFailure, stage: 'start' | 'turn'): void
 }

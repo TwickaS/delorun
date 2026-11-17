@@ -212,7 +212,7 @@ describe('failures', () => {
     const events = await untilTurnEnd(h.session)
     expect(events.slice(-2)).toEqual([
       { kind: 'tool-result', id: EXEC, output: 'The call did not finish before the turn ended.', isError: true },
-      { kind: 'turn-end', outcome: 'failed', failure: { category: 'program', detail: 'Codex stopped unexpectedly.' } },
+      { kind: 'turn-end', outcome: 'failed', failure: { category: 'program', detail: 'Codex stopped unexpectedly.', exit: { code: 1 } } },
     ])
     expect(h.session.closedReason).toBe('exited')
     await expect(h.session.send('more', 'start')).rejects.toBeInstanceOf(CodexSessionClosedError)

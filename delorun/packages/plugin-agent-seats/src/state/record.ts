@@ -69,6 +69,8 @@ export type SeatNoticeKind =
   | 'model-chosen'
   /** Delorun refused a question of the program without asking the person. */
   | 'question-refused'
+  /** The program failed in a way that has no state of its own; the notice gives the fixed facts. */
+  | 'program-failed'
 
 /** One notice record, shown in the chat's transcript. */
 export interface SeatNoticeRecordData {

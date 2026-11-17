@@ -477,7 +477,7 @@ describe('what the adapter reports about a program that cannot start', () => {
   it('names Claude Code in the notice about an unresumable program of a chat with no seat view', async () => {
     const w = await stateWorld()
     const plain = w.ctx.sessions.create().header.id
-    w.mount.events.onTurnFailure?.(plain, { category: 'resume-failed' })
+    w.mount.events.onTurnFailure?.(plain, { category: 'resume-failed' }, 'turn')
     const [notice] = w.ctx.sessions.get(plain)?.snapshotEvents().flatMap((event) => {
       const record = pluginRecordOf(event)
       return record?.type === SEAT_NOTICE_RECORD ? [record.data] : []
@@ -526,7 +526,7 @@ describe('what the adapter reports about a program that cannot start', () => {
 
   it('shows a reached limit without a reset time when the program gave none', async () => {
     const w = await stateWorld()
-    w.mount.events.onTurnFailure?.(w.child, { category: 'limit' })
+    w.mount.events.onTurnFailure?.(w.child, { category: 'limit' }, 'turn')
     expect(view(w)).toMatchObject({ state: 'limit' })
     expect(view(w)?.resetAt).toBeUndefined()
   })
@@ -537,7 +537,20 @@ describe('what the adapter reports about a program that cannot start', () => {
   ] as const)('changes nothing in the chat\'s state for %s', async (_label, failure) => {
     const w = await stateWorld()
     const before = records(w, SEAT_STATUS_RECORD).length
-    w.mount.events.onTurnFailure?.(w.child, failure)
+    w.mount.events.onTurnFailure?.(w.child, failure, 'turn')
     expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+  })
+
+  it.each([
+    ['a failed start with no exit', 'start', { category: 'program', detail: 'secret path /home/x' }, 'Claude Code failed while starting.'],
+    ['a failed turn with an exit code', 'turn', { category: 'program', detail: 'secret', exit: { code: 1 } }, 'Claude Code failed during its turn; its process exited with code 1.'],
+    ['a failed turn ended by a signal', 'turn', { category: 'program', detail: 'secret', exit: { signal: 'SIGKILL' } }, 'Claude Code failed during its turn; its process ended with signal SIGKILL.'],
+  ] as const)('logs and reports only the fixed facts of %s, never the program\'s words', async (_label, stage, failure, sentence) => {
+    const w = await stateWorld()
+    w.mount.events.onTurnFailure?.(w.child, failure, stage)
+    expect(records(w, SEAT_NOTICE_RECORD).at(-1)).toEqual({ kind: 'program-failed', text: sentence })
+    expect(w.warnings.join('\n')).toContain(sentence)
+    expect(JSON.stringify(records(w, SEAT_NOTICE_RECORD))).not.toContain('secret')
+    expect(w.warnings.join('\n')).not.toContain('secret')
   })
 })

@@ -330,10 +330,10 @@ export class SeatAdapter extends LlmAdapter {
     if (error instanceof SeatFolderUnknown) return errorFinish(SEAT_FOLDER_UNKNOWN)
     if (error instanceof GateRefusedError) {
       const { refusal } = error
-      if (refusal.category === 'limit') events?.onTurnFailure?.(child, { category: 'limit', resetsAt: refusal.resetsAt })
+      if (refusal.category === 'limit') events?.onTurnFailure?.(child, { category: 'limit', resetsAt: refusal.resetsAt }, 'start')
       return errorFinish(gateRefusal(refusal))
     }
-    if (error instanceof ProgramOpenError) return this.failureFinish(child, error.failure)
+    if (error instanceof ProgramOpenError) return this.failureFinish(child, error.failure, 'start')
     throw error
   }
 
@@ -341,14 +341,15 @@ export class SeatAdapter extends LlmAdapter {
    * The error finish for a program failure, after telling the rest of the plugin.
    * @param child - the seat child.
    * @param failure - why the open or the turn failed.
+   * @param stage - whether the program could not be opened or failed during a turn.
    * @returns the finish chunk.
    */
-  private failureFinish(child: SessionId, failure: ProgramFailure): StreamChunk {
+  private failureFinish(child: SessionId, failure: ProgramFailure, stage: 'start' | 'turn'): StreamChunk {
     const { events, provider } = this.options
     if (failure.category === 'model-not-offered') {
       events?.onModelNotOffered?.({ child, provider, configured: failure.configured, offered: failure.offered })
     }
-    events?.onTurnFailure?.(child, failure)
+    events?.onTurnFailure?.(child, failure, stage)
     return errorFinish(programFailure(failure))
   }
 
@@ -420,7 +421,7 @@ export class SeatAdapter extends LlmAdapter {
           if (usage !== undefined) yield { type: 'usage', usage }
           if (event.outcome === 'failed') {
             run.failure = event.failure ?? { category: 'program', detail: '' }
-            yield this.failureFinish(child, run.failure)
+            yield this.failureFinish(child, run.failure, 'turn')
             return
           }
           yield { type: 'finish', reason: { kind: 'stop' } }

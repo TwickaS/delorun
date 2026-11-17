@@ -13,7 +13,7 @@ import type { SeatRun } from '../adapter/run.ts'
 import type { CallRecordLedger } from '../executor/ledger.ts'
 import type { SeatPrograms } from '../executor/types.ts'
 import { loadModelChoices, MODEL_CHOICES_FILE } from './choices.ts'
-import { partingNotice, unresumableNotice, type ProgramTailReader } from './parting.ts'
+import { partingNotice, programFailedNotice, unresumableNotice, type ProgramTailReader } from './parting.ts'
 import { agentSeatProjection } from './projection.ts'
 import { chooseModelRoute, resumeRoute, type SeatRoute } from './routes.ts'
 import { SeatRecords, type AccountFigures, type SeatSessions, type StatusChange } from './store.ts'
@@ -174,7 +174,7 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
       const planDefault = offered.find(model => model.isDefault)?.id ?? offered[0]?.id ?? configured
       store.setStatus(child, 'model-needed', { modelPicker: { offered: offered.map(model => ({ id: model.id, label: model.displayName })), planDefault } })
     },
-    onTurnFailure: (child, failure) => {
+    onTurnFailure: (child, failure, stage) => {
       resuming.delete(child)
       switch (failure.category) {
         case 'limit':
@@ -193,9 +193,14 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
           // onModelNotOffered carries the picker.
           break
         case 'time-limit':
-        case 'program':
           // The turn ends with the fixed sentence; the chat returns to idle.
           break
+        case 'program': {
+          const notice = programFailedNotice(nameOf(child), stage, failure.exit)
+          store.notice(child, notice.kind, notice.text)
+          options.warn(`${child}: ${notice.text}`)
+          break
+        }
       }
     },
   }

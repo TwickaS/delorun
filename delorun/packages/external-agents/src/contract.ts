@@ -60,8 +60,19 @@ export type ProgramFailure =
   | { readonly category: 'resume-failed' }
   /** The gate ended the turn at the consent's time limit, `limitMs`; only the gate reports it, never a driver. */
   | { readonly category: 'time-limit'; readonly limitMs: number }
-  /** Anything else; `detail` is for the person's view only. */
-  | { readonly category: 'program'; readonly detail: string }
+  /**
+   * Anything else; `detail` is for the person's view only. `exit` is how the program's process ended, when it did and
+   * the driver knows; it holds no program output.
+   */
+  | { readonly category: 'program'; readonly detail: string; readonly exit?: ProgramExit }
+
+/** How a program's process ended: its exit code, or the signal that ended it. */
+export interface ProgramExit {
+  /** The exit code, when the process exited. */
+  readonly code?: number
+  /** The signal name, when a signal ended the process. */
+  readonly signal?: string
+}
 
 /** One model a program offers to the signed-in account. */
 export interface OfferedModel {
