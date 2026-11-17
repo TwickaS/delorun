@@ -13,8 +13,7 @@ import { STUDIO_ALIASES } from './studio-aliases.ts'
 /** The release the site markets, which a recorded session must have been made on. */
 export const MARKETED_RELEASE = '0.1.0'
 
-/** The environment variable that lets a build carry stand-in sessions; only the plugin reads it. */
-export const ALLOW_STANDINS_VARIABLE = 'SITE_ALLOW_STANDINS'
+export { ALLOW_STANDINS as ALLOW_STANDINS_VARIABLE } from './src/replica/build/release.ts'
 
 /**
  * The replica plugins' options.
