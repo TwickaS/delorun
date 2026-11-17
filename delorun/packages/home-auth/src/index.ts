@@ -15,7 +15,7 @@
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
  *   records, and {@link requireComputer}, which another Delorun plugin's route calls to refuse a request that did not, and
- *   {@link requireComputerUnlessDangerous}, which lets an unlocked device through while dangerous mode holds.
+ *   {@link requireComputerOrDevice}, which lets a reach device's request through to its route's own unlock check.
  * - The stores of the secrets directory with the bounds on the records they hold, the typed refusal and the secret
  *   primitives.
  *
@@ -36,7 +36,7 @@ export {
   type SignedIn,
   type TokenAdmission,
 } from './home-auth.ts'
-export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, defaultPermissionOf, keyRefsOf, protectedEntryIdsOf, type ReachPeer } from './authenticator.ts'
+export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, defaultPermissionOf, keyRefsOf, protectedEntryIdsOf, computerOnlyEntryIdsOf, type ReachPeer } from './authenticator.ts'
 export {
   REACH_ALLOWED_ACTIONS,
   REACH_DANGEROUS_ACTIONS,
@@ -55,6 +55,8 @@ export {
   PROTECTED_ROW_REFUSAL,
   UNLISTED_COMMAND_REFUSAL,
   protectedPluginsIn,
+  COMPUTER_ONLY_ROW_MODULES,
+  COMPUTER_ONLY_BUNDLES,
   switchOffRefusal,
   type ComputerOnlySwitch,
   type DefaultPermission,
@@ -62,6 +64,7 @@ export {
   CREATE_OUTSIDE_WORKSPACES,
   assertDisjoint,
   createReachAccessPolicy,
+  createCondition,
   reachDevicePrincipal,
   reachRefusal,
   type ReachAccessFacts,
@@ -99,7 +102,7 @@ export {
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
 export { hashImage, ICON_FILE_SEGMENTS, readIcon, storeIcon } from './icon-file.ts'
-export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
+export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, gateByUnlock, requireComputer, requireComputerOrDevice, routedPathname, unlockOf, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

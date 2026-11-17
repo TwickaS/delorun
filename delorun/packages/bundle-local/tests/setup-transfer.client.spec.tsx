@@ -248,7 +248,7 @@ describe('Import setup', () => {
   it('says in place that only the home\'s own computer moves a setup, and offers no button elsewhere', async () => {
     const home = host({ [LIST]: listing })
     renderSection(home.fetch, { atComputer: false })
-    await screen.findByText(en.atComputer)
+    await screen.findByText(en['gate.computer'].replace('{reason}', en.transferReason))
     expect(screen.queryByRole('button', { name: en['transfer.export'] })).toBeNull()
     expect(screen.queryByRole('button', { name: en['transfer.import'] })).toBeNull()
     cleanup()

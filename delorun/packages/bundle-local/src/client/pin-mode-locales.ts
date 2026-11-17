@@ -1,11 +1,14 @@
 /** The PIN mode settings section's copy. */
 
+import { gateEn, gateZh } from './gate.ts'
+
 /** English dictionary. */
 export const en = {
+  ...gateEn,
+  'computerReason': 'the PIN is set where Delorun runs, so a phone cannot set or change it.',
   'nav': 'PIN mode',
   'title': 'PIN mode',
-  'intro': 'With PIN mode on, a device must enter your PIN or passcode before it opens the studio. You set it here, at this computer; a device cannot set or change it.',
-  'atComputer': 'PIN mode is set at the computer where Delorun runs. Open the studio there to turn it on or off.',
+  'intro': 'With PIN mode on, a paired phone asks for your PIN or passcode only before actions that need an unlock, such as adding plugins or allowing full access. You set it here, at this computer; a device cannot set or change it.',
   'loopback': 'PIN mode can be read and changed only in the studio on the home\'s own computer.',
   'unavailable': 'PIN mode is not available in this profile.',
   'loading': 'Reading PIN mode…',
@@ -23,7 +26,7 @@ export const en = {
   'pill.on': 'On',
   'pill.off': 'Off',
   'hidden.hint': 'A page locks as soon as you switch away from it.',
-  'off.lead': 'Devices open the studio without a PIN again.',
+  'off.lead': 'Devices unlock with a code from your computer again.',
   'paused.title': 'Unlocks are paused',
   'setBack.title': 'Some settings are waiting to be put back',
   'setBack.name.homeAuth': 'the pairing settings',
@@ -65,10 +68,11 @@ export type PinModeLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
+  ...gateZh,
+  'computerReason': 'PIN 在运行 Delorun 的电脑上设置，手机无法设置或更改。',
   'nav': 'PIN 模式',
   'title': 'PIN 模式',
-  'intro': '开启 PIN 模式后，设备必须输入你的 PIN 或口令才能打开 studio。请在这台电脑上设置；设备不能设置或更改。',
-  'atComputer': 'PIN 模式在运行 Delorun 的电脑上设置。请在那里打开 studio 来开启或关闭。',
+  'intro': '开启 PIN 模式后，已配对的手机只在添加插件、允许完全访问等需要解锁的操作之前才询问你的 PIN 或口令。请在这台电脑上设置；设备不能设置或更改。',
   'loopback': 'PIN 模式只能在主机所在电脑上的 studio 中查看和更改',
   'unavailable': '当前 profile 不提供 PIN 模式。',
   'loading': '正在读取 PIN 模式…',
@@ -86,7 +90,7 @@ export const zh: typeof en = {
   'pill.on': '已开启',
   'pill.off': '已关闭',
   'hidden.hint': '切换离开页面后，页面立即锁定。',
-  'off.lead': '设备将再次无需 PIN 即可打开 studio。',
+  'off.lead': '设备将再次使用电脑上的代码来解锁。',
   'paused.title': '解锁已暂停',
   'setBack.title': '部分设置正等待恢复',
   'setBack.name.homeAuth': '配对设置',

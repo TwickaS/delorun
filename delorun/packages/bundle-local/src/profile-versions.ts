@@ -18,7 +18,7 @@ import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { discardImportReviews } from '@delorun/plugin-changes'
-import { isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputer, routedPathname } from '@delorun/home-auth'
+import { gateByUnlock, isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import {
   HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
   type RestorePlan,
@@ -267,11 +267,14 @@ async function run(call: () => Promise<object>): Promise<Response> {
  * @param request - the request.
  * @returns whether the studio's page made it.
  */
-function fromStudioPage(request: Pick<IncomingMessage, 'headers'>): boolean {
+function fromStudioPage(request: Pick<IncomingMessage, 'headers'>, atComputer: boolean): boolean {
   const site = request.headers['sec-fetch-site']
   if (isForeignFetchSite(Array.isArray(site) ? site[0] : site)) return false
   const { origin, host } = request.headers
-  return origin === undefined || isSameLoopbackOrigin(origin, host)
+  if (origin === undefined) return true
+  if (atComputer) return isSameLoopbackOrigin(origin, host)
+  // A device's page is served from its reach address: its `Origin` must name the request's own `Host`.
+  return host !== undefined && URL.canParse(origin) && new URL(origin).host.toLowerCase() === host.toLowerCase()
 }
 
 /**
@@ -284,8 +287,9 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
   const writes: ReadonlySet<string> = new Set([PROFILE_VERSION_ROUTES.save, PROFILE_VERSION_ROUTES.switch])
   ctx.on('connection/request', async (request, response, next) => {
     if (writes.has(routedPathname(request.url))) {
-      if (!requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
-      if (!fromStudioPage(request)) {
+      const homeAuth = ctx.get('homeAuth')
+      if (!requireComputerOrDevice(request, response, homeAuth, ACTION)) return
+      if (!fromStudioPage(request, homeAuth?.arrivalOf(request).listener === 'loopback')) {
         response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
         response.end(JSON.stringify({ error: 'FOREIGN_ORIGIN', message: `${ACTION} must come from the studio's own page.` }))
         return
@@ -305,19 +309,19 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.save, methods: ['POST'], requestBody: 'buffered',
-    fetch: async (request) => {
+    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, SaveBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with an optional name.' })
       return run(() => service.save(body.name))
-    },
+    }),
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.switch, methods: ['POST'], requestBody: 'buffered',
-    fetch: async (request) => {
+    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, SwitchBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with the version.' })
       return run(() => service.switch(body.version))
-    },
+    }),
   })
 }
 

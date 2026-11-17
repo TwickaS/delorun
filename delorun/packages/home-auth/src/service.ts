@@ -43,6 +43,7 @@ import { HomeAuthAuthenticator } from './authenticator.ts'
 import {
   ELEVATION_PATHS,
   elevationApproveHandler,
+  elevationEndGraceHandler,
   elevationLockHandler,
   elevationPendingHandler,
   elevationRequestHandler,
@@ -69,6 +70,10 @@ export interface ConfigInput {
   readonly pinSetBackRetrySeconds?: number
   /** The sign-in challenge limits, each optional; see {@link Config.challenges}. */
   readonly challenges?: Partial<ChallengeLimits>
+  /** Minutes a newly approved device starts unlocked for; see {@link Config.approvalGraceMinutes}. */
+  readonly approvalGraceMinutes?: number
+  /** The most minutes one unlock lasts from its start; see {@link Config.unlockCapMinutes}. */
+  readonly unlockCapMinutes?: number
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -92,6 +97,19 @@ export interface Config {
    * Every reach request reaches the home from one source, so the source limit bounds the home as a whole.
    */
   readonly challenges: ChallengeLimits
+  /**
+   * The minutes after a device is approved during which its first sign-in starts an unlock, from 0 to 60; 15 by default,
+   * and never more than the listener's unlock minutes. 0 turns the grace off. The grace admits what any unlock admits and
+   * never the computer-only table; the device's own studio ends it when its first-run setup finishes, and a revoke,
+   * a lock, a removal or the end of the session ends it too.
+   */
+  readonly approvalGraceMinutes: number
+  /**
+   * The most minutes one computer-approved unlock lasts from its start, from 1 to 1440; 480 (8 hours) by default. An
+   * unlock slides: its minutes count from the last action that needed it, and this cap ends it however much it is used.
+   * It must be at least the unlock minutes of every listener, or the listener is refused at start.
+   */
+  readonly unlockCapMinutes: number
 }
 
 /** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
@@ -139,6 +157,10 @@ export const Config: schema<ConfigInput, Config> = schema.object({
     perSourcePerMinute: challengeLimit('perSourcePerMinute').description('How many sign-in challenges one source may be issued a minute, from 1 to 600; 60 by default.'),
     perDevicePerMinute: challengeLimit('perDevicePerMinute').description('How many sign-in challenges one trusted device may be issued a minute, from 1 to 600; 10 by default.'),
   }).default({}).description('The sign-in challenge limits. Out-of-bounds values fail the load.'),
+  unlockCapMinutes: schema.number().step(1).min(1).max(1440).default(480)
+    .description('The most minutes one unlock approved at the computer lasts from its start, from 1 to 1440; 480 (8 hours) by default. An unlock lasts its minutes after the last action that needed it, and this cap ends it however much it is used. It must be at least the unlock minutes.'),
+  approvalGraceMinutes: schema.number().step(1).min(0).max(60).default(15)
+    .description('Minutes after a device is approved during which its first sign-in starts an unlock, from 0 to 60; 15 by default, and never more than the unlock minutes. 0 turns it off.'),
 })
 
 /** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
@@ -208,6 +230,8 @@ export class HomeAuthService extends Service {
       pairing: () => resolvePairing(this.config.pairing.get()),
       directory: this.secretsDirectory,
       challengeLimits: this.config.challenges,
+      approvalGraceMinutes: () => this.config.approvalGraceMinutes,
+      unlockCapMinutes: () => this.config.unlockCapMinutes,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),
@@ -275,6 +299,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.state, handler: elevationStateHandler(core) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.request, handler: elevationRequestHandler(core) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.lock, handler: elevationLockHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.endGrace, handler: elevationEndGraceHandler(core) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
@@ -381,6 +406,14 @@ export class HomeAuthService extends Service {
    */
   pageUnlockOf(unlockId: string): ElevationRecord | undefined {
     return this.core?.pageUnlockOf(unlockId)
+  }
+
+  /**
+   * Renew a computer-approved unlock after an action that needed it.
+   * @param elevationId - the id of the unlock the action ran under.
+   */
+  touchUnlock(elevationId: string): void {
+    this.core?.touchUnlock(elevationId)
   }
 
   /**

@@ -31,6 +31,8 @@ import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps 
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 import { OptIn } from '../src/client/opt-in.ts'
 import { switchChat } from '../src/client/index.ts'
+import { installGateUnlock } from '../src/client/gate-unlock.ts'
+import type { UnlockSource, UnlockView } from '../src/client/unlock.ts'
 
 afterEach(() => {
   cleanup()
@@ -1505,5 +1507,57 @@ describe('dangerous mode', () => {
     renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], everywhere: { on: false } } } }), {})
     await settle()
     expect(screen.queryByText(en['everywhere.heading'])).toBeNull()
+  })
+})
+
+describe('a refusal that needs the device unlocked', () => {
+  const REFUSAL: Answer = { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock this device first' } }
+
+  /** An unlock store for a device whose unlock lasts 15 minutes. */
+  function unlockStore() {
+    const view: UnlockView = { place: 'device', state: { kind: 'none', unlockMinutes: 15 }, dialog: null, ended: 0, lockFailed: false }
+    const open = vi.fn()
+    const source = { hooks: { unlock: { getSnapshot: () => view, subscribe: () => () => {} } }, open } as unknown as UnlockSource
+    return { source, open }
+  }
+
+  it('is worded as an unlock that states the minutes, where an unlock can be opened', () => {
+    const { source } = unlockStore()
+    const dispose = installGateUnlock(source)
+    try {
+      const text = consentFailureText(makeTranslate(en), { kind: 'unlock' })
+      expect(text).toContain('15 minutes')
+      expect(text).toContain(en.unlockWhere)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('says the unlock without minutes where the home has not said how long it lasts', () => {
+    expect(consentFailureText(makeTranslate(en), { kind: 'unlock' })).toContain(en['gate.unlockUnknown'])
+  })
+
+  it('shows the full-access dialog an Unlock button that opens the unlock dialog, and keeps the dialog open', async () => {
+    const { source, open } = unlockStore()
+    const dispose = installGateUnlock(source)
+    try {
+      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: REFUSAL })
+      const consent = createFullAccessConsentSource(host.fetch)
+      void consent.ask(OFF)
+      consent.confirm()
+      await settle()
+      renderConsent(consent)
+      expect(screen.getByRole('alert').textContent).toContain('15 minutes')
+      fireEvent.click(screen.getByRole('button', { name: en['gate.unlockButton'] }))
+      expect(open).toHaveBeenCalledOnce()
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    } finally {
+      dispose()
+    }
+  })
+
+  it('has the same unlock copy in Chinese', () => {
+    expect(zh['gate.unlock']).toContain('{minutes}')
+    expect(zh.unlockWhere).not.toBe(en.unlockWhere)
   })
 })

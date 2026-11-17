@@ -32,6 +32,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the 'connection/reset' event merge and the connection service's type.
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import { installGateUnlock } from './gate-unlock.ts'
 import { applyUnlockConnection } from './unlock-connection.ts'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -487,6 +488,7 @@ export function apply(ctx: Context): void {
     if (phase !== pinPhase) void unlock.refresh()
     pinPhase = phase
   }), 'delorun-pin: the unlock banner reads the elevation again when the page unlocks or locks')
+  ctx.effect(() => installGateUnlock(unlock), 'delorun-devices: gate notices open the unlock dialog')
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({
@@ -747,7 +749,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @returns the store, which the Devices section reads too.
  */
 export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
-  const unlock = createUnlockSource(fetch, Date.now, onComputer)
+  const unlock = createUnlockSource(fetch, Date.now, onComputer, () => pin?.ask() === true)
   // Lock now ends the page's PIN unlock when it holds one, and the device's elevation otherwise.
   const lock = async (): Promise<void> => {
     if (pin?.holdsUnlock() === true) await pin.lock()
@@ -784,7 +786,7 @@ export function applyPin(ctx: Context, fetch: HostFetch, onComputer = false): Pi
     name: 'shell.overlay',
     id: PIN_LOCK_OVERLAY_ID,
     locale: PIN_NS,
-    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock }),
+    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock, dismiss: pin.dismiss }),
   }, PinLock))
   return pin
 }

@@ -50,6 +50,7 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@delorun/home-auth": "workspace:*",
     "@delorun/contract-archive-and-trash": "workspace:*",
     "@delorun/trash": "workspace:*"
   },
