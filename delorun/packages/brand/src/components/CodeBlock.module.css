@@ -71,8 +71,14 @@
 .copy[data-answer='copied'] { color: var(--dl-success); }
 .copy[data-answer='failed'] { color: var(--dl-error); }
 
+/* The page's one main button: the accent fill with its readable text. While it answers, it shows the state colour on a raised ground. */
+.copy[data-emphasis='primary'] { background: var(--dl-accent); color: var(--dl-on-accent); }
+.copy[data-emphasis='primary'][data-answer='copied'],
+.copy[data-emphasis='primary'][data-answer='failed'] { background: var(--dl-surface-raised); border-color: var(--dl-border); }
+
 @media (hover: hover) and (pointer: fine) {
-  .copy[data-answer='idle']:hover { background: var(--dl-surface-raised); color: var(--dl-text); }
+  .copy[data-emphasis='primary'][data-answer='idle']:hover { background: color-mix(in srgb, var(--dl-accent) 88%, var(--dl-text)); color: var(--dl-on-accent); }
+  .copy[data-answer='idle']:not([data-emphasis]):hover { background: var(--dl-surface-raised); color: var(--dl-text); }
 }
 
 .answer {
