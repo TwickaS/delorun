@@ -30,6 +30,12 @@ a.button { text-decoration: none; }
   color: var(--dl-text);
 }
 
+.button.solid {
+  background: var(--dl-text);
+  border-color: var(--dl-text);
+  color: var(--dl-surface);
+}
+
 .button.destructive {
   color: var(--dl-error);
   border-color: color-mix(in oklab, var(--dl-error) 45%, transparent);
@@ -43,6 +49,10 @@ a.button { text-decoration: none; }
 @media (hover: hover) and (pointer: fine) {
   .button.primary:hover:not(:disabled, [aria-disabled='true']) {
     background: color-mix(in oklab, var(--dl-accent) 88%, var(--dl-text));
+  }
+
+  .button.solid:hover:not(:disabled, [aria-disabled='true']) {
+    background: color-mix(in oklab, var(--dl-text) 85%, var(--dl-surface));
   }
 
   .button.secondary:hover:not(:disabled, [aria-disabled='true']) {

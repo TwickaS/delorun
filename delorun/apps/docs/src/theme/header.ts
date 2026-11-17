@@ -8,7 +8,7 @@
 import { createElement, Fragment, type ReactNode } from 'react'
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared'
 import { ProductMark } from '@design/product-mark.tsx'
-import { SiteLink } from '@design/site-header.tsx'
+import { HIT, SiteLink } from '@design/site-header.tsx'
 import { ThemeControl } from '@design/theme-control.tsx'
 import type { ShellLink, ThemeCopy } from '@design/shell-copy.ts'
 
@@ -31,7 +31,7 @@ export function headerOptions(options: HeaderOptions): BaseLayoutProps {
   return {
     // Below the medium width the sidebar and its theme switch are folded away, so the control also sits in the bar there.
     nav: { title: createElement(Fragment, null, createElement(ProductMark, { size: 22 }), options.title), url: options.homeUrl, children: createElement('div', { className: 'flex justify-end md:hidden' }, control) },
-    links: options.links.map(link => ({ type: 'custom' as const, children: createElement(SiteLink, { link }) })),
+    links: options.links.map(link => ({ type: 'custom' as const, children: createElement(SiteLink, { link, className: HIT }) })),
     themeSwitch: { component: control },
   }
 }

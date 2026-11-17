@@ -1,6 +1,6 @@
 /**
  * Delorun's button. It renders upstream's `Button`, which owns the native element, focus handling and the pointer and
- * keyboard behaviour, and adds the four Delorun variants and the unavailable state. A pressed button shrinks to
+ * keyboard behaviour, and adds the five Delorun variants and the unavailable state. A pressed button shrinks to
  * `--dl-scale-pressed`, and hover applies only under a fine pointer that can hover.
  * @module @delorun/brand/components/Button
  */
@@ -8,8 +8,8 @@ import { forwardRef, type ButtonHTMLAttributes, type MouseEvent, type ReactNode 
 import { Button as UpstreamButton } from '#upstream'
 import css from './Button.module.css'
 
-/** The Delorun variants: `primary` (peach fill), `secondary` (outline), `destructive` (outline in the error colour) and `ghost`. */
-export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'ghost'
+/** The Delorun variants: `primary` (peach fill), `secondary` (outline), `destructive` (outline in the error colour), `ghost`, and `solid` (filled with the text colour, for an action that is not the page's main one). */
+export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'solid'
 
 /** The props of {@link Button}: a native button's, plus the variant, the size, a leading icon and the unavailable state. */
 export type ButtonProps = {

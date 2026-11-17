@@ -8,7 +8,7 @@ import { ProductMark } from './product-mark.tsx'
 import type { ReactNode } from 'react'
 import { Link } from '../../brand/src/components/Link.tsx'
 import type { FooterCopy, ShellLink } from './shell-copy.ts'
-import { DEFAULT_INNER, SiteLink, useLinkHref } from './site-header.tsx'
+import { DEFAULT_INNER, HIT, SiteLink, useLinkHref } from './site-header.tsx'
 import { BackToStart } from './back-to-start.tsx'
 
 /** The link list's layout. */
@@ -43,7 +43,7 @@ export function SiteFooter({ copy, links, top, closing, inner = DEFAULT_INNER }:
         {closing === undefined ? null : <>{closing}<BackToStart copy={copy.theme} className="self-start" /></>}
         <nav aria-label={copy.navLabel}>
           <ul className={LIST}>
-            {links.map(link => <li key={link.href}><FooterLink link={link} /></li>)}
+            {links.map(link => <li key={link.href} className={HIT}><FooterLink link={link} /></li>)}
           </ul>
         </nav>
         {closing === undefined ? <BackToStart copy={copy.theme} className="self-start" /> : null}
