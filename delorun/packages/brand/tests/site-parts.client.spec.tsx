@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ButtonLink } from '../src/button-link.web.tsx'
 import { CodeBlock, COPY_ANSWER_MS, Frame, SectionHeading, TabList, TabPanel } from '../src/index.ts'
 import { Switch } from '../src/upstream.web.tsx'
 
@@ -175,5 +176,26 @@ describe('the web Switch', () => {
     expect(control.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(control)
     expect(onChange).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('ButtonLink', () => {
+  it('is an anchor with the button\'s classes and the address', () => {
+    render(<ButtonLink href="/download" variant="primary">Download</ButtonLink>)
+    const link = screen.getByRole('link', { name: 'Download' })
+    expect(link.getAttribute('href')).toBe('/download')
+    expect(link.dataset.variant).toBe('primary')
+    expect(link.getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('stays in the tab order when unavailable, with no address, and does not navigate when pressed', () => {
+    render(<><ButtonLink href="/download" unavailable aria-describedby="why">Download</ButtonLink><p id="why">Not yet</p></>)
+    const link = screen.getByRole('link', { name: 'Download' })
+    expect(link.getAttribute('href')).toBeNull()
+    expect(link.getAttribute('aria-disabled')).toBe('true')
+    expect(link.tabIndex).toBe(0)
+    expect(link.getAttribute('aria-describedby')).toBe('why')
+    const pressed = fireEvent.click(link)
+    expect(pressed).toBe(false)
   })
 })
