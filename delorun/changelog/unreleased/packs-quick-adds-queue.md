@@ -8,3 +8,5 @@ section: Fixed
 - The downloads panel and the setup guide's plugin rows follow an install promptly. Delorun used to read and check every file of every installed plugin pack at each progress report; it now checks a pack once every 30 seconds (`verifyCacheMs` in the packs plugin) and again when its install ends.
 
 - The "plugins added" panel no longer comes back at every page load or restart and covers the message box; it shows only for installs you watched. Pack rows in the setup guide describe themselves before they are added, use one name throughout, and "Adding…" no longer shifts when its progress bar appears.
+
+- Adding a plugin pack checks its files against the release's signed list at the moment of the install, and a refusal from the plugin manager, such as protection holding the add for review, now reaches you in its own words.

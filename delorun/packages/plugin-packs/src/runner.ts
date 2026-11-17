@@ -17,7 +17,7 @@ import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStor
 import type { PacksEnvironment } from './environment.ts'
 
 /** The part of the plugin manager's `installBundle` the runner uses. */
-export type InstallBundle = (spec: string, options: { readonly enabled: boolean, readonly requestId: string, readonly expected: { readonly name: string, readonly version: string } }) => Promise<{ readonly application: string, readonly error?: { readonly code?: string } }>
+export type InstallBundle = (spec: string, options: { readonly enabled: boolean, readonly requestId: string, readonly expected: { readonly name: string, readonly version: string } }) => Promise<{ readonly application: string, readonly error?: { readonly code?: string, readonly diagnostic?: string } }>
 
 /** What the runner needs. */
 export interface RunnerDeps {
@@ -116,7 +116,8 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       await requireRunningRelease(release.paths, release.version)
       const result = await installs(signal, () => deps.installBundle(`link:${release.paths.packLink(entry.name)}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } }))
       if (result.application === 'cancelled') throw new Error('cancelled')
-      if (result.application === 'failed') throw new InstallRefusal('failed', `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)
+      // The plugin manager's refusal, such as protection holding the add for review, keeps its own words.
+      if (result.application === 'failed') throw new InstallRefusal('failed', result.error?.diagnostic ?? `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)
       return { reloadNeeded: result.application === 'restart-required' }
     } catch (error) {
       if (!signal.aborted) deps.logFailure(key, error)

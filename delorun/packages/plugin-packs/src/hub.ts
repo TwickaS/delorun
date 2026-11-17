@@ -181,6 +181,25 @@ export class PacksHub {
   }
 
   /**
+   * Check a pack's files against the signed list now, without the stored check, and keep the answer for the listings.
+   * @param name - the package name.
+   * @returns false for a package the release does not list as a pack, or when a file is missing or differs.
+   */
+  async intactNow(name: string): Promise<boolean> {
+    const environment = this.deps.environment
+    if ('unsupported' in environment) return false
+    // An unreadable release or packs file is not an intact pack, so the install refuses.
+    const release = await (this.release === undefined ? environment.release() : Promise.resolve(this.release)).catch(() => undefined)
+    const packs = release === undefined ? undefined : await packsOf(release, environment.files).catch(() => undefined)
+    const entry = packs?.packs.find(each => each.name === name)
+    if (release === undefined || entry === undefined) return false
+    this.checks.delete(name)
+    const installed = await this.intact(release, entry)
+    if (!installed) this.sealed = new Set([...this.sealed].filter(each => each !== name))
+    return installed
+  }
+
+  /**
    * The spec the plugin manager installs for a pack already in the home, for Plugins' official installs.
    * @param name - the package name.
    * @param version - the running Delorun version.
