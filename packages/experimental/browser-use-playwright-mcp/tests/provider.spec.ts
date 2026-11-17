@@ -8,6 +8,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mountSessionMcp } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
 import { chromeChannelCandidates, launchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import * as Provider from '../src/index.ts'
+import { SERVER_CODE_TOOLS, deniedToolsOf, deniedToolMessage } from '../src/denied-tools.ts'
+import { MISSING_CHROME_MESSAGE, MISSING_BROWSER_MESSAGE, explainMissingBrowser } from '../src/missing-browser.ts'
+import { OUTPUT_FOLDER, LINKED_OUTPUT_FOLDER_MESSAGE, outsideFolderMessage, refuseOutsideFolder } from '../src/output-folder.ts'
 
 const CHROME = '/opt/google/chrome/chrome'
 const computer = vi.hoisted(() => ({ chromeInstalled: false }))
@@ -138,7 +141,7 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
     'Browser "chromium" is not installed; expected executable at /home/user/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
     'browserType.launch: Executable doesn\'t exist at /home/user/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome',
   ]) {
-    expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
+    expect(explain(message)).toBe(MISSING_BROWSER_MESSAGE)
   }
   for (const message of [
     // As Playwright's server sends a failure: a `### Error` header line, then the message, with or without `Error: `.
@@ -149,15 +152,15 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
     'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1243/chrome. Run `npx @playwright/mcp install-browser chromium` to install',
     'Executable doesn\'t exist at /cache/chromium-1243/chrome-linux64/chrome\n╔═ Looks like Playwright was just installed ═╗',
   ]) {
-    expect(explain(message)).toBe(Provider.MISSING_BROWSER_MESSAGE)
+    expect(explain(message)).toBe(MISSING_BROWSER_MESSAGE)
   }
   for (const message of [
     '### Error\nError: browserType.launch: Chromium distribution \'chrome\' is not found at /opt/google/chrome/chrome\nRun "npx playwright install chrome"',
     'Chromium distribution \'chrome\' is not found at /opt/google/chrome/chrome',
   ]) {
-    expect(explain(message)).toBe(Provider.MISSING_CHROME_MESSAGE)
+    expect(explain(message)).toBe(MISSING_CHROME_MESSAGE)
   }
-  expect(Provider.MISSING_CHROME_MESSAGE).toContain('finish Browser setup in Plugins')
+  expect(MISSING_CHROME_MESSAGE).toContain('finish Browser setup in Plugins')
   for (const message of [
     'page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/',
     'page.evaluate: Error: the page says Executable doesn\'t exist at /usr/bin/tool',
@@ -170,7 +173,7 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
   ]) {
     expect(explain(message)).toBeUndefined()
   }
-  expect(Provider.MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
+  expect(MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
 })
 
 it('runs the server in one folder of the Harness home for every Session when serverDirectory is home', () => {
@@ -189,40 +192,40 @@ it('refuses a file argument that a link inside the chat\'s folder leads outside,
   await symlink(outside, join(chat, 'link'))
   await symlink(join(outside, 'secret.txt'), join(chat, 'notes.txt'))
   await symlink(join(outside, 'not-yet.png'), join(chat, 'dangling.png'))
-  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
+  const refuse = (args: unknown) => refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
   await symlink(join(chat, 'loop-b'), join(chat, 'loop-a'))
   await symlink(join(chat, 'loop-a'), join(chat, 'loop-b'))
   for (const filename of ['link/shot.png', join(chat, 'link', 'shot.png'), 'link/new/deep/shot.png', 'notes.txt', 'dangling.png', '../link/shot.png', 'loop-a/shot.png']) {
-    expect(await refuse({ filename })).toBe(Provider.outsideFolderMessage(filename))
+    expect(await refuse({ filename })).toBe(outsideFolderMessage(filename))
   }
-  expect(await refuse({ paths: [join(chat, 'ok.txt'), join(chat, 'link', 'secret.txt')] })).toBe(Provider.outsideFolderMessage(join(chat, 'link', 'secret.txt')))
-  expect(await refuse({ filename: join(outside, 'shot.png') })).toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+  expect(await refuse({ paths: [join(chat, 'ok.txt'), join(chat, 'link', 'secret.txt')] })).toBe(outsideFolderMessage(join(chat, 'link', 'secret.txt')))
+  expect(await refuse({ filename: join(outside, 'shot.png') })).toBe(outsideFolderMessage(join(outside, 'shot.png')))
   expect(await refuse({ filename: '../outside/shot.png' })).toContain('leads outside it')
   expect(existsSync(join(outside, 'shot.png'))).toBe(false)
 })
 
 it('refuses every call, with or without a file argument, while the output folder is a link that leads outside the chat\'s folder', async () => {
   const { chat, outside } = await chatFolder()
-  const refuse = (tool: string, args: unknown) => Provider.refuseOutsideFolder({ tool, arguments: args, directory: chat })
+  const refuse = (tool: string, args: unknown) => refuseOutsideFolder({ tool, arguments: args, directory: chat })
   const calls: [string, unknown][] = [
     ['browser_navigate', { url: 'https://example.com/download' }], ['browser_take_screenshot', {}], ['browser_click', { ref: 'e1' }],
     ['browser_pdf_save', { filename: 'page.pdf' }], ['browser_snapshot', undefined],
   ]
   for (const [tool, args] of calls) expect(await refuse(tool, args)).toBeUndefined()
-  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
-  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(Provider.LINKED_OUTPUT_FOLDER_MESSAGE)
-  await rm(join(chat, Provider.OUTPUT_FOLDER))
-  await symlink(join(outside, 'not-there-yet'), join(chat, Provider.OUTPUT_FOLDER))
-  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(Provider.LINKED_OUTPUT_FOLDER_MESSAGE)
+  await symlink(outside, join(chat, OUTPUT_FOLDER))
+  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(LINKED_OUTPUT_FOLDER_MESSAGE)
+  await rm(join(chat, OUTPUT_FOLDER))
+  await symlink(join(outside, 'not-there-yet'), join(chat, OUTPUT_FOLDER))
+  for (const [tool, args] of calls) expect(await refuse(tool, args)).toBe(LINKED_OUTPUT_FOLDER_MESSAGE)
   expect(await readdir(outside)).toEqual([])
-  expect(Provider.LINKED_OUTPUT_FOLDER_MESSAGE).toContain('tell the person to remove or replace ".playwright-mcp"')
+  expect(LINKED_OUTPUT_FOLDER_MESSAGE).toContain('tell the person to remove or replace ".playwright-mcp"')
 })
 
 it('lets calls through when the output folder is a real folder or a link that stays inside the chat\'s folder', async () => {
   const { chat } = await chatFolder()
   await mkdir(join(chat, 'shots'))
-  await symlink(join(chat, 'shots'), join(chat, Provider.OUTPUT_FOLDER))
-  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
+  await symlink(join(chat, 'shots'), join(chat, OUTPUT_FOLDER))
+  const refuse = (args: unknown) => refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat })
   expect(await refuse({})).toBeUndefined()
   expect(await refuse({ filename: 'shot.png' })).toBeUndefined()
 })
@@ -232,7 +235,7 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
   await mkdir(join(chat, 'real'))
   await symlink(join(chat, 'real'), join(chat, 'inside-link'))
   await writeFile(join(chat, 'real', 'upload.txt'), 'upload')
-  const refuse = (args: unknown) => Provider.refuseOutsideFolder({ tool: 'browser_file_upload', arguments: args, directory: chat })
+  const refuse = (args: unknown) => refuseOutsideFolder({ tool: 'browser_file_upload', arguments: args, directory: chat })
   for (const args of [
     { filename: 'shot.png' }, { filename: 'new/deep/shot.png' }, { filename: 'real/upload.txt/under-a-file.png' }, { filename: join(chat, 'real', 'shot.png') }, { filename: 'inside-link/shot.png' },
     { paths: [join(chat, 'real', 'upload.txt'), join(chat, 'inside-link', 'upload.txt')] },
@@ -255,17 +258,17 @@ it('keeps the tool denial, the folder guard and the MCP root with browser_additi
     expect(options.outputFolder).toBeUndefined()
     expect(options.deniedTools).toEqual(['browser_run_code_unsafe'])
     expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: { code: 'async page => 1' }, directory: chat }))
-      .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+      .toBe(deniedToolMessage('browser_run_code_unsafe'))
     expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
-      .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+      .toBe(outsideFolderMessage(join(outside, 'shot.png')))
     expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: 'shot.png' }, directory: chat })).toBeUndefined()
   }
   for (const config of [{ mode: 'launch', browserAdditions: true }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222', browserAdditions: true }] as const) {
     Provider.apply(new Context(), Provider.Config(config))
     const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
-    expect(options).toMatchObject({ outputFolder: Provider.OUTPUT_FOLDER, explainFailure: Provider.explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
+    expect(options).toMatchObject({ outputFolder: OUTPUT_FOLDER, explainFailure: explainMissingBrowser, deniedTools: ['browser_run_code_unsafe'] })
     expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
-      .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+      .toBe(outsideFolderMessage(join(outside, 'shot.png')))
   }
 })
 
@@ -278,11 +281,11 @@ it('turns off the tool that runs code in the server process: never registered, a
     expect(options.deniedTools).toEqual(['browser_run_code_unsafe'])
     for (const args of [{ code: 'async page => require("node:fs").writeFileSync("/tmp/x", "x")' }, { filename: 'code.js' }, {}, undefined]) {
       expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: args, directory: chat }))
-        .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+        .toBe(deniedToolMessage('browser_run_code_unsafe'))
     }
     expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: { function: '() => document.title' }, directory: chat })).toBeUndefined()
   }
-  expect(Provider.deniedToolMessage('browser_run_code_unsafe')).toContain('is turned off here because it runs code outside the page')
+  expect(deniedToolMessage('browser_run_code_unsafe')).toContain('is turned off here because it runs code outside the page')
 })
 
 it('keeps the server-code tool off whatever the configuration lists: an empty or other list cannot turn it back on', async () => {
@@ -294,10 +297,10 @@ it('keeps the server-code tool off whatever the configuration lists: an empty or
       expect(options.deniedTools).toContain('browser_run_code_unsafe')
       expect(options.deniedTools!.filter(name => name === 'browser_run_code_unsafe')).toHaveLength(1)
       expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: { code: 'async page => 1' }, directory: chat }))
-        .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+        .toBe(deniedToolMessage('browser_run_code_unsafe'))
     }
   }
-  expect(Provider.deniedToolsOf({ deniedTools: [] })).toEqual(['browser_run_code_unsafe'])
+  expect(deniedToolsOf({ deniedTools: [] })).toEqual(['browser_run_code_unsafe'])
 })
 
 it('turns off the configured tools as well, keeps the folder guard for the rest, and rejects a name that is not a tool name', async () => {
@@ -305,10 +308,10 @@ it('turns off the configured tools as well, keeps the folder guard for the rest,
   Provider.apply(new Context(), Provider.Config({ mode: 'launch', deniedTools: ['browser_evaluate', 'browser_file_upload'] }))
   const options = vi.mocked(mountSessionMcp).mock.calls[0]![1]
   expect(options.deniedTools).toEqual(['browser_run_code_unsafe', 'browser_evaluate', 'browser_file_upload'])
-  expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: {}, directory: chat })).toBe(Provider.deniedToolMessage('browser_evaluate'))
+  expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: {}, directory: chat })).toBe(deniedToolMessage('browser_evaluate'))
   expect(await options.refuseCall!({ tool: 'browser_click', arguments: { ref: 'e1' }, directory: chat })).toBeUndefined()
   expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
-    .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
+    .toBe(outsideFolderMessage(join(outside, 'shot.png')))
   expect(() => Provider.Config({ mode: 'launch', deniedTools: ['mcp__playwright-mcp__browser evaluate'] })).toThrow()
 })
 
@@ -324,7 +327,7 @@ it('offers no other tool that runs model-written code in the server process in t
   expect(files.length).toBeGreaterThan(20)
   expect(withVm.map(file => file.slice(0, file.indexOf('\n')))).toEqual(['runCode.ts'])
   const tools = withVm.flatMap(file => [...file.matchAll(/name: "(browser_[a-z_]+)"/gu)].map(match => match[1]))
-  expect(tools).toEqual([...Provider.SERVER_CODE_TOOLS])
+  expect(tools).toEqual([...SERVER_CODE_TOOLS])
 })
 
 it('serves every Session while no browser admission is provided, asks a provided one at each ask, and hears its change reports', async () => {
