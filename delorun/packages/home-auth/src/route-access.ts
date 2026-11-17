@@ -102,6 +102,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
+    START_PATH: READ('a random id naming this start of the home, with no setting or data'),
     DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
     AGENT_MODELS_PATH: UNLOCKED('starts the agent\'s own process to list its models'),
     LOCAL_MODELS_PATH: READ('probes the two loopback model listings'),

@@ -184,6 +184,8 @@ export function apply(ctx: Context, config: Config): void {
     path: START_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    // A random id for this start and nothing else, so an approved phone reads it like the computer does.
+    admitPeer: admitApprovedDevice(),
     fetch: () => Promise.resolve(json({ startId } satisfies StartAnswer)),
   })
   ctx.connection.fetch.register({
