@@ -1,0 +1,11 @@
+version: 1
+scenario: delorun-live-agent-flag-off
+profile: headless
+composition: default
+recording: authored
+permission: workspace-write
+header:
+  class: delorun-live-agent-flag-off
+  pin: true
+replay:
+  override: true
