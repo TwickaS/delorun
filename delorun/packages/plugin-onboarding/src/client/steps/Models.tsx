@@ -175,7 +175,6 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
           : couldNotTest(card.result)
             ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
             : <StateLine tone="success">{connectedLine(t, card.source)}</StateLine>)}
-        {card.found && !didNotPass(card.result) && <FoundKey t={t} source={card.source} compact />}
         {card.found && (
           <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => {
             setTicked(held => new Set(held).add(card.provider))
@@ -195,6 +194,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       {cards.length === 0 ? <StateLine tone="warning">{t('providers.none')}</StateLine> : (
         <>
           {foundCards.length > 0 && <ul className={shared.cards}>{foundCards.map(present)}</ul>}
+          {/* The explanation is the same for every key Delorun found, so the step says it once. */}
+          {foundCards.some(card => !didNotPass(card.result)) && <FoundKey t={t} source={undefined} compact />}
           {addable.length > 0 && (
             <section className={shared.stack} aria-labelledby={`${headingId}-add`}>
               <h3 id={`${headingId}-add`} className={css.addHeading}>{t(foundCards.length > 0 ? 'providers.add.heading' : 'providers.add.headingFirst')}</h3>

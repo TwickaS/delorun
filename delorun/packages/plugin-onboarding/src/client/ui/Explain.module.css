@@ -1,0 +1,71 @@
+/* A heading and a row of small cards that share the remaining height of the step. */
+.explain {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: var(--onb-gap-1);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--onb-small-size);
+  font-weight: 500;
+  line-height: var(--onb-small-line);
+}
+
+.cards {
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--onb-gap-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-3);
+  padding: var(--onb-gap-1);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--onb-small-size);
+  font-weight: 600;
+}
+
+.title {
+  font-size: var(--onb-body-size);
+  font-weight: 500;
+  line-height: var(--onb-body-line);
+}
+
+.text {
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sample {
+  flex: 1 0 auto;
+  padding: var(--delorun-space-3) var(--delorun-space-4);
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: pre-line;
+}

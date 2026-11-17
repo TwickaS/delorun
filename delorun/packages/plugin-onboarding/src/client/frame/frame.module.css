@@ -66,7 +66,9 @@
 }
 
 .scroll {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
   padding: var(--onb-gap-2) var(--onb-gap-3);
   overflow-y: auto;
@@ -88,8 +90,17 @@
   }
 }
 
+/* The body is at least as tall as the scroll area, and a step's single root grows into it, so a step can give the
+   space it does not need to a part that grows, such as a picture or a list. */
 .body {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   min-width: 0;
+}
+
+.body > :only-child {
+  flex: 1 0 auto;
 }
 
 .footer {
@@ -119,7 +130,8 @@
 }
 
 .skip {
-  padding-left: 0;
+  /* The text lines up with the step's left edge while the hover and focus fill keeps the button's own padding. */
+  margin-inline-start: -14px;
   color: var(--dsw-alias-label-secondary);
 }
 

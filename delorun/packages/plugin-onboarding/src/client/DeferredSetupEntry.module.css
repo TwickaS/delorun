@@ -1,4 +1,4 @@
-/* A quiet text row at the sidebar's foot, in the voice of the foot's other actions. */
+/* A labelled line at the sidebar's foot, above its icon buttons and aligned with them; on the rail, an icon with a count. */
 .entry,
 .rail {
   display: inline-flex;
@@ -17,6 +17,11 @@
   cursor: pointer;
 }
 
+.entry {
+  justify-content: flex-start;
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+}
 
 .text {
   white-space: nowrap;

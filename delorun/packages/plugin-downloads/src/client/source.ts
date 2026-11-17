@@ -42,6 +42,8 @@ export interface DownloadsSource {
    * @returns the unsubscribe function.
    */
   subscribe(listener: () => void): () => void
+  /** Read the install list again now, for a surface that queued an install through another path. */
+  refresh(): void
   /**
    * Add a plugin pack to the queue.
    * @param key - the package name.
@@ -121,6 +123,7 @@ export function createFakeDownloadsSource(initial: readonly DownloadItem[] = [])
   return {
     calls,
     snapshot: () => items,
+    refresh: () => { calls.push('refresh') },
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     set,
     update: change,
@@ -145,7 +148,7 @@ const HUB_KEY = Symbol.for('delorun.plugin-downloads.hub')
 const NO_ITEMS: readonly DownloadItem[] = []
 
 /** A source with nothing in it; its snapshot is one constant array so React can compare it. */
-export const EMPTY_SOURCE: DownloadsSource = { snapshot: () => NO_ITEMS, subscribe: () => () => {}, enqueue: () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
+export const EMPTY_SOURCE: DownloadsSource = { snapshot: () => NO_ITEMS, subscribe: () => () => {}, refresh: () => {}, enqueue: () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
 
 /**
  * The hub is shared through a global symbol, because the onboarding plugin's bundle and this one's are separate modules

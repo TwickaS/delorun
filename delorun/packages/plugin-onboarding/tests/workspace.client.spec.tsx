@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createGuide, type Guide } from '../src/client/guide.ts'
@@ -39,6 +39,14 @@ describe('the workspace step', () => {
       [en['workspace.mode.default'], 'true'], [en['workspace.mode.folder'], 'false'], [en['workspace.mode.clone'], 'false'],
     ])
     expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+  })
+
+  it('says what a workspace is for beside the default, with an example folder for each kind', async () => {
+    mount()
+    const about = screen.getByRole('region', { name: en['workspace.about'] })
+    expect(within(about).getAllByRole('listitem').map(each => each.textContent)).toEqual((['code', 'files', 'empty'] as const).map(kind => `${en[`workspace.about.${kind}.title`]}${en[`workspace.about.${kind}.text`]}${en[`workspace.about.${kind}.sample`]}`))
+    await click(radio(en['workspace.mode.folder']))
+    expect(screen.queryByRole('region', { name: en['workspace.about'] })).toBeNull()
   })
 
   it('chooses the default workspace again when the person comes back to it', async () => {

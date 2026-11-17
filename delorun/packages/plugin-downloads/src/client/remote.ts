@@ -181,6 +181,7 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
         if (listeners.size === 0) stop()
       }
     },
+    refresh,
     enqueue: (key) => {
       remote.enqueue({ names: [key] }).then(
         (result) => {

@@ -228,7 +228,11 @@ export interface SidebarSettingsOwnerProps {
 export interface SidebarFooterActionOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail). */
   wide: boolean
-  /** Whether the entry sits at the end of the foot's one row (`SidebarLayout.setFootRow`) rather than above it. */
+  /**
+   * Whether the entry sits in the foot's one row (`SidebarLayout.setFootRow`) rather than above it. Inline, an icon
+   * button ends the row after Settings and the panels; a labelled entry whose element carries the
+   * `data-sidebar-foot-line` attribute takes its own full-width line above the row instead.
+   */
   inline?: boolean
 }
 

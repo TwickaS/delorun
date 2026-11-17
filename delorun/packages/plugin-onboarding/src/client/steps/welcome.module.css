@@ -1,0 +1,139 @@
+/* The Welcome step: two large language tiles across the width, then the studio in miniature filling the rest. Its
+   parts sit closer than other steps' so the preview notice, when it is owed, still shows without scrolling. */
+.welcome {
+  gap: var(--onb-gap-1);
+}
+
+.tiles [role='radiogroup'] {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.tiles [role='radio'] {
+  min-height: 92px;
+  justify-content: center;
+  padding: var(--onb-gap-1);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The line in the tile's own language wraps instead of being cut short on a narrow screen. */
+.tiles [role='radio'] > :last-child {
+  overflow: visible;
+  white-space: normal;
+}
+
+.tiles [role='radio'][aria-checked='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.glyph {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The picture grows into the space the step leaves, so the step has no empty band under it. */
+.preview {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(120px, 34%) 1fr;
+  min-height: 136px;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-base);
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border-right: 0.5px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.brand {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.newChat,
+.chat {
+  flex: none;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: var(--dsw-radius-xs);
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.newChat {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.group {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chat[data-current='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.ask,
+.answer {
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: var(--dsw-radius-sm);
+}
+
+.ask {
+  align-self: flex-end;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.answer {
+  align-self: flex-start;
+  color: var(--dsw-alias-label-primary);
+}
+
+.box {
+  margin-top: auto;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (max-width: 767px) {
+  .tiles [role='radio'] {
+    min-height: 88px;
+  }
+
+  .preview {
+    grid-template-columns: minmax(96px, 38%) 1fr;
+  }
+}

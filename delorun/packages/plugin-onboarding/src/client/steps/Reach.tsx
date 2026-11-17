@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
 import { CommandRow } from '../ui/CommandRow.tsx'
+import { Explain } from '../ui/Explain.tsx'
 import { useStore, type StepProps } from './shared.ts'
 import more from './reach.module.css'
 import chevron from '../ui/Chevron.module.css'
@@ -13,6 +14,12 @@ import css from './steps.module.css'
 
 /** The command that turns reach on at the computer. */
 export const REACH_COMMAND = 'delorun reach on tailscale'
+
+/** The numbered cards that say how phone access is set up. */
+const REACH_HOW = ['1', '2', '3'] as const
+
+/** The cards that say what a phone can do once it is in. */
+const REACH_USES = ['1', '2', '3'] as const
 
 /** The command that approves a phone once reach is on. */
 export const APPROVE_COMMAND = 'delorun devices approve'
@@ -71,6 +78,8 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
       {/* The step shows only while remote access is off, so Tailscale being ready is never the same as phone access being on. */}
       <p className={css.lead}>{t(tailscale?.state === 'ready' ? 'reach.tailscaleReady' : 'reach.lead')}</p>
       <CommandRow command={REACH_COMMAND} t={t} />
+      <Explain heading={t('reach.how')} numbered cards={REACH_HOW.map(n => ({ key: n, title: t(`reach.how.${n}.title`), text: t(`reach.how.${n}.text`) }))} />
+      <Explain heading={t('reach.uses')} cards={REACH_USES.map(n => ({ key: n, title: t(`reach.uses.${n}.title`), text: t(`reach.uses.${n}.text`) }))} />
       <details className={more.details}>
         <summary className={`${chevron.summary} ${more.summary}`}>{t('reach.more')}</summary>
         <div className={more.more}>

@@ -727,6 +727,7 @@ export function SidebarRoot({
             <div className={css.footRow}>
               {settingsArea}
               {inFoot && panelList}
+              <span className={css.footSpacer} aria-hidden="true" />
               <div className={css.footerActionsInline}>{renderSlot('sidebar.footer.action', { wide, inline: true })}</div>
             </div>
           )

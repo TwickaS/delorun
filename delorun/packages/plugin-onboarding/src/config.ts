@@ -40,7 +40,7 @@ export interface OnboardingSettings {
   plugins: string[]
   /** Rows a bundle inserts disabled, by row id, that the recommended-plugins step offers to turn on; the step is left out when this and `plugins` are empty. */
   optionalRows: string[]
-  /** The start of Delorun in which the person pressed Finish later, which keeps the guide closed until the next start; empty for none. */
+  /** The start of Delorun in which the person pressed Complete setup later, which keeps the guide closed until the next start; empty for none. */
   pausedStart: string
   /** How long adding a package may run before its card says it is still working, in seconds. */
   addWaitSeconds: number

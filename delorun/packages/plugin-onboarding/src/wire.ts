@@ -189,7 +189,7 @@ export const KeyTestAnswer = z.strictObject({
 export type KeyTestAnswer = z.output<typeof KeyTestAnswer>
 
 /**
- * The harness's route that names this start of Delorun. `GET` answers {@link StartAnswer}. The guide's "Finish later"
+ * The harness's route that names this start of Delorun. `GET` answers {@link StartAnswer}. The guide's "Complete setup later"
  * keeps the guide closed while the start it was pressed in is the current one.
  */
 export const START_PATH = '/api/delorunOnboarding.start'
