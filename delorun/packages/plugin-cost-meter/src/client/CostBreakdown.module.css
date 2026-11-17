@@ -1,7 +1,7 @@
-/* The breakdown grid: a name column and three right-aligned number columns, shared by every row through subgrid. */
+/* The breakdown grid: a name column and four right-aligned number columns, shared by every row through subgrid. */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   column-gap: var(--delorun-space-5);
 }
 

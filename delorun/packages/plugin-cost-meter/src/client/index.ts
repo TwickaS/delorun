@@ -17,7 +17,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { CostPill, type CostPillInjected } from './CostPill.tsx'
 import { en, NS, zh } from './locales.ts'
 
-export { CostBreakdown, type CostBreakdownProps, type CostGroup } from './CostBreakdown.tsx'
+export { CostBreakdown, splitTokens, type CostBreakdownProps, type CostGroup } from './CostBreakdown.tsx'
 export { CostPill, type CostPillInjected, type CostPillProps } from './CostPill.tsx'
 export { addCosts, collectAgents, counted, formatCost, formatExact, formatTokens, NO_COST } from './costs.ts'
 export type { AgentCost, AgentSessionRow, AgentTree, AgentValues, LoadedValues, Translate } from './costs.ts'
