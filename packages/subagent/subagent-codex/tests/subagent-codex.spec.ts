@@ -2452,6 +2452,43 @@ describe('one-shot hand-off fixes', () => {
     expect(child.terminate).toHaveBeenCalled()
   })
 
+  it('follows model pages past the tenth, so a model on a late page is offered', async () => {
+    const child = fakeChild()
+    const starting = startCodexRun(request(), runSpec(child))
+    const initialize = await child.peer.nextMethod('initialize')
+    child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+    await child.peer.nextMethod('initialized')
+    const threadStart = await child.peer.nextMethod('thread/start')
+    child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true }, model: 'gpt-late', modelProvider: 'openai' })
+    for (let page = 1; page <= 12; page += 1) {
+      const list = await child.peer.nextMethod('model/list')
+      const last = page === 12
+      child.peer.respond(list, {
+        data: [{ model: last ? 'gpt-late' : `gpt-${String(page)}`, displayName: '', hidden: false }],
+        nextCursor: last ? null : `page-${String(page + 1)}`,
+      })
+    }
+    await starting
+    await child.peer.nextMethod('turn/start')
+  })
+
+  it('fails loud, not as "not offered", when the model list never ends', async () => {
+    const child = fakeChild()
+    const starting = startCodexRun(request(), runSpec(child))
+    const initialize = await child.peer.nextMethod('initialize')
+    child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+    await child.peer.nextMethod('initialized')
+    const threadStart = await child.peer.nextMethod('thread/start')
+    child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true }, model: 'gpt-x', modelProvider: 'openai' })
+    const outcome = expect(starting).rejects.toThrow(/could not read the full model list/u)
+    for (let page = 1; page <= 1000; page += 1) {
+      const list = await child.peer.nextMethod('model/list')
+      child.peer.respond(list, { data: [], nextCursor: `page-${String(page + 1)}` })
+    }
+    await outcome
+    expect(child.terminate).toHaveBeenCalled()
+  })
+
   it('publishes the run when the configured model is offered', async () => {
     const { child, starting } = await startWithReportedModel('gpt-ok', [
       { model: 'gpt-ok', displayName: 'Ok', hidden: false },

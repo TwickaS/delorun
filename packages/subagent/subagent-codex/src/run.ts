@@ -30,6 +30,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   CodexAppServerWire,
+  CodexModelListIncomplete,
   type CodexModelOption,
   type CodexWireFailureFacts,
 } from './wire.ts'
@@ -411,7 +412,7 @@ export async function startCodexRun(
       // Let an already-exiting process publish those facts before rollback.
       await new Promise<void>((resolve) => { setImmediate(resolve) })
     }
-    const failure = error instanceof CodexModelNotOffered ? error : new CodexRunFailure({
+    const failure = error instanceof CodexModelNotOffered || error instanceof CodexModelListIncomplete ? error : new CodexRunFailure({
       stage: startupStage,
       category: 'unknown',
       outcome: error instanceof CodexRunFailure
