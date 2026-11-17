@@ -1,12 +1,15 @@
 /**
  * A static server for a built `out/` directory, for the review pass. It sends the right type for pictures, fonts and data,
  * serves `404.html` with status 404 for an unknown address, and sends `no-cache` so a second pass never reads a stale file.
+ * Text types are sent brotli-compressed (gzip when brotli is not accepted) with `Content-Encoding` and `Vary: Accept-Encoding`, as
+ * Cloudflare does, so the phone profile's timings read compressed sizes.
  *
  * @module @delorun/website/review/serve
  */
 import { createServer, type Server } from 'node:http'
-import { createReadStream, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve } from 'node:path'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 
 /** Content types by extension. */
 export const TYPES: Readonly<Record<string, string>> = {
@@ -15,6 +18,38 @@ export const TYPES: Readonly<Record<string, string>> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif',
   '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml', '.webmanifest': 'application/manifest+json',
+}
+
+/** The types Cloudflare compresses: text that shrinks, not pictures or fonts that are already compressed. */
+const COMPRESSED = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.txt', '.xml', '.webmanifest'])
+
+/** The encodings the server can send. */
+export type Encoding = 'br' | 'gzip' | 'identity'
+
+/**
+ * Chooses the encoding for a request, preferring brotli as Cloudflare does.
+ * @param acceptEncoding - the request's `Accept-Encoding` header.
+ * @param extension - the file's extension, with the dot.
+ * @returns the encoding to send.
+ */
+export function chooseEncoding(acceptEncoding: string | undefined, extension: string): Encoding {
+  if (!COMPRESSED.has(extension) || acceptEncoding === undefined) return 'identity'
+  const accepted = acceptEncoding.split(',').map(part => part.trim().split(';')[0])
+  if (accepted.includes('br')) return 'br'
+  if (accepted.includes('gzip')) return 'gzip'
+  return 'identity'
+}
+
+const cache = new Map<string, Buffer>()
+
+function body(file: string, encoding: Encoding): Buffer {
+  const key = `${file}|${encoding}`
+  const hit = cache.get(key)
+  if (hit !== undefined) return hit
+  const raw = readFileSync(file)
+  const made = encoding === 'br' ? brotliCompressSync(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 5 } }) : encoding === 'gzip' ? gzipSync(raw) : raw
+  cache.set(key, made)
+  return made
 }
 
 /**
@@ -55,8 +90,16 @@ export function serve(dir: string, port: number): Promise<Server> {
       response.end('Not found')
       return
     }
-    response.writeHead(file === undefined ? 404 : 200, { 'content-type': TYPES[extname(send)] ?? 'application/octet-stream', 'cache-control': 'no-cache' })
-    createReadStream(send).pipe(response)
+    const encoding = chooseEncoding(request.headers['accept-encoding'], extname(send))
+    const data = body(send, encoding)
+    response.writeHead(file === undefined ? 404 : 200, {
+      'content-type': TYPES[extname(send)] ?? 'application/octet-stream',
+      'cache-control': 'no-cache',
+      'content-length': data.length,
+      ...(COMPRESSED.has(extname(send)) ? { vary: 'Accept-Encoding' } : {}),
+      ...(encoding === 'identity' ? {} : { 'content-encoding': encoding }),
+    })
+    response.end(data)
   })
   return new Promise(done => server.listen(port, '127.0.0.1', () => { done(server) }))
 }
