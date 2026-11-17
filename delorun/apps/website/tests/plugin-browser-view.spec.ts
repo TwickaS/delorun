@@ -78,3 +78,12 @@ describe('the plugin browser with scripts', () => {
     expect(host.querySelector(`a[href$="/guide/first-plugin"]`)).not.toBeNull()
   })
 })
+
+describe('the plugin browser still', () => {
+  it('is the same text the browser prints before its scripts run', async () => {
+    const { PluginBrowserStill } = await import('../src/plugin-browser/PluginBrowserStill.tsx')
+    const still = renderToStaticMarkup(createElement(PluginBrowserStill, { words: ENGLISH_WORDS }))
+    for (const plugin of data.plugins) expect(still).toContain(plugin.title.replaceAll("'", '&#x27;'))
+    expect(still).not.toContain('role="tablist"')
+  })
+})

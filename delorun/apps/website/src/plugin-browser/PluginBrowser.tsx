@@ -8,25 +8,14 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Card, Link, Pill, TabList, TabPanel } from '@brand'
 import { GITHUB_URL, DOCS_URL } from '../site/config.ts'
-import data from './plugins.generated.json'
-import type { PluginEntry, Standing } from './list-plugins.ts'
+import type { PluginEntry } from './list-plugins.ts'
 import css from './PluginBrowser.module.css'
-import type { FileNote, PluginBrowserWords } from './words.ts'
+import { KINDS, KindFiles, PLUGINS, PluginBrowserStill, STANDINGS, type Kind } from './PluginBrowserStill.tsx'
+import type { PluginBrowserWords } from './words.ts'
 
 type Tab = 'plugins' | 'make'
-type Kind = keyof typeof data.scaffold
 
-/** The plugins in the data file. */
-const PLUGINS: readonly PluginEntry[] = data.plugins as PluginEntry[]
-const KINDS = Object.keys(data.scaffold) as Kind[]
-const STANDINGS: readonly Standing[] = ['on', 'off', 'headless', 'pack']
 const FIRST_PLUGIN_GUIDE = `${DOCS_URL}/guide/first-plugin`
-
-/** The note for a file of a new plugin, by the file's name without its folder. */
-function noteFor(path: string, words: PluginBrowserWords): string {
-  const name = path.slice(path.lastIndexOf('/') + 1)
-  return name in words.fileNotes ? words.fileNotes[name as FileNote] : ''
-}
 
 function Detail({ plugin, words }: { readonly plugin: PluginEntry; readonly words: PluginBrowserWords }) {
   return (
@@ -50,59 +39,17 @@ function Detail({ plugin, words }: { readonly plugin: PluginEntry; readonly word
   )
 }
 
-function KindFiles({ kind, words }: { readonly kind: Kind; readonly words: PluginBrowserWords }) {
-  return (
-    <>
-      <p className={css.kindSummary}>{words.kinds[kind].summary}</p>
-      <h4 className={css.fileHeading}>{words.filesWritten(words.kinds[kind].name)}</h4>
-      <ul className={css.fileList}>
-        {data.scaffold[kind].map((path) => <li key={path}><code>{path}</code><span>{noteFor(path, words)}</span></li>)}
-      </ul>
-    </>
-  )
-}
-
-function Make({ words, all }: { readonly words: PluginBrowserWords; readonly all: boolean }) {
+function Make({ words }: { readonly words: PluginBrowserWords }) {
   const [kind, setKind] = useState<Kind>('tool')
   return (
     <div className={css.make}>
       <p>{words.makeIntro}</p>
-      {all ? KINDS.map((each) => <section key={each}><h3 className={css.fileHeading}>{words.kinds[each].name}</h3><KindFiles kind={each} words={words} /></section>) : (
-        <>
-          <ul className={css.kinds}>
-            {KINDS.map((each) => <li key={each}><Pill tone={each === kind ? 'accent' : 'neutral'} aria-pressed={each === kind} onClick={() => { setKind(each) }}>{words.kinds[each].name}</Pill></li>)}
-          </ul>
-          <div aria-live="polite"><KindFiles kind={kind} words={words} /></div>
-        </>
-      )}
+      <ul className={css.kinds}>
+        {KINDS.map((each) => <li key={each}><Pill tone={each === kind ? 'accent' : 'neutral'} aria-pressed={each === kind} onClick={() => { setKind(each) }}>{words.kinds[each].name}</Pill></li>)}
+      </ul>
+      <div aria-live="polite"><KindFiles kind={kind} words={words} /></div>
       <p className={css.note}>{words.makeNote}</p>
       <a className={css.guide} href={FIRST_PLUGIN_GUIDE}>{words.guideLink}</a>
-    </div>
-  )
-}
-
-/** Every plugin as text: what a visitor with scripts off, and a search engine, reads. */
-function Plain({ words }: { readonly words: PluginBrowserWords }) {
-  return (
-    <div className={css.plain} tabIndex={0} role="region" aria-label={words.listLabel}>
-      {STANDINGS.map((standing) => {
-        const group = PLUGINS.filter((plugin) => plugin.standing === standing)
-        return group.length === 0 ? null : (
-          <section key={standing}>
-            <h3>{words.groups[standing]}</h3>
-            <ul>
-              {group.map((plugin) => (
-                <li key={plugin.name}>
-                  <strong>{plugin.title}</strong>
-                  <span>{plugin.sentence}</span>
-                  {plugin.requires.length === 0 ? null : <small>{words.requiresHeading}: {plugin.requires.join(', ')}</small>}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )
-      })}
-      <Make words={words} all />
     </div>
   )
 }
@@ -158,12 +105,12 @@ export function PluginBrowser({ words }: { readonly words: PluginBrowserWords })
   const [ready, setReady] = useState(false)
   const [tab, setTab] = useState<Tab>('plugins')
   useEffect(() => { setReady(true) }, [])
-  if (!ready) return <div className={css.root}><span /><Plain words={words} /></div>
+  if (!ready) return <div className={css.root}><span /><PluginBrowserStill words={words} /></div>
   return (
     <div className={css.root}>
       <TabList label={words.tabsLabel} idBase="plugin-browser" selected={tab} onSelect={setTab} tabs={[{ id: 'plugins', label: words.pluginsTab }, { id: 'make', label: words.makeYourOwnTab }]} />
       <TabPanel idBase="plugin-browser" selected={tab} focusable={false} className={css.panel}>
-        {tab === 'plugins' ? <Plugins words={words} /> : <Make words={words} all={false} />}
+        {tab === 'plugins' ? <Plugins words={words} /> : <Make words={words} />}
       </TabPanel>
     </div>
   )
