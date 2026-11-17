@@ -2,8 +2,13 @@
  * Sonner positions and moves the toast; these rules put its movement on the brand's tokens. A toast seats with a short
  * travel from the enter scale, and leaves quicker than it came. The rules name Sonner's data attributes on the class
  * the toaster gives each toast, doubled so it outranks Sonner's own attribute rules. Under reduced motion Sonner's stylesheet
- * removes every transition.
+ * removes every transition with `!important`; the rule at the end gives the fade back, since opacity changes stay.
  */
+/* The wrapper that notices focus inside the toaster takes no box of its own. */
+.focus {
+  display: contents;
+}
+
 .toaster {
   font-family: var(--dl-font-sans);
 }
@@ -57,4 +62,10 @@
 
 .action {
   flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast.toast[data-sonner-toast] {
+    transition: opacity var(--dl-duration-move) var(--dl-ease-out) !important;
+  }
 }

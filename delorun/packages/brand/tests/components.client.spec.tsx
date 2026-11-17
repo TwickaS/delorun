@@ -32,6 +32,13 @@ describe('Button', () => {
     fireEvent.click(button)
     expect(onClick).not.toHaveBeenCalled()
   })
+
+  it('when unavailable does not submit its form', () => {
+    const onSubmit = vi.fn((event: React.FormEvent) => { event.preventDefault() })
+    render(<form onSubmit={onSubmit}><input aria-label="Email" /><Button type="submit" unavailable>Sign up</Button></form>)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign up' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })
 
 describe('TextField', () => {

@@ -1,7 +1,8 @@
 /**
- * A block of code, such as the install command, with a button that copies it. The button answers in place: after a
- * press it shows the copied or the failed text beside a mark for {@link COPY_ANSWER_MS}, and a polite live region says
- * the same to a screen reader. A failed copy also selects the code, so the visitor can copy it by hand. The button
+ * A block of code, such as the install command, with a button that copies it. The block answers in place for
+ * {@link COPY_ANSWER_MS}: the button shows a tick and the copied text, or a cross with the failed text on its own line
+ * under the code, and a polite live region says the same to a screen reader, again on every press. A failed copy also
+ * selects the code, so the visitor can copy it by hand. The button
  * appears once scripts run; without them the block is plain selectable text and keeps its size.
  * @module @delorun/brand/components/CodeBlock
  */
@@ -24,12 +25,14 @@ export async function copyText(text: string): Promise<boolean> {
     // The API is absent (an insecure context or an old browser) or the page lacks permission; the text area below is the fallback.
     void error
   }
+  const before = document.activeElement
   const area = document.createElement('textarea')
   area.value = text
   area.setAttribute('readonly', '')
   area.style.position = 'fixed'
   area.style.opacity = '0'
   document.body.append(area)
+  area.focus({ preventScroll: true })
   area.select()
   try {
     return document.execCommand('copy')
@@ -39,6 +42,7 @@ export async function copyText(text: string): Promise<boolean> {
     return false
   } finally {
     area.remove()
+    if (before instanceof HTMLElement) before.focus({ preventScroll: true })
   }
 }
 
@@ -72,6 +76,7 @@ const CROSS = 'M18 6 6 18M6 6l12 12'
 export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, size = 'md', className }: CodeBlockProps) {
   const [ready, setReady] = useState(false)
   const [answer, setAnswer] = useState<Answer>('idle')
+  const [presses, setPresses] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const codeRef = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -82,6 +87,7 @@ export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, 
     const copied = await copyText(code)
     if (!copied && codeRef.current !== null) window.getSelection()?.selectAllChildren(codeRef.current)
     setAnswer(copied ? 'copied' : 'failed')
+    setPresses(count => count + 1)
     clearTimeout(timer.current)
     timer.current = setTimeout(() => { setAnswer('idle') }, COPY_ANSWER_MS)
   }
@@ -97,10 +103,12 @@ export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, 
               ? <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>
               : <path d={answer === 'copied' ? TICK : CROSS} />}
           </svg>
-          {answer === 'idle' ? null : <span className={css.answer} aria-hidden="true">{said}</span>}
+          {answer === 'copied' ? <span className={css.answer} aria-hidden="true">{said}</span> : null}
         </button>
       </div>
-      <span role="status" aria-live="polite" className={css.announce}>{said}</span>
+      {answer === 'failed' ? <p className={css.failed} aria-hidden="true">{said}</p> : null}
+      {/* A new key per press replaces the text, so a second copy is announced again. */}
+      <span role="status" aria-live="polite" className={css.announce}><span key={presses}>{said}</span></span>
     </figure>
   )
 }

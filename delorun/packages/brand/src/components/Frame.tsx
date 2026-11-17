@@ -19,7 +19,7 @@ export interface FrameProps {
   readonly still: ReactNode
   /** The live content; while it is absent, or `ready` is false, the still shows. */
   readonly children?: ReactNode
-  /** Whether the content is ready to be seen; defaults to whether `children` is given. */
+  /** Whether the content is ready to be seen; defaults to whether `children` is given and not null. */
   readonly ready?: boolean
   readonly className?: string | undefined
 }
@@ -29,12 +29,12 @@ export interface FrameProps {
  * @param props - see {@link FrameProps}.
  * @returns a `figure` named by `label`.
  */
-export function Frame({ width, height, label, still, children, ready = children !== undefined, className }: FrameProps) {
+export function Frame({ width, height, label, still, children, ready = children != null, className }: FrameProps) {
   const size = { '--frame-width': `${width}px`, aspectRatio: `${width} / ${height}` } as CSSProperties
   return (
     <figure className={`${css.frame} ${className ?? ''}`.trim()} style={size} aria-label={label} data-ready={ready}>
       <div className={css.still} aria-hidden={ready}>{still}</div>
-      {children === undefined ? null : <div className={css.content} aria-hidden={!ready}>{children}</div>}
+      {children == null ? null : <div className={css.content} aria-hidden={!ready}>{children}</div>}
     </figure>
   )
 }

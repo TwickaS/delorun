@@ -55,6 +55,19 @@ describe('TabList', () => {
     expect(panel.tabIndex).toBe(0)
   })
 
+  it('falls back to the first tab when the selection is not in the row, keeping one tab stop', () => {
+    const onSelect = vi.fn()
+    render(<TabList label="Chapters" idBase="replay" tabs={CHAPTERS} selected={'gone' as Chapter} onSelect={onSelect} />)
+    expect(screen.getAllByRole('tab').map(tab => tab.tabIndex)).toEqual([0, -1, -1])
+    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' })
+    expect(onSelect).toHaveBeenCalledWith('review')
+  })
+
+  it('leaves the panel out of the tab order when it holds controls', () => {
+    render(<TabPanel idBase="replay" selected="ask" focusable={false}><button type="button">Play</button></TabPanel>)
+    expect(screen.getByRole('tabpanel').hasAttribute('tabindex')).toBe(false)
+  })
+
   it('leaves other keys to the page', () => {
     render(<Chapters />)
     const list = screen.getByRole('tablist')
@@ -95,6 +108,18 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('status').textContent).toBe('')
   })
 
+  it('announces a second copy again with new text in the live region', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => {}) } })
+    render(<CodeBlock code="delorun" {...labels} />)
+    const button = screen.getByRole('button', { name: 'Copy command' })
+    await act(async () => { fireEvent.click(button) })
+    const first = screen.getByRole('status').firstElementChild
+    await act(async () => { fireEvent.click(button) })
+    const second = screen.getByRole('status').firstElementChild
+    expect(second?.textContent).toBe('Copied')
+    expect(second).not.toBe(first)
+  })
+
   it('says a failed copy in place and selects the code for a copy by hand', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => { throw new Error('denied') }) } })
     const execCommand = vi.fn(() => false)
@@ -103,6 +128,8 @@ describe('CodeBlock', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy command' })) })
     expect(execCommand).toHaveBeenCalledWith('copy')
     expect(screen.getByRole('status').textContent).toBe('Copy failed')
+    expect(screen.getByText('Copy failed', { selector: 'p' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy command' }).textContent).toBe('')
     expect(window.getSelection()?.toString()).toBe('pnpm add -g delorun')
     expect(screen.getByRole('figure').querySelector('figcaption')?.textContent).toBe('pnpm')
   })
@@ -121,6 +148,14 @@ describe('Frame', () => {
     expect(frame.dataset.ready).toBe('true')
     expect(screen.getByText('live').parentElement?.getAttribute('aria-hidden')).toBe('false')
     expect(frame.querySelector('img')?.parentElement?.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('Frame with no content yet', () => {
+  it('keeps showing the still when the content is null', () => {
+    render(<Frame width={400} height={300} label="The studio" still={<p>still</p>}>{null}</Frame>)
+    expect(screen.getByRole('figure').dataset.ready).toBe('false')
+    expect(screen.getByText('still').parentElement?.getAttribute('aria-hidden')).toBe('false')
   })
 })
 
