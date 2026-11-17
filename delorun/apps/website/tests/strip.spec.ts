@@ -134,14 +134,14 @@ describe('the entry', () => {
   it('shows the studio bundle\'s row while the profile holds no entry of its own', () => {
     expect(heldEntry(START.entry)).toEqual({ config: Object.entries(BUNDLE_CONFIG), bundle: true })
     expect(heldEntry(after(OCEAN).entry)).toEqual({ config: [['studioAdditions', true], ['palette', 'ocean']], bundle: false })
-    expect(STRIP_COPY.en.bundleFile).toBe(`${BUNDLE_PACKAGE}/cordis.patch.yml`)
+    expect(STRIP_COPY.en.bundleFile).toContain('studio\'s own cordis.patch.yml')
     const bundle = readFileSync(resolve(DELORUN, 'packages/bundle-studio/package.json'), 'utf8')
     expect(JSON.parse(bundle)).toMatchObject({ name: BUNDLE_PACKAGE })
   })
 
   it('says a theme is stored under its id where the id is not its name', () => {
-    expect(storedAsLine(after(look({ look: 't3-chat' })).entry ?? [])).toBe('Berry is stored as t3-chat.')
-    expect(storedAsLine(after(look({ look: 't3-code' })).entry ?? [])).toBe('Slate is stored as t3-code.')
+    expect(storedAsLine(after(look({ look: 't3-chat' })).entry ?? [])).toBe('Berry is written as t3-chat in the file.')
+    expect(storedAsLine(after(look({ look: 't3-code' })).entry ?? [])).toBe('Slate is written as t3-code in the file.')
     for (const id of KNOWN_LOOKS.filter(each => !each.startsWith('t3-'))) {
       const entry = after(id === 'custom' ? MOSS : look({ look: id })).entry
       if (entry !== undefined) expect(storedAsLine(entry)).toBeUndefined()
@@ -255,7 +255,7 @@ describe('the strip on the page', () => {
   it('says which id the entry stores Berry under, and drops the line for a theme stored by its name', () => {
     press(radio(studio.palette, 'Berry'))
     expect(host.querySelector('pre')?.textContent).toContain('palette: t3-chat')
-    expect(entryLine()).toBe('Berry is stored as t3-chat.')
+    expect(entryLine()).toBe('Berry is written as t3-chat in the file.')
     press(radio(studio.palette, 'Ocean'))
     expect(entryLine()).toBeUndefined()
     expect(host.textContent).not.toContain(STRIP_COPY.en.bundleFile)

@@ -167,6 +167,13 @@
   gap: var(--dl-space-2);
 }
 
+/* The entry keeps its indentation at every width: a narrow screen scrolls the code sideways rather than wrapping it. */
+.entry :global(pre) {
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
 .entryLine {
   margin: 0;
   font-size: 13px;
@@ -353,7 +360,8 @@
   font-family: var(--dl-font-mono);
   font-size: 15px;
   line-height: 1.5;
-  white-space: pre-wrap;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 /* The spread: the new page is revealed by the clip the script animates, not cross-faded. */
