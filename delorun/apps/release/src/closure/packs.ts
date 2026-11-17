@@ -10,9 +10,10 @@
  *
  * A pack's package.json files name every package it links: `pnpm deploy` empties the pack package's own
  * `peerDependencies`, so the build restores the source's, and a package that imports a linked package without declaring
- * it gets it in its `peerDependencies` at the closure's version. Changes follows only declared dependencies when it copies
- * a pack for review, so an undeclared link would be missing from the copy; a build whose pack would still leave a need out
- * of the copy is refused.
+ * it gets it in its `peerDependencies`, both at `peerRange`. Changes follows only declared dependencies when it copies
+ * a pack for review, so an undeclared link would be missing from the copy. Each built variant is installed against the
+ * staged closure and checked with Changes' own scan (`./review-copy.ts`); a build whose review copy would miss a need is
+ * refused.
  *
  * @module @delorun/release/closure/packs
  */
@@ -30,7 +31,8 @@ import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
 import { closureName } from '../rebuild/compare.ts'
 import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
-import { describeUnresolved, linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, unresolvedPackImports, type PackLayout } from './pack-imports.ts'
+import { linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, type PackLayout } from './pack-imports.ts'
+import { installedReviewCopyProblems } from './review-copy.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
 
@@ -108,11 +110,12 @@ export function packArchiveName(release: string, name: string, platform: Runtime
   return archive
 }
 
-async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources): Promise<PackExternal> {
+async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources, downloaded: Map<string, Buffer>): Promise<PackExternal> {
   const locked = sources.locked(name, platform)
   if (locked === undefined) throw new Error(`the lockfile does not pin ${name} for ${platform}`)
   const url = tarballUrl(locked.source ?? name, locked.version)
   const bytes = await sources.download(url)
+  downloaded.set(url, bytes)
   const sha512 = createHash('sha512').update(bytes).digest('base64')
   if (`sha512-${sha512}` !== locked.integrity) throw new Error(`${url} does not match the lockfile's integrity; the registry served other bytes than the lockfile pins`)
   return { name, version: brandString<SemanticVersion>(locked.version), url, sha512: brandString<Sha512Base64>(sha512), length: bytes.byteLength }
@@ -160,18 +163,41 @@ function manifestText(manifest: PackageManifest): string {
   return `${JSON.stringify(manifest, null, 2)}\n`
 }
 
+/** Upstream's DSH packages: their peer ranges are what its compatibility check compares with the running DSH. */
+function isDshPackage(name: string): boolean {
+  return name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
+}
+
+/**
+ * The range a pack's `package.json` declares a linked peer at. A DSH package keeps the source's range, `workspace:*`
+ * when it has none: upstream's compatibility check reads a `workspace:` range as the running DSH, so a reviewed copy,
+ * which Changes keeps across updates, stays compatible when the DSH version changes. Any other package is declared at
+ * the closure's exact version, the one the pack links.
+ * @param name - the peer's name.
+ * @param sourceRange - the range the source declares, if any.
+ * @param closureVersion - the closure's version of the peer, if it carries it.
+ * @returns the range; the source's when the closure does not carry a package other than DSH's.
+ */
+function peerRange(name: string, sourceRange: string | undefined, closureVersion: string | undefined): string {
+  if (isDshPackage(name)) return sourceRange ?? 'workspace:*'
+  return closureVersion ?? sourceRange ?? '*'
+}
+
 /**
  * Put back the peers `pnpm deploy` dropped from the pack package's `package.json`: each peer the source declares and the
- * deployed manifest does not, with the source's range, and its `peerDependenciesMeta` entry.
+ * deployed manifest does not, at {@link peerRange}, and its `peerDependenciesMeta` entry.
  * @param directory - the deployment.
  * @param declared - the source's peers.
+ * @param closureNodeModules - the closure's `app/node_modules` for the platform.
  */
-async function restoreDeclaredPeers(directory: string, declared: DeclaredPeers): Promise<void> {
+async function restoreDeclaredPeers(directory: string, declared: DeclaredPeers, closureNodeModules: string): Promise<void> {
   const path = join(directory, 'package.json')
   const manifest = JSON.parse(await readFile(path, 'utf8')) as PackageManifest
   const missing = Object.entries(declared.peerDependencies ?? {}).filter(([peer]) => manifest.peerDependencies?.[peer] === undefined)
   if (missing.length === 0) return
-  manifest.peerDependencies = { ...manifest.peerDependencies, ...Object.fromEntries(missing) }
+  const restored: Record<string, string> = {}
+  for (const [peer, range] of missing) restored[peer] = peerRange(peer, range, await versionIn(join(closureNodeModules, peer)))
+  manifest.peerDependencies = { ...manifest.peerDependencies, ...restored }
   const meta = missing.flatMap(([peer]) => (declared.peerDependenciesMeta?.[peer] === undefined || manifest.peerDependenciesMeta?.[peer] !== undefined ? [] : [[peer, declared.peerDependenciesMeta[peer]] as const]))
   if (meta.length > 0) manifest.peerDependenciesMeta = { ...manifest.peerDependenciesMeta, ...Object.fromEntries(meta) }
   await writeFile(path, manifestText(manifest))
@@ -231,11 +257,13 @@ function isDelorunSource(name: string, path: string): boolean {
  */
 export async function buildPack(name: string, version: string, experimental: boolean, releaseVersion: string, platforms: readonly RuntimePlatform[], epoch: number, externals: readonly string[], sources: PackSources, scratch: string): Promise<BuiltPack> {
   const archives = new Map<string, Buffer>()
+  // The externals' tarballs, by URL, for the review copy check's install.
+  const downloaded = new Map<string, Buffer>()
   const built = new Map<RuntimePlatform, { bytes: Buffer, variant: Omit<PackVariant, 'external' | 'peers'>, external: PackExternal[], peers: string[] }>()
   for (const platform of platforms) {
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
     await sources.deploy(name, platform, directory)
-    await restoreDeclaredPeers(directory, await sources.declaredPeers(name))
+    await restoreDeclaredPeers(directory, await sources.declaredPeers(name), sources.closureNodeModules(platform))
     // A Delorun package exports TypeScript sources, which Node does not run from a pack; the closure's are transpiled too.
     await transpilePackPackages(name, directory)
     const external: PackExternal[] = []
@@ -249,7 +277,7 @@ export async function buildPack(name: string, version: string, experimental: boo
       if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {
           dropped.add(nested)
-          external.push(await pinOf(nested, platform, sources))
+          external.push(await pinOf(nested, platform, sources, downloaded))
         } else {
           const inClosure = await versionIn(join(sources.closureNodeModules(platform), nested))
           const bundled = await versionIn(join(directory, 'node_modules', nested))
@@ -268,7 +296,18 @@ export async function buildPack(name: string, version: string, experimental: boo
     await linkClosureNeeds(name, platform, entries, peers, nestedName => keepsOneCopy(nestedName, packPeers, externals), external, sources)
     await declareLinkedNeeds(name, platform, directory, entries, peers, external, sources)
     const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
-    built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() })
+    const variant = { ...result.variant, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() }
+    const copyProblems = await installedReviewCopyProblems({
+      entry: { name, version: brandString<SemanticVersion>(version), experimental, variants: { [platform]: variant } },
+      platform,
+      archive: result.bytes,
+      release: releaseVersion,
+      runtimeNodeModules: sources.closureNodeModules(platform),
+      fetchExternal: pin => Promise.resolve(downloaded.get(pin.url)!),
+      scratch,
+    })
+    if (copyProblems.length > 0) throw new Error(`${name} for ${platform} would not load from the review copy Changes makes of it: ${copyProblems.slice(0, 5).join('; ')}${copyProblems.length > 5 ? `; and ${String(copyProblems.length - 5)} more` : ''}. Declare each package a pack's package imports in that package's package.json`)
+    built.set(platform, { ...result, external: variant.external, peers: variant.peers })
   }
   const variants: Partial<Record<RuntimePlatform | 'any', PackVariant>> = {}
   const same = platforms.every(platform => {
@@ -318,9 +357,8 @@ async function linkClosureNeeds(name: string, platform: RuntimePlatform, entries
 
 /**
  * Declare in each package's `package.json` the linked peers it imports without declaring, so Changes' review copy keeps
- * those links (see the module comment), then refuse a pack with any need the installed pack or the copy cannot meet.
- * Each name goes into the importer's `peerDependencies` at the closure's exact version, in the deployment and in
- * `entries`.
+ * those links (see the module comment). Each name goes into the importer's `peerDependencies` at {@link peerRange}, in
+ * the deployment and in `entries`.
  * @param name - the pack's package name.
  * @param platform - the platform.
  * @param directory - the deployment.
@@ -328,12 +366,12 @@ async function linkClosureNeeds(name: string, platform: RuntimePlatform, entries
  * @param peers - the linked peers.
  * @param external - the pinned externals.
  * @param sources - the closure.
- * @throws Error naming each need that is still undeclared or unresolved.
+ * @throws Error when a linked name is not in the closure.
  */
 async function declareLinkedNeeds(name: string, platform: RuntimePlatform, directory: string, entries: ArchiveEntry[], peers: ReadonlySet<string>, external: readonly PackExternal[], sources: PackSources): Promise<void> {
   const index = new Map(entries.map((entry, at) => [entry.path, at]))
-  const layout = (): PackLayout => ({ paths: new Set(index.keys()), read: path => Promise.resolve(entries[index.get(path)!]!.data.toString('utf8')), peers, external: new Set(external.map(pin => pin.name)) })
-  for (const [packageDirectory, needs] of await undeclaredPeerNeeds(layout())) {
+  const layout: PackLayout = { paths: new Set(index.keys()), read: path => Promise.resolve(entries[index.get(path)!]!.data.toString('utf8')), peers, external: new Set(external.map(pin => pin.name)) }
+  for (const [packageDirectory, needs] of await undeclaredPeerNeeds(layout)) {
     const path = packageDirectory === '' ? 'package.json' : `${packageDirectory}/package.json`
     const at = index.get(path)!
     const manifest = JSON.parse(entries[at]!.data.toString('utf8')) as PackageManifest
@@ -341,15 +379,13 @@ async function declareLinkedNeeds(name: string, platform: RuntimePlatform, direc
     for (const need of needs) {
       const version = await versionIn(join(sources.closureNodeModules(platform), need))
       if (version === undefined) throw new Error(`${name} for ${platform} links ${need}, which the closure does not carry`)
-      added[need] = version
+      added[need] = peerRange(need, undefined, version)
     }
     manifest.peerDependencies = { ...manifest.peerDependencies, ...added }
     const data = Buffer.from(manifestText(manifest))
     await writeFile(join(directory, ...path.split('/')), data)
     entries[at] = { ...entries[at]!, data }
   }
-  const unmet = (await unresolvedPackImports(layout())).map(describeUnresolved)
-  if (unmet.length > 0) throw new Error(`${name} for ${platform} would not load from its review copy: ${unmet.slice(0, 5).join('; ')}${unmet.length > 5 ? `; and ${String(unmet.length - 5)} more` : ''}. Declare each package a pack's package imports in that package's package.json`)
 }
 
 async function entriesOf(scratch: string, name: string, platform: RuntimePlatform, paths: readonly string[]): Promise<ArchiveEntry[]> {

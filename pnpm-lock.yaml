@@ -1608,6 +1608,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@delorun/changes':
+        specifier: workspace:*
+        version: link:../../packages/changes
       '@delorun/contract-plugin-versions':
         specifier: workspace:*
         version: link:../../packages/contract-plugin-versions
@@ -1626,6 +1629,9 @@ importers:
       '@delorun/runtime-closure':
         specifier: workspace:*
         version: link:../runtime-closure
+      '@delorun/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
       '@delorun/tools':
         specifier: workspace:*
         version: link:../tools
@@ -1657,21 +1663,18 @@ importers:
         specifier: 4.6.6
         version: 4.6.6
     devDependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-llm-mock-server':
         specifier: workspace:*
         version: link:../../../packages/test-support/llm-mock-server
       '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
-      '@delorun/changes':
-        specifier: workspace:*
-        version: link:../../packages/changes
       '@delorun/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
-      '@delorun/runtime-store':
-        specifier: workspace:*
-        version: link:../../packages/runtime-store
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0

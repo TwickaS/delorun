@@ -6,11 +6,9 @@
  * installed pack is not part of the release, so a package there cannot meet a need the build accepts. A package the
  * pack neither carries, links nor fetches fails at load with "Cannot find package".
  *
- * A pack also has to load from the review copy Changes makes of it (`@delorun/changes/tree`), which follows only the
- * packages each included package's `package.json` names in `dependencies`, `optionalDependencies` or
- * `peerDependencies`. So a need counts as met only when the needing package declares it in one of those fields and it
- * resolves in the installed pack ({@link resolvesInReviewCopy}); an import the package does not declare loads from the
- * installed pack but fails from the copy.
+ * A pack also has to load from the review copy Changes makes of it, which keeps only the packages each included
+ * package's `package.json` declares: `./review-copy.ts` checks that copy with Changes' own scan, and
+ * {@link undeclaredPeerNeeds} names the linked packages the cut declares so the copy keeps them.
  *
  * What a package needs: its `dependencies` and required `peerDependencies`, and, for a workspace or Delorun package, each
  * bare specifier its JavaScript imports, re-exports or requires with a string literal. Third-party code is held to its
@@ -35,6 +33,11 @@ export interface PackLayout {
   readonly peers: ReadonlySet<string>
   /** Package names the install extracts into the pack's `node_modules` from the registry. */
   readonly external: ReadonlySet<string>
+  /**
+   * Package directories at any depth, such as `node_modules/a/node_modules/b`, that a link provides from outside the
+   * files, as a review copy's links into the runtime do; none when omitted.
+   */
+  readonly linked?: ReadonlySet<string>
 }
 
 /** A package name one package of the pack needs and nothing in the installed pack provides. */
@@ -112,12 +115,13 @@ function searchedDirectories(directory: string): string[] {
  * Whether a need resolves in the installed pack.
  * @param need - the need.
  * @param layout - the pack.
- * @returns true when a `node_modules` folder from the needing package up to the pack's package directory holds the
- * name, or the pack's own `node_modules` links or fetches it.
+ * @returns true when a `node_modules` folder from the needing package up to the pack's package directory holds or links
+ * the name, or the pack's own `node_modules` links or fetches it.
  */
 export function resolvesInPack(need: Pick<UnresolvedImport, 'name' | 'directory'>, layout: PackLayout): boolean {
   for (const searched of searchedDirectories(need.directory)) {
-    if (layout.paths.has(`${searched === '' ? '' : `${searched}/`}node_modules/${need.name}/package.json`)) return true
+    const at = `${searched === '' ? '' : `${searched}/`}node_modules/${need.name}`
+    if (layout.paths.has(`${at}/package.json`) || layout.linked?.has(at) === true) return true
   }
   return layout.peers.has(need.name) || layout.external.has(need.name)
 }
@@ -158,22 +162,12 @@ export async function packNeeds(layout: PackLayout): Promise<UnresolvedImport[]>
 }
 
 /**
- * Whether a need resolves both in the installed pack and in the review copy Changes makes of it.
- * @param need - the need.
- * @param layout - the pack.
- * @returns true when the needing package declares the need and it resolves in the installed pack ({@link resolvesInPack}).
- */
-export function resolvesInReviewCopy(need: Pick<UnresolvedImport, 'name' | 'directory' | 'declared'>, layout: PackLayout): boolean {
-  return need.declared && resolvesInPack(need, layout)
-}
-
-/**
- * The needs the installed pack or its review copy cannot meet.
+ * The needs no installed copy of the pack can meet.
  * @param layout - the pack's files, peers and externals.
- * @returns every unresolved need, empty for a pack whose packages all load from both.
+ * @returns every unresolved need, empty for a pack whose packages all load.
  */
 export async function unresolvedPackImports(layout: PackLayout): Promise<UnresolvedImport[]> {
-  return (await packNeeds(layout)).filter(need => !resolvesInReviewCopy(need, layout))
+  return (await packNeeds(layout)).filter(need => !resolvesInPack(need, layout))
 }
 
 /**
@@ -200,7 +194,7 @@ export async function undeclaredPeerNeeds(layout: PackLayout): Promise<Map<strin
 export function describeUnresolved(need: UnresolvedImport): string {
   const where = need.directory === '' ? need.importer : `${need.importer} (${need.directory})`
   if (typeof need.via === 'string') return `${where} lists ${need.name} in ${need.via}`
-  return `${where} imports ${need.name} in ${need.via.file}${need.declared ? '' : ' without declaring it in its package.json, so the review copy leaves it out'}`
+  return `${where} imports ${need.name} in ${need.via.file}${need.declared ? '' : ' without declaring it in its package.json'}`
 }
 
 /**
@@ -225,8 +219,7 @@ export function rangeProblem(need: UnresolvedImport, version: string): string | 
 
 /**
  * Link each need the pack does not carry to the closure's copy, as the cut does: a need the closure carries becomes a
- * peer when the closure's version meets the specifier the need declares. Whether the needing package declares it is
- * not judged here; {@link unresolvedPackImports} judges it once the cut has declared the linked needs.
+ * peer when the closure's version meets the specifier the need declares.
  * @param layout - the pack, with the peers to add to.
  * @param closureVersion - the closure's version of a package, or `undefined` when the closure does not carry it.
  * @returns one line per need that stays unmet: neither carried nor linked, or carried at a version outside its range.
