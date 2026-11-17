@@ -3,7 +3,7 @@
  */
 
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import type { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type { SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { finalAssistantOutput } from './assistant-output.ts'
 import { epochStopReason } from './lifecycle.ts'
@@ -87,6 +87,12 @@ export type ActivationResource =
     readonly kind: 'external'
     readonly run: SubagentRun
     readonly controller: AbortController
+    /**
+     * `turn/start` seq of the creator's turn that was open when this run
+     * started; undefined when the creator had no open turn. A user stop of
+     * that turn ends the run.
+     */
+    readonly turnStart: SessionSeq | undefined
   }
 
 /** One managed execution period with its provider-specific resources. */

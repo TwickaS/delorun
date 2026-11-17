@@ -197,6 +197,16 @@ describe('Subagent archive admission: stopping', () => {
       expect.stringContaining('cancelling "stubborn-child"'),
     ])
   })
+
+  it('leaves a running local child alone when the parent turn is stopped', async () => {
+    const ctx = await harness()
+    const parent = ctx.sessions.create(SessionId('parent'))
+    await liveAgent(ctx, parent, 'running')
+    const child = await liveAgent(ctx, childOf(ctx, 'child', parent.id), 'running')
+    parent.append('turn/start', { turn: 1 })
+    parent.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    expect(child.cancels).toEqual([])
+  })
 })
 
 describe('Subagent archive admission: lifetime', () => {
