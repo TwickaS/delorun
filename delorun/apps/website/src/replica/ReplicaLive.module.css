@@ -52,13 +52,6 @@
   .frames[data-width='responsive'] > [data-slot='phone'] { display: block; }
 }
 
-/* A responsive replica as wide as the page sets its frame on the grid's first eight columns and the caption in the four beside it. */
-@container replica (min-width: 1200px) {
-  .replica[data-width='responsive'] .panel { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--grid-gap, var(--dl-space-5)); }
-  .replica[data-width='responsive'] .panel > .frames { grid-column: 1 / 9; }
-  .replica[data-width='responsive'] .panel > .caption { grid-column: 9 / 13; align-self: start; min-height: 0; max-width: 34ch; font-size: 16px; }
-}
-
 /* On a phone the chapters are one row that scrolls sideways and snaps, with Pause beside it on the same line. */
 @media (max-width: 479.98px) {
   .controls { flex-wrap: nowrap; align-items: stretch; gap: var(--dl-space-1); }

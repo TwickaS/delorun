@@ -4,8 +4,7 @@
  * studio is inert; the caption is its text alternative and is announced when the chapter changes. With scripts off the
  * page shows the still and every chapter's caption as a list; under reduced motion each chapter is a still.
  * As a pair, the desktop width and the phone width play the same chapter together under one rail, offset; where the
- * pair is narrower than {@link PAIR_WIDE}, only the phone width shows. A wide responsive replica sets its caption in the
- * column beside the frame. Each session's frame is sized to its content ({@link REPLICA_BOXES}), and the frame keeps
+ * pair is narrower than {@link PAIR_WIDE}, only the phone width shows. Each session's frame is sized to its content ({@link REPLICA_BOXES}), and the frame keeps
  * that size from the first paint, so nothing moves when the live studio arrives.
  * The page places it through `ReplicaFrame.tsx`, which sends this component's first render as static markup and loads
  * this module as a chunk of its own when the frame nears the screen.
