@@ -9,7 +9,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { SessionResources } from './index.ts'
 import type {} from '@deepseek-ai/dsh-browser-use'
-import type {} from '@deepseek-ai/dsh-tools'
+import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
@@ -84,6 +84,26 @@ export interface SessionMcpOptions {
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
   toolCallTimeoutMs?: number
+  /**
+   * The model-visible text that replaces a browser tool failure the person, not the model, must resolve, such as a
+   * browser build that is not installed.
+   * @param message - the failed call's error message.
+   * @returns the replacement, or `undefined` to keep the failure as the server reported it.
+   */
+  explainFailure?: (message: string) => string | undefined
+}
+
+/**
+ * A browser tool failure with the provider's replacement text.
+ * @param result - the failed call's result.
+ * @param explain - the provider's replacement, when it has one.
+ * @returns the failure whose content and message are the replacement, or the result unchanged.
+ */
+function explained(result: ToolExecutionResult, explain: SessionMcpOptions['explainFailure']): ToolExecutionResult {
+  if (!result.isError || explain === undefined) return result
+  const message = explain(result.error.message)
+  if (message === undefined) return result
+  return { isError: true, error: { message }, content: [{ type: 'text', text: `Error: ${message}` }] }
 }
 
 interface ClientState {
@@ -226,7 +246,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     if (agent === undefined || clients.get(agent)?.status !== 'ready') {
       throw new Error(`${options.name}: browser tool belongs to another Session`)
     }
-    return resources.run(agent, exec.signal, async (_scope, combined) => {
+    const result = await resources.run(agent, exec.signal, async (_scope, combined) => {
       const original = exec.signal
       exec.signal = combined
       try {
@@ -235,6 +255,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         exec.signal = original
       }
     })
+    return explained(result, options.explainFailure)
   })
   ctx.on('system-prompt/assemble', async (_assembly, { agent }, next) => {
     const assembly = await next()

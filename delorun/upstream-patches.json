@@ -2802,7 +2802,13 @@
       "path": "packages/experimental/browser-use-runtime/src/mcp.ts",
       "class": "delorun-feature",
       "feature": "mcp-add-consent",
-      "reason": "A browser MCP server start that the mounted add-time consent refuses (`McpConsentRefusedError`), or a declared consent that did not start (`McpConsentUnavailableError`), leaves that Agent activation without the server's tools and instructions and logs a warning, instead of failing the Agent's creation; the next activation reviews the start again. Every other startup failure still rejects creation as upstream does. Without a mounted consent nothing changes."
+      "reason": "A browser MCP server start that the mounted add-time consent refuses (`McpConsentRefusedError`), or a declared consent that did not start (`McpConsentUnavailableError`), leaves that Agent activation without the server's tools and instructions and logs a warning, instead of failing the Agent's creation; the next activation reviews the start again. Every other startup failure still rejects creation as upstream does. Without a mounted consent nothing changes. Browser setup: the optional `explainFailure` option replaces the text of a browser tool failure that only the person can resolve; without it, failures are upstream's."
+    },
+    {
+      "path": "packages/experimental/browser-use-playwright-mcp/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "optional-bundles",
+      "reason": "Passes `explainFailure` to `mountSessionMcp`: a browser tool failure that reports a Chromium build which is not installed (Playwright's \"Executable doesn't exist\" or \"is not installed; expected executable at\") reaches the model as one short message telling it to stop and send the person to finish Browser setup in Plugins, so the model does not try other tools at length. Every other failure is unchanged."
     }
   ],
   "retired": []

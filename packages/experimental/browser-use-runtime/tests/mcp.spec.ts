@@ -95,7 +95,10 @@ class RefuseBrowserConsent extends McpClient.McpAddConsent {
 /** A Loader row of an MCP server outside the browser provider, beside the refused browser server. */
 const OTHER_TOOL = 'mcp__other-fixture__visit'
 
-async function load(exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false) {
+async function load(
+  exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
+  explainFailure?: (message: string) => string | undefined,
+) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -107,7 +110,10 @@ async function load(exclusive = false, mode?: string, toolCallTimeoutMs?: number
     ['model', { inject: ['llm'], apply(ctx: Context) { ctx.effect(() => ctx.llm.registerAdapter(['fixture'], model)) } }],
     ['browser', { inject: ['browserUse', 'agents', 'tools', 'systemPrompt', 'workingDirectory'], apply(ctx: Context) {
       ctx.logger.warn = ((message: unknown) => { warnings.push(String(message)) }) as typeof ctx.logger.warn
-      mountSessionMcp(ctx, { name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]], ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} } })
+      mountSessionMcp(ctx, {
+        name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
+        ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
+      })
     } }],
     ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
   ])
@@ -364,6 +370,29 @@ describe('Session MCP Loader composition', () => {
     await warm(ctx, second.agent)
     expect(consent.reviewed.filter(name => name === 'browser-fixture')).toHaveLength(2)
     expect(warnings).toHaveLength(2)
+  })
+
+  it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
+    const explainFailure = (message: string) => message.includes('is not installed') ? 'Browser needs setup; ask the person.' : undefined
+    const { ctx } = await load(false, undefined, undefined, undefined, false, explainFailure)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('explained') })
+    await warm(ctx, agent)
+    const call = (label: string) => executeToolFixture(ctx, {
+      agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal: new AbortController().signal,
+    })
+    const missing = await call('missing-browser')
+    expect(missing.isError).toBe(true)
+    expect(missing.content).toEqual([{ type: 'text', text: 'Error: Browser needs setup; ask the person.' }])
+    expect(missing.error?.message).toBe('Browser needs setup; ask the person.')
+    expect((await call('page')).content).toEqual([{ type: 'text', text: 'Visit 2: page' }])
+    const unexplained = await load()
+    const other = await unexplained.ctx.agents.create({ sessionId: SessionId('unexplained') })
+    await warm(unexplained.ctx, other.agent)
+    const raw = await executeToolFixture(unexplained.ctx, {
+      agent: other.agent, name: TOOL, arguments: { label: 'missing-browser' }, callId: ToolCallId('raw'), signal: new AbortController().signal,
+    })
+    expect(raw.isError).toBe(true)
+    expect(JSON.stringify(raw.content)).toContain('is not installed; expected executable at')
   })
 
   it('does not reconnect and silently replace browser state after a process exits', async () => {
