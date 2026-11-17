@@ -44,16 +44,16 @@ export interface AgentModelsDeps {
  * Ask the agent for its models.
  * @param agent - which agent.
  * @param deps - the harness parts.
- * @returns the models, or `unavailable` when the agent is not running, did not answer in time or failed.
+ * @returns the models, or `unavailable` with the reason: the agent is not running, did not answer in time or failed.
  */
 export async function listAgentModels(agent: AgentModelsRequest['agent'], deps: AgentModelsDeps): Promise<AgentModelsAnswer> {
   const provider = deps.provider(agent)
-  if (!listsModels(provider)) return { state: 'unavailable' }
+  if (!listsModels(provider)) return { state: 'unavailable', reason: 'not-running' }
   try {
     const models = await provider.listModels(deps.cwd(), AbortSignal.timeout(deps.timeoutMs))
     return { state: 'listed', models: models.map(each => ({ model: each.model, displayName: each.displayName })) }
   } catch (error) {
     deps.warn(`the ${agent} model list was not read: ${error instanceof Error ? error.message : String(error)}`)
-    return { state: 'unavailable' }
+    return { state: 'unavailable', reason: error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'failed' }
   }
 }

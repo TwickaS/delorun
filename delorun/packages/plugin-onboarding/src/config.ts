@@ -47,10 +47,12 @@ export interface OnboardingSettings {
   optionalRows: string[]
   /** What the first chat's folder holds, which picks its starting prompts; empty for the general prompts. */
   starterKind: string
+  /** How long adding a package may run before its card says it is still working, in seconds. */
+  addWaitSeconds: number
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], optionalRows: [], starterKind: '' }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], optionalRows: [], starterKind: '', addWaitSeconds: 60 }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -60,6 +62,7 @@ export interface Config {
   plugins: Volatile<string[]>
   optionalRows: Volatile<string[]>
   starterKind: Volatile<string>
+  addWaitSeconds: Volatile<number>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
@@ -80,6 +83,9 @@ export const Config = z.object({
     .description('Rows of the profile that a bundle inserts disabled, by row id, which the recommended-plugins step offers to turn on. Each must name a row of the profile, or the plugin does not load.')
     .default([...DEFAULT_SETTINGS.optionalRows]).volatile(),
   starterKind: z.union(['', ...FOLDER_KINDS] as const).default('').volatile(),
+  addWaitSeconds: z.natural().min(5).max(1800)
+    .description('How long adding a package in the guide may run before its card says it is still working, in seconds. The add itself is not stopped.')
+    .default(DEFAULT_SETTINGS.addWaitSeconds).volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),
