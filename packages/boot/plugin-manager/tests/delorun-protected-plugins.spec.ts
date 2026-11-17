@@ -4,7 +4,7 @@
  * module, give its row id to another row, or deselect, remove, install or change the package that carries or provides
  * it, and the profile's files stay as they were.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -185,6 +185,29 @@ function changeResult(result: ToolExecutionResult): Record<string, unknown> {
   return JSON.parse(result.value) as Record<string, unknown>
 }
 
+/** A pack bundle Delorun publishes: its package name, which the fixture installs it by, its patch and its row modules. */
+interface PackBundle { name: string; spec: string; patch: Patch; modules: string[] }
+
+/** The modules a patch's inserted rows name, in groups too; built-in and relative modules are left out. */
+function patchModules(rows: readonly unknown[]): string[] {
+  return rows.flatMap((row) => {
+    const { insert, name, config } = row as { insert?: unknown[]; name?: unknown; config?: unknown }
+    const own = typeof name === 'string' && !name.startsWith('cordis:') && !name.startsWith('./') ? [name] : []
+    return [...own, ...Array.isArray(insert) ? patchModules(insert) : [], ...Array.isArray(config) ? patchModules(config) : []]
+  })
+}
+
+/** Every bundle under `delorun/packages` that the release publishes as a signed pack (`delorun.pack`). */
+const PACK_BUNDLES: PackBundle[] = (() => {
+  const packages = fileURLToPath(new URL('../../../../delorun/packages/', import.meta.url))
+  return readdirSync(packages).filter(dir => dir.startsWith('bundle-')).flatMap((dir) => {
+    const manifest = JSON.parse(readFileSync(join(packages, dir, 'package.json'), 'utf8')) as { name: string; delorun?: { pack?: boolean } }
+    if (manifest.delorun?.pack !== true) return []
+    const patch = loadOverlayPatches('dsh', join(packages, dir, 'cordis.patch.yml')) as Patch
+    return [{ name: manifest.name, spec: manifest.name, patch, modules: [...new Set(patchModules(patch))] }]
+  })
+})()
+
 /** The refusal a change of a protected guard ends with: its diagnostic names the guard, and its next step says so. */
 const GUARD_REFUSAL = {
   changed: false, application: 'failed',
@@ -320,6 +343,30 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     expect(changeResult(await call({ action: 'set_bundle', target: 'weakening-bundle', enabled: true }))).toMatchObject(GUARD_REFUSAL)
     expect(files()).toEqual(before)
     expect(guard()).toMatchObject({ disabled: false, options: { config: { enabled: true } } })
+  })
+
+  it.each(PACK_BUNDLES.map(bundle => [bundle.name, bundle] as const))('installs and turns on the published pack %s with its own patch, which leaves the protected rows as they are', async (_name, bundle) => {
+    const { dir, call, files } = await fixture()
+    pnpmInstalls(dir, { [bundle.spec]: { name: bundle.name, patch: bundle.patch } })
+    for (const module of bundle.modules) {
+      if (module.startsWith(`${bundle.name}/`)) continue
+      writePackage(dir, module)
+    }
+    const result = changeResult(await call({ action: 'install_bundle', target: bundle.spec }))
+    expect(result['error']).toBeUndefined()
+    expect(result).toMatchObject({ changed: true, application: 'applied', bundle: bundle.name })
+    expect(files()['package.json']).toContain(bundle.name)
+  })
+
+  it('refuses to install a bundle whose isolated group adds a row of upstream\'s web server module, and puts the profile back', async () => {
+    const { dir, call, files } = await fixture()
+    const server = '@deepseek-ai/dsh-host-webserver'
+    writePackage(dir, server)
+    const patch: Patch = [{ insert: [{ id: 'second-server-group', name: 'cordis:group', group: true, disabled: true, isolate: { webServer: true }, config: [{ id: 'second-server', name: server }] }] }]
+    pnpmInstalls(dir, { 'server-bundle': { name: 'server-bundle', patch } })
+    const before = files()
+    expect(changeResult(await call({ action: 'install_bundle', target: 'server-bundle' }))).toMatchObject({ changed: false, application: 'failed', error: { code: 'management-required' } })
+    expect(files()).toEqual(before)
   })
 
   it('installs and selects a bundle whose patch leaves the protected rows as they are', async () => {

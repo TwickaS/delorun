@@ -11,8 +11,10 @@
       isolate:
         webServer: true
       config:
+        # Upstream's web server under this bundle's module name: plugin management refuses a bundle that adds a row of
+        # `@deepseek-ai/dsh-host-webserver`, the studio's own web server.
         - id: github-webhook-server
-          name: '@deepseek-ai/dsh-host-webserver'
+          name: '@delorun/bundle-webhooks/server'
           config:
             host: '127.0.0.1'
             port: !!js "(() => { const port = Number(process.env.DELORUN_GITHUB_WEBHOOK_PORT ?? 3081); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DELORUN_GITHUB_WEBHOOK_PORT must be a whole number from 1 to 65535'); return port })()"

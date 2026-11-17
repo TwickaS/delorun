@@ -36,7 +36,7 @@ interface Setup {
   readonly files: { fetchRelease: PackFiles['fetchRelease'] }
 }
 
-async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array> } = {}): Promise<Setup> {
+async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array } = {}): Promise<Setup> {
   await fixture.install('0.1.0')
   const paths = new StorePaths(fixture.home, PLATFORM)
   const manifestBytes = readFileSync(paths.releaseFiles(V1).manifest)
@@ -45,7 +45,7 @@ async function setup(options: { application?: string, archive?: (signal?: AbortS
   const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifestBytes).digest('hex'), packs: entries }
   const packsBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(signed), signatures: [] }, [fixture.keys.targets]), undefined, 2)}\n`)
   const served = new Map<string, Uint8Array>([['delorun-0.1.0.packs.json', packsBytes], ['delorun-0.1.0.packs.log.json', Buffer.from('{}')]])
-  built.forEach(each => served.set(each.variant.archive.name, each.bytes))
+  built.forEach(each => served.set(each.variant.archive.name, options.tamper === undefined ? each.bytes : options.tamper(each.bytes)))
   const release: InstalledRelease = { paths, root: fixture.root, version: V1, manifestBytes, checkLog: () => ({ ok: true }) }
   const files: PackFiles = {
     fetchRelease: (name, _size, transfer) => (options.archive !== undefined && name.endsWith('.tar.gz') ? options.archive(transfer?.signal) : Promise.resolve(served.get(name))),
@@ -96,6 +96,22 @@ describe('the pack hub', () => {
     // The link names a pack that matched its signed list; a pack changed since the snapshot has no target after the next one.
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
+  })
+
+  it('refuses a pack whose archive differs from the signed packs file by one byte, installs nothing and asks the plugin manager nothing', async () => {
+    const { hub, installs, paths } = await setup({
+      tamper: (bytes) => {
+        const tampered = Buffer.from(bytes)
+        tampered[tampered.length - 9] = tampered[tampered.length - 9]! ^ 1
+        return tampered
+      },
+    })
+    await hub.enqueue(['one'])
+    const snapshot = await until(hub, each => each.queue[0]?.state === 'failed')
+    expect(snapshot.queue[0]?.failure?.code).toBe('failed')
+    expect(installs).toEqual([])
+    expect(existsSync(paths.pack(V1, 'one'))).toBe(false)
+    expect(snapshot.packs.find(pack => pack.name === 'one')?.availability).not.toBe('installed')
   })
 
   it('reloads the Host once for several installs that need it, and not while a chat runs', async () => {
