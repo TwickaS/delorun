@@ -10,6 +10,7 @@
 import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
+import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { CodexPermissionMode } from './run.ts'
 
@@ -21,6 +22,7 @@ export interface CodexWireFailureFacts {
   readonly category:
     | 'limit'
     | 'access-policy'
+    | 'sign-in'
     | 'service'
     | 'transport'
     | 'product-error'
@@ -111,6 +113,7 @@ function objectFailureInfo(value: JsonObject): ParsedFailureInfo {
     case 'responseTooManyFailedAttempts':
     {
       const httpStatus = numericHttpStatus(fields.httpStatusCode)
+      if (httpStatus === 401) return { category: 'sign-in', httpStatus }
       return httpStatus === undefined
         ? { category: 'transport' }
         : { category: 'transport', httpStatus }
@@ -139,9 +142,10 @@ function failureInfo(turn: JsonObject): ParsedFailureInfo {
       case 'serverOverloaded':
       case 'internalServerError':
         return { category: 'service' }
+      case 'unauthorized':
+        return { category: 'sign-in' }
       case 'cyberPolicy':
       case 'misalignmentPolicyViolation':
-      case 'unauthorized':
         return { category: 'access-policy' }
       case 'badRequest':
       case 'threadRollbackFailed':
@@ -156,6 +160,13 @@ function failureInfo(turn: JsonObject): ParsedFailureInfo {
   return info !== null && typeof info === 'object' && !Array.isArray(info)
     ? objectFailureInfo(info as JsonObject)
     : { category: 'unknown' }
+}
+
+function turnErrorMessage(turn: JsonObject): string {
+  const error = turn.error
+  if (error === null || typeof error !== 'object' || Array.isArray(error)) return ''
+  const message = (error as JsonObject).message
+  return typeof message === 'string' ? message : ''
 }
 
 function unattendedDiagnostic(
@@ -356,13 +367,15 @@ export class CodexAppServerWire {
     const status = terminal.status
     if (status !== 'completed') {
       const parsed = failureInfo(terminal)
-      this.recordFailure(parsed.httpStatus === undefined
-        ? { stage: 'turn', category: parsed.category }
-        : {
-          stage: 'turn',
-          category: parsed.category,
-          httpStatus: parsed.httpStatus,
-        })
+      const message = turnErrorMessage(terminal)
+      const category = parsed.category !== 'sign-in' && isAgentSignInFailure(message)
+        ? 'sign-in'
+        : parsed.category
+      this.recordFailure({
+        stage: 'turn',
+        category,
+        ...parsed.httpStatus === undefined ? {} : { httpStatus: parsed.httpStatus },
+      })
       if (parsed.sandboxFailure) {
         this.recordDiagnostic(
           'sandbox execution',
