@@ -29,10 +29,10 @@ export function cardIconLetter(name: string): string {
 export function cardIconTint(name: string): CardIconTint {
   let hash = 0x811c9dc5
   for (const char of name.trim().toLocaleLowerCase()) {
-    hash = Math.imul(hash ^ char.codePointAt(0) ?? 0, 0x01000193) >>> 0
+    hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 0x01000193) >>> 0
   }
   hash = Math.imul(hash ^ (hash >>> 15), 0x2c1b3c6d) >>> 0
-  hash ^= hash >>> 13
+  hash = (hash ^ (hash >>> 13)) >>> 0
   return CARD_ICON_TINTS[hash % CARD_ICON_TINTS.length] ?? 'slate'
 }
 
