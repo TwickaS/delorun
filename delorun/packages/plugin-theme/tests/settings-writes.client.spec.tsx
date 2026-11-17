@@ -43,3 +43,27 @@ describe('the studio\'s writes', () => {
     expect(form.writes).toEqual(written())
   })
 })
+
+describe('a theme tile after Custom', () => {
+  const scheme = { get: () => 'system' as const, subscribe: () => () => undefined, set: () => undefined }
+  const show = (form: ReturnType<typeof themeForm>) => {
+    render(<AppearanceSection t={makeTranslate(en)} settings={form.scope} scheme={scheme} brandingT={makeTranslate(brandingEn)} pickerT={makeTranslate(pickerEn)} />)
+    return within(screen.getByRole('radiogroup', { name: en.palette }))
+  }
+
+  it('brings Soft back with Peach after Custom moss', async () => {
+    const form = themeForm({ ...STUDIO_ON, palette: 'custom', accent: 'moss' })
+    const tiles = show(form)
+    await click(tiles.getByRole('radio', { name: en['palette.soft'] }))
+    expect(form.writes).toEqual([['accent', 'peach'], ['palette', 'soft']])
+    expect(tiles.getByRole('radio', { name: en['palette.soft'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('brings a preset back with the default contrast after Custom at a higher contrast', async () => {
+    const form = themeForm({ ...STUDIO_ON, palette: 'custom', accent: 'moss', contrast: 150 })
+    const tiles = show(form)
+    await click(tiles.getByRole('radio', { name: en['palette.ocean'] }))
+    expect(form.writes).toEqual([['contrast', 100], ['palette', 'ocean']])
+    expect(tiles.getByRole('radio', { name: en['palette.ocean'] }).getAttribute('aria-checked')).toBe('true')
+  })
+})

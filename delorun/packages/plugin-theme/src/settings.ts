@@ -111,9 +111,28 @@ export function customSeed(settings: LookValues): CustomValues {
   return { accent: 'custom', customAccent: PRESET_ACCENT_HEX[settings.palette], contrast: CONTRAST.default }
 }
 
+/**
+ * Read stored settings as the Look model: a preset beside a changed accent or contrast becomes the custom theme seeded
+ * from that preset. A T3 Code preset keeps only its accent colour in the custom theme, because the custom theme's
+ * surfaces are Soft's. Settings written by {@link writesFor} always read as what was chosen; older settings could hold a
+ * preset beside a changed accent or contrast.
+ * @param settings - the stored settings.
+ * @returns the settings with a palette that matches what they hold; the same object when nothing changes.
+ */
+export function lookOf<Settings extends LookValues>(settings: Settings): Settings {
+  if (settings.palette === 'custom') return settings
+  const changedContrast = settings.contrast !== CONTRAST.default
+  if (settings.palette === 'soft') {
+    if (settings.accent === 'peach' && !changedContrast) return settings
+    return { ...settings, palette: 'custom' }
+  }
+  if (!changedContrast) return settings
+  return { ...settings, palette: 'custom', accent: 'custom', customAccent: PRESET_ACCENT_HEX[settings.palette] }
+}
+
 /** One change made with a look control. */
 export type ThemeChange =
-  /** A theme tile: a preset, or `custom`, which starts the custom theme from the current colours. */
+  /** A theme tile: a preset, which also resets what {@link lookOf} would read as Custom, or `custom`, which starts the custom theme from the current colours. */
   | { readonly kind: 'palette'; readonly palette: PaletteChoice }
   /** A value of the custom theme, such as its accent or contrast; the rest start from the current colours. */
   | { readonly kind: 'custom'; readonly values: Partial<CustomValues> }
@@ -144,7 +163,7 @@ export interface SettingWrite {
 export function writesFor(change: ThemeChange, current: LookValues): readonly SettingWrite[] {
   switch (change.kind) {
     case 'palette':
-      return change.palette === 'custom' ? customWrites(current, {}) : [{ op: 'set', path: ['palette'], value: change.palette }]
+      return change.palette === 'custom' ? customWrites(current, {}) : presetWrites(change.palette, current)
     case 'custom':
       return customWrites(current, change.values)
     case 'density':
@@ -154,6 +173,22 @@ export function writesFor(change: ThemeChange, current: LookValues): readonly Se
       return unknown
     }
   }
+}
+
+/**
+ * A preset written so that it reads back as that preset: Soft also takes Peach back, and every preset takes the default
+ * contrast back, each only when the current value differs. The custom values are lost to nothing a person sees, because
+ * {@link customSeed} starts the custom theme afresh after any preset.
+ * @param palette - the preset.
+ * @param current - the colours shown now.
+ * @returns the writes, the palette last.
+ */
+function presetWrites(palette: PresetPalette, current: LookValues): readonly SettingWrite[] {
+  const writes: SettingWrite[] = []
+  if (palette === 'soft' && current.accent !== 'peach') writes.push({ op: 'set', path: ['accent'], value: 'peach' })
+  if (current.contrast !== CONTRAST.default) writes.push({ op: 'set', path: ['contrast'], value: CONTRAST.default })
+  writes.push({ op: 'set', path: ['palette'], value: palette })
+  return writes
 }
 
 /**
