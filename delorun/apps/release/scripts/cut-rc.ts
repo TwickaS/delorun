@@ -32,7 +32,9 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delorun/contract-release-manifest'
-import { checkFileRef, trustRootChain, verifyChannelManifest, verifySignedManifest, verifyTimestamp } from '@delorun/release-formats/sign/verify'
+import { createHash } from 'node:crypto'
+import { packsLogName, packsName, readBundle, verifyBundle } from '@delorun/release-formats/log/bundle'
+import { checkFileRef, trustRootChain, verifyChannelManifest, verifyPacks, verifySignedManifest, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { parseData } from '../src/changelog/data.ts'
 import { DATA_PATH } from '../src/changelog/paths.ts'
@@ -287,6 +289,8 @@ export interface VerifiedChannel {
   readonly notes: Buffer | undefined
   /** The other releases in the channel, each with a valid manifest signature. */
   readonly others: readonly string[]
+  /** How many pack archives the release's signed, logged packs file names; 0 when the release publishes no packs file. */
+  readonly packs: number
 }
 
 /**
@@ -306,7 +310,8 @@ export function verifyChannel(channel: string, version: string, now: number): Ve
   const pointer = timestamp.channels.stable
   if (pointer.release !== version) throw new Error(`the timestamp names ${pointer.release} as the stable release, not ${version}`)
   const directory = join(channel, 'releases', 'download')
-  const manifest = verifyChannelManifest(root.metadata, timestamp, 'stable', readFileSync(join(directory, `v${version}`, pointer.manifest.name)))
+  const manifestBytes = readFileSync(join(directory, `v${version}`, pointer.manifest.name))
+  const manifest = verifyChannelManifest(root.metadata, timestamp, 'stable', manifestBytes)
   let notes: Buffer | undefined
   if (manifest.notes !== undefined) {
     notes = readFileSync(join(directory, `v${version}`, manifest.notes.name))
@@ -314,7 +319,33 @@ export function verifyChannel(channel: string, version: string, now: number): Ve
   }
   const others = readdirSync(directory).filter(name => name.startsWith('v') && name !== `v${version}`).map(name => name.slice(1)).sort()
   for (const other of others) verifySignedManifest(root.metadata, readFileSync(join(directory, `v${other}`, `delorun-${other}.manifest.json`)))
-  return { release: pointer.release, timestampVersion: timestamp.version, notes, others }
+  return { release: pointer.release, timestampVersion: timestamp.version, notes, others, packs: verifyChannelPacks(root.metadata, join(directory, `v${version}`), version, manifestBytes) }
+}
+
+/**
+ * Verify the packs file of a release directory as the client does: signed by a targets key, bound to the manifest,
+ * covered by a verified release-log bundle, and every archive it names present with its length and digests.
+ * @param root - the newest trusted root's metadata.
+ * @param directory - the release's directory.
+ * @param version - the release version.
+ * @param manifestBytes - the verified manifest file's bytes.
+ * @returns how many distinct pack archives the file names; 0 when the release has no packs file.
+ * @throws Error naming the first check that fails.
+ */
+function verifyChannelPacks(root: Parameters<typeof verifyPacks>[0], directory: string, version: string, manifestBytes: Uint8Array): number {
+  const path = join(directory, packsName(version))
+  if (!existsSync(path)) return 0
+  const packsBytes = readFileSync(path)
+  const signed = verifyPacks(root, manifestBytes, packsBytes)
+  const bundlePath = join(directory, packsLogName(version))
+  if (!existsSync(bundlePath)) throw new Error(`${packsName(version)} has no ${packsLogName(version)}`)
+  verifyBundle(root, packsBytes, version, readBundle(readFileSync(bundlePath)), 'packs')
+  const archives = new Map(signed.packs.flatMap(pack => Object.values(pack.variants).map(variant => [variant.archive.name, variant.archive] as const)))
+  for (const [name, archive] of archives) {
+    const bytes = readFileSync(join(directory, name))
+    if (bytes.byteLength !== archive.length || createHash('sha256').update(bytes).digest('hex') !== archive.sha256) throw new Error(`${name} does not match the signed packs file`)
+  }
+  return archives.size
 }
 
 /**
