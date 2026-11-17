@@ -97,8 +97,8 @@ The row `delorun-onboarding` has these fields ([`src/config.ts`](src/config.ts))
 | `step` | empty | The id of the step reached. |
 | `starterSession` | empty | The chat whose empty state offers the starting prompts; `pending` for the next empty chat. |
 | `starterKind` | empty | What that chat's folder holds: `empty`, `code`, `files`, or empty for the general prompts. |
-| `plugins` | empty | Up to eight npm package names the Recommended plugins step offers. With none, and no `optionalRows`, the step is left out. |
-| `optionalRows` | empty | Up to eight row ids, such as `delorun-cost-meter`, of rows a bundle inserts disabled; the step offers to turn each on. Each must be a row of the profile, or the plugin stops at load with an error that names it. |
+| `plugins` | empty | Up to twelve npm package names the Recommended plugins step offers. With none, and no `optionalRows`, the step is left out. |
+| `optionalRows` | empty | Up to twelve row ids, such as `delorun-cost-meter`, of rows a bundle inserts disabled; the step offers to turn each on. Each must be a row of the profile, or the plugin stops at load with an error that names it. |
 | `registry` | `https://registry.npmjs.org` | The `https://` npm registry a package that is not installed is read from, only when the person asks. |
 | `registryTimeoutMs` | `10000` | The most time the registry requests may take together, 1000 to 60000. |
 | `keyTestTimeoutMs` | `15000` | The most time one provider's key test may take, 1000 to 60000. |
