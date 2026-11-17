@@ -96,6 +96,7 @@ describe('one home process per profile', TIMEOUT, () => {
     expect(await status(home)).toMatchObject({ state: 'running', pid: process.pid, startId: lock?.startId, runtime: { current: V1, running: V1 }, chats: 0 })
     await expect(startHome(home)).rejects.toMatchObject({ code: 'HOME_RUNNING' })
     expect(readHomeLock(runDirectory(home, PROFILE))?.startId).toBe(lock?.startId)
+    expect(readHomeLock(runDirectory(home, PROFILE))?.listening).toBe(true)
     expect(first.process.socketPath).toBe(socket)
   })
 

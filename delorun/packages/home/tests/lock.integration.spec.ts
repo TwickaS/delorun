@@ -60,9 +60,10 @@ function fakeTimersWithPromises(): () => void {
  * @param startId - its start id.
  * @param processStart - its start identity, omitted when undefined.
  * @param pidNamespace - its pid namespace, omitted when undefined.
+ * @param listening - whether its record says its update channel listens, omitted when undefined.
  */
-function plantLock(pid: number, startId = 'a'.repeat(32), processStart?: string, pidNamespace?: string): void {
-  writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid, startId, runtime: '1.0.0', startedAt: '2026-01-01T00:00:00.000Z', processStart, pidNamespace }), { mode: 0o600 })
+function plantLock(pid: number, startId = 'a'.repeat(32), processStart?: string, pidNamespace?: string, listening?: true): void {
+  writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid, startId, runtime: '1.0.0', startedAt: '2026-01-01T00:00:00.000Z', processStart, pidNamespace, listening }), { mode: 0o600 })
 }
 
 /**
@@ -202,6 +203,64 @@ describe('the home lock', () => {
     await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') })).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
   })
 
+  describe('a holder of this boot in another pid namespace, as after a distro restart inside a running VM', () => {
+    const take = (probe: HolderProbe, log?: (line: string) => void): Promise<unknown> => acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe, ...log === undefined ? {} : { log } })
+    const plant = (listening?: true): void => { plantLock(deadPid(), 'b'.repeat(32), otherStart(), 'pid:[1]', listening) }
+
+    it.skipIf(otherStart() === undefined)('is taken over, with one log line, when its record says it listened and its socket refuses connections', async () => {
+      plant(true)
+      const lines: string[] = []
+      await take(() => Promise.resolve('refused'), line => lines.push(line))
+      expect(readHomeLock(runDirectory)?.pid).toBe(process.pid)
+      expect(lines).toHaveLength(1)
+    })
+
+    it.skipIf(otherStart() === undefined)('is refused when its record never said it listened, though its socket refuses connections', async () => {
+      plant()
+      await expect(take(() => Promise.resolve('refused'))).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+      expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
+    })
+
+    it.skipIf(otherStart() === undefined)('is refused when it listened but does not answer in time', async () => {
+      plant(true)
+      await expect(take(() => Promise.resolve('silent'))).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+      expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
+    })
+
+    it.skipIf(otherStart() === undefined)('is refused when it listened and answers', async () => {
+      plant(true)
+      await expect(take(answered)).rejects.toMatchObject({ code: 'HOME_RUNNING' })
+      expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
+    })
+
+    it.skipIf(otherStart() === undefined)('is left alone when it stops listening between the contender\'s read and its removal', async () => {
+      plant(true)
+      const unlisten = (): Promise<'refused'> => {
+        plantLock(deadPid(), 'b'.repeat(32), otherStart(), 'pid:[1]')
+        return Promise.resolve('refused')
+      }
+      await expect(take(unlisten)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+      expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
+    })
+
+    it.skipIf(process.platform !== 'linux')('is not taken over on a refused socket when its lock names this pid namespace and a live process', async () => {
+      plantLock(process.pid, 'b'.repeat(32), readProcessStart(process.pid), readPidNamespace(), true)
+      await expect(take(() => Promise.resolve('refused'))).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+    })
+  })
+
+  it('marks its record listening once the channel is bound, and unmarks it before the channel closes, until released or handed over', async () => {
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
+    lock.setListening(true)
+    expect(readHomeLock(runDirectory)).toEqual({ ...lock.record, listening: true })
+    lock.setListening(false)
+    expect(readHomeLock(runDirectory)).toEqual(lock.record)
+    lock.setListening(true)
+    lock.release()
+    lock.setListening(true)
+    expect(readHomeLock(runDirectory)).toBeUndefined()
+  })
+
   it.skipIf(readPidNamespace() === undefined)('replaces a dead holder\'s lock recorded in this process\'s pid namespace', async () => {
     plantLock(deadPid(), 'b'.repeat(32), undefined, readPidNamespace())
     const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
@@ -238,10 +297,12 @@ describe('the home lock', () => {
     expect(readHomeLock(runDirectory)).toMatchObject({ startId: 'b'.repeat(32), processStart: readProcessStart(process.pid) })
   })
 
-  it('refuses a record whose start identity or runtime is malformed', async () => {
+  it('refuses a record whose start identity, runtime or listening mark is malformed', async () => {
     plantLock(process.pid, 'b'.repeat(32), 'linux:not-a-boot-id:1')
     await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toThrow('is not a home lock record')
     writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: 'b'.repeat(32), runtime: 1, startedAt: '2026-01-01T00:00:00.000Z' }))
+    expect(() => readHomeLock(runDirectory)).toThrow('is not a home lock record')
+    writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: 'b'.repeat(32), runtime: '1.0.0', startedAt: '2026-01-01T00:00:00.000Z', listening: false }))
     expect(() => readHomeLock(runDirectory)).toThrow('is not a home lock record')
   })
 

@@ -387,6 +387,12 @@ export interface HomeLockRecord {
    * namespace differs from the reader's is never judged dead.
    */
   readonly pidNamespace?: string
+  /**
+   * Present, `true`, while the holder's update channel listens on its socket: the holder writes it once the channel
+   * is bound and removes it before the channel closes (C1, "The home lock"). A handed-over record has none until the
+   * successor's channel listens.
+   */
+  readonly listening?: true
 }
 
 /** A confinement rule that Delorun's sandbox profiles add to upstream's dialects. */
