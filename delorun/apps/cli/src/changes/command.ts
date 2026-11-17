@@ -81,6 +81,7 @@ import { applyHarness, diffLines, discardHarness, findHarnessTarget, harnessList
 import { harnessContextOf, outputLogger } from './harness-start.ts'
 import { readableTime } from '../output.ts'
 import { isWorkSubcommand, runWorkCommand } from './work-command.ts'
+import { runningRelease } from './start.ts'
 
 /** The usage line. */
 const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [on|off] | work <plugin> [--for <minutes>] | done <plugin> | edit-harness [--discard]] [--profile <name>] [--json]'
@@ -640,7 +641,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
   const presence = reads ? undefined : attestAtTerminal(dependencies)
   const { home, profile } = await prepareHome(context, profileFlag)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun changes: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
-  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
+  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   try {
     switch (action.kind) {
       case 'list':

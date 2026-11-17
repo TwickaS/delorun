@@ -35,6 +35,7 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { printable } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 import type { ChangesCommandDependencies } from './command.ts'
+import { runningRelease } from './start.ts'
 
 /** How many minutes a work session lasts when `--for` is not given; `@delorun/changes` owns it. */
 export { WORK_SESSION_DEFAULT_MINUTES }
@@ -224,7 +225,7 @@ export async function runWorkCommand(args: readonly string[], context: CommandCo
   const presence = attest()
   const { home, profile } = await prepareHome(context, profileFlag)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun changes: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
-  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
+  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   const plugin = request.plugin
   try {
     if (request.kind === 'done') return await done(ctx, plugin, presence, dependencies, context)

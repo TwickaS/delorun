@@ -25,6 +25,7 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { groupsOfFour } from '../output.ts'
 import { isYes } from '../trash/terminal.ts'
 import { delorunVersion } from '../version.ts'
+import { runningRelease } from './start.ts'
 
 /** The usage lines. */
 export const SETUP_TRANSFER_USAGE = [
@@ -76,7 +77,7 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   }
   const { home, profile } = await prepareHome(context, parsed.values.profile)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun setup ${String(word)}: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
-  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile) }
+  const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   if (word === 'export') {
     const out = parsed.values.out
     if (out === undefined && parsed.positionals.length > 0) throw new CliError(EXIT.usage, '--out is missing: delorun setup export --out <file>')

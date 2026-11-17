@@ -65,6 +65,7 @@ import {
 import { isPluginRequest } from './install-actions.ts'
 import { leftOutOf } from './left-out.ts'
 import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
+import { referenceRelease } from './tree.ts'
 
 /** The profile an action works on. */
 export interface ChangesContext {
@@ -80,6 +81,12 @@ export interface ChangesContext {
   readonly lockWaitMs?: number
   /** An open profile history, when the caller already has one; the profile's own by default. */
   readonly history?: Pick<ProfileHistory, 'record'>
+  /**
+   * The installed release the acting process runs from (`DELORUN_VERSION`): an active directory an action writes links
+   * the packages of this release, as the Host's load check expects ({@link EnforceRequest.runningRelease}); the release
+   * `runtimes/current` names when absent.
+   */
+  readonly runningRelease?: string
 }
 
 /** What a running Host answers when asked to load what the profile's files name. */
@@ -399,12 +406,12 @@ async function contentSteps(ctx: ChangesContext, state: State, plugin: string, a
   const before = Object.hasOwn(activeBefore.plugins, plugin) ? activeBefore.plugins[plugin] : undefined
   return {
     write: async () => {
-      await holdContent(ctx.home, directory, approval?.version)
+      await holdContent(ctx.home, directory, approval?.version, await referenceRelease(ctx.home, ctx.runningRelease))
       await writeApproved(ctx.profileDir, withApproval(state.approved, plugin, approval))
       await writeActiveRecord(ctx.home, ctx.profile, withActive(activeBefore, plugin, approval === undefined ? undefined : { version: approval.version, kind: 'approved' }))
     },
     revert: async () => {
-      await holdContent(ctx.home, directory, before?.version)
+      await holdContent(ctx.home, directory, before?.version, await referenceRelease(ctx.home, ctx.runningRelease))
       await writeApproved(ctx.profileDir, state.approved)
       await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
     },
