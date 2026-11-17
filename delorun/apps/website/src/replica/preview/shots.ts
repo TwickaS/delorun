@@ -1,6 +1,6 @@
 /**
  * Pictures of the replica from its local preview (`vite --config src/replica/preview/vite.config.ts`): the hero session
- * at three chapters, the Changes chapter with its dialog open, and the pair, at 1440 and 390 px wide, in Soft light and
+ * at three chapters, the Changes chapter with its dialog open, the terminal chapter, and the pair, at 1440 and 390 px wide, in Soft light and
  * Ocean dark, and one under reduced motion. Run `node src/replica/preview/shots.ts <out-dir> [base-url]` in
  * `delorun/apps/website`; it prints each picture's path and every page error. Playwright comes from `apps/tools`, which
  * depends on it; the site does not.
@@ -87,6 +87,7 @@ try {
       await hero.close()
       const changes = await open(browser, { query: `${look.query}&width=desktop&session=changes-and-versions`, ...viewport, reduced: false })
       await shoot(changes, 1, '[role="dialog"]', join(out, `changes-dialog-${name}.png`))
+      await shoot(changes, 3, 3500, join(out, `terminal-${name}.png`))
       await changes.close()
       const pair = await open(browser, { query: `${look.query}&width=pair&session=changes-and-versions`, ...viewport, reduced: false })
       await shoot(pair, 0, 3000, join(out, `phone-section-${name}.png`))
