@@ -21,7 +21,7 @@ export const SECTIONS = [
   { key: 'phone', find: 'heading:from your phone' },
   { key: 'whats-new', find: "heading:what.s new" },
   { key: 'next-and-teams', find: 'heading:what comes next|teams' },
-  { key: 'sign-up', find: 'heading:sign up|updates' },
+  { key: 'sign-up', find: 'heading:release news|sign up|updates|subscribe' },
   { key: 'footer', find: 'footer' },
 ] as const
 

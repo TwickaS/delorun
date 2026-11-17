@@ -202,7 +202,7 @@ async function keyboard(page: Page, width: number): Promise<{ findings: Finding[
       let alpha = 1
       for (let node: Element | null = element; node !== null; node = node.parentElement) alpha *= Number.parseFloat(getComputedStyle(node).opacity)
       const r = element.getBoundingClientRect()
-      const name = ((element as HTMLElement).innerText || element.getAttribute('aria-label') || element.getAttribute('href') || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 40)
+      const name = ((element as HTMLElement).innerText || element.getAttribute('aria-label') || element.getAttribute('placeholder') || element.getAttribute('name') || element.getAttribute('href') || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 40)
       const index = [...document.querySelectorAll('*')].indexOf(element)
       return { label: `${element.tagName.toLowerCase()} "${name}"`, index, href: element.getAttribute('href'), visible: alpha > 0.1 && r.width > 1 && r.height > 1 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight + 2000, snapshot: snapshot() }
     })
