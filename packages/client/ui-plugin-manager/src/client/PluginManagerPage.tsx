@@ -46,13 +46,14 @@ export type PluginManagerPageProps =
   & PropsRenderSlots<
     | 'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation'
     | 'plugins.add.actions' | 'plugins.tab'
-    | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
+    | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section' | 'plugins.bundle.action'
   >
   & InjectFace<PluginManagerFace & PluginHeaderLayoutFace>
   & PropsStore<ReturnType<typeof createNavigationStore>>
 
 /** The page's slot renderer, narrowed to the configuration slots. */
 type RenderConfig = PluginManagerPageProps['renderSlot']
+type RenderChain = PluginManagerPageProps['renderSlotChain']
 type ResolveText = PluginManagerFace['resolveText']
 
 type RowPhase = NonNullable<PackageRow['phase']>
@@ -632,12 +633,13 @@ function updateAvailable(pkg: PackageView): boolean {
  * One package as a card that opens its page: its name, its one-liner, its tags, its bundle switch, and why the Host
  * skipped it or does not support its platform.
  */
-function PackageCard({ pkg, t, resolveText, busy, highlighted, newer, onOpen, onSetEnabled }: {
+function PackageCard({ pkg, t, resolveText, renderSlotChain, busy, highlighted, newer, onOpen, onSetEnabled }: {
   readonly pkg: PackageView
   /** The newer registry version a version check offers. */
   readonly newer: string | undefined
   readonly t: Translate
   readonly resolveText: ResolveText
+  readonly renderSlotChain: RenderChain
   readonly busy: boolean
   readonly highlighted: boolean
   readonly onOpen: () => void
@@ -666,7 +668,7 @@ function PackageCard({ pkg, t, resolveText, busy, highlighted, newer, onOpen, on
           </>
         )}
         description={description}
-        end={<EnableSwitch pkg={pkg} title={title} t={t} busy={busy} onSetEnabled={onSetEnabled} />}
+        end={renderSlotChain('plugins.bundle.action', { subject: { kind: 'bundle', pkg: packageRef(pkg) } }, { fallback: <EnableSwitch pkg={pkg} title={title} t={t} busy={busy} onSetEnabled={onSetEnabled} /> })}
       />
       <MetadataError error={pkg.meta?.error} t={t} />
       {/* The card names an incompatibility without its requirement list; the page lists them. */}
@@ -805,7 +807,7 @@ function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form }: {
  * and configure controls, unless the Host reports an error and no rows; and where it comes from.
  */
 function PackageDetail({
-  pkg, t, resolveText, busy, rowBusy, configured, configure, renderSlot, inMore, versions, detail,
+  pkg, t, resolveText, busy, rowBusy, configured, configure, renderSlot, renderSlotChain, inMore, versions, detail,
   onBack, onSetEnabled, onUninstall, onUpdate, onSetRowEnabled, onEnsureVersions, onCheckVersions, onUpdateVersion,
 }: {
   readonly pkg: PackageView
@@ -822,6 +824,7 @@ function PackageDetail({
   readonly configured: boolean
   readonly configure: RowConfigure
   readonly renderSlot: RenderConfig
+  readonly renderSlotChain: RenderChain
   readonly inMore: boolean
   readonly onBack: () => void
   readonly onSetEnabled: (enabled: boolean) => void
@@ -875,7 +878,7 @@ function PackageDetail({
                 </Button>
               )
               : null}
-            <EnableSwitch pkg={pkg} title={title} t={t} busy={busy} onSetEnabled={onSetEnabled} />
+            {renderSlotChain('plugins.bundle.action', { subject }, { fallback: <EnableSwitch pkg={pkg} title={title} t={t} busy={busy} onSetEnabled={onSetEnabled} /> })}
           </div>
         )}
       />
@@ -1700,7 +1703,7 @@ function ConfirmDialog({ name, t, onConfirm, onCancel }: {
 
 /** Render the plugin manager: the official plugins and installed bundles, their pages, the install dialog, and the confirmation. */
 export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
-  const { t, ensure, renderSlot, resolveText } = props
+  const { t, ensure, renderSlot, renderSlotChain, resolveText } = props
   const configurations = props.useConfigurations(snapshot => snapshot.view?.namespaces)
   const formFor = (id: string): ConfigPageForm | undefined => {
     if (!configurations?.some(view => view.ns === id)) return undefined
@@ -1793,6 +1796,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
       pkg={pkg}
       t={t}
       resolveText={resolveText}
+      renderSlotChain={renderSlotChain}
       busy={packageBusy(pkg)}
       highlighted={state.highlight === pkg.name}
       newer={versionUpdate(state.versions[pkg.name])}
@@ -1970,6 +1974,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
               configured={ledger.bundles.has(openPkg.name)}
               configure={configure(openPkg)}
               renderSlot={renderSlot}
+              renderSlotChain={renderSlotChain}
               inMore={backToMore}
               detail={(
                 <BundleDetailSection name={openPkg.name} version={openPkg.version} fromNpm={openPkg.availability === 'missing'}

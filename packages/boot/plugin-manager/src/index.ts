@@ -50,7 +50,7 @@ import type {
   PackageResult, PluginChange, PluginEntryId, PluginInfo, PluginInstallCancellation, PluginInstallProgress, PluginInstallRequestId,
   PluginRegistries, PluginSpecInspection, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, Registry,
   RegistryAttempt, UpdateBundleOptions, PluginAudit, PluginAuditResult, ProfileChangedBy, ProfileHistoryInfo, ProfileVersion,
-  ProfileVersionChanges, ProfileVersionId, ProfileVersionPreview,
+  PackFolderCheck, ProfileVersionChanges, ProfileVersionId, ProfileVersionPreview,
   PluginOperation, PluginOperationId,
 } from './types.ts'
 export type * from './types.ts'
@@ -702,7 +702,7 @@ export class PluginManager extends TypertRemoteService {
    * @param spec - the spec being installed.
    * @throws ManagementFailure `operation-error` with the diagnostic.
    */
-  private async requirePackFolder(packs: NonNullable<ReturnType<typeof this.ownerContext.get<'packInstallTargets'>>>, name: string, spec: string): Promise<void> {
+  private async requirePackFolder(packs: PackFolderCheck, name: string, spec: string): Promise<void> {
     if (!await packs.isPack(name)) return
     if (packs.linkSpec(name) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
     if (!await packs.runsCurrentRelease()) throw new ManagementFailure('operation-error', undefined, PACK_UPDATE_PENDING)

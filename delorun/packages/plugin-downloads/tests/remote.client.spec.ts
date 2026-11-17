@@ -21,6 +21,7 @@ function fake(initial: InstallItem[]) {
   }
   const remote: PacksPanelRemote = {
     list: () => { calls.push('list'); return Promise.resolve(snapshot(queue)) },
+    enqueue: () => Promise.resolve(ok(queue)),
     cancel: guarded('cancel', key => { queue = queue.map(item => (item.key === key ? { ...item, state: 'cancelled' } : item)) }),
     retry: guarded('retry', key => { queue = queue.map(item => { if (item.key !== key) return item; const { failure: _failure, ...rest } = item; return { ...rest, state: 'queued' as const } }) }),
     remove: guarded('remove', key => { queue = queue.filter(item => item.key !== key) }),
@@ -143,5 +144,32 @@ describe('the names a row shows', () => {
     expect(nameOf({ key: 'some-pack' }, english)).toBe('some-pack')
     expect(nameOf({ key: 'toString' }, english)).toBe('toString')
     for (const key of Object.values(PACK_TITLE_KEYS)) expect(zh[key], key).toBeTruthy()
+  })
+})
+
+describe('adding a pack', () => {
+  it('sends the name, shows the queue, and keeps a refused add on "waiting for unlock" until the Host takes it', async () => {
+    const f = fake([])
+    const calls: string[] = []
+    let refuse = true
+    f.remote.enqueue = (request) => {
+      calls.push(request.names.join(','))
+      if (refuse) return Promise.reject({ code: 'remote-access/denied', message: 'denied', details: { reason: 'elevation-required: packs/enqueue' } })
+      f.set([queued('a')])
+      return Promise.resolve(ok([queued('a')]))
+    }
+    const source = createRemoteDownloadsSource(f.remote, { follow: () => () => {}, pollMs: 1000 })
+    source.subscribe(() => {})
+    await vi.advanceTimersByTimeAsync(0)
+    source.enqueue('a')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(source.snapshot().map(item => [item.key, item.state])).toEqual([['a', 'waiting-for-unlock']])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(source.snapshot().map(item => item.state)).toEqual(['waiting-for-unlock'])
+    refuse = false
+    source.enqueue('a')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(source.snapshot().map(item => [item.key, item.state])).toEqual([['a', 'queued']])
+    expect(calls).toEqual(['a', 'a'])
   })
 })

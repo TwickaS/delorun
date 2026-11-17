@@ -14,6 +14,12 @@ export interface PacksPanelRemote {
    */
   list(): Promise<PacksSnapshot>
   /**
+   * Add packs to the install list.
+   * @param request - the package names.
+   * @returns the new snapshot, or why nothing was added.
+   */
+  enqueue(request: { readonly names: readonly string[] }): Promise<PacksResult>
+  /**
    * Cancel a queued or working install.
    * @param request - the package name.
    * @returns the new snapshot.
@@ -99,6 +105,8 @@ function sameOr(before: readonly DownloadItem[], after: readonly DownloadItem[])
 export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: RemoteSourceOptions): DownloadsSource {
   let items: readonly DownloadItem[] = []
   let waiting = new Set<string>()
+  /** Packs whose add awaits an unlock; they have no queue item until the Host accepts it. */
+  const unlockAsks = new Set<string>()
   const listeners = new Set<() => void>()
   let stopFollowing: (() => void) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -112,7 +120,11 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
   const apply = (snapshot: PacksSnapshot): void => {
     const keys = new Set(snapshot.queue.map(item => item.key))
     waiting = new Set([...waiting].filter(key => keys.has(key)))
-    publish(snapshot.queue.map(item => (waiting.has(item.key) ? { ...toItem(item), state: 'waiting-for-unlock' as const } : toItem(item))))
+    for (const key of keys) unlockAsks.delete(key)
+    const queued = snapshot.queue.map(item => (waiting.has(item.key) ? { ...toItem(item), state: 'waiting-for-unlock' as const } : toItem(item)))
+    // An add that is waiting for an unlock has no queue item yet.
+    const asked = [...unlockAsks].filter(key => !keys.has(key)).map(key => ({ key, state: 'waiting-for-unlock' as const, receivedBytes: 0 }))
+    publish([...queued, ...asked])
   }
   const refresh = (): void => {
     remote.list().then(apply, (error: unknown) => { console.warn('delorun downloads: the install list was not read', error) })
@@ -149,6 +161,19 @@ export function createRemoteDownloadsSource(remote: PacksPanelRemote, options: R
         listeners.delete(listener)
         if (listeners.size === 0) stop()
       }
+    },
+    enqueue: (key) => {
+      remote.enqueue({ names: [key] }).then(
+        (result) => {
+          unlockAsks.delete(key)
+          if (result.ok) apply(result.value)
+        },
+        (error: unknown) => {
+          if (!needsUnlock(error)) { console.warn('delorun downloads: the plugin was not added', error); return }
+          unlockAsks.add(key)
+          publish([...items.filter(item => item.key !== key), { key, state: 'waiting-for-unlock', receivedBytes: 0 }])
+        },
+      )
     },
     cancel: (key) => { act(key, request => remote.cancel(request)) },
     retry: (key) => { act(key, request => remote.retry(request)) },

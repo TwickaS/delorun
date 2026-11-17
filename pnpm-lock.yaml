@@ -2919,6 +2919,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: workspace:*
         version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-plugin-manager
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../../../packages/client/ui-primitives
