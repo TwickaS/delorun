@@ -39,7 +39,7 @@ export const REPLICA_BOXES: Readonly<Record<SessionId, Readonly<Record<ReplicaWi
   'ordinary-work': {
     desktop: { width: 960, height: 520 },
     phone: { width: 390, height: 480 },
-    pairPhone: { width: 390, height: 700 },
+    pairPhone: { width: 390, height: 600 },
   },
   'changes-and-versions': {
     desktop: { width: 960, height: 440 },

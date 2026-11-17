@@ -181,7 +181,7 @@ describe('the frames', () => {
     expect(358 * phone.height / phone.width).toBeGreaterThan(400)
     expect(358 * phone.height / phone.width).toBeLessThan(460)
     const paired = boxOf('ordinary-work', 'pair', 'phone')
-    expect(paired.height / paired.width).toBeGreaterThan(1.6)
+    expect(paired.height / paired.width).toBeGreaterThan(1.5)
   })
 })
 
