@@ -212,6 +212,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "Delorun starts again after the computer restarts, or after a Windows Subsystem for Linux distro restarts while its virtual machine keeps running. A lock left behind by the run before no longer stops the next start."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -1512,6 +1517,11 @@
     },
     {
       "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "A chat in the Standard or Creator preset lists your plugins and bundles without asking for approval. Every change to them, such as installing, removing or turning one on or off, still asks."
+    },
+    {
+      "area": "Safety and privacy",
       "section": "Fixed",
       "text": "A chat never turns a plugin on at any protection level: with protection off, `undo` and `restore` in the plugin manager, and a turn-on whose `enabled` is not the boolean `false`, wait for you at the computer, as an install does."
     },
@@ -1519,6 +1529,11 @@
       "area": "Safety and privacy",
       "section": "Fixed",
       "text": "A newly approved phone can no longer open or type in a terminal during the 15 minutes after you approve it at the computer. A terminal is a shell on your computer outside the sandbox, so from a phone it now always needs an unlock: a code from the computer, your PIN or the unlock method you chose. Setting up from the phone in those 15 minutes still needs no unlock."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Fixed",
+      "text": "Browser now saves screenshots, downloads and PDFs in a folder Delorun creates for each chat in your cache folder, outside the chat's folder, so a command running in the chat's sandbox can read a saved file but cannot replace the folder or point it somewhere else. Browser only writes there, and a file it uploads from the chat's folder is copied by Delorun first, so a link swapped in at the last moment cannot make Browser read a file the chat could not. Browser also checks each file after it lands; one that ends up outside the chat's folder or the output folder is removed when Delorun can do so safely, and the result is refused with a message. A chat with Full access runs outside the sandbox, so for it this is a refusal, not a barrier."
     },
     {
       "area": "Safety and privacy",
@@ -2592,6 +2607,40 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.11",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "Delorun starts again after the computer restarts, or after a Windows Subsystem for Linux distro restarts while its virtual machine keeps running. A lock left behind by the run before no longer stops the next start."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "A chat in the Standard or Creator preset lists your plugins and bundles without asking for approval. Every change to them, such as installing, removing or turning one on or off, still asks."
+            },
+            {
+              "section": "Fixed",
+              "text": "Browser now saves screenshots, downloads and PDFs in a folder Delorun creates for each chat in your cache folder, outside the chat's folder, so a command running in the chat's sandbox can read a saved file but cannot replace the folder or point it somewhere else. Browser only writes there, and a file it uploads from the chat's folder is copied by Delorun first, so a link swapped in at the last moment cannot make Browser read a file the chat could not. Browser also checks each file after it lands; one that ends up outside the chat's folder or the output folder is removed when Delorun can do so safely, and the result is refused with a message. A chat with Full access runs outside the sandbox, so for it this is a refusal, not a barrier."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.10",
       "date": "2026-11-17",
