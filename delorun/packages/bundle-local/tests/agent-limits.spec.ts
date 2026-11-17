@@ -55,6 +55,7 @@ describe('the small helpers', () => {
     expect(titleKey('five_hour')).toEqual({ key: 'limits.window.five_hour' })
     expect(titleKey('seven_day')).toEqual({ key: 'limits.window.seven_day' })
     expect(titleKey('window_43200m')).toEqual({ key: 'limits.window.days', count: '30' })
+    expect(titleKey('window_10080m')).toEqual({ key: 'limits.window.seven_day' })
     expect(titleKey('window_300m')).toEqual({ key: 'limits.window.hours', count: '5' })
     expect(titleKey('window_45m')).toBeUndefined()
     expect(titleKey('overage')).toBeUndefined()

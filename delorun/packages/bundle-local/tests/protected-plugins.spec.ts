@@ -43,8 +43,8 @@ describe('the plugin-manager row of @delorun/bundle-local', () => {
       '@delorun/bundle-local/trust', '@delorun/plugin-install-check', '@delorun/reach',
     ])
     // home-auth has no switch; it is protected so no chat points the home's device records elsewhere.
-    // The two live-agent drivers carry no switch, and are protected so no chat removes or reconfigures them (review D7).
-    const withDrivers = guards.flatMap(name => name === '@delorun/external-agents' ? [name, '@delorun/agent-claude-code', '@delorun/agent-codex'] : [name])
+    // The two live-agent drivers and the seats plugin carry no switch, and are protected so no chat removes or reconfigures them (review D7).
+    const withDrivers = guards.flatMap(name => name === '@delorun/external-agents' ? [name, '@delorun/agent-claude-code', '@delorun/agent-codex', '@delorun/plugin-agent-seats'] : [name])
     expect(protectedPlugins()).toEqual([...withDrivers, '@delorun/home-auth', baseRowName('sandbox'), baseRowName('sandbox-policy')])
   })
 

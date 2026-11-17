@@ -121,7 +121,6 @@
   },
   "delorun": {
     "state": "shipped",
-    "unreached": "ea2-seat",
     "previewFlags": [
       "externalAgents.liveAgents"
     ]

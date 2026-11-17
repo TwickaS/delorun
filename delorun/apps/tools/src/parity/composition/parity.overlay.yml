@@ -160,6 +160,10 @@
         harnessToolTimeoutSeconds: 900
       disabled: true
 
+    - id: delorun-agent-seats
+      name: '@delorun/plugin-agent-seats'
+      disabled: true
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:

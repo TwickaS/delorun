@@ -63,6 +63,9 @@ export const WINDOW_TITLES: Readonly<Record<string, string>> = {
   unknown: 'Plan limit',
 }
 
+/** Codex names its weekly window by its length (`window_10080m`); both agents show it as the weekly limit. */
+const WEEK_MINUTES = 7 * 1440
+
 /**
  * The name a person knows a limit window by.
  * @param kind - the window's kind, such as `five_hour` or Codex's `window_43200m`.
@@ -74,6 +77,7 @@ export function windowTitle(kind: string): string {
   const minutes = /^window_(\d+)m$/u.exec(kind)?.[1]
   if (minutes !== undefined) {
     const count = Number(minutes)
+    if (count === WEEK_MINUTES) return WINDOW_TITLES['seven_day']
     if (count > 0 && count % 1440 === 0) return `${String(count / 1440)}-day limit`
     if (count > 0 && count % 60 === 0) return `${String(count / 60)}-hour limit`
     return `${minutes}-minute limit`

@@ -129,6 +129,9 @@ export function planName(plan: string): string {
   return `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`
 }
 
+/** Codex names its weekly window by its length; both agents call it the weekly limit. */
+const WEEK_MINUTES = 7 * 1440
+
 /**
  * @param kind - a window kind.
  * @returns the copy key and its parameter for kinds with a translated title, or undefined for English fallbacks.
@@ -139,6 +142,7 @@ export function titleKey(kind: string): { readonly key: 'limits.window.five_hour
   const minutes = /^window_(\d+)m$/u.exec(kind)?.[1]
   if (minutes === undefined) return undefined
   const count = Number(minutes)
+  if (count === WEEK_MINUTES) return { key: 'limits.window.seven_day' }
   if (count > 0 && count % 1440 === 0) return { key: 'limits.window.days', count: String(count / 1440) }
   if (count > 0 && count % 60 === 0) return { key: 'limits.window.hours', count: String(count / 60) }
   return undefined

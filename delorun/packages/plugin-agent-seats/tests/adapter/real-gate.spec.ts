@@ -37,7 +37,7 @@ class CountingDriver implements ExternalAgentDriver {
 }
 
 /** A consent that refuses every seat review and keeps no lease. */
-class RefusingConsent implements Pick<SeatConsent, 'reviewSeat' | 'leaseOf' | 'endLease' | 'onLeaseEnded' | 'runRules' | 'addRunRule'> {
+class RefusingConsent implements Pick<SeatConsent, 'reviewSeat' | 'leaseOf' | 'endLease' | 'onLeaseEnded' | 'runRules' | 'addRunRule' | 'permissionLevel'> {
   readonly reviews: SeatReview[] = []
 
   reviewSeat(review: SeatReview): Promise<{ readonly kind: 'refuse', readonly reason: string }> {
@@ -54,6 +54,8 @@ class RefusingConsent implements Pick<SeatConsent, 'reviewSeat' | 'leaseOf' | 'e
   runRules(): readonly [] { return [] }
 
   addRunRule(): boolean { return false }
+
+  permissionLevel(): 'standard' { return 'standard' }
 }
 
 describe('a first turn of an unregistered seat child on the real gate', () => {

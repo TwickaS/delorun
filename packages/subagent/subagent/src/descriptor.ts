@@ -22,7 +22,7 @@
  */
 
 import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionSeq as AskedSeq } from '@deepseek-ai/dsh-session'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 
@@ -43,7 +43,7 @@ declare module '@deepseek-ai/dsh-session/types' {
      * `@delorun/plugin-agent-seats` appends it.
      * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
      */
-    'external-agent/run-allowed': { askedSeq: SessionSeq }
+    'external-agent/run-allowed': { askedSeq: AskedSeq }
   }
 }
 

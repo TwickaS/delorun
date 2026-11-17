@@ -2221,6 +2221,9 @@ importers:
       '@delorun/logs':
         specifier: workspace:*
         version: link:../logs
+      '@delorun/plugin-agent-seats':
+        specifier: workspace:*
+        version: link:../plugin-agent-seats
       '@delorun/plugin-changes':
         specifier: workspace:*
         version: link:../plugin-changes

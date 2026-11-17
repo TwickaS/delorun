@@ -139,6 +139,7 @@ function StateCard({ seat, sessionId, t, client, copy, clock }: { readonly seat:
             </li>
           ))}
         </ul>
+        <span className={css.text} data-picker-applies="">{t('picker.applies')}</span>
       </div>
     )
   }

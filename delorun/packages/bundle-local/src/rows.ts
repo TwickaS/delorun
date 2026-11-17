@@ -196,6 +196,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no driver registers with the gate, so no live Codex program can start.' },
   },
   {
+    id: 'delorun-agent-seats',
+    kind: 'added',
+    reason: 'Live external agents behind the `externalAgents.liveAgents` preview flag, off unless a profile row sets it: with it on, the lead\'s model gets a hand-off tool per agent, and the agent\'s chat, approvals and lists appear; with it off the row adds no tool and no UI. Upstream has no live agents.',
+    parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no hand-off tool, seat provider or seat UI exists, and the one-shot subagent tools run as upstream\'s do.' },
+  },
+  {
     id: 'delorun-plugin-changes',
     kind: 'added',
     reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',

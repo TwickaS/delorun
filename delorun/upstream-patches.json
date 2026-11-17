@@ -2941,6 +2941,12 @@
       "class": "delorun-feature",
       "feature": "live-agents",
       "reason": "Declares the `conversation.session.header.actions.subagent.row.lead|detail|trail` and `.trigger` list slots and their owner types (EA13)."
+    },
+    {
+      "path": "docs/persistence-changes/2026-11-17-run-allowed-event.schema.json",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "The machine record of the persistence acknowledgement for the `external-agent/run-allowed` Session event, written by `persistence-changes --record` beside its bilingual prose."
     }
   ],
   "retired": []

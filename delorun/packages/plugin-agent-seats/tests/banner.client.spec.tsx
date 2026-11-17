@@ -96,6 +96,7 @@ describe('states', () => {
     const c = client()
     banner({ ...base, agent: 'codex', state: 'model-needed', modelPicker: { offered: [{ id: 'a', label: 'Model A' }, { id: 'b', label: 'Model B' }], planDefault: 'b' } }, c)
     expect(screen.getByText('plan default')).toBeTruthy()
+    expect(screen.getByText('Applies from your next message')).toBeTruthy()
     fireEvent.click(screen.getByText('Use Model A'))
     expect(c.chooseModel).toHaveBeenCalledWith('s1', 'a')
   })

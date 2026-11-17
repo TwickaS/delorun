@@ -208,6 +208,12 @@
       config:
         harnessToolTimeoutSeconds: 900
 
+    # Live external agents behind the `externalAgents.liveAgents` preview flag (off unless a profile row sets it): the
+    # hand-off tools `claude_code` and `codex`, the agent's chat and its approvals. With the flag off the row adds no tool
+    # and no UI. The row is protected: it relays an agent's questions to the person.
+    - id: delorun-agent-seats
+      name: '@delorun/plugin-agent-seats'
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:
@@ -339,6 +345,7 @@
       - '@delorun/external-agents'
       - '@delorun/agent-claude-code'
       - '@delorun/agent-codex'
+      - '@delorun/plugin-agent-seats'
       - '@delorun/plugin-changes'
       - '@delorun/bundle-local/update-gate'
       - '@delorun/bundle-local/update-check'
