@@ -16,13 +16,18 @@
       "default": "./lib/client.js"
     },
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./row": {
+      "types": "./lib/types/client/row.d.ts",
+      "default": "./src/client/row.ts"
+    }
   },
   "files": [
     "lib/index.js",
     "lib/client.js",
     "lib/types/**/*.d.ts",
-    "locale/*.json"
+    "locale/*.json",
+    "src/client/**"
   ],
   "dsh": {
     "client": {

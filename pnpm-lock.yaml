@@ -3158,6 +3158,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/plugin-downloads':
+        specifier: workspace:*
+        version: link:../plugin-downloads
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme

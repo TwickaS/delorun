@@ -6,22 +6,9 @@ import { ItemList } from './Items.tsx'
 import { Live } from './Live.tsx'
 import { fallbackTranslate, type Translate } from './locales.ts'
 import { useDownloadsModel, type PanelModel } from './model.ts'
-import { claimOnboardingRow, currentDownloadsSource, subscribeHub } from './source.ts'
+import { claimOnboardingRow, currentDownloadsSource, providedTranslate, subscribeHub } from './source.ts'
 import type { DownloadsSource } from './source.ts'
 import css from './Phone.module.css'
-
-/** The translate the plugin binds, for components rendered outside the slot machinery. */
-let boundTranslate: Translate = fallbackTranslate
-
-/**
- * Give the standalone row the plugin's bound translate.
- * @param t - the bound translate.
- * @returns the function that restores the English stand-in.
- */
-export function provideTranslate(t: Translate): () => void {
-  boundTranslate = t
-  return () => { boundTranslate = fallbackTranslate }
-}
 
 /**
  * Follow the provided source.
@@ -48,7 +35,7 @@ export interface OnboardingDownloadsRowProps {
  * @param props - optional overrides for the copy and the source.
  * @returns the row, or nothing.
  */
-export function OnboardingDownloadsRow({ t = boundTranslate, source: given, summaryMs }: OnboardingDownloadsRowProps): ReactNode {
+export function OnboardingDownloadsRow({ t = providedTranslate() ?? fallbackTranslate, source: given, summaryMs }: OnboardingDownloadsRowProps): ReactNode {
   const provided = useHubSource()
   const source = given ?? provided
   const model = useDownloadsModel(source, summaryMs)

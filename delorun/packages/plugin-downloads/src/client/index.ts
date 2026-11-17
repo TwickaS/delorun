@@ -12,9 +12,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the 'shell.overlay' slot.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { en, NS, zh, type DownloadsLocaleKey, type Translate } from './locales.ts'
-import { provideTranslate } from './Phone.tsx'
 import { DownloadsSurface } from './Surface.tsx'
-import { provideDownloadsSource, type DownloadsSource } from './source.ts'
+import { EMPTY_SOURCE, provideDownloadsSource, provideTranslate, type DownloadsSource } from './source.ts'
 
 export { createFakeDownloadsSource, type DownloadItem, type DownloadState, type DownloadsSource, type FakeDownloadsSource } from './source.ts'
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
@@ -38,7 +37,7 @@ export const inject = ['slots', 'locale']
  * @returns the source the panel reads.
  */
 export function createRemoteDownloadsSource(): DownloadsSource {
-  return { snapshot: () => [], subscribe: () => () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
+  return EMPTY_SOURCE
 }
 
 /**

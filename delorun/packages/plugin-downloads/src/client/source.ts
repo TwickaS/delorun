@@ -1,5 +1,7 @@
 /** The panel's data seat: the typed client interface the panel reads, the fake that stands in for it and the shared hub. */
 
+import type { Translate } from './locales.ts'
+
 /** Where one download stands; the install queue's states plus `waiting-for-unlock` for a phone install that awaits the unlock (A408, A413). */
 export type DownloadState =
   | 'queued' | 'waiting-for-unlock' | 'downloading' | 'verifying' | 'installing'
@@ -126,12 +128,16 @@ export function createFakeDownloadsSource(initial: readonly DownloadItem[] = [])
 /** The source the plugin provides, the translate it binds and the number of onboarding rows on screen. */
 interface Hub {
   source: DownloadsSource
+  translate: Translate | undefined
   rows: number
   readonly listeners: Set<() => void>
 }
 
 const HUB_KEY = Symbol.for('delorun.plugin-downloads.hub')
-const EMPTY: DownloadsSource = { snapshot: () => [], subscribe: () => () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
+const NO_ITEMS: readonly DownloadItem[] = []
+
+/** A source with nothing in it; its snapshot is one constant array so React can compare it. */
+export const EMPTY_SOURCE: DownloadsSource = { snapshot: () => NO_ITEMS, subscribe: () => () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
 
 /**
  * The hub is shared through a global symbol, because the onboarding plugin's bundle and this one's are separate modules
@@ -141,7 +147,7 @@ const EMPTY: DownloadsSource = { snapshot: () => [], subscribe: () => () => {}, 
 function hub(): Hub {
   const found = Reflect.get(globalThis, HUB_KEY) as Hub | undefined
   if (found !== undefined) return found
-  const made: Hub = { source: EMPTY, rows: 0, listeners: new Set() }
+  const made: Hub = { source: EMPTY_SOURCE, translate: undefined, rows: 0, listeners: new Set() }
   Reflect.set(globalThis, HUB_KEY, made)
   return made
 }
@@ -159,7 +165,7 @@ export function provideDownloadsSource(source: DownloadsSource): () => void {
   hub().source = source
   notify()
   return () => {
-    if (hub().source === source) { hub().source = EMPTY; notify() }
+    if (hub().source === source) { hub().source = EMPTY_SOURCE; notify() }
   }
 }
 
@@ -197,4 +203,23 @@ export function claimOnboardingRow(): () => void {
  */
 export function onboardingRowShown(): boolean {
   return hub().rows > 0
+}
+
+/**
+ * Give the standalone row the plugin's bound translate. The hub holds it, because the onboarding bundle carries its own
+ * copy of the row's module.
+ * @param t - the bound translate.
+ * @returns the function that takes it back.
+ */
+export function provideTranslate(t: Translate): () => void {
+  hub().translate = t
+  return () => { if (hub().translate === t) hub().translate = undefined }
+}
+
+/**
+ * The translate the plugin bound.
+ * @returns it, or undefined before the plugin applies.
+ */
+export function providedTranslate(): Translate | undefined {
+  return hub().translate
 }
