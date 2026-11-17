@@ -22,9 +22,9 @@ const ROOT = join(HERE, '../../../../..')
 /** The data file next to this module. */
 export const DATA_PATH = join(HERE, 'plugins.generated.json')
 
-/** Counts files git tracks or would track (not ignored build output), so a file counts before and after its commit. */
+/** Counts the files git tracks, so the count is the same on every machine; regenerate the data after committing a file. */
 export const gitSources: PluginSources = {
-  countFiles: (folder) => execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', folder], { cwd: ROOT, encoding: 'utf8', timeout: 20_000 }).split('\n').filter((line) => line !== '').length,
+  countFiles: (folder) => execFileSync('git', ['ls-files', '--', folder], { cwd: ROOT, encoding: 'utf8', timeout: 20_000 }).split('\n').filter((line) => line !== '').length,
 }
 
 /**

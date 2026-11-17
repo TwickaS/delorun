@@ -39,7 +39,7 @@ describe('the plugin list', () => {
       'delorun/packages/plugin-b/locale/en.json': words('B'),
       'delorun/packages/plugin-c/package.json': pkg('@delorun/plugin-c', { state: 'shipped' }),
       'delorun/packages/plugin-h/package.json': pkg('@delorun/plugin-h', { state: 'shipped' }),
-      'delorun/packages/bundle-pack/package.json': pkg('@delorun/bundle-pack', { state: 'experimental', pack: true, requires: { r1: { needs: [{ kind: 'program', names: ['codex', 'claude'] }, { kind: 'env', name: 'SECRET' }] }, r2: { needs: [{ kind: 'env', name: 'SECRET' }] } } }),
+      'delorun/packages/bundle-pack/package.json': pkg('@delorun/bundle-pack', { state: 'experimental', pack: true, requires: { r1: { needs: [{ kind: 'program', names: ['codex'] }, { kind: 'program', names: ['claude'] }, { kind: 'env', name: 'SECRET' }] }, r2: { needs: [{ kind: 'env', name: 'SECRET' }, { kind: 'platform', os: ['linux', 'darwin'] }] }, r3: { needs: [{ kind: 'program', names: ['codex', 'claude'] }] } } }),
       'delorun/packages/library/package.json': pkg('@delorun/library', { state: 'shipped' }),
     }, test)
     const { plugins, unworded } = readPluginList(root, COUNT)
@@ -52,7 +52,7 @@ describe('the plugin list', () => {
       'pack @delorun/bundle-pack',
     ])
     expect(plugins[1]).toMatchObject({ title: 'Local', sentence: 'Local sentence.', state: 'shipped', files: 'delorun/packages/bundle-local'.length, folder: 'delorun/packages/bundle-local' })
-    expect(plugins.at(-1)?.requires).toEqual(['codex or claude installed', 'the SECRET setting'])
+    expect(plugins.at(-1)?.requires).toEqual(['the SECRET setting', 'codex or claude installed'])
     expect(unworded).toEqual(['@delorun/plugin-c', '@delorun/plugin-h', '@delorun/bundle-pack'])
   })
 

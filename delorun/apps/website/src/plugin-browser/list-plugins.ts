@@ -149,14 +149,18 @@ function manifestsByName(root: string): Map<string, { manifest: Manifest; folder
 }
 
 /**
- * Drops a need that offers programs as alternatives when each of them is also a need of its own in the same list, which
- * would say the same thing twice.
+ * Drops what a pack's rows would say twice or that is always met: a program need that is also named inside an
+ * alternative (`codex or claude`) of another row, because either alternative is enough, and a platform need that
+ * admits Linux, which is the only system Delorun runs on.
  * @param needs - a pack's needs, from all its rows.
- * @returns the needs without such alternatives.
+ * @returns the needs to show.
  */
-function withoutCoveredAlternatives(needs: readonly Need[]): Need[] {
-  const single = new Set(needs.filter((need) => need.kind === 'program' && need.names?.length === 1).map((need) => need.names![0]))
-  return needs.filter((need) => !(need.kind === 'program' && (need.names?.length ?? 0) > 1 && need.names!.every((name) => single.has(name))))
+function shownNeeds(needs: readonly Need[]): Need[] {
+  const inAlternative = new Set(needs.filter((need) => need.kind === 'program' && (need.names?.length ?? 0) > 1).flatMap((need) => need.names ?? []))
+  return needs.filter((need) => {
+    if (need.kind === 'platform') return !(need.os ?? []).includes('linux')
+    return !(need.kind === 'program' && need.names?.length === 1 && inAlternative.has(need.names[0]!))
+  })
 }
 
 function standingOrder(standing: Standing): number {
@@ -196,7 +200,7 @@ export function readPluginList(root: string, sources: PluginSources): { plugins:
     const sentence = meta?.description ?? ''
     if (title === '' || sentence === '') unworded.push(name)
     const needs = Object.values(manifest.delorun?.requires ?? {}).flatMap((row) => row.needs ?? [])
-    const requires = [...new Set(withoutCoveredAlternatives(needs).map(needPhrase))]
+    const requires = [...new Set(shownNeeds(needs).map(needPhrase))]
     plugins.push({ name, title, sentence, state, standing, requires: standing === 'pack' ? requires : [], files: sources.countFiles(folder), folder })
   }
   plugins.sort((a, b) => standingOrder(a.standing) - standingOrder(b.standing))

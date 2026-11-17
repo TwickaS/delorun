@@ -5,7 +5,7 @@
  *
  * @module @delorun/website/plugin-browser/PluginBrowser
  */
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Card, Link, Pill, TabList, TabPanel } from '@brand'
 import { GITHUB_URL, DOCS_URL } from '../site/config.ts'
 import type { PluginEntry } from './list-plugins.ts'
@@ -66,7 +66,11 @@ function Plugins({ words }: { readonly words: PluginBrowserWords }) {
     document.getElementById(`plugin-row-${plugin.name}`)?.focus()
   }
   // On a phone the detail opens under the row; a list that scrolls inside its box shows it whole.
-  useEffect(() => { document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [selected])
   const current = PLUGINS.find((plugin) => plugin.name === selected) ?? PLUGINS[0]
   return (
     <div className={css.split}>

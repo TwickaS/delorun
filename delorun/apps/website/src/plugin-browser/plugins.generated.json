@@ -13,7 +13,7 @@
     {
       "name": "@delorun/plugin-instruction-consent",
       "title": "Instruction consent",
-      "sentence": "Shows you the change and asks first when the agent wants to write a skill, a preset or an AGENTS.md file",
+      "sentence": "Shows you the change and asks first when the agent's file tools write a skill, a Delorun setup file or an AGENTS.md file",
       "state": "shipped",
       "standing": "on",
       "requires": [],
@@ -53,7 +53,7 @@
     {
       "name": "@delorun/plugin-fetch-guard",
       "title": "Fetch guard",
-      "sentence": "Stops the agent from fetching addresses on your own computer or private network, and says why when it refuses",
+      "sentence": "Stops the agent's web fetch tool from reaching addresses on your own computer or private network, and says why when it refuses",
       "state": "shipped",
       "standing": "on",
       "requires": [],
@@ -143,7 +143,7 @@
     {
       "name": "@delorun/reach",
       "title": "Reach",
-      "sentence": "Lets you open Delorun from your phone or another computer over your own Tailscale network",
+      "sentence": "Lets you open Delorun from your phone or another computer over your own Tailscale network, once you turn it on",
       "state": "shipped",
       "standing": "on",
       "requires": [],
@@ -281,9 +281,7 @@
       "state": "experimental",
       "standing": "pack",
       "requires": [
-        "codex installed",
-        "claude installed",
-        "Linux or macOS as the operating system",
+        "codex or claude installed",
         "python3 installed"
       ],
       "files": 8,

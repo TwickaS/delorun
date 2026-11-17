@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Instruction consent",
-    "description": "Shows you the change and asks first when the agent wants to write a skill, a preset or an AGENTS.md file"
+    "description": "Shows you the change and asks first when the agent's file tools write a skill, a Delorun setup file or an AGENTS.md file"
   }
 }
